@@ -15,24 +15,22 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 
 ```text
 ┌───────────────┬────────────────────────────────────────────────────┐
-│ ● ● ●         │ Fix flaky login test          Claude Code   ⌄ Plan │  top bar (40 px)
+│ ● ● ●       ◫ │ Fix flaky login test ⌄   ✳ Claude Code             │  top bar (40 px)
 ├───────────────┼────────────────────────────────────────────────────┤
-│ PROJECTS    + │                                                    │
-│ ▾ overbench   │        ┌──────────────────────────────────┐        │
-│   Fix flaky…● │        │ The login test fails on CI …     │  user  │
-│   Add dark …  │        └──────────────────────────────────┘        │
-│ ▸ website     │   I'll start by reading the test and the …  agent  │
-│               │   ▸ Explored 4 files                         tools │
-│               │   ┌ ✎ Edit src/auth/login.test.ts   +12 −3 ┐       │
-│               │   │  … diff …                               │       │
-│               │   └─────────────────────────────────────────┘       │
-│               │                                                    │
-│               ├────────────────────────────────────────────────────┤
-│               │ ▸ Plan 3/5                                          │  pinned plan
-│               │ ┌────────────────────────────────────────────────┐ │
-│               │ │ Ask Claude Code to…                            │ │  composer
-│               │ │ Mode ⌄   Model ⌄                    ◔ 34%   ↑ │ │
-│ ⚙ Agents      │ └────────────────────────────────────────────────┘ │
+│ ✎ New session │                                                    │
+│ Projects    + │        ┌──────────────────────────────────┐        │
+│ ⌄ overbench   │        │ The login test fails on CI …     │        │  user
+│  ✳ Fix flaky 1│        └──────────────────────────────────┘        │
+│  ◎ Add dark… ●│  I'll start by reading the test and the …          │  agent
+│ › website     │  › Explored 4 files                                │  tools
+│               │  ┌ ✎ Edit src/auth/session.ts        +4 −3  ✓ ┐    │
+│               │  │  … diff …                                  │    │
+│               │  └────────────────────────────────────────────┘    │
+│               │  ☰ Plan 2/4 ━━── Run the auth tests         ⌃      │  pinned plan
+│               │  ┌────────────────────────────────────────────┐    │
+│               │  │ Ask Claude Code to…                      ↑ │    │  composer
+│               │  └────────────────────────────────────────────┘    │
+│ ⚙ Agents   ⌘, │    Default ⌄              Opus 5.5 High ⌄  ◔       │  control row
 └───────────────┴────────────────────────────────────────────────────┘
 ```
 
@@ -53,7 +51,7 @@ Shown when a project is selected but no session is. The three agents as large se
 
 ### Session
 
-The thread and the composer, described below.
+The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)), followed by the agent's mark and name in `--muted-foreground`.
 
 ### Agents
 
@@ -66,17 +64,19 @@ Opened from the sidebar footer or with `Mod+,`. One card per agent:
 
 ## Sidebar
 
-- Projects are collapsible groups: folder name, with the full path in a tooltip. **New session** (`Mod+N`) appears on hover and for the selected project.
+- A **New session** row (`Mod+N`) at the top starts a session in the selected project.
+- Projects are collapsible groups: folder name, with the full path in a tooltip.
 - The sidebar's content is built from shadcn's `Sidebar` parts (`SidebarGroup`, `SidebarMenu`, `SidebarMenuButton` at `size="sm"`, which is 28 px, `SidebarMenuBadge`) with `collapsible="none"`, inside the `ResizablePanel` that owns its width. Rows have no border; hover and selection use the component's own fills.
-- Each row: agent icon, title (truncated), relative time, and one status indicator, in this order of priority:
-  1. **Waiting for you** (`attention: 'permission'`): a filled `--attention` dot and count. This is the loudest signal in the app.
-  2. **Error** (`attention: 'error'`): a destructive dot.
+- Each row: the agent's [mark](./design-system.md#agent-marks) at 14 px, title (truncated), relative time, and one status indicator, in this order of priority:
+  1. **Waiting for you** (`attention: 'permission'`): an `--attention` pill with the count, in place of the time. This is the loudest signal in the app.
+  2. **Error** (`attention: 'error'`): a destructive `CircleAlert` icon.
   3. **Running** (`status: 'running'`): a dot with Tailwind's `animate-pulse`.
   4. **Starting** (`status: 'starting'`): a `Spinner` while the agent starts or the session loads.
   5. **Unread** (`attention: 'unread'`): a small neutral dot after a turn ended while you were elsewhere.
+- Running and starting rows show no time, since the session is active now.
 - Indicators always pair a color with a shape or label, never color alone.
 - The sidebar list has one Tab stop; the arrow keys move between rows.
-- The footer holds **Agents** and the sign-in warning when an agent needs attention.
+- The footer holds **Agents** (`Mod+,`) and, above it, a tinted `--attention` notice when an agent needs sign-in ("Codex needs you to sign in"). The notice opens the Agents page and is hidden while that page is open.
 - Later, not in M0: pinned sessions with drag reordering, grouping by status or date, and branch badges once git integration exists.
 
 ## Thread
@@ -89,7 +89,7 @@ Turns are 16 px apart, and the blocks within a turn 10 px.
 
 | Entry      | Presentation                                                                                                                                              |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User       | `Message align="end"` with a `Bubble` in the `muted` variant, at most 85% of the column. Taller than 300 px, it collapses behind a fade and **Show more** |
+| User       | `Message align="end"` with a `Bubble` in the `muted` variant, at most 80% of the column. Taller than 300 px, it collapses behind a fade and **Show more** |
 | Agent      | Plain prose without bubble, border or avatar, so long answers and code read like a document. Rendered with Streamdown                                     |
 | Thought    | Collapsed to one line: "Thinking" with shadcn's `shimmer` while streaming, "Thought for 12 s" afterwards. Expands as a `Collapsible` to muted text        |
 | Tool call  | A compact card ([below](#tool-calls))                                                                                                                     |
@@ -118,8 +118,8 @@ Between sending a prompt and the first output, a status line ("Working…") with
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Card**: shadcn `Card` with an added `tool` variant (surface 2, a hairline ring, `--radius-card`) and a `Collapsible` body; the body is separated from the header by a hairline `Separator`, not a second border.
-- **Header**: a `--row-height` row with the kind icon, the title, a one-line summary on the right (diff stats in `tabular-nums`, exit status, match count) and the status:
+- **Card**: shadcn `Card` with an added `tool` variant (surface 2, a hairline ring, `rounded-xl`) and a `Collapsible` body; the body is separated from the header by a `--border-soft` `Separator`, not a second border. When collapsed, the header itself is the toggle.
+- **Header**: a `--card-header` row with the kind icon, the verb, the path or command, a one-line summary on the right (diff stats in `tabular-nums`, exit status, match count) and the status:
   - `pending`: a hollow circle.
   - `in_progress`: a spinner.
   - `completed`: a check that fades in.
@@ -142,7 +142,7 @@ Between sending a prompt and the first output, a status line ("Working…") with
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- The request lives in the tool card it belongs to. The card takes the attention ring, pulses once, and scrolls into view.
+- The request lives in the tool card it belongs to. The card takes the [attention ring](./design-system.md#elevation), pulses once, and scrolls into view; its header shows "Needs approval" with an `--attention` dot in place of the status icon.
 - The diff or command being approved is visible inside the card, so you judge it before you answer.
 - Options appear in the agent's order. `allow_once` is the primary button, `allow_always` is `outline`, and `reject_*` options use shadcn's `destructive` variant, a soft tinted button rather than a solid red one.
 - Number keys `1` to `4` pick an option when the composer is empty and not focused; within the options, the arrow keys move focus.
@@ -151,15 +151,27 @@ Between sending a prompt and the first output, a status line ("Working…") with
 
 ## Composer
 
-- **Surface**: shadcn's `InputGroup` with an added `composer` variant: raised (surface 3), `--radius-composer`, and the composer's ring and shadow states from the [design system](./design-system.md#elevation).
-- **Text**: `InputGroupTextarea`, which grows with `field-sizing: content`, from 44 px up to `min(40svh, 24rem)`, then scrolls. The placeholder is "Ask <agent> to…".
-- **Chin**: a `--row-height` row under the text with the controls from `config`: the mode selector, the model selector, and the reasoning selector (`thought_level`) when the agent offers one, placed by `category`. Boolean options become switches in an overflow menu. On the right are the usage ring and the send button. Controls are `--control-height`.
+The layout follows the reference: the box holds only your text and the send button, and the session controls sit in a row under it. The box stays quiet, and the controls read as settings rather than as part of the message.
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ Ask Claude Code to…                                    ↑ │  composer, 52 px for one line
+└──────────────────────────────────────────────────────────┘
+  Default ⌄                              Opus 5.5 High ⌄  ◔    control row, 28 px
+```
+
+- **Surface**: shadcn's `InputGroup` with an added `composer` variant: raised (surface 3), `rounded-2xl`, and the composer's ring and shadow states from the [design system](./design-system.md#elevation).
+- **Text**: `InputGroupTextarea`, which grows with `field-sizing: content`, from `--composer-min` up to `min(40svh, 24rem)`, then scrolls. The placeholder is "Ask <agent> to…".
+- **Send button**: a 28 px round `InputGroupButton` at the end of the last line; `--primary` when there is text, `--muted` and disabled when empty.
+- **Control row**: a `--row-height` row under the box, outside it, built from `config`. On the left, the mode selector. On the right, one model button that shows the model and, when the agent offers `thought_level`, the reasoning level in muted text ("Opus 5.5 High"); then the usage ring. The model button opens a menu with the models (the current one checked, number keys `1` to `4` pick), **Effort** as a submenu, and boolean options as switches at the end. Any other `select` option gets its own button in the row, placed by `category`. The controls are ghost buttons at `--control-height` in `--muted-foreground`; the model name is `--foreground`.
 - **Sending**: **Enter** sends and **Shift+Enter** inserts a newline.
 - **IME**: Enter never sends while an IME composition is in progress (`isComposing`, or `keyCode` 229), so Chinese, Japanese and Korean input works. The reference also drops an Enter that arrives within 500 ms after `compositionend`, a guard for WebKit. M0.3 tests Pinyin and Japanese input on all three platforms (the macOS input sources, Microsoft Pinyin and IME, fcitx5) and adds such a guard only where a test shows it is needed, with the shortest window that passes.
 - **Drafts**: unsent text is kept per session and restored when you come back, also after a restart; sending clears it ([persistence](./persistence.md)).
 - **Slash commands**: `/` at the start opens a `Command` popover with the agent's `available_commands_update` list, filtered as you type; choosing one inserts `/name ` and shows its input hint.
-- While a turn runs, the send button becomes **Stop** and `Esc` cancels the turn. Queueing a prompt during a turn comes later ([M0 scope](../milestones/m0.md#out-planned-for-later-milestones)).
-- **Usage**: a small ring showing `used / size` of the context, which turns `--attention` above 80%. The tooltip shows tokens and cost when the agent reports it.
+- While a turn runs, the send button becomes a round **Stop** and `Esc` cancels the turn. You can keep writing a draft meanwhile; queueing a prompt during a turn comes later ([M0 scope](../milestones/m0.md#out-planned-for-later-milestones)).
+- While a permission request is pending, the placeholder reads "Waiting for your approval" and the send button is disabled.
+- While the agent is starting, the text area is disabled and the control row is hidden, because the config options are not known yet.
+- **Usage**: a 16 px ring showing `used / size` of the context, alone at first. From 80% it turns `--attention` and shows the percentage next to it. A click opens a popover with the tokens used, and the cost when the agent reports it.
 
 ## States
 

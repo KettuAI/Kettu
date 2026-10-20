@@ -42,12 +42,13 @@ Four surface steps, mapped onto the shadcn tokens so that shadcn components pick
 
 ### Lines
 
-| Token             | Light                | Dark                 | Used for                                             |
-| ----------------- | -------------------- | -------------------- | ---------------------------------------------------- |
-| `--border`        | `oklch(0 0 0 / 10%)` | `oklch(1 0 0 / 9%)`  | Hairline rings and dividers                          |
-| `--border-strong` | `oklch(0 0 0 / 20%)` | `oklch(1 0 0 / 18%)` | Hovered and focused containers, such as the composer |
+| Token             | Light                | Dark                 | Used for                                              |
+| ----------------- | -------------------- | -------------------- | ----------------------------------------------------- |
+| `--border`        | `oklch(0 0 0 / 16%)` | `oklch(1 0 0 / 14%)` | Container rings: cards, the composer, menus           |
+| `--border-soft`   | `oklch(0 0 0 / 9%)`  | `oklch(1 0 0 / 8%)`  | Dividers inside a container, the ring of an icon tile |
+| `--border-strong` | `oklch(0 0 0 / 28%)` | `oklch(1 0 0 / 24%)` | Outline buttons, hovered and focused containers       |
 
-Lines are translucent, so one token reads the same on every surface step.
+Lines are translucent, so one token reads the same on every surface step. The alphas are set for the 0.5 px hairline of a 2× display; on a 1× display, where the hairline is 1 px, they are halved, so a line keeps the same visual weight.
 
 ### Meaning
 
@@ -57,7 +58,21 @@ Lines are translucent, so one token reads the same on every surface step.
 - `--destructive` and `--ring`: shadcn's.
 - `--muted-foreground` in the light theme is `oklch(0.53 0 0)` instead of shadcn's 0.556, which reaches only 4.49:1 on surface 0, just under WCAG AA.
 - `--sidebar-accent`, the fill of hovered and selected sidebar rows, is `oklch(0.945 0 0)` light and `oklch(0.25 0 0)` dark; shadcn's 0.97 barely shows on surface 0.
-- Agent icons come from the ACP Registry and are the only brand color in the interface.
+- `--muted` (the user bubble, inline code, a disabled send button) is `oklch(0.96 0 0)` light, so the bubble stays visible on surface 1. `--accent` (hovered rows on surface 1, the highlighted menu item, an open selector) is `oklch(0.962 0 0)` light and `oklch(0.27 0 0)` dark.
+
+### Agent marks
+
+Each agent is shown with its official mark in its own colors. They are the only brand colors in the interface.
+
+| Agent       | Mark and colors                                                                                    | Source                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Claude Code | The Claude spark, `#D97757`                                                                        | [ACP Registry](https://github.com/agentclientprotocol/registry) (Apache-2.0) |
+| Codex       | The Codex mark, a vertical gradient `#B1A7FF` → `#7A9DFF` → `#3941FF`                              | [`@lobehub/icons`](https://github.com/lobehub/lobe-icons) (MIT)              |
+| OpenCode    | The two-tone OpenCode mark: frame `#17181C` and fill `#E6E5E6` light, `#FFFFFF` and `#5A5858` dark | [sst/opencode](https://github.com/sst/opencode) `packages/identity` (MIT)    |
+
+- Sizes: 14 px in sidebar and list rows, 13 px next to the session title, 17 px on a 32 px tile in cards (16 px on 30 px in the Welcome list). The tile is `--tile` (`oklch(0.965 0 0)` light, `oklch(0.27 0 0)` dark) with an inset `--border-soft` ring and an 8 px radius.
+- An agent that is not installed shows its mark in one color, `--muted-foreground`.
+- The marks ship as SVG files with their license notices; the gradient and the two OpenCode colors are tokens, so they follow the theme.
 
 ## Borders and elevation
 
@@ -80,35 +95,44 @@ Lines are translucent, so one token reads the same on every surface step.
 | `md` | Contact and a 16 px ambient shadow             | Popovers and menus                  |
 | `lg` | Contact and a 28 px ambient shadow             | Dialogs                             |
 
-- Dark-theme shadows are several times stronger (opacity 0.4 to 0.5), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge, which reads as an edge catching the light.
-- **Composer** (the `composer` variant of `InputGroup`): a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft 24 px shadow. Only color and shadow change, so focusing never moves the text.
+- Dark-theme shadows are several times stronger (opacity 0.4 to 0.5), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge (`oklch(1 0 0 / 5%)`), which reads as an edge catching the light. In the light theme, outline buttons get a 1 px contact shadow instead.
+- **Composer** (the `composer` variant of `InputGroup`): a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft shadow (20 px light, 24 px dark). Only color and shadow change, so focusing never moves the text.
+- **Attention**: a card waiting for the user replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20% (75% and 16% in the dark theme).
 - **Focus rings** are shadcn's `focus-visible` ring everywhere. The reference uses a thinner ring with a glow in its brand color; a glow in a neutral color looks smudged, so OverBench keeps shadcn's ring.
 
 ## Density and sizing
 
 M0 ships the compact density only. The comfortable values are recorded so that a later density setting switches tokens, not components.
 
-| Token                     | Used for                                                  | Compact (M0)        | Comfortable (later)  |
-| ------------------------- | --------------------------------------------------------- | ------------------- | -------------------- |
-| `--radius`                | Controls: buttons, inputs, menu items, rows               | 6 px                | 8 px                 |
-| `--radius-card`           | Cards, the user bubble, panels                            | 10 px               | 12 px                |
-| `--radius-composer`       | The composer                                              | 12 px               | 14 px                |
-| `--radius-dialog`         | Dialogs                                                   | 16 px               | 16 px                |
-| `--control-height`        | Buttons, selects and inputs in toolbars and the composer  | 24 px               | 32 px                |
-| `--control-height-nested` | Chips and buttons inside an input                         | 18 px               | 22 px                |
-| `--icon-size`             | UI icons                                                  | 16 px               | 20 px                |
-| `--row-height`            | Sidebar rows, menu items, card headers, the composer chin | 28 px               | to be measured       |
-| Spacing steps             | Gaps between and around components                        | 6, 8, 12, 20, 32 px | 8, 12, 16, 28, 40 px |
+| Token                 | Used for                                                           | Compact (M0)               | Comfortable (later)  |
+| --------------------- | ------------------------------------------------------------------ | -------------------------- | -------------------- |
+| `--radius`            | The base of shadcn's radius scale                                  | 7 px                       | 8 px                 |
+| `--control-height`    | Buttons and selectors                                              | 26 px                      | 32 px                |
+| `--control-height-sm` | Small inline buttons, icon buttons in the title bar                | 24 px                      | 28 px                |
+| `--row-height`        | Sidebar rows, menu items, the plan bar, the composer's control row | 28 px                      | to be measured       |
+| `--card-header`       | Tool call card headers                                             | 30 px                      | 36 px                |
+| `--composer-min`      | The composer with one line of text                                 | 52 px                      | 56 px                |
+| `--icon-size`         | UI icons; 14 px inside cards and controls                          | 16 px                      | 20 px                |
+| Spacing steps         | Gaps between and around components                                 | 4, 6, 8, 10, 12, 16, 28 px | 8, 12, 16, 28, 40 px |
 
-- shadcn derives its radius scale from `--radius`, so shadcn components follow it.
-- Where OverBench's look differs from a shadcn component's default, the difference is a variant added to that component with `cva`, such as `InputGroup` `variant="composer"` and `Card` `variant="tool"`, which use `rounded-composer` and `rounded-card`. Call sites never restyle a component with `className`; they use it for layout only.
-- The compact spacing steps are Tailwind's `1.5`, `2`, `3`, `5` and `8`.
-- Among shadcn's sizes, `xs` (24 px) is the control height in toolbars and the composer. `default` (32 px) is kept for dialogs, empty states and the Welcome screen, where a larger target helps. When the comfortable density arrives, these become size variants bound to the tokens.
+The radius scale is shadcn's, derived from `--radius`, so shadcn components follow it without new tokens:
+
+| Utility        | Compact | Used for                                   |
+| -------------- | ------- | ------------------------------------------ |
+| `rounded-lg`   | 7 px    | Buttons, inputs, rows, menu items          |
+| `rounded-xl`   | 9.8 px  | Cards, the user bubble, menus and popovers |
+| `rounded-2xl`  | 12.6 px | The composer                               |
+| `rounded-3xl`  | 15.4 px | Dialogs                                    |
+| `rounded-full` |         | The send button, counts and status pills   |
+
+- Where OverBench's look differs from a shadcn component's default, the difference is a variant added to that component with `cva`, such as `InputGroup` `variant="composer"`, `Card` `variant="tool"` and a `Button` `size="compact"` bound to `--control-height`. Call sites never restyle a component with `className`; they use it for layout only.
+- The compact spacing steps are Tailwind's `1`, `1.5`, `2`, `2.5`, `3`, `4` and `7`.
+- shadcn's `xs` button (24 px) is the small size; `default` (32 px) is kept for dialogs, empty states and the Welcome screen, where a larger target helps. When the comfortable density arrives, these sizes are bound to the comfortable tokens.
 
 ## Typography
 
 - **Families**: Geist Variable for the interface and prose, falling back to PingFang SC, Microsoft YaHei and Noto Sans CJK SC for Chinese, then `system-ui`. Mono: `ui-monospace`, SF Mono, Cascadia Code, JetBrains Mono, Menlo, Consolas.
-- **Sizes**: 13 px for the sidebar and controls, 14 px with 1.6 line height for thread prose, 12.5 px for code and diffs, 12 px for secondary labels. Prose keeps 1.6 instead of the reference's 1.43 because CJK text needs the extra leading.
+- **Sizes**: 22 px (weight 600, tracking −1.5%) for page titles, 14 px with a 1.625 line height for thread prose (shadcn `Bubble`'s `text-sm leading-relaxed`), 13 px for the sidebar and controls, 12 px for code, diffs and secondary labels, 11.5 px mono for versions, times and diff stats. Prose keeps 1.625 instead of the reference's 1.43 because CJK text needs the extra leading.
 - **Weights**: 400 for text, 500 for labels and titles, 600 for markdown headings. In the dark theme every weight drops by 20 on Geist's weight axis (400 becomes 380), because light text on a dark surface looks heavier than it is.
 - Numbers that change in place, such as timers, token counts, diff stats and counters, use `tabular-nums` so they do not jitter.
 - Headings use `text-wrap: balance` and prose `text-wrap: pretty`. Paths, URLs and long identifiers use `overflow-wrap: anywhere`, so they never push a card wider than the column.
@@ -168,7 +192,7 @@ Each pattern names what provides it. Only the attention pulse is OverBench's own
 | Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself | `--scroll-fade-size: 28px`                                                            |
 | Running           | Tailwind's `animate-pulse` on the sidebar's running dot                                                        | None                                                                                  |
 | Copy feedback     | The copy button in Streamdown's code blocks                                                                    | None                                                                                  |
-| Attention         | Own keyframe: a 2 px `--attention` ring that pulses once                                                       | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal |
+| Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                       | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal |
 
 - The disclosure is the only layout animation allowed: one at a time, never inside an entry that is streaming.
 - Entries restored from history or a snapshot appear without animation.

@@ -79,7 +79,7 @@ interface AgentDefinition {
 - Package versions are pinned to the ACP Registry entries and bumped deliberately, after a pass with the fake agent and the real agent.
 - `opencode` is looked up on `PATH` unless the user picked a binary in settings.
 - In development builds only, the catalog adds `fake-agent`, which runs `tools/fake-agent/main.ts` with Electron's own Node.js (see [testing](./testing.md#fake-agent)).
-- Agent icons are the SVGs the ACP Registry publishes for these entries, bundled with the app.
+- Each agent is shown with its official mark, bundled with the app; the sources and colors are in the [design system](./design-system.md#agent-marks).
 
 ## Resolving the environment
 
