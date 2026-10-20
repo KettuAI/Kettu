@@ -6,6 +6,8 @@ Guidance for coding agents working in this repository. `CLAUDE.md` imports this 
 
 OverBench is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI and opencode. It is in early development; [README.md](./README.md) has the product vision, features and roadmap.
 
+OverBench is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP). Read [docs/architecture.md](./docs/architecture.md) and the current milestone plan, [docs/milestones/m0.md](./docs/milestones/m0.md), before working on anything that touches agents, sessions or the agent host. When a design decision changes, update those documents in the same change.
+
 ## Core philosophy: beauty is productivity (颜值也是生产力)
 
 OverBench takes the best implementations already proven in leading projects, integrates them into one workbench, and then pushes them further, with performance optimized to the limit and a UI polished to the limit. Judge every change on all three.
@@ -49,6 +51,8 @@ Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Ta
 Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
 
 ## Architecture
+
+The current tree is below. The agent host, the shared thread model and the other parts planned for M0 are described in [docs/architecture.md](./docs/architecture.md#directory-layout).
 
 ```text
 src/

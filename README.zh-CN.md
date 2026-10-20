@@ -33,7 +33,7 @@ OverBench 想给这些 Agent 一个适合长时间工作的家，它的核心信
 
 ## 支持的 Agent
 
-OverBench 直接使用你已经在用的 Agent CLI：你自己的安装、你自己的账号、你自己的配置。
+OverBench 通过 [Agent Client Protocol](https://agentclientprotocol.com)（ACP）与各个 Agent 通信，直接使用你已经在用的 Agent CLI：你自己的安装、你自己的账号、你自己的配置。
 
 | Agent                                                    | 状态   |
 | -------------------------------------------------------- | ------ |
@@ -62,6 +62,8 @@ OverBench 直接使用你已经在用的 Agent CLI：你自己的安装、你自
 5. **不喧宾夺主。** 干活的是 Agent。OverBench 负责让它的工作可见、可控，然后退到一旁。
 
 ## 路线图
+
+第一个里程碑 M0 会通过 ACP 接入这三个 Agent，详见[架构设计](./docs/architecture.md)和 [M0 计划](./docs/milestones/m0.md)（英文）。
 
 - [ ] 应用框架与设计系统
 - [ ] 接入 Claude Code

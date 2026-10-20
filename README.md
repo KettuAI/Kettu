@@ -33,7 +33,7 @@ Design in OverBench is not decoration on top of the tool. It is the tool.
 
 ## Supported agents
 
-OverBench works with the agent CLIs you already use: your installation, your account, your configuration.
+OverBench talks to every agent over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP) and works with the agent CLIs you already use: your installation, your account, your configuration.
 
 | Agent                                                    | Status  |
 | -------------------------------------------------------- | ------- |
@@ -62,6 +62,8 @@ OverBench works with the agent CLIs you already use: your installation, your acc
 5. **Stay out of the way.** The agent does the work. OverBench makes that work visible and controllable, then steps aside.
 
 ## Roadmap
+
+The first milestone, M0, connects all three agents over ACP. See the [architecture](./docs/architecture.md) and the [M0 plan](./docs/milestones/m0.md).
 
 - [ ] App shell and design system
 - [ ] Claude Code integration
