@@ -1,0 +1,32 @@
+appId: com.overbench.app
+productName: OverBench
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - package.json
+npmRebuild: false
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  target: nsis
+nsis:
+  artifactName: ${productName}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+
+linux:
+  target: AppImage
+  category: Development
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}

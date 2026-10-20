@@ -6,7 +6,7 @@
 
 Claude Code · Codex CLI · opencode — one window, one calm workflow.
 
-*Beauty is productivity.*
+_Beauty is productivity._
 
 [![Status](https://img.shields.io/badge/status-early%20development-orange?style=flat-square)](#roadmap)
 [![Electron](https://img.shields.io/badge/built%20with-Electron-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -35,11 +35,11 @@ Design in OverBench is not decoration on top of the tool. It is the tool.
 
 OverBench works with the agent CLIs you already use: your installation, your account, your configuration.
 
-| Agent | Status |
-| --- | --- |
+| Agent                                                    | Status  |
+| -------------------------------------------------------- | ------- |
 | [Claude Code](https://github.com/anthropics/claude-code) | Planned |
-| [Codex CLI](https://github.com/openai/codex) | Planned |
-| [opencode](https://opencode.ai) | Planned |
+| [Codex CLI](https://github.com/openai/codex)             | Planned |
+| [opencode](https://opencode.ai)                          | Planned |
 
 ## Features
 
@@ -74,7 +74,30 @@ OverBench works with the agent CLIs you already use: your installation, your acc
 
 ## Getting started
 
-There is nothing to install yet. Build and install instructions will arrive with the first preview build. Star or watch the repository to follow along.
+There is no release to install yet; star or watch the repository to follow along. To run OverBench from source you need Node.js 22.12 or later and pnpm 10:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+| Command                                               | What it does                                         |
+| ----------------------------------------------------- | ---------------------------------------------------- |
+| `pnpm dev`                                            | Start the app in development mode with hot reload    |
+| `pnpm lint` / `pnpm typecheck` / `pnpm format`        | Lint, type-check and format the code                 |
+| `pnpm build`                                          | Type-check and build the app into `out/`             |
+| `pnpm package`                                        | Build an unpacked app into `dist/` for local testing |
+| `pnpm dist:mac` / `pnpm dist:win` / `pnpm dist:linux` | Build installers for each platform                   |
+
+Built with Electron, electron-vite, React, TypeScript, Tailwind CSS and shadcn/ui. The source is split by Electron process:
+
+```text
+src/
+├── main/       Main process: app lifecycle, windows, IPC handlers
+├── preload/    Bridge exposed to the renderer as window.overbench
+├── renderer/   React UI
+└── shared/     Types shared across processes, such as IPC contracts
+```
 
 ## Contributing
 

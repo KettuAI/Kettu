@@ -6,7 +6,7 @@
 
 Claude Code · Codex CLI · opencode —— 一个窗口，一套从容的工作流。
 
-*颜值也是生产力。*
+_颜值也是生产力。_
 
 [![Status](https://img.shields.io/badge/status-early%20development-orange?style=flat-square)](#路线图)
 [![Electron](https://img.shields.io/badge/built%20with-Electron-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -35,11 +35,11 @@ OverBench 想给这些 Agent 一个适合长时间工作的家。它的核心信
 
 OverBench 直接使用你已经在用的 Agent CLI：你自己的安装、你自己的账号、你自己的配置。
 
-| Agent | 状态 |
-| --- | --- |
+| Agent                                                    | 状态   |
+| -------------------------------------------------------- | ------ |
 | [Claude Code](https://github.com/anthropics/claude-code) | 计划中 |
-| [Codex CLI](https://github.com/openai/codex) | 计划中 |
-| [opencode](https://opencode.ai) | 计划中 |
+| [Codex CLI](https://github.com/openai/codex)             | 计划中 |
+| [opencode](https://opencode.ai)                          | 计划中 |
 
 ## 功能
 
@@ -74,7 +74,30 @@ OverBench 直接使用你已经在用的 Agent CLI：你自己的安装、你自
 
 ## 快速开始
 
-目前还没有可以安装的版本。构建和安装说明会随第一个预览版一起发布，欢迎 Star 或 Watch 本仓库关注进展。
+目前还没有可以安装的版本，欢迎 Star 或 Watch 本仓库关注进展。如果想从源码运行 OverBench，需要 Node.js 22.12 及以上版本和 pnpm 10：
+
+```bash
+pnpm install
+pnpm dev
+```
+
+| 命令                                                  | 作用                                              |
+| ----------------------------------------------------- | ------------------------------------------------- |
+| `pnpm dev`                                            | 以开发模式启动应用，支持热更新                    |
+| `pnpm lint` / `pnpm typecheck` / `pnpm format`        | 代码检查、类型检查和格式化                        |
+| `pnpm build`                                          | 类型检查并把应用构建到 `out/`                     |
+| `pnpm package`                                        | 在 `dist/` 中生成未打成安装包的应用，用于本地测试 |
+| `pnpm dist:mac` / `pnpm dist:win` / `pnpm dist:linux` | 为各个平台构建安装包                              |
+
+技术栈为 Electron、electron-vite、React、TypeScript、Tailwind CSS 和 shadcn/ui。源码按 Electron 进程划分：
+
+```text
+src/
+├── main/       主进程：应用生命周期、窗口、IPC 处理
+├── preload/    以 window.overbench 暴露给渲染进程的桥接层
+├── renderer/   React 界面
+└── shared/     各进程共用的类型，例如 IPC 约定
+```
 
 ## 参与贡献
 
