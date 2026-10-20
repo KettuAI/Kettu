@@ -6,7 +6,7 @@ Guidance for coding agents working in this repository. `CLAUDE.md` imports this 
 
 OverBench is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI and opencode. It is in early development; [README.md](./README.md) has the product vision, features and roadmap.
 
-OverBench is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP). Read [docs/architecture.md](./docs/architecture.md) and the current milestone plan, [docs/milestones/m0.md](./docs/milestones/m0.md), before working on anything that touches agents, sessions or the agent host. When a design decision changes, update those documents in the same change.
+OverBench is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP). Before you build anything, read [docs/architecture.md](./docs/architecture.md), the detailed design for the part you are touching (all of them are listed in [docs/README.md](./docs/README.md)), and the current milestone plan, [docs/milestones/m0.md](./docs/milestones/m0.md). Implement what the design says; when the design turns out wrong or incomplete, update the document in the same change, following the rules in `docs/README.md`.
 
 ## Core philosophy: beauty is productivity (颜值也是生产力)
 
@@ -37,6 +37,8 @@ OverBench takes the best implementations already proven in leading projects, int
 
 Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Tailwind CSS v4, pnpm 10, electron-builder. TypeScript stays on 6.0 until typescript-eslint supports 7.
 
+Approved for M0 and installed by the work package that first needs them: `@agentclientprotocol/sdk` for ACP (stable v1 entrypoint only) and Vitest for tests, both from M0.1.
+
 ### UI stack: one library per concern
 
 | Concern                     | Library                                                            |
@@ -47,6 +49,9 @@ Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Ta
 | Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`      |
 | Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                         |
 | State management            | Zustand, stores in `src/renderer/src/stores`, one store per domain |
+| Markdown                    | Streamdown, with `@streamdown/code` and `@streamdown/cjk` (M0.3)   |
+| Syntax highlighting         | Shiki (M0.3)                                                       |
+| Diffs                       | `@pierre/diffs` (M0.3)                                             |
 
 Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
 
@@ -102,7 +107,7 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 
 - `pnpm format:check`, `pnpm lint` and `pnpm typecheck` pass. Also run `pnpm build` when you touch config, the main process or the preload.
 - For UI changes, run the app and look at the result in light and dark themes before reporting the work as done. In development, `REMOTE_DEBUGGING_PORT=9222 pnpm dev` exposes the renderer over the Chrome DevTools Protocol for inspection and screenshots.
-- There is no test runner yet. Ask before adding one.
+- Once M0.1 adds Vitest, `pnpm test` must pass too, and logic you add or change comes with tests as described in [docs/design/testing.md](./docs/design/testing.md).
 
 ## Conventions
 
@@ -110,7 +115,7 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 - **Imports**: use the `@renderer/*` and `@shared/*` aliases instead of deep relative paths.
 - **Comments**: English and ASCII only, and only when they say what the code cannot, such as the reason for a workaround or an edge case. No commented-out code.
 - **Dependencies**: ask the maintainer before adding any. Renderer-only libraries go in `devDependencies` because Vite bundles them; only modules the main process loads at runtime go in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
-- **Docs**: `README.md` and `README.zh-CN.md` are kept in sync; change both together.
+- **Docs**: `README.md` and `README.zh-CN.md` are kept in sync; change both together. Design docs under `docs/` follow the maintenance rules in `docs/README.md`.
 - **Git**: Conventional Commits 1.0.0 in English, with an imperative subject of at most 50 characters and a body that explains why. No tool-generated trailers or attribution lines. Branches are `feat/…`, `fix/…`, `chore/…`, `docs/…` or `refactor/…` in kebab-case.
 - **Language**: talk to the maintainer in Simplified Chinese. Everything written into the repository is English (code, comments, commits, pull requests), except Chinese product copy and `README.zh-CN.md`.
 
@@ -120,3 +125,5 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 - `BACKGROUND_COLOR` in `src/main/window.ts` must match `--background` in `globals.css`, or the window flashes on load.
 - On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`.
 - `@dnd-kit/react` is still 0.x; read its changelog before bumping the minor version, and never mix in the legacy `@dnd-kit/core` packages.
+- Enter-to-send handlers must ignore IME composition (`event.nativeEvent.isComposing`), or Chinese, Japanese and Korean input sends half-typed text.
+- macOS, Windows and Linux are equal targets. Code that spawns processes, resolves executables or compares paths follows the platform rules in [docs/design/agent-host.md](./docs/design/agent-host.md#platform-differences).
