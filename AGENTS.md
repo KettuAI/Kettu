@@ -17,14 +17,15 @@ OverBench takes the best implementations already proven in leading projects, int
 3. **Optimize to the limit.**
    - Never block the main process: no synchronous file system, child process or network calls there. Move heavy work off the UI thread.
    - Keep the renderer smooth: stream agent output incrementally, virtualize long lists (sessions, transcripts, diffs), and subscribe to Zustand through narrow selectors so a change re-renders only what uses it.
-   - Animate only `transform` and `opacity`, and hold the display's frame rate (60 Hz, or 120 Hz on ProMotion displays).
+   - Never animate properties that trigger layout, except disclosures as the design system describes. Prefer `transform` and `opacity`, and hold the display's frame rate (60 Hz, or 120 Hz on ProMotion displays).
    - Keep startup fast: load heavy modules (syntax highlighting, diff engines, terminals) lazily with dynamic `import()`.
    - Measure before and after with the DevTools Performance panel. An optimization without a measurement is a guess.
 4. **Polish the UI to the limit.**
    - Design every state: loading (`Skeleton`), empty (`Empty`), error, and hover, focus, active and disabled.
    - Check every screen in both light and dark themes, at small and large window sizes.
-   - Use semantic color tokens and the Tailwind spacing scale; no raw colors or magic numbers.
-   - Motion is purposeful and restrained, and always honors reduce-motion.
+   - Take colors, radii, sizes and timings from the tokens in the [design system](./docs/design/design-system.md); no raw colors or magic numbers.
+   - Motion is purposeful and restrained, and always honors reduce-motion. Micro-interactions are CSS; Motion handles springs, layout, exits and gestures.
+   - The first desktop version benchmarks Claude Desktop. Take its principles and measurements from the design system, never its brand assets or the reconstructed code in the reference.
    - Respect platform conventions: macOS traffic lights and `Cmd` shortcuts, `Ctrl` on Windows and Linux.
 
 ### Reusing code from other projects
@@ -125,5 +126,5 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 - `BACKGROUND_COLOR` in `src/main/window.ts` must match `--background` in `globals.css`, or the window flashes on load.
 - On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`.
 - `@dnd-kit/react` is still 0.x; read its changelog before bumping the minor version, and never mix in the legacy `@dnd-kit/core` packages.
-- Enter-to-send handlers must ignore IME composition (`event.nativeEvent.isComposing`), or Chinese, Japanese and Korean input sends half-typed text.
+- Enter-to-send handlers must ignore IME composition (`event.nativeEvent.isComposing`, or `keyCode` 229), or Chinese, Japanese and Korean input sends half-typed text.
 - macOS, Windows and Linux are equal targets. Code that spawns processes, resolves executables or compares paths follows the platform rules in [docs/design/agent-host.md](./docs/design/agent-host.md#platform-differences).

@@ -8,13 +8,13 @@ OverBench stores as little as it can. Agents already keep transcripts and creden
 
 All files live in `app.getPath('userData')` ([per platform](./agent-host.md#platform-differences)).
 
-| File                  | Owner      | Contents                                                              |
-| --------------------- | ---------- | --------------------------------------------------------------------- |
-| `state/projects.json` | Agent host | Recent project folders                                                |
-| `state/sessions.json` | Agent host | The session index                                                     |
-| `settings.json`       | Agent host | Agent binary overrides                                                |
-| `window-state.json`   | Main       | Window size, position and maximized state                             |
-| `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes and collapsed groups |
+| File                  | Owner      | Contents                                                                                                       |
+| --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `state/projects.json` | Agent host | Recent project folders                                                                                         |
+| `state/sessions.json` | Agent host | The session index                                                                                              |
+| `settings.json`       | Agent host | Agent binary overrides                                                                                         |
+| `window-state.json`   | Main       | Window size, position and maximized state                                                                      |
+| `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes and collapsed groups, and [composer drafts](#composer-drafts) |
 
 ```ts
 interface ProjectsFile {
@@ -44,6 +44,12 @@ interface SettingsFile {
 
 - `name` defaults to the folder name.
 - `lastViewedAt` decides the `unread` attention state after a restart.
+
+## Composer drafts
+
+- Unsent composer text is stored in `localStorage` under `draft:<sessionId>`, written 300 ms after the last keystroke and when you switch sessions.
+- Sending a prompt or deleting the session removes the draft.
+- A draft larger than 1 MB, or one whose write fails (for example on the storage quota), stays in memory until the app quits, and the failure is logged.
 
 ## What is never stored
 
