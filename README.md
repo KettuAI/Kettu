@@ -1,0 +1,85 @@
+<div align="center">
+
+# OverBench
+
+**A beautifully crafted desktop workbench for terminal coding agents.**
+
+Claude Code · Codex CLI · opencode — one window, one calm workflow.
+
+*Beauty is productivity.*
+
+[![Status](https://img.shields.io/badge/status-early%20development-orange?style=flat-square)](#roadmap)
+[![Electron](https://img.shields.io/badge/built%20with-Electron-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](#roadmap)
+
+**English** · [简体中文](./README.zh-CN.md)
+
+</div>
+
+> [!NOTE]
+> OverBench is in early development and has no release yet. Everything below describes where the project is headed, not what ships today.
+
+## Why OverBench
+
+Terminal coding agents can now plan, edit and test code on their own. The way we work with them, though, still looks like a terminal: walls of scrolling text, diffs read line by line in monospace, sessions scattered across tabs and windows.
+
+OverBench gives these agents a home built for long working days. Its core belief is simple: **beauty is productivity**. How a tool looks and feels is part of how well it works:
+
+- A clear visual hierarchy shows you what the agent changed faster than any scrollback.
+- Calm typography, colors and motion keep you focused for hours, not minutes.
+- A well-designed review flow surfaces the mistakes a terminal buries.
+
+Design in OverBench is not decoration on top of the tool. It is the tool.
+
+## Supported agents
+
+OverBench works with the agent CLIs you already use: your installation, your account, your configuration.
+
+| Agent | Status |
+| --- | --- |
+| [Claude Code](https://github.com/anthropics/claude-code) | Planned |
+| [Codex CLI](https://github.com/openai/codex) | Planned |
+| [opencode](https://opencode.ai) | Planned |
+
+## Features
+
+> Planned for the first releases.
+
+- **Every agent, one workbench** — run Claude Code, Codex CLI and opencode side by side, and switch agents without switching tools.
+- **Sessions organized by project** — every conversation kept, searchable and resumable, grouped by the project it belongs to.
+- **Review diffs, not scrollback** — the agent's edits rendered as real side-by-side or inline diffs, file by file.
+- **Readable approvals** — tool calls and permission requests shown as clear, structured cards you can approve with confidence.
+- **Parallel sessions** — several agents working across projects at once, with status that shows at a glance what is running, what is waiting for you and what is done.
+- **Keyboard first** — a command palette and shortcuts for everything, so the mouse stays optional.
+- **Crafted details** — considered typography, polished light and dark themes, and restrained motion that never gets in the way.
+
+## Design principles
+
+1. **Beauty is productivity.** Visual quality is a feature, with the same weight as functionality. A screen that is pleasant to look at for eight hours is a screen you work better in.
+2. **Clarity before density.** Show what the decision at hand needs, and keep the rest one step away.
+3. **Make the agent's work legible.** What it plans, what it runs and what it changes should be visible at a glance and easy to review.
+4. **Feel native.** Fast to start, smooth to use and respectful of each platform's conventions, even though it is built on Electron.
+5. **Stay out of the way.** The agent does the work. OverBench makes that work visible and controllable, then steps aside.
+
+## Roadmap
+
+- [ ] App shell and design system
+- [ ] Claude Code integration
+- [ ] Codex CLI integration
+- [ ] opencode integration
+- [ ] Session history and search
+- [ ] Diff review
+- [ ] Multi-project, multi-session workspace
+- [ ] Preview builds for macOS, Windows and Linux
+
+## Getting started
+
+There is nothing to install yet. Build and install instructions will arrive with the first preview build. Star or watch the repository to follow along.
+
+## Contributing
+
+OverBench is taking shape, and early feedback shapes it the most. Ideas about design and workflow are especially welcome: open an [issue](https://github.com/overbench/overbench/issues) to start the conversation.
+
+---
+
+<sub>OverBench is an independent project and is not affiliated with or endorsed by the makers of the agents it supports. All product names are trademarks of their respective owners.</sub>
