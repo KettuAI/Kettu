@@ -1,0 +1,118 @@
+# AGENTS.md
+
+Guidance for coding agents working in this repository. `CLAUDE.md` imports this file, so edit this one and keep a single source of truth.
+
+## Project
+
+OverBench is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI and opencode. It is in early development; [README.md](./README.md) has the product vision, features and roadmap.
+
+## Core philosophy: beauty is productivity (颜值也是生产力)
+
+OverBench takes the best implementations already proven in leading projects, integrates them into one workbench, and then pushes them further, with performance optimized to the limit and a UI polished to the limit. Judge every change on all three.
+
+1. **Start from the best existing implementation.** Before building a feature, study how the strongest projects solve it. Read their source, not only their screenshots, and adopt the best approach instead of inventing one from scratch. In your summary, name the projects you drew on and what you took from each.
+2. **Then go further.** Integration is the starting point, not the goal. Drop what the original did not need, fix its rough edges, and make it faster and better looking than where it came from.
+3. **Optimize to the limit.**
+   - Never block the main process: no synchronous file system, child process or network calls there. Move heavy work off the UI thread.
+   - Keep the renderer smooth: stream agent output incrementally, virtualize long lists (sessions, transcripts, diffs), and subscribe to Zustand through narrow selectors so a change re-renders only what uses it.
+   - Animate only `transform` and `opacity`, and hold the display's frame rate (60 Hz, or 120 Hz on ProMotion displays).
+   - Keep startup fast: load heavy modules (syntax highlighting, diff engines, terminals) lazily with dynamic `import()`.
+   - Measure before and after with the DevTools Performance panel. An optimization without a measurement is a guess.
+4. **Polish the UI to the limit.**
+   - Design every state: loading (`Skeleton`), empty (`Empty`), error, and hover, focus, active and disabled.
+   - Check every screen in both light and dark themes, at small and large window sizes.
+   - Use semantic color tokens and the Tailwind spacing scale; no raw colors or magic numbers.
+   - Motion is purposeful and restrained, and always honors reduce-motion.
+   - Respect platform conventions: macOS traffic lights and `Cmd` shortcuts, `Ctrl` on Windows and Linux.
+
+### Reusing code from other projects
+
+- Check the license first. Code under MIT, BSD, ISC or Apache-2.0 may be adapted: keep its copyright and license notice, and add a one-line comment with the source URL.
+- OverBench's own license is not decided yet. Ask the maintainer before reusing anything under GPL, AGPL, LGPL or MPL, or without a license.
+- When a maintained package already does the job, prefer depending on it over copying it, subject to the dependency rules below.
+
+## Tech stack
+
+Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Tailwind CSS v4, pnpm 10, electron-builder. TypeScript stays on 6.0 until typescript-eslint supports 7.
+
+### UI stack: one library per concern
+
+| Concern                     | Library                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| Components and visual style | shadcn/ui, `base-nova` style on Base UI                            |
+| Icons                       | Lucide (`lucide-react`)                                            |
+| Animation                   | Motion (`motion/react`)                                            |
+| Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`      |
+| Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                         |
+| State management            | Zustand, stores in `src/renderer/src/stores`, one store per domain |
+
+Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
+
+## Architecture
+
+```text
+src/
+├── main/              Main process
+│   ├── index.ts       App lifecycle, single-instance lock
+│   ├── window.ts      Main window, navigation lock
+│   ├── renderer.ts    Loads the renderer; tells app URLs from remote ones
+│   └── ipc.ts         IPC handlers
+├── preload/           Sandboxed bridge exposed as window.overbench
+├── renderer/src/      React UI
+│   ├── components/ui  shadcn/ui components (managed by the shadcn CLI)
+│   ├── lib/           Helpers (cn, theme)
+│   └── styles/        globals.css: Tailwind entry and theme tokens
+└── shared/            Types shared across processes, such as the IPC contract
+```
+
+### Adding an IPC call
+
+1. Declare the channel in `IpcInvokeContract` and the method in `OverbenchApi`, both in `src/shared/ipc.ts`. Channel names are `domain:action` in kebab-case, e.g. `app:get-info`.
+2. Register the handler in `src/main/ipc.ts` with `handle()`, which rejects senders outside the app.
+3. Expose the method in `src/preload/index.ts` through `invoke()`.
+
+### Security rules
+
+OverBench drives agents that run shell commands, so these are not negotiable:
+
+- Keep `sandbox: true`, `contextIsolation: true` and `nodeIntegration: false`.
+- Never expose `ipcRenderer` or Node APIs to the renderer; expose narrow, typed methods only.
+- Treat every IPC argument as untrusted input and validate it in the main process.
+- Navigation away from the app and new windows stay blocked; external `http(s)` links open in the system browser.
+- The sandboxed preload can only `require('electron')`. Bundled source and type-only imports from `@shared` are fine; Node built-ins and npm packages are not.
+- Do not loosen the CSP in `src/renderer/index.html` without a stated reason.
+
+## Commands
+
+| Command             | What it does                              |
+| ------------------- | ----------------------------------------- |
+| `pnpm dev`          | Run the app with hot reload               |
+| `pnpm format:check` | Check formatting (`pnpm format` fixes it) |
+| `pnpm lint`         | ESLint                                    |
+| `pnpm typecheck`    | Type-check main, preload and renderer     |
+| `pnpm build`        | Type-check and build into `out/`          |
+| `pnpm package`      | Build an unpacked app into `dist/`        |
+| `pnpm shadcn add x` | Add a shadcn/ui component                 |
+
+## Definition of done
+
+- `pnpm format:check`, `pnpm lint` and `pnpm typecheck` pass. Also run `pnpm build` when you touch config, the main process or the preload.
+- For UI changes, run the app and look at the result in light and dark themes before reporting the work as done. In development, `REMOTE_DEBUGGING_PORT=9222 pnpm dev` exposes the renderer over the Chrome DevTools Protocol for inspection and screenshots.
+- There is no test runner yet. Ask before adding one.
+
+## Conventions
+
+- **Formatting**: Prettier (single quotes, no semicolons, 100 columns) and ESLint own the style; do not format against them.
+- **Imports**: use the `@renderer/*` and `@shared/*` aliases instead of deep relative paths.
+- **Comments**: English and ASCII only, and only when they say what the code cannot, such as the reason for a workaround or an edge case. No commented-out code.
+- **Dependencies**: ask the maintainer before adding any. Renderer-only libraries go in `devDependencies` because Vite bundles them; only modules the main process loads at runtime go in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
+- **Docs**: `README.md` and `README.zh-CN.md` are kept in sync; change both together.
+- **Git**: Conventional Commits 1.0.0 in English, with an imperative subject of at most 50 characters and a body that explains why. No tool-generated trailers or attribution lines. Branches are `feat/…`, `fix/…`, `chore/…`, `docs/…` or `refactor/…` in kebab-case.
+- **Language**: talk to the maintainer in Simplified Chinese. Everything written into the repository is English (code, comments, commits, pull requests), except Chinese product copy and `README.zh-CN.md`.
+
+## Gotchas
+
+- shadcn/ui here is built on Base UI, not Radix: components take a `render` prop instead of `asChild`. To make a link look like a button, put `buttonVariants()` on a plain `<a>` rather than `<Button render={<a />}>`.
+- `BACKGROUND_COLOR` in `src/main/window.ts` must match `--background` in `globals.css`, or the window flashes on load.
+- On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`.
+- `@dnd-kit/react` is still 0.x; read its changelog before bumping the minor version, and never mix in the legacy `@dnd-kit/core` packages.
