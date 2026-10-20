@@ -23,11 +23,11 @@ _Beauty is productivity._
 
 Terminal coding agents can now plan, edit and test code on their own. The way we work with them, though, still looks like a terminal: walls of scrolling text, diffs read line by line in monospace, sessions scattered across tabs and windows.
 
-OverBench gives these agents a home built for long working days. Its core belief is simple: **beauty is productivity**. How a tool looks and feels is part of how well it works:
+OverBench gives these agents a home built for long working days, and it rests on one belief: **beauty is productivity**. In practice that means three things:
 
-- A clear visual hierarchy shows you what the agent changed faster than any scrollback.
-- Calm typography, colors and motion keep you focused for hours, not minutes.
-- A well-designed review flow surfaces the mistakes a terminal buries.
+- **Start from the best.** The best tools out there have already solved pieces of this problem: a great terminal here, a great diff viewer there, a smart session model somewhere else. OverBench does not reinvent them. It studies the strongest implementations and brings the best of each together in one workbench.
+- **Optimize to the limit.** Bringing them together is only the starting point. Every piece is then tuned until it is fast: quick to start, smooth through the longest transcripts, with no dropped frames.
+- **Polish to the limit.** Every piece is also reworked until it looks and feels right, because how a tool looks and feels is part of how well it works. A clear visual hierarchy shows you what the agent changed faster than any scrollback, calm typography, colors and motion keep you focused for hours, and a well-designed review flow surfaces the mistakes a terminal buries.
 
 Design in OverBench is not decoration on top of the tool. It is the tool.
 
