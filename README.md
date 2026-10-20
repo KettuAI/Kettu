@@ -101,7 +101,7 @@ src/
 
 ## Contributing
 
-OverBench is taking shape, and early feedback shapes it the most. Ideas about design and workflow are especially welcome: open an [issue](https://github.com/overbench/overbench/issues) to start the conversation.
+OverBench is taking shape, and early feedback shapes it the most. Ideas about design and workflow are especially welcome: open an [issue](https://github.com/overbench/overbench/issues) to start the conversation. Before sending code, read [CONTRIBUTING.md](./CONTRIBUTING.md) for the UI stack and project conventions.
 
 ---
 

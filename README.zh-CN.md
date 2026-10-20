@@ -101,7 +101,7 @@ src/
 
 ## 参与贡献
 
-OverBench 正在成形，越早的反馈越能影响它最终的样子。我们尤其欢迎关于设计和工作流的想法，可以直接提一个 [Issue](https://github.com/overbench/overbench/issues) 来聊聊。
+OverBench 正在成形，越早的反馈越能影响它最终的样子。我们尤其欢迎关于设计和工作流的想法，可以直接提一个 [Issue](https://github.com/overbench/overbench/issues) 来聊聊。提交代码前，请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)（英文），了解项目统一使用的 UI 技术栈和开发约定。
 
 ---
 
