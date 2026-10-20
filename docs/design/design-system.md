@@ -55,6 +55,8 @@ Lines are translucent, so one token reads the same on every surface step.
 - `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user. It is the loudest color in the app.
 - `--success` (green): completed checks.
 - `--destructive` and `--ring`: shadcn's.
+- `--muted-foreground` in the light theme is `oklch(0.53 0 0)` instead of shadcn's 0.556, which reaches only 4.49:1 on surface 0, just under WCAG AA.
+- `--sidebar-accent`, the fill of hovered and selected sidebar rows, is `oklch(0.945 0 0)` light and `oklch(0.25 0 0)` dark; shadcn's 0.97 barely shows on surface 0.
 - Agent icons come from the ACP Registry and are the only brand color in the interface.
 
 ## Borders and elevation
