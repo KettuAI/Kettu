@@ -36,7 +36,7 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 └───────────────┴────────────────────────────────────────────────────┘
 ```
 
-- Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B`, and remembers its size per device.
+- Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B` through the panel's own collapse, and remembers its size per device.
 - The sidebar sits on surface 0 and the thread on surface 1. The step between them is the only separation; the resize handle shows a hairline only while it is hovered or dragged.
 - The thread is a single centred column, 768 px at most (`max-w-3xl`), so prose keeps a comfortable line length at any window width. Tool cards and diffs use the same column.
 - There is no right-hand panel in M0. The Changes panel and terminal arrive later and will open on the right.
@@ -67,12 +67,12 @@ Opened from the sidebar footer or with `Mod+,`. One card per agent:
 ## Sidebar
 
 - Projects are collapsible groups: folder name, with the full path in a tooltip. **New session** (`Mod+N`) appears on hover and for the selected project.
-- Session rows are `--row-height` (28 px) with `--radius` and no border. A hovered row fills with `--sidebar-accent`; the selected row has a stronger fill.
+- The sidebar's content is built from shadcn's `Sidebar` parts (`SidebarGroup`, `SidebarMenu`, `SidebarMenuButton` at `size="sm"`, which is 28 px, `SidebarMenuBadge`) with `collapsible="none"`, inside the `ResizablePanel` that owns its width. Rows have no border; hover and selection use the component's own fills.
 - Each row: agent icon, title (truncated), relative time, and one status indicator, in this order of priority:
   1. **Waiting for you** (`attention: 'permission'`): a filled `--attention` dot and count. This is the loudest signal in the app.
   2. **Error** (`attention: 'error'`): a destructive dot.
-  3. **Running** (`status: 'running'`): a dot with a soft pulsing halo.
-  4. **Starting** (`status: 'starting'`): a small spinner while the agent starts or the session loads.
+  3. **Running** (`status: 'running'`): a dot with Tailwind's `animate-pulse`.
+  4. **Starting** (`status: 'starting'`): a `Spinner` while the agent starts or the session loads.
   5. **Unread** (`attention: 'unread'`): a small neutral dot after a turn ended while you were elsewhere.
 - Indicators always pair a color with a shape or label, never color alone.
 - The sidebar list has one Tab stop; the arrow keys move between rows.
@@ -81,36 +81,31 @@ Opened from the sidebar footer or with `Mod+,`. One card per agent:
 
 ## Thread
 
-The thread uses shadcn's `MessageScroller`. Opening a session lands at the bottom. Its scrolling must match the reference's measured behavior, which M0.3 checks:
+The thread uses shadcn's `MessageScroller` with `autoScroll`: it follows new output, yields as soon as you scroll up, shows `MessageScrollerButton` to jump back, and fades its edges. The user message that starts a turn is the `scrollAnchor`, so a new turn opens with your prompt in view. Opening a session lands at the bottom.
 
-- It follows new output while the view is within 40 px of the bottom, and stops following as soon as you scroll up.
-- A scroll you make (wheel, touch, keys) wins over following for 150 ms, so streaming never fights your hand.
-- Jump-to-latest appears once the view is more than 120 px from the bottom.
-- Following scrolls instantly (`behavior: 'auto'`); smooth scrolling lags behind streaming text.
-
-If `MessageScroller` cannot be configured to match, the change goes into the component, not into a second scroll hook.
+M0.3 compares its behavior with the reference's measurements: following within 40 px of the bottom, your own scroll winning over following for 150 ms, jump-to-latest beyond 120 px, and instant rather than smooth following. Where `MessageScroller` differs and offers no option, OverBench keeps its behavior and records the difference here; it never adds a second scroll hook.
 
 Turns are 16 px apart, and the blocks within a turn 10 px.
 
-| Entry      | Presentation                                                                                                                                                                      |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User       | A `Bubble` with a `--muted` fill, no border and `--radius-card`, right-aligned, at most 85% of the column. Taller than 300 px, it collapses behind a 48 px fade and **Show more** |
-| Agent      | Plain prose without bubble, border or avatar, so long answers and code read like a document. Rendered with Streamdown                                                             |
-| Thought    | Collapsed to one line: "Thinking" with a shimmer while streaming, "Thought for 12 s" afterwards. Expands as a disclosure to muted text                                            |
-| Tool call  | A compact card ([below](#tool-calls))                                                                                                                                             |
-| Plan       | A checklist; the latest plan is also pinned above the composer as "Plan 3/5" and expands in place                                                                                 |
-| Notice     | An `Alert` in the matching variant                                                                                                                                                |
-| Compaction | A `Marker` ("Context compacted"), with the summary behind a disclosure                                                                                                            |
-| Turn end   | A quiet `Marker`: "Worked for 2 m 13 s", or "Cancelled", "Stopped at the token limit", "Stopped at the request limit", "Declined"                                                 |
+| Entry      | Presentation                                                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User       | `Message align="end"` with a `Bubble` in the `muted` variant, at most 85% of the column. Taller than 300 px, it collapses behind a fade and **Show more** |
+| Agent      | Plain prose without bubble, border or avatar, so long answers and code read like a document. Rendered with Streamdown                                     |
+| Thought    | Collapsed to one line: "Thinking" with shadcn's `shimmer` while streaming, "Thought for 12 s" afterwards. Expands as a `Collapsible` to muted text        |
+| Tool call  | A compact card ([below](#tool-calls))                                                                                                                     |
+| Plan       | A checklist; the latest plan is also pinned above the composer as "Plan 3/5" and expands in place                                                         |
+| Notice     | An `Alert` in the matching variant                                                                                                                        |
+| Compaction | A `Marker` ("Context compacted"), with the summary behind a disclosure                                                                                    |
+| Turn end   | A quiet `Marker`: "Worked for 2 m 13 s", or "Cancelled", "Stopped at the token limit", "Stopped at the request limit", "Declined"                         |
 
-Between sending a prompt and the first output, the waiting dots sit where the reply will appear.
+Between sending a prompt and the first output, a status line ("Working…") with `shimmer` sits where the reply will appear.
 
 ### Markdown
 
 - Streamdown in `streaming` mode with `parseIncompleteMarkdown` while the message streams, then `static` mode.
 - Plugins: `@streamdown/code` for Shiki highlighting, with a light and a dark theme matched to the app's tokens, and `@streamdown/cjk` so emphasis and line breaking work around Chinese, Japanese and Korean text.
 - `skipHtml` is on: agent output never renders raw HTML. Links pass through Streamdown's link safety and open in the system browser.
-- Code blocks are cards: surface 2, a hairline ring and `--radius-card`, with a `--row-height` header holding the language and a copy button.
+- Code blocks are Streamdown's, with its copy button, on surface 2 with a hairline ring.
 - Images in agent messages render only from `data:` URLs; the CSP blocks remote images.
 
 ### Tool calls
@@ -123,7 +118,7 @@ Between sending a prompt and the first output, the waiting dots sit where the re
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- **Card**: surface 2, a hairline ring, `--radius-card`; the body is separated from the header by a hairline divider, not a second border.
+- **Card**: shadcn `Card` with an added `tool` variant (surface 2, a hairline ring, `--radius-card`) and a `Collapsible` body; the body is separated from the header by a hairline `Separator`, not a second border.
 - **Header**: a `--row-height` row with the kind icon, the title, a one-line summary on the right (diff stats in `tabular-nums`, exit status, match count) and the status:
   - `pending`: a hollow circle.
   - `in_progress`: a spinner.
@@ -156,8 +151,8 @@ Between sending a prompt and the first output, the waiting dots sit where the re
 
 ## Composer
 
-- **Surface**: raised (surface 3), `--radius-composer`, with the composer's ring and shadow states from the [design system](./design-system.md#elevation).
-- **Text**: a textarea that grows with `field-sizing: content`, from 44 px up to `min(40svh, 24rem)`, then scrolls. No height is measured in JavaScript. The placeholder is "Ask <agent> to…".
+- **Surface**: shadcn's `InputGroup` with an added `composer` variant: raised (surface 3), `--radius-composer`, and the composer's ring and shadow states from the [design system](./design-system.md#elevation).
+- **Text**: `InputGroupTextarea`, which grows with `field-sizing: content`, from 44 px up to `min(40svh, 24rem)`, then scrolls. The placeholder is "Ask <agent> to…".
 - **Chin**: a `--row-height` row under the text with the controls from `config`: the mode selector, the model selector, and the reasoning selector (`thought_level`) when the agent offers one, placed by `category`. Boolean options become switches in an overflow menu. On the right are the usage ring and the send button. Controls are `--control-height`.
 - **Sending**: **Enter** sends and **Shift+Enter** inserts a newline.
 - **IME**: Enter never sends while an IME composition is in progress (`isComposing`, or `keyCode` 229), so Chinese, Japanese and Korean input works. The reference also drops an Enter that arrives within 500 ms after `compositionend`, a guard for WebKit. M0.3 tests Pinyin and Japanese input on all three platforms (the macOS input sources, Microsoft Pinyin and IME, fcitx5) and adds such a guard only where a test shows it is needed, with the shortest window that passes.
@@ -186,14 +181,14 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 
 | Element                                                          | Motion                                                |
 | ---------------------------------------------------------------- | ----------------------------------------------------- |
-| New entry                                                        | Enter: opacity and a 4 px rise                        |
+| New entry                                                        | New entry                                             |
 | Thoughts, tool cards, grouped rows, long user messages, the plan | Disclosure                                            |
 | Tool status change                                               | Icon crossfade, `--duration-fast`                     |
 | Status text in a tool header or the composer                     | Status text                                           |
 | Permission request appears                                       | Attention: one pulse, never looping                   |
-| Waiting for the first output                                     | Waiting dots                                          |
-| Running session in the sidebar                                   | Halo                                                  |
-| Buttons                                                          | Press and release                                     |
+| Waiting for the first output                                     | Thinking, waiting                                     |
+| Running session in the sidebar                                   | Running                                               |
+| Buttons                                                          | Press                                                 |
 | Agent cards on Project home                                      | 1 px rise and `sm` shadow on hover, `--duration-fast` |
 | Copying code                                                     | Copy feedback                                         |
 | Dismissed alerts and banners                                     | Motion exit: opacity, `--duration-fast`               |

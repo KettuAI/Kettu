@@ -21,7 +21,8 @@ The first desktop version benchmarks the Claude Desktop app, through the analysi
 2. **One line per surface.** A surface has at most one enclosing border ([below](#one-line-per-surface)).
 3. **Compact by default.** OverBench is a desktop tool for long sessions: 24 px controls and 28 px rows show more of the work without feeling cramped.
 4. **Micro-interactions run on the compositor.** Hover, press, focus and looping indicators are CSS, so they cost no JavaScript per frame. Motion handles springs, layout, exits and gestures ([motion](#css-or-motion)).
-5. **Every value is a token.** Colors, radii, sizes, durations and curves come from `globals.css`; components never hard-code them.
+5. **The stack first.** What shadcn/ui, Base UI, Tailwind or tw-animate-css already provides is used as it is, styled through the tokens; a custom implementation needs a reason written here.
+6. **Every value is a token.** Colors, radii, sizes, durations and curves come from `globals.css`; components never hard-code them.
 
 ## Color
 
@@ -78,7 +79,7 @@ Lines are translucent, so one token reads the same on every surface step.
 | `lg` | Contact and a 28 px ambient shadow             | Dialogs                             |
 
 - Dark-theme shadows are several times stronger (opacity 0.4 to 0.5), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge, which reads as an edge catching the light.
-- **Composer**: a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft 24 px shadow. Only color and shadow change, so focusing never moves the text.
+- **Composer** (the `composer` variant of `InputGroup`): a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft 24 px shadow. Only color and shadow change, so focusing never moves the text.
 - **Focus rings** are shadcn's `focus-visible` ring everywhere. The reference uses a thinner ring with a glow in its brand color; a glow in a neutral color looks smudged, so OverBench keeps shadcn's ring.
 
 ## Density and sizing
@@ -97,7 +98,8 @@ M0 ships the compact density only. The comfortable values are recorded so that a
 | `--row-height`            | Sidebar rows, menu items, card headers, the composer chin | 28 px               | to be measured       |
 | Spacing steps             | Gaps between and around components                        | 6, 8, 12, 20, 32 px | 8, 12, 16, 28, 40 px |
 
-- shadcn derives its radius scale from `--radius`, so shadcn components follow it. OverBench's own components use `rounded-card`, `rounded-composer` and `rounded-dialog`.
+- shadcn derives its radius scale from `--radius`, so shadcn components follow it.
+- Where OverBench's look differs from a shadcn component's default, the difference is a variant added to that component with `cva`, such as `InputGroup` `variant="composer"` and `Card` `variant="tool"`, which use `rounded-composer` and `rounded-card`. Call sites never restyle a component with `className`; they use it for layout only.
 - The compact spacing steps are Tailwind's `1.5`, `2`, `3`, `5` and `8`.
 - Among shadcn's sizes, `xs` (24 px) is the control height in toolbars and the composer. `default` (32 px) is kept for dialogs, empty states and the Welcome screen, where a larger target helps. When the comfortable density arrives, these become size variants bound to the tokens.
 
@@ -114,61 +116,65 @@ M0 ships the compact density only. The comfortable values are recorded so that a
 
 ### Tokens
 
-| Duration             | Value  | Used for                                        |
-| -------------------- | ------ | ----------------------------------------------- |
-| `--duration-instant` | 60 ms  | Press, focus, checkbox                          |
-| `--duration-fast`    | 120 ms | Hover, color changes, icon crossfades           |
-| `--duration-base`    | 200 ms | Disclosures, status text, release after a press |
-| `--duration-slow`    | 300 ms | New thread entries, panels                      |
-| `--duration-slower`  | 450 ms | The one-time attention pulse                    |
+| Duration             | Value  | Used for                              |
+| -------------------- | ------ | ------------------------------------- |
+| `--duration-instant` | 60 ms  | Focus, checkbox                       |
+| `--duration-fast`    | 120 ms | Hover, color changes, icon crossfades |
+| `--duration-base`    | 200 ms | Disclosures, status text              |
+| `--duration-slow`    | 300 ms | New thread entries, panels            |
+| `--duration-slower`  | 450 ms | The one-time attention pulse          |
 
 | Easing             | Curve                                    | Used for                                     |
 | ------------------ | ---------------------------------------- | -------------------------------------------- |
 | `--ease-out-quart` | `cubic-bezier(.165, .84, .44, 1)`        | The default for anything settling into place |
 | `--ease-out-quint` | `cubic-bezier(.22, 1, .36, 1)`           | New thread entries                           |
 | `--ease-out-expo`  | `cubic-bezier(.16, 1, .3, 1)`            | Hover on frequent controls, disclosures      |
-| `--ease-snap`      | `cubic-bezier(.32, .72, 0, 1)`           | Press, snapping into place                   |
-| `--ease-overshoot` | `cubic-bezier(.34, 1.3, .64, 1)`         | Release after a press, toggles               |
 | `ease-in-out`      | Tailwind's, `cubic-bezier(.4, 0, .2, 1)` | Looping indicators                           |
 
-The reference uses nine curves, several of them nearly identical; OverBench keeps these six.
+The reference uses nine curves, several of them nearly identical. OverBench keeps the ones M0 uses; the press and overshoot curves are left out because buttons and switches keep shadcn's own feedback.
 
-| Spring (Motion) | Stiffness / damping / mass | Used for                 |
-| --------------- | -------------------------- | ------------------------ |
-| `press`         | 600 / 30 / 1               | Controls Motion animates |
-| `card`          | 320 / 28 / 1               | Cards, drag release      |
-| `panel`         | 1200 / 80 / 0.1            | Panels and sheets        |
+| Spring (Motion) | Stiffness / damping / mass | Used for            |
+| --------------- | -------------------------- | ------------------- |
+| `card`          | 320 / 28 / 1               | Cards, drag release |
+| `panel`         | 1200 / 80 / 0.1            | Panels and sheets   |
 
 Durations are custom properties used as `duration-(--duration-fast)`; easings are `--ease-*` theme variables, which give `ease-*` utilities. Springs are exported from `src/renderer/src/lib/motion.ts`.
 
 ### CSS or Motion
 
-| CSS transitions and keyframes                                  | Motion                                               |
-| -------------------------------------------------------------- | ---------------------------------------------------- |
-| Hover, press, focus, color, opacity and shadow changes         | Elements leaving the tree (`AnimatePresence`)        |
-| Enter-only effects, which run when an element is inserted      | Springs, layout and shared-element animations        |
-| Looping indicators: spinners, halos, the waiting dots, shimmer | Gestures: drag and anything that follows the pointer |
-| Disclosures and scroll-edge fades                              |                                                      |
+| CSS                                                                   | Motion                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------- |
+| Hover, press, focus, color, opacity and shadow changes                | Elements leaving the tree (`AnimatePresence`)        |
+| Enter-only effects, through tw-animate-css (`animate-in`, `fade-in`)  | Springs, layout and shared-element animations        |
+| Looping indicators: `Spinner`, `Skeleton`, `shimmer`, `animate-pulse` | Gestures: drag and anything that follows the pointer |
+| Disclosures (`Collapsible`) and scroll-edge fades (`scroll-fade`)     |                                                      |
 
 CSS cannot animate an element that is being removed, which is why exits go to Motion. The enter and exit transitions built into shadcn components stay as they are.
 
 ### Patterns
 
-- **Press**: `:active` scales to 0.975 in `--duration-instant` with `--ease-snap`; release returns in `--duration-base` with `--ease-overshoot`. This replaces shadcn's 1 px nudge in `button.tsx`. Rows and menu items do not scale.
-- **Disclosure**: `grid-template-rows` from `0fr` to `1fr`, `--duration-base`, `--ease-out-expo`, with no height measured in JavaScript. It is the only layout animation allowed: one disclosure at a time, never inside an entry that is streaming.
-- **New entry**: opacity from 0 and a 4 px rise, `--duration-slow`, `--ease-out-quint`, once per entry. Entries restored from history or a snapshot appear without animation.
-- **Status text**: when a line of status changes, the old text falls away and the new one rises in, `--duration-base`.
-- **Waiting dots**: three 3 px dots in an opacity wave over 1.9 s, for the gap between sending and the first output.
-- **Shimmer and skeletons**: a 105° gradient sweeps across in 2 s. Skeleton sweeps move a gradient layer with `transform`; the "Thinking" text shimmer animates its own small layer's background. All skeletons on screen share one phase, so a list of placeholders reads as one sweep.
-- **Scroll-edge fades**: a 28 px mask on any edge that has more content, driven by a scroll-driven animation (`animation-timeline: scroll()`) with no JavaScript.
-- **Attention**: a 2 px `--attention` ring that pulses once over `--duration-slower`. It does not loop; the sidebar indicator keeps the signal.
-- **Running**: a soft halo pulses around the sidebar's running dot.
-- **Copy feedback**: the copy icon becomes a check for 2.5 s, then fades back.
+Each pattern names what provides it. Only the attention pulse is OverBench's own keyframe, because nothing in the stack offers a one-time ring pulse.
+
+| Pattern           | Provided by                                                                                                    | Tuning                                                                                |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Press             | shadcn `Button`'s built-in active state                                                                        | None                                                                                  |
+| Disclosure        | shadcn `Collapsible` (Base UI), animating `--collapsible-panel-height`                                         | `--duration-base`, `--ease-out-expo`                                                  |
+| New entry         | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-slow`, `--ease-out-quint`; once per entry                                 |
+| Status text       | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-base`                                                                     |
+| Thinking, waiting | shadcn's `shimmer` utility on the status text                                                                  | None                                                                                  |
+| Loading           | shadcn `Skeleton` and `Spinner`                                                                                | None                                                                                  |
+| Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself | `--scroll-fade-size: 28px`                                                            |
+| Running           | Tailwind's `animate-pulse` on the sidebar's running dot                                                        | None                                                                                  |
+| Copy feedback     | The copy button in Streamdown's code blocks                                                                    | None                                                                                  |
+| Attention         | Own keyframe: a 2 px `--attention` ring that pulses once                                                       | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal |
+
+- The disclosure is the only layout animation allowed: one at a time, never inside an entry that is streaming.
+- Entries restored from history or a snapshot appear without animation.
 
 ### Reduce motion
 
 - Motion components follow the root `<MotionConfig reducedMotion="user">`: movement is removed and opacity remains.
-- CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: transforms and loops stop (dots and halos hold still, shimmer stops), opacity and color transitions remain, and disclosures open at once.
+- CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: movement and loops stop (pulses hold still, shimmer stops), opacity and color transitions remain, and disclosures open at once.
 
 ## Layout behavior
 
