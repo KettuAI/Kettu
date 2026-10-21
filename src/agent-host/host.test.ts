@@ -403,3 +403,32 @@ describe('git', () => {
     expect(gitEntries.map((e) => e.id)).toEqual([`g:${counter + 1}`, `g:${counter + 2}`])
   })
 })
+
+describe('project files', () => {
+  it('serves the files of a registered project only', async () => {
+    const { t, port } = await setup()
+    await mkdir(path.join(t.project, 'src'), { recursive: true })
+    await writeFile(path.join(t.project, 'src', 'a.txt'), 'Needle in a haystack\n')
+    await expect(port.request('files.list', { projectPath: t.project })).rejects.toMatchObject({
+      code: 'not_found',
+    })
+
+    await port.request('projects.add', { path: t.project })
+    expect(await port.request('files.list', { projectPath: t.project })).toEqual({
+      paths: ['src/a.txt'],
+      truncated: false,
+    })
+    expect(
+      await port.request('files.read', { projectPath: t.project, path: 'src/a.txt' }),
+    ).toMatchObject({ kind: 'text', text: 'Needle in a haystack\n' })
+    expect(await port.request('files.search', { projectPath: t.project, query: 'needle' })).toEqual(
+      {
+        matches: [{ path: 'src/a.txt', line: 1, text: 'Needle in a haystack' }],
+        truncated: false,
+      },
+    )
+    await expect(
+      port.request('files.read', { projectPath: t.project, path: '../outside.txt' }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+})

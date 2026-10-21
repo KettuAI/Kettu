@@ -1,5 +1,6 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
+import type { FileContent, FileList, FileSearch } from './files'
 import type { GitStatus, GitTools, PullRequest, PullRequestState } from './git'
 import type { PortConnectionState } from './port-rpc'
 import type { AgentId, PatchBatch, SessionSnapshot, SessionStatus, UserContent } from './thread'
@@ -195,6 +196,9 @@ export interface HostContract {
   'git.pullRequest': { params: { url: string }; result: PullRequest }
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
   'git.tools': { params: void; result: GitTools }
+  'files.list': { params: { projectPath: string }; result: FileList }
+  'files.read': { params: { projectPath: string; path: string }; result: FileContent }
+  'files.search': { params: { projectPath: string; query: string }; result: FileSearch }
 }
 
 export type HostMethod = keyof HostContract
@@ -241,6 +245,9 @@ export const HOST_METHODS = [
   'git.pullRequest',
   'git.currentPullRequest',
   'git.tools',
+  'files.list',
+  'files.read',
+  'files.search',
 ] as const satisfies readonly HostMethod[]
 
 export type HostEvent =

@@ -1,22 +1,9 @@
 import { memo, useMemo } from 'react'
 import { MultiFileDiff, WorkerPoolContext } from '@pierre/diffs/react'
-import { getOrCreateWorkerPoolSingleton } from '@pierre/diffs/worker'
-import DiffsWorker from '@pierre/diffs/worker/worker.js?worker'
 import { useDark } from '@renderer/hooks/use-dark'
 import { cn } from '@renderer/lib/utils'
+import { codeTheme as theme, diffsPool as pool } from './diff-pool'
 import type { DiffProps } from './index'
-
-const theme = { light: 'github-light-default', dark: 'github-dark-default' } as const
-
-// One pool for the app's lifetime: the provider component would terminate it whenever the last
-// diff unmounts, which happens every time a tool card collapses.
-const pool = getOrCreateWorkerPoolSingleton({
-  poolOptions: {
-    workerFactory: () => new DiffsWorker(),
-    poolSize: Math.min(4, Math.max(1, navigator.hardwareConcurrency - 2)),
-  },
-  highlighterOptions: { theme, preferredHighlighter: 'shiki-js' },
-})
 
 function DiffImpl({ path, oldText, newText, className }: DiffProps) {
   const dark = useDark()

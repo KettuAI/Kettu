@@ -234,6 +234,15 @@ ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The 
 - In development, `OVERBENCH_ACP_LOG=1` also mirrors ACP traffic to the host's stdout; packaged builds ignore it.
 - The buffers are bounded by size as well as count: the traffic of one agent holds at most 8 MB of JSON, a message over 256 KB is kept as a truncated preview, each agent keeps its last 500 process events, and the host log its last 2,000 entries. Messages are stored as JSON text, which costs far less memory than the parsed objects.
 
+## Project files
+
+- The Files pane lists, reads and searches a project's files through `files.list`, `files.read` and `files.search` ([host protocol](./host-protocol.md#requests)). `src/agent-host/files.ts` does it for a registered project, at its canonical path; the renderer has no file system access of its own.
+- **Listing**: `git ls-files --cached --others --exclude-standard`, minus the tracked files deleted on disk, so ignored files stay out. Without git, or outside a repository, a breadth-first walk reads at most 20 levels, skips `.git` and `node_modules`, and does not follow links to folders. Paths are relative with `/` on every platform and sorted by code unit; the list stops at 50,000 files and says so with `truncated`.
+- **Reading**: a file up to 1 MiB comes back as UTF-8 text. A NUL byte in its first 8,000 bytes makes it `binary`, and a larger file is `too-large`; neither is sent.
+- **Searching**: `git grep -F -i` with `--untracked --exclude-standard` finds literal text, ignoring case, in the files git would list. Outside a repository the host reads the walk's first 5,000 files, skipping binary ones and those over 1 MiB. Results stop at 500 matches, each line cut to 300 characters, and `truncated` says more exist.
+- **Containment**: a path with `..`, a NUL, or an absolute form is refused, and a read resolves the path with `realpath` and requires the result inside the project folder by the platform's [path rules](#platform-differences), so a symbolic link cannot lead out of the project.
+- Git runs through the same runner as the [git service](./git.md): never a shell, a 10 s timeout, the agent environment, and it stops with the host.
+
 ## Platform differences
 
 | Concern                   | macOS                                                                   | Linux                          | Windows                                                     |

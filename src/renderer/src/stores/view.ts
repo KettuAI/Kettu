@@ -9,6 +9,9 @@ export type MainView =
   // The New session screen; the session is created on the first send.
   | { kind: 'new'; agentId: AgentId | null }
 
+/** What the side panel shows; one pane at a time. */
+export type SidePane = 'terminal' | 'files'
+
 export type SettingsSection =
   | 'general'
   | 'appearance'
@@ -30,8 +33,9 @@ interface ViewStore {
   collapsedProjects: Record<string, true>
   /** Parent sessions the user collapsed or expanded; others follow activity. */
   expandedParents: Record<string, boolean>
-  terminalOpen: Record<string, boolean>
-  terminalMaximized: boolean
+  /** The open side pane per project; none when the panel is closed. */
+  sidePane: Record<string, SidePane>
+  sidePaneMaximized: boolean
 }
 
 interface Persisted {
@@ -40,7 +44,9 @@ interface Persisted {
   sidebarCollapsed: boolean
   collapsedProjects: Record<string, true>
   expandedParents: Record<string, boolean>
-  terminalOpen: Record<string, boolean>
+  sidePane: Record<string, SidePane>
+  /** Read once from versions before the Files pane, when the side panel held only the terminal. */
+  terminalOpen?: Record<string, boolean>
 }
 
 const KEY = 'view:v1'
@@ -53,8 +59,14 @@ export const useViewStore = create<ViewStore>()(() => ({
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
   expandedParents: saved.expandedParents ?? {},
-  terminalOpen: saved.terminalOpen ?? {},
-  terminalMaximized: false,
+  sidePane:
+    saved.sidePane ??
+    Object.fromEntries(
+      Object.entries(saved.terminalOpen ?? {})
+        .filter(([, open]) => open)
+        .map(([path]) => [path, 'terminal' as const]),
+    ),
+  sidePaneMaximized: false,
 }))
 
 export const lastSessionId = saved.lastSessionId ?? null
@@ -69,7 +81,7 @@ useViewStore.subscribe((state) => {
       sidebarCollapsed: state.sidebarCollapsed,
       collapsedProjects: state.collapsedProjects,
       expandedParents: state.expandedParents,
-      terminalOpen: state.terminalOpen,
+      sidePane: state.sidePane,
     }
     writeJson(KEY, persisted)
   }, 300)
@@ -117,9 +129,18 @@ export function toggleSidebar(): void {
   useViewStore.setState((s) => ({ sidebarCollapsed: !s.sidebarCollapsed }))
 }
 
+/** Shows the pane in the project's side panel, or closes the panel when that pane is shown. */
+export function toggleSidePane(projectPath: string, pane: SidePane, open?: boolean): void {
+  useViewStore.setState((s) => {
+    const shown = s.sidePane[projectPath] === pane
+    if ((open ?? !shown) === shown) return s
+    const sidePane = { ...s.sidePane }
+    if (shown) delete sidePane[projectPath]
+    else sidePane[projectPath] = pane
+    return { sidePane, sidePaneMaximized: false }
+  })
+}
+
 export function toggleTerminal(projectPath: string, open?: boolean): void {
-  useViewStore.setState((s) => ({
-    terminalOpen: { ...s.terminalOpen, [projectPath]: open ?? !s.terminalOpen[projectPath] },
-    terminalMaximized: false,
-  }))
+  toggleSidePane(projectPath, 'terminal', open)
 }

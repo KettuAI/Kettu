@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
 import { useDefaultLayout } from 'react-resizable-panels'
 import { onAppEvent } from '@renderer/app/events'
 import {
@@ -6,7 +6,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
-import { SidePanelContext } from '@renderer/features/shell/side-panel'
+import { TerminalPanel } from '@renderer/features/terminal/terminal-panel'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -16,25 +16,36 @@ import {
   useTerminalsStore,
 } from '@renderer/stores/terminals'
 import { toggleTerminal, useViewStore } from '@renderer/stores/view'
-import { TerminalPanel } from './terminal-panel'
+import { SidePanelContext } from './side-panel'
+
+const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
+
+// Each pane is a panel of its own, so each keeps its width: the terminal needs less room than a
+// file beside its tree. The terminal keeps the id it had when it was the only pane.
+const PANES = {
+  terminal: { id: 'side-panel', defaultSize: '340px', minSize: '280px' },
+  files: { id: 'side-panel-files', defaultSize: '560px', minSize: '360px' },
+} as const
 
 /**
- * The main area with the project's terminal in the side panel on its right. Opening or closing it
- * changes the content's width at once. Maximized, the panel covers the whole area while the layout
- * underneath keeps its sizes, so restoring returns to exactly the widths before.
+ * The main area with the project's side panel on its right, holding the terminal or the files.
+ * Opening or closing it changes the content's width at once. Maximized, the panel covers the
+ * whole area while the layout underneath keeps its sizes, so restoring returns to exactly the
+ * widths before.
  */
-export function TerminalArea({
+export function SidePanelArea({
   projectPath,
   children,
 }: {
   projectPath: string
   children: ReactNode
 }) {
-  const open = useViewStore((s) => !!s.terminalOpen[projectPath])
-  const maximized = useViewStore((s) => s.terminalMaximized) && open
+  const pane = useViewStore((s) => s.sidePane[projectPath])
+  const maximized = useViewStore((s) => s.sidePaneMaximized) && !!pane
+  const open = pane === 'terminal'
   const layout = useDefaultLayout({
     id: 'side-panel',
-    panelIds: open ? ['content', 'side-panel'] : ['content'],
+    panelIds: pane ? ['content', PANES[pane].id] : ['content'],
     storage: layoutStorage,
     onlySaveAfterUserInteractions: true,
   })
@@ -75,7 +86,7 @@ export function TerminalArea({
   )
 
   return (
-    <SidePanelContext value={open}>
+    <SidePanelContext value={!!pane}>
       <ResizablePanelGroup
         orientation="horizontal"
         defaultLayout={layout.defaultLayout}
@@ -91,17 +102,22 @@ export function TerminalArea({
             {children}
           </div>
         </ResizablePanel>
-        {open && (
+        {pane && (
           <>
             <ResizableHandle className={maximized ? 'pointer-events-none' : undefined} />
             <ResizablePanel
-              id="side-panel"
-              defaultSize="340px"
-              minSize="280px"
+              key={pane}
+              {...PANES[pane]}
               groupResizeBehavior="preserve-pixel-size"
               className="min-w-0"
             >
-              <TerminalPanel projectPath={projectPath} maximized={maximized} />
+              {pane === 'terminal' ? (
+                <TerminalPanel projectPath={projectPath} maximized={maximized} />
+              ) : (
+                <Suspense fallback={<div className="h-full bg-sidebar" />}>
+                  <FilesPanel projectPath={projectPath} maximized={maximized} />
+                </Suspense>
+              )}
             </ResizablePanel>
           </>
         )}

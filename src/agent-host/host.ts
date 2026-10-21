@@ -16,8 +16,10 @@ import {
 import { buildCatalog } from './catalog'
 import { Diagnostics } from './diagnostics'
 import { HostError } from './errors'
+import { FilesService } from './files'
 import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
+import { createExec, type ExecRunner } from './git/exec'
 import { pathKey } from './paths'
 import { Projects } from './projects'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
@@ -57,6 +59,9 @@ export class AgentHost {
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
+  /** Runs git for the project's files, with the agent environment. */
+  private readonly execRunner: ExecRunner
+  private readonly files: FilesService
   private gitUnsubscribe: (() => void)[] = []
   /** Ports keeping a project's git status live, by path key. */
   private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
@@ -79,6 +84,8 @@ export class AgentHost {
       ...(options.probeNode ? { probe: options.probeNode } : {}),
     })
     this.env.setProxy(options.settings.proxy)
+    this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
+    this.files = new FilesService({ exec: this.execRunner.exec, platform })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.agents = new AgentManager({
       catalog: buildCatalog(options.fakeAgentPath),
@@ -211,6 +218,7 @@ export class AgentHost {
   shutdown(): Promise<void> {
     this.stopping ??= (async () => {
       this.sessions.shutdown()
+      this.execRunner.killAll()
       for (const unsubscribe of this.gitUnsubscribe) unsubscribe()
       await Promise.all([
         this.agents.stopAll(),
@@ -265,6 +273,14 @@ export class AgentHost {
       if (error instanceof HostError) throw error
       throw new HostError('git_error', (error as Error)?.message ?? String(error))
     }
+  }
+
+  /** Runs a file request for a registered project, once the environment git needs is resolved. */
+  private async filesCall<T>(projectPath: string, run: (root: string) => Promise<T>): Promise<T> {
+    const canonical = await this.projects.resolveDirectory(projectPath)
+    this.projects.match(canonical)
+    await this.env.ready()
+    return run(canonical)
   }
 
   private handlers(): Handlers {
@@ -357,6 +373,12 @@ export class AgentHost {
         return this.gitCall((g) => g.currentPullRequest(canonical))
       },
       'git.tools': () => this.gitCall((g) => g.tools()),
+      'files.list': ({ projectPath }) =>
+        this.filesCall(projectPath, (root) => this.files.list(root)),
+      'files.read': ({ projectPath, path }) =>
+        this.filesCall(projectPath, (root) => this.files.read(root, path)),
+      'files.search': ({ projectPath, query }) =>
+        this.filesCall(projectPath, (root) => this.files.search(root, query)),
     }
   }
 }

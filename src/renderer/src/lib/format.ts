@@ -54,6 +54,18 @@ export function tokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
 }
 
+/** "812 B", "41 kB", "1.2 MB", in the locale's number format. */
+export function bytes(n: number): string {
+  const [value, unit] =
+    n < 1000 ? [n, 'byte'] : n < 1_000_000 ? [n / 1000, 'kilobyte'] : [n / 1_000_000, 'megabyte']
+  return new Intl.NumberFormat(undefined, {
+    style: 'unit',
+    unit,
+    unitDisplay: 'short',
+    maximumFractionDigits: n < 1000 ? 0 : 1,
+  }).format(value)
+}
+
 export function plural(n: number, word: string, pluralWord = `${word}s`): string {
   return `${n} ${n === 1 ? word : pluralWord}`
 }

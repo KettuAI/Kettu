@@ -75,6 +75,38 @@ describe('createValidators', () => {
     rejects(() => v({ url: 'https://example.com/a/b/pull/12' }))
     rejects(() => v({ url: 'javascript:alert(1)' }))
   })
+
+  it('checks the file requests', () => {
+    expect(posix['files.list']({ projectPath: '/p', extra: 1 })).toEqual({ projectPath: '/p' })
+    rejects(() => posix['files.list']({ projectPath: 'p' }))
+
+    const read = posix['files.read']
+    expect(read({ projectPath: '/p', path: 'src/a.ts', extra: 1 })).toEqual({
+      projectPath: '/p',
+      path: 'src/a.ts',
+    })
+    rejects(() => read({ projectPath: '/p' }))
+    rejects(() => read({ projectPath: '/p', path: '' }))
+    rejects(() => read({ projectPath: '/p', path: 3 }))
+    rejects(() => read({ projectPath: '/p', path: '/etc/hosts' }))
+    rejects(() => read({ projectPath: '/p', path: 'a\0b' }))
+    rejects(() => read({ projectPath: '/p', path: 'x'.repeat(32_768) }))
+    rejects(() => read({ projectPath: 'p', path: 'a.ts' }))
+    rejects(() => windows['files.read']({ projectPath: 'C:\\p', path: 'C:\\Windows\\a.ini' }))
+    rejects(() => windows['files.read']({ projectPath: 'C:\\p', path: '\\\\server\\share\\a' }))
+    rejects(() => windows['files.read']({ projectPath: 'C:\\p', path: '\\Windows\\a.ini' }))
+    expect(windows['files.read']({ projectPath: 'C:\\p', path: 'src/a.ts' })).toMatchObject({})
+
+    const search = posix['files.search']
+    expect(search({ projectPath: '/p', query: 'needle', extra: 1 })).toEqual({
+      projectPath: '/p',
+      query: 'needle',
+    })
+    rejects(() => search({ projectPath: '/p', query: '' }))
+    rejects(() => search({ projectPath: '/p', query: 'x'.repeat(4_097) }))
+    rejects(() => search({ projectPath: '/p' }))
+    rejects(() => search({ projectPath: 'p', query: 'x' }))
+  })
 })
 
 describe('promptContent', () => {

@@ -95,6 +95,9 @@ interface HostError {
 | `permissions.respond`      | `{ sessionId, requestId, optionId }`     | none                                            |                                                                                                             |
 | `diagnostics.collect`      | none                                     | `DiagnosticsBundle`                             | Main writes it to disk ([agent host](./agent-host.md#diagnostics))                                          |
 | `git.*`                    |                                          |                                                 | Repository status and pull requests ([git](./git.md#host-protocol))                                         |
+| `files.list`               | `{ projectPath }`                        | `FileList`                                      | Paths relative to the project, sorted; stops at 50,000 ([project files](./agent-host.md#project-files))     |
+| `files.read`               | `{ projectPath, path }`                  | `FileContent`                                   | `text`, `binary`, or `too-large` (over 1 MiB); a path leading out of the project is `invalid_params`        |
+| `files.search`             | `{ projectPath, query }`                 | `FileSearch`                                    | Literal, case-insensitive; at most 500 matches of 300 characters, then `truncated`                          |
 
 ```ts
 interface SessionSummary {

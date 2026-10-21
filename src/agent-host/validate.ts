@@ -57,6 +57,15 @@ function absolutePath(o: Fields, key: string, platform: Platform): string {
   return value
 }
 
+function relativePath(o: Fields, key: string, platform: Platform): string {
+  const value = string(o, key, PATH_CHARS)
+  if (value.includes('\0')) throw invalidParams(`${key} contains a NUL character`)
+  if (isAbsolutePath(value, platform) || value.startsWith('/') || value.startsWith('\\')) {
+    throw invalidParams(`${key} must be a relative path`)
+  }
+  return value
+}
+
 function sessionId(o: Fields): string {
   return string(o, 'sessionId', ID_CHARS)
 }
@@ -236,5 +245,20 @@ export function createValidators(platform: Platform): Validators {
     },
     'git.currentPullRequest': project,
     'git.tools': none,
+    'files.list': project,
+    'files.read': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        path: relativePath(o, 'path', platform),
+      }
+    },
+    'files.search': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        query: string(o, 'query', TEXT_CHARS),
+      }
+    },
   }
 }

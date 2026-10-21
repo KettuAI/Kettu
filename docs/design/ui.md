@@ -52,7 +52,7 @@ Launching should feel like opening a lid, not waiting for a page: no white or bl
 - Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B` through the panel's own collapse, sliding as the design system's [sidebar slide](./design-system.md#patterns) describes, and remembers its size per device. The width at collapse is saved too, so an app that starts collapsed expands back to it, not to the minimum. Collapsed, the handle takes no width, so no line shows at the window's edge.
 - The sidebar sits on surface 0 and the thread on surface 1. The step between them is the only separation; the resize handle shows a hairline only while it is hovered or dragged.
 - The thread is a single centred column, 768 px at most (`max-w-3xl`), so prose keeps a comfortable line length at any window width. Tool cards and diffs use the same column.
-- The [terminal](#terminal) opens in the **side panel** on the right of the main area. It sits flush on surface 0, like the sidebar on the left, so the thread on surface 1 is framed by two quieter surfaces and needs no line or shadow to stand apart. The layout follows the reference; the styling is OverBench's own. The thread column keeps the rest of the width and its own top bar. The Changes panel arrives later as a second view of the same side panel.
+- The **side panel** on the right of the main area holds one pane at a time: the [terminal](#terminal) or the [files](#files). It sits flush on surface 0, like the sidebar on the left, so the thread on surface 1 is framed by two quieter surfaces and needs no line or shadow to stand apart. The layout follows the reference; the styling is OverBench's own. The thread column keeps the rest of the width and its own top bar. Each pane has a toggle at the right end of the top bar, as the reference's row of pane buttons: **Files** (`FolderTree`) and **Terminal** (`SquareTerminal`); a toggle shows its pane, or closes the panel when its pane is shown, and the open pane is remembered per project. Each pane keeps its own width (the terminal 340 px by default, the files 560 px). The Changes panel arrives later as a third pane.
 
 ## Screens
 
@@ -330,6 +330,29 @@ The right side of the top bar shows the project's repository at a glance. Everyt
 - **Chips** in agent text and tool output: `--muted` fill, `--border-soft` ring, the state icon, `owner/repo#42` and the title truncated after 40 characters. Hover shows a `HoverCard` with the title, state, branches, checks, review state and when it was updated; a click opens the pull request in the browser. Without `gh`, the chip shows the neutral `GitPullRequest` icon and the number, and still opens the link.
 - **Sidebar**: the badge on a session's row, described in [sidebar](#sidebar).
 - **Top bar**: the current branch's chip, above.
+
+## Files
+
+The Files pane, in the side panel, shows the project's files beside the one that is open, as the reference's Files pane does. The agent host lists, reads and searches them ([project files](./agent-host.md#project-files)); the renderer has no file system access.
+
+```text
+┬──────────────────────────────────────────────────────────┐
+│ ⌕ Filter, or ? to search in files           ☰   ⤢   ×    │  header, 40 px, a drag region
+├──────────────────┬───────────────────────────────────────┤
+│ › docs           │ session.ts  src/agent-host     ⧉  ×   │  the open file
+│ ⌄ src            │   1  import { randomUUID } from …     │
+│   › agent-host   │   2  …                                │  highlighted, line marked
+│     index.ts     │                                       │
+└──────────────────┴───────────────────────────────────────┘
+```
+
+- **Header**: the filter field, then **Show as a list** / **Show as a tree** (`List`, `ListTree`), **Maximize** and **Close**, as the terminal's header. Maximized with the sidebar collapsed, it starts with the sidebar toggle, as the terminal does.
+- **Tree**: folders first, then files, by name; folders start closed. Opening a file from the conversation opens its folders and scrolls it into view. Rows are `--row-height` and virtualized, so a project of 50,000 files scrolls like a small one. **Show as a list** lists every path instead.
+- **Filter**: typing filters the paths by their characters in order, ignoring case, the best match first (as fzf's first algorithm: consecutive characters, word starts and the file name count for more); the matched characters of the name are marked, the folder follows in `--muted-foreground`. Up to 1,000 matches show, with a count of the rest. `Esc` clears it.
+- **Search**: a filter starting with `?` searches the files' text instead (literal, ignoring case, 250 ms after the last keystroke), listing each file with its matching lines, the line number and the match marked; a line opens the file there.
+- **Preview**: "Open files appear here" until a file is picked. An open file shows its name and folder above the text, with **Copy path** and **Close file**, and the text highlighted by the diffs library's `File` on the shared worker pool, virtualized, with the referenced line marked and centred. A binary file, one over 1 MB and one that cannot be read show an `Empty` state saying so.
+- **Freshness**: the list and the open file reload when the project's git status changes, which follows edits on disk, and when the window gains focus.
+- The tree and the preview split the pane with a resize handle; the tree defaults to 220 px.
 
 ## Terminal
 

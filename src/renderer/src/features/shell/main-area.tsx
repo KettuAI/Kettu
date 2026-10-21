@@ -3,10 +3,10 @@ import { usePendingSession } from '@renderer/app/actions'
 import { ProjectHome } from '@renderer/features/home/project-home'
 import { Welcome } from '@renderer/features/home/welcome'
 import { LaunchState } from '@renderer/features/shell/launch-state'
+import { SidePanelArea } from '@renderer/features/shell/side-panel-area'
 import { NewSessionView } from '@renderer/features/session/new-session'
 import { PendingSessionView } from '@renderer/features/session/pending-session'
 import { SessionView } from '@renderer/features/session/session-view'
-import { TerminalArea } from '@renderer/features/terminal/terminal-area'
 import { showProject } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -46,5 +46,5 @@ export function MainArea() {
   } else {
     content = <ProjectHome project={project} />
   }
-  return <TerminalArea projectPath={project.path}>{content}</TerminalArea>
+  return <SidePanelArea projectPath={project.path}>{content}</SidePanelArea>
 }

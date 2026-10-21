@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Maximize2Icon, Minimize2Icon, PlusIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -13,7 +13,7 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -114,7 +114,7 @@ export function TerminalPanel({
         )}
         <PanelButton
           label={maximized ? 'Restore' : 'Maximize'}
-          onClick={() => useViewStore.setState({ terminalMaximized: !maximized })}
+          onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
         >
           {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
         </PanelButton>
@@ -225,38 +225,5 @@ function TerminalTab({
         <XIcon className="size-3" />
       </button>
     </div>
-  )
-}
-
-function PanelButton({
-  label,
-  shortcut,
-  onClick,
-  children,
-}: {
-  label: string
-  shortcut?: string
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="quiet"
-            size="icon-xs"
-            aria-label={label}
-            onClick={onClick}
-            className="app-region-no-drag"
-          />
-        }
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent>
-        {label} {shortcut && <span className="opacity-60">{shortcut}</span>}
-      </TooltipContent>
-    </Tooltip>
   )
 }
