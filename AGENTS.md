@@ -38,7 +38,7 @@ OverBench takes the best implementations already proven in leading projects, int
 
 Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Tailwind CSS v4, pnpm 10, electron-builder. TypeScript stays on 6.0 until typescript-eslint supports 7.
 
-Approved for M0 and installed by the work package that first needs them: `@agentclientprotocol/sdk` for ACP (the stable v1 entrypoint; its unstable schema only for the exceptions listed in [protocol version](./docs/architecture.md#protocol-version)) and Vitest for tests, both from M0.1; xterm.js (`@xterm/xterm` with its fit, webgl and web-links addons) and `node-pty` for the terminal, and `electron-updater` for updates, all from M0.5.
+Approved for M0 and installed by the work package that first needs them: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates; nothing unstable beyond the exceptions listed in [protocol version](./docs/architecture.md#protocol-version)) and Vitest for tests, both from M0.1; xterm.js (`@xterm/xterm` with its fit, webgl and web-links addons) and `node-pty` for the terminal, and `electron-updater` for updates, all from M0.5.
 
 ### UI stack: one library per concern
 

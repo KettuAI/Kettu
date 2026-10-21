@@ -72,13 +72,13 @@ OverBench treats macOS, Windows and Linux as equals. Electron covers the interfa
 
 ### Protocol version
 
-All three agents speak ACP **v1**, the stable protocol. ACP v2 has been in draft since 2026-07-20, and its announcement advises clients not to enable it by default in production yet. OverBench therefore builds on the SDK's default v1 entrypoint and keeps v2 out of M0, but isolates the protocol so that adding v2 later is contained:
+All three agents speak ACP **v1**, the stable protocol. ACP v2 has been in draft since 2026-07-20, and its announcement advises clients not to enable it by default in production yet. OverBench therefore negotiates v1 and keeps v2 out of M0, but isolates the protocol so that adding v2 later is contained:
 
 - ACP types never leave `src/agent-host/acp/`.
 - One mapper turns ACP messages into OverBench's own [session model](./design/session-model.md). v2 becomes a second mapper, selected by the negotiated `protocolVersion`.
 - The session model already uses v2's ideas, stable entry IDs and patches, so the renderer will not change when v2 arrives.
 
-M0 uses only stable v1 methods, with two exceptions that the Claude Code and Codex adapters already implement: the subagents RFD, which [sub-sessions](./design/session-model.md#subagents) depend on, and the optional `usage` field of the `session/prompt` response, which fills the [session's token totals](./design/session-model.md#prompt-turns). Their types stay inside the mapper like every other ACP type. `session/fork` and other unstable features stay off until they stabilize.
+M0 uses only stable v1 methods, with two exceptions that the Claude Code and Codex adapters already implement: the subagents RFD, which [sub-sessions](./design/session-model.md#subagents) depend on, and the optional `usage` field of the `session/prompt` response, which fills the [session's token totals](./design/session-model.md#prompt-turns). Their types stay inside the mapper like every other ACP type. Because the SDK validates every `session/update` against its entrypoint's schema and the stable schema drops the subagent updates, the host imports the SDK's `unstable` v1 entrypoint ([agent host](./design/agent-host.md#connecting)); it still calls only the stable methods and these two exceptions. `session/fork` and other unstable features stay off until they stabilize.
 
 The mapper also reads two adapter extensions outside ACP, for the [account and plan limits](./design/session-model.md#plan-limits): the `_auth/status_update` notification and the `_claude/rateLimit` key in `usage_update._meta`. An agent that does not send them simply shows no plan.
 
