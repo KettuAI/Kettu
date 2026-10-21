@@ -273,10 +273,12 @@ function ToolHeader({
 /** Paths keep their file name visible: only the folder part truncates. */
 function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
   const target = label.target ?? ''
+  const folder = label.kind === 'path' ? dirname(target) : ''
   const text =
     label.kind === 'path' ? (
       <span className="flex min-w-0 font-mono text-xs text-muted-foreground">
-        <span className="truncate">{dirname(target)}</span>
+        {/* An empty truncating span would put the row's baseline at its bottom edge. */}
+        {folder && <span className="truncate">{folder}</span>}
         <span className="shrink-0">{basename(target)}</span>
       </span>
     ) : label.kind === 'command' ? (
