@@ -504,6 +504,36 @@
   }
 }
 
+/* A top fade drawn over a scroller rather than masking it: Chromium repaints a scroller whose mask
+   fades its top on every streamed chunk (docs/perf/m0.md). Goes on the scroller's positioned
+   parent, which must sit on --background; the scroller sets scroll-timeline: --scroll-fade-top y. */
+@utility scroll-fade-top-overlay {
+  timeline-scope: --scroll-fade-top;
+  &::before {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    z-index: 1;
+    height: var(--scroll-fade-size);
+    background: linear-gradient(to bottom, var(--background), transparent);
+    @supports (animation-timeline: scroll()) {
+      animation-name: scroll-fade-top-reveal;
+      animation-duration: 1ms;
+      animation-timing-function: ease-in-out;
+      animation-fill-mode: both;
+      animation-timeline: --scroll-fade-top;
+      animation-range: 0 calc(var(--spacing) * 24);
+    }
+  }
+}
+@keyframes scroll-fade-top-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Chromium on Windows draws Fluent scrollbars with arrow buttons whenever scrollbar-width or
    scrollbar-color is set, and its overlay scrollbars cannot be switched on from the app there.
    The scrollbar pseudo-elements draw thin ones instead; they apply only while both are auto. */
