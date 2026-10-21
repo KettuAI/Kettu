@@ -105,9 +105,9 @@ export class QuitFlow {
       }
     }
     this.phase = 'stopping'
-    const started = Date.now()
+    const started = performance.now()
     await this.deps.shutDown()
-    log.info(`Hosts stopped and state flushed in ${Date.now() - started} ms`)
+    log.info(`Hosts stopped and state flushed in ${(performance.now() - started).toFixed(1)} ms`)
     this.phase = 'done'
     if (reason === 'update') {
       setTimeout(() => app.quit(), INSTALL_FALLBACK_MS).unref()

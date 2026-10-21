@@ -186,6 +186,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
       this.status = 'ready'
       this.policy.ready(Date.now())
       this.record('ready', child.pid ? `pid ${child.pid}` : undefined)
+      this.log.info(`Ready (pid ${child.pid ?? 'unknown'})`)
       const pending = [...this.pendingConnects.values()]
       this.pendingConnects.clear()
       for (const webContents of pending) this.handOff(webContents)
@@ -217,6 +218,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     if (this.status === 'stopping' || this.shutDown) {
       this.status = 'stopped'
       this.record('exit', `code ${code}`)
+      this.log.info(`Stopped with code ${code}${clean ? '' : ' without reporting a clean stop'}`)
       return
     }
     this.record('crash', `code ${code}`)
