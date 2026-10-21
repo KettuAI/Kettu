@@ -56,7 +56,7 @@ Main owns `settings.json`, because it needs the theme before the first window pa
 interface SettingsFile {
   version: 1
   general: {
-    defaultAgent: AgentId | null // null: pick one on the project home each time
+    defaultAgent: AgentId | null // null: pick one on the New session screen each time
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
     restoreLastSession: boolean
     confirmQuitWhileRunning: boolean
@@ -119,7 +119,7 @@ interface AppStateFile {
 
 ## Composer drafts
 
-- Unsent composer text is stored in `localStorage` under `draft:<sessionId>`, written 300 ms after the last keystroke and when you switch sessions.
+- Unsent composer text is stored in `localStorage` under `draft:<sessionId>`, written 300 ms after the last keystroke and when you switch sessions. The [New session](./ui.md#new-session) screen keeps its text the same way under `draft:new`, until the session it starts exists; a first message that session cannot take yet moves to that session's draft.
 - Sending a prompt or deleting the session removes the draft.
 - A draft larger than 1 MB, or one whose write fails (for example on the storage quota), stays in memory until the app quits, and the failure is logged.
 

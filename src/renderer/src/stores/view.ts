@@ -1,10 +1,13 @@
 import { create } from 'zustand'
+import type { AgentId } from '@shared/thread'
 import { markSwitchStart } from '@renderer/app/perf'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
 export type MainView =
   | { kind: 'home' } // Welcome without projects, else the selected project's home
   | { kind: 'session'; sessionId: string }
+  // The New session screen; the session is created on the first send.
+  | { kind: 'new'; agentId: AgentId | null }
 
 export type SettingsSection =
   | 'general'
@@ -86,6 +89,15 @@ export function openProjectHome(projectPath: string | null): void {
   useViewStore.setState((s) => ({
     main: { kind: 'home' },
     projectPath,
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** The New session screen, in the given project or the selected one; a shown one keeps its agent. */
+export function openNewSession(projectPath: string | null, agentId: AgentId | null): void {
+  useViewStore.setState((s) => ({
+    main: s.main.kind === 'new' ? s.main : { kind: 'new', agentId },
+    projectPath: projectPath ?? s.projectPath,
     settings: { ...s.settings, open: false },
   }))
 }

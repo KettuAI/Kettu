@@ -3,7 +3,7 @@ import type { AgentId } from './thread'
 export interface SettingsFile {
   version: 1
   general: {
-    defaultAgent: AgentId | null // null: pick one on the project home each time
+    defaultAgent: AgentId | null // null: pick one on the New session screen each time
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
     restoreLastSession: boolean
     confirmQuitWhileRunning: boolean

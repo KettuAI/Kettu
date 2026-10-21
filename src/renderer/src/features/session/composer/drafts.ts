@@ -3,6 +3,9 @@ import { removeKey } from '@renderer/lib/storage'
 // Unsent composer text per session, in localStorage under `draft:<sessionId>`, written 300 ms
 // after the last keystroke. A draft that is too large or fails to save stays in memory.
 
+/** The New session screen's draft, kept like a session's until the session it starts exists. */
+export const NEW_SESSION_DRAFT = 'new'
+
 const WRITE_DELAY_MS = 300
 const MAX_DRAFT_BYTES = 1024 * 1024
 

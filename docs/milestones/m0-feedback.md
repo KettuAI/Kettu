@@ -14,7 +14,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 6   | Markdown looks plain and file references do not stand out      | Markdown       | Open         |
 | 7   | The usage popover shows too little and needs a full redesign   | Usage          | Open         |
 | 8   | Session rows show their time badly                             | Sidebar        | Open         |
-| 9   | New session is tied to the selected project                    | Sidebar        | Open         |
+| 9   | New session is tied to the selected project                    | Sidebar        | Fixed        |
 | 10  | The welcome screen and the project home lack polish            | Home           | Open         |
 | 11  | No steering or queued messages while a turn runs               | Composer       | Fixed        |
 | 12  | Switching sessions visibly stalls                              | Performance    | Partly fixed |
@@ -102,6 +102,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: New session (`Mod+N`) opens the project home of whichever project is selected (bucky in the screenshot), or starts a session there with the default agent. The project you get depends on what was selected last, and the sidebar has no direct way to start a session in a given project.
 - **Expected**: New session is global. It assumes no project; the project is chosen, or a new one added, as part of starting the session. Each project group ends with a small **+** that starts a session in that project, as the reference's sidebar does at the end of its "overbench" group.
 - **Today**: [Interface: sidebar](../design/ui.md#sidebar) says New session "starts a session in the selected project", and `newSession` in `src/renderer/src/app/actions.ts` takes the selected project, else the first one, then starts a session with the default agent or opens the [project home](../design/ui.md#project-home). The only **+** in the sidebar is the one after Projects, which opens a project. To settle when planning: what the global New session screen holds (choosing the project and the agent), what `Mod+N` does, and what becomes of the project home.
+- **Fixed**: New session (`Mod+N`, the File menu) opens a [New session screen](../design/ui.md#new-session): a composer with a project menu (the projects, then **Open project…**) and an agent menu, starting at the selected project and the default agent. The first send creates the session and sends the message; until then the text is kept as a draft, so a failed start or a sign-in loses nothing. Each project's row shows a **+** on hover that opens the screen in that project, and the project's name still opens its home. Checked in development on macOS in light and dark with the fake agent. The project home's own design stays with [problem 10](#10-the-welcome-screen-and-the-project-home-lack-polish).
 
 ## 10. The welcome screen and the project home lack polish
 

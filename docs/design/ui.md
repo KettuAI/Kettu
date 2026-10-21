@@ -62,9 +62,18 @@ Shown when there are no projects. A centred `Empty`: the OverBench wordmark, one
 
 Behind it lies the [ambient field](./design-system.md#ambient-field): a faint dot grid that a soft light drifts across, centred on the content and fading out towards the edges. The content enters once, the wordmark first and each agent row 30 ms after the one before.
 
+### New session
+
+Opened by **New session** (`Mod+N`, also in the File menu) and by the **+** on a project's row in the sidebar. The screen assumes nothing from what was shown before: the top bar says "New session", the thread area holds one line ("What should Claude Code work on?"), and under a composer like the session's sit two menus in the control row, styled as the composer's own:
+
+- **Project**: the projects, each with its path in mono and missing ones disabled, then **Open project…**, which adds a folder and chooses it. It starts at the selected project, or at the one whose **+** opened the screen. With no projects yet the screen still opens, offering only **Open project…**.
+- **Agent**: the agents with their marks; one that is not installed is disabled with "Not installed". It starts at **Default agent** from Settings; with **Ask each time** none is chosen, and Send waits until one is.
+
+The git status and the terminal toggle follow the chosen project. The first send creates the session there and sends the message: the screen gives way to the starting agent, then to the session with the message in its thread. Until the session exists the text is kept as a [draft](./persistence.md#composer-drafts), so nothing is lost when the start fails (**Back** returns here with the text) or the agent asks to sign in first (the session opens on its sign-in screen, with the text in its composer). Opening the screen again while it is shown keeps the agent you chose.
+
 ### Project home
 
-Shown when a project is selected but no session is. The three agents as large selectable cards (mark, name, version, status) to start a session. A hovered card rises 1 px, takes the `sm` shadow and lights up softly from its bottom edge, as the reference's starter cards do. The project's recent sessions are listed below. The ambient field sits behind the title and the cards and fades out before the list, so the list stays plain. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
+Shown when you click a project's name in the sidebar, and after the shown session is closed or deleted. The three agents as large selectable cards (mark, name, version, status) to start a session. A hovered card rises 1 px, takes the `sm` shadow and lights up softly from its bottom edge, as the reference's starter cards do. The project's recent sessions are listed below. The ambient field sits behind the title and the cards and fades out before the list, so the list stays plain. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
 
 ### Session
 
@@ -100,8 +109,8 @@ Search filters rows in every section by name and description. While you search, 
 
 ## Sidebar
 
-- A **New session** row (`Mod+N`) at the top starts a session in the selected project.
-- Projects are collapsible groups: folder name, with the full path in a tooltip.
+- A **New session** row (`Mod+N`) at the top opens [New session](#new-session), and stays highlighted while it is shown.
+- Projects are collapsible groups: folder name, with the full path in a tooltip. Clicking the name opens the [project home](#project-home). Hovering the row shows a **+** at its end (shadcn's `SidebarMenuAction` with `showOnHover`), which opens New session in that project; a missing project has none.
 - The sidebar's content is built from shadcn's `Sidebar` parts (`SidebarGroup`, `SidebarMenu`, `SidebarMenuButton` at `size="sm"`, which is 28 px, `SidebarMenuBadge`) with `collapsible="none"`, inside the `ResizablePanel` that owns its width. Rows have no border; hover and selection use the component's own fills, and a row keeps the hover fill while its context menu is open. The list scrolls behind [scroll-edge fades](./design-system.md#patterns), so rows fade out at the edges instead of being cut by the footer.
 - Each row: the agent's [mark](./design-system.md#agent-marks) at 14 px, title (truncated), relative time, and one status indicator, in this order of priority:
   1. **Waiting for you** (`attention: 'permission'`): an `--attention` pill with the count, in place of the time. This is the loudest signal in the app.
@@ -429,7 +438,7 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 | Shortcut                            | Action                                 |
 | ----------------------------------- | -------------------------------------- |
 | `Mod+O`                             | Open project                           |
-| `Mod+N`                             | New session in the current project     |
+| `Mod+N`                             | New session                            |
 | `Mod+B`                             | Toggle the sidebar                     |
 | `Mod+L`                             | Focus the composer                     |
 | `Mod+Shift+[` / `Mod+Shift+]`       | Previous / next session in the sidebar |

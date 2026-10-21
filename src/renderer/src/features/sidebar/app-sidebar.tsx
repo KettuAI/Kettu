@@ -12,6 +12,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
@@ -32,6 +33,7 @@ export function AppSidebar() {
   const sessionsLoaded = useSessionsStore((s) => s.loaded)
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
+  const drafting = useViewStore((s) => s.main.kind === 'new' && !s.settings.open)
 
   return (
     <Sidebar collapsible="none" className="w-full" aria-label="Projects and sessions">
@@ -45,7 +47,8 @@ export function AppSidebar() {
           icon={<SquarePenIcon className="text-muted-foreground" />}
           label="New session"
           shortcut="Mod+N"
-          onClick={newSession}
+          current={drafting}
+          onClick={() => newSession()}
         />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
@@ -157,51 +160,70 @@ function ProjectGroup({ project }: { project: Project }) {
 
   return (
     <div className="flex flex-col gap-px">
-      <Tooltip>
-        <TooltipTrigger
-          delay={700}
-          render={
-            <SidebarMenuButton
-              size="row"
-              isActive={current}
-              data-sidebar-row=""
-              tabIndex={-1}
-              aria-expanded={open}
-              onClick={() => {
-                if (current || !open) toggle()
-                openProjectHome(project.path)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowRight' && !open) toggle()
-                else if (event.key === 'ArrowLeft' && open) toggle()
-              }}
-              className={cn('gap-1.5 font-medium', project.missing && 'text-muted-foreground')}
-            />
-          }
-        >
-          <span
-            role="presentation"
-            onClick={(event) => {
-              event.stopPropagation()
-              toggle()
-            }}
-            className="grid size-3.5 place-items-center text-muted-foreground"
+      <div className="group/menu-item relative">
+        <Tooltip>
+          <TooltipTrigger
+            delay={700}
+            render={
+              <SidebarMenuButton
+                size="row"
+                isActive={current}
+                data-sidebar-row=""
+                tabIndex={-1}
+                aria-expanded={open}
+                onClick={() => {
+                  if (current || !open) toggle()
+                  openProjectHome(project.path)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowRight' && !open) toggle()
+                  else if (event.key === 'ArrowLeft' && open) toggle()
+                }}
+                className={cn('gap-1.5 font-medium', project.missing && 'text-muted-foreground')}
+              />
+            }
           >
-            {open ? (
-              <ChevronDownIcon strokeWidth={2} className="size-3!" />
-            ) : (
-              <ChevronRightIcon strokeWidth={2} className="size-3!" />
+            <span
+              role="presentation"
+              onClick={(event) => {
+                event.stopPropagation()
+                toggle()
+              }}
+              className="grid size-3.5 place-items-center text-muted-foreground"
+            >
+              {open ? (
+                <ChevronDownIcon strokeWidth={2} className="size-3!" />
+              ) : (
+                <ChevronRightIcon strokeWidth={2} className="size-3!" />
+              )}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{project.name}</span>
+            {project.missing && (
+              <span className="text-[11.5px] font-normal text-muted-foreground">Missing</span>
             )}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{project.name}</span>
-          {project.missing && (
-            <span className="text-[11.5px] font-normal text-muted-foreground">Missing</span>
-          )}
-        </TooltipTrigger>
-        <TooltipContent side="right" className="max-w-sm font-mono break-all">
-          {project.path}
-        </TooltipContent>
-      </Tooltip>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-sm font-mono break-all">
+            {project.path}
+          </TooltipContent>
+        </Tooltip>
+        {!project.missing && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <SidebarMenuAction
+                  showOnHover
+                  aria-label={`New session in ${project.name}`}
+                  onClick={() => newSession(project.path)}
+                  className="top-1 text-muted-foreground [&>svg]:size-3.5"
+                />
+              }
+            >
+              <PlusIcon />
+            </TooltipTrigger>
+            <TooltipContent>New session in {project.name}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       {open && tree.length > 0 && (
         <SidebarMenu className="gap-px">
           {tree.map((node) => (

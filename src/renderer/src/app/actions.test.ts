@@ -7,8 +7,12 @@ vi.stubGlobal('window', {
   matchMedia: () => ({ matches: false, addEventListener: () => {} }),
 })
 
-const { closeSession } = await import('./actions')
+const { closeSession, createSession, newSession, retryPendingSession, usePendingSession } =
+  await import('./actions')
+const { NEW_SESSION_DRAFT, readDraft, writeDraft } =
+  await import('@renderer/features/session/composer/drafts')
 const { useSessionsStore } = await import('@renderer/stores/sessions')
+const { useSettingsStore } = await import('@renderer/stores/settings')
 const { useThreadsStore } = await import('@renderer/stores/threads')
 const { useViewStore } = await import('@renderer/stores/view')
 
@@ -51,5 +55,95 @@ describe('closeSession', () => {
     useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/repo' })
     await closeSession('s1')
     expect(useViewStore.getState()).toMatchObject({ main: { kind: 'home' }, projectPath: '/repo' })
+  })
+})
+
+describe('newSession', () => {
+  beforeEach(() => {
+    const settings = useSettingsStore.getState().settings
+    useSettingsStore.setState({
+      settings: { ...settings, general: { ...settings.general, defaultAgent: 'codex' } },
+    })
+  })
+
+  it('opens New session with the default agent, in the selected project', () => {
+    useViewStore.setState({ main: { kind: 'home' }, projectPath: '/repo' })
+    newSession()
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'codex' },
+      projectPath: '/repo',
+    })
+  })
+
+  it('takes the project it is given, and keeps the agent chosen on a shown screen', () => {
+    useViewStore.setState({ main: { kind: 'new', agentId: 'opencode' }, projectPath: '/repo' })
+    newSession('/other')
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'opencode' },
+      projectPath: '/other',
+    })
+  })
+})
+
+describe('createSession with a first message', () => {
+  const created = (status: SessionSummary['status']) =>
+    ({ id: 'n1', projectPath: '/repo', agentId: 'codex', status }) as SessionSummary
+
+  beforeEach(() => {
+    request.mockReset()
+    usePendingSession.setState({ pending: null })
+    useSessionsStore.setState({ byId: {} })
+    useViewStore.setState({ main: { kind: 'new', agentId: 'codex' }, projectPath: '/repo' })
+    writeDraft(NEW_SESSION_DRAFT, 'Fix the build')
+  })
+
+  it('sends it once the session exists, then shows the session', async () => {
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('ready') : undefined,
+    )
+    await createSession('codex', '/repo', null, 'Fix the build')
+    expect(request).toHaveBeenLastCalledWith('sessions.prompt', {
+      sessionId: 'n1',
+      content: [{ type: 'text', text: 'Fix the build' }],
+    })
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+    expect(readDraft('n1')).toBe('')
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
+  })
+
+  it("leaves it in the session's composer when the agent asks to sign in first", async () => {
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('auth_required') : undefined,
+    )
+    await createSession('codex', '/repo', null, 'Fix the build')
+    expect(request).not.toHaveBeenCalledWith('sessions.prompt', expect.anything())
+    expect(readDraft('n1')).toBe('Fix the build')
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+  })
+
+  it("leaves it in the session's composer when the agent turns it down", async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    request.mockImplementation(async (method: string) => {
+      if (method === 'sessions.create') return created('ready')
+      throw new Error('The session is failed')
+    })
+    await createSession('codex', '/repo', null, 'Fix the build')
+    expect(readDraft('n1')).toBe('Fix the build')
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
+  })
+
+  it('keeps it when the agent cannot start, and sends it after a retry', async () => {
+    request.mockRejectedValueOnce(new Error('spawn failed'))
+    await createSession('codex', '/repo', null, 'Fix the build')
+    expect(usePendingSession.getState().pending).toMatchObject({ prompt: 'Fix the build' })
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
+
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('ready') : undefined,
+    )
+    retryPendingSession()
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenLastCalledWith('sessions.prompt', expect.anything()),
+    )
   })
 })
