@@ -113,7 +113,7 @@ Apps started from the Dock, Finder, a desktop launcher or the Start menu do not 
   ```text
   $SHELL -i -l -c '<electron> -p "<mark> + JSON.stringify(process.env) + <mark>"'
   ```
-  with `ELECTRON_RUN_AS_NODE=1`, so Electron's binary acts as Node.js. The JSON between the random markers becomes the agent environment. It falls back to `/bin/zsh` on macOS and `/bin/sh` on Linux when `SHELL` is unset; for `csh` and `tcsh`, which reject `-i -l -c` together, it drops `-i`.
+  with `ELECTRON_RUN_AS_NODE=1`, so Electron's binary acts as Node.js. The JSON between the random markers becomes the agent environment. It falls back to `/bin/zsh` on macOS and `/bin/sh` on Linux when `SHELL` is unset or not absolute. `csh` and `tcsh` accept `-l` only as their sole flag, so they run `-ic` instead, as in VS Code; `pwsh` runs `-Login -Command` with PowerShell quoting and `nu` prefixes the command with `^`. The shell runs detached, without a controlling terminal, so an interactive profile cannot wait for input; on timeout its whole process group is killed.
 - **Windows**: GUI apps inherit the user and system environment, so the host uses `process.env` as is. A `PATH` change made after OverBench started needs an app restart, and Settings › Agents says so.
 - The resolution times out after 10 s. On timeout or failure the host uses the inherited environment and Settings › Agents shows a warning.
 - `ELECTRON_RUN_AS_NODE` and other `ELECTRON_*` variables are removed before the environment reaches an agent.
