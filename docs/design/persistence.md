@@ -91,7 +91,7 @@ interface SettingsFile {
 - Missing keys take their defaults, so adding a setting needs no migration.
 - Reading is lenient where writing is strict: a value that does not validate takes its default and the rest of the file is kept, and unknown keys are ignored. Any invalid value, or a file that is not JSON, is logged and the file is first moved aside as `settings.corrupt-<timestamp>.json` (the rule [below](#reading-and-recovering)), so the user's file is kept before the cleaned one is written.
 - A file whose `version` is newer than the app knows is read the same way but never written; changes in that run apply in memory only.
-- **Restore the last session** uses the session id kept in `localStorage` with the other per-device view state.
+- **Restore the last session** uses the session id kept in `localStorage` with the other per-device view state. It opens that session once the settings and the session list are loaded, without waiting for git tools, whose `gh auth status` can take seconds on a slow network: launch to restored thread took 2.6 to 2.8 s when it waited and 1.8 s without (fake agent, production build, 2026-10-21).
 
 ## Window and app state
 

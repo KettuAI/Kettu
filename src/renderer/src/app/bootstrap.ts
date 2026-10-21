@@ -54,14 +54,18 @@ function onHostEvent(event: HostEvent): void {
   }
 }
 
-/** Loads everything the shell shows; also runs after the agent host comes back. */
-export async function loadHostState(): Promise<void> {
-  await Promise.allSettled([
+/** What the shell needs before it can show a session. */
+function loadSessionState(): Promise<unknown> {
+  return Promise.allSettled([
     useProjectsStore.getState().refresh(),
     useSessionsStore.getState().refresh(),
     useAgentsStore.getState().refresh(),
-    loadGitTools(),
   ])
+}
+
+/** Loads everything the shell shows; also runs after the agent host comes back. */
+export async function loadHostState(): Promise<void> {
+  await Promise.allSettled([loadSessionState(), loadGitTools()])
 }
 
 /** Reopens the session shown when the app last closed, as Settings › General allows. */
@@ -100,7 +104,11 @@ export function bootstrap(): void {
   const settingsReady = initSettings()
   void initUpdates()
   initTerminals()
-  void Promise.allSettled([settingsReady, loadHostState()]).then(restoreLastSession)
+  const sessionState = loadSessionState()
+  void loadGitTools()
+  // Restoring waits for the session list, not for git tools, whose `gh auth status` can take
+  // seconds on a slow network.
+  void Promise.allSettled([settingsReady, sessionState]).then(restoreLastSession)
 
   // The ambient field pauses while the window is in the background.
   const setActive = () => {
