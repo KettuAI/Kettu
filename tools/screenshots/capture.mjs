@@ -21,8 +21,6 @@ const valueOf = (flag) => {
 }
 const out = resolve(valueOf('--out') ?? 'screenshots')
 const port = Number(valueOf('--port') ?? 9230)
-const width = 1280
-const height = 800
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 const log = (text) => process.stderr.write(`${text}\n`)
 
@@ -163,10 +161,12 @@ async function run() {
       })
     }
   }
+  // Only the scale is emulated: the window keeps its real size, which the window controls
+  // overlay on Windows and Linux is measured against.
   const setup = async () => {
     await cdp.send('Emulation.setDeviceMetricsOverride', {
-      width,
-      height,
+      width: 0,
+      height: 0,
       deviceScaleFactor: 2,
       mobile: false,
     })
@@ -191,6 +191,7 @@ async function run() {
   await setup()
   await waitFor(`document.querySelector('#root')?.childElementCount`, 'the first render')
   await sleep(1500)
+  log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
   await shoot('welcome')
 
   await cdp.evaluate(
@@ -236,6 +237,11 @@ async function run() {
   await waitFor(`document.querySelector('[aria-label=Stop]')`, 'the turn to start')
   await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to end', 120_000)
   await sleep(800)
+  // Overlay scrollbars take no room; classic ones do.
+  const gutter = await cdp.evaluate(
+    `(() => { const el = document.querySelector('[data-slot=message-scroller-viewport]'); return el.offsetWidth - el.clientWidth })()`,
+  )
+  log(`thread scrollbar ${gutter} px`)
   await shoot('session')
 
   await click(`return document.querySelector('button[aria-label=Model]')`, 'the model button')

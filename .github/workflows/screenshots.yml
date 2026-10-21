@@ -27,6 +27,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # The runner's 1024 x 768 screen would shrink the default window.
+      - name: Enlarge the screen
+        if: runner.os == 'Windows'
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
       - name: Capture
         if: runner.os != 'Linux'
         run: node tools/screenshots/capture.mjs --out screenshots
