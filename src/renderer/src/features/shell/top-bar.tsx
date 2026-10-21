@@ -6,19 +6,24 @@ import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { useBesideSidePanel } from './side-panel'
 
 /**
  * The 40 px top bar of the main area: the window's drag region. With the sidebar collapsed it
- * leaves room for the macOS traffic lights and carries the sidebar toggle.
+ * leaves room for the macOS traffic lights and carries the sidebar toggle; on Windows and Linux it
+ * leaves room for the window controls unless the side panel takes the window's right edge.
  */
 export function TopBar({ children, className }: { children: ReactNode; className?: string }) {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  const besidePanel = useBesideSidePanel()
   return (
     <header
       className={cn(
         'app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 pr-2.5 pl-5',
         collapsed && (isMac ? 'pl-[84px]' : 'pl-2'),
-        !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
+        !isMac &&
+          !besidePanel &&
+          'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
         className,
       )}
     >

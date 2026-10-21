@@ -1,12 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import {
-  Maximize2Icon,
-  Minimize2Icon,
-  PanelBottomCloseIcon,
-  PlusIcon,
-  SquareTerminalIcon,
-  XIcon,
-} from 'lucide-react'
+import { Maximize2Icon, Minimize2Icon, PlusIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import {
   AlertDialog,
@@ -21,6 +14,8 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import {
   createTerminal,
@@ -34,6 +29,7 @@ import {
 import { toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { TerminalView } from './terminal-view'
 
+/** The side panel: a card holding the project's terminals, with their tabs in its header. */
 export function TerminalPanel({
   projectPath,
   maximized,
@@ -41,6 +37,8 @@ export function TerminalPanel({
   projectPath: string
   maximized: boolean
 }) {
+  // Maximized with the sidebar collapsed, the header is the window's top left corner.
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
   const list = useTerminalsStore(useShallow((s) => terminalsOf(s.byId, projectPath)))
   const activeId = useTerminalsStore((s) => s.active[projectPath])
   const error = useTerminalsStore((s) => s.error)
@@ -61,12 +59,27 @@ export function TerminalPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-terminal-panel="">
-      <div className="flex h-8 shrink-0 items-center gap-1 pr-1.5 pl-2">
+    <div
+      className={cn(
+        'flex h-full min-h-0 animate-in flex-col bg-sidebar fade-in animation-duration-(--duration-fast)',
+        // Maximized, it leaves its slot and covers the whole main area.
+        maximized && 'absolute inset-0 z-10',
+      )}
+      data-terminal-panel=""
+    >
+      <div
+        className={cn(
+          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2',
+          cornered && (isMac ? 'pl-[84px]' : 'pl-2'),
+          // The panel reaches the window's right edge, where Windows and Linux put the controls.
+          !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+8px)]',
+        )}
+      >
+        {cornered && <SidebarToggle className="mr-1" />}
         <div
           role="tablist"
           aria-label="Terminals"
-          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
+          className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
         >
           {list.map((t) => (
             <TerminalTab
@@ -84,11 +97,6 @@ export function TerminalPanel({
             </span>
           )}
         </div>
-        {error && (
-          <span className="max-w-[40%] truncate text-xs text-destructive" title={error}>
-            {error}
-          </span>
-        )}
         <PanelButton
           label="New terminal"
           shortcut="Ctrl+Shift+`"
@@ -96,6 +104,12 @@ export function TerminalPanel({
         >
           <PlusIcon />
         </PanelButton>
+        <span className="min-w-2 flex-1" />
+        {error && (
+          <span className="max-w-[40%] truncate text-xs text-destructive" title={error}>
+            {error}
+          </span>
+        )}
         <PanelButton
           label={maximized ? 'Restore' : 'Maximize'}
           onClick={() => useViewStore.setState({ terminalMaximized: !maximized })}
@@ -103,11 +117,11 @@ export function TerminalPanel({
           {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
         </PanelButton>
         <PanelButton
-          label="Hide"
+          label="Close"
           shortcut="Ctrl+`"
           onClick={() => toggleTerminal(projectPath, false)}
         >
-          <PanelBottomCloseIcon />
+          <XIcon />
         </PanelButton>
       </div>
       <div className="relative min-h-0 flex-1">
@@ -169,8 +183,8 @@ function TerminalTab({
       className={cn(
         'group/tab relative flex h-6 max-w-48 shrink-0 items-center rounded-md text-xs transition-colors duration-(--duration-fast)',
         selected
-          ? 'bg-accent text-foreground'
-          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+          : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground',
       )}
     >
       <button
