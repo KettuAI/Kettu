@@ -259,6 +259,10 @@ The layout follows the reference: the box holds only your text and the send butt
 │ Context                                  84% │
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━──────│
 │ 215k of 256k tokens · 41k left               │
+│ System prompt                    4.6k   0.8% │
+│ Messages                        160k   62.5% │
+│ Free space                        8k    3.1% │
+│ › MCP Tools 8                                │
 │ This session   Input 1.2M  Output 48k        │
 │                Cache read 980k  write 64k    │
 │                                   Compact    │
@@ -273,9 +277,10 @@ The layout follows the reference: the box holds only your text and the send butt
 
 - A shadcn `Popover`, 320 px wide, in two parts separated by a `Separator`.
 - **Context**, for this session: a `Progress` bar of `used / size`, the tokens used and left, and the session's token totals when the agent reports them (input, output, reasoning, cache read and write). The cost appears only when the account is not a subscription. **Compact** runs the agent's own `compact` command, and is shown only when the agent offers one among its slash commands.
-- **Plan limits**, for the agent's account: the plan label from the agent ("Claude Max"), then one row per window the agent has reported ([plan limits](./session-model.md#plan-limits)): label, a bar, the percentage in `tabular-nums`, and the reset time (the clock time today, the weekday later, the full time in a tooltip). Bars at the warning state turn `--attention`, and a reached limit `--destructive`. "Updated 3 min ago" tells how fresh the numbers are.
+- **What fills the context**, for Claude Code: opening the popover while no turn runs reads the [context breakdown](./session-model.md#context-breakdown), which shows one row per category (name, tokens, share of the window) under the token line, then each list the report has (MCP tools, memory files, skills) as a `Collapsible` with its count. `Skeleton` rows stand in until the first one arrives; a later read dims the rows it replaces; a failure says so in one line. The breakdown is kept until the session's context changes. This is the existing layout with rows added; the popover's redesign is [problem 7](../milestones/m0-feedback.md#7-the-usage-popover-shows-too-little-and-needs-a-full-redesign).
+- **Plan limits**, for the agent's account: the plan label from the agent ("Claude Max"), then one row per window the agent has reported ([plan limits](./session-model.md#plan-limits)), which opening the popover reads afresh from Claude Code's `/usage`: label, a bar, the percentage in `tabular-nums`, and the reset time (the clock time today, the weekday later, the full time in a tooltip). Bars at the warning state turn `--attention`, and a reached limit `--destructive`. "Updated 3 min ago" tells how fresh the numbers are.
 - Agents that report no plan limits, today Codex and OpenCode, show the Context part only; an API key account shows its label without bars.
-- Settings › Agents shows the same plan rows on each agent's card.
+- Settings › Agents shows the same plan rows on each agent's card, read afresh when the card shows and the agent runs. For a stopped Claude Code with no limits known yet, the card offers **Check plan limits**, which starts it to read them.
 
 ## Git in the top bar
 

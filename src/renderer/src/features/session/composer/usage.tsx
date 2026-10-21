@@ -1,14 +1,29 @@
-import type { AgentAccount, PlanLimit } from '@shared/agent-host'
+import { ChevronRightIcon } from 'lucide-react'
+import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
 import type { AgentId, SessionUsage } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@renderer/components/ui/collapsible'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Progress } from '@renderer/components/ui/progress'
 import { Separator } from '@renderer/components/ui/separator'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { PANEL } from '@renderer/features/session/entries/helpers'
 import { fullTime, longAgo, money, resetTime, tokens } from '@renderer/lib/format'
+import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import {
+  loadContext,
+  refreshLimits,
+  useUsageStore,
+  type ContextReport,
+} from '@renderer/stores/usage'
 
 /** From this share of the context the ring turns to --attention and shows the percentage. */
 const CONTEXT_WARNING = 0.8
@@ -61,11 +76,18 @@ function Ring({ share, tone }: { share: number; tone: 'muted' | 'attention' }) {
 }
 
 export function UsageButton({
+  sessionId,
+  agentId,
+  idle,
   usage,
   limits,
   account,
   onCompact,
 }: {
+  sessionId: string
+  agentId: AgentId
+  /** No turn runs, so the agent can break the context down. */
+  idle: boolean
   usage: SessionUsage | null
   limits: PlanLimit[]
   account: AgentAccount | null
@@ -75,8 +97,15 @@ export function UsageButton({
   if (!usage && !warning) return null
   const share = usage && usage.size > 0 ? usage.used / usage.size : 0
   const full = share >= CONTEXT_WARNING
+  const onOpenChange = (open: boolean) => {
+    if (!open) return
+    refreshLimits(agentId).catch((error: unknown) =>
+      console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
+    )
+    if (idle && usage) loadContext(sessionId, `${usage.used}/${usage.size}`)
+  }
   return (
-    <Popover>
+    <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={
           <Button
@@ -110,7 +139,15 @@ export function UsageButton({
         {usage && <Ring share={share} tone={full ? 'attention' : 'muted'} />}
       </PopoverTrigger>
       <PopoverContent side="top" align="end" sideOffset={6} className="w-[320px] gap-0 p-0">
-        {usage && <ContextPart usage={usage} share={share} full={full} onCompact={onCompact} />}
+        {usage && (
+          <ContextPart
+            sessionId={sessionId}
+            usage={usage}
+            share={share}
+            full={full}
+            onCompact={onCompact}
+          />
+        )}
         {usage && (limits.length > 0 || account) && <Separator className="bg-border-soft" />}
         {(limits.length > 0 || account) && <LimitsPart limits={limits} account={account} />}
       </PopoverContent>
@@ -119,16 +156,19 @@ export function UsageButton({
 }
 
 function ContextPart({
+  sessionId,
   usage,
   share,
   full,
   onCompact,
 }: {
+  sessionId: string
   usage: SessionUsage
   share: number
   full: boolean
   onCompact: (() => void) | null
 }) {
+  const report = useUsageStore((s) => s.context[sessionId])
   const totals = usage.tokens
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
@@ -147,6 +187,7 @@ function ContextPart({
         {tokens(usage.used)} of {tokens(usage.size)} tokens ·{' '}
         {tokens(Math.max(0, usage.size - usage.used))} left
       </p>
+      {report && <Breakdown report={report} />}
       {totals && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs tabular">
           <dt className="text-muted-foreground">This session</dt>
@@ -196,6 +237,74 @@ function ContextPart({
         </div>
       )}
     </div>
+  )
+}
+
+/** What fills the context, by source, as the agent's own report gives it. */
+function Breakdown({ report }: { report: ContextReport }) {
+  const { breakdown, loading, error } = report
+  if (!breakdown) {
+    if (loading) {
+      return (
+        <div aria-label="Reading what fills the context" className="flex flex-col gap-1.5 py-0.5">
+          <Skeleton className="h-3 w-4/5" />
+          <Skeleton className="h-3 w-3/5" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+      )
+    }
+    return error ? (
+      <p className="text-xs text-muted-foreground">Couldn't break the context down: {error}</p>
+    ) : null
+  }
+  return (
+    <div
+      aria-busy={loading}
+      className={cn(
+        'flex flex-col gap-1.5 transition-opacity duration-(--duration-fast)',
+        loading && 'opacity-60',
+      )}
+    >
+      <ul className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5 text-xs tabular">
+        {breakdown.categories.map((category) => (
+          <li key={category.name} className="contents">
+            <span className="truncate text-muted-foreground">{category.name}</span>
+            <span className="text-right">{tokens(category.tokens)}</span>
+            <span className="w-10 text-right text-muted-foreground">
+              {category.share !== null && `${Math.round(category.share * 1000) / 10}%`}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {breakdown.lists.map((list) => (
+        <ListPart key={list.name} list={list} />
+      ))}
+    </div>
+  )
+}
+
+function ListPart({ list }: { list: ContextList }) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger className="group/list flex items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+        <ChevronRightIcon className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90" />
+        {list.name}
+        <span className="tabular">{list.items.length}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className={PANEL}>
+        <ul className="mt-1 grid max-h-40 grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 overflow-y-auto pl-4 text-xs tabular">
+          {list.items.map((item, index) => (
+            <li key={index} className="contents">
+              <span className="truncate" title={item.detail ?? item.name}>
+                {item.name}
+                {item.detail && <span className="text-muted-foreground"> · {item.detail}</span>}
+              </span>
+              <span className="text-right text-muted-foreground">{item.tokens}</span>
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 

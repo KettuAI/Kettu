@@ -80,8 +80,7 @@ export async function sendUsage(turn: Turn, extraTokens = 1800): Promise<void> {
   const session = turn.session
   session.usedTokens = Math.min(200_000, session.usedTokens + extraTokens)
   const now = Math.floor(Date.now() / 1000)
-  const fiveHour = Math.min(0.99, 0.12 + session.turns * 0.07)
-  const weekly = Math.min(0.99, 0.31 + session.turns * 0.01)
+  const { fiveHour, weekly } = planWindows(session.turns)
   const windows = [
     { rateLimitType: 'five_hour', utilization: fiveHour, resetsAt: now + 2 * 3600 + 840 },
     { rateLimitType: 'seven_day', utilization: weekly, resetsAt: now + 3 * 86400 + 7200 },
@@ -719,6 +718,113 @@ const thinking: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+// The plan windows of sendUsage, as fractions.
+function planWindows(turns: number): { fiveHour: number; weekly: number } {
+  return {
+    fiveHour: Math.min(0.99, 0.12 + turns * 0.07),
+    weekly: Math.min(0.99, 0.31 + turns * 0.01),
+  }
+}
+
+/** The adapter's reset format (`formatReset` in claude-agent-acp's usage-markdown.js). */
+function resetText(at: number): string {
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(at)
+}
+
+function usageBar(percent: number): string {
+  const filled = percent === 0 ? 0 : Math.max(1, Math.round((percent / 100) * 20))
+  return `${'█'.repeat(filled)}${'░'.repeat(20 - filled)}`
+}
+
+/** `/usage` as claude-agent-acp 0.94 formats it, with the windows sendUsage pushes. */
+const usage: Scenario = async (turn) => {
+  const { fiveHour, weekly } = planWindows(turn.session.turns)
+  const now = Date.now()
+  const limit = (label: string, share: number, resetsAt: number): string[] => {
+    const percent = Math.round(share * 100)
+    return [
+      `**${label}** — **${percent}%** · Resets ${resetText(resetsAt)}`,
+      '',
+      `\`${usageBar(percent)}\``,
+      '',
+    ]
+  }
+  const report = [
+    '## Usage',
+    '',
+    '> Claude fake subscription usage',
+    '',
+    '### Limits',
+    '',
+    ...limit('5-hour limit', fiveHour, now + 2 * 3600_000 + 840_000),
+    ...limit('Weekly · all models', weekly, now + 3 * 86_400_000 + 7_200_000),
+    ...limit('Weekly · Fake', 0.07, now + 3 * 86_400_000 + 7_200_000),
+    '---',
+    '',
+    '### This session',
+  ].join('\n')
+  await stream(turn, report, { chunks: [report], delayMs: 0 })
+  return 'end_turn'
+}
+
+/** `/context` as Claude Code 2.1 reports it, for the fake session's tokens. */
+const context: Scenario = async (turn) => {
+  const size = 200_000
+  const fixed = {
+    'System prompt': 3_100,
+    'System tools': 8_400,
+    'MCP tools': 640,
+    'Memory files': 900,
+  }
+  const messages = Math.max(500, turn.session.usedTokens)
+  const used = Object.values(fixed).reduce((sum, n) => sum + n, messages)
+  const buffer = 33_000
+  const k = (n: number): string => (n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n))
+  const pct = (n: number): string => `${Math.round((n / size) * 1000) / 10}%`
+  const rows = [
+    ...Object.entries(fixed),
+    ['Messages', messages] as const,
+    ['Free space', size - used - buffer] as const,
+    ['Autocompact buffer', buffer] as const,
+  ]
+  const report = [
+    '## Context Usage',
+    '',
+    '**Model:** fake-model  ',
+    `**Tokens:** ${k(used)} / ${k(size)} (${Math.round((used / size) * 100)}%)`,
+    '',
+    '### Estimated usage by category',
+    '',
+    '| Category | Tokens | Percentage |',
+    '|----------|--------|------------|',
+    ...rows.map(([name, n]) => `| ${name} | ${k(n)} | ${pct(n)} |`),
+    '',
+    '### MCP Tools',
+    '',
+    '| Tool | Server | Tokens |',
+    '|------|--------|--------|',
+    '| mcp__fake__search | fake | 340 |',
+    '| mcp__fake__fetch | fake | 300 |',
+    '',
+    '### Memory Files',
+    '',
+    '| Type | Path | Tokens |',
+    '|------|------|--------|',
+    `| Project | ${join(turn.session.cwd, 'CLAUDE.md')} | 900 |`,
+  ].join('\n')
+  // Claude Code sends the report twice, under two message ids.
+  for (let i = 0; i < 2; i++) {
+    await stream(turn, report, { chunks: [report], delayMs: 0, messageId: turn.messageId() })
+  }
+  return 'end_turn'
+}
+
 export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'basic-turn': basicTurn,
   'long-stream': longStream,
@@ -734,6 +840,8 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   subagent,
   plan,
   thinking,
+  usage,
+  context,
 }
 
 export const compact: Scenario = async (turn) => {

@@ -2,7 +2,12 @@
 // session lifecycle, sub-sessions, and the session index.
 
 import { randomUUID } from 'node:crypto'
-import type { ImportableSession, SessionAttention, SessionSummary } from '@shared/agent-host'
+import type {
+  ContextBreakdown,
+  ImportableSession,
+  SessionAttention,
+  SessionSummary,
+} from '@shared/agent-host'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import {
@@ -42,12 +47,14 @@ import {
   type SubagentState,
   type TurnScope,
 } from './acp/mapper'
+import { parseContextReport } from './acp/claude-reports'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams, notFound } from './errors'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
+import { hasReports, runReport } from './reports'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
 
 export interface SessionTimings {
@@ -192,6 +199,8 @@ export class SessionManager {
   private readonly watchers = new Map<string, Set<string>>()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
+  /** `/context` reports running, by session id. */
+  private readonly contextRuns = new Map<string, Promise<ContextBreakdown | null>>()
   /** The last `seq` of sessions that are not live, so a reopened session continues it. */
   private readonly seqs = new Map<string, number>()
   private readonly listed = new Map<string, { title: string | null; updatedAt: string | null }>()
@@ -1116,6 +1125,56 @@ export class SessionManager {
 
   private titleOf(live: Live): string {
     return live.thread.session.title ?? this.deps.agents.name(live.record.agentId)
+  }
+
+  /**
+   * What fills the session's context, from the agent's `/context` report. It runs in a fork,
+   * deleted afterwards, so the session's own thread and history stay as they were. Null for an
+   * agent without the report.
+   */
+  context(sessionId: string): Promise<ContextBreakdown | null> {
+    const running = this.contextRuns.get(sessionId)
+    if (running) return running
+    const run = this.readContext(sessionId).finally(() => this.contextRuns.delete(sessionId))
+    this.contextRuns.set(sessionId, run)
+    return run
+  }
+
+  private async readContext(sessionId: string): Promise<ContextBreakdown | null> {
+    const live = this.liveFor(sessionId)
+    const { record } = live
+    if (!hasReports(record.agentId) || record.origin === 'subagent') return null
+    if (live.thread.session.status !== 'ready' || !live.connection) {
+      throw new HostError('busy', `The session is ${live.thread.session.status.replace('_', ' ')}`)
+    }
+    const runtime = await this.deps.agents.ensureReady(record.agentId)
+    if (!runtime.init.capabilities.forkSession) return null
+    const log = (message: string): void => this.deps.diagnostics.log('warn', message)
+    let messages: string[]
+    try {
+      messages = await runReport(
+        runtime,
+        async () =>
+          (
+            await runtime.connection.forkSession(
+              record.acpSessionId,
+              record.projectPath,
+              sessionMeta(record),
+            )
+          ).acpSessionId,
+        '/context',
+        log,
+      )
+    } catch (error) {
+      throw agentError(error)
+    }
+    const now = this.now()
+    const breakdown =
+      messages.map((text) => parseContextReport(text, now)).findLast((report) => report !== null) ??
+      null
+    if (!breakdown)
+      log(`${this.deps.agents.name(record.agentId)}: /context gave no report OverBench can read`)
+    return breakdown
   }
 
   async prompt(sessionId: string, content: UserContent[]): Promise<void> {

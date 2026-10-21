@@ -174,6 +174,8 @@ export class AgentConnection {
   private readonly targets = new Map<string, SessionTarget>()
   private readonly pending = new Map<string, { at: number; updates: SessionUpdate[] }>()
   private readonly unregistered = new Set<string>()
+  /** Sessions OverBench runs a report in, which no thread shows. */
+  private readonly collectors = new Map<string, (update: SessionUpdate) => void>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -260,6 +262,11 @@ export class AgentConnection {
     const target = this.targets.get(acpSessionId)
     if (target) {
       target.apply(mapSessionUpdate(update, target.context()))
+      return
+    }
+    const collector = this.collectors.get(acpSessionId)
+    if (collector) {
+      collector(update)
       return
     }
     if (this.unregistered.has(acpSessionId)) {
@@ -503,6 +510,29 @@ export class AgentConnection {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
       tokens: mapTokenTotals(response.usage),
     }
+  }
+
+  /**
+   * Prompts a session no thread shows, such as one made for a report, with `text`, and returns
+   * the text of each agent message of the turn, in order. Its other updates are dropped.
+   */
+  async collect(acpSessionId: string, text: string): Promise<string[]> {
+    const messages: { id: string | null; text: string }[] = []
+    this.pending.delete(acpSessionId)
+    this.collectors.set(acpSessionId, (update) => {
+      if (update.sessionUpdate !== 'agent_message_chunk' || update.content.type !== 'text') return
+      const id = update.messageId ?? null
+      const last = messages.at(-1)
+      if (last && (id === null || last.id === id)) last.text += update.content.text
+      else messages.push({ id, text: update.content.text })
+    })
+    try {
+      await this.prompt(acpSessionId, [{ type: 'text', text }])
+    } finally {
+      this.collectors.delete(acpSessionId)
+      this.unregister(acpSessionId)
+    }
+    return messages.map((message) => message.text)
   }
 
   /**

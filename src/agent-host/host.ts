@@ -1,6 +1,7 @@
 // The agent host, assembled: state, agents, sessions, git and the ports. index.ts runs it in
 // the utility process; tests run it in-process with fakes for the launcher, shell and git.
 
+import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
 import type { HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
@@ -96,6 +97,7 @@ export class AgentHost {
       diagnostics: this.diagnostics,
       launcher: options.launcher ?? processLauncher(platform),
       settings: () => this.settings,
+      reportsDir: path.join(options.userDataPath, 'agent-reports'),
       ...(options.detect ? { detect: options.detect } : {}),
       ...(options.agentTimings ? { timings: options.agentTimings } : {}),
       status: (status) => this.hub.broadcast({ type: 'agent.status', status }),
@@ -298,6 +300,7 @@ export class AgentHost {
       'agents.authenticate': ({ agentId, methodId }) => agents.authenticate(agentId, methodId),
       'agents.logout': ({ agentId }) => agents.logout(agentId),
       'agents.retry': ({ agentId }) => agents.retry(agentId),
+      'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.listSessions': ({ agentId, projectPath, cursor }) =>
         sessions.listImportable(agentId, projectPath, cursor ?? null),
       'projects.list': () => {
@@ -322,6 +325,7 @@ export class AgentHost {
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.retry': ({ sessionId }) => sessions.retry(sessionId),
       'sessions.fork': ({ sessionId }) => sessions.fork(sessionId),
+      'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.queue': ({ sessionId, content }) => sessions.queue(sessionId, content),
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
       'sessions.steer': ({ sessionId, itemId }) => sessions.steer(sessionId, itemId),

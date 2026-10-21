@@ -363,6 +363,7 @@ Subscription plans cap usage in rolling windows, such as five hours and a week. 
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------- |
 | The `_auth/status_update` notification: kind, plan label, email | Yes                                                                                                              | Yes                                                             | No       |
 | Plan limits                                                     | `usage_update._meta["_claude/rateLimit"]`, one window per update, whenever Claude Code's rate limit info changes | Not sent; the adapter keeps them for its `/status` command only | No       |
+| Current use of every limit                                      | The `/usage` report, on request ([below](#reading-the-limits-from-usage))                                        | No                                                              | No       |
 
 ```ts
 interface AgentAccount {
@@ -388,6 +389,44 @@ interface PlanLimit {
 - An account with `kind: 'none'` sets the agent's `signIn` to `required`; any other kind sets `signed-in`.
 - Cost is shown only when the account is not a subscription, because for a plan it is not what the user pays.
 - For Codex, the adapter already receives `account/rateLimits/updated` from Codex; forwarding it in `usage_update._meta` the way the Claude adapter does is a small upstream change, and the plan limits appear once it lands.
+
+### Reading the limits from `/usage`
+
+Rate-limit events arrive only when a window changes, so a window can stay unknown for days, and one may come without `utilization`. Claude Code's `/usage` command reads the current use of every window; it runs in Claude Code itself, with no model call. The adapter formats it as the markdown of an agent message (`formatUsageResponse` in claude-agent-acp 0.94's `usage-markdown.js`), and nothing else exposes it, so the host reads that markdown ([reports](#reports-from-claude-codes-own-commands)).
+
+- `agents.refreshLimits` runs it for Claude Code (and the fake agent, which imitates the format), at most once a minute; other agents have no report and the request does nothing. The usage popover and the sidebar's plan chips ask for it when they open and Settings › Agents when a card shows, each only while the agent runs; the card's **Check plan limits** starts a stopped agent to ask.
+- It runs in a session the host creates for it in `<userData>/agent-reports`, an empty folder, so no project's settings, hooks or memory files load.
+- Each `**<label>** — **<n>%** · Resets <time>` line under `### Limits` becomes a window: "5-hour limit" is `five_hour`, "Weekly · all models" `seven_day`, and "Weekly · <model>" `seven_day_<model>`, so Opus and Sonnet merge with the windows the events name. `usedPercent` is `n` as printed (already a percentage), and a window at 100% is `reached`.
+- The reset is printed in English without a year, in the zone of the machine (`Oct 24, 6:00 AM PDT`). A `GMT+8` or `UTC` zone is applied as written; a named zone such as `PDT` is the local one it came from. The year is this one, or the next for a reset that would otherwise lie in the past.
+- A window read this way replaces the one in memory, except that a `warning` or `reached` state an event set holds until that window's reset passes, since the report has no state of its own.
+- Text that is not the structured report, such as Claude Code's own output when the adapter falls back to it, changes nothing and is logged.
+
+## Context breakdown
+
+`usage_update` gives only the context's `used` and `size`. Claude Code works out what fills it for its own `/context` command, which also runs without a model call: by category (system prompt, system tools, MCP tools, MCP server instructions, deferred tools, memory files, skills, messages, free space, the autocompact buffer), then lists of the MCP tools, memory files and skills with their tokens. The adapter passes it through as an agent message, so the host reads that markdown too ([reports](#reports-from-claude-codes-own-commands)).
+
+```ts
+interface ContextBreakdown {
+  model: string | null
+  used: number
+  size: number
+  categories: { name: string; tokens: number; share: number | null }[] // in the report's order
+  lists: { name: string; items: { name: string; detail: string | null; tokens: string }[] }[]
+  observedAt: number
+}
+```
+
+- `sessions.context` runs it for a `ready` Claude Code session, in a `session/fork` of it, so the session's own thread and history stay as they were. Other agents give `null`, and a running turn fails with `busy`.
+- The fork starts like a resumed session, with the model the transcript records, so the totals match the session's.
+- Claude Code sends the report twice, under two message ids; the host takes the last message that parses. Token counts such as `32.1k` become numbers; list items keep the text the report shows (`~310`, `< 20`).
+- The renderer asks when the usage popover opens and keeps the result for that session until its `used / size` changes.
+
+## Reports from Claude Code's own commands
+
+`/usage` and `/context` run in a session no thread shows. The connection prompts it and collects its agent messages; its other updates are dropped, and updates that arrive after are ignored like those of a closed session.
+
+- Afterwards the host deletes the session with `session/delete`, which removes its transcript, so it shows in no session list. claude-agent-acp 0.94 deletes without waiting for Claude Code to exit, and Claude Code writes the session's title and costs back as it exits, which lists it again; the host deletes it once more one and five seconds later. An agent without `session/delete` gets `session/close`.
+- A report that has not finished after 60 seconds is cancelled and fails.
 
 ## Config options
 

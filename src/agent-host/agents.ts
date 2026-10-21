@@ -1,6 +1,7 @@
 // Agent supervision: detection, lazy start, one process per agent, idle stop, restarts with
 // backoff, sign-in state and the AgentStatus every port sees.
 
+import { mkdir } from 'node:fs/promises'
 import os from 'node:os'
 import type {
   AgentAccount,
@@ -19,6 +20,7 @@ import {
   type AgentInit,
   type ConnectionHooks,
 } from './acp/connection'
+import { parseUsageReport } from './acp/claude-reports'
 import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
 import {
   detectAgent,
@@ -33,6 +35,7 @@ import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { formatCommand } from './quote'
+import { hasReports, runReport } from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
 
@@ -76,6 +79,8 @@ export interface AgentTimings {
   failureWindowMs: number
   maxFailures: number
   progressMs: number
+  /** The shortest gap between two `/usage` reports. */
+  limitsMs: number
 }
 
 export const AGENT_TIMINGS: AgentTimings = {
@@ -87,6 +92,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   failureWindowMs: 5 * 60_000,
   maxFailures: 5,
   progressMs: 250,
+  limitsMs: 60_000,
 }
 
 export interface AgentRuntime {
@@ -112,6 +118,8 @@ export interface AgentManagerDeps {
   diagnostics: Diagnostics
   launcher: AgentLauncher
   settings(): HostSettings
+  /** The folder the `/usage` report's session runs in. */
+  reportsDir: string
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
@@ -134,6 +142,8 @@ class Slot {
   signIn: AgentStatus['signIn'] = 'unknown'
   account: AgentAccount | null = null
   limits = new Map<string, PlanLimit>()
+  limitsRun: Promise<void> | null = null
+  limitsReadAt = 0
   progress = new TextRing(8 * 1024)
   restartTimer: ReturnType<typeof setTimeout> | null = null
   idleTimer: ReturnType<typeof setTimeout> | null = null
@@ -533,6 +543,64 @@ export class AgentManager {
     this.emit(slot)
   }
 
+  /**
+   * Reads the current use of every plan limit from the agent's `/usage` report, at most once a
+   * minute, starting the agent if needed; the windows arrive in its status. Rate-limit events
+   * report a window only when it changes, so without this most windows would stay unknown.
+   */
+  async refreshLimits(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    if (!hasReports(agentId)) return
+    await this.detectAll()
+    if (slot.signIn === 'required' || (!slot.runtime && slot.detection?.state !== 'available')) {
+      return
+    }
+    if (slot.limitsRun) return slot.limitsRun
+    if (Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
+    slot.limitsRun = this.readLimits(slot).finally(() => {
+      slot.limitsRun = null
+    })
+    return slot.limitsRun
+  }
+
+  private async readLimits(slot: Slot): Promise<void> {
+    const runtime = await this.ensureReady(slot.def.id)
+    const dir = this.deps.reportsDir
+    await mkdir(dir, { recursive: true })
+    const log = (message: string): void => this.deps.diagnostics.log('warn', message)
+    let messages: string[]
+    try {
+      messages = await runReport(
+        runtime,
+        async () => (await runtime.connection.newSession(dir)).acpSessionId,
+        '/usage',
+        log,
+      )
+    } catch (error) {
+      if (error instanceof AgentRequestError && error.kind === 'auth_required') {
+        this.authRequired(slot.def.id)
+      }
+      throw agentError(error)
+    }
+    const now = Date.now()
+    slot.limitsReadAt = now
+    const limits = messages
+      .map((text) => parseUsageReport(text, now))
+      .findLast((report) => report !== null)
+    if (!limits) {
+      log(`${slot.def.name}: /usage gave no report OverBench can read`)
+      return
+    }
+    for (const limit of limits) {
+      const before = slot.limits.get(limit.window)
+      // A warning or a block the agent pushed holds until its window resets.
+      const held =
+        limit.state === 'ok' && before && before.state !== 'ok' && (before.resetsAt ?? 0) > now
+      slot.limits.set(limit.window, held ? { ...limit, state: before.state } : limit)
+    }
+    this.emit(slot)
+  }
+
   authRequired(agentId: AgentId): void {
     const slot = this.slots.get(agentId)
     if (!slot || slot.signIn === 'required') return
@@ -643,6 +711,7 @@ export class AgentManager {
         // codex-acp 2.2.2 ignores `idleBehavior` and starts a turn of its own when none is
         // running (its PR #593 would fix it), which OverBench would not know about.
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
+        reports: hasReports(slot.def.id),
       },
     }
   }

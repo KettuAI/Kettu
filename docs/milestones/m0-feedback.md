@@ -12,7 +12,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 4   | The model menu does not look polished                          | Model menu     | Open         |
 | 5   | Messages have no action row                                    | Thread entries | Fixed        |
 | 6   | Markdown looks plain and file references do not stand out      | Markdown       | Partly fixed |
-| 7   | The usage popover shows too little and needs a full redesign   | Usage          | Open         |
+| 7   | The usage popover shows too little and needs a full redesign   | Usage          | Partly fixed |
 | 8   | Session rows show their time badly                             | Sidebar        | Open         |
 | 9   | New session is tied to the selected project                    | Sidebar        | Fixed        |
 | 10  | The welcome screen and the project home lack polish            | Home           | Open         |
@@ -22,7 +22,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 14  | The terminal panel's own buttons do nothing                    | Terminal       | Fixed        |
 | 15  | Settings selects show names only and keep the default look     | Settings       | Partly fixed |
 | 16  | Switches keep shadcn's default look                            | Settings       | Open         |
-| 17  | Settings › Agents leaves out what matters                      | Settings       | Open         |
+| 17  | Settings › Agents leaves out what matters                      | Settings       | Partly fixed |
 | 18  | The About page needs redoing                                   | Settings       | Open         |
 | 19  | Settings leave too much empty space                            | Settings       | Open         |
 | 20  | Collapsing the sidebar is abrupt                               | Sidebar        | Fixed        |
@@ -89,6 +89,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - From `usage_update` OverBench gets only the context's `used`, `size` and `cost`, with no breakdown ([Session model: mapping ACP v1](../design/session-model.md#mapping-acp-v1-to-patches)). Claude Code works the breakdown out for its own `/context` command; whether the adapter can pass it on is unchecked.
   - A plan-limit window appears only after Claude Code reports it in `usage_update._meta["_claude/rateLimit"]`, which happens when the limit changes, so the weekly windows had not shown up yet, and a window reported without `utilization` shows "—" ([Session model: plan limits](../design/session-model.md#plan-limits)). The current numbers need another source.
 - **To settle when planning**: where the context breakdown and the current plan usage come from for each agent, what the popover shows for agents that offer neither, and the new design, written into the design docs before it is built.
+- **Partly fixed**: both sources exist now, for Claude Code. The plan limits come from Claude Code's `/usage`, read when the popover opens, so every window shows its current use and reset ([Session model: reading the limits from `/usage`](../design/session-model.md#reading-the-limits-from-usage)); what fills the context comes from `/context`, run in a throwaway fork of the session ([Session model: context breakdown](../design/session-model.md#context-breakdown)). Neither costs a model call, and both run in sessions the host deletes afterwards. The popover shows the breakdown as rows in its current layout ([Interface: usage popover](../design/ui.md#usage-popover)). Checked against a live Claude Max session: three windows (5-hour, weekly, weekly Fable) with their resets, and the categories with the memory file and 69 skills, each in 3 to 5 s. Still to do: the popover's redesign, and the plan's tier ("Max (5x)"), which neither report gives; Codex and OpenCode have no such reports.
 
 ## 8. Session rows show their time badly
 
@@ -167,6 +168,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the page falls well short. Each card shows the agent's status and launch command, and some a version and the account, but the core facts are missing. Claude Code's subscription usage is the clearest case: its card has a single 5-hour row with an empty bar and "—", so how much quota is left cannot be seen. Also in the screenshot: Claude Code's "v0.94.0" is the ACP adapter's version, Codex shows neither a version nor an account, and the footer read "Reading your environment…".
 - **Expected**: the page reworked to show each agent's core facts, starting with how much of Claude Code's subscription quota is left.
 - **Today**: `src/renderer/src/features/settings/agents-section.tsx` follows [Interface: settings](../design/ui.md#settings): status with its next step, the version from `agentInfo`, the launch command, the Node.js version, the account, and its plan limits when the agent reports them. The plan limits come from the same place as the usage popover's, so they share the gap in [problem 7](#7-the-usage-popover-shows-too-little-and-needs-a-full-redesign): only windows Claude Code has pushed, with "—" when `utilization` is missing. To settle when planning: which facts each card shows and where each comes from (subscription usage, the agent's own version besides the adapter's, the account for Codex and OpenCode), solved together with problem 7.
+- **Partly fixed**: each Claude Code card shows its plan limits read afresh from `/usage` while it runs, and a stopped one offers **Check plan limits** ([Interface: usage popover](../design/ui.md#usage-popover)). Still to decide with the page's redesign: the other facts each card shows, the agent's own version besides the adapter's, and the account for Codex and OpenCode.
 
 ## 18. The About page needs redoing
 

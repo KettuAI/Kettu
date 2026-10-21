@@ -3,9 +3,11 @@ import type { AgentStatus } from '@shared/agent-host'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { LimitsPart } from '@renderer/features/session/composer/usage'
+import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
+import { refreshLimits } from '@renderer/stores/usage'
 import { countdown, tightestLimit } from './plan-usage'
 
 /** One chip per agent that reports plan limits, each opening that agent's limits. */
@@ -37,8 +39,14 @@ function UsageChip({ agent, now }: { agent: AgentStatus; now: number }) {
   const label = limit
     ? `${agent.name} plan usage: ${limit.label} ${percent === null ? 'unknown' : `${percent}%`}${left ? `, resets in ${left}` : ''}`
     : `${agent.name} plan usage: not known since its windows reset`
+  const onOpenChange = (open: boolean) => {
+    if (!open || agent.state !== 'ready') return
+    refreshLimits(agent.id).catch((error: unknown) =>
+      console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
+    )
+  }
   return (
-    <Popover>
+    <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={
           <button

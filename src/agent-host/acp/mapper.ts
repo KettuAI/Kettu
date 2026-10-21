@@ -547,7 +547,8 @@ function parseTime(value: string | null | undefined, fallback: number): number {
   return Number.isFinite(time) ? time : fallback
 }
 
-const WINDOW_LABELS: Record<string, string> = {
+/** Labels of the plan-limit windows Claude Code names. */
+export const WINDOW_LABELS: Readonly<Record<string, string>> = {
   five_hour: '5-hour',
   seven_day: 'Weekly',
   seven_day_opus: 'Weekly · Opus',

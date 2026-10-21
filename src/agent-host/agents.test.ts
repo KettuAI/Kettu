@@ -1,5 +1,7 @@
 // The agent lifecycle with the fake agent in-process: start, timeouts, restarts, idle stop.
 
+import os from 'node:os'
+import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { AgentStatus } from '@shared/agent-host'
 import { AgentManager, type AgentTimings } from './agents'
@@ -50,6 +52,7 @@ function manager(env: Env = {}, timings: Partial<AgentTimings> = {}) {
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
     }),
+    reportsDir: path.join(os.tmpdir(), 'overbench-agent-reports'),
     detect: detectAgent,
     timings: { restartDelaysMs: [5], ...timings },
     status: (status) => statuses.push(status),

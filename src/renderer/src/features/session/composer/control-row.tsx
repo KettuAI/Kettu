@@ -146,6 +146,9 @@ export function ControlRow({
         />
       )}
       <UsageButton
+        sessionId={session.id}
+        agentId={session.agentId}
+        idle={session.status === 'ready'}
         usage={session.usage}
         limits={agent?.limits ?? []}
         account={agent?.account ?? null}

@@ -55,6 +55,8 @@ React components have no automated tests in M0; they are checked by running the 
 | `subagent`             | Announces a child session, sends it a `session_message`, streams its work including one permission request on the child, and ends the child with `idle`                                                                                                         |
 | `plan`                 | A four-item plan whose items progress while the agent reads files                                                                                                                                                                                               |
 | `thinking`             | A long thought streamed token by token, then an answer                                                                                                                                                                                                          |
+| `usage`                | The `/usage` report as claude-agent-acp formats it, with the windows `usage_update` pushes and a model-scoped weekly window                                                                                                                                     |
+| `context`              | The `/context` report as Claude Code writes it, twice under two message ids as Claude Code sends it, for the session's tokens                                                                                                                                   |
 
 Without a scenario it plays `basic-turn`. `/compact` streams a compaction with its summary. Replies stream with tens of milliseconds between chunks, like a real agent.
 

@@ -20,6 +20,23 @@ export interface PlanLimit {
   observedAt: number
 }
 
+/** What fills a session's context, as the agent's own report breaks it down. */
+export interface ContextBreakdown {
+  model: string | null
+  used: number
+  size: number
+  /** In the report's order, free space and the autocompact buffer included. */
+  categories: { name: string; tokens: number; share: number | null }[]
+  /** The itemised lists that follow, such as MCP tools, memory files and skills. */
+  lists: ContextList[]
+  observedAt: number
+}
+
+export interface ContextList {
+  name: string // "MCP Tools", "Memory Files", "Skills"
+  items: { name: string; detail: string | null; tokens: string }[] // tokens as reported: "~310"
+}
+
 export type AgentState =
   | 'not-installed'
   | 'node-missing'
@@ -62,6 +79,7 @@ export interface AgentStatus {
     deleteSession: boolean
     forkSession: boolean
     steering: boolean // `_session/steering` into a running turn
+    reports: boolean // plan limits and context breakdowns from its own `/usage` and `/context`
   }
 }
 
@@ -146,6 +164,7 @@ export interface HostContract {
   'agents.authenticate': { params: { agentId: AgentId; methodId: string }; result: void }
   'agents.logout': { params: { agentId: AgentId }; result: void }
   'agents.retry': { params: { agentId: AgentId }; result: void }
+  'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.listSessions': {
     params: { agentId: AgentId; projectPath: string; cursor?: string }
     result: { sessions: ImportableSession[]; nextCursor: string | null }
@@ -171,6 +190,7 @@ export interface HostContract {
   'sessions.cancel': { params: { sessionId: string }; result: void }
   'sessions.retry': { params: { sessionId: string }; result: void }
   'sessions.fork': { params: { sessionId: string }; result: SessionSummary }
+  'sessions.context': { params: { sessionId: string }; result: ContextBreakdown | null }
   'sessions.queue': {
     params: { sessionId: string; content: UserContent[] }
     result: { itemId: string | null } // null when it was sent at once
@@ -213,6 +233,7 @@ export const HOST_METHODS = [
   'agents.authenticate',
   'agents.logout',
   'agents.retry',
+  'agents.refreshLimits',
   'agents.listSessions',
   'projects.list',
   'projects.add',
@@ -229,6 +250,7 @@ export const HOST_METHODS = [
   'sessions.cancel',
   'sessions.retry',
   'sessions.fork',
+  'sessions.context',
   'sessions.queue',
   'sessions.unqueue',
   'sessions.steer',

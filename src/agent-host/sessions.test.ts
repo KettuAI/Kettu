@@ -234,6 +234,51 @@ describe('forking', () => {
   })
 })
 
+describe('reports', () => {
+  it('breaks the context down in a fork that leaves the session and the list as they were', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilStatus(sessionId, 'ready')
+    const before = port.entries(sessionId)
+    const listed = async () =>
+      (await port.request('agents.listSessions', { agentId: 'fake-agent', projectPath: t.project }))
+        .sessions.length
+
+    const sessionsBefore = await listed()
+    const breakdown = await port.request('sessions.context', { sessionId })
+    expect(breakdown).toMatchObject({ model: 'fake-model', size: 200_000 })
+    expect(breakdown?.categories.map((category) => category.name)).toContain('Messages')
+    expect(breakdown?.lists.map((list) => list.name)).toEqual(['MCP Tools', 'Memory Files'])
+    expect(port.entries(sessionId)).toEqual(before)
+    expect(await port.request('sessions.list', {})).toHaveLength(1)
+    expect(await listed()).toBe(sessionsBefore)
+  })
+
+  it('reads every plan limit from /usage, at most once a minute', async () => {
+    const { port } = await setup()
+    const limits = () =>
+      port.events
+        .flatMap((event) =>
+          event.type === 'agent.status' && event.status.id === 'fake-agent'
+            ? [event.status.limits]
+            : [],
+        )
+        .at(-1) ?? []
+
+    await port.request('agents.refreshLimits', { agentId: 'fake-agent' })
+    expect(limits()).toEqual([
+      expect.objectContaining({ window: 'five_hour', label: '5-hour', usedPercent: 19 }),
+      expect.objectContaining({ window: 'seven_day', label: 'Weekly', usedPercent: 32 }),
+      expect.objectContaining({ window: 'seven_day_fake', label: 'Weekly · Fake', usedPercent: 7 }),
+    ])
+    const observed = limits()[0]?.observedAt
+    await port.request('agents.refreshLimits', { agentId: 'fake-agent' })
+    expect(limits()[0]?.observedAt).toBe(observed)
+    expect(await port.request('sessions.list', {})).toHaveLength(0)
+  })
+})
+
 describe('a prompt turn', () => {
   it('streams a whole turn into the watching port', async () => {
     const { t, port } = await setup()

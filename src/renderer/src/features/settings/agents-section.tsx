@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ExternalLinkIcon, LogOutIcon, RefreshCwIcon, RotateCwIcon } from 'lucide-react'
 import type { AgentStatus } from '@shared/agent-host'
 import { emitAppEvent } from '@renderer/app/events'
@@ -13,9 +13,10 @@ import { longAgo } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { refreshLimits } from '@renderer/stores/usage'
 import { closeSettings, toggleTerminal, useViewStore } from '@renderer/stores/view'
 
 function useAction(): [(run: () => Promise<unknown>) => void, boolean, string | null] {
@@ -45,6 +46,17 @@ export function AgentCard({ status }: { status: AgentStatus }) {
   const override = useSettingsStore((s) => s.settings.agents[status.id]?.binaryPath)
   const [act, busy, error] = useAction()
   const r = readiness(status)
+  const limitsReadable =
+    status.capabilities.reports && isInstalled(status) && status.signIn !== 'required'
+  const running = status.state === 'ready'
+
+  // A running agent's limits are read as the card shows; starting one is left to Check.
+  useEffect(() => {
+    if (!limitsReadable || !running) return
+    refreshLimits(status.id).catch((e: unknown) =>
+      console.warn(`Could not read the plan limits: ${errorMessage(e)}`),
+    )
+  }, [limitsReadable, running, status.id])
 
   const signInTerminal = (command: string) => {
     const view = useViewStore.getState()
@@ -180,6 +192,19 @@ export function AgentCard({ status }: { status: AgentStatus }) {
                 <span className="text-muted-foreground"> · {status.account.email}</span>
               )}
             </span>
+          </Detail>
+        )}
+        {limitsReadable && !running && status.limits.length === 0 && (
+          <Detail label="Usage">
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={busy}
+              onClick={() => act(() => refreshLimits(status.id))}
+            >
+              {busy && <Spinner data-icon="inline-start" className="size-3" />}
+              Check plan limits
+            </Button>
           </Detail>
         )}
         {status.id === 'opencode' && (

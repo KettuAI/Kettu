@@ -15,6 +15,8 @@ export const SCENARIOS = [
   'subagent',
   'plan',
   'thinking',
+  'usage',
+  'context',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -42,6 +44,8 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   subagent: { description: 'Runs a subagent in a child session with a permission request' },
   plan: { description: 'A plan whose items progress while the agent works' },
   thinking: { description: 'A long thought, then an answer' },
+  usage: { description: "The plan limits, as Claude Code's /usage reports them" },
+  context: { description: "What fills the context, as Claude Code's /context reports it" },
 }
 
 export interface ScenarioOptions {

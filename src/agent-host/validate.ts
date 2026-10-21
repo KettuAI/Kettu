@@ -157,6 +157,7 @@ export function createValidators(platform: Platform): Validators {
     },
     'agents.logout': agent,
     'agents.retry': agent,
+    'agents.refreshLimits': agent,
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)
@@ -204,6 +205,7 @@ export function createValidators(platform: Platform): Validators {
     'sessions.cancel': session,
     'sessions.retry': session,
     'sessions.fork': session,
+    'sessions.context': session,
     'sessions.queue': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), content: promptContent(o.content) }
