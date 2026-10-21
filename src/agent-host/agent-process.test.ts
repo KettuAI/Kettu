@@ -6,7 +6,9 @@ import { applyPatches, threadFromSnapshot, type ThreadState } from '@shared/thre
 import { AgentConnection, type ConnectionHooks, type SessionTarget } from './acp/connection'
 import { newTurnScope } from './acp/mapper'
 import { spawnAgent, spawnArguments } from './agent-process'
+import { processLauncher } from './agents'
 import type { LaunchSpec } from './catalog'
+import { startTestHost } from './testing/harness'
 
 const FAKE_AGENT = path.resolve('tools/fake-agent/main.ts')
 
@@ -196,5 +198,53 @@ describe('spawnArguments', () => {
       args: [],
       shell: true,
     })
+  })
+})
+
+describe('a crashed agent process', () => {
+  it('is restarted and its sessions resume', async () => {
+    const t = await startTestHost({
+      launcher: processLauncher(process.platform),
+      agentEnv: { FAKE_AGENT_DELAY_SCALE: '0' },
+    })
+    try {
+      const port = t.connect()
+      const created = await port.request('sessions.create', {
+        agentId: 'fake-agent',
+        projectPath: t.project,
+      })
+      await port.open(created.id)
+      const pids = () =>
+        t.sent.flatMap((m) => (m.type === 'host:agent-processes' ? [m.processes] : []))
+      const firstPid = pids().at(-1)?.[0]?.pid
+      expect(firstPid).toBeGreaterThan(0)
+
+      await port.request('sessions.prompt', {
+        sessionId: created.id,
+        content: [{ type: 'text', text: '/crash --code 5' }],
+      })
+      await port.untilStatus(created.id, 'disconnected')
+      await port.untilStatus(created.id, 'ready')
+      const exit = t.host.diagnostics
+        .agentRecords('fake-agent')
+        .events.find((e) => e.event === 'exit')
+      expect(exit?.detail).toBe('exited with code 5')
+      expect(pids()).toContainEqual([])
+      const secondPid = pids().at(-1)?.[0]?.pid
+      expect(secondPid).toBeGreaterThan(0)
+      expect(secondPid).not.toBe(firstPid)
+
+      await port.request('sessions.prompt', {
+        sessionId: created.id,
+        content: [{ type: 'text', text: 'hello again' }],
+      })
+      await port.untilStatus(created.id, 'ready')
+      expect(port.entries(created.id).at(-1)).toMatchObject({ stopReason: 'end_turn' })
+    } finally {
+      await t.stop()
+    }
+    expect(t.sent.at(-1)).toEqual({ type: 'host:stopped' })
+    const last = t.sent.filter((m) => m.type === 'host:agent-processes').at(-1)
+    expect(last).toEqual({ type: 'host:agent-processes', processes: [] })
   })
 })
