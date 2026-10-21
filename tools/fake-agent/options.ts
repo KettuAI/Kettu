@@ -33,7 +33,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'parallel-permissions': { description: 'Three tool calls asking for permission at once' },
   cancel: { description: 'A long turn that honors cancellation', hint: '--ignore-cancel' },
   crash: { description: 'Exits mid-turn with a non-zero code', hint: '--code <n>' },
-  'auth-required': { description: 'Signs the agent out; requests fail until you sign in' },
+  'auth-required': {
+    description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
+  },
   'large-history': { description: 'Makes reopening this session replay 1,000 entries' },
   'slow-start': { description: 'Explains how to start the agent slowly (set at launch)' },
   'all-updates': { description: 'Sends every session update variant once, plus an unknown one' },

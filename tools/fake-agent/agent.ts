@@ -212,6 +212,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       turns: 0,
       usedTokens: 0,
       largeHistory: id.startsWith('large-history'),
+      signedOut: false,
       mode: 'ask',
       model: 'balanced',
       thought: 'medium',

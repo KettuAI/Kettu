@@ -15,6 +15,8 @@ export interface FakeSessionState {
   turns: number
   usedTokens: number
   largeHistory: boolean
+  /** Its last prompt signed the agent out with the auth-required scenario. */
+  signedOut: boolean
   mode: string
   model: string
   thought: string

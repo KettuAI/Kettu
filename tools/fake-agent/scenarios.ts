@@ -374,6 +374,13 @@ const crash: Scenario = async (turn) => {
 }
 
 const authRequired: Scenario = async (turn) => {
+  // Clients send the failed prompt again after sign-in; like a real agent, that one succeeds.
+  if (turn.session.signedOut) {
+    turn.session.signedOut = false
+    await stream(turn, 'Signed in again, so the session picks up where it was.')
+    return 'end_turn'
+  }
+  turn.session.signedOut = true
   turn.signOut()
   throw RequestError.authRequired(undefined, 'Sign in to the fake agent to continue')
 }

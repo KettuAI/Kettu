@@ -442,6 +442,21 @@ describe('sign-in', () => {
       port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'nope' }),
     ).rejects.toMatchObject({ code: 'invalid_params' })
   })
+
+  it('sends the prompt that needed sign-in again once signed in', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/auth-required')
+    await port.untilStatus(sessionId, 'auth_required')
+    await port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'fake-login' })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'agent')
+    await port.untilStatus(sessionId, 'ready')
+    expect(port.summary(sessionId)?.status).toBe('ready')
+    const [status] = (await port.request('agents.list', undefined)).filter(
+      (s) => s.id === 'fake-agent',
+    )
+    expect(status).toMatchObject({ signIn: 'signed-in' })
+  })
 })
 
 describe('updates', () => {
