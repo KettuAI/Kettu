@@ -77,8 +77,9 @@ src/
 └── shared/            Shared across processes: the IPC and host contracts, the thread model
 tools/
 ├── fake-agent/        Scripted ACP agent for development, tests and perf runs
-├── perf/              The performance script
-└── screenshots/       Captures the main screens on each platform
+├── perf/              The performance script and its CI runner
+├── screenshots/       Captures the main screens on each platform
+└── launch.mjs         Starts a production build for the two above
 ```
 
 ### Adding an IPC call

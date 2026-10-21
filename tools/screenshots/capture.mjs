@@ -8,11 +8,10 @@
 //
 // On Linux CI, run it under `xvfb-run -a`.
 
-import { spawn, execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { connect, launchApp, makeProject, openProject } from '../launch.mjs'
 
 const args = process.argv.slice(2)
 const valueOf = (flag) => {
@@ -26,41 +25,9 @@ const log = (text) => process.stderr.write(`${text}\n`)
 
 mkdirSync(out, { recursive: true })
 const scratch = mkdtempSync(join(tmpdir(), 'overbench-shots-'))
-const userData = join(scratch, 'user-data')
 const project = join(scratch, 'demo-project')
-
-// A small repository on a branch with no upstream and one uncommitted change, so the top bar
-// shows a branch, "Not published" and a change count.
-mkdirSync(join(project, 'src'), { recursive: true })
-const git = (...rest) => execFileSync('git', rest, { cwd: project, stdio: 'ignore' })
-git('init', '-q', '-b', 'feat/login')
-git('config', 'user.email', 'screenshots@example.com')
-git('config', 'user.name', 'Screenshots')
-writeFileSync(join(project, 'src', 'login.ts'), 'export const login = () => true\n')
-git('add', '.')
-git('commit', '-q', '-m', 'feat: add login')
-writeFileSync(join(project, 'src', 'session.ts'), 'export const session = null\n')
-
-const electron = createRequire(import.meta.url)('electron')
-const app = spawn(
-  electron,
-  [
-    '.',
-    '--overbench-perf',
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${userData}`,
-    // CI's Ubuntu restricts the user namespaces Chromium's sandbox needs; this run only reads.
-    ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
-  ],
-  {
-    cwd: resolve(import.meta.dirname, '../..'),
-    env: {
-      ...process.env,
-      OVERBENCH_FAKE_AGENT: resolve(import.meta.dirname, '../fake-agent/main.ts'),
-    },
-    stdio: ['ignore', 'inherit', 'inherit'],
-  },
-)
+makeProject(project)
+const app = launchApp({ port, userData: join(scratch, 'user-data') })
 
 let failed = false
 try {
@@ -75,61 +42,8 @@ try {
 }
 process.exit(failed ? 1 : 0)
 
-async function connect() {
-  const deadline = Date.now() + 60_000
-  for (;;) {
-    try {
-      const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-      const page = targets.find((t) => t.type === 'page' && !t.url.startsWith('devtools'))
-      if (page) return open(page.webSocketDebuggerUrl)
-    } catch {
-      // Not listening yet.
-    }
-    if (Date.now() > deadline) throw new Error(`No window answered on port ${port}`)
-    await sleep(250)
-  }
-}
-
-async function open(url) {
-  const ws = new WebSocket(url)
-  await new Promise((done, fail) => {
-    ws.onopen = done
-    ws.onerror = () => fail(new Error('Could not connect to the renderer'))
-  })
-  let id = 0
-  const pending = new Map()
-  ws.onmessage = (message) => {
-    const data = JSON.parse(message.data)
-    const settle = data.id && pending.get(data.id)
-    if (!settle) return
-    pending.delete(data.id)
-    settle(data)
-  }
-  const send = (method, params = {}) =>
-    new Promise((done, fail) => {
-      const n = ++id
-      pending.set(n, (data) =>
-        data.error ? fail(new Error(`${method}: ${data.error.message}`)) : done(data.result),
-      )
-      ws.send(JSON.stringify({ id: n, method, params }))
-    })
-  const evaluate = async (expression) => {
-    const result = await send('Runtime.evaluate', {
-      expression,
-      awaitPromise: true,
-      returnByValue: true,
-    })
-    if (result.exceptionDetails) {
-      const detail = result.exceptionDetails.exception?.description ?? result.exceptionDetails.text
-      throw new Error(`In the page: ${detail}`)
-    }
-    return result.result.value
-  }
-  return { send, evaluate, close: () => ws.close() }
-}
-
 async function run() {
-  let cdp = await connect()
+  let cdp = await connect(port)
   const waitFor = async (expression, what, timeout = 60_000) => {
     const deadline = Date.now() + timeout
     while (Date.now() < deadline) {
@@ -194,14 +108,7 @@ async function run() {
   log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
   await shoot('welcome')
 
-  await cdp.evaluate(
-    `window.overbench.agents.request('projects.add', { path: ${JSON.stringify(project)} })`,
-  )
-  // The page picks the project up on load.
-  await cdp.send('Page.reload')
-  cdp.close()
-  await sleep(1500)
-  cdp = await connect()
+  cdp = await openProject(port, cdp, project)
   await setup()
   await waitFor(
     `[...document.querySelectorAll('[data-sidebar=menu-button]')].some((b) => b.textContent.startsWith('New session'))`,

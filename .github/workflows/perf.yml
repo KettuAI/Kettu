@@ -1,0 +1,40 @@
+name: Performance
+
+on:
+  workflow_dispatch:
+
+jobs:
+  measure:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # The runner's 1024 x 768 screen would shrink the default window.
+      - name: Enlarge the screen
+        if: runner.os == 'Windows'
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+      # A budget that is not met fails the step; the results are uploaded either way.
+      - name: Measure
+        if: runner.os != 'Linux'
+        shell: bash
+        run: node tools/perf/run.mjs 2>&1 | tee perf-${{ runner.os }}.txt; exit ${PIPESTATUS[0]}
+      - name: Measure
+        if: runner.os == 'Linux'
+        shell: bash
+        run: xvfb-run -a --server-args="-screen 0 1920x1080x24" node tools/perf/run.mjs 2>&1 | tee perf-${{ runner.os }}.txt; exit ${PIPESTATUS[0]}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-${{ runner.os }}
+          path: perf-${{ runner.os }}.txt

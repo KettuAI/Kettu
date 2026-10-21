@@ -238,8 +238,9 @@ src/
     └── thread.ts          Session model and applyPatches
 tools/
 ├── fake-agent/            Scripted ACP agent for development and tests
-├── perf/                  Performance measurement script
-└── screenshots/           Screenshot capture of the main screens, run in CI
+├── perf/                  Performance measurement script and its CI runner
+├── screenshots/           Screenshot capture of the main screens, run in CI
+└── launch.mjs             Starts a production build for perf and screenshots
 ```
 
 ## What we take from where
