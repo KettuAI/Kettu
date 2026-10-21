@@ -17,7 +17,7 @@ _颜值也是生产力。_
 </div>
 
 > [!NOTE]
-> OverBench 目前处于早期开发阶段，还没有发布任何版本。下文描述的是项目的方向，而不是现在已经能用的功能。
+> OverBench 目前处于早期开发阶段，还没有发布任何版本。第一个里程碑 M0 已在 `main` 分支上实现，正在验收，现在就可以从源码运行。下文标为「_之后_」的内容还在计划中，尚未实现。
 
 ## 为什么是 OverBench
 
@@ -35,23 +35,29 @@ OverBench 想给这些 Agent 一个适合长时间工作的家，它的核心信
 
 OverBench 通过 [Agent Client Protocol](https://agentclientprotocol.com)（ACP）与各个 Agent 通信，直接使用你已经在用的 Agent CLI：你自己的安装、你自己的账号、你自己的配置。
 
-| Agent                                                    | 状态   |
-| -------------------------------------------------------- | ------ |
-| [Claude Code](https://github.com/anthropics/claude-code) | 计划中 |
-| [Codex CLI](https://github.com/openai/codex)             | 计划中 |
-| [opencode](https://opencode.ai)                          | 计划中 |
+| Agent                                                    | OverBench 如何运行它                                             | 状态 |
+| -------------------------------------------------------- | ---------------------------------------------------------------- | ---- |
+| [Claude Code](https://github.com/anthropics/claude-code) | 通过 npx 运行 ACP 适配器 `@agentclientprotocol/claude-agent-acp` | M0   |
+| [Codex CLI](https://github.com/openai/codex)             | 通过 npx 运行 ACP 适配器 `@agentclientprotocol/codex-acp`        | M0   |
+| [opencode](https://opencode.ai)                          | 你自己安装的 `opencode`，以 `opencode acp` 运行                  | M0   |
+
+Claude Code 和 Codex 的适配器需要 Node.js 22 及以上版本，OverBench 会通过你的登录 shell 找到它。登录走各个 Agent 自己的流程，OverBench 不会接触你的凭据。
 
 ## 功能
 
-> 计划在首批版本中提供。
+M0 提供的功能：
 
-- **所有 Agent，一个工作台** —— 在同一个界面里并排使用 Claude Code、Codex CLI 和 opencode，切换 Agent 不用切换工具。
-- **按项目组织的会话** —— 每一次对话都会保留，可搜索、可恢复，并按所属项目归类。
-- **用 diff 审阅改动，而不是翻滚动记录** —— Agent 的修改以真正的并排或行内 diff 呈现，逐个文件查看。
-- **看得懂的授权请求** —— 工具调用和权限请求以清晰的结构化卡片展示，让你放心批准。
-- **多会话并行** —— 多个 Agent 同时在不同项目里工作，一眼就能看出哪些在运行、哪些在等你、哪些已完成。
-- **键盘优先** —— 命令面板和快捷键覆盖所有操作，鼠标只是可选项。
-- **打磨到细节** —— 讲究的字体排印、精心调校的浅色与深色主题，以及从不打扰你的克制动效。
+- **所有 Agent，一个工作台** —— 在同一个项目里并排开启 Claude Code、Codex CLI 和 opencode 会话，切换 Agent 不用切换工具。
+- **按项目组织的会话** —— 每个会话都随项目保存，重新打开时带着完整历史，Agent 崩溃后也能恢复；Agent 已有的该项目会话可以导入。
+- **好读的对话线程** —— 回答以 Markdown 流式呈现，代码带语法高亮；思考过程、计划、工具调用及其行内 diff 以安静的卡片展示，需要时再展开。
+- **看得懂的授权请求** —— 权限请求以清晰的卡片展示，点击或按数字键即可应答；Agent 并行提问时可以同时处理多个。
+- **多会话并行** —— 多个会话同时运行，侧边栏标出哪些在运行、哪些在等你、哪些已完成，子 Agent 显示在父会话下；OverBench 在后台时，有会话需要你会弹出系统通知。
+- **每个 Agent 自己的控制项** —— 模式、模型和推理强度选择、斜杠命令、上下文用量，以及 Agent 上报时显示的套餐额度。
+- **Git 一目了然** —— 顶栏显示分支、同步状态和改动，线程里显示提交和推送，并通过 GitHub CLI 显示 Pull Request 及其检查状态。
+- **内置终端** —— 每个项目一个，支持多标签页，使用你的登录 shell。
+- **打磨到细节** —— 讲究的字体排印、浅色与深色主题、遵循「减少动态效果」的克制动效，以及常用操作的快捷键。
+
+_之后_：用于并排审阅 diff 的改动面板、跨会话搜索、命令面板、输入框中的 `@` 文件引用和图片，以及签名的安装包。[M0 计划](./docs/milestones/m0.md#scope)（英文）列出了包含与不包含的内容。
 
 ## 设计原则
 
@@ -63,16 +69,17 @@ OverBench 通过 [Agent Client Protocol](https://agentclientprotocol.com)（ACP�
 
 ## 路线图
 
-第一个里程碑 M0 会通过 ACP 接入这三个 Agent，详见[架构设计](./docs/architecture.md)和 [M0 计划](./docs/milestones/m0.md)（英文）。
+第一个里程碑 M0 通过 ACP 接入这三个 Agent，目前已实现，正在验收。详见[架构设计](./docs/architecture.md)、[M0 计划](./docs/milestones/m0.md)和它的[性能测量结果](./docs/perf/m0.md)（均为英文）。
 
-- [ ] 应用框架与设计系统
-- [ ] 接入 Claude Code
-- [ ] 接入 Codex CLI
-- [ ] 接入 opencode
-- [ ] 会话历史与搜索
-- [ ] Diff 审阅
-- [ ] 多项目、多会话工作区
+- [x] 应用框架与设计系统
+- [x] 通过 ACP 接入 Claude Code、Codex CLI 和 opencode
+- [x] 会话历史：重新打开、崩溃恢复和导入
+- [x] 多项目、多会话工作区与子会话
+- [x] Git 状态、Pull Request 和内置终端
+- [ ] M0 在 macOS、Windows、Linux 上通过验收
 - [ ] macOS、Windows、Linux 预览版
+- [ ] 在改动面板中审阅 diff
+- [ ] 跨会话搜索
 
 ## 快速开始
 
@@ -83,22 +90,30 @@ pnpm install
 pnpm dev
 ```
 
+开发版还会列出一个 **Fake agent**：它不需要账号和网络，按脚本演示各种场景，例如很长的回答、一连串工具调用，或同时出现三个授权请求。在它的输入框里输入 `/` 即可查看，也可以阅读 [fake agent](./docs/design/testing.md#fake-agent) 文档（英文）。
+
 | 命令                                                  | 作用                                              |
 | ----------------------------------------------------- | ------------------------------------------------- |
 | `pnpm dev`                                            | 以开发模式启动应用，支持热更新                    |
+| `pnpm test`                                           | 运行单元测试、集成测试和进程测试                  |
 | `pnpm lint` / `pnpm typecheck` / `pnpm format`        | 代码检查、类型检查和格式化                        |
 | `pnpm build`                                          | 类型检查并把应用构建到 `out/`                     |
 | `pnpm package`                                        | 在 `dist/` 中生成未打成安装包的应用，用于本地测试 |
 | `pnpm dist:mac` / `pnpm dist:win` / `pnpm dist:linux` | 为各个平台构建安装包                              |
 
-技术栈为 Electron、electron-vite、React、TypeScript、Tailwind CSS 和 shadcn/ui。源码按 Electron 进程划分：
+技术栈为 Electron、electron-vite、React、TypeScript、Tailwind CSS 和 shadcn/ui。源码按进程划分：
 
 ```text
 src/
-├── main/       主进程：应用生命周期、窗口、IPC 处理
-├── preload/    以 window.overbench 暴露给渲染进程的桥接层
-├── renderer/   React 界面
-└── shared/     各进程共用的类型，例如 IPC 约定
+├── main/            主进程：应用生命周期、窗口、菜单、IPC、更新
+├── preload/         以 window.overbench 暴露给渲染进程的桥接层
+├── agent-host/      通过 ACP 运行各个 Agent、管理会话的 utility 进程
+├── terminal-host/   运行终端 shell 的 utility 进程
+├── renderer/        React 界面
+└── shared/          各进程共用的类型和逻辑，例如线程模型
+tools/
+├── fake-agent/      用于测试、开发和性能测量的脚本化 ACP Agent
+└── perf/            性能测量脚本
 ```
 
 ## 参与贡献

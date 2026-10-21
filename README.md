@@ -17,7 +17,7 @@ _Beauty is productivity._
 </div>
 
 > [!NOTE]
-> OverBench is in early development and has no release yet. Everything below describes where the project is headed, not what ships today.
+> OverBench is in early development and has no release yet. Its first milestone, M0, is implemented on `main` and in acceptance, so you can run it from source today. What is marked _later_ below is planned, not built.
 
 ## Why OverBench
 
@@ -35,23 +35,29 @@ Design in OverBench is not decoration on top of the tool. It is the tool.
 
 OverBench talks to every agent over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP) and works with the agent CLIs you already use: your installation, your account, your configuration.
 
-| Agent                                                    | Status  |
-| -------------------------------------------------------- | ------- |
-| [Claude Code](https://github.com/anthropics/claude-code) | Planned |
-| [Codex CLI](https://github.com/openai/codex)             | Planned |
-| [opencode](https://opencode.ai)                          | Planned |
+| Agent                                                    | How OverBench runs it                                                | Status |
+| -------------------------------------------------------- | -------------------------------------------------------------------- | ------ |
+| [Claude Code](https://github.com/anthropics/claude-code) | The ACP adapter `@agentclientprotocol/claude-agent-acp`, through npx | M0     |
+| [Codex CLI](https://github.com/openai/codex)             | The ACP adapter `@agentclientprotocol/codex-acp`, through npx        | M0     |
+| [opencode](https://opencode.ai)                          | Your installed `opencode`, as `opencode acp`                         | M0     |
+
+The Claude Code and Codex adapters need Node.js 22 or later, which OverBench finds through your login shell. You sign in with each agent's own flow, so OverBench never sees your credentials.
 
 ## Features
 
-> Planned for the first releases.
+What M0 delivers:
 
-- **Every agent, one workbench** — run Claude Code, Codex CLI and opencode side by side, and switch agents without switching tools.
-- **Sessions organized by project** — every conversation kept, searchable and resumable, grouped by the project it belongs to.
-- **Review diffs, not scrollback** — the agent's edits rendered as real side-by-side or inline diffs, file by file.
-- **Readable approvals** — tool calls and permission requests shown as clear, structured cards you can approve with confidence.
-- **Parallel sessions** — several agents working across projects at once, with status that shows at a glance what is running, what is waiting for you and what is done.
-- **Keyboard first** — a command palette and shortcuts for everything, so the mouse stays optional.
-- **Crafted details** — considered typography, polished light and dark themes, and restrained motion that never gets in the way.
+- **Every agent, one workbench** — start Claude Code, Codex CLI and opencode sessions side by side in the same project, and switch agents without switching tools.
+- **Sessions organized by project** — every session is kept with its project, reopens with its full history and survives an agent crash; the sessions an agent already has for a project can be imported.
+- **A thread that reads well** — answers stream as Markdown with highlighted code, and thoughts, plans, tool calls and their inline diffs show as quiet cards you can open.
+- **Readable approvals** — permission requests are clear cards you answer with a click or the number keys, several at once when the agent asks in parallel.
+- **Parallel sessions** — several sessions run at once; the sidebar shows which are running, which are waiting for you and which are done, with subagents under their parent, and a system notification tells you when one needs you while OverBench is in the background.
+- **Each agent's own controls** — mode, model and reasoning selectors, slash commands, context usage and, where the agent reports them, your plan limits.
+- **Git at a glance** — the branch, sync state and changes in the top bar, commits and pushes in the thread, and pull requests with their checks through the GitHub CLI.
+- **A built-in terminal** — one per project, with tabs and your login shell.
+- **Crafted details** — considered typography, light and dark themes, restrained motion that honors reduce motion, and shortcuts for the common actions.
+
+_Later_: a changes panel for reviewing diffs side by side, search across sessions, a command palette, `@` file mentions and images in the composer, and signed builds. The [M0 plan](./docs/milestones/m0.md#scope) lists what is in and out.
 
 ## Design principles
 
@@ -63,16 +69,17 @@ OverBench talks to every agent over the [Agent Client Protocol](https://agentcli
 
 ## Roadmap
 
-The first milestone, M0, connects all three agents over ACP. See the [architecture](./docs/architecture.md) and the [M0 plan](./docs/milestones/m0.md).
+The first milestone, M0, connects all three agents over ACP; it is implemented and in acceptance. See the [architecture](./docs/architecture.md), the [M0 plan](./docs/milestones/m0.md) and its [performance results](./docs/perf/m0.md).
 
-- [ ] App shell and design system
-- [ ] Claude Code integration
-- [ ] Codex CLI integration
-- [ ] opencode integration
-- [ ] Session history and search
-- [ ] Diff review
-- [ ] Multi-project, multi-session workspace
+- [x] App shell and design system
+- [x] Claude Code, Codex CLI and opencode over ACP
+- [x] Session history: reopening, crash recovery and import
+- [x] Multi-project, multi-session workspace with sub-sessions
+- [x] Git status, pull requests and a built-in terminal
+- [ ] M0 accepted on macOS, Windows and Linux
 - [ ] Preview builds for macOS, Windows and Linux
+- [ ] Diff review in a changes panel
+- [ ] Search across sessions
 
 ## Getting started
 
@@ -83,22 +90,30 @@ pnpm install
 pnpm dev
 ```
 
+Development builds also list a **Fake agent**, which needs no account or network and plays scripted scenarios, such as a long answer, a burst of tool calls or three approvals at once. Type `/` in its composer to see them, or read the [fake agent](./docs/design/testing.md#fake-agent) docs.
+
 | Command                                               | What it does                                         |
 | ----------------------------------------------------- | ---------------------------------------------------- |
 | `pnpm dev`                                            | Start the app in development mode with hot reload    |
+| `pnpm test`                                           | Run the unit, integration and process tests          |
 | `pnpm lint` / `pnpm typecheck` / `pnpm format`        | Lint, type-check and format the code                 |
 | `pnpm build`                                          | Type-check and build the app into `out/`             |
 | `pnpm package`                                        | Build an unpacked app into `dist/` for local testing |
 | `pnpm dist:mac` / `pnpm dist:win` / `pnpm dist:linux` | Build installers for each platform                   |
 
-Built with Electron, electron-vite, React, TypeScript, Tailwind CSS and shadcn/ui. The source is split by Electron process:
+Built with Electron, electron-vite, React, TypeScript, Tailwind CSS and shadcn/ui. The source is split by process:
 
 ```text
 src/
-├── main/       Main process: app lifecycle, windows, IPC handlers
-├── preload/    Bridge exposed to the renderer as window.overbench
-├── renderer/   React UI
-└── shared/     Types shared across processes, such as IPC contracts
+├── main/            Main process: app lifecycle, windows, menus, IPC, updates
+├── preload/         Bridge exposed to the renderer as window.overbench
+├── agent-host/      Utility process that runs the agents over ACP and owns the sessions
+├── terminal-host/   Utility process that runs the terminal's shells
+├── renderer/        React UI
+└── shared/          Types and logic shared across processes, such as the thread model
+tools/
+├── fake-agent/      A scripted ACP agent for tests, development and performance runs
+└── perf/            The performance script
 ```
 
 ## Contributing
