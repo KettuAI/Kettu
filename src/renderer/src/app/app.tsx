@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 import {
   ResizableHandle,
@@ -56,6 +56,8 @@ export function App() {
 
 function Workbench() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  // Fixed at mount: a changed default re-registers the panel, which forgets its size before collapsing.
+  const [sidebarDefault] = useState(() => (collapsed ? '0px' : '260px'))
   const sidebar = usePanelRef()
   const layout = useDefaultLayout({ id: 'workbench', storage: layoutStorage })
 
@@ -76,7 +78,7 @@ function Workbench() {
       <ResizablePanel
         id="sidebar"
         panelRef={sidebar}
-        defaultSize={collapsed ? '0px' : '260px'}
+        defaultSize={sidebarDefault}
         minSize="200px"
         maxSize="400px"
         collapsible
