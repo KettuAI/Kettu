@@ -1,0 +1,302 @@
+// OverBench's own session and thread model, shared by the agent host and the renderer.
+// It never imports ACP types; only the mapper in src/agent-host/acp/ does.
+
+export type AgentId = 'claude-code' | 'codex' | 'opencode' | 'fake-agent'
+
+export const AGENT_IDS: readonly AgentId[] = ['claude-code', 'codex', 'opencode', 'fake-agent']
+
+export type SessionStatus =
+  | 'starting' // agent starting, or session/new, load or resume in flight
+  | 'auth_required'
+  | 'ready'
+  | 'running' // a prompt turn is in progress
+  | 'awaiting_permission' // running, with at least one unanswered permission request
+  | 'disconnected' // the agent process exited; recoverable
+  | 'failed' // could not start or recover; needs user action
+  | 'closed'
+
+export interface SessionView {
+  id: string // OverBench id; ACP ids are only unique per agent
+  agentId: AgentId
+  projectPath: string // canonical absolute path
+  acpSessionId: string | null
+  status: SessionStatus
+  title: string | null
+  config: ConfigOption[]
+  commands: SlashCommand[]
+  usage: SessionUsage | null
+  error: { message: string; detail?: string } | null
+  turnStartedAt: number | null
+  createdAt: number
+  updatedAt: number
+  parentId: string | null // the parent session, for sub-sessions
+  origin: 'user' | 'subagent'
+  subagent: SubagentInfo | null // set when origin is 'subagent'
+}
+
+export interface SessionUsage {
+  used: number // tokens in the context window now
+  size: number // the context window
+  cost: { amount: number; currency: string } | null
+  tokens: TokenTotals | null // session totals, when the agent reports them
+}
+
+export interface TokenTotals {
+  total: number
+  input: number
+  output: number
+  thought: number | null
+  cacheRead: number | null
+  cacheWrite: number | null
+}
+
+export interface SubagentInfo {
+  description: string | null // the parent's description of the child's purpose
+  canCancel: boolean // the child's `capabilities.cancel`
+  stateKnown: boolean // false after an `unknown` state, until a known one arrives
+  stopReason: string | null // from the last `idle` state
+}
+
+export interface ConfigOption {
+  id: string
+  name: string
+  description?: string
+  category: 'mode' | 'model' | 'model_config' | 'thought_level' | 'other'
+  type: 'select' | 'boolean'
+  value: string | boolean
+  choices?: { value: string; name: string; description?: string; group?: string }[]
+}
+
+export interface SlashCommand {
+  name: string
+  description: string
+  inputHint?: string
+}
+
+export type ThreadEntry =
+  | { kind: 'user'; id: string; content: UserContent[] }
+  | { kind: 'agent'; id: string; markdown: string; attachments: ContentRef[]; streaming: boolean }
+  | { kind: 'thought'; id: string; markdown: string; streaming: boolean; durationMs?: number }
+  | ToolEntry
+  | { kind: 'subagent'; id: string; sessionId: string } // a sub-session the agent started here
+  | { kind: 'session_message'; id: string; senderId: string | null; content: UserContent[] }
+  | { kind: 'plan'; id: string; items: PlanItem[] }
+  | {
+      kind: 'notice'
+      id: string
+      severity: 'info' | 'warning' | 'error'
+      title: string
+      description?: string
+    }
+  | {
+      kind: 'compaction'
+      id: string
+      status: 'in_progress' | 'completed' | 'failed' | 'cancelled'
+      summary: string
+    }
+  | { kind: 'turn_end'; id: string; stopReason: StopReason; durationMs: number }
+  | GitEntry // OverBench's own observation of the repository, see the git design
+
+export type GitEntry =
+  | {
+      kind: 'git'
+      id: string
+      event: 'commit'
+      commits: { oid: string; subject: string }[]
+      more: number
+    }
+  | { kind: 'git'; id: string; event: 'push'; upstream: string; count: number }
+  | { kind: 'git'; id: string; event: 'branch'; branch: string }
+  | { kind: 'git'; id: string; event: 'pull_request'; url: string }
+
+export type ToolKind =
+  | 'read'
+  | 'edit'
+  | 'delete'
+  | 'move'
+  | 'search'
+  | 'execute'
+  | 'think'
+  | 'fetch'
+  | 'switch_mode'
+  | 'other'
+
+export interface ToolEntry {
+  kind: 'tool'
+  id: string
+  title: string
+  toolKind: ToolKind
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  content: ToolContent[]
+  locations: { path: string; line?: number }[]
+  permission: PendingPermission | null
+  permissionResult: { optionId: string; kind: PermissionKind } | 'cancelled' | 'withdrawn' | null
+  rawInput?: string // the command or input as text, when the agent sent one
+}
+
+export type ToolContent =
+  | { type: 'markdown'; markdown: string }
+  | { type: 'diff'; path: string; oldText: string | null; newText: string }
+  | { type: 'ref'; ref: ContentRef }
+
+export interface PendingPermission {
+  requestId: string
+  options: { id: string; name: string; kind: PermissionKind }[]
+}
+
+export type PermissionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always'
+export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
+export type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: ContentRef }
+export type ContentRef =
+  | { kind: 'image'; mimeType: string; data: string }
+  | { kind: 'link'; uri: string; name: string }
+  | { kind: 'unsupported'; label: string }
+
+export interface PlanItem {
+  content: string
+  priority: 'high' | 'medium' | 'low'
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+
+/** Fields an `entry.update` may change; `kind` and `id` never change. */
+export type EntryChanges = Partial<DistributiveOmit<ThreadEntry, 'kind' | 'id'>>
+
+export type Patch =
+  | { op: 'entry.add'; entry: ThreadEntry }
+  | { op: 'entry.appendText'; id: string; text: string } // agent and thought markdown, compaction summary
+  | { op: 'entry.update'; id: string; changes: EntryChanges }
+  | { op: 'session.update'; changes: Partial<SessionView> }
+  | { op: 'thread.reset' } // before a session/load replay
+
+export interface PatchBatch {
+  sessionId: string
+  seq: number
+  patches: Patch[]
+}
+
+export interface SessionSnapshot {
+  session: SessionView
+  entries: ThreadEntry[]
+  seq: number
+}
+
+/** A session's thread, normalized so one entry can change without touching the others. */
+export interface ThreadState {
+  session: SessionView
+  order: string[]
+  byId: Record<string, ThreadEntry>
+}
+
+/** Thrown for a patch that names an entry the thread does not have. */
+export class UnknownEntryError extends Error {
+  constructor(readonly entryId: string) {
+    super(`Patch for unknown entry "${entryId}"`)
+    this.name = 'UnknownEntryError'
+  }
+}
+
+export function threadFromSnapshot(snapshot: SessionSnapshot): ThreadState {
+  const byId: Record<string, ThreadEntry> = {}
+  const order: string[] = []
+  for (const entry of snapshot.entries) {
+    if (!(entry.id in byId)) order.push(entry.id)
+    byId[entry.id] = entry
+  }
+  return { session: snapshot.session, order, byId }
+}
+
+export function threadEntries(state: ThreadState): ThreadEntry[] {
+  return state.order.map((id) => state.byId[id]!)
+}
+
+/**
+ * Applies patches in order and returns a new state that shares every object the
+ * patches did not change, so a component selecting one entry re-renders only for it.
+ */
+export function applyPatches(state: ThreadState, patches: readonly Patch[]): ThreadState {
+  let { session, order, byId } = state
+  let byIdCopied = false
+  let orderCopied = false
+
+  const writableById = (): Record<string, ThreadEntry> => {
+    if (!byIdCopied) {
+      byId = { ...byId }
+      byIdCopied = true
+    }
+    return byId
+  }
+  const writableOrder = (): string[] => {
+    if (!orderCopied) {
+      order = [...order]
+      orderCopied = true
+    }
+    return order
+  }
+
+  for (const patch of patches) {
+    switch (patch.op) {
+      case 'entry.add': {
+        const exists = patch.entry.id in byId
+        writableById()[patch.entry.id] = patch.entry
+        if (!exists) writableOrder().push(patch.entry.id)
+        break
+      }
+      case 'entry.appendText': {
+        const entry = byId[patch.id]
+        if (!entry) throw new UnknownEntryError(patch.id)
+        writableById()[patch.id] = appendText(entry, patch.text)
+        break
+      }
+      case 'entry.update': {
+        const entry = byId[patch.id]
+        if (!entry) throw new UnknownEntryError(patch.id)
+        writableById()[patch.id] = { ...entry, ...patch.changes } as ThreadEntry
+        break
+      }
+      case 'session.update':
+        session = { ...session, ...patch.changes }
+        break
+      case 'thread.reset':
+        byId = {}
+        order = []
+        byIdCopied = true
+        orderCopied = true
+        break
+    }
+  }
+
+  if (session === state.session && order === state.order && byId === state.byId) return state
+  return { session, order, byId }
+}
+
+function appendText(entry: ThreadEntry, text: string): ThreadEntry {
+  switch (entry.kind) {
+    case 'agent':
+    case 'thought':
+      return { ...entry, markdown: entry.markdown + text }
+    case 'compaction':
+      return { ...entry, summary: entry.summary + text }
+    default:
+      throw new Error(`entry.appendText does not apply to ${entry.kind} entries`)
+  }
+}
+
+/** Merges consecutive text appends to the same entry, as the host does before a flush. */
+export function coalescePatches(patches: readonly Patch[]): Patch[] {
+  const out: Patch[] = []
+  for (const patch of patches) {
+    const last = out[out.length - 1]
+    if (
+      patch.op === 'entry.appendText' &&
+      last?.op === 'entry.appendText' &&
+      last.id === patch.id
+    ) {
+      out[out.length - 1] = { op: 'entry.appendText', id: patch.id, text: last.text + patch.text }
+    } else {
+      out.push(patch)
+    }
+  }
+  return out
+}
