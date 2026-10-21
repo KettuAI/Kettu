@@ -156,7 +156,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
         </div>
       )}
 
-      <dl className="ml-11 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+      <dl className="ml-11 grid grid-cols-[--spacing(14)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
         <Detail label="Launch">
           <code
             className="min-w-0 truncate font-mono text-[11.5px]"
