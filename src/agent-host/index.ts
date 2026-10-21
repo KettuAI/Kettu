@@ -2,6 +2,7 @@
 
 import type { MessagePortMain } from 'electron'
 import type { HostToMain, MainToHost } from '@shared/host-control'
+import { createGitService } from './git'
 import { AgentHost } from './host'
 import type { PortChannel } from './rpc'
 
@@ -36,8 +37,7 @@ function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
     settings: message.settings,
     baseEnv: process.env,
     send,
-    // No git service exists in this build yet, so every git.* request answers git_error.
-    git: null,
+    git: (deps) => createGitService(deps),
     mirrorTraffic: !message.isPackaged && process.env.OVERBENCH_ACP_LOG === '1',
   })
   host.catch((error: unknown) => {

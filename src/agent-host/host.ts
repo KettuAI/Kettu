@@ -17,7 +17,7 @@ import { buildCatalog } from './catalog'
 import { Diagnostics } from './diagnostics'
 import { HostError } from './errors'
 import type { Env } from './find-command'
-import type { GitServiceApi } from './git/api'
+import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { pathKey } from './paths'
 import { Projects } from './projects'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
@@ -35,8 +35,8 @@ export interface HostOptions {
   settings: HostSettings
   baseEnv: Env
   send(message: HostToMain): void
-  /** The git service; null until it exists, and then every `git.*` request fails. */
-  git?: GitServiceApi | null
+  /** The git service, or how to make one with the host's log; without it every `git.*` fails. */
+  git?: GitServiceApi | ((deps: GitServiceDeps) => GitServiceApi) | null
   launcher?: AgentLauncher
   resolveEnv?: EnvironmentServiceDeps['resolve']
   probeNode?: EnvironmentServiceDeps['probe']
@@ -126,7 +126,13 @@ export class AgentHost {
       this.broadcast({ type: 'environment.changed', info })
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
     })
-    this.git = options.git ?? null
+    this.git =
+      typeof options.git === 'function'
+        ? options.git({
+            env: this.env.agentEnv() as NodeJS.ProcessEnv,
+            log: (level, message) => log(level, `git: ${message}`),
+          })
+        : (options.git ?? null)
     if (this.git) this.wireGit(this.git)
   }
 
@@ -249,8 +255,10 @@ export class AgentHost {
     return this.git
   }
 
+  /** Runs git with the resolved environment, so git and gh are found as the agents find them. */
   private async gitCall<T>(run: (git: GitServiceApi) => Promise<T>): Promise<T> {
     const git = this.requireGit()
+    await this.env.ready()
     try {
       return await run(git)
     } catch (error) {
@@ -264,7 +272,12 @@ export class AgentHost {
     return {
       'agents.list': () => agents.list(),
       'agents.check': ({ agentId }) => agents.check(agentId),
-      'agents.reloadEnvironment': () => agents.reloadEnvironment(),
+      'agents.reloadEnvironment': async () => {
+        const result = await agents.reloadEnvironment()
+        // A tool installed since the last probe shows up without a restart.
+        if (this.git) await this.gitCall((g) => g.reloadTools())
+        return result
+      },
       'agents.environment': () => this.env.info(),
       'agents.authenticate': ({ agentId, methodId }) => agents.authenticate(agentId, methodId),
       'agents.logout': ({ agentId }) => agents.logout(agentId),
@@ -303,6 +316,8 @@ export class AgentHost {
       'git.status': async ({ projectPath }, { portId }) => {
         const git = this.requireGit()
         const canonical = await projects.resolveDirectory(projectPath)
+        await this.env.ready()
+        if (!this.hub.has(portId)) return this.gitCall((g) => g.status(canonical))
         const key = pathKey(canonical, this.options.platform)
         let retained = this.gitRetains.get(key)
         if (!retained) {

@@ -29,7 +29,7 @@ import type { AgentLauncher, AgentTimings } from '../agents'
 import { detectAgent } from '../catalog'
 import type { Env } from '../find-command'
 import type { GitServiceApi } from '../git/api'
-import { AgentHost } from '../host'
+import { AgentHost, type HostOptions } from '../host'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
 
@@ -246,6 +246,7 @@ export interface TestHostOptions {
   sessionTimings?: Partial<SessionTimings>
   launcher?: AgentLauncher
   projectDir?: string
+  resolveEnv?: HostOptions['resolveEnv']
 }
 
 export interface TestHost {
@@ -281,13 +282,15 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     send: (message) => sent.push(structuredClone(message)),
     git: options.git ?? null,
     launcher,
-    resolveEnv: async ({ baseEnv }) => ({
-      env: baseEnv,
-      source: 'inherited',
-      shell: null,
-      durationMs: 0,
-      warning: null,
-    }),
+    resolveEnv:
+      options.resolveEnv ??
+      (async ({ baseEnv }) => ({
+        env: baseEnv,
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: null,
+      })),
     // No Node.js is found, so only the fake agent is available.
     probeNode: async () => ({ nodeVersion: null, npxPath: null, nodePath: null }),
     detect: async (def, ctx) => {

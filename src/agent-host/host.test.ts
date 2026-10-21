@@ -217,8 +217,8 @@ function fakeGit() {
     currentPullRequest: async () => null,
     branchPullRequests: () => prs,
     currentBranch: () => branch,
-    tools: async () => tools,
-    reloadTools: async () => tools,
+    tools: async () => (calls.push('tools'), tools),
+    reloadTools: async () => (calls.push('reloadTools'), tools),
     setEnvironment: () => void calls.push('setEnvironment'),
     setBackgroundFetch: (enabled) => void calls.push(`setBackgroundFetch ${enabled}`),
     toolCallStarted: (_p, _s, id) => void calls.push(`toolCallStarted ${id}`),
@@ -250,6 +250,71 @@ describe('git', () => {
       message: 'Git is not available yet',
     })
     await expect(port.request('git.tools', undefined)).rejects.toMatchObject({ code: 'git_error' })
+  })
+
+  it('runs git only once the environment is resolved, and re-probes tools on a reload', async () => {
+    const git = fakeGit()
+    const resolved: (() => void)[] = []
+    const { t, port } = await setup({
+      git: git.service,
+      resolveEnv: ({ baseEnv }) =>
+        new Promise((resolve) =>
+          resolved.push(() =>
+            resolve({
+              env: baseEnv,
+              source: 'login-shell',
+              shell: 'zsh',
+              durationMs: 1,
+              warning: null,
+            }),
+          ),
+        ),
+    })
+    const tools = port.request('git.tools', undefined)
+    const status = port.request('git.status', { projectPath: t.project })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(git.calls.filter((c) => c.startsWith('retain') || c.startsWith('status'))).toEqual([])
+    expect(git.calls).not.toContain('tools')
+    resolved.shift()?.()
+    await Promise.all([tools, status])
+    const first = git.calls.indexOf('setEnvironment')
+    expect(first).toBeGreaterThanOrEqual(0)
+    expect(git.calls.findIndex((c) => c.startsWith('retain'))).toBeGreaterThan(first)
+    expect(git.calls.indexOf('tools')).toBeGreaterThan(first)
+
+    const reload = port.request('agents.reloadEnvironment', undefined)
+    await new Promise((r) => setTimeout(r, 20))
+    resolved.shift()?.()
+    await reload
+    expect(git.calls).toContain('reloadTools')
+  })
+
+  it('does not keep a project live for a port that closed while it waited', async () => {
+    const git = fakeGit()
+    let resolveEnv!: () => void
+    const { t, port } = await setup({
+      git: git.service,
+      resolveEnv: ({ baseEnv }) =>
+        new Promise((resolve) => {
+          resolveEnv = () =>
+            resolve({
+              env: baseEnv,
+              source: 'login-shell',
+              shell: 'zsh',
+              durationMs: 1,
+              warning: null,
+            })
+        }),
+    })
+    const other = t.connect()
+    // A closed port never gets its answer, so the request is left pending.
+    void other.request('git.status', { projectPath: t.project }).catch(() => null)
+    await new Promise((r) => setTimeout(r, 20))
+    other.disconnect()
+    resolveEnv()
+    await port.request('agents.list', undefined)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(git.calls.some((c) => c.startsWith('retain'))).toBe(false)
   })
 
   it('keeps projects live per port and forwards changes to those ports only', async () => {
