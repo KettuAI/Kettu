@@ -1,0 +1,142 @@
+import { memo, useMemo } from 'react'
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@renderer/components/ui/message-scroller'
+import { cn } from '@renderer/lib/utils'
+import { useThreadsStore } from '@renderer/stores/threads'
+import {
+  AgentEntry,
+  CompactionEntry,
+  GitEventEntry,
+  NoticeEntry,
+  PlanEntry,
+  SessionMessageEntry,
+  ThoughtEntry,
+  TurnEndEntry,
+  UserEntry,
+} from './entries/basic'
+import { SubagentCard } from './entries/subagent-card'
+import { ToolCard } from './entries/tool-card'
+import { ToolGroup } from './entries/tool-group'
+import { buildItems, signatureOf } from './thread-items'
+
+export const Thread = memo(function Thread({
+  sessionId,
+  projectPath,
+  agentName,
+  working,
+}: {
+  sessionId: string
+  projectPath: string
+  agentName: string
+  /** A turn is running and the agent has not answered yet. */
+  working: boolean
+}) {
+  const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
+  const signature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
+  const items = useMemo(() => buildItems(order ?? [], signature), [order, signature])
+  const awaitingReply = working && signature.endsWith('u')
+
+  return (
+    <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
+      <MessageScroller className="min-h-0 flex-1">
+        <MessageScrollerViewport
+          aria-label="Thread"
+          className="[scrollbar-gutter:stable_both-edges]"
+        >
+          <MessageScrollerContent className="mx-auto w-full max-w-[760px] gap-0 px-6 pt-5 pb-8">
+            {items.map((item, index) => (
+              <MessageScrollerItem
+                key={item.key}
+                messageId={item.key}
+                scrollAnchor={item.type === 'entry' && item.turnStart}
+                className={cn(
+                  index > 0 && (item.type === 'entry' && item.turnStart ? 'pt-4' : 'pt-2.5'),
+                )}
+              >
+                {item.type === 'group' ? (
+                  <ToolGroup
+                    sessionId={sessionId}
+                    entryIds={item.ids}
+                    projectPath={projectPath}
+                    agentName={agentName}
+                  />
+                ) : (
+                  <Entry
+                    sessionId={sessionId}
+                    entryId={item.id}
+                    projectPath={projectPath}
+                    agentName={agentName}
+                    keepOpen={item.keepOpen}
+                  />
+                )}
+              </MessageScrollerItem>
+            ))}
+            {awaitingReply && (
+              <MessageScrollerItem messageId="working" className="pt-2.5">
+                <p className="animate-in text-prose text-muted-foreground duration-(--duration-base) fade-in">
+                  <span className="shimmer">Working…</span>
+                </p>
+              </MessageScrollerItem>
+            )}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton
+          variant="outline"
+          size="icon-sm"
+          className="rounded-full shadow-md"
+        />
+      </MessageScroller>
+    </MessageScrollerProvider>
+  )
+})
+
+const Entry = memo(function Entry({
+  sessionId,
+  entryId,
+  projectPath,
+  agentName,
+  keepOpen,
+}: {
+  sessionId: string
+  entryId: string
+  projectPath: string
+  agentName: string
+  keepOpen: boolean
+}) {
+  const kind = useThreadsStore((s) => s.replicas[sessionId]?.state?.byId[entryId]?.kind)
+  const props = { sessionId, entryId }
+  switch (kind) {
+    case 'user':
+      return <UserEntry {...props} />
+    case 'agent':
+      return <AgentEntry {...props} />
+    case 'thought':
+      return <ThoughtEntry {...props} />
+    case 'tool':
+      return (
+        <ToolCard {...props} projectPath={projectPath} agentName={agentName} keepOpen={keepOpen} />
+      )
+    case 'subagent':
+      return <SubagentCard {...props} projectPath={projectPath} />
+    case 'session_message':
+      return <SessionMessageEntry {...props} />
+    case 'plan':
+      return <PlanEntry {...props} />
+    case 'notice':
+      return <NoticeEntry {...props} />
+    case 'compaction':
+      return <CompactionEntry {...props} />
+    case 'turn_end':
+      return <TurnEndEntry {...props} />
+    case 'git':
+      return <GitEventEntry {...props} />
+    default:
+      return null
+  }
+})
