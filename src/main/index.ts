@@ -1,13 +1,18 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, powerMonitor } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { AgentHost } from './agent-host'
+import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
+import { broadcast } from './events'
 import { registerIpcHandlers } from './ipc'
 import { createLogger } from './log'
+import { installMenu } from './menu'
 import { notifyAttention } from './notifications'
+import { QuitFlow } from './quit'
 import { SettingsStore } from './settings'
 import { hostSettings, terminalSettings } from './settings-schema'
 import { TerminalHost } from './terminal-host'
+import { Updater } from './updater'
 import {
   applyTheme,
   configureWindows,
@@ -29,6 +34,7 @@ async function start(): Promise<void> {
   const loading = Promise.all([
     SettingsStore.load(userDataPath),
     WindowStateStore.load(userDataPath),
+    AppStateStore.load(userDataPath),
   ])
   let ready = false
   app.on('second-instance', () => {
@@ -37,7 +43,7 @@ async function start(): Promise<void> {
 
   await app.whenReady()
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
-  const [settings, windowState] = await loading
+  const [settings, windowState, appState] = await loading
 
   applyTheme(settings.get().appearance.theme)
   watchTheme()
@@ -52,41 +58,63 @@ async function start(): Promise<void> {
     onProjects: (paths) => terminalHost.setProjects(paths),
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
   })
+  let quit: QuitFlow | null = null
+  const updater = new Updater({
+    appState,
+    settings: () => settings.get(),
+    requestRestart: () => quit?.request('update'),
+  })
+  quit = new QuitFlow({
+    settings: () => settings.get(),
+    busySessions: (timeoutMs) => agentHost.busy(timeoutMs),
+    busyTerminals: (timeoutMs) => terminalHost.busy(timeoutMs),
+    shutDown: async () => {
+      await Promise.all([agentHost.stop(), terminalHost.stop()])
+      await Promise.all([settings.flush(), windowState.flush(), appState.flush()])
+    },
+    installUpdate: () => updater.installNow(),
+  })
+  const quitFlow = quit
 
   settings.onChange((next, changed) => {
+    broadcast('settings:changed', next)
     if (changed.has('agents') || changed.has('proxy') || changed.has('git')) {
       agentHost.pushSettings(hostSettings(next))
     }
     if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))
     if (changed.has('appearance')) applyTheme(next.appearance.theme)
     if (changed.has('notifications')) setBadgeEnabled(next.notifications.badge)
+    updater.settingsChanged(next, changed)
   })
+
+  registerIpcHandlers({ settings, agentHost, terminalHost, updater, quit: quitFlow })
+  installMenu({ checkForUpdates: () => void updater.check() })
 
   app.on('browser-window-created', (_, window) => {
     // F12 toggles DevTools in development; reload shortcuts are disabled in production.
     optimizer.watchWindowShortcuts(window)
+    quitFlow.watchWindow(window)
     window.once('show', () => applyBadgeTo(window))
+    window.on('session-end', () => {
+      quitFlow.systemShutdown()
+      updater.systemShutdown()
+    })
+  })
+  powerMonitor.on('shutdown', () => {
+    quitFlow.systemShutdown()
+    updater.systemShutdown()
   })
 
-  registerIpcHandlers()
   agentHost.start()
-  createMainWindow()
+  const window = createMainWindow()
+  window.once('show', () => updater.start())
   ready = true
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+    if (BrowserWindow.getAllWindows().length === 0 && !quitFlow.quitting) createMainWindow()
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
-  })
-  let stopping = false
-  app.on('before-quit', (event) => {
-    if (stopping) return
-    event.preventDefault()
-    stopping = true
-    void Promise.all([agentHost.stop(), terminalHost.stop()])
-      .then(() => Promise.all([settings.flush(), windowState.flush()]))
-      .finally(() => app.quit())
   })
 }
 
