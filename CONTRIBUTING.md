@@ -29,6 +29,7 @@ Each concern has exactly one library. Build with these instead of adding an alte
 | Markdown                    | [Streamdown](https://streamdown.ai), with `@streamdown/code` and `@streamdown/cjk` (from M0.3)                        |
 | Syntax highlighting         | [Shiki](https://shiki.style) (from M0.3)                                                                              |
 | Diffs                       | [Diffs](https://diffs.com) (`@pierre/diffs`, from M0.3)                                                               |
+| Terminal                    | [xterm.js](https://xtermjs.org) (`@xterm/xterm`) in the renderer, `node-pty` in the terminal host (from M0.5)         |
 
 - **Components**: add shadcn components with `pnpm shadcn add <component>` rather than writing them by hand; they land in `src/renderer/src/components/ui`. Reach for their variants before custom classes, and style with semantic tokens such as `bg-background` and `text-muted-foreground`, never raw colors, so the light and dark themes stay consistent. Radii, sizes and timings come from the [design system](./docs/design/design-system.md) tokens as well.
 - **Icons**: import Lucide icons as components, e.g. `import { SearchIcon } from 'lucide-react'`. Do not mix in other icon sets or inline SVGs for UI icons.
@@ -37,8 +38,9 @@ Each concern has exactly one library. Build with these instead of adding an alte
 - **Drag and drop**: use `@dnd-kit/react`, the current dnd-kit API, not the legacy `@dnd-kit/core` and `@dnd-kit/sortable` packages. It is still on 0.x, so read its changelog before bumping the minor version.
 - **Markdown**: render agent text with Streamdown, in `streaming` mode while it streams and `static` mode afterwards, with `skipHtml` on. Never render agent output with `dangerouslySetInnerHTML`.
 - **Code and diffs**: highlight only with Shiki, through the shadcn `code-block` component, Streamdown's code plugin and `@pierre/diffs`. Render diffs with `@pierre/diffs` and its worker pool.
+- **Terminal**: render terminals with xterm.js and its fit, webgl and web-links addons, imported with dynamic `import()` the first time a terminal opens. Pseudo-terminals live only in the terminal host, through `node-pty`; main and the renderer never spawn a shell ([terminal design](./docs/design/terminal.md)).
 - **State**: keep state in React when only one component or a small subtree needs it. State shared across the app lives in Zustand stores under `src/renderer/src/stores`, one store per domain. Read it through selectors such as `useSessionStore((s) => s.activeId)` so components re-render only when the values they use change.
 
 ## Dependencies
 
-Libraries used only by the renderer go in `devDependencies`: Vite bundles them, while everything in `dependencies` is copied into the packaged app. Only modules the main process loads at runtime belong in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
+Libraries used only by the renderer go in `devDependencies`: Vite bundles them, while everything in `dependencies` is copied into the packaged app. Only modules a process loads at runtime instead of from the bundle belong in `dependencies`, such as `node-pty`, a native module the terminal host loads. `pnpm shadcn add` installs into `dependencies`, so move what it adds.

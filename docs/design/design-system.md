@@ -245,20 +245,20 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 
 ### Ambient field
 
-The Welcome screen and Project home have a quiet background: a faint dot grid that a soft light drifts across. It is the only motion on screen while nothing happens, so it stays slow and dim; sessions and Settings never show it.
+The Welcome screen and Project home have a quiet background: a dot grid that a soft light drifts across. It is the only motion on screen while nothing happens, so it stays slow and soft, clearly there but never competing with the content; sessions and Settings never show it.
 
-| Layer    | What it draws                                                            | Token               | Light                | Dark                 |
-| -------- | ------------------------------------------------------------------------ | ------------------- | -------------------- | -------------------- |
-| Grid     | 1.4 px dots on a 20 px grid                                              | `--ambient-dot`     | `oklch(0 0 0 / 9%)`  | `oklch(1 0 0 / 8%)`  |
-| Light    | A 240 px circle that brightens what it passes over                       | `--ambient-glow`    | `oklch(1 0 0 / 0%)`  | `oklch(1 0 0 / 4%)`  |
-| Lit grid | Slightly larger dots, visible only inside the light                      | `--ambient-dot-lit` | `oklch(0 0 0 / 30%)` | `oklch(1 0 0 / 30%)` |
-| Clearing | A radial wash of the surface color behind text, so no dot sits in a word | `--background`      |                      |                      |
+| Layer    | What it draws                                                            | Token               | Light                 | Dark                 |
+| -------- | ------------------------------------------------------------------------ | ------------------- | --------------------- | -------------------- |
+| Grid     | 1.7 px dots on a 20 px grid                                              | `--ambient-dot`     | `oklch(0 0 0 / 15%)`  | `oklch(1 0 0 / 13%)` |
+| Light    | A 280 px circle that brightens what it passes over                       | `--ambient-glow`    | `oklch(0 0 0 / 2.5%)` | `oklch(1 0 0 / 7%)`  |
+| Lit grid | Larger dots (2.3 px), visible only inside the light                      | `--ambient-dot-lit` | `oklch(0 0 0 / 50%)`  | `oklch(1 0 0 / 55%)` |
+| Clearing | A radial wash of the surface color behind text, so no dot sits in a word | `--background`      |                       |                      |
 
-- The field is centred on the content and fades out towards the edges with a radial mask. On Project home it covers the title and the agent cards and fades out before the recent sessions.
+- The field is centred on the content and fades out towards the edges with a radial mask, solid to 40% of its radius. On Project home it covers the title and the agent cards and fades out before the recent sessions.
 - The light drifts on two axes with different periods, 41 s across (±15% of the field) and 29 s down (−9% to +11%), both `ease-in-out` and alternating, so its path does not visibly repeat. The lit grid moves the opposite way inside the light, so the dots stay in place and only the light travels.
 - Every layer is one element moved with `transform`; the grids are CSS gradients, not images or a canvas. Check in the Performance panel that the field adds no layout or paint per frame.
 - The drift pauses (`animation-play-state: paused`) while the window is hidden or not focused, from the renderer's `focus`, `blur` and `visibilitychange` events.
-- In the light theme the light itself is invisible on a near-white surface; there the lit dots alone carry it.
+- A brighter spot cannot show on a near-white surface, so in the light theme the light is a faint shade and the lit dots carry it.
 
 ### Reduce motion
 

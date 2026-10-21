@@ -11,6 +11,22 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 - The top bar is the drag region (`app-region-drag`). Everything clickable inside it is `app-region-no-drag`.
 - The window remembers its size and position ([persistence](./persistence.md)). Minimum size: 960 × 600.
 
+## Launch
+
+Launching should feel like opening a lid, not waiting for a page: no white or black flash, no empty window, and no content jumping into place.
+
+| Moment                 | What is on screen                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Before the first frame | Nothing. Main creates the window hidden, with `backgroundColor` set to `--background` of the theme from settings (`nativeTheme` decides for System), and shows it on `ready-to-show` |
+| First frame            | The app shell from the renderer bundle alone: window controls, the sidebar on surface 0 with `Skeleton` rows at the real 28 px row height, and the empty main surface                |
+| Data arrives           | Projects and sessions from the agent host replace the skeleton rows in place, fading in over `--duration-base`; nothing moves, because the rows already had their size               |
+| A session is restored  | With **Restore the last session**, the main area shows the thread skeleton until the snapshot arrives, then the thread fades in                                                      |
+
+- The first frame needs no data and no agent host, so it is on screen within the [launch budget](../milestones/m0.md#performance-budgets) (500 ms to the first interactive frame) whatever the host is doing.
+- A launch that takes longer than 1 s, such as a cold start after an update, shows "Starting OverBench…" with a `Spinner` centred in the main area, so a slow start never looks frozen; a normal start never shows it.
+- There is no splash screen. A launch mark comes once the OverBench logo is final, and it follows the same rule: it appears only when the launch is slow, so it never delays a fast one.
+- With reduce-motion on, the content appears without fading.
+
 ## Layout
 
 ```text

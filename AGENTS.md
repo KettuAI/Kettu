@@ -38,7 +38,7 @@ OverBench takes the best implementations already proven in leading projects, int
 
 Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Tailwind CSS v4, pnpm 10, electron-builder. TypeScript stays on 6.0 until typescript-eslint supports 7.
 
-Approved for M0 and installed by the work package that first needs them: `@agentclientprotocol/sdk` for ACP (the stable v1 entrypoint; its unstable schema only for the exceptions listed in [protocol version](./docs/architecture.md#protocol-version)) and Vitest for tests, both from M0.1.
+Approved for M0 and installed by the work package that first needs them: `@agentclientprotocol/sdk` for ACP (the stable v1 entrypoint; its unstable schema only for the exceptions listed in [protocol version](./docs/architecture.md#protocol-version)) and Vitest for tests, both from M0.1; xterm.js (`@xterm/xterm` with its fit, webgl and web-links addons) and `node-pty` for the terminal, from M0.5.
 
 ### UI stack: one library per concern
 
@@ -53,6 +53,7 @@ Approved for M0 and installed by the work package that first needs them: `@agent
 | Markdown                    | Streamdown, with `@streamdown/code` and `@streamdown/cjk` (M0.3)   |
 | Syntax highlighting         | Shiki (M0.3)                                                       |
 | Diffs                       | `@pierre/diffs` (M0.3)                                             |
+| Terminal                    | xterm.js in the renderer, `node-pty` in the terminal host (M0.5)   |
 
 Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
 
@@ -115,7 +116,7 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 - **Formatting**: Prettier (single quotes, no semicolons, 100 columns) and ESLint own the style; do not format against them.
 - **Imports**: use the `@renderer/*` and `@shared/*` aliases instead of deep relative paths.
 - **Comments**: English and ASCII only, and only when they say what the code cannot, such as the reason for a workaround or an edge case. No commented-out code.
-- **Dependencies**: ask the maintainer before adding any. Renderer-only libraries go in `devDependencies` because Vite bundles them; only modules the main process loads at runtime go in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
+- **Dependencies**: ask the maintainer before adding any. Renderer-only libraries go in `devDependencies` because Vite bundles them; only modules a process loads at runtime instead of from the bundle, such as `node-pty`, go in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
 - **Docs**: `README.md` and `README.zh-CN.md` are kept in sync; change both together. Design docs under `docs/` follow the maintenance rules in `docs/README.md`.
 - **Git**: Conventional Commits 1.0.0 in English, with an imperative subject of at most 50 characters and a body that explains why. No tool-generated trailers or attribution lines. Branches are `feat/…`, `fix/…`, `chore/…`, `docs/…` or `refactor/…` in kebab-case.
 - **Language**: talk to the maintainer in Simplified Chinese. Everything written into the repository is English (code, comments, commits, pull requests), except Chinese product copy and `README.zh-CN.md`.
