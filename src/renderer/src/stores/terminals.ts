@@ -210,8 +210,18 @@ async function reconcileTerminals(): Promise<void> {
 
 /** A stale tab's Restart: a new shell in the same project, in the old tab's place. */
 export async function replaceStale(id: string): Promise<void> {
-  const old = useTerminalsStore.getState().byId[id]
+  const { byId, connection } = useTerminalsStore.getState()
+  const old = byId[id]
   if (!old) return
+  // A host that crashed too often stays down until asked to start again.
+  if (connection === 'failed') {
+    try {
+      await window.overbench.terminals.restart()
+    } catch (error) {
+      useTerminalsStore.setState({ error: errorMessage(error) })
+      return
+    }
+  }
   const created = await createTerminal(old.projectPath)
   if (created) forgetTerminal(id)
 }
