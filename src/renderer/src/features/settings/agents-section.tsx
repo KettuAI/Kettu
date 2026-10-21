@@ -132,6 +132,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
                 <Button
                   key={method.id}
                   size="compact"
+                  variant="outline"
                   onClick={() => signInTerminal(method.command!)}
                 >
                   {method.name}
