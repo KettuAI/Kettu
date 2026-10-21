@@ -257,6 +257,9 @@ describe('git', () => {
     const { t, port } = await setup({ git: git.service })
     const other = t.connect()
     expect(git.calls).toContain('setBackgroundFetch false')
+    await port.request('agents.list', undefined)
+    // The resolved environment reaches git once the shell has answered.
+    expect(git.calls).toContain('setEnvironment')
     const status = await port.request('git.status', { projectPath: t.project })
     expect(status.head.branch).toBe('main')
     await port.request('git.status', { projectPath: t.project })

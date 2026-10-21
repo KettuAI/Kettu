@@ -1,6 +1,9 @@
 // Integration tests: the session layer, through the host and its port, against the fake agent
 // running in-process.
 
+import { writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ToolEntry } from '@shared/thread'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
@@ -341,6 +344,46 @@ describe('opening and recovering', () => {
 })
 
 describe('sign-in', () => {
+  it('retries after a sign-in in a terminal', async () => {
+    const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)
+    const { t, port } = await setup({
+      agentEnv: { FAKE_AGENT_AUTH: 'required', FAKE_AGENT_LOGIN_MARKER: marker },
+    })
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    expect(summary.status).toBe('auth_required')
+    await port.request('sessions.retry', { sessionId: summary.id })
+    expect(port.summary(summary.id)?.status).toBe('auth_required')
+    // What `main.ts --login` leaves behind once the user signed in.
+    await writeFile(marker, '')
+    await port.request('sessions.retry', { sessionId: summary.id })
+    expect(port.summary(summary.id)?.status).toBe('ready')
+  })
+
+  it('reopens with session/load when the resume after a crash fails', async () => {
+    const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)
+    const { t, port } = await setup({
+      agentEnv: { FAKE_AGENT_AUTH: 'required', FAKE_AGENT_LOGIN_MARKER: marker },
+    })
+    await port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'fake-login' })
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/crash')
+    await port.untilStatus(sessionId, 'disconnected')
+    // The restarted agent starts signed out, so its session/resume fails.
+    await port.untilStatus(sessionId, 'auth_required')
+    await writeFile(marker, '')
+    await port.request('sessions.retry', { sessionId })
+    expect(port.summary(sessionId)?.status).toBe('ready')
+    // A load replaced the thread with the agent's history, which knows nothing of the crash.
+    const snapshot = await port.request('sessions.snapshot', { sessionId })
+    const users = snapshot.entries.flatMap((entry) => (entry.kind === 'user' ? [entry] : []))
+    expect(users.length).toBeGreaterThan(0)
+    expect(JSON.stringify(users)).not.toContain('/crash')
+    expect(port.entries(sessionId)).toEqual(snapshot.entries)
+  })
+
   it('waits in auth_required and continues after authenticate', async () => {
     const { t, port } = await setup({ agentEnv: { FAKE_AGENT_AUTH: 'required' } })
     const summary = await port.request('sessions.create', {
