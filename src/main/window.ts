@@ -128,6 +128,8 @@ export function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       additionalArguments: options.perf ? ['--overbench-perf'] : [],
+      // A perf run measures frames and timers, which Chromium throttles for a window behind others.
+      backgroundThrottling: !options.perf,
     },
   })
 
