@@ -68,7 +68,7 @@ export function BranchPopover({
                   from <span className="font-mono text-[11.5px]">{shortRef(base.name)}</span>
                 </>
               )}
-              {base && upstream && head.branch !== base.name && ' · '}
+              {base && head.branch !== base.name && (upstream || !head.detached) && ' · '}
               {upstream ? (
                 <>
                   tracking <span className="font-mono text-[11.5px]">{upstream.name}</span>
