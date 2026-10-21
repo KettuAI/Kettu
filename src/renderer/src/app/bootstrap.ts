@@ -1,4 +1,6 @@
 import type { HostEvent } from '@shared/agent-host'
+import { usePendingSession } from '@renderer/app/actions'
+import { sessionToRestore } from '@renderer/app/restore'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useConnectionStore } from '@renderer/stores/connection'
 import {
@@ -11,10 +13,11 @@ import {
 } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { initSettings } from '@renderer/stores/settings'
+import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { initTerminals } from '@renderer/stores/terminals'
 import { forgetSession, receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { initUpdates } from '@renderer/stores/updates'
+import { lastSessionId, openSession, useViewStore } from '@renderer/stores/view'
 
 function onHostEvent(event: HostEvent): void {
   switch (event.type) {
@@ -59,6 +62,18 @@ export async function loadHostState(): Promise<void> {
   ])
 }
 
+/** Reopens the session shown when the app last closed, as Settings › General allows. */
+function restoreLastSession(): void {
+  if (usePendingSession.getState().pending) return
+  const summary = sessionToRestore({
+    enabled: useSettingsStore.getState().settings.general.restoreLastSession,
+    sessionId: lastSessionId,
+    main: useViewStore.getState().main,
+    byId: useSessionsStore.getState().byId,
+  })
+  if (summary) openSession(summary.id, summary.projectPath)
+}
+
 let wasDisconnected = false
 
 export function bootstrap(): void {
@@ -77,10 +92,10 @@ export function bootstrap(): void {
     rewatchGit()
   })
 
-  void initSettings()
+  const settingsReady = initSettings()
   void initUpdates()
   initTerminals()
-  void loadHostState()
+  void Promise.allSettled([settingsReady, loadHostState()]).then(restoreLastSession)
 
   // The ambient field pauses while the window is in the background.
   const setActive = () => {
