@@ -4,29 +4,29 @@
 
 Problems the maintainer found while using M0 by hand. Each one is recorded as reported, with where it lives today; fixes are planned together once the list is complete, and the design docs change with them.
 
-| #   | Problem                                                        | Area           | Status |
-| --- | -------------------------------------------------------------- | -------------- | ------ |
-| 1   | Thoughts and tool calls cannot be folded together              | Thread entries | Open   |
-| 2   | Choosing a model does not close the model menu                 | Model menu     | Open   |
-| 3   | No switch for Claude Code's ultracode                          | Model menu     | Open   |
-| 4   | The model menu does not look polished                          | Model menu     | Open   |
-| 5   | Messages have no action row                                    | Thread entries | Open   |
-| 6   | Markdown looks plain and file references do not stand out      | Markdown       | Open   |
-| 7   | The usage popover shows too little and needs a full redesign   | Usage          | Open   |
-| 8   | Session rows show their time badly                             | Sidebar        | Open   |
-| 9   | New session is tied to the selected project                    | Sidebar        | Open   |
-| 10  | The welcome screen and the project home lack polish            | Home           | Open   |
-| 11  | No steering or queued messages while a turn runs               | Composer       | Open   |
-| 12  | Switching sessions visibly stalls                              | Performance    | Open   |
-| 13  | The git popover only displays, and repeats the terminal toggle | Git            | Open   |
-| 14  | The terminal panel's own buttons do nothing                    | Terminal       | Open   |
-| 15  | Settings selects show names only and keep the default look     | Settings       | Open   |
-| 16  | Switches keep shadcn's default look                            | Settings       | Open   |
-| 17  | Settings › Agents leaves out what matters                      | Settings       | Open   |
-| 18  | The About page needs redoing                                   | Settings       | Open   |
-| 19  | Settings leave too much empty space                            | Settings       | Open   |
-| 20  | Collapsing the sidebar is abrupt                               | Sidebar        | Open   |
-| 21  | No file browser or preview                                     | Side panel     | Open   |
+| #   | Problem                                                        | Area           | Status       |
+| --- | -------------------------------------------------------------- | -------------- | ------------ |
+| 1   | Thoughts and tool calls cannot be folded together              | Thread entries | Open         |
+| 2   | Choosing a model does not close the model menu                 | Model menu     | Fixed        |
+| 3   | No switch for Claude Code's ultracode                          | Model menu     | Open         |
+| 4   | The model menu does not look polished                          | Model menu     | Open         |
+| 5   | Messages have no action row                                    | Thread entries | Open         |
+| 6   | Markdown looks plain and file references do not stand out      | Markdown       | Open         |
+| 7   | The usage popover shows too little and needs a full redesign   | Usage          | Open         |
+| 8   | Session rows show their time badly                             | Sidebar        | Open         |
+| 9   | New session is tied to the selected project                    | Sidebar        | Open         |
+| 10  | The welcome screen and the project home lack polish            | Home           | Open         |
+| 11  | No steering or queued messages while a turn runs               | Composer       | Open         |
+| 12  | Switching sessions visibly stalls                              | Performance    | Partly fixed |
+| 13  | The git popover only displays, and repeats the terminal toggle | Git            | Open         |
+| 14  | The terminal panel's own buttons do nothing                    | Terminal       | Fixed        |
+| 15  | Settings selects show names only and keep the default look     | Settings       | Open         |
+| 16  | Switches keep shadcn's default look                            | Settings       | Open         |
+| 17  | Settings › Agents leaves out what matters                      | Settings       | Open         |
+| 18  | The About page needs redoing                                   | Settings       | Open         |
+| 19  | Settings leave too much empty space                            | Settings       | Open         |
+| 20  | Collapsing the sidebar is abrupt                               | Sidebar        | Open         |
+| 21  | No file browser or preview                                     | Side panel     | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -42,6 +42,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: clicking a model in the model menu switches to it, but the menu stays open.
 - **Expected**: one click chooses the model and closes the menu.
 - **Today**: this is the designed behavior. [Interface: model menu](../design/ui.md#composer) says "a model row checks the model without closing the menu", and the model list in `src/renderer/src/features/session/composer/control-row.tsx` renders `Choices` without `closeOnClick`. The fix changes that rule. To settle when planning: whether a reasoning level or a switch such as Fast mode still keeps the menu open, as all three do today.
+- **Fixed** in `b6eac92`: a model row, `Enter` on it or `1` to `4` choose the model and close the menu; a reasoning level and the switches keep it open, as [Interface: model menu](../design/ui.md#composer) now says. Checked on a production build on macOS.
 
 ## 3. No switch for Claude Code's ultracode
 
@@ -121,6 +122,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: switching between sessions stalls noticeably. In the screenshot the main area shows the thread skeleton and the session's sidebar row a spinner while the session opens.
 - **Expected**: switching feels instant, as the [M0 goal](./m0.md) promises ("Switching between them is instant").
 - **Today**: the only measurement, in [M0 performance](../perf/m0.md), is 36 ms to first paint for a live fake-agent session with 1,000 entries. It does not cover what the screenshot shows: a session that is not live and has to be opened again with `session/load`, the wait for its snapshot (`ThreadSkeleton` in `src/renderer/src/features/session/session-view.tsx`), or real threads full of markdown and diffs. Which of these causes the stall is not known yet. To settle when planning: reproduce the switch with real sessions, profile it in the DevTools Performance panel to find where the time goes (starting the agent and `session/load`, the snapshot, or rendering), and add the case to the performance script.
+- **Partly fixed**: three of the causes found in [M0 feedback findings](./m0-feedback-findings.md#12-switching-sessions) are fixed: `7dddd70` replays `session/load` in linear time in the agent host, `1365800` mounts a long history in linear time, and `3e26044` restores the last session at launch without waiting for git tools. Still open: the starting state for a session that is not live, agents starting through `npx -y` on every launch, keeping recent sessions mounted, and these cases in the performance script.
 
 ## 13. The git popover only displays, and repeats the terminal toggle
 
@@ -135,6 +137,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: in the terminal panel's header, **New terminal** (+), a tab's close button, **Maximize** and **Close** do nothing when clicked. Only the terminal toggle in the top bar closes the panel.
 - **Expected**: every button in the header works.
 - **Today**: likely cause, not yet confirmed in the app: the header in `src/renderer/src/features/terminal/terminal-panel.tsx` is a window drag region (`app-region-drag`), since the panel reaches the window's top edge, but neither its tabs nor its `PanelButton`s set `app-region-no-drag`, so macOS takes the clicks as window drags. The top bar's own controls set `app-region-no-drag` (`src/renderer/src/features/shell/top-bar.tsx`), which is why the toggle works; AGENTS.md lists this rule under gotchas. To check when fixing: the same header on Windows and Linux, and the sidebar toggle that the header shows while maximized with the sidebar collapsed.
+- **Fixed** in `5daaea1`: the header's tab list and buttons opt out of the drag region; the sidebar toggle already did. On a production build on macOS every tab and button in the header computes `no-drag`; Windows and Linux are not checked by hand.
 
 ## 15. Settings selects show names only and keep the default look
 

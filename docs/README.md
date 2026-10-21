@@ -17,7 +17,7 @@ Design documents for OverBench. Start with the architecture, then read the desig
 | [Testing](./design/testing.md)                               | Unit, integration and process tests, the fake agent, CI, and performance measurement                                                | Draft         |
 | [M0: ACP foundation](./milestones/m0.md)                     | Scope, work packages, acceptance criteria, budgets, dependencies and decisions for M0                                               | In acceptance |
 | [M0 feedback](./milestones/m0-feedback.md)                   | Problems found while accepting M0 by hand, collected before they are planned                                                        | Collecting    |
-| [M0 feedback findings](./milestones/m0-feedback-findings.md) | Research and prepared fixes for the feedback, for planning it                                                                       | Draft         |
+| [M0 feedback findings](./milestones/m0-feedback-findings.md) | Research and fixes for the feedback, for planning it                                                                                | Draft         |
 | [M0 performance](./perf/m0.md)                               | Measured results against the M0 budgets, per platform                                                                               | Draft         |
 
 ## Keeping the docs current
