@@ -189,4 +189,23 @@ describe('AgentManager', () => {
     expect(terminal?.command).toMatch(/main\.ts["']? --login$/)
     await m.agents.stopAll()
   })
+
+  it('keeps the known use of a window when an event for its period has none', () => {
+    const m = manager()
+    const window = (usedPercent: number | null, resetsAt: number) => ({
+      window: 'five_hour',
+      label: '5-hour',
+      usedPercent,
+      resetsAt,
+      state: 'ok' as const,
+      observedAt: 1,
+    })
+    const used = () => m.agents.status('fake-agent').limits[0]?.usedPercent
+    m.agents.setLimit('fake-agent', window(54, 1_800_000_000_000))
+    // `/usage` prints the reset to the minute, the events to the second.
+    m.agents.setLimit('fake-agent', window(null, 1_800_000_030_000))
+    expect(used()).toBe(54)
+    m.agents.setLimit('fake-agent', window(null, 1_800_018_000_000))
+    expect(used()).toBeNull()
+  })
 })

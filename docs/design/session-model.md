@@ -382,7 +382,7 @@ interface PlanLimit {
 }
 ```
 
-- Each `_claude/rateLimit` value updates the window named by its `rateLimitType` and leaves the others as they are; windows never reported are not shown.
+- Each `_claude/rateLimit` value updates the window named by its `rateLimitType` and leaves the others as they are; windows never reported are not shown. A value without `utilization`, which Claude Code often sends, keeps the use already known for the same period, one whose reset is within a minute of it, since `/usage` prints resets to the minute.
 - **Units** (checked on 2026-10-20 against the sources, not yet against a live session): `claude-agent-acp` 0.94.0 passes Claude Code's `rate_limit_info` through unchanged, and Claude Code 2.1.304 treats `utilization` as a fraction from 0 to 1 (it shows `Math.round(u * 1000) / 10` percent, capped at 100, and compares it with thresholds of 0.25, 0.5, 0.75 and 0.9) and `resetsAt` as Unix seconds. The host stores `usedPercent = round(utilization × 1000) / 10`, clamped to 0–100, and `resetsAt` in milliseconds; a `resetsAt` that is already in milliseconds (10¹² or more) is kept as is. A live session should confirm this before M0.2 is signed off.
 - `rateLimitType` values seen in Claude Code: `five_hour` ("5-hour"), `seven_day` ("Weekly"), `seven_day_opus` ("Weekly · Opus"), `seven_day_sonnet` ("Weekly · Sonnet") and `overage` ("Extra usage"); others, such as `seven_day_overage_included`, get a label made from the name. `status` is `allowed`, `allowed_warning` or `rejected`.
 - Limits are kept in memory for the life of the host. After a restart they appear again with the first update.

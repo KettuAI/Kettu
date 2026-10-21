@@ -539,7 +539,15 @@ export class AgentManager {
   setLimit(agentId: AgentId, limit: PlanLimit): void {
     const slot = this.slots.get(agentId)
     if (!slot) return
-    slot.limits.set(limit.window, limit)
+    const before = slot.limits.get(limit.window)
+    // Claude Code often reports a window without its utilization; the use `/usage` read for the
+    // same period still holds. `/usage` gives the reset to the minute, the events to the second.
+    const samePeriod =
+      before?.resetsAt != null &&
+      limit.resetsAt !== null &&
+      Math.abs(before.resetsAt - limit.resetsAt) < 60_000
+    const keep = limit.usedPercent === null && before?.usedPercent != null && samePeriod
+    slot.limits.set(limit.window, keep ? { ...limit, usedPercent: before.usedPercent } : limit)
     this.emit(slot)
   }
 
