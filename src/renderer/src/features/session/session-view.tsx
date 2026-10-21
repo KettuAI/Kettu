@@ -10,7 +10,7 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
 import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
-import { preloadRenderers } from './markdown/preload'
+import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { PlanBar } from './plan-bar'
 import { SessionHeader } from './session-header'
 import { FailedState, StartingAgent, ThreadSkeleton } from './session-states'
@@ -32,6 +32,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const replicaError = useThreadsStore((s) => s.replicas[sessionId]?.error ?? null)
   const empty = useThreadsStore((s) => (s.replicas[sessionId]?.state?.order.length ?? 0) === 0)
   const session = useSessionView(sessionId)
+  const renderersReady = useRenderersReady()
   const name = agentName(summary.agentId)
 
   useEffect(() => {
@@ -86,6 +87,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         </p>
       </div>
     )
+  } else if (!renderersReady) {
+    body = <ThreadSkeleton />
   } else {
     body = (
       <Thread
