@@ -307,6 +307,7 @@ describe('opening and recovering', () => {
     await turn(port, sessionId, 'still there?')
     await port.untilStatus(sessionId, 'ready')
     expect(port.entries(sessionId).at(-1)).toMatchObject({ stopReason: 'end_turn' })
+    expect(port.thread(sessionId).session.title).toBe('hello')
   })
 
   it('ends a crashed turn: running tools stop and the notice says what follows', async () => {

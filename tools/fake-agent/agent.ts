@@ -365,8 +365,12 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     })
     .onRequest(methods.agent.session.resume, (ctx) => {
       requireSignedIn()
-      const session =
-        sessions.get(ctx.params.sessionId) ?? newSession(ctx.params.sessionId, ctx.params.cwd)
+      let session = sessions.get(ctx.params.sessionId)
+      if (!session) {
+        // A real agent resumes a session it already titled, so the next prompt keeps the title.
+        session = newSession(ctx.params.sessionId, ctx.params.cwd)
+        session.title = 'Restored session'
+      }
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return sessionSetup(session)
     })
