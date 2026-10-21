@@ -309,6 +309,21 @@ describe('opening and recovering', () => {
     expect(port.entries(sessionId).at(-1)).toMatchObject({ stopReason: 'end_turn' })
   })
 
+  it('ends a crashed turn: running tools stop and the notice says what follows', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/crash')
+    await port.untilStatus(sessionId, 'disconnected')
+    expect(tools(port, sessionId).map((tool) => tool.status)).toEqual(['cancelled'])
+    const notices = port.entries(sessionId).filter((entry) => entry.kind === 'notice')
+    expect(notices).toEqual([
+      expect.objectContaining({
+        title: 'Fake agent stopped unexpectedly',
+        description: expect.stringContaining('reconnects the session'),
+      }),
+    ])
+  })
+
   it('opens a session from the index after a restart of the host', async () => {
     const first = await startTestHost()
     let port = first.connect()

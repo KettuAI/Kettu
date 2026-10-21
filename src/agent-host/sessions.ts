@@ -656,7 +656,7 @@ export class SessionManager {
           }
         }
         if (startedAt !== null && isStopReason(state.stopReason) && !child.replaying) {
-          this.closeStreaming(child)
+          this.closeOpenEntries(child)
           this.emit(child, [
             {
               op: 'entry.add',
@@ -983,9 +983,7 @@ export class SessionManager {
               kind: 'notice',
               id: this.nextId(live),
               severity: 'error',
-              title: `${name} stopped unexpectedly`,
-              description:
-                'The turn ended without an answer. OverBench reconnects the session when the agent restarts.',
+              ...stoppedNotice(name),
             },
           },
         ])
@@ -1136,13 +1134,18 @@ export class SessionManager {
     }
   }
 
-  /** Ends streaming on the turn's messages and closes open thoughts. */
-  private closeStreaming(live: Live): void {
+  /** Ends streaming on the turn's messages, closes open thoughts and stops unfinished tools. */
+  private closeOpenEntries(live: Live): void {
     const now = this.now()
     const patches: Patch[] = []
     for (const id of live.thread.order) {
       const entry = live.thread.byId[id]
-      if ((entry?.kind === 'agent' || entry?.kind === 'thought') && entry.streaming) {
+      if (
+        entry?.kind === 'tool' &&
+        (entry.status === 'pending' || entry.status === 'in_progress')
+      ) {
+        patches.push({ op: 'entry.update', id, changes: { status: 'cancelled' } })
+      } else if ((entry?.kind === 'agent' || entry?.kind === 'thought') && entry.streaming) {
         const startedAt = live.scope.thoughts.get(id)
         patches.push({
           op: 'entry.update',
@@ -1163,7 +1166,7 @@ export class SessionManager {
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
     if (live.turn === turn) live.turn = null
-    this.closeStreaming(live)
+    this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
     if (stopReason) {
       this.emit(live, [
@@ -1224,12 +1227,14 @@ export class SessionManager {
           kind: 'notice',
           id: this.nextId(live),
           severity: 'error',
-          title: authRequired
-            ? `${this.deps.agents.name(live.record.agentId)} needs you to sign in`
+          ...(authRequired
+            ? {
+                title: `${this.deps.agents.name(live.record.agentId)} needs you to sign in`,
+                description: mapped.message,
+              }
             : closed
-              ? `${this.deps.agents.name(live.record.agentId)} stopped before it answered`
-              : 'The turn failed',
-          description: mapped.message,
+              ? stoppedNotice(this.deps.agents.name(live.record.agentId))
+              : { title: 'The turn failed', description: mapped.message }),
         },
       },
     ])
@@ -1682,5 +1687,14 @@ function turnEndText(stopReason: StopReason): string {
       return 'Stopped at the request limit'
     case 'refusal':
       return 'The agent refused'
+  }
+}
+
+// The exit event and the failed prompt race, so both say the same thing.
+function stoppedNotice(name: string): { title: string; description: string } {
+  return {
+    title: `${name} stopped unexpectedly`,
+    description:
+      'The turn ended without an answer. OverBench reconnects the session when the agent restarts.',
   }
 }

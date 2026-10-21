@@ -126,7 +126,8 @@ export interface ToolEntry {
   id: string
   title: string
   toolKind: ToolKind
-  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  // ACP has no cancelled status: the host sets it when a turn ends before the tool finished.
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
   content: ToolContent[]
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null

@@ -361,9 +361,9 @@ function toolEffects(
   after: ToolEntry,
 ): void {
   const active = (status: ToolEntry['status'] | null): boolean =>
-    status === 'in_progress' || status === 'completed' || status === 'failed'
+    status !== null && status !== 'pending'
   const done = (status: ToolEntry['status'] | null): boolean =>
-    status === 'completed' || status === 'failed'
+    status === 'completed' || status === 'failed' || status === 'cancelled'
   if (!active(before) && active(after.status)) {
     out.effects.push({
       kind: 'tool',

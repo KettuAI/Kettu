@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import {
   ArrowRightLeftIcon,
+  BanIcon,
   BrainIcon,
   CheckIcon,
   ChevronRightIcon,
@@ -338,6 +339,15 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
           role="img"
           aria-label="Failed"
           className={cn(icon, 'text-destructive')}
+        />
+      )
+    case 'cancelled':
+      return (
+        <BanIcon
+          key="cancelled"
+          role="img"
+          aria-label="Cancelled"
+          className={cn(icon, 'text-muted-foreground/70')}
         />
       )
   }

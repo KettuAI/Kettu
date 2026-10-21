@@ -140,7 +140,7 @@ interface ToolEntry {
     | 'fetch'
     | 'switch_mode'
     | 'other'
-  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' // cancelled is set by the host
   content: ToolContent[]
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null
@@ -266,6 +266,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 3. The session stays `running` until `session/prompt` returns with `stopReason: 'cancelled'`.
 4. If the agent has not returned 10 s later, the host ends the turn itself, adds a warning notice that the agent did not confirm cancellation, and sets `status: 'ready'`.
 5. A permission request that arrives after the user cancelled the turn, or while the session is closing, is answered `cancelled` at once; it never becomes pending.
+6. However a turn ends, a tool still `pending` or `in_progress` becomes `cancelled`, as ACP asks clients to do, so no tool keeps a spinner after its turn. ACP has no such status; the host sets it, and a later update from the agent still overrides it.
 
 ## Session lifecycle
 
