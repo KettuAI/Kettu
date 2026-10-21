@@ -1,0 +1,237 @@
+import { useState, type ReactNode } from 'react'
+import {
+  Maximize2Icon,
+  Minimize2Icon,
+  PanelBottomCloseIcon,
+  PlusIcon,
+  SquareTerminalIcon,
+  XIcon,
+} from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@renderer/components/ui/alert-dialog'
+import { Button } from '@renderer/components/ui/button'
+import { Spinner } from '@renderer/components/ui/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { cn } from '@renderer/lib/utils'
+import {
+  createTerminal,
+  forgetTerminal,
+  killTerminal,
+  showTerminal,
+  terminalsOf,
+  useTerminalsStore,
+  type TerminalState,
+} from '@renderer/stores/terminals'
+import { toggleTerminal, useViewStore } from '@renderer/stores/view'
+import { TerminalView } from './terminal-view'
+
+export function TerminalPanel({
+  projectPath,
+  maximized,
+}: {
+  projectPath: string
+  maximized: boolean
+}) {
+  const list = useTerminalsStore(useShallow((s) => terminalsOf(s.byId, projectPath)))
+  const activeId = useTerminalsStore((s) => s.active[projectPath])
+  const error = useTerminalsStore((s) => s.error)
+  const [creating, setCreating] = useState(false)
+  const [closing, setClosing] = useState<TerminalState | null>(null)
+  const active = list.find((t) => t.id === activeId) ?? list.at(-1)
+
+  const newTerminal = async () => {
+    setCreating(true)
+    await createTerminal(projectPath)
+    setCreating(false)
+  }
+
+  const close = (t: TerminalState) => {
+    if (t.stale) forgetTerminal(t.id)
+    else if (t.busy && t.exitCode === null) setClosing(t)
+    else void killTerminal(t.id)
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-terminal-panel="">
+      <div className="flex h-8 shrink-0 items-center gap-1 pr-1.5 pl-2">
+        <div
+          role="tablist"
+          aria-label="Terminals"
+          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
+        >
+          {list.map((t) => (
+            <TerminalTab
+              key={t.id}
+              terminal={t}
+              selected={t.id === active?.id}
+              onSelect={() => showTerminal(projectPath, t.id)}
+              onClose={() => close(t)}
+            />
+          ))}
+          {creating && (
+            <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground">
+              <Spinner className="size-3" />
+              Starting…
+            </span>
+          )}
+        </div>
+        {error && (
+          <span className="max-w-[40%] truncate text-xs text-destructive" title={error}>
+            {error}
+          </span>
+        )}
+        <PanelButton
+          label="New terminal"
+          shortcut="Ctrl+Shift+`"
+          onClick={() => void newTerminal()}
+        >
+          <PlusIcon />
+        </PanelButton>
+        <PanelButton
+          label={maximized ? 'Restore' : 'Maximize'}
+          onClick={() => useViewStore.setState({ terminalMaximized: !maximized })}
+        >
+          {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
+        </PanelButton>
+        <PanelButton
+          label="Hide"
+          shortcut="Ctrl+`"
+          onClick={() => toggleTerminal(projectPath, false)}
+        >
+          <PanelBottomCloseIcon />
+        </PanelButton>
+      </div>
+      <div className="relative min-h-0 flex-1">
+        {active ? (
+          <TerminalView key={active.id} terminal={active} />
+        ) : (
+          !creating && (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-[13px] text-muted-foreground">
+              <span>No terminal in this project.</span>
+              <Button variant="outline" size="compact" onClick={() => void newTerminal()}>
+                <SquareTerminalIcon data-icon="inline-start" />
+                New terminal
+              </Button>
+            </div>
+          )
+        )}
+      </div>
+      <AlertDialog open={!!closing} onOpenChange={(open) => !open && setClosing(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>End this terminal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-mono text-xs text-foreground">{closing?.title}</span> is still
+              running. Closing the tab ends it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (closing) void killTerminal(closing.id)
+                setClosing(null)
+              }}
+            >
+              End process
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+function TerminalTab({
+  terminal,
+  selected,
+  onSelect,
+  onClose,
+}: {
+  terminal: TerminalState
+  selected: boolean
+  onSelect: () => void
+  onClose: () => void
+}) {
+  const exited = terminal.exitCode !== null
+  return (
+    <div
+      className={cn(
+        'group/tab relative flex h-6 max-w-48 shrink-0 items-center rounded-md text-xs transition-colors duration-(--duration-fast)',
+        selected
+          ? 'bg-accent text-foreground'
+          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+      )}
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={selected}
+        onClick={onSelect}
+        onAuxClick={(e) => e.button === 1 && onClose()}
+        className="flex h-full min-w-0 items-center gap-1.5 rounded-md pr-6 pl-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <SquareTerminalIcon className="size-3.5 shrink-0" />
+        <span className="truncate">{terminal.title || terminal.shell}</span>
+        {exited && (
+          <span className={cn('shrink-0 tabular', terminal.exitCode !== 0 && 'text-destructive')}>
+            {terminal.exitCode}
+          </span>
+        )}
+        {terminal.activity && !selected && (
+          <span
+            role="img"
+            aria-label="New output"
+            className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
+          />
+        )}
+      </button>
+      <button
+        type="button"
+        aria-label={`Close ${terminal.title || terminal.shell}`}
+        onClick={onClose}
+        className={cn(
+          'absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-background/60 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/tab:opacity-100',
+          selected && 'opacity-100',
+        )}
+      >
+        <XIcon className="size-3" />
+      </button>
+    </div>
+  )
+}
+
+function PanelButton({
+  label,
+  shortcut,
+  onClick,
+  children,
+}: {
+  label: string
+  shortcut?: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Button variant="quiet" size="icon-xs" aria-label={label} onClick={onClick} />}
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>
+        {label} {shortcut && <span className="opacity-60">{shortcut}</span>}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
