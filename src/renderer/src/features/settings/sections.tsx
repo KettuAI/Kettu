@@ -112,6 +112,7 @@ export function ThemeTiles() {
       <ToggleGroup
         aria-label="Theme"
         variant="tile"
+        size="tile"
         spacing={3}
         value={[value]}
         onValueChange={(next) => {
@@ -120,7 +121,7 @@ export function ThemeTiles() {
         }}
       >
         {tiles.map((tile) => (
-          <ToggleGroupItem key={tile.value} value={tile.value} className="text-xs">
+          <ToggleGroupItem key={tile.value} value={tile.value}>
             <ThemePreview kind={tile.value} />
             {tile.label}
           </ToggleGroupItem>
