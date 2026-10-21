@@ -42,6 +42,7 @@ export interface UtilityHostConfig<ToChild, FromChild extends { type: string }> 
 
 const READY_TIMEOUT_MS = 20_000
 const STOP_TIMEOUT_MS = 6000
+const KILL_GRACE_MS = 2000
 const HISTORY_LIMIT = 100
 
 /**
@@ -142,10 +143,21 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
       exited.then(() => false),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(true), timeoutMs)),
     ])
-    if (timedOut) {
-      this.log.warn(`Did not exit within ${timeoutMs} ms; killing it`)
-      child.kill()
-      await exited
+    if (!timedOut) return
+    this.log.warn(`Did not exit within ${timeoutMs} ms; killing it`)
+    const pid = child.pid
+    child.kill()
+    const gone = await Promise.race([
+      exited.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), KILL_GRACE_MS)),
+    ])
+    // kill() sends SIGTERM on macOS and Linux, which a process can ignore; quitting must not wait.
+    if (!gone && pid && process.platform !== 'win32') {
+      try {
+        process.kill(pid, 'SIGKILL')
+      } catch (error) {
+        this.log.error('Could not kill it', error)
+      }
     }
   }
 
@@ -153,10 +165,18 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     this.cleanStop = false
     this.status = 'starting'
     this.record('start')
-    const child = utilityProcess.fork(this.config.modulePath, [], {
-      serviceName: this.config.serviceName,
-      stdio: 'pipe',
-    })
+    let child: UtilityProcess
+    try {
+      child = utilityProcess.fork(this.config.modulePath, [], {
+        serviceName: this.config.serviceName,
+        stdio: 'pipe',
+      })
+    } catch (error) {
+      this.record('crash', 'fork failed')
+      this.log.error('Could not start', error)
+      this.scheduleRestart()
+      return
+    }
     this.child = child
     this.forwardOutput(child)
     child.on('message', (message: unknown) => this.receive(child, message))
@@ -223,6 +243,10 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     }
     this.record('crash', `code ${code}`)
     this.log.error(`Exited unexpectedly with code ${code}`)
+    this.scheduleRestart()
+  }
+
+  private scheduleRestart(): void {
     const decision = this.policy.crashed(Date.now())
     if (decision.kind === 'give-up') {
       this.status = 'failed'
