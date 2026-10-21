@@ -6,8 +6,15 @@ const grid = (color: string, size: number): CSSProperties => ({
   backgroundPosition: '10px 10px',
 })
 
+// Longhands, not the `animation` shorthand: the shorthand also sets animation-play-state inline,
+// which overrides the rule in globals.css that pauses the drift while the window is inactive.
 const drift = (name: string, seconds: number, phase: number): CSSProperties => ({
-  animation: `${name} ${seconds}s ease-in-out ${-phase * seconds}s infinite alternate`,
+  animationName: name,
+  animationDuration: `${seconds}s`,
+  animationTimingFunction: 'ease-in-out',
+  animationDelay: `${-phase * seconds}s`,
+  animationIterationCount: 'infinite',
+  animationDirection: 'alternate',
 })
 
 /**
