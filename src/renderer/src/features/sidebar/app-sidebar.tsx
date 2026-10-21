@@ -31,6 +31,7 @@ export function AppSidebar() {
   const projectsLoaded = useProjectsStore((s) => s.loaded)
   const sessionsLoaded = useSessionsStore((s) => s.loaded)
   const loaded = projectsLoaded && sessionsLoaded
+  const loadError = useProjectsStore((s) => s.error)
 
   return (
     <Sidebar collapsible="none" className="w-full" aria-label="Projects and sessions">
@@ -72,7 +73,11 @@ export function AppSidebar() {
               </TooltipContent>
             </Tooltip>
           </div>
-          {!loaded ? (
+          {!loaded && loadError ? (
+            <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
+              Projects are unavailable right now.
+            </p>
+          ) : !loaded ? (
             <SidebarMenu className="gap-px">
               {[0, 1, 2, 3].map((i) => (
                 <SidebarMenuItem key={i}>

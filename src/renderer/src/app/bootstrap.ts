@@ -50,7 +50,7 @@ function onHostEvent(event: HostEvent): void {
 }
 
 /** Loads everything the shell shows; also runs after the agent host comes back. */
-async function loadHostState(): Promise<void> {
+export async function loadHostState(): Promise<void> {
   await Promise.allSettled([
     useProjectsStore.getState().refresh(),
     useSessionsStore.getState().refresh(),

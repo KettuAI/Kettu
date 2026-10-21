@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { usePendingSession } from '@renderer/app/actions'
 import { ProjectHome } from '@renderer/features/home/project-home'
 import { Welcome } from '@renderer/features/home/welcome'
+import { LaunchState } from '@renderer/features/shell/launch-state'
 import { PendingSessionView } from '@renderer/features/session/pending-session'
 import { SessionView } from '@renderer/features/session/session-view'
 import { TerminalArea } from '@renderer/features/terminal/terminal-area'
@@ -27,7 +28,7 @@ export function MainArea() {
   }, [projectPath])
 
   if (loaded && !project) return <Welcome />
-  if (!project) return <div className="h-full" />
+  if (!project) return <LaunchState />
 
   let content
   if (pending && pending.projectPath === project.path) {

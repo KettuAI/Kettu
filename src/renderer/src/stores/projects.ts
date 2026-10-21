@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import type { Project } from '@shared/agent-host'
-import { host } from '@renderer/lib/host'
+import { errorMessage, host } from '@renderer/lib/host'
 
 interface ProjectsStore {
   projects: Project[]
   loaded: boolean
+  /** Why the list could not be read, until a later read succeeds. */
+  error: string | null
   setAll(projects: Project[]): void
   refresh(): Promise<void>
   add(path: string): Promise<Project>
@@ -14,11 +16,17 @@ interface ProjectsStore {
 export const useProjectsStore = create<ProjectsStore>()((set) => ({
   projects: [],
   loaded: false,
+  error: null,
   setAll(projects) {
-    set({ projects, loaded: true })
+    set({ projects, loaded: true, error: null })
   },
   async refresh() {
-    set({ projects: await host('projects.list', undefined), loaded: true })
+    try {
+      set({ projects: await host('projects.list', undefined), loaded: true, error: null })
+    } catch (error) {
+      set({ error: errorMessage(error) })
+      throw error
+    }
   },
   async add(path) {
     const project = await host('projects.add', { path })

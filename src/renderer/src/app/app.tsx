@@ -8,7 +8,6 @@ import {
 import { SidebarProvider } from '@renderer/components/ui/sidebar'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { HostBanner } from '@renderer/features/shell/host-banner'
-import { LaunchState } from '@renderer/features/shell/launch-state'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
@@ -111,5 +110,5 @@ function ReportInteractive() {
       requestAnimationFrame(() => window.overbench.app.reportInteractive()),
     )
   }, [])
-  return <LaunchState />
+  return null
 }
