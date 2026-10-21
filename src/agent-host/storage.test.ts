@@ -200,6 +200,17 @@ describe('the host files', () => {
     expect(parseSessionsFile({ sessions: {} })).toBe('sessions is not a list')
   })
 
+  it('keeps a saved queue and drops one that does not parse', () => {
+    const queue = [{ id: 'q1', content: [{ type: 'text', text: 'Then this' }], at: 5 }]
+    expect(parseSessionsFile({ sessions: [{ ...session, queue }] })).toEqual({
+      version: 1,
+      sessions: [{ ...session, queue }],
+    })
+    expect(
+      parseSessionsFile({ sessions: [{ ...session, queue: [{ id: 'q1', content: 'x', at: 5 }] }] }),
+    ).toEqual({ version: 1, sessions: [session] })
+  })
+
   it('validates projects', async () => {
     const project = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
     expect(parseProjectsFile({ projects: [project] })).toEqual({ version: 1, projects: [project] })

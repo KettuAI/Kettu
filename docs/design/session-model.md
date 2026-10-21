@@ -44,6 +44,14 @@ interface SessionView {
   parentId: string | null // the parent session, for sub-sessions
   origin: 'user' | 'subagent'
   subagent: SubagentInfo | null // set when origin is 'subagent'
+  queue: QueuedPrompt[] // prompts waiting for the running turn, oldest first
+  queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
+}
+
+interface QueuedPrompt {
+  id: string
+  content: UserContent[]
+  at: number
 }
 
 interface SessionUsage {
@@ -91,7 +99,8 @@ interface SlashCommand {
 ```ts
 type ThreadEntry =
   // `at`: when a live message was sent or began; a replay carries no times, so it has none.
-  | { kind: 'user'; id: string; content: UserContent[]; at?: number }
+  // `steered`: sent into a running turn rather than as a turn of its own.
+  | { kind: 'user'; id: string; content: UserContent[]; at?: number; steered?: boolean }
   | {
       kind: 'agent'
       id: string
@@ -253,11 +262,19 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 
 ## Prompt turns
 
-1. `sessions.prompt` is accepted only when the session is `ready`; otherwise it fails with `busy`. M0 runs one turn at a time per session.
+1. `sessions.prompt` is accepted only when the session is `ready`; otherwise it fails with `busy`. M0 runs one turn at a time per session; a prompt sent during a turn waits in the [queue](#queue-and-steering).
 2. The host adds the user entry, sets `status: 'running'` and `turnStartedAt`, and sends `session/prompt` with the content as ACP content blocks.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
 4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, sets `usage.tokens` when present. The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
 5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready`, `auth_required` or `disconnected` depending on the cause. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
+
+## Queue and steering
+
+ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is OverBench's own and steering uses the `_session/steering` extension that the Claude Code and Codex adapters share. Observed on 2026-10-21 in claude-agent-acp 0.94.0 and codex-acp 2.2.2 (package sources).
+
+- **Queue**: `SessionView.queue` holds the prompts waiting for the running turn, oldest first, and `queuePaused` whether it waits for the user. `sessions.queue` adds one, or sends it at once when the session is `ready` and nothing waits or only a paused queue does; the composer sends everything through it, so a prompt sent before the renderer heard that a turn started is queued instead of refused. When a turn ends with `end_turn`, the host sends the oldest prompt as the next turn. After any other stop reason or a failed turn, the queue pauses until `sessions.resumeQueue`. OverBench never sends a second `session/prompt` during a turn. The queue is saved in the session index and comes back paused after a close or a restart.
+- **Steering**: an agent advertises `_session/steering` in the top-level `_meta.steering.supported` of its `initialize` response. `sessions.steer` sends a queued prompt as `_session/steering` with `{ sessionId, prompt, _meta: { steering: { idleBehavior: 'promptRequired' } } }`. On `injected`, the host adds the user entry with `steered: true` and removes the prompt from the queue; on `promptRequired` the turn is ending, so the prompt stays first in the queue and goes with the next turn. Claude Code's adapter injects the message into the running turn, interrupting the current generation or moving a running tool to the background.
+- **Codex** is left out: codex-acp 2.2.2 advertises steering but ignores `idleBehavior` and starts a turn of its own when none runs, which OverBench would not track (its PR #593 would fix it). `AgentStatus.capabilities.steering` is false for Codex until a version honours it. OpenCode advertises none and rejects a second prompt, so it gets the queue only.
 
 ## Permissions
 

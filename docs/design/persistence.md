@@ -38,13 +38,15 @@ interface SessionsFile {
     origin: 'user' | 'subagent'
     description: string | null // a subagent's purpose, as its parent described it
     branch: string | null // checked out when its last turn ended, for its pull request
+    queue?: { id: string; content: UserContent[]; at: number }[] // prompts still waiting
   }[]
 }
 ```
 
 - `name` defaults to the folder name.
 - `lastViewedAt` decides the `unread` attention state after a restart.
-- A session enters the index once its `session/new` succeeds, when it is imported, or, for a subagent, as soon as its parent is in the index. Its entry is rewritten when its title, `updatedAt`, `lastViewedAt`, description or branch changes.
+- A session enters the index once its `session/new` succeeds, when it is imported, or, for a subagent, as soon as its parent is in the index. Its entry is rewritten when its title, `updatedAt`, `lastViewedAt`, description, branch or queue changes.
+- A saved `queue` comes back paused ([queue and steering](./session-model.md#queue-and-steering)); one that does not validate is dropped without failing the file.
 
 ## Settings
 

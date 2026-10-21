@@ -88,6 +88,8 @@ describe('spawnAgent', () => {
         parentId: null,
         origin: 'user',
         subagent: null,
+        queue: [],
+        queuePaused: false,
       },
       entries: [],
       seq: 0,

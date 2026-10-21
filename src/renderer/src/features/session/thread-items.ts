@@ -1,8 +1,8 @@
 import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
-// streamed token: u user, a agent, h thought, g groupable lookup, t other tool, e turn end, o
-// anything else.
+// streamed token: u user, s user message steered into a running turn, a agent, h thought, g
+// groupable lookup, t other tool, e turn end, o anything else.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -12,7 +12,7 @@ export function signatureOf(state: ThreadState | null | undefined): string {
 
 function charOf(entry: ThreadEntry | undefined): string {
   if (!entry) return 'o'
-  if (entry.kind === 'user') return 'u'
+  if (entry.kind === 'user') return entry.steered ? 's' : 'u'
   if (entry.kind === 'agent') return 'a'
   if (entry.kind === 'turn_end') return 'e'
   if (entry.kind === 'thought') return 'h'

@@ -29,6 +29,8 @@ const session: SessionView = {
   parentId: null,
   origin: 'user',
   subagent: null,
+  queue: [],
+  queuePaused: false,
 }
 
 const user: ThreadEntry = { kind: 'user', id: 'e:1', content: [{ type: 'text', text: 'Hi' }] }

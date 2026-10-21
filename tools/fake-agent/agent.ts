@@ -332,6 +332,8 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         },
         authMethods,
         agentInfo: { name: 'fake-agent', title: 'Fake agent', version: FAKE_AGENT_VERSION },
+        // Like claude-agent-acp: `_session/steering`, advertised beside the capabilities.
+        _meta: { steering: { supported: true } },
       }
       // Like claude-agent-acp, the first account push follows the initialize response.
       setTimeout(pushAuthStatus, 0)
@@ -381,6 +383,41 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return sessionSetup(session)
     })
+    .onRequest(
+      '_session/steering',
+      (params: unknown) =>
+        params as {
+          sessionId: string
+          prompt: ContentBlock[]
+          _meta?: { steering?: { idleBehavior?: string } }
+        },
+      async (ctx) => {
+        const session = sessions.get(ctx.params.sessionId)
+        if (!session) throw RequestError.resourceNotFound(ctx.params.sessionId)
+        if (!session.turn) {
+          if (ctx.params._meta?.steering?.idleBehavior === 'promptRequired') {
+            return { outcome: 'promptRequired', reason: 'noRunningTurn' }
+          }
+          throw RequestError.invalidRequest(undefined, 'No turn is running')
+        }
+        for (const block of ctx.params.prompt) {
+          record(session, session.id, { sessionUpdate: 'user_message_chunk', content: block })
+        }
+        const update: SessionUpdate = {
+          sessionUpdate: 'agent_message_chunk',
+          messageId: nextId('msg'),
+          content: { type: 'text', text: `Noted mid-turn: ${promptText(ctx.params.prompt)}` },
+        }
+        record(session, session.id, update)
+        // Like Claude Code, the answer to a steered message streams after the request returns.
+        setTimeout(() => {
+          void ctx.client
+            .notify(methods.client.session.update, { sessionId: session.id, update })
+            .catch(() => {})
+        }, 0)
+        return { outcome: 'injected' }
+      },
+    )
     .onRequest(methods.agent.session.fork, (ctx) => {
       requireSignedIn()
       const source = sessions.get(ctx.params.sessionId)

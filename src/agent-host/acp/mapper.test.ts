@@ -41,6 +41,8 @@ const baseSession: SessionView = {
   parentId: null,
   origin: 'user',
   subagent: null,
+  queue: [],
+  queuePaused: false,
 }
 
 interface RunOptions {

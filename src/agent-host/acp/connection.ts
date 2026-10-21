@@ -117,6 +117,8 @@ export interface AgentInit {
     deleteSession: boolean
     forkSession: boolean
     logout: boolean
+    /** `_session/steering`, an extension advertised in the response's own `_meta`. */
+    steering: boolean
   }
   authMethods: AuthMethodInfo[]
   /** The raw `agentCapabilities`, for diagnostics. */
@@ -366,6 +368,9 @@ export class AgentConnection {
         deleteSession: session.delete != null,
         forkSession: session.fork != null,
         logout: caps.auth?.logout != null,
+        steering:
+          (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
+            ?.supported === true,
       },
       authMethods: (init.authMethods ?? []).map((method) => {
         const terminal = 'type' in method && method.type === 'terminal'
@@ -479,6 +484,30 @@ export class AgentConnection {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
       tokens: mapTokenTotals(response.usage),
     }
+  }
+
+  /**
+   * `_session/steering`: sends a message into the running turn. With `promptRequired`, an agent
+   * with no turn running answers so instead of starting one, and the message stays OverBench's.
+   */
+  async steer(
+    acpSessionId: string,
+    content: readonly UserContent[],
+  ): Promise<'injected' | 'promptRequired'> {
+    const response = await this.call(() =>
+      this.connection.agent.request<{ outcome?: unknown }>('_session/steering', {
+        sessionId: acpSessionId,
+        prompt: promptBlocks(content),
+        _meta: { steering: { idleBehavior: 'promptRequired' } },
+      }),
+    )
+    if (response?.outcome === 'injected' || response?.outcome === 'promptRequired') {
+      return response.outcome
+    }
+    throw new AgentRequestError(
+      'agent_error',
+      `Unexpected steering outcome ${JSON.stringify(response?.outcome)}`,
+    )
   }
 
   async cancel(acpSessionId: string): Promise<void> {

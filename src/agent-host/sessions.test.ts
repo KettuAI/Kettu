@@ -38,6 +38,111 @@ function tools(port: TestPort, sessionId: string): ToolEntry[] {
   return port.entries(sessionId).filter((entry): entry is ToolEntry => entry.kind === 'tool')
 }
 
+describe('the queue', () => {
+  const text = (value: string) => [{ type: 'text' as const, text: value }]
+  const userTexts = (port: TestPort, sessionId: string) =>
+    port
+      .entries(sessionId)
+      .filter((entry) => entry.kind === 'user')
+      .map((entry) =>
+        entry.kind === 'user' && entry.content[0]?.type === 'text' ? entry.content[0].text : '',
+      )
+
+  it('sends at once when nothing runs', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const { itemId } = await port.request('sessions.queue', {
+      sessionId,
+      content: text('Fix the flaky login test'),
+    })
+    expect(itemId).toBeNull()
+    expect(port.summary(sessionId)?.status).toBe('running')
+  })
+
+  it('holds a prompt until the running turn ends, then sends it', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/permission')
+    await port.untilStatus(sessionId, 'awaiting_permission')
+    const { itemId } = await port.request('sessions.queue', {
+      sessionId,
+      content: text('And the docs'),
+    })
+    expect(itemId).not.toBeNull()
+    await port.until(() => port.thread(sessionId).session.queue[0]?.id === itemId)
+
+    await port.until(() => tools(port, sessionId).some((tool) => tool.permission !== null))
+    const tool = tools(port, sessionId).find((entry) => entry.permission)!
+    const { requestId, options } = tool.permission!
+    await port.request('permissions.respond', { sessionId, requestId, optionId: options[0]!.id })
+    await port.until(() => userTexts(port, sessionId).includes('And the docs'))
+    await port.until(() => port.thread(sessionId).session.queue.length === 0)
+  })
+
+  it('pauses after Stop and goes on when resumed', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    await port.request('sessions.queue', { sessionId, content: text('Then this') })
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    await port.until(() => port.thread(sessionId).session.queuePaused)
+    expect(port.thread(sessionId).session.queue).toHaveLength(1)
+
+    await port.request('sessions.resumeQueue', { sessionId })
+    await port.until(() => userTexts(port, sessionId).at(-1) === 'Then this')
+    expect(port.summary(sessionId)?.status).toBe('running')
+    expect(port.thread(sessionId).session).toMatchObject({ queue: [], queuePaused: false })
+  })
+
+  it('sends at once beside a paused queue', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    await port.request('sessions.queue', { sessionId, content: text('Later') })
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    const { itemId } = await port.request('sessions.queue', { sessionId, content: text('Now') })
+    expect(itemId).toBeNull()
+    await port.until(() => userTexts(port, sessionId).at(-1) === 'Now')
+    expect(port.thread(sessionId).session.queue).toHaveLength(1)
+  })
+
+  it('removes a queued prompt', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    const { itemId } = await port.request('sessions.queue', { sessionId, content: text('No') })
+    await port.request('sessions.unqueue', { sessionId, itemId: itemId! })
+    await port.until(() => port.thread(sessionId).session.queue.length === 0)
+    await expect(
+      port.request('sessions.unqueue', { sessionId, itemId: itemId! }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('steers a queued prompt into the running turn', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    const { itemId } = await port.request('sessions.queue', {
+      sessionId,
+      content: text('Use the new clock'),
+    })
+    await port.request('sessions.steer', { sessionId, itemId: itemId! })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'user' && !!entry.steered)
+    expect(port.entries(sessionId).find((e) => e.kind === 'user' && e.steered)).toMatchObject({
+      content: text('Use the new clock'),
+    })
+    expect(port.thread(sessionId).session.queue).toEqual([])
+    await port.untilEntry(
+      sessionId,
+      (entry) =>
+        entry.kind === 'agent' && entry.markdown.includes('Noted mid-turn: Use the new clock'),
+    )
+    expect(port.summary(sessionId)?.status).toBe('running')
+  })
+})
+
 describe('forking', () => {
   it('starts a new session from the history, shown with its entries', async () => {
     const { t, port } = await setup()

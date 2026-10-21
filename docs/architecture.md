@@ -105,7 +105,7 @@ What all three advertised in `initialize`:
 | Prompt `image` and `embeddedContext`                                |      ✓      |   ✓   |    ✓     |
 | MCP over HTTP / SSE                                                 |    ✓ / ✓    | ✓ / – |  ✓ / –   |
 
-Agent-specific extensions (`_meta`) such as steering, prompt queueing and auth status exist but are unstable; M0 depends on none of them.
+Agent-specific extensions (`_meta`) such as steering, prompt queueing and auth status exist but are unstable. Since M0's acceptance OverBench uses one of them, `_session/steering`, where an agent advertises it and honours `idleBehavior` ([queue and steering](./design/session-model.md#queue-and-steering)); the queue itself is OverBench's own.
 
 ### Client capabilities
 

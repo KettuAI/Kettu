@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from 'react'
-import { GitForkIcon, SquareIcon, Volume2Icon } from 'lucide-react'
+import { CornerDownRightIcon, GitForkIcon, SquareIcon, Volume2Icon } from 'lucide-react'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
@@ -64,12 +64,31 @@ function userText(content: UserContent[]): string {
     .join('\n')
 }
 
-/** Under a user message, at its end: when it was sent, and Copy. */
-export function UserActions({ content, at }: { content: UserContent[]; at?: number }) {
+/**
+ * Under a user message, at its end: "Steered" for one sent into a running turn, then on hover
+ * when it was sent, and Copy.
+ */
+export function UserActions({
+  content,
+  at,
+  steered,
+}: {
+  content: UserContent[]
+  at?: number
+  steered?: boolean
+}) {
   return (
-    <div className={cn('flex h-6 items-center gap-1 text-xs text-muted-foreground', REVEAL)}>
-      {at !== undefined && <Ago at={at} />}
-      <CopyButton text={() => userText(content)} label="Copy message" />
+    <div className="flex h-6 items-center gap-1 text-xs text-muted-foreground">
+      {steered && (
+        <span className="mr-1 inline-flex items-center gap-1">
+          <CornerDownRightIcon className="size-3" />
+          Steered
+        </span>
+      )}
+      <span className={cn('flex items-center gap-1', REVEAL)}>
+        {at !== undefined && <Ago at={at} />}
+        <CopyButton text={() => userText(content)} label="Copy message" />
+      </span>
     </div>
   )
 }

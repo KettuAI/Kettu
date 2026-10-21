@@ -16,7 +16,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 8   | Session rows show their time badly                             | Sidebar        | Open         |
 | 9   | New session is tied to the selected project                    | Sidebar        | Open         |
 | 10  | The welcome screen and the project home lack polish            | Home           | Open         |
-| 11  | No steering or queued messages while a turn runs               | Composer       | Open         |
+| 11  | No steering or queued messages while a turn runs               | Composer       | Fixed        |
 | 12  | Switching sessions visibly stalls                              | Performance    | Partly fixed |
 | 13  | The git popover only displays, and repeats the terminal toggle | Git            | Partly fixed |
 | 14  | The terminal panel's own buttons do nothing                    | Terminal       | Fixed        |
@@ -117,6 +117,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - **Steering**: a message that guides the agent within the turn it is running.
   - **Queued**: a message that waits and is sent once the running turn ends.
 - **Today**: left out of M0 on purpose. While a turn runs, the send button becomes **Stop** and `Esc` cancels the turn; you can keep writing a draft, and queueing "comes later" ([Interface: composer](../design/ui.md#composer)). Steering and prompt queueing are [out of M0](./m0.md#out-planned-for-later-milestones), and the agents' `_meta` extensions for them are unstable ([Architecture: agents](../architecture.md#agents)). A queue can live in OverBench alone, while steering needs the agent to accept input during a turn. To settle when planning: which agents support steering and how, how each kind is sent and shown in the composer and the thread, and whether this comes into M0.
+- **Fixed**: OverBench owns a queue for every agent, shown above the composer, and steers into a running turn where the agent supports `_session/steering` with `idleBehavior` (Claude Code today), as [M0 feedback findings](./m0-feedback-findings.md#11-steering-and-queued-messages) proposed: the send key queues, `Mod+Enter` steers, a queued message can be steered, edited or removed, and the queue pauses after Stop or an error ([Interface: composer](../design/ui.md#composer), [Session model: queue and steering](../design/session-model.md#queue-and-steering)). Still to decide: a setting that makes the send key steer, as Codex CLI and OpenCode do.
 
 ## 12. Switching sessions visibly stalls
 

@@ -306,6 +306,10 @@ export class AgentHost {
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.retry': ({ sessionId }) => sessions.retry(sessionId),
       'sessions.fork': ({ sessionId }) => sessions.fork(sessionId),
+      'sessions.queue': ({ sessionId, content }) => sessions.queue(sessionId, content),
+      'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
+      'sessions.steer': ({ sessionId, itemId }) => sessions.steer(sessionId, itemId),
+      'sessions.resumeQueue': ({ sessionId }) => sessions.resumeQueue(sessionId),
       'sessions.setConfigOption': ({ sessionId, optionId, value }) =>
         sessions.setConfigOption(sessionId, optionId, value),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),

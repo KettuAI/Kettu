@@ -60,6 +60,7 @@ export interface AgentStatus {
     closeSession: boolean
     deleteSession: boolean
     forkSession: boolean
+    steering: boolean // `_session/steering` into a running turn
   }
 }
 
@@ -169,6 +170,13 @@ export interface HostContract {
   'sessions.cancel': { params: { sessionId: string }; result: void }
   'sessions.retry': { params: { sessionId: string }; result: void }
   'sessions.fork': { params: { sessionId: string }; result: SessionSummary }
+  'sessions.queue': {
+    params: { sessionId: string; content: UserContent[] }
+    result: { itemId: string | null } // null when it was sent at once
+  }
+  'sessions.unqueue': { params: { sessionId: string; itemId: string }; result: void }
+  'sessions.steer': { params: { sessionId: string; itemId: string }; result: void }
+  'sessions.resumeQueue': { params: { sessionId: string }; result: void }
   'sessions.setConfigOption': {
     params: { sessionId: string; optionId: string; value: string | boolean }
     result: void
@@ -217,6 +225,10 @@ export const HOST_METHODS = [
   'sessions.cancel',
   'sessions.retry',
   'sessions.fork',
+  'sessions.queue',
+  'sessions.unqueue',
+  'sessions.steer',
+  'sessions.resumeQueue',
   'sessions.setConfigOption',
   'sessions.close',
   'sessions.delete',

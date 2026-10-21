@@ -32,6 +32,14 @@ export interface SessionView {
   parentId: string | null // the parent session, for sub-sessions
   origin: 'user' | 'subagent'
   subagent: SubagentInfo | null // set when origin is 'subagent'
+  queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
+  queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
+}
+
+export interface QueuedPrompt {
+  id: string
+  content: UserContent[]
+  at: number
 }
 
 export interface SessionUsage {
@@ -75,7 +83,8 @@ export interface SlashCommand {
 
 export type ThreadEntry =
   // `at`: when the message was sent or began, for live messages only; a replay carries no times.
-  | { kind: 'user'; id: string; content: UserContent[]; at?: number }
+  // `steered`: sent into a running turn rather than as a turn of its own.
+  | { kind: 'user'; id: string; content: UserContent[]; at?: number; steered?: boolean }
   | {
       kind: 'agent'
       id: string

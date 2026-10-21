@@ -407,6 +407,9 @@ export class SessionManager {
               stopReason: null,
             }
           : null,
+      queue: record.queue ?? [],
+      // A queue from before a close or a restart waits until the user resumes it.
+      queuePaused: (record.queue?.length ?? 0) > 0,
     }
   }
 
@@ -481,6 +484,8 @@ export class SessionManager {
     const session = live.thread.session
     live.record.title = session.title
     live.record.updatedAt = session.updatedAt
+    if (session.queue.length > 0) live.record.queue = session.queue
+    else delete live.record.queue
     this.records.set(live.id, live.record)
     this.saveIndex()
   }
@@ -1084,6 +1089,10 @@ export class SessionManager {
     if (live.thread.session.status !== 'ready' || !live.connection) {
       throw new HostError('busy', `The session is ${live.thread.session.status.replace('_', ' ')}`)
     }
+    this.sendPrompt(live, content)
+  }
+
+  private sendPrompt(live: Live, content: UserContent[]): void {
     const now = this.now()
     const patches: Patch[] = [
       { op: 'entry.add', entry: { kind: 'user', id: this.nextId(live), content, at: now } },
@@ -1094,6 +1103,112 @@ export class SessionManager {
       if (title) this.update(live, { title })
     }
     this.startTurn(live, content, now)
+  }
+
+  // The queue: OverBench's own, for every agent, since ACP has none. One turn runs at a time,
+  // and the oldest waiting prompt goes when a turn ends normally.
+
+  /**
+   * Queues a prompt behind the running turn, or sends it at once when the session is free and
+   * nothing waits, or only a paused queue does. The composer always sends through here, so a
+   * prompt sent before it heard that a turn started is queued, not refused.
+   */
+  async queue(sessionId: string, content: UserContent[]): Promise<{ itemId: string | null }> {
+    const live = this.liveFor(sessionId)
+    if (live.record.origin === 'subagent') {
+      throw new HostError('restricted', 'A subagent session takes its instructions from its parent')
+    }
+    const { status, queue, queuePaused } = live.thread.session
+    if (status === 'ready' && (queue.length === 0 || queuePaused)) {
+      await this.prompt(sessionId, content)
+      return { itemId: null }
+    }
+    if (status !== 'ready' && status !== 'running' && status !== 'awaiting_permission') {
+      throw new HostError('busy', `The session is ${status.replace('_', ' ')}`)
+    }
+    const item = { id: randomUUID(), content, at: this.now() }
+    this.update(live, { queue: [...queue, item] })
+    this.persist(live)
+    this.touch(live.id)
+    return { itemId: item.id }
+  }
+
+  unqueue(sessionId: string, itemId: string): void {
+    const live = this.liveFor(sessionId)
+    const { queue } = live.thread.session
+    if (!queue.some((item) => item.id === itemId)) throw notFound(`No queued prompt ${itemId}`)
+    const rest = queue.filter((item) => item.id !== itemId)
+    this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
+    this.persist(live)
+    this.touch(live.id)
+  }
+
+  /**
+   * Sends a queued prompt into the running turn through `_session/steering`. When the agent
+   * answers that no turn is running, the turn is ending: the prompt stays first in the queue.
+   */
+  async steer(sessionId: string, itemId: string): Promise<void> {
+    const live = this.liveFor(sessionId)
+    const item = live.thread.session.queue.find((i) => i.id === itemId)
+    if (!item) throw notFound(`No queued prompt ${itemId}`)
+    if (!this.deps.agents.status(live.record.agentId).capabilities.steering) {
+      throw new HostError(
+        'restricted',
+        `${this.deps.agents.name(live.record.agentId)} cannot take messages during a turn`,
+      )
+    }
+    if (!live.turn || live.turn.ended || !live.connection) {
+      throw new HostError('busy', 'No turn is running')
+    }
+    let outcome
+    try {
+      outcome = await live.connection.steer(live.record.acpSessionId, item.content)
+    } catch (error) {
+      throw agentError(error)
+    }
+    const { queue } = live.thread.session
+    if (outcome === 'promptRequired') {
+      this.update(live, { queue: [item, ...queue.filter((i) => i.id !== itemId)] })
+      this.persist(live)
+      if (live.thread.session.status === 'ready') this.drainQueue(live)
+      return
+    }
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'user',
+          id: this.nextId(live),
+          content: item.content,
+          at: this.now(),
+          steered: true,
+        },
+      },
+    ])
+    this.update(live, { queue: queue.filter((i) => i.id !== itemId) })
+    this.persist(live)
+    this.touch(live.id)
+  }
+
+  resumeQueue(sessionId: string): void {
+    const live = this.liveFor(sessionId)
+    this.update(live, { queuePaused: false })
+    this.drainQueue(live)
+    this.persist(live)
+    this.touch(live.id)
+  }
+
+  /** Sends the oldest waiting prompt, when the session is free and the queue is not paused. */
+  private drainQueue(live: Live): void {
+    const { status, queue, queuePaused } = live.thread.session
+    const [next, ...rest] = queue
+    if (!next || queuePaused || status !== 'ready' || !live.connection) return
+    this.update(live, { queue: rest })
+    this.sendPrompt(live, next.content)
+  }
+
+  private pauseQueue(live: Live): void {
+    if (live.thread.session.queue.length > 0) this.update(live, { queuePaused: true })
   }
 
   private startTurn(live: Live, content: UserContent[], now: number): void {
@@ -1277,6 +1392,8 @@ export class SessionManager {
     this.persist(live)
     this.touch(live.id)
     this.deps.events.attention(live.id, 'turn-ended', this.titleOf(live), turnEndText(stopReason))
+    if (stopReason === 'end_turn') this.drainQueue(live)
+    else this.pauseQueue(live)
   }
 
   private failTurn(live: Live, turn: Turn, error: unknown): void {
@@ -1317,6 +1434,7 @@ export class SessionManager {
         error: { message: mapped.message },
       })
     }
+    this.pauseQueue(live)
     this.persist(live)
     this.touch(live.id)
     this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)

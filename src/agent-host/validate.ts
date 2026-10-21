@@ -129,6 +129,10 @@ export function createValidators(platform: Platform): Validators {
     sessionId: sessionId(fields(params)),
   })
   const agent = (params: unknown): { agentId: AgentId } => ({ agentId: agentId(fields(params)) })
+  const queueItem = (params: unknown): { sessionId: string; itemId: string } => {
+    const o = fields(params)
+    return { sessionId: sessionId(o), itemId: string(o, 'itemId', ID_CHARS) }
+  }
 
   return {
     'agents.list': none,
@@ -191,6 +195,13 @@ export function createValidators(platform: Platform): Validators {
     'sessions.cancel': session,
     'sessions.retry': session,
     'sessions.fork': session,
+    'sessions.queue': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), content: promptContent(o.content) }
+    },
+    'sessions.unqueue': queueItem,
+    'sessions.steer': queueItem,
+    'sessions.resumeQueue': session,
     'sessions.setConfigOption': (params) => {
       const o = fields(params)
       const value = o.value

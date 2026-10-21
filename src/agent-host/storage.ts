@@ -2,7 +2,7 @@
 
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import { AGENT_IDS, type AgentId, type QueuedPrompt } from '@shared/thread'
 
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void
 
@@ -216,6 +216,7 @@ export interface SessionRecord {
   origin: 'user' | 'subagent'
   description: string | null
   branch: string | null
+  queue?: QueuedPrompt[] // prompts that were waiting when it was saved
 }
 
 export interface SessionsFile {
@@ -264,6 +265,24 @@ export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile |
   return { version: 1, projects }
 }
 
+// A queue that does not parse is dropped rather than failing the whole index.
+function queueOf(value: unknown): { queue?: QueuedPrompt[] } {
+  if (!Array.isArray(value)) return {}
+  const queue = value.filter(
+    (item): item is QueuedPrompt =>
+      isRecord(item) &&
+      isString(item.id) &&
+      isTime(item.at) &&
+      Array.isArray(item.content) &&
+      item.content.every(
+        (c) =>
+          isRecord(c) &&
+          ((c.type === 'text' && isString(c.text)) || (c.type === 'ref' && isRecord(c.ref))),
+      ),
+  )
+  return queue.length > 0 ? { queue } : {}
+}
+
 export function parseSessionsFile(data: Record<string, unknown>): SessionsFile | string {
   if (!Array.isArray(data.sessions)) return 'sessions is not a list'
   const sessions: SessionRecord[] = []
@@ -300,6 +319,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       origin: item.origin,
       description: item.description,
       branch: item.branch,
+      ...queueOf(item.queue),
     })
   }
   return { version: 1, sessions }

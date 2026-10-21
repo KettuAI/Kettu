@@ -51,7 +51,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
           </BubbleContent>
         </Bubble>
       </Message>
-      <UserActions content={entry.content} at={entry.at} />
+      <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
     </div>
   )
 })

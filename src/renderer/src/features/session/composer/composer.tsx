@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
-import { ArrowUpIcon, SquareIcon } from 'lucide-react'
+import { ArrowUpIcon, ListPlusIcon, SquareIcon } from 'lucide-react'
 import type { SessionView, SlashCommand } from '@shared/thread'
 import { onAppEvent } from '@renderer/app/events'
 import {
@@ -12,7 +12,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { isMod } from '@renderer/lib/platform'
+import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { ControlRow } from './control-row'
@@ -32,12 +32,16 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const group = useRef<HTMLDivElement>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const limits = useAgentsStore((s) => s.byId[session.agentId]?.limits)
+  const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
 
   const status = session.status
   const starting = status === 'starting'
   const running = status === 'running' || status === 'awaiting_permission'
   const awaiting = status === 'awaiting_permission'
   const canSend = status === 'ready' && text.trim().length > 0
+  // During a turn the send key queues the message and the steer key sends it into the turn.
+  const canQueue = running && text.trim().length > 0
+  const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
   // Claude Code turns on ultracode for a message that says the word; no config option sets it.
   const ultracode = session.agentId === 'claude-code' && /\bultracode\b/i.test(text)
@@ -87,18 +91,35 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     if (!next.startsWith('/')) setSlashDismissed(false)
   }
 
-  const send = () => {
-    if (!canSend) return
+  const take = (): string => {
     const prompt = text
     setText('')
     clearDraft(sessionId)
     setError(null)
-    host('sessions.prompt', { sessionId, content: [{ type: 'text', text: prompt }] }).catch(
-      (e: unknown) => {
-        setError(errorMessage(e))
-        setText((current) => (current ? current : prompt))
-      },
-    )
+    return prompt
+  }
+  const restore = (prompt: string) => (e: unknown) => {
+    setError(errorMessage(e))
+    setText((current) => (current ? current : prompt))
+  }
+
+  // Both go through the host's queue, which sends at once when the session is free.
+  const send = () => {
+    if (canSend || canQueue) queue(false)
+  }
+
+  const queue = (steer: boolean) => {
+    const prompt = take()
+    host('sessions.queue', { sessionId, content: [{ type: 'text', text: prompt }] })
+      .then(({ itemId }) => {
+        // Once queued, a failed steer leaves the message in the queue, not lost.
+        if (steer && itemId) {
+          host('sessions.steer', { sessionId, itemId }).catch((e: unknown) =>
+            setError(errorMessage(e)),
+          )
+        }
+      })
+      .catch(restore(prompt))
   }
 
   const cancel = () => {
@@ -129,6 +150,15 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     }
     if (event.key !== 'Enter') return
     const sends = sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event)
+    const steers =
+      running &&
+      steering &&
+      (sendKey === 'enter' ? isMod(event) && !event.shiftKey : isMod(event) && event.shiftKey)
+    if (steers) {
+      event.preventDefault()
+      queue(true)
+      return
+    }
     if (!sends) return
     event.preventDefault()
     send()
@@ -138,9 +168,13 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     ? `Starting ${agentName}…`
     : awaiting
       ? 'Waiting for your approval'
-      : reached?.resetsAt
-        ? `${reached.label} limit reached · resets ${resetTime(reached.resetsAt)}`
-        : `Ask ${agentName} to…`
+      : running
+        ? steering
+          ? `Queue a message, or steer with ${formatShortcut(steerKey)}`
+          : 'Queue a message for when the turn ends'
+        : reached?.resetsAt
+          ? `${reached.label} limit reached · resets ${resetTime(reached.resetsAt)}`
+          : `Ask ${agentName} to…`
 
   const compact = commands.some((c) => c.name === 'compact')
     ? () => {
@@ -192,7 +226,36 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
               </div>
             )}
           </div>
-          <InputGroupAddon align="inline-end" className="self-end pr-3 pb-3 pl-1">
+          <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
+            {canQueue && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <InputGroupButton
+                      key="queue"
+                      size="round"
+                      variant="secondary"
+                      aria-label="Queue"
+                      onClick={() => queue(false)}
+                      className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
+                    />
+                  }
+                >
+                  <ListPlusIcon />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Queue{' '}
+                  <span className="opacity-60">
+                    {formatShortcut(sendKey === 'enter' ? 'Enter' : 'Mod+Enter')}
+                  </span>
+                  {steering && (
+                    <>
+                      {' · '}Steer <span className="opacity-60">{formatShortcut(steerKey)}</span>
+                    </>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {running ? (
               <Tooltip>
                 <TooltipTrigger

@@ -190,6 +190,14 @@ describe('reply footers', () => {
     expect(keys([user('u1'), agent('a1')], true)).toEqual(['u1', 'a1'])
   })
 
+  it('keep a steered message inside its turn', () => {
+    const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
+    const s = state([user('u1'), agent('a1'), steered, agent('a2'), end('t1')])
+    const result = buildItems(s.order, signatureOf(s))
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 's1', 'a2', 'reply:u1'])
+    expect(result[2]).toMatchObject({ turnStart: false, scrollAnchor: false })
+  })
+
   it('leave a turn without a message to its end marker', () => {
     expect(keys([user('u1'), tool('x1', 'execute'), end('t1')])).toEqual(['u1', 'x1', 't1'])
   })

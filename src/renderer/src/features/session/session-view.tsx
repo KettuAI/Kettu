@@ -14,6 +14,7 @@ import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { PlanBar } from './plan-bar'
+import { QueueTray } from './queue-tray'
 import { SessionHeader } from './session-header'
 import { FailedState, StartingAgent, ThreadSkeleton } from './session-states'
 import { SignIn } from './sign-in'
@@ -147,6 +148,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         <div className="flex flex-col">
           {session && summary.origin !== 'subagent' && (
             <PlanBar sessionId={sessionId} running={running} />
+          )}
+          {/* Mounted only while something waits, so its error goes with the last item. */}
+          {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
+            <QueueTray session={session} />
           )}
           {summary.origin === 'subagent' ? (
             <SubagentBar summary={summary} session={session} />
