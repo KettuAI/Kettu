@@ -40,9 +40,9 @@ Typed in `src/shared/host-control.ts`.
 
 | Direction   | Message                | Payload                                                                    |
 | ----------- | ---------------------- | -------------------------------------------------------------------------- |
-| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`                     |
+| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `settings`         |
 | main → host | `host:connect`         | `windowId`, and the port in the transfer list                              |
-| main → host | `host:set-binary-path` | `agentId`, `path` picked in a native dialog, or `null` to clear it         |
+| main → host | `host:settings`        | `settings`, whenever the agent part changes                                |
 | main → host | `host:shutdown`        | none                                                                       |
 | host → main | `host:ready`           | none                                                                       |
 | host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent                               |
@@ -51,7 +51,9 @@ Typed in `src/shared/host-control.ts`.
 
 `host:attention` lets main show an OS notification when no OverBench window is focused, including when every window is closed on macOS. Clicking the notification opens or focuses a window on that session.
 
-The renderer never sends the host a path to an executable. Changing an agent's binary goes through a main-process IPC call that shows a native file dialog and then sends `host:set-binary-path`.
+`settings` is the agent part of the [settings](./persistence.md#settings): binary overrides and the proxy. Main owns the settings file; the host only receives this part.
+
+The renderer never sends the host a path to an executable. Changing an agent's binary goes through a main-process IPC call that shows a native file dialog, saves the choice in settings and sends `host:settings`.
 
 ## Agent catalog
 
@@ -90,14 +92,15 @@ Apps started from the Dock, Finder, a desktop launcher or the Start menu do not 
   $SHELL -i -l -c '<electron> -p "<mark> + JSON.stringify(process.env) + <mark>"'
   ```
   with `ELECTRON_RUN_AS_NODE=1`, so Electron's binary acts as Node.js. The JSON between the random markers becomes the agent environment. It falls back to `/bin/zsh` on macOS and `/bin/sh` on Linux when `SHELL` is unset; for `csh` and `tcsh`, which reject `-i -l -c` together, it drops `-i`.
-- **Windows**: GUI apps inherit the user and system environment, so the host uses `process.env` as is. A `PATH` change made after OverBench started needs an app restart, and the Agents page says so.
-- The resolution times out after 10 s. On timeout or failure the host uses the inherited environment and the Agents page shows a warning.
-- `ELECTRON_RUN_AS_NODE` and other `ELECTRON_*` variables are removed before the environment reaches an agent. Nothing is added.
-- The result is cached for the life of the host. **Reload environment** on the Agents page resolves it again, for example right after installing Node.js.
+- **Windows**: GUI apps inherit the user and system environment, so the host uses `process.env` as is. A `PATH` change made after OverBench started needs an app restart, and Settings › Agents says so.
+- The resolution times out after 10 s. On timeout or failure the host uses the inherited environment and Settings › Agents shows a warning.
+- `ELECTRON_RUN_AS_NODE` and other `ELECTRON_*` variables are removed before the environment reaches an agent.
+- A custom proxy from Settings › Advanced replaces `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms; `npx` and the agents read them. With the default, **Use the environment**, nothing is added.
+- The result is cached for the life of the host. **Reload environment** in Settings › Agents resolves it again, for example right after installing Node.js.
 
 ## Detecting agents
 
-Detection never starts an agent, so it is cheap enough to run at host startup and whenever the Agents page asks.
+Detection never starts an agent, so it is cheap enough to run at host startup and whenever Settings › Agents asks.
 
 - **Finding a command**: the host walks the resolved `PATH` itself. On Windows it also tries each `PATHEXT` extension, so `npx` resolves to `npx.cmd` and `opencode` to `opencode.exe`.
 - **`npx` agents**: `npx` must be found, and `node --version` must satisfy `requiresNode`. Otherwise the status is `node-missing` or `node-outdated`, with the install hint.

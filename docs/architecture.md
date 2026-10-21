@@ -70,7 +70,7 @@ All three agents speak ACP **v1**, the stable protocol. ACP v2 has been in draft
 - One mapper turns ACP messages into OverBench's own [session model](./design/session-model.md). v2 becomes a second mapper, selected by the negotiated `protocolVersion`.
 - The session model already uses v2's ideas, stable entry IDs and patches, so the renderer will not change when v2 arrives.
 
-M0 uses only stable v1 methods. `session/fork` and other unstable features stay off until they stabilize.
+M0 uses only stable v1 methods, with one exception: the subagents RFD, which the Claude Code and Codex adapters already implement and which [sub-sessions](./design/session-model.md#subagents) depend on. Its types stay inside the mapper like every other ACP type. `session/fork` and other unstable features stay off until they stabilize.
 
 ### Agents
 
@@ -109,6 +109,7 @@ What OverBench advertises in `initialize` for M0, and why:
 | `session.notices`, `session.compaction` | on  | The thread renders notices and compaction markers.                                                                                                |
 | `session.configOptions.boolean`         | on  | Boolean options render as switches.                                                                                                               |
 | `elicitation`                           | off | Structured questions come later; agents fall back to plain messages.                                                                              |
+| `subagents`                             | on  | Subagents the agent runs become [sub-sessions](./design/session-model.md#subagents) the user can watch and answer.                                |
 
 ### Agents and sessions at a glance
 
@@ -222,10 +223,12 @@ In line with the project philosophy, these are the implementations this design d
 | Source                                                                                                                           | What OverBench takes                                                                                                                                                               |
 | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [ACP specification](https://agentclientprotocol.com) and [TypeScript SDK](https://github.com/agentclientprotocol/typescript-sdk) | The wire protocol, method semantics and the client connection                                                                                                                      |
-| [ACP Registry](https://agentclientprotocol.com/get-started/registry)                                                             | Which adapter and version to launch for each agent, and the agent icons                                                                                                            |
+| [ACP Registry](https://agentclientprotocol.com/get-started/registry)                                                             | Which adapter and version to launch for each agent, and the Claude Code mark                                                                                                       |
 | [Zed](https://zed.dev/docs/ai/external-agents)                                                                                   | External agents as separate processes, thread entries keyed by tool call, an inspectable ACP traffic log                                                                           |
-| VS Code                                                                                                                          | Hosting heavy work in a utility process; resolving the login shell environment for GUI launches                                                                                    |
+| VS Code                                                                                                                          | Hosting heavy work in a utility process; resolving the login shell environment for GUI launches; settings as one searchable page with a table of contents                          |
 | [Harnss](https://github.com/OpenSource03/harnss), [AionUi](https://github.com/iOfficeAI/AionUi)                                  | Per-project workspaces, tool calls as cards with diffs, pending-approval badges and OS notifications                                                                               |
+| [OpenCode](https://github.com/sst/opencode)                                                                                      | Subagents as child sessions of the session that started them; the OpenCode mark                                                                                                    |
+| [LobeHub Icons](https://github.com/lobehub/lobe-icons)                                                                           | The Codex mark in its colors                                                                                                                                                       |
 | shadcn/ui chat primitives                                                                                                        | `MessageScroller` for stick-to-bottom, anchoring and jump-to-latest while streaming                                                                                                |
 | [Streamdown](https://streamdown.ai) and [Diffs](https://diffs.com)                                                               | Markdown that renders correctly mid-stream, and diffs highlighted off the main thread                                                                                              |
 | Claude Desktop, through the [open-claude-ui](https://github.com/Caho1/open-claude-ui) analysis                                   | The visual and interaction benchmark for the first version: surfaces, density, lines, motion, composer and approvals ([design system](./design/design-system.md#design-reference)) |

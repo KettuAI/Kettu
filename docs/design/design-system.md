@@ -59,6 +59,7 @@ Lines are translucent, so one token reads the same on every surface step. The al
 - `--muted-foreground` in the light theme is `oklch(0.53 0 0)` instead of shadcn's 0.556, which reaches only 4.49:1 on surface 0, just under WCAG AA.
 - `--sidebar-accent`, the fill of hovered and selected sidebar rows, is `oklch(0.945 0 0)` light and `oklch(0.25 0 0)` dark; shadcn's 0.97 barely shows on surface 0.
 - `--muted` (the user bubble, inline code, a disabled send button) is `oklch(0.96 0 0)` light, so the bubble stays visible on surface 1. `--accent` (hovered rows on surface 1, the highlighted menu item, an open selector) is `oklch(0.962 0 0)` light and `oklch(0.27 0 0)` dark.
+- `--input`, the track of an unchecked `Switch`, is `oklch(0.9 0 0)` light instead of shadcn's 0.922, so an unchecked switch still reads on a card, and `oklch(1 0 0 / 16%)` dark.
 
 ### Agent marks
 
@@ -97,6 +98,7 @@ Each agent is shown with its official mark in its own colors. They are the only 
 
 - Dark-theme shadows are several times stronger (opacity 0.4 to 0.5), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge (`oklch(1 0 0 / 5%)`), which reads as an edge catching the light. In the light theme, outline buttons get a 1 px contact shadow instead.
 - **Composer** (the `composer` variant of `InputGroup`): a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft shadow (20 px light, 24 px dark). Only color and shadow change, so focusing never moves the text.
+- **Hovered cards** (the agent cards on Project home): the card rises 1 px, its ring turns `--border-strong`, it takes `sm`, and a soft light rises from its bottom edge, as the reference's starter cards do. The light is a radial gradient of `--card-glow` (`oklch(0 0 0 / 3%)` light, `oklch(1 0 0 / 5%)` dark) on a pseudo-element that fades in, because a gradient cannot be transitioned.
 - **Attention**: a card waiting for the user replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20% (75% and 16% in the dark theme).
 - **Focus rings** are shadcn's `focus-visible` ring everywhere. The reference uses a thinner ring with a glow in its brand color; a glow in a neutral color looks smudged, so OverBench keeps shadcn's ring.
 
@@ -179,28 +181,49 @@ CSS cannot animate an element that is being removed, which is why exits go to Mo
 
 ### Patterns
 
-Each pattern names what provides it. Only the attention pulse is OverBench's own keyframe, because nothing in the stack offers a one-time ring pulse.
+Each pattern names what provides it. OverBench writes its own keyframes only where nothing in the stack offers the effect: the one-time attention pulse and the ambient field's drift.
 
-| Pattern           | Provided by                                                                                                    | Tuning                                                                                |
-| ----------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Press             | shadcn `Button`'s built-in active state                                                                        | None                                                                                  |
-| Disclosure        | shadcn `Collapsible` (Base UI), animating `--collapsible-panel-height`                                         | `--duration-base`, `--ease-out-expo`                                                  |
-| New entry         | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-slow`, `--ease-out-quint`; once per entry                                 |
-| Status text       | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-base`                                                                     |
-| Thinking, waiting | shadcn's `shimmer` utility on the status text                                                                  | None                                                                                  |
-| Loading           | shadcn `Skeleton` and `Spinner`                                                                                | None                                                                                  |
-| Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself | `--scroll-fade-size: 28px`                                                            |
-| Running           | Tailwind's `animate-pulse` on the sidebar's running dot                                                        | None                                                                                  |
-| Copy feedback     | The copy button in Streamdown's code blocks                                                                    | None                                                                                  |
-| Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                       | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal |
+| Pattern           | Provided by                                                                                                    | Tuning                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Press             | shadcn `Button`'s built-in active state                                                                        | None                                                                                               |
+| Disclosure        | shadcn `Collapsible` (Base UI), animating `--collapsible-panel-height`                                         | `--duration-base`, `--ease-out-expo`                                                               |
+| New entry         | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-slow`, `--ease-out-quint`; once per entry                                              |
+| Status text       | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-base`                                                                                  |
+| Thinking, waiting | shadcn's `shimmer` utility on the status text                                                                  | None                                                                                               |
+| Loading           | shadcn `Skeleton` and `Spinner`                                                                                | None                                                                                               |
+| Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself | `--scroll-fade-size: 28px`                                                                         |
+| Running           | Tailwind's `animate-pulse` on the sidebar's running dot                                                        | None                                                                                               |
+| Copy feedback     | The copy button in Streamdown's code blocks                                                                    | None                                                                                               |
+| Staggered entry   | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1 fill-mode-both`, with a growing `animation-delay`   | `--duration-slow`, `--ease-out-quint`; the first item after 60 ms, each next one 30 ms later, once |
+| Card hover        | CSS transitions on `transform`, the ring, the shadow and the opacity of the `--card-glow` layer                | `--duration-fast`, `--ease-out-expo`                                                               |
+| Ambient field     | Own keyframes, described [below](#ambient-field)                                                               | 41 s and 29 s, `ease-in-out`, alternating                                                          |
+| Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                       | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal              |
 
 - The disclosure is the only layout animation allowed: one at a time, never inside an entry that is streaming.
 - Entries restored from history or a snapshot appear without animation.
+
+### Ambient field
+
+The Welcome screen and Project home have a quiet background: a faint dot grid that a soft light drifts across. It is the only motion on screen while nothing happens, so it stays slow and dim; sessions and Settings never show it.
+
+| Layer    | What it draws                                                            | Token               | Light                | Dark                 |
+| -------- | ------------------------------------------------------------------------ | ------------------- | -------------------- | -------------------- |
+| Grid     | 1.4 px dots on a 20 px grid                                              | `--ambient-dot`     | `oklch(0 0 0 / 9%)`  | `oklch(1 0 0 / 8%)`  |
+| Light    | A 240 px circle that brightens what it passes over                       | `--ambient-glow`    | `oklch(1 0 0 / 0%)`  | `oklch(1 0 0 / 4%)`  |
+| Lit grid | Slightly larger dots, visible only inside the light                      | `--ambient-dot-lit` | `oklch(0 0 0 / 30%)` | `oklch(1 0 0 / 30%)` |
+| Clearing | A radial wash of the surface color behind text, so no dot sits in a word | `--background`      |                      |                      |
+
+- The field is centred on the content and fades out towards the edges with a radial mask. On Project home it covers the title and the agent cards and fades out before the recent sessions.
+- The light drifts on two axes with different periods, 41 s across (±15% of the field) and 29 s down (−9% to +11%), both `ease-in-out` and alternating, so its path does not visibly repeat. The lit grid moves the opposite way inside the light, so the dots stay in place and only the light travels.
+- Every layer is one element moved with `transform`; the grids are CSS gradients, not images or a canvas. Check in the Performance panel that the field adds no layout or paint per frame.
+- The drift pauses (`animation-play-state: paused`) while the window is hidden or not focused, from the renderer's `focus`, `blur` and `visibilitychange` events.
+- In the light theme the light itself is invisible on a near-white surface; there the lit dots alone carry it.
 
 ### Reduce motion
 
 - Motion components follow the root `<MotionConfig reducedMotion="user">`: movement is removed and opacity remains.
 - CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: movement and loops stop (pulses hold still, shimmer stops), opacity and color transitions remain, and disclosures open at once.
+- The ambient field's light rests at the centre of the content, a staggered entry becomes a plain fade, and a hovered card keeps its glow and shadow but does not rise.
 
 ## Layout behavior
 

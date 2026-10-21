@@ -20,17 +20,17 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 │ ✎ New session │                                                    │
 │ Projects    + │        ┌──────────────────────────────────┐        │
 │ ⌄ overbench   │        │ The login test fails on CI …     │        │  user
-│  ✳ Fix flaky 1│        └──────────────────────────────────┘        │
-│  ◎ Add dark… ●│  I'll start by reading the test and the …          │  agent
-│ › website     │  › Explored 4 files                                │  tools
-│               │  ┌ ✎ Edit src/auth/session.ts        +4 −3  ✓ ┐    │
-│               │  │  … diff …                                  │    │
+│  ✳ Fix flaky 2│        └──────────────────────────────────┘        │
+│   ◇ Explore   │  I'll start by reading the test and the …          │  agent
+│   ◇ Review   1│  › Explored 4 files                                │  tools
+│  ◎ Add dark ↳1│  ┌ ✎ Edit src/auth/session.ts        +4 −3  ✓ ┐    │
+│ › website     │  │  … diff …                                  │    │
 │               │  └────────────────────────────────────────────┘    │
 │               │  ☰ Plan 2/4 ━━── Run the auth tests         ⌃      │  pinned plan
 │               │  ┌────────────────────────────────────────────┐    │
 │               │  │ Ask Claude Code to…                      ↑ │    │  composer
 │               │  └────────────────────────────────────────────┘    │
-│ ⚙ Agents   ⌘, │    Default ⌄              Opus 5.5 High ⌄  ◔       │  control row
+│ ⚙ Settings ⌘, │    Default ⌄              Opus 5.5 High ⌄  ◔       │  control row
 └───────────────┴────────────────────────────────────────────────────┘
 ```
 
@@ -45,22 +45,39 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 
 Shown when there are no projects. A centred `Empty`: the OverBench wordmark, one line ("Open a project to start working with an agent."), the **Open project** button (`Mod+O`), and below it the three agents with their status, so a missing Node.js or agent is visible before the first session.
 
+Behind it lies the [ambient field](./design-system.md#ambient-field): a faint dot grid that a soft light drifts across, centred on the content and fading out towards the edges. The content enters once, the wordmark first and each agent row 30 ms after the one before.
+
 ### Project home
 
-Shown when a project is selected but no session is. The three agents as large selectable cards (icon, name, version, status) to start a session; a hovered card rises 1 px and takes the `sm` shadow. The project's recent sessions are listed below. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
+Shown when a project is selected but no session is. The three agents as large selectable cards (mark, name, version, status) to start a session. A hovered card rises 1 px, takes the `sm` shadow and lights up softly from its bottom edge, as the reference's starter cards do. The project's recent sessions are listed below. The ambient field sits behind the title and the cards and fades out before the list, so the list stays plain. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
 
 ### Session
 
-The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)), followed by the agent's mark and name in `--muted-foreground`.
+The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **New sub-session**, **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)), followed by the agent's mark and name in `--muted-foreground`. A sub-session's top bar starts with its parent's title as a link.
 
-### Agents
+### Subagent
 
-Opened from the sidebar footer or with `Mod+,`. One card per agent:
+Opening a subagent ([sub-sessions](./session-model.md#sub-sessions)) shows its own thread: the parent's instructions first, as a quoted `session_message` entry labelled with the parent's title, then the subagent's work, including its permission requests. The agent drives it, so in place of the composer a bar reads "Claude Code runs this subagent for Fix flaky login test", with **Stop** when the agent allows it and **Back to** the parent.
 
-- Status with a clear next step: **Install** guidance and a link when missing, **Sign in** when needed, the error with **Retry** when failed.
-- Version, from `agentInfo` once started.
-- For OpenCode, **Choose binary…**, which opens the native file dialog.
-- At the bottom: **Reload environment** and **Export diagnostics**.
+### Settings
+
+Opened from **Settings** in the sidebar footer or with `Mod+,`. The sidebar stays, so sessions waiting for you remain visible.
+
+Settings is one scrolling page, the way VS Code's settings editor works. A table of contents on the left jumps to a section and highlights the one in view; a search field above it (`Mod+F`) filters rows in every section by name and description. Each section is a card of rows: the name and a one-line description on the left, the control on the right (shadcn `Field` with `Switch`, `Select` or `ToggleGroup`). Changes apply at once, with no Save button.
+
+| Section            | Rows                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| General            | **Default agent** for New session (Ask each time, or one agent) · **Send with** Enter or `Mod+Enter`, the other key adding a newline · **Restore the last session on launch** · **Ask before quitting while agents are working**                                                                                                                      |
+| Appearance         | **Theme**: System, Light or Dark, as three preview tiles · **Text size**: Small, Default or Large · **Reduce motion**: System or Always                                                                                                                                                                                                               |
+| Agents             | One card per agent: status with its next step (**Install** guidance when missing, the sign-in methods when needed, the error with **Retry** when failed), the version from `agentInfo`, the launch command, the Node.js version, and for OpenCode **Choose binary…**. Below them: where and when the environment was read, and **Reload environment** |
+| Notifications      | Shown only when no OverBench window is focused: **Needs approval**, **Turn finished**, **Errors**, **Play a sound** (the system notification sound), and **Show a count on the Dock icon** (the taskbar button on Windows; not shown on Linux, where desktops differ)                                                                                 |
+| Keyboard shortcuts | The [shortcuts](#keyboard), read-only, with the platform's modifier                                                                                                                                                                                                                                                                                   |
+| Advanced           | **Proxy** for agents and `npx`: Use the environment, or Custom with a URL and a no-proxy list · **Diagnostics**: Export diagnostics · **Data folder**: Show in Finder (Explorer, the file manager) · **Remove all sessions from OverBench**, which clears the index after a confirmation and leaves the agents' transcripts alone                     |
+| About              | The version, with the Electron, Chromium and Node.js versions and **Copy**; links to the source code and the third-party notices                                                                                                                                                                                                                      |
+
+- The sign-in notice in the sidebar footer opens Settings at Agents.
+- Settings shows only what M0 supports; there are no disabled placeholders for later features.
+- The values and where they are kept: [persistence](./persistence.md#settings).
 
 ## Sidebar
 
@@ -74,9 +91,13 @@ Opened from the sidebar footer or with `Mod+,`. One card per agent:
   4. **Starting** (`status: 'starting'`): a `Spinner` while the agent starts or the session loads.
   5. **Unread** (`attention: 'unread'`): a small neutral dot after a turn ended while you were elsewhere.
 - Running and starting rows show no time, since the session is active now.
+- **Sub-sessions** ([session model](./session-model.md#sub-sessions)) sit under their parent, indented 16 px along a hairline `--border` guide line. A subagent shows the `Bot` icon with its title and, muted, its description ("Explore · Find where the tests read the clock"); a sub-session you started shows its agent's mark and title.
+- A parent has a chevron in front of its mark. It expands by itself while a sub-session is running or waiting for you, and otherwise stays as you left it.
+- A parent's indicator includes its sub-sessions: the attention count adds up their permission requests, and it shows Running while any of them runs, so a collapsed parent still says where to look.
+- **New sub-session** is in the session's title menu and its row's context menu.
 - Indicators always pair a color with a shape or label, never color alone.
 - The sidebar list has one Tab stop; the arrow keys move between rows.
-- The footer holds **Agents** (`Mod+,`) and, above it, a tinted `--attention` notice when an agent needs sign-in ("Codex needs you to sign in"). The notice opens the Agents page and is hidden while that page is open.
+- The footer holds **Settings** (`Mod+,`) and, above it, a tinted `--attention` notice when an agent needs sign-in ("Codex needs you to sign in"). The notice opens Settings at Agents and is hidden while that section is open.
 - Later, not in M0: pinned sessions with drag reordering, grouping by status or date, and branch badges once git integration exists.
 
 ## Thread
@@ -87,16 +108,18 @@ M0.3 compares its behavior with the reference's measurements: following within 4
 
 Turns are 16 px apart, and the blocks within a turn 10 px.
 
-| Entry      | Presentation                                                                                                                                              |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User       | `Message align="end"` with a `Bubble` in the `muted` variant, at most 80% of the column. Taller than 300 px, it collapses behind a fade and **Show more** |
-| Agent      | Plain prose without bubble, border or avatar, so long answers and code read like a document. Rendered with Streamdown                                     |
-| Thought    | Collapsed to one line: "Thinking" with shadcn's `shimmer` while streaming, "Thought for 12 s" afterwards. Expands as a `Collapsible` to muted text        |
-| Tool call  | A compact card ([below](#tool-calls))                                                                                                                     |
-| Plan       | A checklist; the latest plan is also pinned above the composer as "Plan 3/5" and expands in place                                                         |
-| Notice     | An `Alert` in the matching variant                                                                                                                        |
-| Compaction | A `Marker` ("Context compacted"), with the summary behind a disclosure                                                                                    |
-| Turn end   | A quiet `Marker`: "Worked for 2 m 13 s", or "Cancelled", "Stopped at the token limit", "Stopped at the request limit", "Declined"                         |
+| Entry           | Presentation                                                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User            | `Message align="end"` with a `Bubble` in the `muted` variant, at most 80% of the column. Taller than 300 px, it collapses behind a fade and **Show more** |
+| Agent           | Plain prose without bubble, border or avatar, so long answers and code read like a document. Rendered with Streamdown                                     |
+| Thought         | Collapsed to one line: "Thinking" with shadcn's `shimmer` while streaming, "Thought for 12 s" afterwards. Expands as a `Collapsible` to muted text        |
+| Tool call       | A compact card ([below](#tool-calls))                                                                                                                     |
+| Subagent        | A compact card with the `Bot` icon, the subagent's title and description, its status and, while it runs, its latest tool call. It opens the subagent      |
+| Session message | In a subagent's thread, the parent's instructions as a quoted block labelled with the parent's title                                                      |
+| Plan            | A checklist; the latest plan is also pinned above the composer as "Plan 3/5" and expands in place                                                         |
+| Notice          | An `Alert` in the matching variant                                                                                                                        |
+| Compaction      | A `Marker` ("Context compacted"), with the summary behind a disclosure                                                                                    |
+| Turn end        | A quiet `Marker`: "Worked for 2 m 13 s", or "Cancelled", "Stopped at the token limit", "Stopped at the request limit", "Declined"                         |
 
 Between sending a prompt and the first output, a status line ("Working…") with `shimmer` sits where the reply will appear.
 
@@ -191,20 +214,23 @@ Every one of these exists in light and dark themes before M0.3 is done.
 
 Each element uses a pattern from the [design system](./design-system.md#patterns):
 
-| Element                                                          | Motion                                                |
-| ---------------------------------------------------------------- | ----------------------------------------------------- |
-| New entry                                                        | New entry                                             |
-| Thoughts, tool cards, grouped rows, long user messages, the plan | Disclosure                                            |
-| Tool status change                                               | Icon crossfade, `--duration-fast`                     |
-| Status text in a tool header or the composer                     | Status text                                           |
-| Permission request appears                                       | Attention: one pulse, never looping                   |
-| Waiting for the first output                                     | Thinking, waiting                                     |
-| Running session in the sidebar                                   | Running                                               |
-| Buttons                                                          | Press                                                 |
-| Agent cards on Project home                                      | 1 px rise and `sm` shadow on hover, `--duration-fast` |
-| Copying code                                                     | Copy feedback                                         |
-| Dismissed alerts and banners                                     | Motion exit: opacity, `--duration-fast`               |
-| Menus, popovers and dialogs                                      | shadcn's built-in transitions                         |
+| Element                                                          | Motion                                  |
+| ---------------------------------------------------------------- | --------------------------------------- |
+| New entry                                                        | New entry                               |
+| Thoughts, tool cards, grouped rows, long user messages, the plan | Disclosure                              |
+| Tool status change                                               | Icon crossfade, `--duration-fast`       |
+| Status text in a tool header or the composer                     | Status text                             |
+| Permission request appears                                       | Attention: one pulse, never looping     |
+| Waiting for the first output                                     | Thinking, waiting                       |
+| Running session in the sidebar                                   | Running                                 |
+| Buttons                                                          | Press                                   |
+| Agent cards on Project home                                      | Card hover                              |
+| Welcome content and Project home cards on first show             | Staggered entry                         |
+| Background of Welcome and Project home                           | Ambient field                           |
+| Expanding a parent session in the sidebar                        | Disclosure                              |
+| Copying code                                                     | Copy feedback                           |
+| Dismissed alerts and banners                                     | Motion exit: opacity, `--duration-fast` |
+| Menus, popovers and dialogs                                      | shadcn's built-in transitions           |
 
 - Never animate the layout of the whole thread while it streams; only the entry that changed may move.
 - Entries restored from history or a snapshot appear without animation.
@@ -221,7 +247,7 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 | `Mod+B`                       | Toggle the sidebar                     |
 | `Mod+L`                       | Focus the composer                     |
 | `Mod+Shift+[` / `Mod+Shift+]` | Previous / next session in the sidebar |
-| `Mod+,`                       | Agents                                 |
+| `Mod+,`                       | Settings                               |
 | `Esc`                         | Cancel the running turn                |
 | `1` to `4`                    | Answer the pending permission request  |
 

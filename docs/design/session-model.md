@@ -41,6 +41,16 @@ interface SessionView {
   turnStartedAt: number | null
   createdAt: number
   updatedAt: number
+  parentId: string | null // the parent session, for sub-sessions
+  origin: 'user' | 'subagent'
+  subagent: SubagentInfo | null // set when origin is 'subagent'
+}
+
+interface SubagentInfo {
+  description: string | null // the parent's description of the child's purpose
+  canCancel: boolean // the child's `capabilities.cancel`
+  stateKnown: boolean // false after an `unknown` state, until a known one arrives
+  stopReason: string | null // from the last `idle` state
 }
 
 interface ConfigOption {
@@ -68,6 +78,8 @@ type ThreadEntry =
   | { kind: 'agent'; id: string; markdown: string; attachments: ContentRef[]; streaming: boolean }
   | { kind: 'thought'; id: string; markdown: string; streaming: boolean }
   | ToolEntry
+  | { kind: 'subagent'; id: string; sessionId: string } // a sub-session the agent started here
+  | { kind: 'session_message'; id: string; senderId: string | null; content: UserContent[] }
   | { kind: 'plan'; id: string; items: PlanItem[] }
   | {
       kind: 'notice'
@@ -167,6 +179,8 @@ interface SessionSnapshot {
 - Messages with an ACP `messageId`: `m:<messageId>`.
 - Tool calls: `t:<toolCallId>`.
 - Compactions: `c:<compactionId>`.
+- Subagent announcements: `s:<child session id>`.
+- Session messages: `sm:<messageId>`.
 - Everything else: `e:<n>`, from a per-session counter in the host.
 
 ## Mapping ACP v1 to patches
@@ -189,6 +203,8 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `notice`                    | Adds a notice entry. Severities other than `info`, `warning` and `error` are shown as `info`.                                                                                                                                           |
 | `compaction_update`         | Adds or updates the compaction entry for `compactionId`.                                                                                                                                                                                |
 | `compaction_summary_chunk`  | Appends text to that compaction entry's `summary`.                                                                                                                                                                                      |
+| `subagent_update`           | Creates or updates a child session ([Sub-sessions](#sub-sessions)); the first update for a child also adds a `subagent` entry to the parent's thread.                                                                                   |
+| `session_message`           | Adds or replaces the `session_message` entry for `messageId` in the session it arrives on.                                                                                                                                              |
 | anything else               | Ignored and recorded in diagnostics, so a newer agent never breaks the thread.                                                                                                                                                          |
 
 Content blocks map as follows: `text` to markdown, `image` to an image ref, `resource_link` to a link ref, and `audio` and `resource` to `unsupported` refs. In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
@@ -237,6 +253,33 @@ When an agent process exits, its live sessions become `disconnected` and keep th
 ### Titles
 
 The title comes from `session_info_update`. Until the agent sends one, the host uses the first line of the first user message, cut to 60 characters. It is persisted in the index.
+
+## Sub-sessions
+
+A session can have sub-sessions, listed under it in the sidebar. They come from two places:
+
+| Origin     | Created by                                                                                     | What you can do                                                  |
+| ---------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `subagent` | The agent, for a subagent it runs, announced through ACP's subagents RFD                       | Watch it, answer its permission requests, and stop it if allowed |
+| `user`     | You, with **New sub-session** on a session; an ordinary session in the same project, any agent | Everything you can do in a session; only OverBench links the two |
+
+### Subagents
+
+The subagents RFD ([agent-client-protocol#1992](https://github.com/agentclientprotocol/agent-client-protocol/pull/1992)) is unstable, so it is the one exception to M0's stable-only rule ([architecture](../architecture.md#protocol-version)). Its types come from the SDK's `unstable` v1 schema and stay inside the mapper; if the RFD changes, only the mapper changes. OverBench declares `clientCapabilities.subagents: {}` in `initialize`. `claude-agent-acp` 0.94 and `codex-acp` 2.2.2 implement it; OpenCode does not, so its subagents stay tool calls in the parent.
+
+- The first `subagent_update` for an unknown child `sessionId`, sent on the parent session, creates a `SessionView` with the parent's agent and project, `parentId`, `origin: 'subagent'`, the child id as `acpSessionId`, `title` from `title`, and `subagent` from `description` and `capabilities.cancel`. It also adds a `subagent` entry to the parent's thread at that point. Later updates change only the fields present, and `null` clears one, as the RFD specifies.
+- `state` maps to the child's status: `running` to `running`, `requires_action` to `awaiting_permission`, and `idle` to `ready`, keeping `stopReason`. `unknown` keeps the last status and sets `stateKnown: false`, so the UI shows it as last known rather than current.
+- Updates that name the child's `sessionId` go through the same mapper into the child's own thread. Its permission requests work as in any session.
+- `session_message` adds a `session_message` entry: the parent's instructions to the child, which open the child's thread, and any later messages between them.
+- A subagent session is restricted: `sessions.prompt` fails with `restricted`, and `sessions.cancel` sends `session/cancel` for the child only when `canCancel` is true.
+- When the agent reports the child's work ended with an error, the child becomes `failed` with that error.
+- Children are saved in the index with the parent, so the sidebar shows them after a restart. Their threads come back with the parent's `session/load`, which replays the children too; a child the replay does not mention is marked missing.
+
+### Rules for both
+
+- Sub-sessions belong to the parent's project. Closing or deleting the parent closes or deletes its sub-sessions, after one confirmation that names how many there are.
+- A parent's attention includes its descendants: its sidebar row shows the number of pending permission requests in it and in every sub-session below it.
+- Sub-sessions nest as deep as the agent creates them. The sidebar indents two levels at most and lists deeper ones at the second level.
 
 ## Config options
 
