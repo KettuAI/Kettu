@@ -127,8 +127,21 @@ function ContextMenuSubTrigger({
   )
 }
 
-function ContextMenuSubContent({ ...props }: React.ComponentProps<typeof ContextMenuContent>) {
-  return <ContextMenuContent data-slot="context-menu-sub-content" side="right" {...props} />
+// The first item lines up with the parent item, and the submenu clears the menu's edge by 2 px.
+function ContextMenuSubContent({
+  alignOffset = -4,
+  sideOffset = 6,
+  ...props
+}: React.ComponentProps<typeof ContextMenuContent>) {
+  return (
+    <ContextMenuContent
+      data-slot="context-menu-sub-content"
+      side="right"
+      alignOffset={alignOffset}
+      sideOffset={sideOffset}
+      {...props}
+    />
+  )
 }
 
 function ContextMenuCheckboxItem({

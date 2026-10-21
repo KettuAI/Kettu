@@ -186,12 +186,15 @@ function Choices({
           className="items-start"
         >
           <span className="flex min-w-0 flex-1 flex-col">
-            <ChoiceName name={choice.name} />
+            {/* The number shares the name's baseline, not the top of a two-line row. */}
+            <span className="flex items-baseline gap-2">
+              <ChoiceName name={choice.name} />
+              {numbered && i < 4 && <DropdownMenuShortcut>{i + 1}</DropdownMenuShortcut>}
+            </span>
             {choice.description && (
               <span className="text-xs text-muted-foreground">{choice.description}</span>
             )}
           </span>
-          {numbered && i < 4 && <DropdownMenuShortcut>{i + 1}</DropdownMenuShortcut>}
         </DropdownMenuRadioItem>
       ))}
     </DropdownMenuRadioGroup>

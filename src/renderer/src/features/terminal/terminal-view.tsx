@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquareTextIcon, RotateCwIcon } from 'lucide-react'
+import {
+  ClipboardPasteIcon,
+  CopyIcon,
+  EraserIcon,
+  MessageSquareTextIcon,
+  RotateCwIcon,
+  TextSelectIcon,
+} from 'lucide-react'
 import { onAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -144,15 +151,23 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
             disabled={!instance?.term.hasSelection()}
             onClick={() => instance && void copySelection(instance)}
           >
+            <CopyIcon />
             Copy
             <ContextMenuShortcut>{isMac ? '⌘C' : 'Ctrl+Shift+C'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance && void pasteClipboard(instance)}>
+            <ClipboardPasteIcon />
             Paste
             <ContextMenuShortcut>{isMac ? '⌘V' : 'Ctrl+Shift+V'}</ContextMenuShortcut>
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => instance?.term.selectAll()}>Select all</ContextMenuItem>
-          <ContextMenuItem onClick={() => instance?.term.clear()}>Clear</ContextMenuItem>
+          <ContextMenuItem onClick={() => instance?.term.selectAll()}>
+            <TextSelectIcon />
+            Select all
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => instance?.term.clear()}>
+            <EraserIcon />
+            Clear
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
             disabled={!instance?.term.hasSelection()}

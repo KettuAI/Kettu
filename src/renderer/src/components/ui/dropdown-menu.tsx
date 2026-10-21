@@ -128,11 +128,12 @@ function DropdownMenuSubTrigger({
   )
 }
 
+// The first item lines up with the parent item, and the submenu clears the menu's edge by 2 px.
 function DropdownMenuSubContent({
   align = 'start',
-  alignOffset = -3,
+  alignOffset = -4,
   side = 'right',
-  sideOffset = 0,
+  sideOffset = 6,
   className,
   ...props
 }: React.ComponentProps<typeof DropdownMenuContent>) {

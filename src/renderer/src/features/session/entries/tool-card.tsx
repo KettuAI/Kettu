@@ -192,7 +192,7 @@ export const ToolCard = memo(function ToolCard({
   return (
     <ContextMenu>
       <ContextMenuTrigger render={<div />}>{card}</ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="w-52">
         <ContextMenuItem
           onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
         >
