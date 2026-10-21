@@ -196,40 +196,49 @@ OverBench drives agents that edit files and run commands, so every layer assumes
 
 ## Directory layout
 
-The planned layout once M0 lands; new parts are marked.
+The layout as M0 built it.
 
 ```text
 src/
 ├── main/                  Main process
-│   ├── agent-host.ts      new: starts and supervises the agent host, hands out ports, shows notifications
-│   ├── terminal-host.ts   new: starts the terminal host on first use, hands out its ports
-│   └── updater.ts         new: checks, downloads and installs updates through electron-updater
-├── agent-host/            new: utility process
+│   ├── index.ts           App lifecycle, single-instance lock
+│   ├── window.ts          Main window, navigation lock
+│   ├── ipc.ts             IPC handlers
+│   ├── settings.ts        settings.json: validated on every change, written atomically
+│   ├── agent-host.ts      Starts and supervises the agent host, hands out ports, shows notifications
+│   ├── terminal-host.ts   Starts the terminal host on first use, hands out its ports
+│   ├── menu.ts            The application menu
+│   └── updater.ts         Checks, downloads and installs updates through electron-updater
+├── agent-host/            Utility process
 │   ├── index.ts           Entry, port wiring
+│   ├── host.ts            The host assembled: state, agents, sessions, git and the ports
 │   ├── rpc.ts             Requests and events on renderer ports
 │   ├── validate.ts        Request validators
 │   ├── shell-env.ts       Login shell environment resolution
 │   ├── catalog.ts         Built-in agent definitions
-│   ├── agent-process.ts   Detection, spawning, stopping, restarts, stderr capture
+│   ├── agents.ts          Supervision: detection, lazy start, restarts, sign-in state
+│   ├── agent-process.ts   Spawning, stopping, stderr capture
 │   ├── acp/               SDK connection and the v1 mapper; the only place ACP types live
 │   ├── sessions.ts        Live session state, prompts, permissions
+│   ├── projects.ts        Recent project folders
 │   ├── git/               Repository status, watchers, pull requests through gh
 │   ├── storage.ts         JSON persistence
 │   └── diagnostics.ts     Traffic and stderr ring buffers
-├── terminal-host/         new: utility process owning node-pty terminals
-├── preload/               Adds window.overbench.agents and window.overbench.terminals
+├── terminal-host/         Utility process owning node-pty terminals
+├── preload/               window.overbench, with its agents and terminals ports
 ├── renderer/src/
-│   ├── features/          agents, projects, sessions (thread, composer, tool calls, permissions), git, terminal, settings
+│   ├── app/               Bootstrap, actions, shortcuts, menu commands
+│   ├── features/          agents, home, session (thread, composer, tool calls, permissions), sidebar, git, terminal, settings, updates
 │   └── stores/            Zustand stores
 └── shared/
     ├── ipc.ts             Renderer to main contract
-    ├── agent-host.ts      new: renderer to agent host contract
-    ├── host-control.ts    new: main to agent host messages
-    ├── terminal-host.ts   new: renderer to terminal host contract
-    └── thread.ts          new: session model and applyPatches
+    ├── agent-host.ts      Renderer to agent host contract
+    ├── host-control.ts    Main to agent host messages
+    ├── terminal-host.ts   Renderer to terminal host contract
+    └── thread.ts          Session model and applyPatches
 tools/
-├── fake-agent/            new: scripted ACP agent for development and tests
-└── perf/                  new: performance measurement script
+├── fake-agent/            Scripted ACP agent for development and tests
+└── perf/                  Performance measurement script
 ```
 
 ## What we take from where

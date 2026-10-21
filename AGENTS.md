@@ -59,21 +59,25 @@ Never add a library that overlaps one of these. The detailed usage rules are in 
 
 ## Architecture
 
-The current tree is below. The agent host, the shared thread model and the other parts planned for M0 are described in [docs/architecture.md](./docs/architecture.md#directory-layout).
+The top of the tree is below; [docs/architecture.md](./docs/architecture.md#directory-layout) describes each process in detail.
 
 ```text
 src/
-├── main/              Main process
-│   ├── index.ts       App lifecycle, single-instance lock
-│   ├── window.ts      Main window, navigation lock
-│   ├── renderer.ts    Loads the renderer; tells app URLs from remote ones
-│   └── ipc.ts         IPC handlers
+├── main/              Main process: lifecycle, windows, menus, IPC, settings, updates
 ├── preload/           Sandboxed bridge exposed as window.overbench
+├── agent-host/        Utility process: agents over ACP, sessions, projects, git
+├── terminal-host/     Utility process: the terminal's shells through node-pty
 ├── renderer/src/      React UI
+│   ├── app/           Bootstrap, actions, shortcuts, menu commands
+│   ├── features/      One folder per area: session, sidebar, settings, git, terminal, ...
+│   ├── stores/        Zustand stores, one per domain
 │   ├── components/ui  shadcn/ui components (managed by the shadcn CLI)
-│   ├── lib/           Helpers (cn, theme)
+│   ├── lib/           Helpers (cn, format, host requests)
 │   └── styles/        globals.css: Tailwind entry and theme tokens
-└── shared/            Types shared across processes, such as the IPC contract
+└── shared/            Shared across processes: the IPC and host contracts, the thread model
+tools/
+├── fake-agent/        Scripted ACP agent for development, tests and perf runs
+└── perf/              The performance script
 ```
 
 ### Adding an IPC call
