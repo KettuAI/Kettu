@@ -68,12 +68,16 @@ export function SegmentedControl<T extends string>({
     if (!el) return
     const measure = () => {
       const item = segmentsOf(el)[active]
+      if (!item) return setBox(null)
+      // offsetLeft and offsetWidth round to whole pixels, and rects carry the transforms of
+      // ancestors such as a menu zooming in, so rects are scaled back to the group's layout width.
+      const group = el.getBoundingClientRect()
+      const rect = item.getBoundingClientRect()
+      const scale = group.width / parseFloat(getComputedStyle(el).width) || 1
+      const x = (rect.left - group.left) / scale - el.clientLeft
+      const width = rect.width / scale
       setBox((b) =>
-        !item
-          ? null
-          : b?.x === item.offsetLeft && b.width === item.offsetWidth
-            ? b
-            : { x: item.offsetLeft, width: item.offsetWidth },
+        b && Math.abs(b.x - x) < 0.01 && Math.abs(b.width - width) < 0.01 ? b : { x, width },
       )
     }
     measure()
