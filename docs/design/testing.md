@@ -31,22 +31,48 @@ React components have no automated tests in M0; they are checked by running the 
 `tools/fake-agent/` is an ACP agent built with the SDK's `agent()` API. It never calls a model; it plays scripted scenarios.
 
 - **Running it**: `tools/fake-agent/main.ts` runs directly on Node.js through type stripping, either with Electron's own Node.js (`ELECTRON_RUN_AS_NODE=1`) or with any Node.js 22.18 or later. It has no build step, so its code uses only erasable TypeScript syntax and relative imports with `.ts` extensions; its folder has a `package.json` with `"type": "module"`. `tsconfig.tools.json` type-checks it with `erasableSyntaxOnly` and `allowImportingTsExtensions`, and `pnpm typecheck` includes it.
-- **Choosing a scenario**: the prompt text selects it, for example `/scenario long-stream`, so one agent process can run any scenario. The agent also advertises the scenarios as slash commands.
+- **In process**: `tools/fake-agent/agent.ts` exports `createFakeAgent(options)`, which returns the SDK's `AgentApp`. Integration tests connect it to the host's session layer through an in-memory stream pair; `options.exit` replaces `process.exit` so the `crash` scenario closes the connection instead of ending the test run. Tests load it with a dynamic `import()` of its file URL, because the host's `tsconfig.node.json` does not allow `.ts` import extensions; `tsconfig.tools.json` still type-checks it.
+- **Choosing a scenario**: the prompt text selects it with `/scenario <name> [flags]` or `/<name> [flags]`, so one agent process can run any scenario; any other text runs the default (`FAKE_AGENT_SCENARIO`, else `basic-turn`). The agent advertises every scenario as a slash command, plus `scenario` and `compact`.
+- **Protocol surface**: it uses the SDK's `unstable` v1 entrypoint so it can send the subagents RFD updates, and it advertises `loadSession`, `session/list`, `session/resume`, `session/close`, `session/delete`, logout, one `agent` sign-in method (`fake-login`) and, when the client supports terminal sign-in, one `terminal` method (`fake-terminal-login`, which runs `main.ts --login`). Its config options are a mode select (Ask, Code, Plan), a grouped model select with three models, a `thought_level` select and one boolean (Fast mode). It pushes `_auth/status_update` once after `initialize` and whenever its sign-in state changes, and sends `usage_update` with `_meta["_claude/rateLimit"]` for the five-hour and weekly windows at the end of most turns, with `utilization` as a fraction and `resetsAt` in Unix seconds, as Claude Code does. It sends subagent updates only when the client advertised `clientCapabilities.subagents`; the RFD has no agent capability.
 - **In the app**: development builds list it in the agent catalog as Fake agent. A production build lists it only when started with `OVERBENCH_FAKE_AGENT` set to the path of `main.ts`, which is how the performance runs use it. It is never packaged.
 
-| Scenario               | What it does                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------ |
-| `basic-turn`           | A short answer with markdown, a code block and one edit with a diff                        |
-| `long-stream`          | 200 KB of markdown in small chunks at a configurable rate (default 200 updates per second) |
-| `tool-storm`           | 500 tool calls, mixing reads, searches, edits and commands, with updates for each          |
-| `permission`           | A command that needs approval, offering all four option kinds                              |
-| `parallel-permissions` | Three tool calls asking for permission at the same time                                    |
-| `cancel`               | A long turn that honors `session/cancel`; with `--ignore-cancel` it never confirms         |
-| `crash`                | Exits mid-turn with a non-zero code                                                        |
-| `auth-required`        | Fails `session/new` with `auth_required` until `authenticate` is called                    |
-| `large-history`        | `session/load` replays 1,000 entries                                                       |
-| `slow-start`           | Takes 20 s to answer `initialize`, printing progress to stderr                             |
-| `all-updates`          | Sends every `session/update` variant once, plus an unknown one                             |
+| Scenario               | What it does                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic-turn`           | A short answer with markdown (heading, list, code block, table, inline code, link) and one edit with a diff                                                     |
+| `long-stream`          | 200 KB of markdown in 100-character chunks at a configurable rate (default 200 updates per second); `--rate`, `--size`                                          |
+| `tool-storm`           | 500 tool calls, mixing reads, searches, edits, commands, fetches and thoughts, with two updates each; `--count`                                                 |
+| `permission`           | A command that needs approval, offering all four option kinds; `--withdraw [ms]` withdraws the request after a delay                                            |
+| `parallel-permissions` | Three tool calls asking for permission at the same time                                                                                                         |
+| `cancel`               | A long turn that honors `session/cancel`; with `--ignore-cancel` it never confirms                                                                              |
+| `crash`                | Exits mid-turn with a non-zero code (`--code`, default 3)                                                                                                       |
+| `auth-required`        | Signs the agent out and fails the prompt with `auth_required`; `session/new`, `load`, `resume` and `prompt` then fail until `authenticate` or `main.ts --login` |
+| `large-history`        | Marks the session so that `session/load` replays 1,000 entries; the importable session `large-history-1` does the same                                          |
+| `slow-start`           | Takes 20 s to answer `initialize`, printing progress to stderr; chosen at launch with `FAKE_AGENT_SCENARIO=slow-start`, since it happens before any prompt      |
+| `all-updates`          | Sends every `session/update` variant once, including every content block kind, the subagent updates and an unknown `future_update`                              |
+| `subagent`             | Announces a child session, sends it a `session_message`, streams its work including one permission request on the child, and ends the child with `idle`         |
+| `plan`                 | A four-item plan whose items progress while the agent reads files                                                                                               |
+| `thinking`             | A long thought streamed token by token, then an answer                                                                                                          |
+
+Without a scenario it plays `basic-turn`. `/compact` streams a compaction with its summary. Replies stream with tens of milliseconds between chunks, like a real agent.
+
+Environment variables, read when the agent starts:
+
+| Variable                             | Effect                                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `FAKE_AGENT_SCENARIO`                | The scenario for prompts that name none; `slow-start` also delays `initialize`             |
+| `FAKE_AGENT_RATE`, `_SIZE`, `_COUNT` | Defaults for `--rate`, `--size` (such as `200k`) and `--count`                             |
+| `FAKE_AGENT_DELAY_SCALE`             | Multiplies every delay; `0` runs scenarios as fast as possible, which the tests use        |
+| `FAKE_AGENT_SLOW_START_MS`           | Delays `initialize` by this long, printing progress                                        |
+| `FAKE_AGENT_AUTH=required`           | Starts signed out                                                                          |
+| `FAKE_AGENT_LEGACY_MODES=1`          | Reports modes through the legacy `modes` field instead of a mode config option             |
+| `FAKE_AGENT_HISTORY_ENTRIES`         | The size of the synthesized `large-history` replay (default 1,000)                         |
+| `FAKE_AGENT_LIST_PAGE`               | The `session/list` page size (default 50), to exercise `nextCursor`                        |
+| `FAKE_AGENT_IGNORE_EOF=1`            | Keeps running after stdin closes, for the forced-stop process test                         |
+| `FAKE_AGENT_IGNORE_SIGTERM=1`        | Ignores `SIGTERM`, so a stop has to escalate to `SIGKILL`                                  |
+| `FAKE_AGENT_SPAWN_CHILD=1`           | Starts a long-running child process and prints its pid to stderr, for process-tree cleanup |
+| `FAKE_AGENT_LOGIN_MARKER`            | Where `main.ts --login` writes its sign-in marker (default: the temp directory)            |
+
+The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history.
 
 ## Continuous integration
 
