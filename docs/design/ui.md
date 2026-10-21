@@ -7,20 +7,22 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 ## Window and chrome
 
 - **macOS**: hidden title bar, traffic lights at `{ x: 16, y: 14 }`, centred in a 40 px top bar. The top bar leaves 80 px on the left for them.
-- **Windows and Linux**: hidden title bar with `titleBarOverlay` window controls, 40 px high, colored from the current theme and updated with `setTitleBarOverlay` when the theme changes. The top bar keeps clear of the controls with `env(titlebar-area-x)` and `env(titlebar-area-width)`.
+- **Windows and Linux**: hidden title bar with `titleBarOverlay` window controls, 40 px high, colored from the current theme and updated with `setTitleBarOverlay` when the theme changes: the background is `--background`, the symbols `--foreground` (`#0a0a0a` light, `#fafafa` dark). The top bar keeps clear of the controls with `env(titlebar-area-x)` and `env(titlebar-area-width)`. There is no menu bar; the renderer handles the shortcuts.
 - The top bar is the drag region (`app-region-drag`). Everything clickable inside it is `app-region-no-drag`.
-- The window remembers its size and position ([persistence](./persistence.md)). Minimum size: 960 × 600.
+- The window remembers its size, position and maximized state, and never reopens off-screen ([persistence](./persistence.md#window-and-app-state)). Minimum size: 960 × 600.
+- The window's own background follows the effective theme, `#fcfcfc` light and `#151515` dark, the values of `--background`, also when the theme changes while it is open.
+- On Windows and Linux, closing the last window quits the app, so it goes through the quit confirmation first; on macOS it only closes the window, and agents and terminals keep running.
 
 ## Launch
 
 Launching should feel like opening a lid, not waiting for a page: no white or black flash, no empty window, and no content jumping into place.
 
-| Moment                 | What is on screen                                                                                                                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Before the first frame | Nothing. Main creates the window hidden, with `backgroundColor` set to `--background` of the theme from settings (`nativeTheme` decides for System), and shows it on `ready-to-show` |
-| First frame            | The app shell from the renderer bundle alone: window controls, the sidebar on surface 0 with `Skeleton` rows at the real 28 px row height, and the empty main surface                |
-| Data arrives           | Projects and sessions from the agent host replace the skeleton rows in place, fading in over `--duration-base`; nothing moves, because the rows already had their size               |
-| A session is restored  | With **Restore the last session**, the main area shows the thread skeleton until the snapshot arrives, then the thread fades in                                                      |
+| Moment                 | What is on screen                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before the first frame | Nothing. Main reads the settings, then creates the window hidden, with `backgroundColor` set to `--background` of the theme from settings (`nativeTheme` decides for System), and shows it on `ready-to-show` |
+| First frame            | The app shell from the renderer bundle alone: window controls, the sidebar on surface 0 with `Skeleton` rows at the real 28 px row height, and the empty main surface                                         |
+| Data arrives           | Projects and sessions from the agent host replace the skeleton rows in place, fading in over `--duration-base`; nothing moves, because the rows already had their size                                        |
+| A session is restored  | With **Restore the last session**, the main area shows the thread skeleton until the snapshot arrives, then the thread fades in                                                                               |
 
 - The first frame needs no data and no agent host, so it is on screen within the [launch budget](../milestones/m0.md#performance-budgets) (500 ms to the first interactive frame) whatever the host is doing.
 - A launch that takes longer than 1 s, such as a cold start after an update, shows "Starting OverBench…" with a `Spinner` centred in the main area, so a slow start never looks frozen; a normal start never shows it.
@@ -330,6 +332,7 @@ The [updater](./updates.md) works in the background, and the interface shows it 
 - **After an update**, the same row reads "Updated to 0.3.0" with **What's new**, which opens the release page, and an ×. It shows for that launch only. There is no dialog and no OS notification.
 - With the sidebar collapsed, the sidebar toggle in the top bar carries a small `--foreground` dot, and its tooltip names the version.
 - **Restart** with agents working or terminal commands running first opens an `AlertDialog`: "Restart to update?", the running sessions with their agent marks and the busy terminals by command, "Your sessions and drafts come back after the restart.", then **Cancel** and **Restart**. With nothing running it restarts at once. The dialog follows **Ask before quitting while agents or terminal commands are running**.
+- Main asks for this dialog, and the same one for quitting, with `app:confirm-quit` (`QuitRequest`, `reason` `update` or `quit`, listing the busy sessions and terminals); the renderer answers with `window.overbench.app.respondQuit(id, confirmed)`. When the page has no listener, or reloads before it answers, main asks with a native dialog instead, so a quit never waits forever.
 - **Settings › About** holds the whole status in one row under the version, the state on the left and its action on the right:
 
   | State        | Text                                                                                        | Action                       |
@@ -409,6 +412,20 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 | `1` to `4`                          | Answer the pending permission request  |
 
 Shortcuts appear in tooltips and menus, so they can be discovered.
+
+On macOS, `Cmd+O`, `Cmd+N`, `Cmd+B` and `Cmd+,` are also accelerators of the app menu, which sends them to the window as `app:command` (`open-project`, `new-session`, `toggle-sidebar`, `open-settings`); the renderer handles those four itself only on Windows and Linux, where there is no menu bar, so a shortcut never acts twice.
+
+### The macOS menu
+
+| Menu      | Items                                                                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OverBench | About OverBench · **Check for Updates…** (opens Settings at About and checks there) · **Settings…** `Cmd+,` · Services · Hide, Hide Others, Show All · Quit OverBench |
+| File      | **Open Project…** `Cmd+O` · **New Session** `Cmd+N` · Close Window                                                                                                    |
+| Edit      | The standard roles, so undo, cut, copy, paste and select all work in every text field                                                                                 |
+| View      | **Toggle Sidebar** `Cmd+B` · Reload and Toggle Developer Tools in development builds only · Enter Full Screen                                                         |
+| Window    | The standard window menu                                                                                                                                              |
+
+Menu commands that need a window open one if every window was closed; **Toggle Sidebar** does nothing without one. In development builds F12 also toggles DevTools on every platform.
 
 ## Accessibility
 

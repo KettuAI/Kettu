@@ -8,9 +8,9 @@ Electron itself is cross-platform, but this process is where OverBench meets the
 
 ## Startup and supervision
 
-`src/main/agent-host.ts` owns the host's lifecycle.
+`src/main/agent-host.ts` owns the host's lifecycle, through the supervisor in `src/main/utility-host.ts` that also runs the [terminal host](./terminal.md#processes).
 
-1. After `app.whenReady()`, main forks the host:
+1. After `app.whenReady()` and once the settings are read, main forks the host:
    ```ts
    import agentHostPath from '../agent-host/index?modulePath'
 
@@ -20,37 +20,58 @@ Electron itself is cross-platform, but this process is where OverBench meets the
    })
    ```
    electron-vite builds `src/agent-host/index.ts` as its own bundle because of the `?modulePath` import.
-2. Main sends `host:init` (data directory, app version, platform, whether the app is packaged). The host loads its JSON state, starts resolving the shell environment in the background, and replies `host:ready`. Agents wait for the environment; listing projects and sessions does not.
-3. Each renderer gets its own port. When a page loads, its preload sends `agent-host:connect`; main checks the sender with `isRendererUrl`, creates a `MessageChannelMain`, passes `port1` to the host in `host:connect` and `port2` to the page with `webContents.postMessage('agent-host:port', null, [port2])`. A reload repeats this, so a page never reuses a stale port.
-4. The host's stdout and stderr are forwarded to main's log.
+2. Main sends `host:init` (data directory, app version, platform, whether the app is packaged, Electron's executable, the fake agent's path and the agent part of the settings). The host loads its JSON state, starts resolving the shell environment in the background, and replies `host:ready`. Agents wait for the environment; listing projects and sessions does not. A host that sends no `host:ready` within 20 s is killed and counts as a crash.
+3. Each renderer gets its own port. When a page loads, its preload sends `agent-host:connect`; main checks that the sender is the main frame of one of its windows with `isRendererUrl`, creates a `MessageChannelMain`, passes `port1` to the host in `host:connect` and `port2` to the page with `webContents.postMessage('agent-host:port', null, [port2])`. A reload repeats this, so a page never reuses a stale port. A request that arrives while the host starts or restarts waits and is answered once it is ready.
+4. The host's stdout and stderr are forwarded to main's log, line by line, as info and warnings.
 
 ### Crash recovery
 
-- When the host exits unexpectedly, main restarts it with backoff (0.5 s, 1 s, 2 s, then doubling up to 30 s; the delay resets after 60 s of healthy running), sends `host:init` again, and tells every window `agent-host:reset`. Each preload drops its port, requests a new one, and the renderer refetches snapshots for the sessions it shows.
-- After five crashes within two minutes, main stops restarting. The UI shows the failure with **Restart agent host** and **Export diagnostics**.
-- The host reports the process ID of every agent it starts (`host:agent-processes`). If the host dies, main terminates those process trees itself, so a crash never leaves orphaned agents behind.
+- When the host exits unexpectedly, main tells every window `agent-host:reset` with `{ failed: false }` at once, restarts the host with backoff (0.5 s, 1 s, 2 s, then doubling up to 30 s; the delay resets after 60 s of healthy running) and sends `host:init` again. Each preload drops its port, rejects what was in flight with `host_restarted`, reports `reconnecting`, and requests a new port, which arrives once the new host is ready; then it reports `connected` and the renderer refetches snapshots for the sessions it shows.
+- After five crashes within two minutes, main stops restarting and sends `agent-host:reset` with `{ failed: true }`; the preload reports `failed` and rejects requests until the host runs again. The UI shows the failure with **Restart agent host**, which calls `window.overbench.agents.restart()` (`agent-host:restart`), and **Export diagnostics**. A restart clears the crash count; in any other state it does nothing.
+- The host reports the process ID of every agent it starts (`host:agent-processes`). If the host dies without `host:stopped`, main terminates those process trees itself, as in [stopping an agent](#stopping-an-agent): `SIGTERM` to each process group and `SIGKILL` 2 s later if it is still there, or `taskkill /PID <pid> /T /F` on Windows. A crash never leaves orphaned agents behind; after a clean stop the host has stopped them already.
+- Main keeps the last 100 supervision events (start, ready, crash with exit code, scheduled restart, failure, user restart) of both hosts for [diagnostics](#diagnostics).
 
 ### Shutdown
 
-On `before-quit`, main delays the quit, sends `host:shutdown`, and waits for the host to stop every agent ([Stopping an agent](#stopping-an-agent)) and exit. After 6 s it kills the host and quits anyway.
+On `before-quit`, main delays the quit and runs its quit flow (`src/main/quit.ts`), which also serves the restart to [update](./updates.md#restarting) and, on Windows and Linux, closing the last window:
+
+1. Unless the system is shutting down, and while **Ask before quitting while agents or terminal commands are running** is on, main asks both hosts what is working (`host:busy-request`, and `terminal-host:busy-request` if the terminal host runs), waiting at most 2 s for each; a host that does not answer counts as idle.
+2. If something is working, main sends `app:confirm-quit` (`QuitRequest`) to the focused window, or the first one, and waits for `app:respond-quit`. A page with no `onConfirmQuit` listener, a page that reloads or closes meanwhile, and a quit with no window at all get a native `dialog.showMessageBox` instead, naming the sessions and terminal commands. Cancelling ends the flow; nothing has stopped.
+3. Main sends `host:shutdown` and `terminal-host:shutdown` and waits for both hosts to stop every agent and terminal ([Stopping an agent](#stopping-an-agent)) and exit. After 6 s it kills a host that is still running.
+4. Main flushes `settings.json`, `window-state.json` and `app-state.json`, then quits, or calls `quitAndInstall` for an update.
 
 ### Main and host messages
 
 Typed in `src/shared/host-control.ts`.
 
-| Direction   | Message                | Payload                                                                                                     |
-| ----------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `settings`                                          |
-| main → host | `host:connect`         | `windowId`, and the port in the transfer list                                                               |
-| main → host | `host:settings`        | `settings`, whenever the agent part changes                                                                 |
-| main → host | `host:shutdown`        | none                                                                                                        |
-| host → main | `host:ready`           | none                                                                                                        |
-| host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent                                                                |
-| host → main | `host:projects`        | The project paths, whenever the list changes; main relays them to the [terminal host](./terminal.md#shells) |
-| host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body`                                  |
-| host → main | `host:stopped`         | none; sent just before a clean exit                                                                         |
+| Direction   | Message                | Payload                                                                                                                                   |
+| ----------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `electronPath`, `fakeAgentPath`, `settings`                                       |
+| main → host | `host:connect`         | `windowId`, and the port in the transfer list                                                                                             |
+| main → host | `host:settings`        | `settings`, whenever the agent part changes                                                                                               |
+| main → host | `host:busy-request`    | `requestId`, before quitting                                                                                                              |
+| main → host | `host:shutdown`        | none                                                                                                                                      |
+| host → main | `host:ready`           | none                                                                                                                                      |
+| host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent                                                                                              |
+| host → main | `host:projects`        | The project paths, whenever the list changes; main relays them to the [terminal host](./terminal.md#shells)                               |
+| host → main | `host:auth-commands`   | The terminal sign-in commands it built; main relays them to the terminal host, which runs only these ([terminal](./terminal.md#security)) |
+| host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body`                                                                |
+| host → main | `host:badge`           | `count`: pending permission requests across all sessions                                                                                  |
+| host → main | `host:busy`            | `requestId`, and the sessions with a turn running                                                                                         |
+| host → main | `host:log`             | `level`, `message`, written to main's log                                                                                                 |
+| host → main | `host:stopped`         | none; sent just before a clean exit                                                                                                       |
 
-`host:attention` lets main show an OS notification when no OverBench window is focused, including when every window is closed on macOS. Clicking the notification opens or focuses a window on that session.
+`fakeAgentPath` is `tools/fake-agent/main.ts` under the app path in development, and `OVERBENCH_FAKE_AGENT` (or null) in a packaged build.
+
+`host:attention` lets main show an OS notification when no OverBench window is focused, including when every window is closed on macOS. Each kind follows its switch in Settings › Notifications, and **Play a sound** decides `silent`. A session has at most one notification at a time: a newer one replaces it. Clicking the notification focuses a window, or opens one, and sends it `app:command` `{ kind: 'open-session', sessionId }`; a page that has not subscribed yet receives the command when it does.
+
+`host:badge` puts the count where the platform shows one, while Settings › Notifications › **Show a count on the Dock icon** is on:
+
+- **macOS**: `app.setBadgeCount` on the Dock icon.
+- **Windows**: an overlay icon on each window's taskbar button (`setOverlayIcon`), a white count on a red disc, the color of the macOS badge. Main draws it at runtime (`src/main/badge-image.ts`, encoded as PNG at 16 and 32 px for 100% and 200% scaling), "1" to "9" and then "9+", so the app ships no image per count and the badge stays sharp at every scale.
+- **Linux**: `app.setBadgeCount`, which only launchers that support counts, such as Unity's, show; elsewhere it does nothing.
+
+The badge clears when the host stops or crashes, until the new host reports again.
 
 `settings` is the agent part of the [settings](./persistence.md#settings): binary overrides and the proxy. Main owns the settings file; the host only receives this part.
 
@@ -199,7 +220,7 @@ ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The 
 ## Diagnostics
 
 - For each agent, the host keeps the last 2,000 ACP messages (direction, time, method, size and the full JSON) in a ring buffer, plus the stderr ring buffer and process events (start, exit code, restarts).
-- **Export diagnostics** asks the host for a bundle: app and agent versions, agent states, capabilities, the buffers, and the platform. The environment is reduced to `PATH`, `SHELL` and the detected Node.js version; other variables can hold secrets and are left out. The renderer passes the bundle to main, which writes it to a path chosen in a save dialog.
+- **Export diagnostics** asks the host for a bundle: app and agent versions, agent states, capabilities, the buffers, and the platform. The environment is reduced to `PATH`, `SHELL` and the detected Node.js version; other variables can hold secrets and are left out. The renderer passes the bundle to main (`diagnostics:save`), which adds its own section under `main` and writes pretty JSON to a path chosen in a save dialog, `overbench-diagnostics-<date>-<time>.json` in Downloads by default. Main's section holds the app, Electron, Chromium, Node.js and V8 versions, the platform, architecture and OS version, the launch time to the first interactive frame, the state and supervision events of both hosts, and main's last 500 log records.
 - Before exporting, the UI warns that the bundle contains prompts and code from recent sessions.
 - In development, `OVERBENCH_ACP_LOG=1` also mirrors ACP traffic to the host's stdout.
 

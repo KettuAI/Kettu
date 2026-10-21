@@ -13,14 +13,17 @@ interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>
   onEvent(listener: (event: HostEvent) => void): () => void
   onConnection(listener: (state: 'connected' | 'reconnecting' | 'failed') => void): () => void
+  restart(): Promise<void>
 }
 ```
 
-Exposed as `window.overbench.agents`.
+Exposed as `window.overbench.agents`. `src/preload/port-client.ts` implements it, and the same client serves `window.overbench.terminals`.
 
-- `request` accepts only method names from the contract; the preload checks the name against an allowlist before posting.
-- `onEvent` and `onConnection` return an unsubscribe function.
+- `request` accepts only method names from the contract; the preload checks the name against `HOST_METHODS` before posting. Requests made before the first port arrives wait for it, in order.
+- `onEvent` and `onConnection` return an unsubscribe function. `onConnection` calls a new listener at once with the current state, if there is one yet, so a late subscriber does not miss `connected`.
 - While the port is being replaced after `agent-host:reset`, requests in flight reject with `host_restarted`. After `connected`, the renderer's stores refetch snapshots for the sessions they watch.
+- After `failed` ([crash recovery](./agent-host.md#crash-recovery)), requests reject at once with `host_restarted` until `restart()` brings the host back; the state then goes through `reconnecting` to `connected`.
+- A failed request rejects with a plain object, `{ name: 'PortRequestError', code, message, data? }`, not an `Error`: `contextBridge` copies an `Error` with its message only and drops `code`. `isPortError` from `src/shared/port-rpc.ts` recognizes the object, and `new PortRequestError(error)` turns it into an `Error` that keeps the code where the renderer wants one. Params that cannot be cloned reject with `invalid_params` without reaching the host.
 
 ## Envelope
 

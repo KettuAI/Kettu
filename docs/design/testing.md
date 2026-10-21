@@ -73,3 +73,6 @@ Budgets are measured on a production build, packaged with `pnpm package`, launch
 | Agent host memory                 | `app.getAppMetrics()` for the process named OverBench Agent Host, after `tool-storm`                               |
 
 The script prints a table; the results for each platform are recorded in `docs/perf/m0.md` with the date, machine, OS and app version. A change that makes a budget fail is not merged.
+
+- Main logs the first `perf:interactive` of a launch to stdout as `perf:interactive <ms> ms after launch`, and later ones, from reloads, separately; diagnostics keep it as `main.launchToInteractiveMs`.
+- When main itself was started with `--overbench-perf`, it passes the flag to each page with `additionalArguments`, and the preload sets `window.overbench.perf`.

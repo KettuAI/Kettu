@@ -16,8 +16,8 @@ What this design takes from where:
 The updater lives in main (`src/main/updater.ts`), because installing means quitting the app, which only main can do.
 
 - `electron-updater` is loaded with dynamic `import()` after the window is shown, so startup does not pay for it. Its work is asynchronous network and file I/O and never blocks main.
-- The feed is the GitHub Releases of `overbench/overbench`. electron-builder writes it into `app-update.yml` inside the app at build time, and nothing at runtime can change it.
-- Requests go through electron-updater's own session (`autoUpdater.netSession`). When Settings › Advanced › Proxy is Custom, that session uses the same proxy as the agents, so an update downloads wherever the agents can reach the network; otherwise it follows the system proxy.
+- The feed is the GitHub Releases of `overbench/overbench`. electron-builder writes it into `app-update.yml` inside the app at build time, and nothing at runtime can change it. It does so only for the `dmg` and `zip`, NSIS and AppImage targets: an unpacked `pnpm package` build has no `app-update.yml`, so its checks fail and are only logged.
+- Requests go through electron-updater's own session (`autoUpdater.netSession`). When Settings › Advanced › Proxy is Custom, that session uses the same proxy as the agents, so an update downloads wherever the agents can reach the network; otherwise it follows the system proxy. Chromium takes the proxy as `scheme://host:port`, so a path or credentials in the URL are dropped for updates, and the no-proxy list becomes its bypass rules. The proxy changes as soon as the setting does.
 - The updater is off in development (`app.isPackaged` is false) and in builds that cannot update themselves (below).
 
 ## Platforms
@@ -31,12 +31,13 @@ The updater lives in main (`src/main/updater.ts`), because installing means quit
 | Linux    | Not started from an AppImage         | Off     | Settings › About says that updates come from the package manager                        |
 
 - **Link** mode checks and tells you like Install mode, but the action opens the release page in the browser, because the app cannot replace itself. Code signing and notarization are planned after M0 ([scope](../milestones/m0.md#out-planned-for-later-milestones)); a signed build switches to Install with no other change.
-- The release workflow decides the mode at build time and electron-vite inlines it as a constant, so the app never has to inspect its own signature.
+- The release workflow decides the mode at build time and electron-vite inlines it as a constant, so the app never has to inspect its own signature: `MAIN_VITE_UPDATE_MODE` is `install` or `link`. Without it, macOS builds link and the others install, so a local `pnpm package` behaves like a release; a signed macOS build sets `install`.
 - The `zip` target that Squirrel.Mac needs is already in `electron-builder.yml` next to `dmg`.
 
 ## Releases
 
 - CI builds every platform on a version tag and uploads the installers with `latest.yml`, `latest-mac.yml` and `latest-linux.yml` to a **draft** release. No client sees it until the maintainer publishes the draft.
+- `.github/workflows/release.yml` runs on `v*` tags on macOS, Windows and Linux. It fails unless the tag equals `v` plus the version in `package.json`, runs the tests, builds with `MAIN_VITE_UPDATE_MODE` set per platform (`link` on macOS), and runs `electron-builder --publish always` with the workflow's `GITHUB_TOKEN`. electron-builder's `publish` section (`provider: github`, `owner: overbench`, `repo: overbench`, `releaseType: draft`) names the release and writes `app-update.yml` into the app. Signing identities are not looked up yet (`CSC_IDENTITY_AUTO_DISCOVERY=false`).
 - Versions are semver. Releases marked as pre-release on GitHub are never offered (`allowPrerelease: false`) and an older version never replaces a newer one (`allowDowngrade: false`). A beta channel comes later.
 
 ## Checking and downloading
@@ -52,7 +53,8 @@ The updater lives in main (`src/main/updater.ts`), because installing means quit
   | Off                  | Only when asked | When you choose **Download** |         |
 
 - electron-updater downloads only the changed blocks when a blockmap of the installed version is available, and verifies the file's SHA-512 against `latest*.yml` before it counts as ready.
-- A failed automatic check or download is logged and retried at the next hourly check; nothing is shown. A check you started shows its error in Settings › About.
+- A failed automatic check or download is logged and retried at the next hourly check; nothing is shown: the state goes back to what it was, `idle` or, after a failed download, `available`. A check or download you started shows its error in Settings › About, reduced to its first line. Starting a check while an automatic one runs joins it and makes its error yours.
+- No check runs while an update downloads or is ready, and **Check for updates** then returns the current status.
 
 ## States
 
@@ -81,13 +83,13 @@ interface UpdateStatus {
 ## Restarting
 
 - **Restart** goes through the normal quit path. When agents are working or terminal commands are running, and **Ask before quitting while agents or terminal commands are running** is on, it first asks in an `AlertDialog` that names them, as quitting does. Otherwise it restarts at once.
-- Main then stops the agents and flushes pending writes as on every quit ([agent host](./agent-host.md#startup-and-supervision)), and calls `quitAndInstall`.
+- Main then stops the agents and flushes pending writes as on every quit ([agent host](./agent-host.md#shutdown)), and calls `quitAndInstall(true, true)`: silently, and starting the new version afterwards. If the app is still running 10 s later, because the installer could not start, it quits anyway, since the hosts have already stopped; the update then installs at the next quit.
 - After the restart, the window, the sidebar, the open session and composer drafts come back ([persistence](./persistence.md)), and sessions reload their history with `session/load`. A restart costs a few seconds, not work.
-- OverBench never restarts by itself. A ready update that you do not restart for installs when you next quit (`autoInstallOnAppQuit`), unless the system is shutting down: on `powerMonitor`'s `shutdown`, or the window's `session-end` on Windows, the install is skipped, because the system could kill the installer halfway, and it runs at the next quit instead. electron-updater 7 will do this by itself.
+- OverBench never restarts by itself. A ready update that you do not restart for installs when you next quit (`autoInstallOnAppQuit`, Install mode only), unless the system is shutting down: on `powerMonitor`'s `shutdown`, or the window's `session-end` on Windows, the install is skipped, because the system could kill the installer halfway, and it runs at the next quit instead. electron-updater 7 will do this by itself. A signed macOS build hands the download to Squirrel.Mac as soon as it is ready, so there the skip cannot apply. During a system shutdown the quit itself also skips the confirmation, which no one could answer.
 
 ## After an update
 
-- Main remembers the last version that ran. On the first launch of a newer one, `updatedFrom` is set and the update notice reads "Updated to 0.3.0" with **What's new**, for that launch only.
+- Main remembers the last version that ran. On the first launch of a newer one, by semver precedence, `updatedFrom` is set and the update notice reads "Updated to 0.3.0" with **What's new**, for that launch only.
 - There is no dialog, no release notes tab and no OS notification.
 
 ## Storage
@@ -103,14 +105,14 @@ Downloaded updates stay in electron-updater's cache folder, which it cleans afte
 
 Calls from the renderer to main, added as described in [AGENTS.md](../../AGENTS.md#adding-an-ipc-call):
 
-| Channel             | Args | Result         | Notes                                                            |
-| ------------------- | ---- | -------------- | ---------------------------------------------------------------- |
-| `update:get-status` | none | `UpdateStatus` |                                                                  |
-| `update:check`      | none | `UpdateStatus` | A manual check                                                   |
-| `update:download`   | none | none           | Only in `available` with Install mode                            |
-| `update:restart`    | none | none           | Only in `ready`; the renderer has already asked, if it needed to |
-| `update:dismiss`    | none | none           | Hides the current notice until a newer version is found          |
-| `update:changed`    |      |                | Event from main to every window, with `UpdateStatus`             |
+| Channel             | Args | Result         | Notes                                                                                                                                                                          |
+| ------------------- | ---- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `update:get-status` | none | `UpdateStatus` |                                                                                                                                                                                |
+| `update:check`      | none | `UpdateStatus` | A manual check                                                                                                                                                                 |
+| `update:download`   | none | none           | Only in `available` with Install mode; rejects otherwise, and always in Link mode, where the renderer opens the release page                                                   |
+| `update:restart`    | none | none           | Only in `ready`; the renderer has already asked, if it needed to                                                                                                               |
+| `update:dismiss`    | none | none           | Hides the current notice until a newer version is found: `dismissed` becomes the version of the `ready` or `available` notice, or the running version for the "Updated to" one |
+| `update:changed`    |      |                | Event from main to every window, with `UpdateStatus`                                                                                                                           |
 
 ## Security
 
