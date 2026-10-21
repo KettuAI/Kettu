@@ -18,6 +18,10 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { ControlRow } from './control-row'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
 
+type BaseUIKeyboardEvent = KeyboardEvent<HTMLTextAreaElement> & {
+  preventBaseUIHandler?: () => void
+}
+
 /** The prompt box and the session's controls under it. */
 export function Composer({ session, agentName }: { session: SessionView; agentName: string }) {
   const sessionId = session.id
@@ -106,6 +110,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (slashOpen && (event.key === 'Enter' || event.key === 'Tab' || event.key === 'Escape'))
       return
+    // With no list open, Base UI's autocomplete clears its input on Escape, which here is the draft.
+    if (event.key === 'Escape') (event as BaseUIKeyboardEvent).preventBaseUIHandler?.()
     if (event.key === 'Escape' && running) {
       event.preventDefault()
       cancel()
