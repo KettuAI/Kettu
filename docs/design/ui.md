@@ -105,7 +105,7 @@ Settings is one scrolling page, the way VS Code's settings editor works. A colum
 
 - A **New session** row (`Mod+N`) at the top starts a session in the selected project.
 - Projects are collapsible groups: folder name, with the full path in a tooltip.
-- The sidebar's content is built from shadcn's `Sidebar` parts (`SidebarGroup`, `SidebarMenu`, `SidebarMenuButton` at `size="sm"`, which is 28 px, `SidebarMenuBadge`) with `collapsible="none"`, inside the `ResizablePanel` that owns its width. Rows have no border; hover and selection use the component's own fills.
+- The sidebar's content is built from shadcn's `Sidebar` parts (`SidebarGroup`, `SidebarMenu`, `SidebarMenuButton` at `size="sm"`, which is 28 px, `SidebarMenuBadge`) with `collapsible="none"`, inside the `ResizablePanel` that owns its width. Rows have no border; hover and selection use the component's own fills, and a row keeps the hover fill while its context menu is open.
 - Each row: the agent's [mark](./design-system.md#agent-marks) at 14 px, title (truncated), relative time, and one status indicator, in this order of priority:
   1. **Waiting for you** (`attention: 'permission'`): an `--attention` pill with the count, in place of the time. This is the loudest signal in the app.
   2. **Error** (`attention: 'error'`): a destructive `CircleAlert` icon.
