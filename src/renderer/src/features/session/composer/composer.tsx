@@ -236,8 +236,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             sideOffset={6}
             className="isolate z-50 outline-none"
           >
-            <Autocomplete.Popup className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] origin-(--transform-origin) overflow-y-auto rounded-xl bg-popover p-1 text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-              <Autocomplete.List>
+            <Autocomplete.Popup className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] flex origin-(--transform-origin) flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+              <Autocomplete.List className="min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain p-1">
                 {(command: SlashCommand) => (
                   <Autocomplete.Item
                     key={command.name}
