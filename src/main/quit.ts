@@ -125,6 +125,11 @@ export class QuitFlow {
       const fallBack = (): void => {
         if (this.pending === pending) void this.askNatively(pending)
       }
+      const onNavigation = (
+        details: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>,
+      ): void => {
+        if (details.isMainFrame && !details.isSameDocument) fallBack()
+      }
       const pending: PendingAnswer = {
         request,
         webContents,
@@ -133,7 +138,7 @@ export class QuitFlow {
           this.pending = null
           if (webContents && !webContents.isDestroyed()) {
             webContents.off('destroyed', fallBack)
-            webContents.off('did-start-navigation', fallBack)
+            webContents.off('did-start-navigation', onNavigation)
           }
           resolve(confirmed)
         },
@@ -144,7 +149,7 @@ export class QuitFlow {
         return
       }
       webContents.once('destroyed', fallBack)
-      webContents.once('did-start-navigation', fallBack)
+      webContents.on('did-start-navigation', onNavigation)
       if (window.isMinimized()) window.restore()
       window.show()
       window.focus()
