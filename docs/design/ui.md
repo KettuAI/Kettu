@@ -49,7 +49,7 @@ Launching should feel like opening a lid, not waiting for a page: no white or bl
 └─────────────┴──────────────────────────────────────────┴──────────────────────────┘
 ```
 
-- Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B` through the panel's own collapse, and remembers its size per device.
+- Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B` through the panel's own collapse, and remembers its size per device. The width at collapse is saved too, so an app that starts collapsed expands back to it, not to the minimum. Collapsed, the handle takes no width, so no line shows at the window's edge.
 - The sidebar sits on surface 0 and the thread on surface 1. The step between them is the only separation; the resize handle shows a hairline only while it is hovered or dragged.
 - The thread is a single centred column, 768 px at most (`max-w-3xl`), so prose keeps a comfortable line length at any window width. Tool cards and diffs use the same column.
 - The [terminal](#terminal) opens in the **side panel** on the right of the main area. It sits flush on surface 0, like the sidebar on the left, so the thread on surface 1 is framed by two quieter surfaces and needs no line or shadow to stand apart. The layout follows the reference; the styling is OverBench's own. The thread column keeps the rest of the width and its own top bar. The Changes panel arrives later as a second view of the same side panel.

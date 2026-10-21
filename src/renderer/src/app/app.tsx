@@ -11,7 +11,7 @@ import { HostBanner } from '@renderer/features/shell/host-banner'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
-import { layoutStorage } from '@renderer/lib/storage'
+import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { useViewStore } from '@renderer/stores/view'
 import { useKeyboardShortcuts } from './shortcuts'
@@ -54,18 +54,27 @@ export function App() {
   )
 }
 
+// The sidebar's width when it was last collapsed, for an app that starts collapsed.
+const SIDEBAR_WIDTH = 'sidebar-width'
+
 function Workbench() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   // Fixed at mount: a changed default re-registers the panel, which forgets its size before collapsing.
   const [sidebarDefault] = useState(() => (collapsed ? '0px' : '260px'))
   const sidebar = usePanelRef()
+  const width = useRef(0)
   const layout = useDefaultLayout({ id: 'workbench', storage: layoutStorage })
 
   useEffect(() => {
     const panel = sidebar.current
     if (!panel) return
     if (collapsed && !panel.isCollapsed()) panel.collapse()
-    if (!collapsed && panel.isCollapsed()) panel.expand()
+    if (!collapsed && panel.isCollapsed()) {
+      panel.expand()
+      // Started collapsed, the panel has no size to return to, so it takes the one saved on collapse.
+      const saved = readJson(SIDEBAR_WIDTH, 0)
+      if (saved > panel.getSize().inPixels) panel.resize(saved)
+    }
   }, [collapsed, sidebar])
 
   return (
@@ -86,6 +95,11 @@ function Workbench() {
         groupResizeBehavior="preserve-pixel-size"
         onResize={(size) => {
           const isCollapsed = size.inPixels === 0
+          if (!isCollapsed) width.current = size.inPixels
+          else if (width.current > 0) {
+            writeJson(SIDEBAR_WIDTH, width.current)
+            width.current = 0
+          }
           if (isCollapsed !== useViewStore.getState().sidebarCollapsed) {
             useViewStore.setState({ sidebarCollapsed: isCollapsed })
           }
@@ -94,7 +108,8 @@ function Workbench() {
       >
         <AppSidebar />
       </ResizablePanel>
-      <ResizableHandle className={cn(collapsed && 'pointer-events-none')} />
+      {/* Collapsed, the handle takes no width, so nothing shows at the window's edge. */}
+      <ResizableHandle className={cn(collapsed && 'pointer-events-none w-0')} />
       <ResizablePanel id="main" minSize="560px" className="min-w-0 bg-background">
         <MainArea />
       </ResizablePanel>
