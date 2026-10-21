@@ -18,6 +18,7 @@ import { initTerminals } from '@renderer/stores/terminals'
 import { forgetSession, receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { initUpdates } from '@renderer/stores/updates'
 import { lastSessionId, openSession, useViewStore } from '@renderer/stores/view'
+import { installPerfCounters } from './perf'
 
 function onHostEvent(event: HostEvent): void {
   switch (event.type) {
@@ -77,6 +78,7 @@ function restoreLastSession(): void {
 let wasDisconnected = false
 
 export function bootstrap(): void {
+  installPerfCounters()
   const agents = window.overbench.agents
   agents.onEvent(onHostEvent)
   agents.onConnection((state) => {

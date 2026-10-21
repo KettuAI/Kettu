@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { markSwitchStart } from '@renderer/app/perf'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
 export type MainView =
@@ -71,6 +72,8 @@ useViewStore.subscribe((state) => {
 })
 
 export function openSession(sessionId: string, projectPath: string): void {
+  const { main } = useViewStore.getState()
+  if (main.kind !== 'session' || main.sessionId !== sessionId) markSwitchStart(sessionId)
   useViewStore.setState({
     main: { kind: 'session', sessionId },
     projectPath,

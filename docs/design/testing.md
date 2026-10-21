@@ -90,18 +90,24 @@ Real agents never run in CI: they need accounts and cost money.
 
 ## Measuring performance
 
-Budgets are measured on a production build, packaged with `pnpm package`, launched with `--remote-debugging-port` and `OVERBENCH_FAKE_AGENT`, and driven by `tools/perf/measure.mjs`, a script with no dependencies that talks to the renderer over the Chrome DevTools Protocol.
+Budgets are measured on a production build with the fake agent, launched with `--overbench-perf` and `--remote-debugging-port`, and driven by `tools/perf/measure.mjs`, a script with no dependencies that talks to the renderer over the Chrome DevTools Protocol. Either build works:
 
-| Budget                            | How it is measured                                                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Launch to first interactive frame | The renderer sends `perf:interactive` after the first frame of the app shell; main records `process.uptime()` then |
-| Renderer commits while streaming  | With the `--overbench-perf` launch flag, the renderer counts store updates per animation frame                     |
-| Main-thread long tasks            | A `PerformanceObserver` for `long-animation-frame`, during `long-stream` and `tool-storm`                          |
-| Session switch                    | A mark when the switch starts and when the first frame of the new session has painted, using `large-history`       |
-| Keystroke to paint                | Event timing entries for input in the composer while `long-stream` runs                                            |
-| Agent host memory                 | `app.getAppMetrics()` for the process named OverBench Agent Host, after `tool-storm`                               |
+- unpacked: `pnpm build`, then `pnpm exec electron-vite preview --skipBuild -- --overbench-perf --remote-debugging-port=9222`; development builds list the fake agent on their own;
+- packaged: `pnpm package`, then start the app with `OVERBENCH_FAKE_AGENT` set to the path of `tools/fake-agent/main.ts` and the same two flags.
 
-The script prints a table; the results for each platform are recorded in `docs/perf/m0.md` with the date, machine, OS and app version. A change that makes a budget fail is not merged.
+Open a project in the app, leave the window alone, and run `node tools/perf/measure.mjs --port 9222` (`--json` prints the raw numbers). The script drives the real UI with real input events: it starts fake-agent sessions from the sidebar, sends `/long-stream`, `/tool-storm` and `/large-history` through the composer, and closes and reopens a session from the session menu and the sidebar.
 
+| Budget                            | How it is measured                                                                                                                                                                                                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Launch to first interactive frame | The renderer sends `perf:interactive` after the first frame of the app shell; main records `process.uptime()` then and returns it from `perf:metrics`                                                                                                                  |
+| Renderer commits while streaming  | The renderer counts thread store updates per animation frame during `long-stream`                                                                                                                                                                                      |
+| Main-thread long tasks            | A `PerformanceObserver` for `long-animation-frame`, during `long-stream` and `tool-storm`                                                                                                                                                                              |
+| Session switch                    | From the click on a session to the task after the first frame painted with its thread, measured five times against the session `large-history` left with 1,000 entries, after a switch away                                                                            |
+| Keystroke to paint                | A letter typed every 150 ms into the composer while `long-stream` runs, timed from the key event to the start of the frame after the one that shows it. Event Timing durations are reported too; they run to the frame's presentation and so include the OS compositor |
+| Agent host memory                 | The working set of the process named OverBench Agent Host in `app.getAppMetrics()`, from `perf:metrics`, after `tool-storm`                                                                                                                                            |
+
+The script prints a table; the results for each platform are recorded in [`docs/perf/m0.md`](../perf/m0.md) with the date, machine, OS and app version. A change that makes a budget fail is not merged.
+
+- With `--overbench-perf`, the renderer exposes its counters as `window.__overbenchPerf` (`frames()`, `switches()`, `reset()`), which the script reads with `Runtime.evaluate`, and main answers the `perf:metrics` IPC call, which rejects without the flag.
 - Main logs the first `perf:interactive` of a launch to stdout as `perf:interactive <ms> ms after launch`, and later ones, from reloads, separately; diagnostics keep it as `main.launchToInteractiveMs`.
 - When main itself was started with `--overbench-perf`, it passes the flag to each page with `additionalArguments`, and the preload sets `window.overbench.perf`. It also turns off `backgroundThrottling`, so a window behind others or on another Space still renders every frame and runs its timers on time while it is measured.

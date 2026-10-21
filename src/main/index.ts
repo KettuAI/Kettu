@@ -87,7 +87,7 @@ async function start(): Promise<void> {
     updater.settingsChanged(next, changed)
   })
 
-  registerIpcHandlers({ settings, agentHost, terminalHost, updater, quit: quitFlow })
+  registerIpcHandlers({ settings, agentHost, terminalHost, updater, quit: quitFlow, perf })
   installMenu({ checkForUpdates: () => void updater.check() })
 
   app.on('browser-window-created', (_, window) => {

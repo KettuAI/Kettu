@@ -27,6 +27,8 @@ export interface IpcDeps {
   terminalHost: TerminalHost
   updater: Updater
   quit: QuitFlow
+  /** Started with --overbench-perf. */
+  perf: boolean
 }
 
 interface Caller {
@@ -106,6 +108,7 @@ export function registerIpcHandlers({
   terminalHost,
   updater,
   quit,
+  perf,
 }: IpcDeps): void {
   handle('app:get-info', 0, (): AppInfo => ({
     name: app.getName(),
@@ -179,6 +182,19 @@ export function registerIpcHandlers({
   })
   handle('terminal-host:restart', 0, () => {
     terminalHost.restart()
+  })
+
+  handle('perf:metrics', 0, () => {
+    if (!perf) throw new Error('"perf:metrics" needs --overbench-perf')
+    return {
+      launchToInteractiveMs,
+      processes: app.getAppMetrics().map((metric) => ({
+        type: metric.type,
+        name: metric.name ?? null,
+        pid: metric.pid,
+        workingSetKB: metric.memory.workingSetSize,
+      })),
+    }
   })
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))

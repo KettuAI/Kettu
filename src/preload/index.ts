@@ -66,6 +66,7 @@ const api: OverbenchApi = {
       }
     },
     reportInteractive: () => send('perf:interactive'),
+    perfMetrics: () => invoke('perf:metrics'),
   },
   settings: {
     get: () => invoke('settings:get'),

@@ -4,6 +4,7 @@ import type { SessionSummary } from '@shared/agent-host'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { markThreadShown } from '@renderer/app/perf'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -53,6 +54,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   useEscapeToCancel(sessionId, !!session && running, fail)
 
   let body
+  let showsThread = false
   if (!session) {
     body =
       replicaStatus === 'error' ? (
@@ -90,6 +92,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   } else if (!renderersReady) {
     body = <ThreadSkeleton />
   } else {
+    showsThread = true
     body = (
       <Thread
         sessionId={sessionId}
@@ -99,6 +102,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       />
     )
   }
+
+  useEffect(() => {
+    if (showsThread) markThreadShown(sessionId)
+  }, [sessionId, showsThread])
 
   return (
     <div className="flex h-full min-h-0 flex-col">

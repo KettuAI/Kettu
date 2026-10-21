@@ -24,6 +24,13 @@ export interface QuitRequest {
   terminals: BusyTerminal[]
 }
 
+/** What a perf run (--overbench-perf) reads from main; see docs/design/testing.md. */
+export interface PerfMetrics {
+  launchToInteractiveMs: number | null
+  /** From `app.getAppMetrics()`; a utility process is named by the serviceName it was forked with. */
+  processes: { type: string; name: string | null; pid: number; workingSetKB: number }[]
+}
+
 /** Commands main sends to the renderer, from the app menu or a notification. */
 export type AppCommand =
   | { kind: 'open-project' }
@@ -50,6 +57,7 @@ export interface IpcInvokeContract {
   'update:dismiss': { args: []; result: void }
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
+  'perf:metrics': { args: []; result: PerfMetrics }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -100,6 +108,8 @@ export interface OverbenchApi {
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     onCommand(listener: (command: AppCommand) => void): () => void
     reportInteractive(): void
+    /** Only answers in a perf run; rejects otherwise. */
+    perfMetrics(): Promise<PerfMetrics>
   }
   settings: {
     get(): Promise<SettingsFile>
