@@ -73,7 +73,7 @@ Shown when a project is selected but no session is. The three agents as large se
 
 ### Session
 
-The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **New sub-session**, **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)), followed by the agent's mark and name in `--muted-foreground`. A sub-session's top bar starts with its parent's title as a link. On the right of the top bar sit the [git status](#git-in-the-top-bar) and the terminal toggle; Project home shows them too.
+The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **New sub-session**, **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)); closing or deleting the shown session, or its parent, returns to the project home, and a closed session opens again from the sidebar with `session/load`. The title is followed by the agent's mark and name in `--muted-foreground`. A sub-session's top bar starts with its parent's title as a link. On the right of the top bar sit the [git status](#git-in-the-top-bar) and the terminal toggle; Project home shows them too.
 
 ### Subagent
 

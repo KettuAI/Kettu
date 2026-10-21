@@ -80,8 +80,16 @@ export function retryPendingSession(): void {
   if (pending) void createSession(pending.agentId, pending.projectPath, pending.parentId)
 }
 
+/** Drops the live state of the session and its sub-sessions; opening one loads it again. */
 export async function closeSession(sessionId: string): Promise<void> {
+  const summary = useSessionsStore.getState().byId[sessionId]
+  const closed = [sessionId, ...descendantIds(sessionId)]
   await host('sessions.close', { sessionId })
+  for (const id of closed) forgetSession(id)
+  const view = useViewStore.getState()
+  if (view.main.kind === 'session' && closed.includes(view.main.sessionId)) {
+    openProjectHome(summary?.projectPath ?? view.projectPath)
+  }
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -98,18 +106,22 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 /** All sessions under a session, for the confirmation that names how many go with it. */
 export function descendantCount(sessionId: string): number {
+  return descendantIds(sessionId).length
+}
+
+function descendantIds(sessionId: string): string[] {
   const { byId } = useSessionsStore.getState()
-  let count = 0
+  const ids: string[] = []
   const walk = (id: string) => {
     for (const s of Object.values(byId)) {
       if (s.parentId === id) {
-        count++
+        ids.push(s.id)
         walk(s.id)
       }
     }
   }
   walk(sessionId)
-  return count
+  return ids
 }
 
 /** Collects the diagnostics bundle and asks main where to save it; null when cancelled. */
