@@ -25,7 +25,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 17  | Settings › Agents leaves out what matters                      | Settings       | Open         |
 | 18  | The About page needs redoing                                   | Settings       | Open         |
 | 19  | Settings leave too much empty space                            | Settings       | Open         |
-| 20  | Collapsing the sidebar is abrupt                               | Sidebar        | Open         |
+| 20  | Collapsing the sidebar is abrupt                               | Sidebar        | Fixed        |
 | 21  | No file browser or preview                                     | Side panel     | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
@@ -187,6 +187,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: collapsing the sidebar, with the toggle or `Mod+B`, removes it in a single frame, and the content jumps to its new width with no transition. Expanding is the same.
 - **Expected**: collapsing and expanding animate, so the change reads as a movement instead of a cut.
 - **Today**: the sidebar collapses through the `ResizablePanel`'s own collapse ([Interface: layout](../design/ui.md#layout)), and [Interface: motion](../design/ui.md#motion) gives it no animation, so it happens at once. The design system allows the disclosure as the only layout animation ([Design system: patterns](../design/design-system.md#patterns)), and animating the width would lay out a long thread again on every frame. To settle when planning: how the sidebar moves (for example sliding it with `transform` while the content resizes once, or animating the panel's size) and its timing, checked against the frame budget with a long thread, with reduce motion honoured; the design system's rule changes with it.
+- **Fixed**: the toggle and `Mod+B` slide the sidebar over `--duration-slow` with `--ease-out-quart`, through a transition on the panels' `flex-grow` that only a toggle sets, so resizing by drag stays immediate; reduce motion keeps it instant. Both panels' contents take their final widths at once against the panel's right edge, so the thread lays out once, as it did, and the sidebar slides in or out with its content intact. Measured on a production build at 120 Hz: with a 1,250-entry thread, with or without the terminal open, neither direction had a task over 15 ms. A single 200 KB message with the terminal open, where the thread column changes width, costs one or two frames of 30 to 55 ms, as the instant toggle did (44 to 56 ms). The design system's [patterns](../design/design-system.md#patterns) name the slide as the one layout animation between panels.
 
 ## 21. No file browser or preview
 
