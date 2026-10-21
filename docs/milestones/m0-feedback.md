@@ -20,7 +20,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 12  | Switching sessions visibly stalls                              | Performance    | Partly fixed |
 | 13  | The git popover only displays, and repeats the terminal toggle | Git            | Open         |
 | 14  | The terminal panel's own buttons do nothing                    | Terminal       | Fixed        |
-| 15  | Settings selects show names only and keep the default look     | Settings       | Open         |
+| 15  | Settings selects show names only and keep the default look     | Settings       | Partly fixed |
 | 16  | Switches keep shadcn's default look                            | Settings       | Open         |
 | 17  | Settings › Agents leaves out what matters                      | Settings       | Open         |
 | 18  | The About page needs redoing                                   | Settings       | Open         |
@@ -146,6 +146,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Expected**: options show a mark with the name, which is required for agents, so a choice is recognised at a glance; and the select gets a look designed for OverBench.
 - **Today**: both selects in Settings, Default agent in General and Automatic updates in About, go through `SettingSelect` in `src/renderer/src/features/settings/controls.tsx`. It takes only a value and a label per option and renders shadcn's `Select` unchanged, which lines the chosen item up with the trigger by default (`alignItemWithTrigger`). The agents' marks already exist ([Design system: agent marks](../design/design-system.md#agent-marks)). To settle when planning: the select's design and whether other selects in the app follow it, and what "Ask each time" and options that are not agents show in place of a mark.
 
+- **Partly fixed**: `SettingSelect` options take an icon, shown in the list and the trigger; Default agent shows each agent's mark and a neutral `CircleHelp` for "Ask each time". The select's look is still to be designed.
 ## 16. Switches keep shadcn's default look
 
 - **Reported**: 2026-10-21, with a screenshot of two switches in Settings › General.

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import {
   Select,
@@ -64,7 +65,7 @@ export function SettingSelect<T extends string>({
 }: {
   label: string
   value: T
-  options: { value: T; label: string }[]
+  options: { value: T; label: string; icon?: ReactNode }[]
   onChange: (value: T) => void
 }) {
   return (
@@ -76,12 +77,23 @@ export function SettingSelect<T extends string>({
       }}
     >
       <SelectTrigger aria-label={label} className="min-w-40">
-        <SelectValue />
+        <SelectValue>
+          {(current: T) => {
+            const chosen = options.find((o) => o.value === current)
+            return (
+              <>
+                {chosen?.icon}
+                {chosen?.label}
+              </>
+            )
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent align="end">
         <SelectGroup>
           {options.map((o) => (
             <SelectItem key={o.value} value={o.value}>
+              {o.icon}
               {o.label}
             </SelectItem>
           ))}

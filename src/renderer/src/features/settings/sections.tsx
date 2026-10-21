@@ -1,8 +1,9 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { FileDownIcon, FolderOpenIcon, TrashIcon } from 'lucide-react'
+import { CircleHelpIcon, FileDownIcon, FolderOpenIcon, TrashIcon } from 'lucide-react'
 import type { SettingsFile } from '@shared/settings'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,10 +38,15 @@ export function DefaultAgent() {
   const value = useSettings().general.defaultAgent
   const [apply, error] = useApply()
   const options = [
-    { value: 'ask', label: 'Ask each time' },
+    {
+      value: 'ask',
+      label: 'Ask each time',
+      icon: <CircleHelpIcon className="size-3.5 text-muted-foreground" />,
+    },
     ...AGENT_IDS.filter((id) => id !== 'fake-agent').map((id) => ({
       value: id,
       label: AGENT_NAMES[id],
+      icon: <AgentMark agent={id} className="size-3.5" />,
     })),
   ]
   return (
