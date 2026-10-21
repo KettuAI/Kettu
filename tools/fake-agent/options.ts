@@ -38,7 +38,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'auth-required': {
     description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
   },
-  'large-history': { description: 'Makes reopening this session replay 1,000 entries' },
+  'large-history': {
+    description: 'Makes reopening this session replay 1,000 entries',
+    hint: '--entries <n>',
+  },
   'slow-start': { description: 'Explains how to start the agent slowly (set at launch)' },
   'all-updates': { description: 'Sends every session update variant once, plus an unknown one' },
   subagent: { description: 'Runs a subagent in a child session with a permission request' },
@@ -55,6 +58,7 @@ export interface ScenarioOptions {
   ignoreCancel: boolean
   withdrawMs: number | null // permission: withdraw the request after this long
   exitCode: number
+  entries: number // large-history: the entries its replay synthesizes
 }
 
 export interface ScenarioChoice {
@@ -133,8 +137,14 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
       flagValue(args, 'ignore-cancel') !== undefined || env.FAKE_AGENT_IGNORE_CANCEL === '1',
     withdrawMs: withdraw === undefined ? null : withdraw === '' ? 1500 : parseNumber(withdraw),
     exitCode: parseNumber(flagValue(args, 'code')) ?? 3,
+    entries: historyEntries(env, parseNumber(flagValue(args, 'entries'))),
   }
   return { scenario, options, text }
+}
+
+/** The size of a large-history replay: the flag, else `FAKE_AGENT_HISTORY_ENTRIES`, else 1,000. */
+export function historyEntries(env: Env, flag: number | null = null): number {
+  return flag || parseNumber(env.FAKE_AGENT_HISTORY_ENTRIES) || 1000
 }
 
 /** Multiplies every delay; 0 runs scenarios as fast as possible, for tests. */

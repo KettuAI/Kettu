@@ -27,6 +27,7 @@ import {
   SCENARIO_DESCRIPTIONS,
   chooseScenario,
   delayScale,
+  historyEntries,
   type Env,
   type ScenarioName,
 } from './options.ts'
@@ -217,7 +218,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       title: null,
       turns: 0,
       usedTokens: 0,
-      largeHistory: id.startsWith('large-history'),
+      largeHistory: id.startsWith('large-history') ? historyEntries(env) : null,
       signedOut: false,
       mode: 'ask',
       model: 'balanced',
@@ -280,9 +281,8 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   }
 
   const replay = async (client: AgentContext, session: FakeSession): Promise<void> => {
-    const entries = Number(env.FAKE_AGENT_HISTORY_ENTRIES ?? '') || 1000
-    if (session.largeHistory) {
-      for (const update of syntheticHistory(entries)) {
+    if (session.largeHistory !== null) {
+      for (const update of syntheticHistory(session.largeHistory)) {
         await client.notify(methods.client.session.update, { sessionId: session.id, update })
       }
       return
@@ -364,7 +364,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       if (!session) {
         session = newSession(ctx.params.sessionId, ctx.params.cwd)
         session.title = 'Restored session'
-        if (!session.largeHistory) {
+        if (session.largeHistory === null) {
           for (const update of syntheticHistory(8)) record(session, session.id, update)
         }
       }

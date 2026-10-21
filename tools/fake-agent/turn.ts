@@ -14,7 +14,8 @@ export interface FakeSessionState {
   title: string | null
   turns: number
   usedTokens: number
-  largeHistory: boolean
+  /** The entries its `session/load` replay synthesizes; null replays what it recorded. */
+  largeHistory: number | null
   /** Its last prompt signed the agent out with the auth-required scenario. */
   signedOut: boolean
   mode: string

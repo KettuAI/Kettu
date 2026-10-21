@@ -385,10 +385,11 @@ const authRequired: Scenario = async (turn) => {
 }
 
 const largeHistory: Scenario = async (turn) => {
-  turn.session.largeHistory = true
+  const entries = turn.options.entries
+  turn.session.largeHistory = entries
   await stream(
     turn,
-    'This session now has a **1,000-entry** history. Close it and open it again to replay it with `session/load`.',
+    `This session now has a **${entries.toLocaleString('en')}-entry** history. Close it and open it again to replay it with \`session/load\`.`,
   )
   return 'end_turn'
 }

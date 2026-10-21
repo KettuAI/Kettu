@@ -120,11 +120,10 @@ if (!(await evaluate('Boolean(window.overbench.perf && window.__overbenchPerf)')
   throw new Error('Start OverBench with --overbench-perf')
 }
 
-const byText = (selector, text) =>
-  `return [...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.textContent.includes(${JSON.stringify(text)}))`
-
-const sessionTitle = () =>
-  evaluate(`document.querySelector('header [data-slot=dropdown-menu-trigger]')?.textContent.trim()`)
+const shownSession = () =>
+  evaluate(`document.querySelector('[data-session-id][aria-current=page]')?.dataset.sessionId`)
+const sessionRow = (sessionId) =>
+  `return document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]')`
 
 const fakeAgentCard = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`
 
@@ -262,6 +261,7 @@ await newFakeSession()
 await startObserving()
 const keystrokes = await runTurn('/long-stream', typeWhileStreaming)
 results.stream = { ...(await stopObserving()), keystrokes }
+const streamSession = await shownSession()
 await clearComposer()
 
 log('tool-storm: 500 tool calls…')
@@ -269,59 +269,106 @@ await newFakeSession()
 await startObserving()
 await runTurn('/tool-storm')
 results.storm = await stopObserving()
-const stormTitle = await sessionTitle()
+const stormSession = await shownSession()
 const after = await evaluate('window.overbench.app.perfMetrics()')
 const agentHost = after.processes.find((p) => p.name === 'OverBench Agent Host')
 results.agentHostMB = agentHost ? agentHost.workingSetKB / 1024 : null
 
+/** Closes the shown session through its menu, which returns to the project home. */
+async function closeShownSession() {
+  await click(
+    `return document.querySelector('header [data-slot=dropdown-menu-trigger]')`,
+    'the session menu',
+  )
+  await waitFor(
+    `[...document.querySelectorAll('[role=menuitem]')].some((m) => m.textContent.trim() === 'Close')`,
+    { what: 'the session menu' },
+  )
+  await click(
+    `return [...document.querySelectorAll('[role=menuitem]')].find((m) => m.textContent.trim() === 'Close')`,
+    'Close',
+  )
+  await waitFor(`!document.querySelector('header [data-slot=dropdown-menu-trigger]')`, {
+    what: 'the project home after Close',
+  })
+}
+
+/**
+ * Clicks a session's row and measures the switch: its first paint, then when it settled, the end
+ * of the last frame over 50 ms before a second without one, and how many such frames there were.
+ */
+async function switchTo(sessionId, what) {
+  await evaluate(`(() => {
+    const probe = (window.__switchProbe = { t0: performance.now(), loaf: [] })
+    probe.observer = new PerformanceObserver((list) => probe.loaf.push(...list.getEntries()))
+    probe.observer.observe({ type: 'long-animation-frame' })
+    window.__overbenchPerf.reset()
+    return true
+  })()`)
+  await click(sessionRow(sessionId), what)
+  await waitFor('window.__overbenchPerf.switches().length > 0', { timeout: 60_000, what })
+  const quiet = `(() => {
+    const { loaf, t0 } = window.__switchProbe
+    const last = Math.max(t0 + window.__overbenchPerf.switches()[0].ms, ...loaf.map((f) => f.startTime + f.duration))
+    return performance.now() - last > 1000
+  })()`
+  await waitFor(quiet, { timeout: 60_000, what: `${what} to settle` })
+  return evaluate(`(() => {
+    const { loaf, t0, observer } = window.__switchProbe
+    observer.disconnect()
+    const paint = window.__overbenchPerf.switches()[0].ms
+    return {
+      paint,
+      settled: Math.max(paint, ...loaf.map((f) => f.startTime + f.duration - t0)),
+      longFrames: loaf.length,
+      longest: Math.max(0, ...loaf.map((f) => f.duration)),
+    }
+  })()`)
+}
+
 log('large-history: close and reopen a session with 1,000 entries, then switch to it…')
 await newFakeSession()
 await runTurn('/large-history')
-const title = await sessionTitle()
-await click(
-  `return document.querySelector('header [data-slot=dropdown-menu-trigger]')`,
-  'the session menu',
-)
-await waitFor(
-  `[...document.querySelectorAll('[role=menuitem]')].some((m) => m.textContent.trim() === 'Close')`,
-  { what: 'the session menu' },
-)
-await click(
-  `return [...document.querySelectorAll('[role=menuitem]')].find((m) => m.textContent.trim() === 'Close')`,
-  'Close',
-)
-// Closing the shown session returns to the project home.
-await waitFor(`!document.querySelector('header [data-slot=dropdown-menu-trigger]')`, {
-  what: 'the project home after Close',
-})
-await evaluate('window.__overbenchPerf.reset()')
-const sidebarRow = byText('[data-sidebar=menu-button], [data-slot=sidebar-menu-button]', title)
-await click(sidebarRow, `the "${title}" row in the sidebar`)
-await waitFor('window.__overbenchPerf.switches().length > 0', {
-  timeout: 60_000,
-  what: 'the reopened session',
-})
-results.reopenMs = (await evaluate('window.__overbenchPerf.switches()'))[0].ms
+const largeSession = await shownSession()
+await closeShownSession()
+results.reopen = await switchTo(largeSession, 'the reopened 1,000-entry session')
 const entries = await evaluate(
   `document.querySelectorAll('[data-slot=message-scroller-item]').length`,
 )
-// Away to the tool-storm session and back: the switch the budget is about.
-const other = stormTitle
+// Away to the tool-storm session and back: the switch the budget is about. Both stay mounted.
 const switches = []
 for (let i = 0; i < 5; i++) {
-  await click(
-    byText('[data-sidebar=menu-button], [data-slot=sidebar-menu-button]', other),
-    'another session',
-  )
+  await click(sessionRow(stormSession), 'the tool-storm session')
   await sleep(400)
-  await evaluate('window.__overbenchPerf.reset()')
-  await click(sidebarRow, `the "${title}" row`)
-  await waitFor('window.__overbenchPerf.switches().length > 0', { what: 'the switch' })
-  switches.push((await evaluate('window.__overbenchPerf.switches()'))[0].ms)
+  switches.push(await switchTo(largeSession, 'the 1,000-entry session'))
   await sleep(400)
 }
-switches.sort((a, b) => a - b)
-results.switch = { median: switches[2], worst: switches.at(-1), items: entries }
+const paints = switches.map((s) => s.paint).sort((a, b) => a - b)
+results.switch = {
+  median: paints[2],
+  worst: paints.at(-1),
+  settledWorst: Math.max(...switches.map((s) => s.settled)),
+  longFrames: switches.reduce((n, s) => n + s.longFrames, 0),
+  longest: Math.max(...switches.map((s) => s.longest)),
+  items: entries,
+}
+
+log('large-history: close and reopen a session with 4,000 entries…')
+await newFakeSession()
+await runTurn('/large-history --entries 4000')
+const hugeSession = await shownSession()
+await closeShownSession()
+results.reopen4k = await switchTo(hugeSession, 'the reopened 4,000-entry session')
+await switchTo(stormSession, 'the tool-storm session')
+await sleep(400)
+results.switch4k = await switchTo(hugeSession, 'the 4,000-entry session')
+
+log('evicted: back to the 1,000-entry session after four others…')
+// Four other sessions shown after it drop its replica and unmount it.
+await newFakeSession()
+await switchTo(streamSession, 'the long-stream session')
+await switchTo(stormSession, 'the tool-storm session')
+results.evicted = await switchTo(largeSession, 'the evicted 1,000-entry session')
 
 cdp.close()
 
@@ -381,9 +428,15 @@ if (asJson) {
   console.log(`|${widths.map((w) => '-'.repeat(w + 2)).join('|')}|------|`)
   for (const row of rows) console.log(line(row.slice(0, 3)) + (row[3] ? ' yes  |' : ' NO   |'))
   console.log('')
+  const sw = (r) =>
+    `first paint ${ms(r.paint)}, settled ${ms(r.settled)}, ${r.longFrames} frames over 50 ms (longest ${ms(r.longest)})`
   console.log(
-    `Also: reopening the 1,000-entry session with session/load took ${ms(results.reopenMs)}.`,
+    `Reopening with session/load: 1,000 entries ${sw(results.reopen)}; 4,000 entries ${sw(results.reopen4k)}.`,
   )
+  console.log(
+    `Switches back to the 1,000-entry session: settled within ${ms(results.switch.settledWorst)}, ${results.switch.longFrames} frames over 50 ms in five (longest ${ms(results.switch.longest)}). To it after it was evicted: ${sw(results.evicted)}.`,
+  )
+  console.log(`Back to the 4,000-entry session: ${sw(results.switch4k)}.`)
   console.log(
     `Of the keystroke time, delivery from the browser to the renderer's handler: p95 ${ms(results.stream.deliveryP95)}, slowest ${ms(results.stream.deliveryMax)}; to the composer's input event: p95 ${ms(results.stream.toInputP95)}.`,
   )

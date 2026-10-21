@@ -40,6 +40,13 @@ describe('chooseScenario', () => {
     expect(chooseScenario('/permission --withdraw 10', {}).options.withdrawMs).toBe(10)
     expect(chooseScenario('/permission', {}).options.withdrawMs).toBeNull()
   })
+
+  it('sizes a large history from --entries, else the environment, else 1,000', () => {
+    const env = { FAKE_AGENT_HISTORY_ENTRIES: '2000' }
+    expect(chooseScenario('/large-history --entries 4000', env).options.entries).toBe(4000)
+    expect(chooseScenario('/large-history', env).options.entries).toBe(2000)
+    expect(chooseScenario('/large-history', {}).options.entries).toBe(1000)
+  })
 })
 
 describe('delayScale', () => {
