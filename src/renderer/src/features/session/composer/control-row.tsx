@@ -220,9 +220,9 @@ const tierText: Record<EffortTier, string> = {
 }
 
 /**
- * One button for the model, with the reasoning level after it, and one menu for both. The menu
- * stays open while choosing, so a model and its level can be set together: 1 to 4 pick a model,
- * the left and right arrows step the level, and Escape closes it.
+ * One button for the model, with the reasoning level after it, and one menu for both. Choosing a
+ * model, by click or with 1 to 4, closes the menu; the level, which the left and right arrows
+ * step, and the switches keep it open, so several can be set in one visit.
  */
 function ModelMenu({
   model,
@@ -235,6 +235,7 @@ function ModelMenu({
   switches: ConfigOption[]
   onSelect: Select
 }) {
+  const [open, setOpen] = useState(false)
   const [modelValue, pickModel] = usePick(model, onSelect)
   const [effortValue, pickEffort] = usePick(effort, onSelect)
   const level = effort ? levelsOf(effort, effortValue) : null
@@ -255,6 +256,7 @@ function ModelMenu({
     if (choice) {
       event.preventDefault()
       pickModel(choice.value)
+      setOpen(false)
       return
     }
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
@@ -270,7 +272,7 @@ function ModelMenu({
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           <Button
@@ -311,7 +313,13 @@ function ModelMenu({
                 ref={showChosen}
                 className="relative -mx-1 max-h-72 scroll-fade-y overflow-y-auto overscroll-contain px-1"
               >
-                <Choices option={model} value={modelValue} onPick={pickModel} numbered />
+                <Choices
+                  option={model}
+                  value={modelValue}
+                  onPick={pickModel}
+                  numbered
+                  closeOnClick
+                />
               </div>
             </DropdownMenuGroup>
           )}
