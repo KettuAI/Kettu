@@ -181,7 +181,7 @@ function TerminalTab({
   return (
     <div
       className={cn(
-        'group/tab relative flex h-6 max-w-48 shrink-0 items-center rounded-md text-xs transition-[color,background-color,box-shadow] duration-(--duration-fast)',
+        'group/tab relative flex h-6 max-w-48 min-w-20 items-center rounded-md text-xs transition-[color,background-color,box-shadow] duration-(--duration-fast)',
         // The selected tab is raised like a segmented control's thumb, apart from the hover fill.
         selected
           ? 'bg-segment-thumb text-foreground shadow-segment'

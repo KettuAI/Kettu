@@ -263,7 +263,11 @@ async function run() {
 
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
   await waitFor(`document.querySelector('[data-terminal-panel] .xterm')`, 'the terminal')
-  await sleep(1500)
+  // PowerShell takes a few seconds to print its first prompt on a CI runner.
+  await sleep(5000)
+  log(
+    `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)}`,
+  )
   await shoot('terminal')
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
   await sleep(300)
