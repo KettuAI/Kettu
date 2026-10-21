@@ -1,0 +1,328 @@
+// The host's JSON files: versioned, migrated at load, written atomically and debounced.
+
+import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
+import path from 'node:path'
+import { AGENT_IDS, type AgentId } from '@shared/thread'
+
+export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void
+
+/** Upgrades data of version `n` to version `n + 1`. Pure, so it can be unit-tested. */
+export type Migration = (data: Record<string, unknown>) => Record<string, unknown>
+
+export type MigrationResult =
+  | { kind: 'ok'; data: Record<string, unknown>; from: number }
+  | { kind: 'newer'; version: number }
+  | { kind: 'invalid'; reason: string }
+
+/** Runs the migrations from the file's version up to `current`. */
+export function migrate(
+  raw: unknown,
+  current: number,
+  migrations: Readonly<Record<number, Migration>>,
+): MigrationResult {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { kind: 'invalid', reason: 'not a JSON object' }
+  }
+  const version = (raw as { version?: unknown }).version
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) {
+    return { kind: 'invalid', reason: 'missing or invalid version' }
+  }
+  if (version > current) return { kind: 'newer', version }
+  let data = raw as Record<string, unknown>
+  for (let v = version; v < current; v++) {
+    const step = migrations[v]
+    if (!step) return { kind: 'invalid', reason: `no migration from version ${v}` }
+    data = { ...step(data), version: v + 1 }
+  }
+  return { kind: 'ok', data, from: version }
+}
+
+const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY'])
+
+/** Writes to `<file>.tmp`, flushes it to disk and renames it over the file. */
+export async function writeFileAtomic(file: string, contents: string): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true })
+  const tmp = `${file}.tmp`
+  const handle = await open(tmp, 'w')
+  try {
+    await handle.writeFile(contents, 'utf8')
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
+  // On Windows a scanner or indexer can hold the target open for a moment.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(tmp, file)
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? ''
+      if (attempt >= 4 || !RETRYABLE.has(code)) {
+        await rm(tmp, { force: true })
+        throw error
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)))
+    }
+  }
+}
+
+export type LoadStatus = 'missing' | 'ok' | 'migrated' | 'corrupt' | 'newer'
+
+export interface JsonFileOptions<T> {
+  file: string
+  version: number
+  migrations: Readonly<Record<number, Migration>>
+  /** Returns the parsed data, or an error message when the data is not valid. */
+  parse(data: Record<string, unknown>): T | string
+  empty(): T
+  log: LogFn
+  debounceMs?: number
+  now?: () => number
+}
+
+/** The file name a corrupt file is moved to, safe on every platform. */
+export function corruptName(file: string, at: number): string {
+  const stamp = new Date(at).toISOString().replace(/[:.]/g, '-')
+  return `${file}.corrupt-${stamp}.json`
+}
+
+export class JsonFile<T> {
+  private pending: T | null = null
+  private timer: ReturnType<typeof setTimeout> | null = null
+  private writing: Promise<void> = Promise.resolve()
+  /** A file from a newer version of the app is never overwritten. */
+  readOnly = false
+  status: LoadStatus = 'missing'
+  backupPath: string | null = null
+
+  constructor(private readonly options: JsonFileOptions<T>) {}
+
+  get file(): string {
+    return this.options.file
+  }
+
+  async load(): Promise<T> {
+    const { file, log } = this.options
+    let text: string
+    try {
+      text = await readFile(file, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        this.status = 'missing'
+        return this.options.empty()
+      }
+      throw error
+    }
+    let raw: unknown
+    try {
+      raw = JSON.parse(text)
+    } catch {
+      return this.recover('it is not valid JSON')
+    }
+    const migrated = migrate(raw, this.options.version, this.options.migrations)
+    if (migrated.kind === 'newer') {
+      this.readOnly = true
+      this.status = 'newer'
+      log(
+        'warn',
+        `${path.basename(file)} has version ${migrated.version}, newer than this app understands (${this.options.version}); it is left untouched and changes are not saved this run`,
+      )
+      return this.options.empty()
+    }
+    if (migrated.kind === 'invalid') return this.recover(migrated.reason)
+    const parsed = this.options.parse(migrated.data)
+    if (typeof parsed === 'string') return this.recover(parsed)
+    this.status = migrated.from === this.options.version ? 'ok' : 'migrated'
+    if (this.status === 'migrated') {
+      log('info', `Migrated ${path.basename(file)} from version ${migrated.from}`)
+      this.save(parsed)
+    }
+    return parsed
+  }
+
+  private async recover(reason: string): Promise<T> {
+    const { file, log } = this.options
+    const backup = corruptName(file, (this.options.now ?? Date.now)())
+    await rename(file, backup)
+    this.status = 'corrupt'
+    this.backupPath = backup
+    log(
+      'error',
+      `${path.basename(file)} could not be read (${reason}); it was moved to ${path.basename(backup)} and OverBench started from an empty state`,
+    )
+    return this.options.empty()
+  }
+
+  /** Schedules a write; changes within the debounce window share one write. */
+  save(data: T): void {
+    if (this.readOnly) return
+    this.pending = data
+    this.timer ??= setTimeout(() => {
+      this.timer = null
+      void this.writePending()
+    }, this.options.debounceMs ?? 500)
+  }
+
+  private writePending(): Promise<void> {
+    const data = this.pending
+    if (data === null) return this.writing
+    this.pending = null
+    const contents = `${JSON.stringify(data, null, 2)}\n`
+    this.writing = this.writing
+      .then(() => writeFileAtomic(this.options.file, contents))
+      .catch((error: unknown) => {
+        this.options.log(
+          'error',
+          `Could not write ${this.options.file}: ${(error as Error).message}`,
+        )
+      })
+    return this.writing
+  }
+
+  /** Writes what is pending now, and waits for writes in flight. */
+  async flush(): Promise<void> {
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    await this.writePending()
+  }
+}
+
+// The files and their validators.
+
+export interface ProjectRecord {
+  path: string
+  name: string
+  addedAt: number
+  lastOpenedAt: number
+}
+
+export interface ProjectsFile {
+  version: 1
+  projects: ProjectRecord[]
+}
+
+export interface SessionRecord {
+  id: string
+  agentId: AgentId
+  acpSessionId: string
+  projectPath: string
+  title: string | null
+  createdAt: number
+  updatedAt: number
+  lastViewedAt: number | null
+  parentId: string | null
+  origin: 'user' | 'subagent'
+  description: string | null
+  branch: string | null
+}
+
+export interface SessionsFile {
+  version: 1
+  sessions: SessionRecord[]
+}
+
+export const PROJECTS_VERSION = 1
+export const SESSIONS_VERSION = 1
+// No older formats exist yet; each future version adds its step here, with a test.
+export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+const isString = (value: unknown): value is string => typeof value === 'string'
+const isTime = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+const isNullable =
+  <V>(guard: (value: unknown) => value is V) =>
+  (value: unknown): value is V | null =>
+    value === null || guard(value)
+
+export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile | string {
+  if (!Array.isArray(data.projects)) return 'projects is not a list'
+  const projects: ProjectRecord[] = []
+  for (const [index, item] of data.projects.entries()) {
+    if (
+      !isRecord(item) ||
+      !isString(item.path) ||
+      !isString(item.name) ||
+      !isTime(item.addedAt) ||
+      !isTime(item.lastOpenedAt)
+    ) {
+      return `project ${index} is malformed`
+    }
+    projects.push({
+      path: item.path,
+      name: item.name,
+      addedAt: item.addedAt,
+      lastOpenedAt: item.lastOpenedAt,
+    })
+  }
+  return { version: 1, projects }
+}
+
+export function parseSessionsFile(data: Record<string, unknown>): SessionsFile | string {
+  if (!Array.isArray(data.sessions)) return 'sessions is not a list'
+  const sessions: SessionRecord[] = []
+  const nullableString = isNullable(isString)
+  for (const [index, item] of data.sessions.entries()) {
+    if (
+      !isRecord(item) ||
+      !isString(item.id) ||
+      !isString(item.agentId) ||
+      !(AGENT_IDS as readonly string[]).includes(item.agentId) ||
+      !isString(item.acpSessionId) ||
+      !isString(item.projectPath) ||
+      !nullableString(item.title) ||
+      !isTime(item.createdAt) ||
+      !isTime(item.updatedAt) ||
+      !isNullable(isTime)(item.lastViewedAt) ||
+      !nullableString(item.parentId) ||
+      (item.origin !== 'user' && item.origin !== 'subagent') ||
+      !nullableString(item.description) ||
+      !nullableString(item.branch)
+    ) {
+      return `session ${index} is malformed`
+    }
+    sessions.push({
+      id: item.id,
+      agentId: item.agentId as AgentId,
+      acpSessionId: item.acpSessionId,
+      projectPath: item.projectPath,
+      title: item.title,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      lastViewedAt: item.lastViewedAt,
+      parentId: item.parentId,
+      origin: item.origin,
+      description: item.description,
+      branch: item.branch,
+    })
+  }
+  return { version: 1, sessions }
+}
+
+export function projectsFile(userDataPath: string, log: LogFn): JsonFile<ProjectsFile> {
+  return new JsonFile<ProjectsFile>({
+    file: path.join(userDataPath, 'state', 'projects.json'),
+    version: PROJECTS_VERSION,
+    migrations: PROJECTS_MIGRATIONS,
+    parse: parseProjectsFile,
+    empty: () => ({ version: 1, projects: [] }),
+    log,
+  })
+}
+
+export function sessionsFile(userDataPath: string, log: LogFn): JsonFile<SessionsFile> {
+  return new JsonFile<SessionsFile>({
+    file: path.join(userDataPath, 'state', 'sessions.json'),
+    version: SESSIONS_VERSION,
+    migrations: SESSIONS_MIGRATIONS,
+    parse: parseSessionsFile,
+    empty: () => ({ version: 1, sessions: [] }),
+    log,
+  })
+}

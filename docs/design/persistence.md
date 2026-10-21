@@ -129,8 +129,8 @@ interface AppStateFile {
 
 ## Writing safely
 
-- Writes are debounced by 500 ms per file.
-- Each write goes to `<file>.tmp`, is flushed with `fsync`, and is renamed over the original. A crash mid-write leaves the previous version intact.
+- Writes are debounced by 500 ms per file: the first change starts the window, and every change within it shares the one write that ends it, so a steady stream of changes still reaches disk twice a second.
+- Each write goes to `<file>.tmp`, is flushed with `fsync`, and is renamed over the original. A crash mid-write leaves the previous version intact. On Windows the rename is retried a few times on `EPERM`, `EACCES` and `EBUSY`, which a virus scanner or indexer holding the file causes. Writes to one file are serialized.
 - Only the agent host writes its files, and the single-instance lock in main guarantees there is one host.
 - On quit, pending writes are flushed before the host reports `host:stopped`.
 
@@ -138,9 +138,10 @@ interface AppStateFile {
 
 - Files are read once at host startup.
 - A missing file means an empty state.
-- A file that fails to parse or validate is renamed to `<file>.corrupt-<timestamp>.json`, the host starts from an empty state, and the UI shows a notice. Nothing is silently discarded.
+- A file that fails to parse or validate is renamed to `<file>.corrupt-<timestamp>.json` (for example `sessions.json.corrupt-2026-10-20T12-00-00-000Z.json`, with `:` and `.` replaced so the name is valid on Windows), the host starts from an empty state, and the UI shows a notice. Nothing is silently discarded. The host reports it as an `error` entry in its log, which reaches main as `host:log` and the diagnostics bundle.
+- Validation is strict: a file with any malformed entry, or an `agentId` this version does not know, counts as corrupt as a whole, because a partial read would be silently discarding the rest.
 - Index entries whose project folder no longer exists stay listed but are marked missing, so a temporarily unmounted drive does not erase history.
 
 ## Versioning
 
-Every file has a `version` field. A newer format comes with a pure migration function from each older version, run at load time and covered by unit tests. A file with a version newer than the app understands is left untouched and treated as read-only for that run, so downgrading never destroys data.
+Every file has a `version` field. A newer format comes with a pure migration function from each older version, run at load time and covered by unit tests; a migrated file is written back in the new format. Migrations live next to the file's validator in `src/agent-host/storage.ts` (`PROJECTS_MIGRATIONS`, `SESSIONS_MIGRATIONS`), keyed by the version they upgrade from; version 1 is the first, so both are empty. A file with a version newer than the app understands is left untouched and treated as read-only for that run: the host starts from an empty state, logs a warning and saves nothing to that file, so downgrading never destroys data.
