@@ -13,7 +13,15 @@ export default defineConfig([
     extends: [js.configs.recommended, tseslint.configs.recommended],
   },
   {
-    files: ['electron.vite.config.ts', 'src/main/**/*.ts', 'src/preload/**/*.ts'],
+    files: [
+      'electron.vite.config.ts',
+      'vitest.config.mts',
+      'src/main/**/*.ts',
+      'src/preload/**/*.ts',
+      'src/agent-host/**/*.ts',
+      'src/terminal-host/**/*.ts',
+      'tools/**/*.{ts,mjs}',
+    ],
     languageOptions: { globals: globals.node },
   },
   {
