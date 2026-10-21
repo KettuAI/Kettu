@@ -48,6 +48,8 @@ export interface IpcInvokeContract {
   'update:download': { args: []; result: void }
   'update:restart': { args: []; result: void }
   'update:dismiss': { args: []; result: void }
+  'agent-host:restart': { args: []; result: void }
+  'terminal-host:restart': { args: []; result: void }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -69,6 +71,22 @@ export interface IpcSendContract {
   'agent-host:connect': []
   'terminal-host:connect': []
   'perf:interactive': []
+  /** The page has no `onConfirmQuit` listener, so main asks with a native dialog instead. */
+  'app:confirm-quit-unhandled': [id: number]
+}
+
+/** Payload of `agent-host:reset` and `terminal-host:reset`. */
+export interface HostResetEvent {
+  /** The host crashed too often and stays down until the renderer calls `restart()`. */
+  failed: boolean
+}
+
+/** Messages main sends to the preload alone; they are never forwarded to the page. */
+export interface PreloadEventContract {
+  'agent-host:port': [] // the MessagePort travels in the event's ports
+  'agent-host:reset': HostResetEvent
+  'terminal-host:port': []
+  'terminal-host:reset': HostResetEvent
 }
 
 /** API the preload script exposes to the renderer as `window.overbench`. */

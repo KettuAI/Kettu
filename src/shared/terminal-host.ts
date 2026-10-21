@@ -61,7 +61,10 @@ export interface TerminalsApi {
     params: TerminalParams<M>,
   ): Promise<TerminalResult<M>>
   onEvent(listener: (event: TerminalEvent) => void): () => void
+  /** Calls the listener with the current state, if there is one yet, and then on every change. */
   onConnection(listener: (state: PortConnectionState) => void): () => void
+  /** Starts the host again after it failed (crashed too often); does nothing otherwise. */
+  restart(): Promise<void>
 }
 
 /** Flow control constants, from VS Code's pty host (MIT). */

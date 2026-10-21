@@ -1,8 +1,13 @@
 import { app, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { AgentHost } from './agent-host'
+import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { registerIpcHandlers } from './ipc'
 import { createLogger } from './log'
+import { notifyAttention } from './notifications'
 import { SettingsStore } from './settings'
+import { hostSettings, terminalSettings } from './settings-schema'
+import { TerminalHost } from './terminal-host'
 import {
   applyTheme,
   configureWindows,
@@ -37,14 +42,34 @@ async function start(): Promise<void> {
   applyTheme(settings.get().appearance.theme)
   watchTheme()
   configureWindows({ state: windowState, perf })
-  settings.onChange((next, changed) => {
-    if (changed.has('appearance')) applyTheme(next.appearance.theme)
+  setBadgeEnabled(settings.get().notifications.badge)
+
+  const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
+  const agentHost = new AgentHost({
+    settings: () => hostSettings(settings.get()),
+    onAttention: (message) => notifyAttention(message, settings.get()),
+    onBadge: setBadgeCount,
+    onProjects: (paths) => terminalHost.setProjects(paths),
+    onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
   })
 
-  // F12 toggles DevTools in development; reload shortcuts are disabled in production.
-  app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+  settings.onChange((next, changed) => {
+    if (changed.has('agents') || changed.has('proxy') || changed.has('git')) {
+      agentHost.pushSettings(hostSettings(next))
+    }
+    if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))
+    if (changed.has('appearance')) applyTheme(next.appearance.theme)
+    if (changed.has('notifications')) setBadgeEnabled(next.notifications.badge)
+  })
+
+  app.on('browser-window-created', (_, window) => {
+    // F12 toggles DevTools in development; reload shortcuts are disabled in production.
+    optimizer.watchWindowShortcuts(window)
+    window.once('show', () => applyBadgeTo(window))
+  })
 
   registerIpcHandlers()
+  agentHost.start()
   createMainWindow()
   ready = true
 
@@ -54,8 +79,14 @@ async function start(): Promise<void> {
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
   })
-  app.on('before-quit', () => {
-    void Promise.all([settings.flush(), windowState.flush()])
+  let stopping = false
+  app.on('before-quit', (event) => {
+    if (stopping) return
+    event.preventDefault()
+    stopping = true
+    void Promise.all([agentHost.stop(), terminalHost.stop()])
+      .then(() => Promise.all([settings.flush(), windowState.flush()]))
+      .finally(() => app.quit())
   })
 }
 

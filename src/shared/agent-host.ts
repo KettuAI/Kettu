@@ -242,5 +242,8 @@ export type HostEvent =
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>
   onEvent(listener: (event: HostEvent) => void): () => void
+  /** Calls the listener with the current state, if there is one yet, and then on every change. */
   onConnection(listener: (state: PortConnectionState) => void): () => void
+  /** Starts the host again after it failed (crashed too often); does nothing otherwise. */
+  restart(): Promise<void>
 }
