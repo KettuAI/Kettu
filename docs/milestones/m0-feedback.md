@@ -6,7 +6,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 
 | #   | Problem                                                        | Area           | Status       |
 | --- | -------------------------------------------------------------- | -------------- | ------------ |
-| 1   | Thoughts and tool calls cannot be folded together              | Thread entries | Open         |
+| 1   | Thoughts and tool calls cannot be folded together              | Thread entries | Fixed        |
 | 2   | Choosing a model does not close the model menu                 | Model menu     | Fixed        |
 | 3   | No switch for Claude Code's ultracode                          | Model menu     | Open         |
 | 4   | The model menu does not look polished                          | Model menu     | Open         |
@@ -35,6 +35,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Expected**: the intermediate work of a turn, thoughts and tool calls alike, folds into one block that can be collapsed and expanded to show the individual steps.
 - **Today**: `buildItems` in `src/renderer/src/features/session/thread-items.ts` groups only consecutive completed `read`, `search` and `fetch` calls. Thoughts, commands, edits and failures always stand alone, as [Interface: tool calls](../design/ui.md#tool-calls) specifies ("Edits, commands and failures are never grouped"), so the fix changes that rule too.
 - **Reference**: Claude Desktop folds a run of steps into one summary line, such as "Ran 3 commands, edited m0-feedback.md +3 −0 ›", which expands to the steps (seen in a screenshot sent with problem 6).
+- **Fixed**: two or more thoughts and tool calls between messages fold into one summary line after the reference, which expands to the steps; the run a turn is still adding to shows step by step until a message or the turn's end follows it ([Interface: tool calls](../design/ui.md#tool-calls)). The rule that kept a turn's last edit open is gone, since the summary names the edit with its stats.
 
 ## 2. Choosing a model does not close the model menu
 

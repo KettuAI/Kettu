@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupLabel, stopReasonText, toolLabel } from './helpers'
+import { groupLabel, runSummary, stopReasonText, toolLabel } from './helpers'
 
 const base = { title: 'Do something', locations: [], rawInput: undefined }
 
@@ -54,8 +54,61 @@ describe('groupLabel', () => {
     expect(groupLabel(['read', 'read', 'read', 'read'])).toBe('Explored 4 files')
     expect(groupLabel(['search', 'search', 'search'])).toBe('Searched 3 times')
     expect(groupLabel(['read', 'search', 'read', 'fetch'])).toBe(
-      'Explored 2 files, searched 1 time, fetched 1 page',
+      'Explored 2 files, searched once, fetched a page',
     )
+  })
+})
+
+describe('runSummary', () => {
+  const run = (kind: string, path?: string) => ({
+    kind: 'tool' as const,
+    toolKind: kind as 'read',
+    status: 'completed' as const,
+    path,
+  })
+
+  it('counts each kind in the order it first appears', () => {
+    expect(
+      runSummary([
+        run('execute'),
+        run('read', '/repo/a.ts'),
+        run('execute'),
+        run('read', '/repo/b.ts'),
+        run('read', '/repo/a.ts'),
+        run('execute'),
+      ]),
+    ).toEqual({ parts: ['Ran 3 commands', 'read 2 files'], editAt: -1, failed: 0, running: false })
+  })
+
+  it('names the one file a run edited, and where its stats go', () => {
+    expect(
+      runSummary([
+        { kind: 'thought', durationMs: 8_000 },
+        run('edit', '/repo/docs/ui.md'),
+        run('edit', '/repo/docs/ui.md'),
+        run('search'),
+      ]),
+    ).toEqual({
+      parts: ['Thought for 8 s', 'edited ui.md', 'searched once'],
+      editAt: 1,
+      failed: 0,
+      running: false,
+    })
+  })
+
+  it('counts failures and running steps', () => {
+    const summary = runSummary([
+      { ...run('execute'), status: 'failed' },
+      { ...run('fetch'), status: 'in_progress' },
+      run('other'),
+      { kind: 'thought', streaming: true },
+    ])
+    expect(summary).toEqual({
+      parts: ['Ran a command', 'fetched a page', 'used a tool', 'thought'],
+      editAt: -1,
+      failed: 1,
+      running: true,
+    })
   })
 })
 

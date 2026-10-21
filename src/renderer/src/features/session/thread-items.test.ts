@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView, ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { buildItems, signatureOf } from './thread-items'
+import { buildItems, signatureOf, stepItems } from './thread-items'
 
 const session = { id: 's1' } as SessionView
 
@@ -44,16 +44,25 @@ function items(entries: ThreadEntry[]) {
   return buildItems(s.order, signatureOf(s))
 }
 
+const thought = (id: string): ThreadEntry => ({
+  kind: 'thought',
+  id,
+  markdown: '',
+  streaming: false,
+})
+const plan = (id: string): ThreadEntry => ({ kind: 'plan', id, items: [] })
+
 describe('signatureOf', () => {
-  it('marks users, groupable lookups, edits and other tools', () => {
+  it('marks users, groupable lookups, thoughts and other tools', () => {
     const s = state([
       user('u1'),
+      thought('h1'),
       tool('r1', 'read'),
       tool('e1', 'edit'),
       tool('x1', 'execute'),
       agent('a1'),
     ])
-    expect(signatureOf(s)).toBe('ugeto')
+    expect(signatureOf(s)).toBe('uhgtto')
   })
 
   it('does not group a lookup that runs or waits for permission', () => {
@@ -70,32 +79,67 @@ describe('signatureOf', () => {
 })
 
 describe('buildItems', () => {
-  it('groups two or more consecutive completed lookups', () => {
+  it('folds a run of thoughts and tool calls between messages', () => {
     const result = items([
+      user('u1'),
+      thought('h1'),
+      tool('x1', 'execute'),
+      tool('e1', 'edit'),
+      agent('a1'),
+    ])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a1'])
+    expect(result[1]).toMatchObject({ type: 'run', ids: ['h1', 'x1', 'e1'], signature: 'htt' })
+  })
+
+  it('leaves a single step as its own entry', () => {
+    const result = items([user('u1'), tool('x1', 'execute'), agent('a1'), thought('h1')])
+    expect(result.map((i) => i.type)).toEqual(['entry', 'entry', 'entry', 'entry'])
+  })
+
+  it('breaks a run at a plan, a subagent or a notice', () => {
+    const result = items([
+      tool('x1', 'execute'),
+      tool('x2', 'execute'),
+      plan('p1'),
+      tool('x3', 'execute'),
+      tool('x4', 'execute'),
+    ])
+    expect(result.map((i) => i.key)).toEqual(['run:x1', 'p1', 'run:x3'])
+  })
+
+  it('shows the run still growing in a live turn step by step', () => {
+    const entries = [user('u1'), tool('x1', 'execute'), tool('x2', 'execute')]
+    const s = state(entries)
+    const live = buildItems(s.order, signatureOf(s), true)
+    expect(live.map((i) => i.key)).toEqual(['u1', 'x1', 'x2'])
+    const done = buildItems(s.order, signatureOf(s), false)
+    expect(done.map((i) => i.key)).toEqual(['u1', 'run:x1'])
+  })
+
+  it("folds a live turn's earlier runs once a message follows them", () => {
+    const s = state([
+      user('u1'),
+      tool('x1', 'execute'),
+      tool('x2', 'execute'),
+      agent('a1'),
+      tool('x3', 'execute'),
+      tool('x4', 'execute'),
+    ])
+    const result = buildItems(s.order, signatureOf(s), true)
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a1', 'x3', 'x4'])
+  })
+
+  it('groups consecutive completed lookups in a live run', () => {
+    const s = state([
       user('u1'),
       tool('r1', 'read'),
       tool('s1', 'search'),
       tool('f1', 'fetch'),
-      agent('a1'),
+      tool('x1', 'execute', 'in_progress'),
     ])
-    expect(result.map((i) => i.key)).toEqual(['u1', 'group:r1', 'a1'])
+    const result = buildItems(s.order, signatureOf(s), true)
+    expect(result.map((i) => i.key)).toEqual(['u1', 'group:r1', 'x1'])
     expect(result[1]).toMatchObject({ type: 'group', ids: ['r1', 's1', 'f1'] })
-  })
-
-  it('leaves a single lookup as its own card', () => {
-    const result = items([tool('r1', 'read'), agent('a1'), tool('r2', 'read')])
-    expect(result.map((i) => i.type)).toEqual(['entry', 'entry', 'entry'])
-  })
-
-  it('never groups across other entries', () => {
-    const result = items([
-      tool('r1', 'read'),
-      tool('r2', 'read'),
-      tool('x1', 'execute'),
-      tool('r3', 'read'),
-      tool('r4', 'read'),
-    ])
-    expect(result.map((i) => i.key)).toEqual(['group:r1', 'x1', 'group:r3'])
   })
 
   it('marks user entries as turn starts', () => {
@@ -112,22 +156,12 @@ describe('buildItems', () => {
       false,
     ])
   })
+})
 
-  it("keeps only the latest turn's last edit open", () => {
-    const result = items([
-      user('u1'),
-      tool('e1', 'edit'),
-      user('u2'),
-      tool('e2', 'edit'),
-      tool('e3', 'edit'),
-      agent('a1'),
-    ])
-    const open = result.filter((i) => i.type === 'entry' && i.keepOpen).map((i) => i.key)
-    expect(open).toEqual(['e3'])
-  })
-
-  it('closes the last edit once a new turn starts', () => {
-    const result = items([user('u1'), tool('e1', 'edit'), user('u2')])
-    expect(result.some((i) => i.type === 'entry' && i.keepOpen)).toBe(false)
+describe('stepItems', () => {
+  it('groups two or more consecutive completed lookups', () => {
+    const result = stepItems(['x1', 'r1', 's1', 'r2', 'e1', 'r3'], 'tgggtg')
+    expect(result.map((i) => i.key)).toEqual(['x1', 'group:r1', 'e1', 'r3'])
+    expect(result[1]).toMatchObject({ type: 'group', ids: ['r1', 's1', 'r2'] })
   })
 })

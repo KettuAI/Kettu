@@ -181,8 +181,9 @@ Between sending a prompt and the first output, a status line ("Working…") with
 - **Kind icons** (Lucide): `read` FileText, `edit` FilePen, `delete` Trash2, `move` ArrowRightLeft, `search` Search, `execute` SquareTerminal, `think` Brain, `fetch` Globe, `switch_mode` Repeat, `other` Wrench.
 - **Paths and commands** are monospace, middle-truncated so the file name stays visible, with the full value in a tooltip.
 - **Content**: markdown through Streamdown, finished from the start; diffs through `@pierre/diffs` `MultiFileDiff` in `unified` style with wrapping, at most 480 px high with **Show full diff**.
-- **Grouping**: consecutive completed `read`, `search` and `fetch` calls collapse into one row, "Explored 4 files" or "Searched 3 times", which expands to the individual calls. Edits, commands and failures are never grouped.
-- **Defaults**: running cards and cards waiting for permission are open; completed cards are collapsed, except that a turn's last edit stays open until the next turn starts.
+- **Folding a run**: two or more thoughts and tool calls between messages fold into one muted line that says what they did, one part per kind in the order it first appears: "Thought for 8 s, ran 3 commands, read 2 files, edited ui.md +3 −0 ›". A single file is named, more are counted; the edits' diff stats follow their part, failures add "1 failed" in `--destructive`, and a step still running adds a spinner. The line expands, as a disclosure, to the steps on a `--border` rail. A plan, a subagent, a notice or any other entry ends a run; a single step stays as it is. The run a turn is still adding to shows step by step and folds once a message or the turn's end follows it, so the current work stays in view. A step waiting for permission holds its run open.
+- **Grouping**: inside a run, consecutive completed `read`, `search` and `fetch` calls collapse into one row, "Explored 4 files" or "Searched 3 times", which expands to the individual calls.
+- **Defaults**: running cards and cards waiting for permission are open; completed cards are collapsed.
 
 ### Permission requests
 

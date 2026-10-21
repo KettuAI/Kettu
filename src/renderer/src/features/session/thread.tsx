@@ -20,6 +20,7 @@ import {
   TurnEndEntry,
   UserEntry,
 } from './entries/basic'
+import { RunGroup } from './entries/run-group'
 import { SubagentCard } from './entries/subagent-card'
 import { ToolCard } from './entries/tool-card'
 import { ToolGroup } from './entries/tool-group'
@@ -55,7 +56,10 @@ export const Thread = memo(function Thread({
 }) {
   const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
   const signature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
-  const items = useMemo(() => buildItems(order ?? [], signature), [order, signature])
+  const items = useMemo(
+    () => buildItems(order ?? [], signature, working),
+    [order, signature, working],
+  )
   const awaitingReply = working && signature.endsWith('u')
   const shownFrom = useShownFrom(items.length)
 
@@ -83,7 +87,15 @@ export const Thread = memo(function Thread({
                     index === items.length - 1 && '[content-visibility:visible]',
                   )}
                 >
-                  {item.type === 'group' ? (
+                  {item.type === 'run' ? (
+                    <RunGroup
+                      sessionId={sessionId}
+                      entryIds={item.ids}
+                      signature={item.signature}
+                      projectPath={projectPath}
+                      agentName={agentName}
+                    />
+                  ) : item.type === 'group' ? (
                     <ToolGroup
                       sessionId={sessionId}
                       entryIds={item.ids}
@@ -96,7 +108,6 @@ export const Thread = memo(function Thread({
                       entryId={item.id}
                       projectPath={projectPath}
                       agentName={agentName}
-                      keepOpen={item.keepOpen}
                     />
                   )}
                 </MessageScrollerItem>
@@ -126,13 +137,11 @@ const Entry = memo(function Entry({
   entryId,
   projectPath,
   agentName,
-  keepOpen,
 }: {
   sessionId: string
   entryId: string
   projectPath: string
   agentName: string
-  keepOpen: boolean
 }) {
   const kind = useThreadsStore((s) => s.replicas[sessionId]?.state?.byId[entryId]?.kind)
   const props = { sessionId, entryId }
@@ -144,9 +153,7 @@ const Entry = memo(function Entry({
     case 'thought':
       return <ThoughtEntry {...props} />
     case 'tool':
-      return (
-        <ToolCard {...props} projectPath={projectPath} agentName={agentName} keepOpen={keepOpen} />
-      )
+      return <ToolCard {...props} projectPath={projectPath} agentName={agentName} />
     case 'subagent':
       return <SubagentCard {...props} projectPath={projectPath} />
     case 'session_message':
