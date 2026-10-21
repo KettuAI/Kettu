@@ -361,7 +361,7 @@ The [updater](./updates.md) works in the background, and the interface shows it 
   | Error        | "Couldn't check for updates" and the reason                                                 | **Try again**                |
   | Off          | "Updates are installed by your package manager", or "Updates are off in development builds" | none                         |
 
-- Below it, **Automatic updates**: Download and install, Notify only, or Off ([checking and downloading](./updates.md#checking-and-downloading)).
+- Below it, **Automatic updates**: Download and install, Notify only, or Off ([checking and downloading](./updates.md#checking-and-downloading)). A `Select`, since the labels are too long to sit side by side as segments.
 - On macOS the app menu has **Check for Updates…** under OverBench. It opens Settings at About and checks there instead of showing a dialog.
 
 ## States
