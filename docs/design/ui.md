@@ -32,32 +32,27 @@ Launching should feel like opening a lid, not waiting for a page: no white or bl
 ## Layout
 
 ```text
-┌───────────────┬────────────────────────────────────────────────────┐
-│ ● ● ●       ◫ │ Fix flaky login ⌄  ✳ Claude Code  ⎇ fix/flaky ⇡2 ▣ │  top bar (40 px)
-├───────────────┼────────────────────────────────────────────────────┤
-│ ✎ New session │                                                    │
-│ Projects    + │       ┌──────────────────────────────────┐         │  user
-│ ⌄ overbench   │       │ The login test fails on CI …     │         │
-│  ✳ Fix flaky 2│       └──────────────────────────────────┘         │
-│   ◇ Explore   │ I'll start by reading the test and the …           │  agent
-│   ◇ Review   1│ ┌ ✎ Edit src/auth/session.ts        +4 −3  ✓ ┐     │  tools
-│  ◎ Add dark ↳1│ └────────────────────────────────────────────┘     │
-│  ✳ Bump deps ⊙│ ⊙ Committed 3f2a1c1 fix(auth): read the clock…     │  git event
-│ › website     │ ┌────────────────────────────────────────────┐     │
-│               │ │ Ask Claude Code to…                      ↑ │     │  composer
-│               │ └────────────────────────────────────────────┘     │
-│               │   Default ⌄              Opus 5.5 High ⌄  ◔        │  control row
-│               ├────────────────────────────────────────────────────┤
-│               │ zsh   pnpm dev ●                       +  ⤢  ×     │  terminal tabs
-│               │ ~/overbench (fix/flaky-login) $ pnpm test          │  terminal
-│ ⚙ Settings ⌘, │  ✓ 42 passed  ·  1 failed                          │
-└───────────────┴────────────────────────────────────────────────────┘
+┌─────────────┬──────────────────────────────────────────┬──────────────────────────┐
+│ ● ● ●     ◫ │ Fix flaky login ⌄  ✳ Claude Code ⎇ fix ▣ │ ▣ zsh  ▣ pnpm ●  +   ⤢ × │  top bar · side panel header
+├─────────────┤                                          │ ~/overbench $ pnpm test  │
+│ ✎ New       │   ┌──────────────────────────────────┐   │  ✓ 42 passed             │
+│ Projects  + │   │ The login test fails on CI …     │   │  ✗ 1 failed              │  terminal
+│ ⌄ overbench │   └──────────────────────────────────┘   │ ~/overbench $ █          │
+│  ✳ Fix fla 2│ I'll start by reading the test and …     │                          │  agent
+│   ◇ Explore │ ┌ ✎ Edit src/auth/session.ts  +4 −3 ✓ ┐  │                          │  tools
+│  ◎ Add da ↳1│ └─────────────────────────────────────┘  │                          │
+│  ✳ Bump d ⊙ │ ⊙ Committed 3f2a1c1 fix(auth): read …    │                          │  git event
+│ › website   │ ┌─────────────────────────────────────┐  │                          │
+│             │ │ Ask Claude Code to…               ↑ │  │                          │  composer
+│             │ └─────────────────────────────────────┘  │                          │
+│ ⚙ Settings  │   Default ⌄          Opus 5.5 High ⌄ ◔   │                          │  control row
+└─────────────┴──────────────────────────────────────────┴──────────────────────────┘
 ```
 
 - Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B` through the panel's own collapse, and remembers its size per device.
 - The sidebar sits on surface 0 and the thread on surface 1. The step between them is the only separation; the resize handle shows a hairline only while it is hovered or dragged.
 - The thread is a single centred column, 768 px at most (`max-w-3xl`), so prose keeps a comfortable line length at any window width. Tool cards and diffs use the same column.
-- The [terminal](#terminal) opens as a panel at the bottom of the main area, under the thread and the composer. The Changes panel arrives later and will open on the right, so both can be open at once.
+- The [terminal](#terminal) opens in the **side panel** on the right of the main area. It sits flush on surface 0, like the sidebar on the left, so the thread on surface 1 is framed by two quieter surfaces and needs no line or shadow to stand apart. The layout follows the reference; the styling is OverBench's own. The thread column keeps the rest of the width and its own top bar. The Changes panel arrives later as a second view of the same side panel.
 
 ## Screens
 
@@ -73,7 +68,7 @@ Shown when a project is selected but no session is. The three agents as large se
 
 ### Session
 
-The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **New sub-session**, **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)); closing or deleting the shown session, or its parent, returns to the project home, and a closed session opens again from the sidebar with `session/load`. The title is followed by the agent's mark and name in `--muted-foreground`. A sub-session's top bar starts with its parent's title as a link. On the right of the top bar sit the [git status](#git-in-the-top-bar) and the terminal toggle; Project home shows them too.
+The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **New sub-session** (`CornerDownRight`, with a submenu of agents), **Close** (`X`) and, after a separator, **Delete…** (`Trash2`, in `--destructive`), the same items as the row's context menu in the sidebar and styled as in [menus](./design-system.md#menus-and-dialogs) ([session lifecycle](./session-model.md#session-lifecycle)); closing or deleting the shown session, or its parent, returns to the project home, and a closed session opens again from the sidebar with `session/load`. The title is followed by the agent's mark and name in `--muted-foreground`. A sub-session's top bar starts with its parent's title as a link. On the right of the top bar sit the [git status](#git-in-the-top-bar) and the terminal toggle; Project home shows them too.
 
 ### Subagent
 
@@ -83,7 +78,9 @@ Opening a subagent ([sub-sessions](./session-model.md#sub-sessions)) shows its o
 
 Opened from **Settings** in the sidebar footer or with `Mod+,`. Settings takes the whole window: the app sidebar goes away, and the top bar holds a **Back** button after the window controls that returns to where you were. `Esc` does the same when no field has focus. While a session waits for your approval, the Back button carries the `--attention` count, so the signal the sidebar gave is not lost.
 
-Settings is one scrolling page, the way VS Code's settings editor works. A column on the left, on surface 0 like the app sidebar it replaces, holds the title, a search field (`Mod+F`) that filters rows in every section by name and description, and the table of contents, which jumps to a section and highlights the one in view; while you search, it shows the number of matching rows next to each section. Each section is a card of rows: the name and a one-line description on the left, the control on the right (shadcn `Field` with `Switch`, `Select` or `ToggleGroup`). Changes apply at once, with no Save button.
+Each section is a page of its own, as in the reference. A column on the left, on surface 0 like the app sidebar it replaces, holds the title, a search field (`Mod+F`) and the list of sections; the selected section takes the row fill, and choosing another replaces the page, which fades in over `--duration-fast` and starts at its top. The page opens with the section's name as its title (22 px, weight 600) and holds its cards. Each card is a list of rows: the name and a one-line description on the left, the control on the right (shadcn `Field` with `Switch`, `Select` or `ToggleGroup`). Changes apply at once, with no Save button.
+
+Search filters rows in every section by name and description. While you search, the page gives way to the results, grouped under their sections' names, and the list shows the number of matching rows next to each section; choosing a section clears the search and opens its page. `Esc` in the field clears it, then leaves it.
 
 | Section            | Rows                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -97,7 +94,7 @@ Settings is one scrolling page, the way VS Code's settings editor works. A colum
 | Advanced           | **Proxy** for agents, `npx` and updates: Use the environment, or Custom with a URL and a no-proxy list · **Diagnostics**: Export diagnostics · **Data folder**: Show in Finder (Explorer, the file manager) · **Remove all sessions from OverBench**, which clears the index after a confirmation and leaves the agents' transcripts alone                                                                                           |
 | About              | The version, with the Electron, Chromium and Node.js versions and **Copy**; the [update status](#updates) with its action and **Automatic updates**; links to the source code and the third-party notices                                                                                                                                                                                                                            |
 
-- The sign-in notice in the sidebar footer opens Settings at Agents.
+- The sign-in notice in the sidebar footer opens Settings at Agents, and **Check for Updates…** at About; opening Settings without a section shows the one shown last, or General.
 - Settings shows only what M0 supports; there are no disabled placeholders for later features.
 - The values and where they are kept: [persistence](./persistence.md#settings).
 
@@ -117,7 +114,7 @@ Settings is one scrolling page, the way VS Code's settings editor works. A colum
 - **Sub-sessions** ([session model](./session-model.md#sub-sessions)) sit under their parent, indented 16 px along a hairline `--border` guide line. A subagent shows the `Bot` icon with its title and, muted, its description ("Explore · Find where the tests read the clock"); a sub-session you started shows its agent's mark and title.
 - A parent has a chevron in front of its mark. It expands by itself while a sub-session is running or waiting for you, and otherwise stays as you left it.
 - A parent's indicator includes its sub-sessions: the attention count adds up their permission requests, and it shows Running while any of them runs, so a collapsed parent still says where to look.
-- **New sub-session** is in the session's title menu and its row's context menu.
+- **New sub-session** is in the session's title menu and its row's context menu. The context menu is 208 px wide and holds the same items as the title menu, with the same icons: **New sub-session**, **Close**, a separator, and **Delete…**, which asks first in an `AlertDialog`.
 - Indicators always pair a color with a shape or label, never color alone.
 - The sidebar list has one Tab stop; the arrow keys move between rows.
 - The footer holds **Settings** (`Mod+,`) and, above it, a tinted `--attention` notice when an agent needs sign-in ("Codex needs you to sign in"). The notice opens Settings at Agents and is hidden while that section is open. The [update notice](#updates) sits between the two.
@@ -219,7 +216,11 @@ The layout follows the reference: the box holds only your text and the send butt
 - **Surface**: shadcn's `InputGroup` with an added `composer` variant: raised (surface 3), `rounded-2xl`, and the composer's ring and shadow states from the [design system](./design-system.md#elevation).
 - **Text**: `InputGroupTextarea`, which grows with `field-sizing: content`, from `--composer-min` up to `min(40svh, 24rem)`, then scrolls. The placeholder is "Ask <agent> to…".
 - **Send button**: a 28 px round `InputGroupButton` at the end of the last line; `--primary` when there is text, `--muted` and disabled when empty.
-- **Control row**: a `--row-height` row under the box, outside it, built from `config`. On the left, the mode selector. On the right, one model button that shows the model and, when the agent offers `thought_level`, the reasoning level in muted text ("Opus 5.5 High"); then the usage ring. The model button opens a menu with the models (the current one checked, number keys `1` to `4` pick), **Effort** as a submenu, and boolean options as switches at the end. Any other `select` option gets its own button in the row, placed by `category`. The controls are ghost buttons at `--control-height` in `--muted-foreground`; the model name is `--foreground`.
+- **Control row**: a `--row-height` row under the box, outside it, built from `config`. On the left, the mode selector. On the right, one model button that shows the model and, when the agent offers `thought_level`, the reasoning level after it ("Opus 5.5 High"); then the usage ring. The controls are ghost buttons at `--control-height` in `--muted-foreground`; the model name is `--foreground`. For a `provider/model` name, such as OpenCode's `opencode-go/GLM-5.3`, the button shows only the model part, with the full name in its tooltip. Any other `select` option gets its own button in the row, placed by `category`; its menu closes once a choice is made.
+- **Model menu**: one 320 px menu (`w-80`) for the model, the reasoning level and the boolean options, so a model and its level are set together. It stays open while you choose: a model row checks the model without closing the menu, `1` to `4` pick the first four models, `←` and `→` step the reasoning level, and `Esc` or a click outside closes it. The model list comes first under its option's name, the current model checked; each row shows the model's name and, when the agent gives one, its description in muted text, and a `provider/` prefix in `--muted-foreground`. A long list, such as OpenCode's dozens of models, scrolls by itself within 288 px (`max-h-72`) with [scroll-edge fades](./design-system.md#patterns), and opens scrolled to the current model, so the reasoning level below it stays in view. The boolean options follow as switches, after a separator.
+- **Reasoning level**: the levels are ordered and one is always chosen, so up to six of them show as a [segmented control](./design-system.md#segmented-controls) under a row with the option's name and a muted `← →` hint. The control spans the menu's full content width, like the rows above it, with 6 px of padding inside each segment; more than six levels fall back to a list like the models'. A choice named Default leaves the level to the agent, so it is one of the levels in effect and gets no segment: while it stands, the thumb rests on the level its name or description names ("Default (High)"), or on none when the agent does not say, and the row shows "Default" on the right; once a level is set by hand, a reset button (`RotateCcw`, "Use the agent's default") takes its place. The model button leaves a Default level out. A click on a level chooses it. Pressing captures the pointer: while pressed, the thumb snaps segment by segment under the pointer and shrinks to 97%, and the label and the thumb's tier styles follow it; the segment under the pointer is chosen on release, so the agent gets one request. The thumb slides with `translate` over `--duration-base` and `--ease-out-quart`, and moves at once with reduce motion. The top levels are recognised by name, compared without case or dashes: **Xhigh**, Extra high and Very high are the high tier, **Max**, Maximum, Ultra, Ultrathink and Ultracode the max tier. A chosen high-tier level shows its name in a warm gradient (`text-effort-high`); the max tier takes a wider gradient (`text-effort-max`), a tinted ring on the thumb (`shadow-effort-max`), and one sheen that sweeps across the thumb when it lands there ([reasoning levels](./design-system.md#reasoning-levels)). The model button shows the level's name with the same gradient, so a costly level is visible without opening the menu.
+- **Ultracode**: Claude Code turns on ultracode for a message that says the word, and its ACP adapter offers no option for it. While a Claude Code draft contains `ultracode`, the control row shows **Ultracode** in the max tier's gradient before the model button, fading in over `--duration-fast`, with a tooltip saying the message runs with ultracode. A real switch needs the adapter to offer one.
+- **Picks show at once**: a chosen model or level shows immediately. The agent's own value arrives with the session's next patch, after the request has settled, so the pick stands until that value lands, the request fails (the error shows in the control row and the old value returns), or 1.5 s pass.
 - **Sending**: **Enter** sends and **Shift+Enter** inserts a newline.
 - **IME**: Enter never sends while an IME composition is in progress (`isComposing`, or `keyCode` 229), so Chinese, Japanese and Korean input works. The reference also drops an Enter that arrives within 500 ms after `compositionend`, a guard for WebKit. M0.3 tests Pinyin and Japanese input on all three platforms (the macOS input sources, Microsoft Pinyin and IME, fcitx5) and adds such a guard only where a test shows it is needed, with the shortest window that passes.
 - **Drafts**: unsent text is kept per session and restored when you come back, also after a restart; sending clears it ([persistence](./persistence.md)).
@@ -310,21 +311,24 @@ The right side of the top bar shows the project's repository at a glance. Everyt
 
 ## Terminal
 
-The built-in [terminal](./terminal.md) is a panel at the bottom of the main area, under the thread and the composer.
+The built-in [terminal](./terminal.md) opens in the side panel, on the right of the main area. The placement follows the reference; the panel itself follows OverBench's surfaces.
 
 ```text
-├──────────────────────────────────────────────────────────────┤
-│ ▣ zsh   ▣ pnpm dev ●   ▣ git log                  +   ⤢   ×  │  tabs, 32 px
-│ ~/overbench (fix/flaky-login) $ pnpm test --filter auth       │
-│  ✓ login.test.ts (12)                                        │
-│  ✗ session.test.ts (1)                                       │
-│ ~/overbench (fix/flaky-login) $ █                            │
-└──────────────────────────────────────────────────────────────┘
+┬───────────────────────────────────┐
+│ ▣ zsh  ▣ pnpm dev ●  +       ⤢  × │  header, 40 px, in line with the top bar
+│ ~/overbench (fix/flaky-login) $   │
+│ pnpm test --filter auth           │
+│  ✓ login.test.ts (12)             │
+│  ✗ session.test.ts (1)            │
+│ ~/overbench (fix/flaky-login) $ █ │
+┴───────────────────────────────────┘
 ```
 
 - **Opening**: `` Ctrl+` `` on every platform, as in VS Code, or the `SquareTerminal` toggle at the right of the top bar, which shows a pressed state while the panel is open. The first time in a project it starts a terminal in the project folder and focuses it; later it shows the terminals that already exist.
-- **Panel**: a `ResizablePanel` under the thread, 280 px high by default, between 120 px and 70% of the main area, remembered per device. It sits on surface 0 ([terminal tokens](./design-system.md#terminal)); the step from the thread's surface 1 is the separation, and the resize handle shows a hairline only while hovered or dragged. It opens and closes at once, without animating its height.
-- **Tabs**: a 32 px strip. Each tab has the `SquareTerminal` icon and the title of its foreground process; the active tab takes `--accent`. A tab that printed while hidden shows a neutral dot, and one whose shell exited shows its exit code. On the right: **New terminal** (`` Ctrl+Shift+` ``), **Maximize** (the panel takes the main area, and the thread is hidden until restored), and **Hide** (`` Ctrl+` ``), which keeps the processes running.
+- **Panel**: flush with the window's top, right and bottom edges on surface 0 (`--sidebar`), mirroring the sidebar on the left, with no ring, inset or shadow ([terminal tokens](./design-system.md#terminal)). It sits in a `ResizablePanel` with `groupResizeBehavior` `preserve-pixel-size`, so it keeps its width when the window or the sidebar changes: 340 px by default and at least 280 px, while the content beside it never gets less than 360 px. The width is remembered per device. The resize handle shows a hairline only while hovered or dragged, like the sidebar's. Opening fades the panel in over `--duration-fast` and gives the content its new width at once; closing is immediate.
+- **Header**: 40 px (`--top-bar`), so it lines up with the top bar and, on macOS, the traffic lights, and it is part of the window's drag region. On Windows and Linux the panel, not the top bar, reaches the window's right edge, so its header leaves room for the window controls there and the top bar beside it drops its own (`SidePanelContext`).
+- **Tabs**: in the header, from its left edge. Each tab is 24 px high with the `SquareTerminal` icon and the title of its foreground process; the active tab takes `--sidebar-accent`, as a selected sidebar row does, and a hovered one 70% of it. A tab that printed while hidden shows a neutral dot, and one whose shell exited shows its exit code. **New terminal** (`+`, `` Ctrl+Shift+` ``) follows the last tab, as in the reference. On the right: **Maximize** (`Maximize2`) and **Close** (`X`, `` Ctrl+` ``), which hides the panel and keeps the processes running.
+- **Maximize** covers the whole main area with the panel, as a layer over the layout, which keeps its sizes underneath, so **Restore** (`Minimize2`) returns to exactly the widths before. The content under it keeps its state but is inert and not rendered (`content-visibility: hidden`). With the sidebar collapsed, the header is then the window's top left corner: it starts with the sidebar toggle and, on macOS, leaves the same room for the traffic lights as the top bar.
 - **Closing a tab** ends its shell, after a confirmation if a command is still running.
 - **Selection**: selecting text shows a small **Ask Claude Code** button at the end of the selection; it and `Mod+L` put the selection into the composer as a fenced code block. The context menu holds **Copy**, **Paste**, **Select all**, **Clear** and the same **Ask** item.
 - **Copy and paste**: `Cmd+C` and `Cmd+V` on macOS; `Ctrl+Shift+C` and `Ctrl+Shift+V` on Windows and Linux, where `Ctrl+C` stays the interrupt.
@@ -376,27 +380,30 @@ Every one of these exists in light and dark themes before M0.3 is done.
 
 Each element uses a pattern from the [design system](./design-system.md#patterns):
 
-| Element                                                          | Motion                                  |
-| ---------------------------------------------------------------- | --------------------------------------- |
-| New entry                                                        | New entry                               |
-| Thoughts, tool cards, grouped rows, long user messages, the plan | Disclosure                              |
-| Tool status change                                               | Icon crossfade, `--duration-fast`       |
-| Status text in a tool header or the composer                     | Status text                             |
-| Permission request appears                                       | Attention: one pulse, never looping     |
-| Waiting for the first output                                     | Thinking, waiting                       |
-| Running session in the sidebar                                   | Running                                 |
-| Buttons                                                          | Press                                   |
-| Agent cards on Project home                                      | Card hover                              |
-| Welcome content and Project home cards on first show             | Staggered entry                         |
-| Background of Welcome and Project home                           | Ambient field                           |
-| Expanding a parent session in the sidebar                        | Disclosure                              |
-| Git event in the thread                                          | New entry                               |
-| Counts in the git status and the usage ring                      | Status text                             |
-| Terminal panel                                                   | None: it opens and closes at once       |
-| Copying code                                                     | Copy feedback                           |
-| Update notice appears                                            | New entry                               |
-| Dismissed alerts and banners                                     | Motion exit: opacity, `--duration-fast` |
-| Menus, popovers and dialogs                                      | shadcn's built-in transitions           |
+| Element                                                          | Motion                                                                                       |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| New entry                                                        | New entry                                                                                    |
+| Thoughts, tool cards, grouped rows, long user messages, the plan | Disclosure                                                                                   |
+| Tool status change                                               | Icon crossfade, `--duration-fast`                                                            |
+| Status text in a tool header or the composer                     | Status text                                                                                  |
+| Permission request appears                                       | Attention: one pulse, never looping                                                          |
+| Waiting for the first output                                     | Thinking, waiting                                                                            |
+| Running session in the sidebar                                   | Running                                                                                      |
+| Buttons                                                          | Press                                                                                        |
+| Agent cards on Project home                                      | Card hover                                                                                   |
+| Welcome content and Project home cards on first show             | Staggered entry                                                                              |
+| Background of Welcome and Project home                           | Ambient field                                                                                |
+| Expanding a parent session in the sidebar                        | Disclosure                                                                                   |
+| Git event in the thread                                          | New entry                                                                                    |
+| Counts in the git status and the usage ring                      | Status text                                                                                  |
+| Side panel                                                       | Fades in over `--duration-fast`; closes at once                                              |
+| Copying code                                                     | Copy feedback                                                                                |
+| Update notice appears                                            | New entry                                                                                    |
+| Dismissed alerts and banners                                     | Motion exit: opacity, `--duration-fast`                                                      |
+| Menus                                                            | Fade and zoom from 95% at the anchor, 100 ms, without a slide                                |
+| Popovers and dialogs                                             | shadcn's built-in transitions                                                                |
+| Segmented control thumb                                          | Slides with `translate`, `--duration-base`, `--ease-out-quart`; shrinks to 97% while pressed |
+| The highest reasoning level chosen                               | Sheen: one sweep across the thumb, `--duration-slower`                                       |
 
 - Never animate the layout of the whole thread while it streams; only the entry that changed may move.
 - Entries restored from history or a snapshot appear without animation.

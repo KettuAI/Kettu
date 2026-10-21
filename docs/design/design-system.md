@@ -61,6 +61,20 @@ Lines are translucent, so one token reads the same on every surface step. The al
 - `--muted` (the user bubble, inline code, a disabled send button) is `oklch(0.96 0 0)` light, so the bubble stays visible on surface 1. `--accent` (hovered rows on surface 1, the highlighted menu item, an open selector) is `oklch(0.962 0 0)` light and `oklch(0.27 0 0)` dark.
 - `--input`, the track of an unchecked `Switch`, is `oklch(0.9 0 0)` light instead of shadcn's 0.922, so an unchecked switch still reads on a card, and `oklch(1 0 0 / 16%)` dark.
 
+### Reasoning levels
+
+The top reasoning levels cost the most time and tokens, so their names carry a warm gradient wherever they show: in the model menu and on the model button ([interface](./ui.md#composer)). It is the one gradient in the interface, and it marks a cost, so it still carries meaning. Which levels are on top is recognised by name ([interface](./ui.md#composer)).
+
+| Token                        | Light                                                               | Dark                                                                   | Used for                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `--effort-high-1`, `-2`      | `oklch(0.6 0.14 70)` → `oklch(0.56 0.18 40)`                        | `oklch(0.86 0.12 82)` → `oklch(0.78 0.15 52)`                          | The high tier's name (`text-effort-high`)                                                                 |
+| `--effort-max-1`, `-2`, `-3` | `oklch(0.6 0.15 60)` → `oklch(0.56 0.2 18)` → `oklch(0.52 0.2 300)` | `oklch(0.86 0.12 78)` → `oklch(0.76 0.16 22)` → `oklch(0.75 0.15 305)` | The max tier's name (`text-effort-max`), the middle stop at 55%                                           |
+| `--effort-max-ring`          | `oklch(0.6 0.18 30 / 32%)`                                          | `oklch(0.76 0.16 30 / 40%)`                                            | The 1 px ring of the max tier's thumb (`shadow-effort-max`), with a 3 px (4 px dark) glow of the same hue |
+| `--sheen`                    | `oklch(0.72 0.17 35 / 26%)`                                         | `oklch(0.82 0.13 45 / 24%)`                                            | The light that sweeps once across the thumb when the max tier is chosen (`animate-sheen`)                 |
+
+- The light stops sit near lightness 0.6, so a 12 px name keeps its contrast on the white thumb; the dark stops are lighter for the same reason.
+- The gradient runs across the name itself (`background-clip: text`), so a short name such as "Max" still shows all of it.
+
 ### Repository state
 
 Git and pull request states reuse the meaning colors and add one, `--merged`, because a merged pull request is neither a success nor waiting. The mapping follows GitHub's, which every developer already reads at a glance; each color always comes with its own Lucide icon.
@@ -80,7 +94,7 @@ Git and pull request states reuse the meaning colors and add one, `--merged`, be
 
 ### Terminal
 
-The terminal panel sits on surface 0, like the sidebar, so it reads as part of the workbench and the thread stays the one canvas. Its colors are tokens read by xterm.js:
+The terminal sits in the side panel on surface 0, like the sidebar, so the thread on surface 1 stays the one canvas, framed by a quieter surface on each side. Its colors are tokens read by xterm.js:
 
 | Token                   | Light                | Dark                 |
 | ----------------------- | -------------------- | -------------------- |
@@ -162,7 +176,8 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 
 | Utility        | Compact | Used for                                   |
 | -------------- | ------- | ------------------------------------------ |
-| `rounded-lg`   | 7 px    | Buttons, inputs, rows, menu items          |
+| `rounded-md`   | 5.6 px  | Menu items, segments and their thumb       |
+| `rounded-lg`   | 7 px    | Buttons, inputs, rows                      |
 | `rounded-xl`   | 9.8 px  | Cards, the user bubble, menus and popovers |
 | `rounded-2xl`  | 12.6 px | The composer                               |
 | `rounded-3xl`  | 15.4 px | Dialogs                                    |
@@ -170,6 +185,7 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 
 - Where OverBench's look differs from a shadcn component's default, the difference is a variant added to that component with `cva`, such as `InputGroup` `variant="composer"`, `Card` `variant="tool"` and a `Button` `size="compact"` bound to `--control-height`. Call sites never restyle a component with `className`; they use it for layout only.
 - The compact spacing steps are Tailwind's `1`, `1.5`, `2`, `2.5`, `3`, `4` and `7`.
+- Menu items are `rounded-md` because they sit 4 px inside a `rounded-xl` menu: 9.8 − 4 ≈ 5.6, so the item's corner follows the menu's. Segments sit inside their track the same way.
 - shadcn's `xs` button (24 px) is the small size; `default` (32 px) is kept for dialogs, empty states and the Welcome screen, where a larger target helps. When the comfortable density arrives, these sizes are bound to the comfortable tokens.
 
 ## Typography
@@ -180,6 +196,42 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 - Numbers that change in place, such as timers, token counts, diff stats and counters, use `tabular-nums` so they do not jitter.
 - Headings use `text-wrap: balance` and prose `text-wrap: pretty`. Paths, URLs and long identifiers use `overflow-wrap: anywhere`, so they never push a card wider than the column.
 - Icons inline with text sit at `vertical-align: -0.125em`, which centres them on the text.
+
+## Components
+
+### Segmented controls
+
+A choice among two to six ordered or exclusive values, such as the theme in Settings and the reasoning level in the model menu, is a segmented control (`SegmentedControl`, built on shadcn's `ToggleGroup` with its `segmented` variant):
+
+| Part    | Look                                                                                                                                                                                                                                 | Token                                                                  |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Track   | A recessed fill, `rounded-lg`, 2 px padding and 2 px gaps; 28 px high                                                                                                                                                                | `--segment-track`: `oklch(0 0 0 / 5%)` light, `oklch(1 0 0 / 6%)` dark |
+| Segment | As wide as its label, sharing any room the track has left (`flex-auto`); 24 px high, 12.5 px text in `--muted-foreground` with 10 px padding (6 px in the model menu); the segment under the thumb (`data-active`) is `--foreground` | none                                                                   |
+| Thumb   | One raised piece under the chosen segment, `rounded-md`                                                                                                                                                                              | `--segment-thumb`: `oklch(1 0 0)` light, `oklch(1 0 0 / 12%)` dark     |
+| Ring    | The thumb's edge                                                                                                                                                                                                                     | `--segment-ring` (`shadow-segment`), below                             |
+
+- `--segment-ring` is a hairline of `--border` and a 2 px contact shadow (`oklch(0 0 0 / 8%)`) in the light theme; in the dark theme, a 1 px top highlight (`oklch(1 0 0 / 6%)`) and a 2 px shadow at 30%. The tokens are translucent in the dark theme, so the control reads the same on a card and in a menu.
+- The thumb is placed from the segments' measured boxes (a `ResizeObserver` keeps them current) and slides to the chosen segment with `translate` over `--duration-base` with `--ease-out-quart`; its width changes only between segments of different widths, and `contain: strict` keeps that layout to the thumb. Its first placement is not animated, so it never slides in from the track's edge. Pressing captures the pointer; while pressed, the thumb snaps segment by segment under the pointer and shrinks to 97% (`scale-97`), and the segment under it is chosen on release, so a drag sends one change. With reduce motion the thumb moves without a transition (`motion-reduce:transition-none`).
+- The control is one Tab stop; the arrow keys move between segments and Space or Enter chooses ([layout behavior](#layout-behavior)). Inside a menu the items sit in `DropdownMenuList`, so opening the menu with the pointer focuses the list rather than the control, and the arrows keep moving through the menu.
+
+### Menus and dialogs
+
+Every menu, the dropdown menus and the context menus alike, shares one set of measurements, so the session's title menu, its row's context menu and the model menu read as one family.
+
+| Part        | Look                                                                                                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Menu        | Surface 3, `rounded-xl`, 4 px padding, `shadow-menu` (a hairline ring and the `md` shadow). It opens with a fade and a zoom from 95% at its anchor in 100 ms, without a slide, and closes the same way |
+| Item        | 13 px text, at least `--row-height`, 8 px horizontal padding, 8 px between icon and label, `rounded-md`; highlighted, it takes `--accent`                                                              |
+| Icon        | A leading Lucide icon at 16 px in `--muted-foreground`, `--accent-foreground` when the item is highlighted; agent marks keep their own colors                                                          |
+| Check       | The checked item of a radio or checkbox group shows a 14 px `Check` on the right, centred on the first line, so a two-line item keeps it by its name                                                   |
+| Group label | 12 px, weight 500, `--muted-foreground`, with the items' 8 px inset, so it lines up with their text                                                                                                    |
+| Separator   | One hairline of `--border`, inset 8 px on both sides, never edge to edge                                                                                                                               |
+| Shortcut    | 12 px `--muted-foreground` with `tabular-nums`, on the right                                                                                                                                           |
+| Submenu     | A 14 px `ChevronRight` in `--muted-foreground`; the item stays filled while its submenu is open                                                                                                        |
+| Destructive | Red text and icon (`--destructive`), with a faint `--destructive-tint` fill only when highlighted; it comes last, after a separator                                                                    |
+
+- The session menus, the title menu and the row's context menu, hold **New sub-session** (`CornerDownRight`), **Close** (`X`), a separator and **Delete…** (`Trash2`).
+- **Dialogs** (`Dialog`, `AlertDialog`): surface 3, `rounded-3xl`, 20 px padding and 16 px between parts, at most 384 px wide, with the `lg` shadow. The title is 16 px at weight 500, the description 13 px with a relaxed line height in `--muted-foreground`. The buttons sit right-aligned at the end, 8 px apart, at the `default` size; the footer has no band or rule of its own. A destructive action uses `Button`'s `destructive` variant.
 
 ## Motion
 
@@ -222,23 +274,25 @@ CSS cannot animate an element that is being removed, which is why exits go to Mo
 
 ### Patterns
 
-Each pattern names what provides it. OverBench writes its own keyframes only where nothing in the stack offers the effect: the one-time attention pulse and the ambient field's drift.
+Each pattern names what provides it. OverBench writes its own keyframes only where nothing in the stack offers the effect: the one-time attention pulse, the ambient field's drift and the sheen on the highest reasoning level.
 
-| Pattern           | Provided by                                                                                                    | Tuning                                                                                             |
-| ----------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Press             | shadcn `Button`'s built-in active state                                                                        | None                                                                                               |
-| Disclosure        | shadcn `Collapsible` (Base UI), animating `--collapsible-panel-height`                                         | `--duration-base`, `--ease-out-expo`                                                               |
-| New entry         | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-slow`, `--ease-out-quint`; once per entry                                              |
-| Status text       | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                    | `--duration-base`                                                                                  |
-| Thinking, waiting | shadcn's `shimmer` utility on the status text                                                                  | None                                                                                               |
-| Loading           | shadcn `Skeleton` and `Spinner`                                                                                | None                                                                                               |
-| Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself | `--scroll-fade-size: 28px`                                                                         |
-| Running           | Tailwind's `animate-pulse` on the sidebar's running dot                                                        | None                                                                                               |
-| Copy feedback     | The copy button in Streamdown's code blocks                                                                    | None                                                                                               |
-| Staggered entry   | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1 fill-mode-both`, with a growing `animation-delay`   | `--duration-slow`, `--ease-out-quint`; the first item after 60 ms, each next one 30 ms later, once |
-| Card hover        | CSS transitions on `transform`, the ring, the shadow and the opacity of the `--card-glow` layer                | `--duration-fast`, `--ease-out-expo`                                                               |
-| Ambient field     | Own keyframes, described [below](#ambient-field)                                                               | 41 s and 29 s, `ease-in-out`, alternating                                                          |
-| Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                       | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal              |
+| Pattern           | Provided by                                                                                                       | Tuning                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Press             | shadcn `Button`'s built-in active state                                                                           | None                                                                                               |
+| Disclosure        | shadcn `Collapsible` (Base UI), animating `--collapsible-panel-height`                                            | `--duration-base`, `--ease-out-expo`                                                               |
+| New entry         | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                       | `--duration-slow`, `--ease-out-quint`; once per entry                                              |
+| Status text       | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1`                                                       | `--duration-base`                                                                                  |
+| Thinking, waiting | shadcn's `shimmer` utility on the status text                                                                     | None                                                                                               |
+| Loading           | shadcn `Skeleton` and `Spinner`                                                                                   | None                                                                                               |
+| Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself    | `--scroll-fade-size: 28px`                                                                         |
+| Running           | Tailwind's `animate-pulse` on the sidebar's running dot                                                           | None                                                                                               |
+| Copy feedback     | The copy button in Streamdown's code blocks                                                                       | None                                                                                               |
+| Staggered entry   | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1 fill-mode-both`, with a growing `animation-delay`      | `--duration-slow`, `--ease-out-quint`; the first item after 60 ms, each next one 30 ms later, once |
+| Card hover        | CSS transitions on `transform`, the ring, the shadow and the opacity of the `--card-glow` layer                   | `--duration-fast`, `--ease-out-expo`                                                               |
+| Ambient field     | Own keyframes, described [below](#ambient-field)                                                                  | 41 s and 29 s, `ease-in-out`, alternating                                                          |
+| Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                          | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal              |
+| Segmented thumb   | A CSS transition on `translate` and `scale`                                                                       | `--duration-base`, `--ease-out-quart`                                                              |
+| Sheen             | Own keyframe: a band of `--sheen` crosses the max tier's thumb from left to right, once, each time it lands there | `--duration-slower`, `--ease-out-quart`; not when the menu merely opens on that level              |
 
 - The disclosure is the only layout animation allowed: one at a time, never inside an entry that is streaming.
 - Entries restored from history or a snapshot appear without animation.
@@ -265,6 +319,7 @@ The Welcome screen and Project home have a quiet background: a dot grid that a s
 - Motion components follow the root `<MotionConfig reducedMotion="user">`: movement is removed and opacity remains.
 - CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: movement and loops stop (slides, zooms and spins hold still, pulses and shimmer stop), opacity and color transitions remain, and disclosures open at once.
 - The ambient field's light rests at the centre of the content, a staggered entry becomes a plain fade, and a hovered card keeps its glow and shadow but does not rise.
+- The segmented thumb moves at once, and the sheen does not play (`motion-safe`).
 
 ## Layout behavior
 

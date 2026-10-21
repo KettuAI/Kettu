@@ -4,7 +4,7 @@
 
 Working with an agent still means running things yourself: the dev server, the tests the agent claims pass, a quick `git log`. The built-in terminal keeps that next to the session, in the project's folder and with the user's own shell, so nobody has to switch windows. The interface is in [ui.md](./ui.md#terminal).
 
-The reference opens its terminal as a panel on the right. OverBench puts it at the bottom instead, where VS Code, JetBrains IDEs and Zed have trained developers to look for it, and keeps the right side for the Changes panel that comes later, so both can be open at once. The thread is a narrow centred column, so a bottom panel takes height the thread has to spare at most window sizes.
+The terminal opens in the side panel on the right, as in the reference. M0 first put it at the bottom, where VS Code, JetBrains IDEs and Zed put theirs, but under the composer it pushed the thread and the composer up and left the terminal short and wide; the maintainer found it awkward in use during the M0 acceptance (2026-10-21). On the right it gets the full height of the window, and the thread, a narrow centred column, loses width it rarely uses. Only the placement follows the reference: the panel is OverBench's own, flush on surface 0 like the sidebar rather than the reference's card. The Changes panel that comes later becomes a second view of the same side panel.
 
 ## Processes
 
@@ -112,6 +112,6 @@ The terminal is a deliberate exception to "the renderer cannot run commands": wh
 
 ## Alternatives considered
 
-- **A panel on the right, as in the reference**: it would compete with the Changes panel for the same space, and most developers expect the terminal at the bottom. Rejected.
+- **A panel at the bottom, as in VS Code**: what M0 built first. Under the composer it squeezed the thread from below and gave the terminal little height; replaced by the side panel during the M0 acceptance.
 - **The pty in the agent host**: one process fewer, but a native crash or an output flood would hit every agent. Rejected.
 - **A custom renderer instead of xterm.js**: xterm.js is what VS Code, Hyper and Tabby use, handles every escape sequence, and has a GPU renderer. Nothing would be gained. Rejected.
