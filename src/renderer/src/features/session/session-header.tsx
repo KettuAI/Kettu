@@ -69,34 +69,29 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
             <ChevronDownIcon data-icon="inline-end" className="size-3 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-52">
-            {!subagent && (
-              <>
-                <DropdownMenuGroup>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <CornerDownRightIcon />
-                      New sub-session
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-48">
-                      {agents.map((agent) => (
-                        <DropdownMenuItem
-                          key={agent.id}
-                          disabled={!isInstalled(agent)}
-                          onClick={() =>
-                            void createSession(agent.id, summary.projectPath, summary.id)
-                          }
-                        >
-                          <AgentMark agent={agent.id} size={14} mono={!isInstalled(agent)} />
-                          {agent.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-              </>
-            )}
             <DropdownMenuGroup>
+              {!subagent && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <CornerDownRightIcon />
+                    New sub-session
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-48">
+                    {agents.map((agent) => (
+                      <DropdownMenuItem
+                        key={agent.id}
+                        disabled={!isInstalled(agent)}
+                        onClick={() =>
+                          void createSession(agent.id, summary.projectPath, summary.id)
+                        }
+                      >
+                        <AgentMark agent={agent.id} size={14} mono={!isInstalled(agent)} />
+                        {agent.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
               <DropdownMenuItem onClick={() => void closeSession(summary.id)}>
                 <XIcon />
                 Close

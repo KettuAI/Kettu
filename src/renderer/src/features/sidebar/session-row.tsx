@@ -237,7 +237,6 @@ function SessionMenu({
           </ContextMenuSubContent>
         </ContextMenuSub>
       )}
-      {canCreateChild && <ContextMenuSeparator />}
       <ContextMenuItem onClick={() => void closeSession(sessionId)}>
         <XIcon />
         Close

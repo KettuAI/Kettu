@@ -112,7 +112,7 @@ Search filters rows in every section by name and description. While you search, 
 - Running and starting rows show no time, since the session is active now.
 - A session whose branch has a pull request shows its state icon after the title ([repository state](./design-system.md#repository-state)), as in the reference. Hovering the row shows the branch and the pull request in a tooltip.
 - **Sub-sessions** ([session model](./session-model.md#sub-sessions)) sit under their parent, indented 16 px along a hairline `--border` guide line. A subagent shows the `Bot` icon with its title and, muted, its description ("Explore · Find where the tests read the clock"); a sub-session you started shows its agent's mark and title.
-- A parent has a chevron in front of its mark. It expands by itself while a sub-session is running or waiting for you, and otherwise stays as you left it.
+- A parent's mark turns into a chevron under the pointer, so rows stay aligned; the chevron folds and unfolds its sub-sessions, and so do `→` and `←` on the row. It expands by itself while a sub-session is running or waiting for you, and otherwise stays as you left it.
 - A parent's indicator includes its sub-sessions: the attention count adds up their permission requests, and it shows Running while any of them runs, so a collapsed parent still says where to look.
 - **New sub-session** is in the session's title menu and its row's context menu. The context menu is 208 px wide and holds the same items as the title menu, with the same icons: **New sub-session**, **Close**, a separator, and **Delete…**, which asks first in an `AlertDialog`.
 - Indicators always pair a color with a shape or label, never color alone.
