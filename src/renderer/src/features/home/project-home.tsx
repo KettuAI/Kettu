@@ -63,7 +63,10 @@ export function ProjectHome({ project }: { project: Project }) {
             </div>
           ) : (
             <section aria-label="Start a session" className="flex flex-col gap-2.5">
-              <h2 className="text-xs font-medium text-muted-foreground">Start a session</h2>
+              <h2 className="relative w-fit text-xs font-medium text-muted-foreground">
+                <Clearing inset="-12px -28px" />
+                <span className="relative">Start a session</span>
+              </h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 {agents.map((status, i) => (
                   <AgentCard key={status.id} status={status} project={project} index={i} />

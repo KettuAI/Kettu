@@ -61,10 +61,14 @@ export function Welcome() {
           </div>
           <section aria-label="Agents" className="flex w-full flex-col gap-2">
             <h2
-              className={cn('px-0.5 text-xs font-medium text-muted-foreground', heading.className)}
+              className={cn(
+                'relative w-fit px-0.5 text-xs font-medium text-muted-foreground',
+                heading.className,
+              )}
               style={heading.style}
             >
-              Agents on this computer
+              <Clearing inset="-12px -28px" />
+              <span className="relative">Agents on this computer</span>
             </h2>
             <div className="overflow-hidden rounded-xl bg-card shadow-card">
               {!loaded
