@@ -34,7 +34,9 @@ export function formatShortcut(shortcut: string): string {
 }
 
 /** Whether the event carries the platform's main modifier and no other. */
-export function isMod(event: KeyboardEvent | React.KeyboardEvent): boolean {
+export function isMod(
+  event: Pick<KeyboardEvent | MouseEvent | React.KeyboardEvent, 'metaKey' | 'ctrlKey'>,
+): boolean {
   return isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
 }
 

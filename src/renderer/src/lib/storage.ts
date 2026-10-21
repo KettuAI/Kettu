@@ -27,3 +27,21 @@ export function removeKey(key: string): void {
     // Nothing to clean up if storage is unavailable.
   }
 }
+
+/** localStorage for panel layouts, or nothing when it is unavailable; a lost size is no crash. */
+export const layoutStorage = {
+  getItem(key: string): string | null {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      // The size simply is not remembered.
+    }
+  },
+}

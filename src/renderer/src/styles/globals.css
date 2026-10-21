@@ -3,6 +3,10 @@
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
 
+/* Streamdown and its code plugin style their elements with Tailwind classes. */
+@source '../../../../node_modules/streamdown/dist/*.js';
+@source '../../../../node_modules/@streamdown/code/dist/*.js';
+
 @custom-variant dark (&:is(.dark *));
 
 /* Reduce motion follows the OS, and Settings › Appearance can force it on. */
@@ -92,6 +96,7 @@
   --shadow-menu: var(--menu-ring);
   --shadow-dialog: var(--dialog-ring);
   --shadow-composer: var(--composer-ring);
+  --shadow-composer-hover: var(--composer-hover);
   --shadow-composer-focus: var(--composer-focus);
   --shadow-attention: var(--attention-ring-shadow);
 
@@ -556,4 +561,158 @@
 /* The ambient field pauses while the window is hidden or not focused. */
 :root[data-window-active='false'] [data-ambient-drift] {
   animation-play-state: paused;
+}
+
+/* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not
+   in a layer, so they win over the utility classes Streamdown puts on each element. */
+.markdown {
+  font-size: var(--prose-size);
+  line-height: 1.625;
+  overflow-wrap: break-word;
+  user-select: text;
+
+  & :where(p, ul, ol, blockquote, table, pre) {
+    margin-block: 0.75em;
+  }
+  & > :first-child,
+  & > :first-child > :first-child {
+    margin-top: 0;
+  }
+  & > :last-child,
+  & > :last-child > :last-child {
+    margin-bottom: 0;
+  }
+
+  & [data-streamdown^='heading-'] {
+    margin: 1.4em 0 0.5em;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.35;
+    letter-spacing: -0.005em;
+  }
+  & [data-streamdown='heading-1'] {
+    font-size: 1.36em;
+  }
+  & [data-streamdown='heading-2'] {
+    font-size: 1.2em;
+  }
+  & [data-streamdown='heading-3'] {
+    font-size: 1.07em;
+  }
+  &
+    :is(
+      [data-streamdown='heading-4'],
+      [data-streamdown='heading-5'],
+      [data-streamdown='heading-6']
+    ) {
+    font-size: 1em;
+  }
+
+  & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    padding-left: 1.4em;
+    list-style-position: outside;
+  }
+  & [data-streamdown='list-item'] {
+    margin-block: 0.25em;
+    padding-left: 0.15em;
+  }
+  & [data-streamdown='list-item']::marker {
+    color: var(--muted-foreground);
+  }
+
+  & [data-streamdown='strong'] {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  & [data-streamdown='link'] {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--border-strong);
+    text-underline-offset: 0.2em;
+    transition: text-decoration-color var(--duration-fast);
+    &:hover {
+      text-decoration-color: currentColor;
+    }
+  }
+
+  & [data-streamdown='inline-code'] {
+    border-radius: 5px;
+    background: var(--muted);
+    padding: 0.1em 0.35em;
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+  }
+
+  & [data-streamdown='code-block'] {
+    margin-block: 0.85em;
+    gap: 0;
+    border: 0;
+    border-radius: var(--radius-xl);
+    background: var(--card);
+    box-shadow: var(--card-ring);
+    padding: 0;
+    overflow: hidden;
+  }
+  & [data-streamdown='code-block-header'] {
+    height: 30px;
+    padding-inline: 12px 6px;
+    color: var(--muted-foreground);
+    font-size: 11.5px;
+  }
+  & [data-streamdown='code-block-body'] {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 2px 12px 10px;
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  & [data-streamdown='code-block-body'] pre {
+    background: transparent !important;
+  }
+
+  & [data-streamdown='blockquote'] {
+    border-left: 2px solid var(--border-strong);
+    padding-left: 0.85em;
+    color: var(--muted-foreground);
+    font-style: normal;
+  }
+
+  & [data-streamdown='horizontal-rule'] {
+    margin-block: 1.5em;
+    border-color: var(--border-soft);
+  }
+
+  & [data-streamdown='table-wrapper'] {
+    margin-block: 0.85em;
+    border: 0;
+    border-radius: var(--radius-xl);
+    background: var(--card);
+    box-shadow: var(--card-ring);
+    padding: 0;
+  }
+  & [data-streamdown='table'] {
+    border: 0;
+    font-size: 13px;
+  }
+  & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell']) {
+    border-color: var(--border-soft);
+    padding: 6px 12px;
+    line-height: 1.5;
+  }
+  & [data-streamdown='table-header-cell'] {
+    font-weight: var(--font-weight-medium);
+    color: var(--muted-foreground);
+  }
+}
+
+/* Thoughts and summaries: the same structure, quieter. */
+.markdown-muted {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+/* Tool output inside a card. */
+.markdown-compact {
+  font-size: 13px;
+  line-height: 1.55;
 }

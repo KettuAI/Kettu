@@ -31,16 +31,20 @@ const KEEP_WATCHED = 4
 const watched: string[] = [] // most recent last
 const pending = new Map<string, PatchBatch[]>() // batches that arrived before their snapshot
 const snapshotsInFlight = new Map<string, Promise<void>>()
-const fresh = new Map<string, Set<string>>() // entries added live, which animate in once
+// Entries added live, with when they arrived; they animate in once, on their first render.
+const fresh = new Map<string, Map<string, number>>()
+const FRESH_FOR_MS = 1000
 let queue: PatchBatch[] = []
 let frame = 0
 
-/** Whether an entry arrived live rather than from a snapshot or a history replay. */
-export function takeFresh(sessionId: string, entryId: string): boolean {
-  const set = fresh.get(sessionId)
-  if (!set?.has(entryId)) return false
-  set.delete(entryId)
-  return true
+/**
+ * Whether an entry arrived live in the last second rather than from a snapshot or a history
+ * replay. It is a time window rather than a one-time flag so StrictMode's double render and a
+ * remount agree.
+ */
+export function isFresh(sessionId: string, entryId: string): boolean {
+  const at = fresh.get(sessionId)?.get(entryId)
+  return at !== undefined && performance.now() - at < FRESH_FOR_MS
 }
 
 function setReplica(sessionId: string, replica: Replica): void {
@@ -122,11 +126,13 @@ function flush(): void {
 }
 
 function markFresh(batch: PatchBatch): void {
+  const now = performance.now()
   for (const patch of batch.patches) {
     if (patch.op !== 'entry.add') continue
-    let set = fresh.get(batch.sessionId)
-    if (!set) fresh.set(batch.sessionId, (set = new Set()))
-    set.add(patch.entry.id)
+    let entries = fresh.get(batch.sessionId)
+    if (!entries) fresh.set(batch.sessionId, (entries = new Map()))
+    for (const [id, at] of entries) if (now - at >= FRESH_FOR_MS) entries.delete(id)
+    entries.set(patch.entry.id, now)
   }
 }
 
