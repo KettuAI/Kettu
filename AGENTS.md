@@ -77,7 +77,8 @@ src/
 └── shared/            Shared across processes: the IPC and host contracts, the thread model
 tools/
 ├── fake-agent/        Scripted ACP agent for development, tests and perf runs
-└── perf/              The performance script
+├── perf/              The performance script
+└── screenshots/       Captures the main screens on each platform
 ```
 
 ### Adding an IPC call

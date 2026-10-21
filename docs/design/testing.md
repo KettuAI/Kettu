@@ -88,6 +88,12 @@ The fake agent keeps its sessions in memory. `session/load` replays what happene
 
 Real agents never run in CI: they need accounts and cost money.
 
+## Screenshots
+
+Nobody runs every platform by hand, so `.github/workflows/screenshots.yml` captures the main screens of a production build on `macos-latest`, `windows-latest` and `ubuntu-latest` (under `xvfb-run`), on demand and on pushes to `main` that touch `src/` or `tools/`. Each run uploads one artifact per platform, `screenshots-<OS>`; `gh run download <run id>` fetches them for review.
+
+`tools/screenshots/capture.mjs`, with no dependencies, does the capturing. It starts the app from `out/` with `--overbench-perf`, a fresh data folder and the fake agent, adds a scratch git project on an unpublished branch with one uncommitted file, and drives the real UI over the Chrome DevTools Protocol at 1280 x 800 and a device scale factor of 2. It writes `<platform>-<screen>-<light|dark>.png` for the welcome screen, the project home, a finished `/basic-turn`, the model menu, a `/permission` request, the terminal panel, the session context menu and five Settings sections. Locally, run `pnpm build`, then `node tools/screenshots/capture.mjs --out <folder>`; `--port` changes the debugging port (default 9230).
+
 ## Measuring performance
 
 Budgets are measured on a production build with the fake agent, launched with `--overbench-perf` and `--remote-debugging-port`, and driven by `tools/perf/measure.mjs`, a script with no dependencies that talks to the renderer over the Chrome DevTools Protocol. Either build works:

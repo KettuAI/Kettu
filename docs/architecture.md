@@ -238,7 +238,8 @@ src/
     └── thread.ts          Session model and applyPatches
 tools/
 ├── fake-agent/            Scripted ACP agent for development and tests
-└── perf/                  Performance measurement script
+├── perf/                  Performance measurement script
+└── screenshots/           Screenshot capture of the main screens, run in CI
 ```
 
 ## What we take from where
