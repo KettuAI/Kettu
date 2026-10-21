@@ -52,9 +52,9 @@ What M0 delivers:
 - **A thread that reads well** — answers stream as Markdown with highlighted code, and thoughts, plans, tool calls and their inline diffs show as quiet cards you can open.
 - **Readable approvals** — permission requests are clear cards you answer with a click or the number keys, several at once when the agent asks in parallel.
 - **Parallel sessions** — several sessions run at once; the sidebar shows which are running, which are waiting for you and which are done, with subagents under their parent, and a system notification tells you when one needs you while OverBench is in the background.
-- **Each agent's own controls** — mode, model and reasoning selectors, slash commands, context usage and, where the agent reports them, your plan limits.
+- **Each agent's own controls** — mode, model and reasoning selectors, slash commands, context usage and, where the agent reports them, your plan limits, which the sidebar also shows at a glance.
 - **Git at a glance** — the branch, sync state and changes in the top bar, commits and pushes in the thread, and pull requests with their checks through the GitHub CLI.
-- **A built-in terminal** — one per project, with tabs and your login shell.
+- **A built-in terminal** — one per project, in a side panel beside the session, with tabs and your login shell.
 - **Crafted details** — considered typography, light and dark themes, restrained motion that honors reduce motion, and shortcuts for the common actions.
 
 _Later_: a changes panel for reviewing diffs side by side, search across sessions, a command palette, `@` file mentions and images in the composer, and signed builds. The [M0 plan](./docs/milestones/m0.md#scope) lists what is in and out.
