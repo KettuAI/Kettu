@@ -69,6 +69,8 @@
   --color-background: var(--background);
   --color-tile: var(--tile);
   --color-track: var(--track);
+  --color-segment-track: var(--segment-track);
+  --color-segment-thumb: var(--segment-thumb);
   --color-attention: var(--attention);
   --color-attention-foreground: var(--attention-foreground);
   --color-attention-text: var(--attention-text);
@@ -99,6 +101,8 @@
   --shadow-composer-hover: var(--composer-hover);
   --shadow-composer-focus: var(--composer-focus);
   --shadow-attention: var(--attention-ring-shadow);
+  --shadow-segment: var(--segment-ring);
+  --shadow-effort-max: var(--effort-max-shadow);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);
@@ -138,6 +142,8 @@
   --ring: oklch(0.708 0 0);
   --tile: oklch(0.965 0 0);
   --track: oklch(0 0 0 / 12%);
+  --segment-track: oklch(0 0 0 / 5%);
+  --segment-thumb: oklch(1 0 0);
 
   /* Lines are translucent so one token reads the same on every surface. Alphas are for the
      0.5 px hairline of a 2x display and halved below, so a line keeps its visual weight. */
@@ -157,6 +163,15 @@
   --merged: oklch(0.55 0.19 300);
   --diff-add: oklch(0.62 0.15 150 / 9%);
   --diff-del: oklch(0.6 0.2 27 / 8%);
+
+  /* The top reasoning levels: warm gradients on their names. */
+  --effort-high-1: oklch(0.6 0.14 70);
+  --effort-high-2: oklch(0.56 0.18 40);
+  --effort-max-1: oklch(0.6 0.15 60);
+  --effort-max-2: oklch(0.56 0.2 18);
+  --effort-max-3: oklch(0.52 0.2 300);
+  --effort-max-ring: oklch(0.6 0.18 30 / 32%);
+  --sheen: oklch(0.72 0.17 35 / 26%);
 
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -193,6 +208,8 @@
     var(--elevation-focus), var(--highlight);
   --attention-ring-shadow:
     inset 0 0 0 1px var(--attention-ring), 0 0 0 3px var(--attention-halo), var(--highlight);
+  --segment-ring: 0 0 0 var(--hairline) var(--border), 0 1px 2px oklch(0 0 0 / 8%);
+  --effort-max-shadow: inset 0 0 0 1px var(--effort-max-ring), 0 1px 3px oklch(0.6 0.18 30 / 14%);
 
   /* Agent marks, the only brand colors in the interface. */
   --brand-claude: #d97757;
@@ -294,6 +311,8 @@
   --ring: oklch(0.556 0 0);
   --tile: oklch(0.27 0 0);
   --track: oklch(1 0 0 / 14%);
+  --segment-track: oklch(1 0 0 / 6%);
+  --segment-thumb: oklch(1 0 0 / 12%);
 
   --border: oklch(1 0 0 / 7%);
   --border-soft: oklch(1 0 0 / 4%);
@@ -311,6 +330,14 @@
   --diff-add: oklch(0.7 0.15 150 / 12%);
   --diff-del: oklch(0.7 0.19 22 / 12%);
 
+  --effort-high-1: oklch(0.86 0.12 82);
+  --effort-high-2: oklch(0.78 0.15 52);
+  --effort-max-1: oklch(0.86 0.12 78);
+  --effort-max-2: oklch(0.76 0.16 22);
+  --effort-max-3: oklch(0.75 0.15 305);
+  --effort-max-ring: oklch(0.76 0.16 30 / 40%);
+  --sheen: oklch(0.82 0.13 45 / 24%);
+
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.922 0 0);
   --sidebar-primary-foreground: oklch(0.205 0 0);
@@ -325,6 +352,8 @@
   --elevation-focus: 0 4px 24px oklch(0 0 0 / 55%);
   --button-shadow: inset 0 1px 0 oklch(1 0 0 / 5%);
   --card-glow: oklch(1 0 0 / 5%);
+  --segment-ring: inset 0 1px 0 oklch(1 0 0 / 6%), 0 1px 2px oklch(0 0 0 / 30%);
+  --effort-max-shadow: inset 0 0 0 1px var(--effort-max-ring), 0 1px 4px oklch(0.76 0.16 30 / 18%);
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
@@ -470,6 +499,37 @@
     animation-fill-mode: both;
     animation-timeline: scroll(self y);
   }
+}
+
+/* The names of the top reasoning levels. */
+@utility text-effort-high {
+  background-image: linear-gradient(90deg, var(--effort-high-1), var(--effort-high-2));
+  background-clip: text;
+  color: transparent;
+}
+@utility text-effort-max {
+  background-image: linear-gradient(
+    90deg,
+    var(--effort-max-1),
+    var(--effort-max-2) 55%,
+    var(--effort-max-3)
+  );
+  background-clip: text;
+  color: transparent;
+}
+
+/* One sweep of light across a surface, as when the highest reasoning level is chosen. */
+@keyframes sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@utility animate-sheen {
+  background-image: linear-gradient(100deg, transparent 25%, var(--sheen) 50%, transparent 75%);
+  animation: sheen var(--duration-slower) var(--ease-out-quart) 1 both;
 }
 
 /* One-time attention pulse: the halo grows to 6 px and settles at 3 px. */

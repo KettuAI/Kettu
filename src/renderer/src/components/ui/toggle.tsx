@@ -9,9 +9,9 @@ const toggleVariants = cva(
       variant: {
         default: 'bg-transparent',
         outline: 'border border-input bg-transparent hover:bg-muted',
-        // A segment of a segmented control: the chosen one is raised on the muted track.
+        // A segment of a segmented control; the control's thumb raises the one marked active.
         segmented:
-          'rounded-[6px] font-normal text-muted-foreground hover:bg-transparent hover:text-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-outline data-[state=on]:bg-card',
+          'min-w-0 rounded-md font-normal text-muted-foreground transition-colors duration-(--duration-fast) hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent data-[state=on]:bg-transparent data-active:text-foreground',
         // A preview tile with its label under it; the chosen tile takes a strong ring.
         tile: 'h-auto flex-col gap-1.5 bg-transparent p-0 font-normal text-muted-foreground hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent aria-pressed:text-foreground [&>[data-tile]]:ring-1 [&>[data-tile]]:ring-border [&>[data-tile]]:transition-shadow aria-pressed:[&>[data-tile]]:ring-2 aria-pressed:[&>[data-tile]]:ring-foreground',
       },

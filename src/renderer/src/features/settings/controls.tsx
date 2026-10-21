@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@renderer/components/segmented-control'
 import {
   Select,
   SelectContent,
@@ -7,7 +8,6 @@ import {
   SelectValue,
 } from '@renderer/components/ui/select'
 import { Switch } from '@renderer/components/ui/switch'
-import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 
 export function ControlError({ error }: { error: string | null }) {
   if (!error) return null
@@ -44,23 +44,15 @@ export function Segmented<T extends string | number>({
   onChange: (value: T) => void
 }) {
   return (
-    <ToggleGroup
+    <SegmentedControl
       aria-label={label}
-      variant="segmented"
-      size="compact"
-      spacing={0.5}
-      value={[String(value)]}
-      onValueChange={(next) => {
-        const picked = options.find((o) => String(o.value) === next[0])
-        if (picked && picked.value !== value) onChange(picked.value)
+      value={String(value)}
+      segments={options.map((o) => ({ value: String(o.value), label: o.label }))}
+      onChange={(next) => {
+        const picked = options.find((o) => String(o.value) === next)
+        if (picked) onChange(picked.value)
       }}
-    >
-      {options.map((o) => (
-        <ToggleGroupItem key={String(o.value)} value={String(o.value)}>
-          {o.label}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
+    />
   )
 }
 

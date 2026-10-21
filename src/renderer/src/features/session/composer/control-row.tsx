@@ -1,6 +1,7 @@
-import { useState, type KeyboardEvent } from 'react'
-import { ChevronDownIcon } from 'lucide-react'
+import { useCallback, useId, useState, type KeyboardEvent } from 'react'
+import { ChevronDownIcon, RotateCcwIcon } from 'lucide-react'
 import type { ConfigOption, SessionView } from '@shared/thread'
+import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
@@ -8,36 +9,68 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuList,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Switch } from '@renderer/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
+import { levelsOf, splitName, tierOf, type EffortTier, type SelectOption } from './levels'
 import { UsageButton } from './usage'
 
-type SelectOption = ConfigOption & { type: 'select'; choices: NonNullable<ConfigOption['choices']> }
+/** Asks the agent to change an option; resolves to whether it did. */
+type Select = (optionId: string, value: string | boolean) => Promise<boolean>
 
 const isSelect = (o: ConfigOption): o is SelectOption => o.type === 'select' && !!o.choices?.length
 
-function choiceName(option: SelectOption): string {
-  return option.choices.find((c) => c.value === option.value)?.name ?? String(option.value)
+function choiceName(option: SelectOption, value: string | undefined): string {
+  return option.choices.find((c) => c.value === value)?.name ?? String(value)
+}
+
+// How long a pick may stand in for the agent's value when no new value arrives.
+const SETTLE_MS = 1500
+
+/**
+ * The option's value, showing the user's pick at once. The agent's new value arrives with the
+ * session's next patch, after the request has settled, so the pick stands until that value lands,
+ * the request fails or `SETTLE_MS` passes.
+ */
+function usePick(
+  option: SelectOption | undefined,
+  onSelect: Select,
+): [string | undefined, (value: string) => void] {
+  const actual = option === undefined ? undefined : String(option.value)
+  const [pending, setPending] = useState<string | null>(null)
+  if (pending !== null && pending === actual) setPending(null)
+  const shown = pending ?? actual
+  const pick = (value: string) => {
+    if (!option || value === shown) return
+    setPending(value)
+    const clear = () => setPending((p) => (p === value ? null : p))
+    void onSelect(option.id, value).then((ok) => {
+      if (ok) setTimeout(clear, SETTLE_MS)
+      else clear()
+    })
+  }
+  return [shown, pick]
 }
 
 /** The session's controls under the composer, built from the agent's config options. */
 export function ControlRow({
   session,
   onCompact,
+  ultracode = false,
 }: {
   session: SessionView
   onCompact: (() => void) | null
+  /** The draft turns on Claude Code's ultracode for its message. */
+  ultracode?: boolean
 }) {
   const agent = useAgentsStore((s) => s.byId[session.agentId])
   const [error, setError] = useState<string | null>(null)
@@ -54,10 +87,14 @@ export function ControlRow({
   const leftOthers = others.filter((o) => o.category === 'other')
   const rightOthers = others.filter((o) => o.category !== 'other')
 
-  const set = (optionId: string, value: string | boolean) => {
+  const set: Select = (optionId, value) => {
     setError(null)
-    host('sessions.setConfigOption', { sessionId: session.id, optionId, value }).catch(
-      (e: unknown) => setError(errorMessage(e)),
+    return host('sessions.setConfigOption', { sessionId: session.id, optionId, value }).then(
+      () => true,
+      (e: unknown) => {
+        setError(errorMessage(e))
+        return false
+      },
     )
   }
 
@@ -76,6 +113,20 @@ export function ControlRow({
       {rightOthers.map((o) => (
         <OptionMenu key={o.id} option={o} onSelect={set} />
       ))}
+      {ultracode && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span className="animate-in px-1.5 text-xs font-medium fade-in animation-duration-(--duration-fast)" />
+            }
+          >
+            <span className="text-effort-max">Ultracode</span>
+          </TooltipTrigger>
+          <TooltipContent>
+            This message runs with ultracode: dynamic workflows on the task
+          </TooltipContent>
+        </Tooltip>
+      )}
       {(model || effort || switches.length > 0) && (
         <ModelMenu model={model} effort={effort} switches={switches} onSelect={set} />
       )}
@@ -89,13 +140,9 @@ export function ControlRow({
   )
 }
 
-function OptionMenu({
-  option,
-  onSelect,
-}: {
-  option: SelectOption
-  onSelect: (optionId: string, value: string) => void
-}) {
+/** A menu for one option, which closes once a choice is made. */
+function OptionMenu({ option, onSelect }: { option: SelectOption; onSelect: Select }) {
+  const [value, pick] = usePick(option, onSelect)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -103,13 +150,13 @@ function OptionMenu({
           <Button variant="quiet" size="compact" aria-label={option.name} className="gap-1 px-2" />
         }
       >
-        {choiceName(option)}
+        {choiceName(option, value)}
         <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" sideOffset={6} className="w-64">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{option.name}</DropdownMenuLabel>
-          <Choices option={option} onSelect={onSelect} />
+          <Choices option={option} value={value} onPick={pick} closeOnClick />
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -118,36 +165,62 @@ function OptionMenu({
 
 function Choices({
   option,
-  onSelect,
+  value,
+  onPick,
+  closeOnClick = false,
   numbered = false,
 }: {
   option: SelectOption
-  onSelect: (optionId: string, value: string) => void
+  value: string | undefined
+  onPick: (value: string) => void
+  closeOnClick?: boolean
   numbered?: boolean
 }) {
   return (
-    <DropdownMenuRadioGroup
-      value={String(option.value)}
-      onValueChange={(v) => onSelect(option.id, String(v))}
-    >
+    <DropdownMenuRadioGroup value={value} onValueChange={(v) => onPick(String(v))}>
       {option.choices.map((choice, i) => (
-        <DropdownMenuRadioItem key={choice.value} value={choice.value} className="items-start">
-          <span className="flex min-w-0 flex-col py-px">
-            <span>{choice.name}</span>
+        <DropdownMenuRadioItem
+          key={choice.value}
+          value={choice.value}
+          closeOnClick={closeOnClick}
+          className="items-start"
+        >
+          <span className="flex min-w-0 flex-1 flex-col">
+            <ChoiceName name={choice.name} />
             {choice.description && (
               <span className="text-xs text-muted-foreground">{choice.description}</span>
             )}
           </span>
-          {numbered && i < 4 && (
-            <DropdownMenuShortcut className="mr-5">{i + 1}</DropdownMenuShortcut>
-          )}
+          {numbered && i < 4 && <DropdownMenuShortcut>{i + 1}</DropdownMenuShortcut>}
         </DropdownMenuRadioItem>
       ))}
     </DropdownMenuRadioGroup>
   )
 }
 
-/** One button for the model, with the reasoning level in muted text, and a menu for all of it. */
+function ChoiceName({ name }: { name: string }) {
+  const [prefix, rest] = splitName(name)
+  return (
+    <span className="break-words">
+      {prefix && <span className="text-muted-foreground">{prefix}</span>}
+      {rest}
+    </span>
+  )
+}
+
+// More levels than this do not fit as segments, so they are listed like models.
+const MAX_SEGMENTS = 6
+
+const tierText: Record<EffortTier, string> = {
+  high: 'text-effort-high',
+  max: 'text-effort-max',
+}
+
+/**
+ * One button for the model, with the reasoning level after it, and one menu for both. The menu
+ * stays open while choosing, so a model and its level can be set together: 1 to 4 pick a model,
+ * the left and right arrows step the level, and Escape closes it.
+ */
 function ModelMenu({
   model,
   effort,
@@ -157,25 +230,65 @@ function ModelMenu({
   model: SelectOption | undefined
   effort: SelectOption | undefined
   switches: ConfigOption[]
-  onSelect: (optionId: string, value: string | boolean) => void
+  onSelect: Select
 }) {
-  const [open, setOpen] = useState(false)
-  const pickByNumber = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!model || event.metaKey || event.ctrlKey || event.altKey) return
+  const [modelValue, pickModel] = usePick(model, onSelect)
+  const [effortValue, pickEffort] = usePick(effort, onSelect)
+  const level = effort ? levelsOf(effort, effortValue) : null
+  const segmented = !!level && level.levels.length > 0 && level.levels.length <= MAX_SEGMENTS
+  // The list opens scrolled to the chosen model; only on opening, so it never jumps under the pointer.
+  const showChosen = useCallback((list: HTMLDivElement | null) => {
+    const chosen = list?.querySelector<HTMLElement>('[aria-checked=true]')
+    if (list && chosen) {
+      list.scrollTop = chosen.offsetTop - (list.clientHeight - chosen.offsetHeight) / 2
+    }
+  }, [])
+  const tier = effort ? tierOf(effort, effortValue) : null
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return
     const n = Number(event.key)
-    const choice = Number.isInteger(n) && n >= 1 && n <= 4 ? model.choices[n - 1] : undefined
-    if (!choice) return
+    const choice = Number.isInteger(n) && n >= 1 && n <= 4 ? model?.choices[n - 1] : undefined
+    if (choice) {
+      event.preventDefault()
+      pickModel(choice.value)
+      return
+    }
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    // Inside the segments the arrows move focus between them instead.
+    const inSegments = (event.target as Element).closest('[data-slot=toggle-group]')
+    if (!level || step === 0 || inSegments) return
     event.preventDefault()
-    onSelect(model.id, choice.value)
-    setOpen(false)
+    const { levels, shown } = level
+    const index = levels.findIndex((c) => c.value === shown)
+    const next =
+      index < 0 ? levels[0] : levels[Math.min(levels.length - 1, Math.max(0, index + step))]
+    if (next) pickEffort(next.value)
   }
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="quiet" size="compact" aria-label="Model" className="gap-1 px-2" />}
+        render={
+          <Button
+            variant="quiet"
+            size="compact"
+            aria-label="Model"
+            title={model ? choiceName(model, modelValue) : undefined}
+            className="min-w-0 shrink gap-1 px-2"
+          />
+        }
       >
-        {model && <span className="text-foreground">{choiceName(model)}</span>}
-        {effort && <span>{choiceName(effort)}</span>}
+        {model && (
+          <span className="truncate text-foreground">
+            {splitName(choiceName(model, modelValue))[1]}
+          </span>
+        )}
+        {effort && !(model && level?.usesDefault) && (
+          <span className={cn('shrink-0', tier && tierText[tier])}>
+            {choiceName(effort, effortValue)}
+          </span>
+        )}
         {!model && !effort && <span>Options</span>}
         <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
       </DropdownMenuTrigger>
@@ -183,62 +296,150 @@ function ModelMenu({
         side="top"
         align="end"
         sideOffset={6}
-        className="w-64"
-        onKeyDown={pickByNumber}
+        className="w-80"
+        onKeyDown={onKeyDown}
       >
-        {model && (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{model.name}</DropdownMenuLabel>
-            <Choices option={model} onSelect={onSelect} numbered />
-          </DropdownMenuGroup>
-        )}
-        {effort && (
-          <>
-            {model && <DropdownMenuSeparator />}
+        <DropdownMenuList>
+          {model && (
             <DropdownMenuGroup>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <span className="flex-1">{effort.name}</span>
-                  <span className="text-xs text-muted-foreground">{choiceName(effort)}</span>
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-56">
-                  <Choices option={effort} onSelect={onSelect} />
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
+              <DropdownMenuLabel>{model.name}</DropdownMenuLabel>
+              {/* A long list scrolls by itself, so the levels below stay in view. */}
+              <div
+                ref={showChosen}
+                className="relative -mx-1 max-h-72 scroll-fade-y overflow-y-auto overscroll-contain px-1"
+              >
+                <Choices option={model} value={modelValue} onPick={pickModel} numbered />
+              </div>
             </DropdownMenuGroup>
-          </>
-        )}
-        {switches.length > 0 && (
-          <>
-            {(model || effort) && <DropdownMenuSeparator />}
-            <DropdownMenuGroup>
-              {switches.map((o) => (
-                <DropdownMenuItem
-                  key={o.id}
-                  closeOnClick={false}
-                  role="menuitemcheckbox"
-                  aria-checked={o.value === true}
-                  onClick={() => onSelect(o.id, o.value !== true)}
-                >
-                  <span className="flex min-w-0 flex-1 flex-col py-px">
-                    <span>{o.name}</span>
-                    {o.description && (
-                      <span className="text-xs text-muted-foreground">{o.description}</span>
-                    )}
-                  </span>
-                  <Switch
-                    size="sm"
-                    checked={o.value === true}
-                    tabIndex={-1}
-                    aria-hidden
-                    className={cn('pointer-events-none')}
-                  />
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-          </>
-        )}
+          )}
+          {effort && (
+            <>
+              {model && <DropdownMenuSeparator />}
+              {segmented ? (
+                <EffortSegments effort={effort} value={effortValue} onPick={pickEffort} />
+              ) : (
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{effort.name}</DropdownMenuLabel>
+                  <Choices option={effort} value={effortValue} onPick={pickEffort} />
+                </DropdownMenuGroup>
+              )}
+            </>
+          )}
+          {switches.length > 0 && (
+            <>
+              {(model || effort) && <DropdownMenuSeparator />}
+              <DropdownMenuGroup>
+                {switches.map((o) => (
+                  <DropdownMenuItem
+                    key={o.id}
+                    closeOnClick={false}
+                    role="menuitemcheckbox"
+                    aria-checked={o.value === true}
+                    onClick={() => void onSelect(o.id, o.value !== true)}
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span>{o.name}</span>
+                      {o.description && (
+                        <span className="text-xs text-muted-foreground">{o.description}</span>
+                      )}
+                    </span>
+                    <Switch
+                      size="sm"
+                      checked={o.value === true}
+                      tabIndex={-1}
+                      aria-hidden
+                      className="pointer-events-none"
+                    />
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </>
+          )}
+        </DropdownMenuList>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/**
+ * The reasoning levels as segments. The top levels carry their gradient, and landing on the
+ * highest sweeps a light across its thumb once. A level set by hand can be reset to the agent's
+ * default when the agent offers one.
+ */
+function EffortSegments({
+  effort,
+  value,
+  onPick,
+}: {
+  effort: SelectOption
+  value: string | undefined
+  onPick: (value: string) => void
+}) {
+  const labelId = useId()
+  const { levels, fallback, usesDefault, shown } = levelsOf(effort, value)
+  const tier = tierOf(effort, shown)
+  const [seen, setSeen] = useState(shown)
+  const [sweeps, setSweeps] = useState(0)
+  if (seen !== shown) {
+    setSeen(shown)
+    if (tier === 'max') setSweeps((n) => n + 1)
+  }
+
+  return (
+    <DropdownMenuGroup>
+      <div className="flex items-center gap-1 pr-1">
+        <DropdownMenuLabel id={labelId} className="flex-1">
+          {effort.name}
+        </DropdownMenuLabel>
+        {usesDefault && fallback ? (
+          <span className="px-1 text-xs text-muted-foreground">{fallback.name}</span>
+        ) : (
+          fallback && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="quiet"
+                    size="icon-xs"
+                    aria-label={`Use ${fallback.name.toLowerCase()}`}
+                    onClick={() => onPick(fallback.value)}
+                  />
+                }
+              >
+                <RotateCcwIcon />
+              </TooltipTrigger>
+              <TooltipContent>Use the agent's default</TooltipContent>
+            </Tooltip>
+          )
+        )}
+        <span aria-hidden className="px-1 text-[11px] text-muted-foreground">
+          ← →
+        </span>
+      </div>
+      <div className="pb-1">
+        <SegmentedControl
+          aria-labelledby={labelId}
+          value={shown ?? ''}
+          segments={levels.map((c) => {
+            const t = tierOf(effort, c.value)
+            return {
+              value: c.value,
+              label: (active: boolean) =>
+                active && t ? <span className={tierText[t]}>{c.name}</span> : c.name,
+            }
+          })}
+          onChange={onPick}
+          thumbClassName={(v) => (tierOf(effort, v) === 'max' ? 'shadow-effort-max' : undefined)}
+          thumb={
+            tier === 'max' &&
+            sweeps > 0 && (
+              <span key={sweeps} className="absolute inset-0 motion-safe:animate-sheen" />
+            )
+          }
+          className="w-full"
+          itemClassName="px-1.5"
+        />
+      </div>
+    </DropdownMenuGroup>
   )
 }
