@@ -6,7 +6,23 @@ directories:
 files:
   - out/**/*
   - package.json
+  # node-pty ships its sources and every platform's binaries; only the loader and the
+  # binaries for the target platform are needed at runtime.
+  - '!node_modules/node-pty/{binding.gyp,deps,scripts,src,third_party,typings}{,/**/*}'
+  - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
+  - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
+  - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+# The terminal host loads pty.node and starts spawn-helper from the real file system.
+asarUnpack:
+  - node_modules/node-pty/**
+# The postinstall step (electron-builder install-app-deps) already built node-pty for Electron,
+# including the from-source build on Linux, where node-pty has no prebuilt binary.
 npmRebuild: false
+publish:
+  provider: github
+  owner: overbench
+  repo: overbench
+  releaseType: draft
 
 mac:
   category: public.app-category.developer-tools
@@ -15,11 +31,15 @@ mac:
     - zip
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
+  files:
+    - '!node_modules/node-pty/prebuilds/win32-*{,/**/*}'
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 
 win:
   target: nsis
+  files:
+    - '!node_modules/node-pty/prebuilds/darwin-*{,/**/*}'
 nsis:
   artifactName: ${productName}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -28,5 +48,7 @@ nsis:
 linux:
   target: AppImage
   category: Development
+  files:
+    - '!node_modules/node-pty/prebuilds{,/**/*}'
 appImage:
   artifactName: ${productName}-${version}-${arch}.${ext}
