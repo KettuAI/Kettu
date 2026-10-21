@@ -4,7 +4,6 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, Project } from '@shared/agent-host'
 import { createSession } from '@renderer/app/actions'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
-import { AmbientField, Clearing } from '@renderer/components/ambient-field'
 import { rise } from '@renderer/lib/motion'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
@@ -26,27 +25,22 @@ export function ProjectHome({ project }: { project: Project }) {
   const header = rise(0)
 
   return (
-    <div className="relative isolate flex h-full flex-col">
-      <AmbientField at="50% 30%" fade="ellipse 70% 100% at 50% 0%" height="470px" phase={0.3} />
-      <TopBar className="relative">
+    <div className="flex h-full flex-col">
+      <TopBar>
         <span className="flex-1" />
         <HeaderTools projectPath={project.path} />
       </TopBar>
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-7 py-9 [scrollbar-gutter:stable]">
+      <div className="min-h-0 flex-1 overflow-y-auto px-7 py-9 [scrollbar-gutter:stable]">
         <div className="mx-auto flex max-w-[712px] flex-col gap-9">
           <div
             className={cn('flex flex-wrap items-end gap-3', header.className)}
             style={header.style}
           >
-            <div className="relative flex min-w-0 flex-1 flex-col gap-1.5">
-              <Clearing inset="-24px -40px" />
-              <h1 className="relative text-[22px] leading-tight font-semibold tracking-[-0.015em]">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.015em]">
                 {project.name}
               </h1>
-              <span
-                className="relative truncate font-mono text-xs text-muted-foreground"
-                data-selectable=""
-              >
+              <span className="truncate font-mono text-xs text-muted-foreground" data-selectable="">
                 {project.path}
               </span>
             </div>
@@ -63,10 +57,7 @@ export function ProjectHome({ project }: { project: Project }) {
             </div>
           ) : (
             <section aria-label="Start a session" className="flex flex-col gap-2.5">
-              <h2 className="relative w-fit text-xs font-medium text-muted-foreground">
-                <Clearing inset="-12px -28px" />
-                <span className="relative">Start a session</span>
-              </h2>
+              <h2 className="w-fit text-xs font-medium text-muted-foreground">Start a session</h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 {agents.map((status, i) => (
                   <AgentCard key={status.id} status={status} project={project} index={i} />

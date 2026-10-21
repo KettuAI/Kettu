@@ -60,7 +60,7 @@ Launching should feel like opening a lid, not waiting for a page: no white or bl
 
 Shown when there are no projects. A centred `Empty`: the OverBench wordmark, one line ("Open a project to start working with an agent."), the **Open project** button (`Mod+O`), and below it the three agents with their status, so a missing Node.js or agent is visible before the first session.
 
-Behind it lies the [ambient field](./design-system.md#ambient-field): a faint dot grid that a soft light drifts across, centred on the content and fading out towards the edges. The content enters once, the wordmark first and each agent row 30 ms after the one before.
+It sits on the plain `--background` surface, with nothing moving behind it. The content enters once, the wordmark first and each agent row 30 ms after the one before.
 
 ### New session
 
@@ -73,7 +73,7 @@ The git status and the terminal toggle follow the chosen project. The first send
 
 ### Project home
 
-Shown when you click a project's name in the sidebar, and after the shown session is closed or deleted. The three agents as large selectable cards (mark, name, version, status) to start a session. A hovered card rises 1 px, takes the `sm` shadow and lights up softly from its bottom edge, as the reference's starter cards do. The project's recent sessions are listed below. The ambient field sits behind the title and the cards and fades out before the list, so the list stays plain. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
+Shown when you click a project's name in the sidebar, and after the shown session is closed or deleted. The three agents as large selectable cards (mark, name, version, status) to start a session. A hovered card rises 1 px, takes the `sm` shadow and lights up softly from its bottom edge, as the reference's starter cards do. The project's recent sessions are listed below. Like Welcome, it sits on the plain `--background` surface. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
 
 ### Session
 
@@ -414,7 +414,6 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 | Buttons                                                          | Press                                                                                        |
 | Agent cards on Project home                                      | Card hover                                                                                   |
 | Welcome content and Project home cards on first show             | Staggered entry                                                                              |
-| Background of Welcome and Project home                           | Ambient field                                                                                |
 | Expanding a parent session in the sidebar                        | Disclosure                                                                                   |
 | Git event in the thread                                          | New entry                                                                                    |
 | Counts in the git status and the usage ring                      | Status text                                                                                  |

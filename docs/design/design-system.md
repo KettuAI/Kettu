@@ -274,7 +274,7 @@ CSS cannot animate an element that is being removed, which is why exits go to Mo
 
 ### Patterns
 
-Each pattern names what provides it. OverBench writes its own keyframes only where nothing in the stack offers the effect: the one-time attention pulse, the ambient field's drift and the sheen on the highest reasoning level.
+Each pattern names what provides it. OverBench writes its own keyframes only where nothing in the stack offers the effect: the one-time attention pulse and the sheen on the highest reasoning level.
 
 | Pattern           | Provided by                                                                                                                                                                                                                                                 | Tuning                                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -289,7 +289,6 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 | Copy feedback     | The copy button in Streamdown's code blocks                                                                                                                                                                                                                 | None                                                                                               |
 | Staggered entry   | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1 fill-mode-both`, with a growing `animation-delay`                                                                                                                                                | `--duration-slow`, `--ease-out-quint`; the first item after 60 ms, each next one 30 ms later, once |
 | Card hover        | CSS transitions on `transform`, the ring, the shadow and the opacity of the `--card-glow` layer                                                                                                                                                             | `--duration-fast`, `--ease-out-expo`                                                               |
-| Ambient field     | Own keyframes, described [below](#ambient-field)                                                                                                                                                                                                            | 41 s and 29 s, `ease-in-out`, alternating                                                          |
 | Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                                                                                                                                                                    | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal              |
 | Segmented thumb   | A CSS transition on `translate` and `scale`                                                                                                                                                                                                                 | `--duration-base`, `--ease-out-quart`                                                              |
 | Sheen             | Own keyframe: a band of `--sheen` crosses the max tier's thumb from left to right, once, each time it lands there                                                                                                                                           | `--duration-slower`, `--ease-out-quart`; not when the menu merely opens on that level              |
@@ -297,28 +296,11 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 - The disclosure is the only layout animation allowed: one at a time, never inside an entry that is streaming.
 - Entries restored from history or a snapshot appear without animation.
 
-### Ambient field
-
-The Welcome screen and Project home have a quiet background: a dot grid that a soft light drifts across. It is the only motion on screen while nothing happens, so it stays slow and soft, clearly there but never competing with the content; sessions and Settings never show it.
-
-| Layer    | What it draws                                                            | Token               | Light                 | Dark                 |
-| -------- | ------------------------------------------------------------------------ | ------------------- | --------------------- | -------------------- |
-| Grid     | 1.7 px dots on a 20 px grid                                              | `--ambient-dot`     | `oklch(0 0 0 / 15%)`  | `oklch(1 0 0 / 13%)` |
-| Light    | A 280 px circle that brightens what it passes over                       | `--ambient-glow`    | `oklch(0 0 0 / 2.5%)` | `oklch(1 0 0 / 7%)`  |
-| Lit grid | Larger dots (2.3 px), visible only inside the light                      | `--ambient-dot-lit` | `oklch(0 0 0 / 50%)`  | `oklch(1 0 0 / 55%)` |
-| Clearing | A radial wash of the surface color behind text, so no dot sits in a word | `--background`      |                       |                      |
-
-- The field is centred on the content and fades out towards the edges with a radial mask, solid to 40% of its radius. On Project home it covers the title and the agent cards and fades out before the recent sessions.
-- The light drifts on two axes with different periods, 41 s across (±15% of the field) and 29 s down (−9% to +11%), both `ease-in-out` and alternating, so its path does not visibly repeat. The lit grid moves the opposite way inside the light, so the dots stay in place and only the light travels.
-- Every layer is one element moved with `transform`; the grids are CSS gradients, not images or a canvas. Check in the Performance panel that the field adds no layout or paint per frame.
-- The drift pauses (`animation-play-state: paused`) while the window is hidden or not focused, from the renderer's `focus`, `blur` and `visibilitychange` events.
-- A brighter spot cannot show on a near-white surface, so in the light theme the light is a faint shade and the lit dots carry it.
-
 ### Reduce motion
 
 - Motion components follow the root `<MotionConfig reducedMotion="user">`: movement is removed and opacity remains.
 - CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: movement and loops stop (slides, zooms and spins hold still, pulses and shimmer stop), opacity and color transitions remain, and disclosures open at once.
-- The ambient field's light rests at the centre of the content, a staggered entry becomes a plain fade, and a hovered card keeps its glow and shadow but does not rise.
+- A staggered entry becomes a plain fade, and a hovered card keeps its glow and shadow but does not rise.
 - The segmented thumb moves at once, and the sheen does not play (`motion-safe`).
 
 ## Layout behavior

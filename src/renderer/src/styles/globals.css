@@ -219,11 +219,6 @@
   --brand-opencode-frame: #17181c;
   --brand-opencode-fill: #e6e5e6;
 
-  /* Ambient field on Welcome and Project home. */
-  --ambient-dot: oklch(0 0 0 / 15%);
-  --ambient-dot-lit: oklch(0 0 0 / 50%);
-  --ambient-glow: oklch(0 0 0 / 2.5%);
-
   /* Terminal, read by xterm.js. VS Code's default ANSI colors (MIT). */
   --terminal-background: var(--sidebar);
   --terminal-foreground: var(--foreground);
@@ -360,10 +355,6 @@
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
-
-  --ambient-dot: oklch(1 0 0 / 13%);
-  --ambient-dot-lit: oklch(1 0 0 / 55%);
-  --ambient-glow: oklch(1 0 0 / 7%);
 
   --terminal-selection: oklch(1 0 0 / 20%);
   --ansi-green: #0dbc79;
@@ -617,41 +608,6 @@
   animation: attention-pulse var(--duration-slower) var(--ease-out-quart) 1;
 }
 
-/* Ambient field drift: two axes with different periods, so the path does not visibly repeat.
-   The lit grid moves the opposite way inside the light, so the dots stay in place. */
-@keyframes ambient-x {
-  from {
-    transform: translateX(-15%);
-  }
-  to {
-    transform: translateX(15%);
-  }
-}
-@keyframes ambient-x-reverse {
-  from {
-    transform: translateX(15%);
-  }
-  to {
-    transform: translateX(-15%);
-  }
-}
-@keyframes ambient-y {
-  from {
-    transform: translateY(-9%);
-  }
-  to {
-    transform: translateY(11%);
-  }
-}
-@keyframes ambient-y-reverse {
-  from {
-    transform: translateY(9%);
-  }
-  to {
-    transform: translateY(-11%);
-  }
-}
-
 @keyframes stream-caret {
   50% {
     opacity: 0;
@@ -675,7 +631,6 @@
   }
   .animate-pulse,
   .shimmer,
-  [data-ambient-drift],
   [data-caret] {
     animation: none !important;
   }
@@ -698,18 +653,12 @@
   }
   & .animate-pulse,
   & .shimmer,
-  & [data-ambient-drift],
   & [data-caret] {
     animation: none !important;
   }
   & [data-slot='collapsible-content'] {
     transition-duration: 0s !important;
   }
-}
-
-/* The ambient field pauses while the window is hidden or not focused. */
-:root[data-window-active='false'] [data-ambient-drift] {
-  animation-play-state: paused;
 }
 
 /* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not

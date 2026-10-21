@@ -110,17 +110,5 @@ export function bootstrap(): void {
   // seconds on a slow network.
   void Promise.allSettled([settingsReady, sessionState]).then(restoreLastSession)
 
-  // The ambient field pauses while the window is in the background.
-  const setActive = () => {
-    document.documentElement.dataset.windowActive = String(
-      document.visibilityState === 'visible' && document.hasFocus(),
-    )
-  }
-  setActive()
-  window.addEventListener('focus', () => {
-    setActive()
-    refreshShownProject()
-  })
-  window.addEventListener('blur', setActive)
-  document.addEventListener('visibilitychange', setActive)
+  window.addEventListener('focus', refreshShownProject)
 }

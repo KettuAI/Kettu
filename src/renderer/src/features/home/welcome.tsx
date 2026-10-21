@@ -2,7 +2,6 @@ import { Fragment } from 'react'
 import { FolderOpenIcon } from 'lucide-react'
 import { openProjectDialog } from '@renderer/app/actions'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
-import { AmbientField, Clearing } from '@renderer/components/ambient-field'
 import { rise } from '@renderer/lib/motion'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Kbd } from '@renderer/components/ui/kbd'
@@ -24,25 +23,20 @@ export function Welcome() {
   const heading = rise(2)
 
   return (
-    <div className="relative isolate flex h-full flex-col">
-      <AmbientField at="50% 38%" fade="ellipse 58% 62% at 50% 40%" phase={0.45} />
+    <div className="flex h-full flex-col">
       <TopBar>
         <span />
       </TopBar>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-7 pb-12">
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-7 pb-12">
         <div className="flex w-full max-w-[420px] flex-col items-center gap-7">
           <div
-            className={cn(
-              'relative flex flex-col items-center gap-2.5 text-center',
-              title.className,
-            )}
+            className={cn('flex flex-col items-center gap-2.5 text-center', title.className)}
             style={title.style}
           >
-            <Clearing />
-            <h1 className="relative text-[30px] leading-[1.15] font-semibold tracking-[-0.025em]">
+            <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em]">
               OverBench
             </h1>
-            <p className="relative text-sm leading-relaxed text-balance text-muted-foreground">
+            <p className="text-sm leading-relaxed text-balance text-muted-foreground">
               Open a project to start working with an agent.
             </p>
           </div>
@@ -62,13 +56,12 @@ export function Welcome() {
           <section aria-label="Agents" className="flex w-full flex-col gap-2">
             <h2
               className={cn(
-                'relative w-fit px-0.5 text-xs font-medium text-muted-foreground',
+                'w-fit px-0.5 text-xs font-medium text-muted-foreground',
                 heading.className,
               )}
               style={heading.style}
             >
-              <Clearing inset="-12px -28px" />
-              <span className="relative">Agents on this computer</span>
+              Agents on this computer
             </h2>
             <div className="overflow-hidden rounded-xl bg-card shadow-card">
               {!loaded
