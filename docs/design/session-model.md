@@ -36,7 +36,7 @@ interface SessionView {
   title: string | null
   config: ConfigOption[]
   commands: SlashCommand[]
-  usage: { used: number; size: number; cost: { amount: number; currency: string } | null } | null
+  usage: SessionUsage | null
   error: { message: string; detail?: string } | null
   turnStartedAt: number | null
   createdAt: number
@@ -44,6 +44,22 @@ interface SessionView {
   parentId: string | null // the parent session, for sub-sessions
   origin: 'user' | 'subagent'
   subagent: SubagentInfo | null // set when origin is 'subagent'
+}
+
+interface SessionUsage {
+  used: number // tokens in the context window now
+  size: number // the context window
+  cost: { amount: number; currency: string } | null
+  tokens: TokenTotals | null // session totals, when the agent reports them
+}
+
+interface TokenTotals {
+  total: number
+  input: number
+  output: number
+  thought: number | null
+  cacheRead: number | null
+  cacheWrite: number | null
 }
 
 interface SubagentInfo {
@@ -95,6 +111,19 @@ type ThreadEntry =
       summary: string
     }
   | { kind: 'turn_end'; id: string; stopReason: StopReason; durationMs: number }
+  | GitEntry // OverBench's own observation of the repository, see the git design
+
+type GitEntry =
+  | {
+      kind: 'git'
+      id: string
+      event: 'commit'
+      commits: { oid: string; subject: string }[]
+      more: number
+    }
+  | { kind: 'git'; id: string; event: 'push'; upstream: string; count: number }
+  | { kind: 'git'; id: string; event: 'branch'; branch: string }
+  | { kind: 'git'; id: string; event: 'pull_request'; url: string }
 
 interface ToolEntry {
   kind: 'tool'
@@ -179,6 +208,7 @@ interface SessionSnapshot {
 - Messages with an ACP `messageId`: `m:<messageId>`.
 - Tool calls: `t:<toolCallId>`.
 - Compactions: `c:<compactionId>`.
+- Git events: `g:<n>`, from the same counter as `e:<n>`.
 - Subagent announcements: `s:<child session id>`.
 - Session messages: `sm:<messageId>`.
 - Everything else: `e:<n>`, from a per-session counter in the host.
@@ -199,7 +229,7 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `config_option_update`      | `session.update` of `config`.                                                                                                                                                                                                           |
 | `current_mode_update`       | Updates the value of the mode option in `config` (see [Config options](#config-options)).                                                                                                                                               |
 | `session_info_update`       | `session.update` of `title` and `updatedAt`.                                                                                                                                                                                            |
-| `usage_update`              | `session.update` of `usage`.                                                                                                                                                                                                            |
+| `usage_update`              | `session.update` of `usage`'s `used`, `size` and `cost`. A plan limit in the update's `_meta` goes to the agent's account instead ([plan limits](#plan-limits)).                                                                        |
 | `notice`                    | Adds a notice entry. Severities other than `info`, `warning` and `error` are shown as `info`.                                                                                                                                           |
 | `compaction_update`         | Adds or updates the compaction entry for `compactionId`.                                                                                                                                                                                |
 | `compaction_summary_chunk`  | Appends text to that compaction entry's `summary`.                                                                                                                                                                                      |
@@ -216,7 +246,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 1. `sessions.prompt` is accepted only when the session is `ready`; otherwise it fails with `busy`. M0 runs one turn at a time per session.
 2. The host adds the user entry, sets `status: 'running'` and `turnStartedAt`, and sends `session/prompt` with the content as ACP content blocks.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
-4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. It also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
+4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, sets `usage.tokens` when present. The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
 5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready`, `auth_required` or `disconnected` depending on the cause.
 
 ## Permissions
@@ -280,6 +310,38 @@ The subagents RFD ([agent-client-protocol#1992](https://github.com/agentclientpr
 - Sub-sessions belong to the parent's project. Closing or deleting the parent closes or deletes its sub-sessions, after one confirmation that names how many there are.
 - A parent's attention includes its descendants: its sidebar row shows the number of pending permission requests in it and in every sub-session below it.
 - Sub-sessions nest as deep as the agent creates them. The sidebar indents two levels at most and lists deeper ones at the second level.
+
+## Plan limits
+
+Subscription plans cap usage in rolling windows, such as five hours and a week. These limits belong to the agent's account, not to a session, so they live on `AgentStatus` ([host protocol](./host-protocol.md#requests)), next to the account the agent reports. Neither is part of ACP yet; both come from extensions the adapters define, and only the mapper reads them.
+
+| Source                                                          | Claude Code (`claude-agent-acp` 0.94)                                                                            | Codex (`codex-acp` 2.2.2)                                       | OpenCode |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------- |
+| The `_auth/status_update` notification: kind, plan label, email | Yes                                                                                                              | Yes                                                             | No       |
+| Plan limits                                                     | `usage_update._meta["_claude/rateLimit"]`, one window per update, whenever Claude Code's rate limit info changes | Not sent; the adapter keeps them for its `/status` command only | No       |
+
+```ts
+interface AgentAccount {
+  kind: 'account' | 'api_key' | 'external' | 'gateway' | 'none'
+  label: string // "Claude Max", "ChatGPT Plus", "Anthropic API key"
+  email: string | null
+}
+
+interface PlanLimit {
+  window: 'five_hour' | 'seven_day' | 'seven_day_opus' | 'seven_day_sonnet' | string
+  label: string // "5-hour", "Weekly", "Weekly · Opus"
+  usedPercent: number | null
+  resetsAt: number | null
+  state: 'ok' | 'warning' | 'reached' // from `status`: allowed, allowed_warning, rejected
+  observedAt: number
+}
+```
+
+- Each `_claude/rateLimit` value updates the window named by its `rateLimitType` and leaves the others as they are; windows never reported are not shown. M0.2 checks the unit of `utilization` against a live session and records it here.
+- Limits are kept in memory for the life of the host. After a restart they appear again with the first update.
+- An account with `kind: 'none'` sets the agent's `signIn` to `required`; any other kind sets `signed-in`.
+- Cost is shown only when the account is not a subscription, because for a plan it is not what the user pays.
+- For Codex, the adapter already receives `account/rateLimits/updated` from Codex; forwarding it in `usage_update._meta` the way the Claude adapter does is a small upstream change, and the plan limits appear once it lands.
 
 ## Config options
 

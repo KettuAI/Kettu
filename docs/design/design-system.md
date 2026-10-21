@@ -61,6 +61,47 @@ Lines are translucent, so one token reads the same on every surface step. The al
 - `--muted` (the user bubble, inline code, a disabled send button) is `oklch(0.96 0 0)` light, so the bubble stays visible on surface 1. `--accent` (hovered rows on surface 1, the highlighted menu item, an open selector) is `oklch(0.962 0 0)` light and `oklch(0.27 0 0)` dark.
 - `--input`, the track of an unchecked `Switch`, is `oklch(0.9 0 0)` light instead of shadcn's 0.922, so an unchecked switch still reads on a card, and `oklch(1 0 0 / 16%)` dark.
 
+### Repository state
+
+Git and pull request states reuse the meaning colors and add one, `--merged`, because a merged pull request is neither a success nor waiting. The mapping follows GitHub's, which every developer already reads at a glance; each color always comes with its own Lucide icon.
+
+| State                            | Icon                                  | Color                                                                 |
+| -------------------------------- | ------------------------------------- | --------------------------------------------------------------------- |
+| Open pull request                | `GitPullRequest`                      | `--success`                                                           |
+| Draft                            | `GitPullRequestDraft`                 | `--muted-foreground`                                                  |
+| Merged                           | `GitMerge`                            | `--merged`: `oklch(0.55 0.19 300)` light, `oklch(0.72 0.15 300)` dark |
+| Closed                           | `GitPullRequestClosed`                | `--destructive`                                                       |
+| Checks passing, failing, pending | `CircleCheck`, `CircleX`, `CircleDot` | `--success`, `--destructive`, `--attention`                           |
+| Commits not pushed               | `ArrowUp` with the count              | `--foreground`; pushed and in sync is `--muted-foreground`            |
+| Conflicts, a rebase in progress  | `TriangleAlert`                       | `--destructive` for conflicts, `--attention` for the operation        |
+
+- Branch names and commit ids are monospace, at 12 px, with ids cut to 7 characters.
+- Pull request chips are neutral: `--muted` fill with a `--border-soft` ring and `--foreground` text, so only the state icon carries color. Hover takes `--accent`.
+
+### Terminal
+
+The terminal panel sits on surface 0, like the sidebar, so it reads as part of the workbench and the thread stays the one canvas. Its colors are tokens read by xterm.js:
+
+| Token                   | Light                | Dark                 |
+| ----------------------- | -------------------- | -------------------- |
+| `--terminal-background` | `--sidebar`          | `--sidebar`          |
+| `--terminal-foreground` | `--foreground`       | `--foreground`       |
+| `--terminal-cursor`     | `--foreground`       | `--foreground`       |
+| `--terminal-selection`  | `oklch(0 0 0 / 12%)` | `oklch(1 0 0 / 20%)` |
+
+The 16 ANSI colors are VS Code's defaults for its light and dark themes (MIT), tuned there for contrast on light and dark backgrounds:
+
+| Color   | Light normal | Light bright | Dark normal | Dark bright |
+| ------- | ------------ | ------------ | ----------- | ----------- |
+| Black   | `#000000`    | `#666666`    | `#000000`   | `#666666`   |
+| Red     | `#cd3131`    | `#f14c4c`    | `#cd3131`   | `#f14c4c`   |
+| Green   | `#107c10`    | `#14ce14`    | `#0dbc79`   | `#23d18b`   |
+| Yellow  | `#949800`    | `#b5ba00`    | `#e5e510`   | `#f5f543`   |
+| Blue    | `#0451a5`    | `#3b8eea`    | `#2472c8`   | `#3b8eea`   |
+| Magenta | `#bc05bc`    | `#d670d6`    | `#bc3fbc`   | `#d670d6`   |
+| Cyan    | `#0598bc`    | `#29b8db`    | `#11a8cd`   | `#29b8db`   |
+| White   | `#555555`    | `#a5a5a5`    | `#e5e5e5`   | `#e5e5e5`   |
+
 ### Agent marks
 
 Each agent is shown with its official mark in its own colors. They are the only brand colors in the interface.

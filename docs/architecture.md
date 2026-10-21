@@ -14,6 +14,8 @@ This document is the overview. Each subsystem has a detailed design:
 | [Session model](./design/session-model.md) | The thread model, patches and snapshots, the ACP v1 mapping, prompts, permissions, cancellation, session lifecycle                  |
 | [Host protocol](./design/host-protocol.md) | The preload API, requests, events and validation between the renderer and the agent host                                            |
 | [Persistence](./design/persistence.md)     | What is stored on disk, how it is written, versioned and recovered                                                                  |
+| [Git](./design/git.md)                     | Repository status, pull requests through `gh`, and git events in the thread                                                         |
+| [Terminal](./design/terminal.md)           | The terminal host, shells, flow control, rendering, and how terminals relate to projects and sessions                               |
 | [Interface](./design/ui.md)                | Layout, screens, thread entries, composer, states, motion, typography and shortcuts                                                 |
 | [Testing](./design/testing.md)             | Unit, integration and process tests, the fake agent, CI, and how performance is measured                                            |
 
@@ -25,21 +27,26 @@ flowchart LR
     R["Renderer<br/>React UI"]
     M["Main process<br/>windows, menus, dialogs"]
     H["Agent host<br/>utility process"]
+    T["Terminal host<br/>utility process"]
     R -- "typed IPC" --> M
     M -- "lifecycle, port handoff" --> H
+    M -- "lifecycle, port handoff" --> T
     R <-- "MessagePort<br/>session RPC + events" --> H
+    R <-- "MessagePort<br/>terminal data" --> T
   end
+  T <-- "node-pty" --> S["Shells"]
   H <-- "ACP v1, NDJSON over stdio" --> C["claude-agent-acp"]
   H <-- "ACP v1" --> X["codex-acp"]
   H <-- "ACP v1" --> O["opencode acp"]
 ```
 
-| Process       | Runs                                | Owns                                                                                    |
-| ------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
-| Main          | Electron main                       | App lifecycle, windows, menus, native dialogs and notifications, agent host supervision |
-| Renderer      | Sandboxed Chromium                  | UI, view state, a replica of each session it shows                                      |
-| Agent host    | Electron `utilityProcess` (Node.js) | ACP connections, agent processes, live session state, persistence                       |
-| Agent process | One per agent, spawned by the host  | The agent itself: model calls, tools, auth, conversation storage                        |
+| Process       | Runs                                | Owns                                                                                     |
+| ------------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| Main          | Electron main                       | App lifecycle, windows, menus, native dialogs and notifications, agent host supervision  |
+| Renderer      | Sandboxed Chromium                  | UI, view state, a replica of each session it shows                                       |
+| Agent host    | Electron `utilityProcess` (Node.js) | ACP connections, agent processes, live session state, persistence                        |
+| Terminal host | Electron `utilityProcess` (Node.js) | Pseudo-terminals for the built-in [terminal](./design/terminal.md), started on first use |
+| Agent process | One per agent, spawned by the host  | The agent itself: model calls, tools, auth, conversation storage                         |
 
 **Why a separate agent host.** Main stays thin and never touches agent traffic, so a burst of tool output or a misbehaving adapter can never stall window dragging, menus or other windows. If the host crashes, main restarts it and the UI reconnects; the window survives. This is the same split VS Code uses for its pty host and extension host.
 
@@ -53,6 +60,7 @@ Alternatives considered:
 
 - **Renderer to main**: the typed `ipcRenderer.invoke` contract in `src/shared/ipc.ts`, for what only main can do: folder and file pickers, saving diagnostics, window controls.
 - **Renderer to agent host**: a `MessagePort` per page, created by main. The preload keeps it in the isolated world and exposes `window.overbench.agents`, so session traffic skips main and page scripts never hold a raw channel. See [host protocol](./design/host-protocol.md).
+- **Renderer to terminal host**: a second `MessagePort` per page, exposed as `window.overbench.terminals`, so terminal output never shares a queue with session patches. See [terminal](./design/terminal.md#host-protocol).
 - **Main to agent host**: `utilityProcess` messages for startup, port handoff, binary overrides, notifications and shutdown. See [agent host](./design/agent-host.md#main-and-host-messages).
 - **Agent host to agents**: ACP over each agent's stdin and stdout as newline-delimited JSON-RPC, through the official [`@agentclientprotocol/sdk`](https://github.com/agentclientprotocol/typescript-sdk).
 
@@ -70,7 +78,9 @@ All three agents speak ACP **v1**, the stable protocol. ACP v2 has been in draft
 - One mapper turns ACP messages into OverBench's own [session model](./design/session-model.md). v2 becomes a second mapper, selected by the negotiated `protocolVersion`.
 - The session model already uses v2's ideas, stable entry IDs and patches, so the renderer will not change when v2 arrives.
 
-M0 uses only stable v1 methods, with one exception: the subagents RFD, which the Claude Code and Codex adapters already implement and which [sub-sessions](./design/session-model.md#subagents) depend on. Its types stay inside the mapper like every other ACP type. `session/fork` and other unstable features stay off until they stabilize.
+M0 uses only stable v1 methods, with two exceptions that the Claude Code and Codex adapters already implement: the subagents RFD, which [sub-sessions](./design/session-model.md#subagents) depend on, and the optional `usage` field of the `session/prompt` response, which fills the [session's token totals](./design/session-model.md#prompt-turns). Their types stay inside the mapper like every other ACP type. `session/fork` and other unstable features stay off until they stabilize.
+
+The mapper also reads two adapter extensions outside ACP, for the [account and plan limits](./design/session-model.md#plan-limits): the `_auth/status_update` notification and the `_claude/rateLimit` key in `usage_update._meta`. An agent that does not send them simply shows no plan.
 
 ### Agents
 
@@ -104,7 +114,7 @@ What OverBench advertises in `initialize` for M0, and why:
 | Capability                              | M0  | Reason                                                                                                                                            |
 | --------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fs.readTextFile`, `fs.writeTextFile`   | off | OverBench has no editor buffers yet, so the agents' own file tools are the better implementation. Turned on with change tracking and checkpoints. |
-| `terminal`                              | off | Agents run commands themselves and report output in tool calls. Turned on with the embedded terminal.                                             |
+| `terminal`                              | off | Agents run commands themselves and report output in tool calls. The built-in terminal is the user's, not the agents'.                             |
 | `auth.terminal`                         | on  | Claude Code and OpenCode only offer sign-in through terminal methods.                                                                             |
 | `session.notices`, `session.compaction` | on  | The thread renders notices and compaction markers.                                                                                                |
 | `session.configOptions.boolean`         | on  | Boolean options render as switches.                                                                                                               |
@@ -114,7 +124,7 @@ What OverBench advertises in `initialize` for M0, and why:
 ### Agents and sessions at a glance
 
 - An agent process starts with the first session that needs it and then serves all of that agent's sessions, in every project. It stops after 30 idle minutes and at quit, and restarts with backoff if it crashes. See [agent host](./design/agent-host.md#agent-process-lifecycle).
-- Agents own their credentials. `agent` sign-in methods run through `authenticate`; `terminal` methods show the exact command to run, until the embedded terminal lands. See [sign-in](./design/agent-host.md#sign-in).
+- Agents own their credentials. `agent` sign-in methods run through `authenticate`; `terminal` methods run their command in the built-in terminal, or show it to copy. See [sign-in](./design/agent-host.md#sign-in).
 - New sessions use `session/new` with the project folder as `cwd`. Reopening from history uses `session/load`, which replays the conversation; recovering after a crash uses `session/resume`, which does not. See [session lifecycle](./design/session-model.md#session-lifecycle).
 
 ```mermaid
@@ -169,14 +179,15 @@ The agent host is the source of truth for every live session. Its mapper turns A
 
 ### Persistence
 
-The host keeps a few small JSON files: recent projects, the session index and agent settings, written atomically and versioned. Transcripts stay with the agents and come back through `session/load`; credentials and diagnostics are never written. See [persistence](./design/persistence.md).
+The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. Transcripts stay with the agents and come back through `session/load`; credentials and diagnostics are never written. See [persistence](./design/persistence.md).
 
 ## Security
 
 OverBench drives agents that edit files and run commands, so every layer assumes the one next to it can be wrong.
 
 - **Agent output is untrusted.** Markdown is rendered sanitized, without raw HTML. The CSP blocks remote images, so content in a reply cannot load tracking pixels or leak data through image URLs. Links open in the system browser only after the `http(s)` check in main.
-- **The renderer cannot run commands.** The host has no API that takes a command line. Agent launch specs come from the catalog, and binary overrides come from a native dialog in main.
+- **The renderer cannot run commands, except in the terminal.** The agent host has no API that takes a command line. Agent launch specs come from the catalog, and binary and shell overrides come from a native dialog in main. The built-in terminal is the one deliberate exception: what the user types there runs in a shell, so its safety rests on the renderer's integrity, and no agent output is ever written into a terminal ([terminal security](./design/terminal.md#security)).
+- **Git is read-only.** The git service runs status commands and `git fetch` only; it never commits, pushes or rewrites anything, and pull requests come through the user's own `gh` sign-in ([git](./design/git.md)).
 - **Every request to the host is validated**, including that a project folder is an absolute path to an existing directory. See [validation](./design/host-protocol.md#validation).
 - **Permission requests are shown faithfully.** OverBench never answers one without the user, and never switches an agent into a bypass or full-auto mode by default.
 - **No credentials.** OverBench stores no API keys or tokens; agents keep their own.
@@ -190,7 +201,8 @@ The planned layout once M0 lands; new parts are marked.
 ```text
 src/
 ├── main/                  Main process
-│   └── agent-host.ts      new: starts and supervises the agent host, hands out ports, shows notifications
+│   ├── agent-host.ts      new: starts and supervises the agent host, hands out ports, shows notifications
+│   └── terminal-host.ts   new: starts the terminal host on first use, hands out its ports
 ├── agent-host/            new: utility process
 │   ├── index.ts           Entry, port wiring
 │   ├── rpc.ts             Requests and events on renderer ports
@@ -200,16 +212,19 @@ src/
 │   ├── agent-process.ts   Detection, spawning, stopping, restarts, stderr capture
 │   ├── acp/               SDK connection and the v1 mapper; the only place ACP types live
 │   ├── sessions.ts        Live session state, prompts, permissions
+│   ├── git/               Repository status, watchers, pull requests through gh
 │   ├── storage.ts         JSON persistence
 │   └── diagnostics.ts     Traffic and stderr ring buffers
-├── preload/               Adds window.overbench.agents on top of the host port
+├── terminal-host/         new: utility process owning node-pty terminals
+├── preload/               Adds window.overbench.agents and window.overbench.terminals
 ├── renderer/src/
-│   ├── features/          agents, projects, sessions (thread, composer, tool calls, permissions)
+│   ├── features/          agents, projects, sessions (thread, composer, tool calls, permissions), git, terminal, settings
 │   └── stores/            Zustand stores
 └── shared/
     ├── ipc.ts             Renderer to main contract
     ├── agent-host.ts      new: renderer to agent host contract
     ├── host-control.ts    new: main to agent host messages
+    ├── terminal-host.ts   new: renderer to terminal host contract
     └── thread.ts          new: session model and applyPatches
 tools/
 ├── fake-agent/            new: scripted ACP agent for development and tests
@@ -220,15 +235,17 @@ tools/
 
 In line with the project philosophy, these are the implementations this design draws on:
 
-| Source                                                                                                                           | What OverBench takes                                                                                                                                                               |
-| -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ACP specification](https://agentclientprotocol.com) and [TypeScript SDK](https://github.com/agentclientprotocol/typescript-sdk) | The wire protocol, method semantics and the client connection                                                                                                                      |
-| [ACP Registry](https://agentclientprotocol.com/get-started/registry)                                                             | Which adapter and version to launch for each agent, and the Claude Code mark                                                                                                       |
-| [Zed](https://zed.dev/docs/ai/external-agents)                                                                                   | External agents as separate processes, thread entries keyed by tool call, an inspectable ACP traffic log                                                                           |
-| VS Code                                                                                                                          | Hosting heavy work in a utility process; resolving the login shell environment for GUI launches; settings as one searchable page with a table of contents                          |
-| [Harnss](https://github.com/OpenSource03/harnss), [AionUi](https://github.com/iOfficeAI/AionUi)                                  | Per-project workspaces, tool calls as cards with diffs, pending-approval badges and OS notifications                                                                               |
-| [OpenCode](https://github.com/sst/opencode)                                                                                      | Subagents as child sessions of the session that started them; the OpenCode mark                                                                                                    |
-| [LobeHub Icons](https://github.com/lobehub/lobe-icons)                                                                           | The Codex mark in its colors                                                                                                                                                       |
-| shadcn/ui chat primitives                                                                                                        | `MessageScroller` for stick-to-bottom, anchoring and jump-to-latest while streaming                                                                                                |
-| [Streamdown](https://streamdown.ai) and [Diffs](https://diffs.com)                                                               | Markdown that renders correctly mid-stream, and diffs highlighted off the main thread                                                                                              |
-| Claude Desktop, through the [open-claude-ui](https://github.com/Caho1/open-claude-ui) analysis                                   | The visual and interaction benchmark for the first version: surfaces, density, lines, motion, composer and approvals ([design system](./design/design-system.md#design-reference)) |
+| Source                                                                                                                           | What OverBench takes                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ACP specification](https://agentclientprotocol.com) and [TypeScript SDK](https://github.com/agentclientprotocol/typescript-sdk) | The wire protocol, method semantics and the client connection                                                                                                                                                                                                                                                          |
+| [ACP Registry](https://agentclientprotocol.com/get-started/registry)                                                             | Which adapter and version to launch for each agent, and the Claude Code mark                                                                                                                                                                                                                                           |
+| [Zed](https://zed.dev/docs/ai/external-agents)                                                                                   | External agents as separate processes, thread entries keyed by tool call, an inspectable ACP traffic log                                                                                                                                                                                                               |
+| VS Code                                                                                                                          | Hosting heavy work in a utility process; resolving the login shell environment for GUI launches; settings as one searchable page with a table of contents; a separate pty host with flow control and its default ANSI colors (MIT); git status without index locks (`GIT_OPTIONAL_LOCKS=0`) and branch and sync labels |
+| [xterm.js](https://xtermjs.org)                                                                                                  | The terminal emulator and its GPU renderer, as used by VS Code, Hyper and Tabby                                                                                                                                                                                                                                        |
+| GitHub Desktop and the GitHub CLI                                                                                                | "Last fetched" next to Fetch; pull requests through the user's own `gh` sign-in                                                                                                                                                                                                                                        |
+| [Harnss](https://github.com/OpenSource03/harnss), [AionUi](https://github.com/iOfficeAI/AionUi)                                  | Per-project workspaces, tool calls as cards with diffs, pending-approval badges and OS notifications                                                                                                                                                                                                                   |
+| [OpenCode](https://github.com/sst/opencode)                                                                                      | Subagents as child sessions of the session that started them; the OpenCode mark                                                                                                                                                                                                                                        |
+| [LobeHub Icons](https://github.com/lobehub/lobe-icons)                                                                           | The Codex mark in its colors                                                                                                                                                                                                                                                                                           |
+| shadcn/ui chat primitives                                                                                                        | `MessageScroller` for stick-to-bottom, anchoring and jump-to-latest while streaming                                                                                                                                                                                                                                    |
+| [Streamdown](https://streamdown.ai) and [Diffs](https://diffs.com)                                                               | Markdown that renders correctly mid-stream, and diffs highlighted off the main thread                                                                                                                                                                                                                                  |
+| Claude Desktop, through the [open-claude-ui](https://github.com/Caho1/open-claude-ui) analysis                                   | The visual and interaction benchmark for the first version: surfaces, density, lines, motion, composer and approvals ([design system](./design/design-system.md#design-reference)); pull request badges on session rows and pull request chips in the thread                                                           |

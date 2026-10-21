@@ -15,29 +15,31 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 
 ```text
 ┌───────────────┬────────────────────────────────────────────────────┐
-│ ● ● ●       ◫ │ Fix flaky login test ⌄   ✳ Claude Code             │  top bar (40 px)
+│ ● ● ●       ◫ │ Fix flaky login ⌄  ✳ Claude Code  ⎇ fix/flaky ⇡2 ▣ │  top bar (40 px)
 ├───────────────┼────────────────────────────────────────────────────┤
 │ ✎ New session │                                                    │
-│ Projects    + │        ┌──────────────────────────────────┐        │
-│ ⌄ overbench   │        │ The login test fails on CI …     │        │  user
-│  ✳ Fix flaky 2│        └──────────────────────────────────┘        │
-│   ◇ Explore   │  I'll start by reading the test and the …          │  agent
-│   ◇ Review   1│  › Explored 4 files                                │  tools
-│  ◎ Add dark ↳1│  ┌ ✎ Edit src/auth/session.ts        +4 −3  ✓ ┐    │
-│ › website     │  │  … diff …                                  │    │
-│               │  └────────────────────────────────────────────┘    │
-│               │  ☰ Plan 2/4 ━━── Run the auth tests         ⌃      │  pinned plan
-│               │  ┌────────────────────────────────────────────┐    │
-│               │  │ Ask Claude Code to…                      ↑ │    │  composer
-│               │  └────────────────────────────────────────────┘    │
-│ ⚙ Settings ⌘, │    Default ⌄              Opus 5.5 High ⌄  ◔       │  control row
+│ Projects    + │       ┌──────────────────────────────────┐         │  user
+│ ⌄ overbench   │       │ The login test fails on CI …     │         │
+│  ✳ Fix flaky 2│       └──────────────────────────────────┘         │
+│   ◇ Explore   │ I'll start by reading the test and the …           │  agent
+│   ◇ Review   1│ ┌ ✎ Edit src/auth/session.ts        +4 −3  ✓ ┐     │  tools
+│  ◎ Add dark ↳1│ └────────────────────────────────────────────┘     │
+│  ✳ Bump deps ⊙│ ⊙ Committed 3f2a1c1 fix(auth): read the clock…     │  git event
+│ › website     │ ┌────────────────────────────────────────────┐     │
+│               │ │ Ask Claude Code to…                      ↑ │     │  composer
+│               │ └────────────────────────────────────────────┘     │
+│               │   Default ⌄              Opus 5.5 High ⌄  ◔        │  control row
+│               ├────────────────────────────────────────────────────┤
+│               │ zsh   pnpm dev ●                       +  ⤢  ×     │  terminal tabs
+│               │ ~/overbench (fix/flaky-login) $ pnpm test          │  terminal
+│ ⚙ Settings ⌘, │  ✓ 42 passed  ·  1 failed                          │
 └───────────────┴────────────────────────────────────────────────────┘
 ```
 
 - Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B` through the panel's own collapse, and remembers its size per device.
 - The sidebar sits on surface 0 and the thread on surface 1. The step between them is the only separation; the resize handle shows a hairline only while it is hovered or dragged.
 - The thread is a single centred column, 768 px at most (`max-w-3xl`), so prose keeps a comfortable line length at any window width. Tool cards and diffs use the same column.
-- There is no right-hand panel in M0. The Changes panel and terminal arrive later and will open on the right.
+- The [terminal](#terminal) opens as a panel at the bottom of the main area, under the thread and the composer. The Changes panel arrives later and will open on the right, so both can be open at once.
 
 ## Screens
 
@@ -53,7 +55,7 @@ Shown when a project is selected but no session is. The three agents as large se
 
 ### Session
 
-The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **New sub-session**, **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)), followed by the agent's mark and name in `--muted-foreground`. A sub-session's top bar starts with its parent's title as a link.
+The thread and the composer, described below. The top bar shows the session title as a button whose menu holds **New sub-session**, **Close** and **Delete** ([session lifecycle](./session-model.md#session-lifecycle)), followed by the agent's mark and name in `--muted-foreground`. A sub-session's top bar starts with its parent's title as a link. On the right of the top bar sit the [git status](#git-in-the-top-bar) and the terminal toggle; Project home shows them too.
 
 ### Subagent
 
@@ -61,19 +63,21 @@ Opening a subagent ([sub-sessions](./session-model.md#sub-sessions)) shows its o
 
 ### Settings
 
-Opened from **Settings** in the sidebar footer or with `Mod+,`. The sidebar stays, so sessions waiting for you remain visible.
+Opened from **Settings** in the sidebar footer or with `Mod+,`. Settings takes the whole window: the app sidebar goes away, and the top bar holds a **Back** button after the window controls that returns to where you were. `Esc` does the same when no field has focus. While a session waits for your approval, the Back button carries the `--attention` count, so the signal the sidebar gave is not lost.
 
-Settings is one scrolling page, the way VS Code's settings editor works. A table of contents on the left jumps to a section and highlights the one in view; a search field above it (`Mod+F`) filters rows in every section by name and description. Each section is a card of rows: the name and a one-line description on the left, the control on the right (shadcn `Field` with `Switch`, `Select` or `ToggleGroup`). Changes apply at once, with no Save button.
+Settings is one scrolling page, the way VS Code's settings editor works. A column on the left, on surface 0 like the app sidebar it replaces, holds the title, a search field (`Mod+F`) that filters rows in every section by name and description, and the table of contents, which jumps to a section and highlights the one in view; while you search, it shows the number of matching rows next to each section. Each section is a card of rows: the name and a one-line description on the left, the control on the right (shadcn `Field` with `Switch`, `Select` or `ToggleGroup`). Changes apply at once, with no Save button.
 
-| Section            | Rows                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| General            | **Default agent** for New session (Ask each time, or one agent) · **Send with** Enter or `Mod+Enter`, the other key adding a newline · **Restore the last session on launch** · **Ask before quitting while agents are working**                                                                                                                      |
-| Appearance         | **Theme**: System, Light or Dark, as three preview tiles · **Text size**: Small, Default or Large · **Reduce motion**: System or Always                                                                                                                                                                                                               |
-| Agents             | One card per agent: status with its next step (**Install** guidance when missing, the sign-in methods when needed, the error with **Retry** when failed), the version from `agentInfo`, the launch command, the Node.js version, and for OpenCode **Choose binary…**. Below them: where and when the environment was read, and **Reload environment** |
-| Notifications      | Shown only when no OverBench window is focused: **Needs approval**, **Turn finished**, **Errors**, **Play a sound** (the system notification sound), and **Show a count on the Dock icon** (the taskbar button on Windows; not shown on Linux, where desktops differ)                                                                                 |
-| Keyboard shortcuts | The [shortcuts](#keyboard), read-only, with the platform's modifier                                                                                                                                                                                                                                                                                   |
-| Advanced           | **Proxy** for agents and `npx`: Use the environment, or Custom with a URL and a no-proxy list · **Diagnostics**: Export diagnostics · **Data folder**: Show in Finder (Explorer, the file manager) · **Remove all sessions from OverBench**, which clears the index after a confirmation and leaves the agents' transcripts alone                     |
-| About              | The version, with the Electron, Chromium and Node.js versions and **Copy**; links to the source code and the third-party notices                                                                                                                                                                                                                      |
+| Section            | Rows                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| General            | **Default agent** for New session (Ask each time, or one agent) · **Send with** Enter or `Mod+Enter`, the other key adding a newline · **Restore the last session on launch** · **Ask before quitting while agents or terminal commands are running**                                                                                                                                                                                |
+| Appearance         | **Theme**: System, Light or Dark, as three preview tiles · **Text size**: Small, Default or Large · **Reduce motion**: System or Always                                                                                                                                                                                                                                                                                              |
+| Agents             | One card per agent: status with its next step (**Install** guidance when missing, the sign-in methods when needed, the error with **Retry** when failed), the version from `agentInfo`, the launch command, the Node.js version, the account and its [plan limits](#usage-popover) when the agent reports them, and for OpenCode **Choose binary…**. Below them: where and when the environment was read, and **Reload environment** |
+| Terminal           | **Shell**: the platform default, or a program picked with **Choose…** · **Font size**: 12, 13 or 14 px                                                                                                                                                                                                                                                                                                                               |
+| Git                | Whether `git` and the GitHub CLI were found and whether `gh` is signed in, with the command to run when it is not · **Fetch in the background** every 5 minutes                                                                                                                                                                                                                                                                      |
+| Notifications      | Shown only when no OverBench window is focused: **Needs approval**, **Turn finished**, **Errors**, **Play a sound** (the system notification sound), and **Show a count on the Dock icon** (the taskbar button on Windows; not shown on Linux, where desktops differ)                                                                                                                                                                |
+| Keyboard shortcuts | The [shortcuts](#keyboard), read-only, with the platform's modifier                                                                                                                                                                                                                                                                                                                                                                  |
+| Advanced           | **Proxy** for agents and `npx`: Use the environment, or Custom with a URL and a no-proxy list · **Diagnostics**: Export diagnostics · **Data folder**: Show in Finder (Explorer, the file manager) · **Remove all sessions from OverBench**, which clears the index after a confirmation and leaves the agents' transcripts alone                                                                                                    |
+| About              | The version, with the Electron, Chromium and Node.js versions and **Copy**; links to the source code and the third-party notices                                                                                                                                                                                                                                                                                                     |
 
 - The sign-in notice in the sidebar footer opens Settings at Agents.
 - Settings shows only what M0 supports; there are no disabled placeholders for later features.
@@ -91,6 +95,7 @@ Settings is one scrolling page, the way VS Code's settings editor works. A table
   4. **Starting** (`status: 'starting'`): a `Spinner` while the agent starts or the session loads.
   5. **Unread** (`attention: 'unread'`): a small neutral dot after a turn ended while you were elsewhere.
 - Running and starting rows show no time, since the session is active now.
+- A session whose branch has a pull request shows its state icon after the title ([repository state](./design-system.md#repository-state)), as in the reference. Hovering the row shows the branch and the pull request in a tooltip.
 - **Sub-sessions** ([session model](./session-model.md#sub-sessions)) sit under their parent, indented 16 px along a hairline `--border` guide line. A subagent shows the `Bot` icon with its title and, muted, its description ("Explore · Find where the tests read the clock"); a sub-session you started shows its agent's mark and title.
 - A parent has a chevron in front of its mark. It expands by itself while a sub-session is running or waiting for you, and otherwise stays as you left it.
 - A parent's indicator includes its sub-sessions: the attention count adds up their permission requests, and it shows Running while any of them runs, so a collapsed parent still says where to look.
@@ -98,7 +103,7 @@ Settings is one scrolling page, the way VS Code's settings editor works. A table
 - Indicators always pair a color with a shape or label, never color alone.
 - The sidebar list has one Tab stop; the arrow keys move between rows.
 - The footer holds **Settings** (`Mod+,`) and, above it, a tinted `--attention` notice when an agent needs sign-in ("Codex needs you to sign in"). The notice opens Settings at Agents and is hidden while that section is open.
-- Later, not in M0: pinned sessions with drag reordering, grouping by status or date, and branch badges once git integration exists.
+- Later, not in M0: pinned sessions with drag reordering, and grouping by status or date.
 
 ## Thread
 
@@ -108,18 +113,19 @@ M0.3 compares its behavior with the reference's measurements: following within 4
 
 Turns are 16 px apart, and the blocks within a turn 10 px.
 
-| Entry           | Presentation                                                                                                                                              |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User            | `Message align="end"` with a `Bubble` in the `muted` variant, at most 80% of the column. Taller than 300 px, it collapses behind a fade and **Show more** |
-| Agent           | Plain prose without bubble, border or avatar, so long answers and code read like a document. Rendered with Streamdown                                     |
-| Thought         | Collapsed to one line: "Thinking" with shadcn's `shimmer` while streaming, "Thought for 12 s" afterwards. Expands as a `Collapsible` to muted text        |
-| Tool call       | A compact card ([below](#tool-calls))                                                                                                                     |
-| Subagent        | A compact card with the `Bot` icon, the subagent's title and description, its status and, while it runs, its latest tool call. It opens the subagent      |
-| Session message | In a subagent's thread, the parent's instructions as a quoted block labelled with the parent's title                                                      |
-| Plan            | A checklist; the latest plan is also pinned above the composer as "Plan 3/5" and expands in place                                                         |
-| Notice          | An `Alert` in the matching variant                                                                                                                        |
-| Compaction      | A `Marker` ("Context compacted"), with the summary behind a disclosure                                                                                    |
-| Turn end        | A quiet `Marker`: "Worked for 2 m 13 s", or "Cancelled", "Stopped at the token limit", "Stopped at the request limit", "Declined"                         |
+| Entry           | Presentation                                                                                                                                                                                                                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User            | `Message align="end"` with a `Bubble` in the `muted` variant, at most 80% of the column. Taller than 300 px, it collapses behind a fade and **Show more**                                                                                                                                                              |
+| Agent           | Plain prose without bubble, border or avatar, so long answers and code read like a document. Rendered with Streamdown                                                                                                                                                                                                  |
+| Thought         | Collapsed to one line: "Thinking" with shadcn's `shimmer` while streaming, "Thought for 12 s" afterwards. Expands as a `Collapsible` to muted text                                                                                                                                                                     |
+| Tool call       | A compact card ([below](#tool-calls))                                                                                                                                                                                                                                                                                  |
+| Subagent        | A compact card with the `Bot` icon, the subagent's title and description, its status and, while it runs, its latest tool call. It opens the subagent                                                                                                                                                                   |
+| Session message | In a subagent's thread, the parent's instructions as a quoted block labelled with the parent's title                                                                                                                                                                                                                   |
+| Plan            | A checklist; the latest plan is also pinned above the composer as "Plan 3/5" and expands in place                                                                                                                                                                                                                      |
+| Notice          | An `Alert` in the matching variant                                                                                                                                                                                                                                                                                     |
+| Compaction      | A `Marker` ("Context compacted"), with the summary behind a disclosure                                                                                                                                                                                                                                                 |
+| Turn end        | A quiet `Marker`: "Worked for 2 m 13 s", or "Cancelled", "Stopped at the token limit", "Stopped at the request limit", "Declined"                                                                                                                                                                                      |
+| Git event       | A muted line with its icon: `GitCommit` "Committed `3f2a1c1` fix(auth): read the clock once", `ArrowUp` "Pushed 2 commits to origin/fix/flaky-login", `GitBranch` "Switched to fix/flaky-login", or "Opened pull request" with its chip ([git events](./git.md#git-events-in-the-thread)). A commit id copies on click |
 
 Between sending a prompt and the first output, a status line ("Working…") with `shimmer` sits where the reply will appear.
 
@@ -127,7 +133,7 @@ Between sending a prompt and the first output, a status line ("Working…") with
 
 - Streamdown in `streaming` mode with `parseIncompleteMarkdown` while the message streams, then `static` mode.
 - Plugins: `@streamdown/code` for Shiki highlighting, with a light and a dark theme matched to the app's tokens, and `@streamdown/cjk` so emphasis and line breaking work around Chinese, Japanese and Korean text.
-- `skipHtml` is on: agent output never renders raw HTML. Links pass through Streamdown's link safety and open in the system browser.
+- `skipHtml` is on: agent output never renders raw HTML. Links pass through Streamdown's link safety and open in the system browser. A GitHub pull request URL renders as a [pull request chip](#pull-requests) instead of a plain link.
 - Code blocks are Streamdown's, with its copy button, on surface 2 with a hairline ring.
 - Images in agent messages render only from `data:` URLs; the CSP blocks remote images.
 
@@ -194,7 +200,110 @@ The layout follows the reference: the box holds only your text and the send butt
 - While a turn runs, the send button becomes a round **Stop** and `Esc` cancels the turn. You can keep writing a draft meanwhile; queueing a prompt during a turn comes later ([M0 scope](../milestones/m0.md#out-planned-for-later-milestones)).
 - While a permission request is pending, the placeholder reads "Waiting for your approval" and the send button is disabled.
 - While the agent is starting, the text area is disabled and the control row is hidden, because the config options are not known yet.
-- **Usage**: a 16 px ring showing `used / size` of the context, alone at first. From 80% it turns `--attention` and shows the percentage next to it. A click opens a popover with the tokens used, and the cost when the agent reports it.
+- **Usage**: a 16 px ring showing `used / size` of the context, alone at first. From 80% it turns `--attention` and shows the percentage next to it. When a plan limit of the agent's account reaches its warning state, its window and percentage appear in front of the ring in `--attention` ("5h 92%"); once a limit is reached, the composer's placeholder says when it resets. A click opens the [usage popover](#usage-popover).
+
+### Usage popover
+
+```text
+┌──────────────────────────────────────────────┐
+│ Context                                  84% │
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━──────│
+│ 215k of 256k tokens · 41k left               │
+│ This session   Input 1.2M  Output 48k        │
+│                Cache read 980k  write 64k    │
+│                                   Compact    │
+├──────────────────────────────────────────────┤
+│ Claude Max                     Plan limits   │
+│ 5-hour        ━━━━━━━━━━━──────  62%  14:30  │
+│ Weekly        ━━━━━────────────  31%  Mon    │
+│ Weekly · Opus ━━━━━━━━━━━━━━━──  88%  Mon    │
+│ Updated 3 min ago                            │
+└──────────────────────────────────────────────┘
+```
+
+- A shadcn `Popover`, 320 px wide, in two parts separated by a `Separator`.
+- **Context**, for this session: a `Progress` bar of `used / size`, the tokens used and left, and the session's token totals when the agent reports them (input, output, reasoning, cache read and write). The cost appears only when the account is not a subscription. **Compact** runs the agent's own `compact` command, and is shown only when the agent offers one among its slash commands.
+- **Plan limits**, for the agent's account: the plan label from the agent ("Claude Max"), then one row per window the agent has reported ([plan limits](./session-model.md#plan-limits)): label, a bar, the percentage in `tabular-nums`, and the reset time (the clock time today, the weekday later, the full time in a tooltip). Bars at the warning state turn `--attention`, and a reached limit `--destructive`. "Updated 3 min ago" tells how fresh the numbers are.
+- Agents that report no plan limits, today Codex and OpenCode, show the Context part only; an API key account shows its label without bars.
+- Settings › Agents shows the same plan rows on each agent's card.
+
+## Git in the top bar
+
+The right side of the top bar shows the project's repository at a glance. Everything comes from the [git service](./git.md#repository-status) and updates as the agent, the terminal or any other tool changes the repository.
+
+```text
+⎇ fix/flaky-login  ⇡2 ⇣1  ±3   ⊙ #42 ✓
+```
+
+- **Branch**: `GitBranch` and the branch name in monospace, middle-truncated at 200 px. A detached `HEAD` shows the short commit id; an unborn branch shows its name and "no commits".
+- **Sync**: `ArrowUp` with the number of commits not pushed, in `--foreground`; `ArrowDown` with the number behind the upstream, in `--muted-foreground`. In sync, nothing shows. A branch with no upstream shows `CloudUpload` and "Not published".
+- **Changes**: `FileDiff` with the number of changed files, staged, unstaged and untracked together. Conflicts replace it with `TriangleAlert` and their count in `--destructive`; a merge or rebase in progress adds "Rebasing 2/5" in `--attention`.
+- **Pull request**: the current branch's pull request as a chip, `#42` with its state icon and its checks icon. It opens the pull request in the browser; the rest of the cluster opens the branch popover.
+- Each part is a ghost button at `--control-height`; the cluster is one Tab stop with arrow-key focus inside. A project that is not a repository, or a machine without `git`, shows nothing here.
+
+### Branch popover
+
+```text
+┌────────────────────────────────────────────────┐
+│ ⎇ fix/flaky-login                            ⧉ │
+│ from main · tracking origin/fix/flaky-login    │
+│                                                │
+│ main ──●────────────────────●─ ⇣3              │
+│         ╲                                      │
+│          ●────●────●────◉────◌                 │
+│          pushed        ⇡2 not pushed   3 files │
+│                                                │
+│ 3f2a1c1  fix(auth): read the clock once   ⇡ 2m │
+│ 9be04d7  test(auth): freeze time in login ⇡ 8m │
+│ 51c8a20  refactor(auth): extract clock      1h │
+│                                                │
+│ 3 files changed  +24 −6 · 1 staged · 1 new     │
+├────────────────────────────────────────────────┤
+│ ⊙ Fix flaky login test                    #42  │
+│   Open · into main · ✓ 3 passed · ◌ 1 pending  │
+│   Review required              Open on GitHub  │
+├────────────────────────────────────────────────┤
+│ Fetched 12 min ago          Fetch   Terminal   │
+└────────────────────────────────────────────────┘
+```
+
+- A shadcn `Popover`, 360 px wide.
+- **Header**: the branch name (monospace, wrapping rather than truncating) with a copy button, and under it the base and the upstream.
+- **Branch lane**: a small SVG drawing of the branch against its base. The top line is the base branch; dots after the fork point are the base's new commits, labelled with how far behind the branch is. The lower line is the branch: filled dots for pushed commits, `--foreground` rings for commits not pushed, and a dashed ring at the tip when the working tree has changes. A small tick marks the upstream's position. More than eight commits collapse into a gap with their count. The lane has a text alternative that says the same in words ("5 commits ahead of main, 2 not pushed, 3 behind").
+- **Commits**: the branch's newest commits, five at first and up to twenty with a scroll: id in monospace, subject, relative time, and `ArrowUp` on those not pushed.
+- **Working tree**: files changed with added and removed lines in `tabular-nums`, then the staged, untracked and conflicted counts.
+- **Pull request**: state icon and title, number, base, checks summary and review state, and **Open on GitHub**. A published branch without one offers **Create pull request**, which opens GitHub's compare page in the browser. Without `gh`, a muted line says "Install the GitHub CLI to see pull requests"; signed out, it shows `gh auth login` with a copy button.
+- **Footer**: when the remote was last fetched, **Fetch** (a spinner while it runs, git's message inline if it fails), and **Terminal**, which opens a terminal in the project.
+
+### Pull requests
+
+- **Chips** in agent text and tool output: `--muted` fill, `--border-soft` ring, the state icon, `owner/repo#42` and the title truncated after 40 characters. Hover shows a `HoverCard` with the title, state, branches, checks, review state and when it was updated; a click opens the pull request in the browser. Without `gh`, the chip shows the neutral `GitPullRequest` icon and the number, and still opens the link.
+- **Sidebar**: the badge on a session's row, described in [sidebar](#sidebar).
+- **Top bar**: the current branch's chip, above.
+
+## Terminal
+
+The built-in [terminal](./terminal.md) is a panel at the bottom of the main area, under the thread and the composer.
+
+```text
+├──────────────────────────────────────────────────────────────┤
+│ ▣ zsh   ▣ pnpm dev ●   ▣ git log                  +   ⤢   ×  │  tabs, 32 px
+│ ~/overbench (fix/flaky-login) $ pnpm test --filter auth       │
+│  ✓ login.test.ts (12)                                        │
+│  ✗ session.test.ts (1)                                       │
+│ ~/overbench (fix/flaky-login) $ █                            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- **Opening**: `` Ctrl+` `` on every platform, as in VS Code, or the `SquareTerminal` toggle at the right of the top bar, which shows a pressed state while the panel is open. The first time in a project it starts a terminal in the project folder and focuses it; later it shows the terminals that already exist.
+- **Panel**: a `ResizablePanel` under the thread, 280 px high by default, between 120 px and 70% of the main area, remembered per device. It sits on surface 0 ([terminal tokens](./design-system.md#terminal)); the step from the thread's surface 1 is the separation, and the resize handle shows a hairline only while hovered or dragged. It opens and closes at once, without animating its height.
+- **Tabs**: a 32 px strip. Each tab has the `SquareTerminal` icon and the title of its foreground process; the active tab takes `--accent`. A tab that printed while hidden shows a neutral dot, and one whose shell exited shows its exit code. On the right: **New terminal** (`` Ctrl+Shift+` ``), **Maximize** (the panel takes the main area, and the thread is hidden until restored), and **Hide** (`` Ctrl+` ``), which keeps the processes running.
+- **Closing a tab** ends its shell, after a confirmation if a command is still running.
+- **Selection**: selecting text shows a small **Ask Claude Code** button at the end of the selection; it and `Mod+L` put the selection into the composer as a fenced code block. The context menu holds **Copy**, **Paste**, **Select all**, **Clear** and the same **Ask** item.
+- **Copy and paste**: `Cmd+C` and `Cmd+V` on macOS; `Ctrl+Shift+C` and `Ctrl+Shift+V` on Windows and Linux, where `Ctrl+C` stays the interrupt.
+- **Focus and shortcuts**: while the terminal has focus, keys go to the shell. On macOS, `Cmd` shortcuts still reach the app. On Windows and Linux, only `` Ctrl+` ``, `` Ctrl+Shift+` ``, copy and paste reach the app, since `Ctrl+B`, `Ctrl+L` and `Ctrl+N` mean something to the shell; `Ctrl+L` reaches the app only while text is selected, the way Windows Terminal treats `Ctrl+C`.
+- **Projects**: the panel shows the current project's terminals. In a project without one, the open panel shows a quiet empty state with **New terminal**; it never starts a shell by itself when you switch projects.
+- **States**: starting (a `Spinner` in the tab while the shell starts), exited (the output stays, with **Restart**), and terminal host stopped (each tab shows "Terminal stopped unexpectedly" with **Restart**).
 
 ## States
 
@@ -228,6 +337,9 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 | Welcome content and Project home cards on first show             | Staggered entry                         |
 | Background of Welcome and Project home                           | Ambient field                           |
 | Expanding a parent session in the sidebar                        | Disclosure                              |
+| Git event in the thread                                          | New entry                               |
+| Counts in the git status and the usage ring                      | Status text                             |
+| Terminal panel                                                   | None: it opens and closes at once       |
 | Copying code                                                     | Copy feedback                           |
 | Dismissed alerts and banners                                     | Motion exit: opacity, `--duration-fast` |
 | Menus, popovers and dialogs                                      | shadcn's built-in transitions           |
@@ -240,16 +352,19 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 
 `Mod` is `Cmd` on macOS and `Ctrl` on Windows and Linux.
 
-| Shortcut                      | Action                                 |
-| ----------------------------- | -------------------------------------- |
-| `Mod+O`                       | Open project                           |
-| `Mod+N`                       | New session in the current project     |
-| `Mod+B`                       | Toggle the sidebar                     |
-| `Mod+L`                       | Focus the composer                     |
-| `Mod+Shift+[` / `Mod+Shift+]` | Previous / next session in the sidebar |
-| `Mod+,`                       | Settings                               |
-| `Esc`                         | Cancel the running turn                |
-| `1` to `4`                    | Answer the pending permission request  |
+| Shortcut                            | Action                                 |
+| ----------------------------------- | -------------------------------------- |
+| `Mod+O`                             | Open project                           |
+| `Mod+N`                             | New session in the current project     |
+| `Mod+B`                             | Toggle the sidebar                     |
+| `Mod+L`                             | Focus the composer                     |
+| `Mod+Shift+[` / `Mod+Shift+]`       | Previous / next session in the sidebar |
+| `Mod+,`                             | Settings; `Esc` goes back              |
+| `` Ctrl+` ``                        | Show or hide the terminal              |
+| `` Ctrl+Shift+` ``                  | New terminal                           |
+| `Mod+L` with terminal text selected | Ask the agent about the selection      |
+| `Esc`                               | Cancel the running turn                |
+| `1` to `4`                          | Answer the pending permission request  |
 
 Shortcuts appear in tooltips and menus, so they can be discovered.
 
@@ -267,4 +382,5 @@ Shortcuts appear in tooltips and menus, so they can be discovered.
 - Diff highlighting runs in `@pierre/diffs`' worker pool (`WorkerPoolContextProvider`), off the main thread.
 - Thread items use `content-visibility: auto` with an intrinsic size estimate.
 - Micro-interactions and looping indicators are CSS; no component re-renders to animate.
-- Markdown, Shiki and the diff renderer are loaded lazily the first time a session needs them.
+- Markdown, Shiki and the diff renderer are loaded lazily the first time a session needs them; xterm.js and its addons the first time a terminal opens.
+- Git status components select only the shown project's status, and pull request chips load their details when they first scroll into view.

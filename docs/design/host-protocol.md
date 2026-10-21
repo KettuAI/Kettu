@@ -41,6 +41,7 @@ interface HostError {
     | 'agent_unavailable'
     | 'auth_required'
     | 'agent_error'
+    | 'git_error'
     | 'host_restarted'
     | 'internal'
   message: string
@@ -78,6 +79,7 @@ interface HostError {
 | `sessions.delete`          | `{ sessionId }`                          | none                                            | The UI confirms first                                               |
 | `permissions.respond`      | `{ sessionId, requestId, optionId }`     | none                                            |                                                                     |
 | `diagnostics.collect`      | none                                     | `DiagnosticsBundle`                             | Main writes it to disk ([agent host](./agent-host.md#diagnostics))  |
+| `git.*`                    |                                          |                                                 | Repository status and pull requests ([git](./git.md#host-protocol)) |
 
 ```ts
 interface SessionSummary {
@@ -88,6 +90,9 @@ interface SessionSummary {
   status: SessionStatus
   attention: 'none' | 'permission' | 'unread' | 'error'
   updatedAt: number
+  parentId: string | null
+  branch: string | null // the branch checked out when its last turn ended
+  pr: { number: number; state: 'open' | 'draft' | 'merged' | 'closed'; url: string } | null
 }
 ```
 
@@ -117,6 +122,8 @@ interface AgentStatus {
     command?: string
   }[]
   canLogout: boolean
+  account: AgentAccount | null // what the agent reports through `_auth/status_update`
+  limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   progress: string[] // latest stderr lines while starting
 }
@@ -137,17 +144,20 @@ interface ImportableSession {
 ```
 
 - `state` follows the [agent process lifecycle](./agent-host.md#agent-process-lifecycle), plus the detection results that come before it.
-- Stable ACP v1 has no way to ask whether an agent is signed in, so `signIn` starts as `unknown`. It becomes `required` when a request fails with `auth_required`, and `signed-in` after `authenticate` or any session request succeeds.
+- Stable ACP v1 has no way to ask whether an agent is signed in, so `signIn` starts as `unknown`. It becomes `required` when a request fails with `auth_required`, and `signed-in` after `authenticate` or any session request succeeds. Agents that push `_auth/status_update` (Claude Code and Codex) set it directly, before any session exists ([plan limits](./session-model.md#plan-limits)).
 - For `terminal` methods, `command` is the full command to show, already quoted for the user's platform.
 
 ## Events
 
-| Event             | Payload          | Sent to                                                             |
-| ----------------- | ---------------- | ------------------------------------------------------------------- |
-| `session.patches` | `PatchBatch`     | Ports watching that session                                         |
-| `session.summary` | `SessionSummary` | All ports, whenever status, title, attention or `updatedAt` changes |
-| `session.removed` | `{ sessionId }`  | All ports                                                           |
-| `agent.status`    | `AgentStatus`    | All ports                                                           |
+| Event                   | Payload                           | Sent to                                                             |
+| ----------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| `session.patches`       | `PatchBatch`                      | Ports watching that session                                         |
+| `session.summary`       | `SessionSummary`                  | All ports, whenever status, title, attention or `updatedAt` changes |
+| `session.removed`       | `{ sessionId }`                   | All ports                                                           |
+| `agent.status`          | `AgentStatus`                     | All ports, also when its account or a plan limit changes            |
+| `git.changed`, `git.pr` | See [git](./git.md#host-protocol) | Ports keeping that project live                                     |
+
+Terminals use a port of their own to the terminal host, with the same envelope ([terminal](./terminal.md#host-protocol)).
 
 Only watched sessions stream patches. Every other session costs the renderer one small summary per change, so ten agents working in the background do not slow down the one in view.
 

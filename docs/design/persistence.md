@@ -8,13 +8,13 @@ OverBench stores as little as it can. Agents already keep transcripts and creden
 
 All files live in `app.getPath('userData')` ([per platform](./agent-host.md#platform-differences)).
 
-| File                  | Owner      | Contents                                                                                                       |
-| --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------- |
-| `state/projects.json` | Agent host | Recent project folders                                                                                         |
-| `state/sessions.json` | Agent host | The session index                                                                                              |
-| `settings.json`       | Main       | [Settings](#settings)                                                                                          |
-| `window-state.json`   | Main       | Window size, position and maximized state                                                                      |
-| `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes and collapsed groups, and [composer drafts](#composer-drafts) |
+| File                  | Owner      | Contents                                                                                                                                           |
+| --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state/projects.json` | Agent host | Recent project folders                                                                                                                             |
+| `state/sessions.json` | Agent host | The session index                                                                                                                                  |
+| `settings.json`       | Main       | [Settings](#settings)                                                                                                                              |
+| `window-state.json`   | Main       | Window size, position and maximized state                                                                                                          |
+| `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts
 interface ProjectsFile {
@@ -36,6 +36,7 @@ interface SessionsFile {
     parentId: string | null // for sub-sessions
     origin: 'user' | 'subagent'
     description: string | null // a subagent's purpose, as its parent described it
+    branch: string | null // checked out when its last turn ended, for its pull request
   }[]
 }
 ```
@@ -70,13 +71,19 @@ interface SettingsFile {
   }
   agents: Partial<Record<AgentId, { binaryPath?: string }>>
   proxy: { mode: 'environment' } | { mode: 'custom'; url: string; noProxy: string }
+  terminal: {
+    shellPath?: string // picked in a native dialog; the platform default when absent
+    fontSize: 12 | 13 | 14
+  }
+  git: { backgroundFetch: boolean }
 }
 ```
 
-- Defaults: no default agent, Enter sends, restore and confirm on, the system theme, the default text size, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, and the proxy from the environment.
+- Defaults: no default agent, Enter sends, restore and confirm on, the system theme, the default text size, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, and no background fetch.
 - The renderer reads them with `settings:get` and changes them with `settings:update`, which takes a partial object. Main validates it against the schema, rejects unknown keys and values, writes the file and sends `settings:changed` to every window.
 - The renderer applies appearance settings as attributes on `<html>` (`data-theme`, `data-text-size`, `data-reduce-motion`), so tokens switch in CSS without re-rendering components.
-- `agents` and `proxy` go to the agent host in `host:init` and `host:settings` ([agent host](./agent-host.md#main-and-host-messages)).
+- `agents`, `proxy` and `git` go to the agent host in `host:init` and `host:settings` ([agent host](./agent-host.md#main-and-host-messages)); `terminal` goes to the terminal host when it starts and when it changes.
+- Terminals themselves are not stored: their output and processes end with the app in M0 ([terminal](./terminal.md#terminals-and-projects)).
 - Missing keys take their defaults, so adding a setting needs no migration.
 - **Restore the last session** uses the session id kept in `localStorage` with the other per-device view state.
 

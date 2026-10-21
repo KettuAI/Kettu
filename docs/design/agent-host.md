@@ -38,16 +38,17 @@ On `before-quit`, main delays the quit, sends `host:shutdown`, and waits for the
 
 Typed in `src/shared/host-control.ts`.
 
-| Direction   | Message                | Payload                                                                    |
-| ----------- | ---------------------- | -------------------------------------------------------------------------- |
-| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `settings`         |
-| main → host | `host:connect`         | `windowId`, and the port in the transfer list                              |
-| main → host | `host:settings`        | `settings`, whenever the agent part changes                                |
-| main → host | `host:shutdown`        | none                                                                       |
-| host → main | `host:ready`           | none                                                                       |
-| host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent                               |
-| host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body` |
-| host → main | `host:stopped`         | none; sent just before a clean exit                                        |
+| Direction   | Message                | Payload                                                                                                     |
+| ----------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `settings`                                          |
+| main → host | `host:connect`         | `windowId`, and the port in the transfer list                                                               |
+| main → host | `host:settings`        | `settings`, whenever the agent part changes                                                                 |
+| main → host | `host:shutdown`        | none                                                                                                        |
+| host → main | `host:ready`           | none                                                                                                        |
+| host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent                                                                |
+| host → main | `host:projects`        | The project paths, whenever the list changes; main relays them to the [terminal host](./terminal.md#shells) |
+| host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body`                                  |
+| host → main | `host:stopped`         | none; sent just before a clean exit                                                                         |
 
 `host:attention` lets main show an OS notification when no OverBench window is focused, including when every window is closed on macOS. Clicking the notification opens or focuses a window on that session.
 
@@ -190,8 +191,9 @@ The same sequence runs on idle stop, restart and quit, for every agent in parall
 ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The host then sets the agent's sign-in state, and every session waiting on it shows the agent's `authMethods`.
 
 - **`agent` methods** (Codex): the host calls `authenticate` with the method `id`. The agent runs its own flow, such as opening the browser. On success the host retries what failed.
-- **`terminal` methods** (Claude Code, OpenCode): the agent must run interactively. The command is the agent's launch command plus the method's `args`, for example `npx -y @agentclientprotocol/claude-agent-acp@0.94.0 --cli auth login --claudeai` or `opencode acp --login`. Until the embedded terminal exists, the UI shows that command quoted for the user's platform, with a copy button and **I've signed in, retry**.
+- **`terminal` methods** (Claude Code, OpenCode): the agent must run interactively. The command is the agent's launch command plus the method's `args`, for example `npx -y @agentclientprotocol/claude-agent-acp@0.94.0 --cli auth login --claudeai` or `opencode acp --login`. **Sign in in terminal** runs that command in the built-in [terminal](./terminal.md#working-with-the-session) and retries when it finishes. The command is also shown quoted for the user's platform, with a copy button and **I've signed in, retry**, for those who prefer their own terminal.
 - **Logout** is offered only when the agent advertises `agentCapabilities.auth.logout`. It calls `logout`; the agent's sessions then need sign-in again.
+- Claude Code and Codex also push `_auth/status_update`, an adapter extension that names the account and plan ("Claude Max", "ChatGPT Plus"). It sets the sign-in state without waiting for a failed request, and the plan label heads the [plan limits](./session-model.md#plan-limits).
 - OverBench never reads, stores or forwards credentials.
 
 ## Diagnostics
