@@ -1,13 +1,6 @@
 import { useShallow } from 'zustand/react/shallow'
 import { memo, useEffect, useState } from 'react'
-import {
-  BotIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CornerDownRightIcon,
-  Trash2Icon,
-  XIcon,
-} from 'lucide-react'
+import { BotIcon, ChevronDownIcon, ChevronRightIcon, CornerDownRightIcon } from 'lucide-react'
 import { createSession, deleteSession, descendantCount, closeSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -216,14 +209,11 @@ function SessionMenu({
 }) {
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   return (
-    <ContextMenuContent className="w-52">
+    <ContextMenuContent>
       {canCreateChild && (
         <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <CornerDownRightIcon />
-            New sub-session
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-48">
+          <ContextMenuSubTrigger>New sub-session</ContextMenuSubTrigger>
+          <ContextMenuSubContent>
             {agents.map((agent) => (
               <ContextMenuItem
                 key={agent.id}
@@ -237,13 +227,9 @@ function SessionMenu({
           </ContextMenuSubContent>
         </ContextMenuSub>
       )}
-      <ContextMenuItem onClick={() => void closeSession(sessionId)}>
-        <XIcon />
-        Close
-      </ContextMenuItem>
+      <ContextMenuItem onClick={() => void closeSession(sessionId)}>Close</ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onClick={onDelete}>
-        <Trash2Icon />
         Delete…
       </ContextMenuItem>
     </ContextMenuContent>

@@ -55,7 +55,7 @@ Lines are translucent, so one token reads the same on every surface step. The al
 - `--primary` stays shadcn's neutral: near black in the light theme, near white in the dark one. OverBench has no brand accent, so color is left for meaning.
 - `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user. It is the loudest color in the app.
 - `--success` (green): completed checks.
-- `--destructive` and `--ring`: shadcn's.
+- `--destructive` is a brick red, `oklch(0.5 0.17 27)` light and `oklch(0.7 0.16 22)` dark, calmer than shadcn's saturated red. It marks errors, conflicts and deletion in text and icons and tints destructive buttons, so a loud red would shout from every one of them; the darker light value still reaches 5.9:1 on surface 0. `--ring` stays shadcn's.
 - `--muted-foreground` in the light theme is `oklch(0.53 0 0)` instead of shadcn's 0.556, which reaches only 4.49:1 on surface 0, just under WCAG AA.
 - `--sidebar-accent`, the fill of hovered and selected sidebar rows, is `oklch(0.945 0 0)` light and `oklch(0.25 0 0)` dark; shadcn's 0.97 barely shows on surface 0.
 - `--muted` (the user bubble, inline code, a disabled send button) is `oklch(0.96 0 0)` light, so the bubble stays visible on surface 1. `--accent` (hovered rows on surface 1, the highlighted menu item, an open selector) is `oklch(0.962 0 0)` light and `oklch(0.27 0 0)` dark.
@@ -144,14 +144,14 @@ Each agent is shown with its official mark in its own colors. They are the only 
 
 ### Elevation
 
-| Tier | Shadow                                         | Used for                            |
-| ---- | ---------------------------------------------- | ----------------------------------- |
-| none |                                                | Everything on the canvas at rest    |
-| `sm` | A tight contact shadow and an 8 px ambient one | The composer at rest, hovered cards |
-| `md` | Contact and a 16 px ambient shadow             | Popovers and menus                  |
-| `lg` | Contact and a 28 px ambient shadow             | Dialogs                             |
+| Tier | Shadow                                         | Used for                             |
+| ---- | ---------------------------------------------- | ------------------------------------ |
+| none |                                                | Everything on the canvas at rest     |
+| `sm` | A tight contact shadow and an 8 px ambient one | The composer at rest, hovered cards  |
+| `md` | Contact and a 24 px ambient shadow             | Popovers, menus and floating buttons |
+| `lg` | Contact and a 28 px ambient shadow             | Dialogs                              |
 
-- Dark-theme shadows are several times stronger (opacity 0.4 to 0.5), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge (`oklch(1 0 0 / 5%)`), which reads as an edge catching the light. In the light theme, outline buttons get a 1 px contact shadow instead.
+- Dark-theme shadows are several times stronger (opacity 0.4 to 0.65), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge (`oklch(1 0 0 / 5%)`), which reads as an edge catching the light. In the light theme, outline buttons get a 1 px contact shadow instead.
 - **Composer** (the `composer` variant of `InputGroup`): a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft shadow (20 px light, 24 px dark). Only color and shadow change, so focusing never moves the text.
 - **Hovered cards** (the agent cards on Project home): the card rises 1 px, its ring turns `--border-strong`, it takes `sm`, and a soft light rises from its bottom edge, as the reference's starter cards do. The light is a radial gradient of `--card-glow` (`oklch(0 0 0 / 3%)` light, `oklch(1 0 0 / 5%)` dark) on a pseudo-element that fades in, because a gradient cannot be transitioned.
 - **Attention**: a card waiting for the user replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20% (75% and 16% in the dark theme).
@@ -174,18 +174,18 @@ M0 ships the compact density only. The comfortable values are recorded so that a
 
 The radius scale is shadcn's, derived from `--radius`, so shadcn components follow it without new tokens:
 
-| Utility        | Compact | Used for                                   |
-| -------------- | ------- | ------------------------------------------ |
-| `rounded-md`   | 5.6 px  | Menu items, segments and their thumb       |
-| `rounded-lg`   | 7 px    | Buttons, inputs, rows                      |
-| `rounded-xl`   | 9.8 px  | Cards, the user bubble, menus and popovers |
-| `rounded-2xl`  | 12.6 px | The composer                               |
-| `rounded-3xl`  | 15.4 px | Dialogs                                    |
-| `rounded-full` |         | The send button, counts and status pills   |
+| Utility        | Compact | Used for                                 |
+| -------------- | ------- | ---------------------------------------- |
+| `rounded-md`   | 5.6 px  | Segments and their thumb                 |
+| `rounded-lg`   | 7 px    | Buttons, inputs, rows, menu items        |
+| `rounded-xl`   | 9.8 px  | Cards, the user bubble                   |
+| `rounded-2xl`  | 12.6 px | The composer, menus and popovers         |
+| `rounded-3xl`  | 15.4 px | Dialogs                                  |
+| `rounded-full` |         | The send button, counts and status pills |
 
 - Where OverBench's look differs from a shadcn component's default, the difference is a variant added to that component with `cva`, such as `InputGroup` `variant="composer"`, `Card` `variant="tool"` and a `Button` `size="compact"` bound to `--control-height`. Call sites never restyle a component with `className`; they use it for layout only.
 - The compact spacing steps are Tailwind's `1`, `1.5`, `2`, `2.5`, `3`, `4` and `7`.
-- Menu items are `rounded-md` because they sit 4 px inside a `rounded-xl` menu: 9.8 − 4 ≈ 5.6, so the item's corner follows the menu's. Segments sit inside their track the same way.
+- Menu items are `rounded-lg` because they sit 6 px inside a `rounded-2xl` menu: 12.6 − 6 ≈ 6.6, so the item's corner follows the menu's. Segments sit inside their track the same way.
 - shadcn's `xs` button (24 px) is the small size; `default` (32 px) is kept for dialogs, empty states and the Welcome screen, where a larger target helps. When the comfortable density arrives, these sizes are bound to the comfortable tokens.
 
 ## Typography
@@ -218,19 +218,19 @@ A choice among two to six ordered or exclusive values, such as the theme in Sett
 
 Every menu, the dropdown menus and the context menus alike, shares one set of measurements, so the session's title menu, its row's context menu and the model menu read as one family.
 
-| Part        | Look                                                                                                                                                                                                             |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Menu        | Surface 3, `rounded-xl`, 4 px padding, `shadow-menu` (a hairline ring and the `md` shadow). It opens with a fade and a zoom from 95% at its anchor in 100 ms, without a slide, and closes the same way           |
-| Item        | 13 px text, at least `--row-height`, 8 px horizontal padding, 8 px between icon and label, `rounded-md`; highlighted, it takes `--accent`                                                                        |
-| Icon        | A leading Lucide icon at 16 px in `--muted-foreground`, `--accent-foreground` when the item is highlighted; agent marks keep their own colors. When one item has an icon, every item does, so the labels line up |
-| Check       | The checked item of a radio or checkbox group shows a 14 px `Check` on the right, centred on the first line, so a two-line item keeps it by its name                                                             |
-| Group label | 12 px, weight 500, `--muted-foreground`, with the items' 8 px inset, so it lines up with their text                                                                                                              |
-| Separator   | One hairline of `--border-soft`, inset 8 px on both sides, never edge to edge                                                                                                                                    |
-| Shortcut    | 12 px `--muted-foreground` with `tabular-nums`, on the right                                                                                                                                                     |
-| Submenu     | A 14 px `ChevronRight` in `--muted-foreground`; the item stays filled while its submenu is open. The submenu opens beside the menu, 2 px clear of its edge, with its first item level with the item              |
-| Destructive | Red text and icon (`--destructive`), with a faint `--destructive-tint` fill only when highlighted; it comes last, after a separator                                                                              |
+| Part        | Look                                                                                                                                                                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Menu        | Surface 3, `rounded-2xl`, 6 px padding, `shadow-menu` (a hairline ring and the `md` shadow). It is as wide as its widest item and at least 160 px, never a fixed width, so a short menu stays a small object. It opens with a fade and a zoom from 95% at its anchor in 100 ms, without a slide, and closes the same way |
+| Item        | 13 px text, at least `--row-height`, 8 px horizontal padding, `rounded-lg`; highlighted, it takes `--accent`. With the menu's padding, a label starts 14 px from the menu's edge and a shortcut ends 14 px before it                                                                                                     |
+| Icon        | None: labels and shortcuts line up on their own, as in the reference and in the platform's own menus, and icons only added weight. The one exception is an agent mark at 14 px, which tells agents apart                                                                                                                 |
+| Check       | The checked item of a radio or checkbox group shows a 14 px `Check` on the right, centred on the first line, so a two-line item keeps it by its name                                                                                                                                                                     |
+| Group label | 12 px, weight 500, `--muted-foreground`, with the items' 8 px inset, so it lines up with their text                                                                                                                                                                                                                      |
+| Separator   | One hairline of `--border-soft`, inset 8 px on both sides so it lines up with the labels, never edge to edge                                                                                                                                                                                                             |
+| Shortcut    | 12 px `--muted-foreground` with `tabular-nums`, on the right                                                                                                                                                                                                                                                             |
+| Submenu     | A 14 px `ChevronRight` in `--muted-foreground`; the item stays filled while its submenu is open. The submenu opens beside the menu, 2 px clear of its edge, with its first item level with the item                                                                                                                      |
+| Destructive | Text in `--destructive`, with a faint `--destructive-tint` fill only when highlighted; its shortcut stays muted. It comes last, after a separator                                                                                                                                                                        |
 
-- The session menus, the title menu and the row's context menu, hold **New sub-session** (`CornerDownRight`), **Close** (`X`), a separator and **Delete…** (`Trash2`).
+- The session menus, the title menu and the row's context menu, hold **New sub-session**, **Close**, a separator and **Delete…**.
 - **Dialogs** (`Dialog`, `AlertDialog`): surface 3, `rounded-3xl`, 20 px padding and 16 px between parts, at most 384 px wide, with the `lg` shadow. The title is 16 px at weight 500, the description 13 px with a relaxed line height in `--muted-foreground`. The buttons sit right-aligned at the end, 8 px apart, at the `default` size; the footer has no band or rule of its own. A destructive action uses `Button`'s `destructive` variant.
 
 ## Motion

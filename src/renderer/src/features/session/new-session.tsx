@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, ChevronDownIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
+import { ArrowUpIcon, ChevronDownIcon, FolderIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
@@ -241,10 +241,7 @@ function ProjectMenu({ project }: { project: Project | null }) {
               <DropdownMenuSeparator />
             </>
           )}
-          <DropdownMenuItem onClick={() => void open()}>
-            <FolderOpenIcon />
-            Open project…
-          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void open()}>Open project…</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       {error && (

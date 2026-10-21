@@ -6,7 +6,6 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CircleIcon,
-  CopyIcon,
   FilePenIcon,
   FileTextIcon,
   GlobeIcon,
@@ -158,15 +157,13 @@ export const ToolCard = memo(function ToolCard({
   return (
     <ContextMenu>
       <ContextMenuTrigger render={<div />}>{card}</ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
+      <ContextMenuContent>
         <ContextMenuItem
           onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
         >
-          <SquareTerminalIcon />
           Run in terminal
         </ContextMenuItem>
         <ContextMenuItem onClick={() => void navigator.clipboard.writeText(command)}>
-          <CopyIcon />
           Copy command
         </ContextMenuItem>
       </ContextMenuContent>
