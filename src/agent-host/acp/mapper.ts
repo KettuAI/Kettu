@@ -311,6 +311,7 @@ function mapMessageChunk(
       markdown: text,
       attachments: isText ? [] : [contentRef(chunk.content)],
       streaming,
+      ...(streaming ? { at: ctx.now } : {}),
     })
   } else {
     if (!isText) {

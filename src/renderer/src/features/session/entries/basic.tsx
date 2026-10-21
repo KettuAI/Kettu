@@ -30,6 +30,7 @@ import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
+import { UserActions } from './message-actions'
 import { UserContentView } from './user-content'
 
 export interface EntryProps {
@@ -42,13 +43,16 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
   return (
-    <Message align="end" className={animation}>
-      <Bubble variant="muted">
-        <BubbleContent className="rounded-2xl px-3.5 py-2 text-prose leading-normal">
-          <UserContentView content={entry.content} />
-        </BubbleContent>
-      </Bubble>
-    </Message>
+    <div className={cn('group/actions flex flex-col items-end gap-0.5', animation)}>
+      <Message align="end">
+        <Bubble variant="muted">
+          <BubbleContent className="rounded-2xl px-3.5 py-2 text-prose leading-normal">
+            <UserContentView content={entry.content} />
+          </BubbleContent>
+        </Bubble>
+      </Message>
+      <UserActions content={entry.content} at={entry.at} />
+    </div>
   )
 })
 

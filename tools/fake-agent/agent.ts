@@ -326,7 +326,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           loadSession: true,
           promptCapabilities: { image: true, embeddedContext: true },
           mcpCapabilities: { http: false, sse: false },
-          sessionCapabilities: { list: {}, resume: {}, close: {}, delete: {} },
+          sessionCapabilities: { list: {}, resume: {}, close: {}, delete: {}, fork: {} },
           auth: { logout: {} },
           _meta: { authStatus: {} },
         },
@@ -380,6 +380,18 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       }
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return sessionSetup(session)
+    })
+    .onRequest(methods.agent.session.fork, (ctx) => {
+      requireSignedIn()
+      const source = sessions.get(ctx.params.sessionId)
+      if (!source) throw RequestError.resourceNotFound(ctx.params.sessionId)
+      const fork = newSession(nextId('fake'), ctx.params.cwd)
+      fork.title = source.title
+      fork.turns = source.turns
+      fork.usedTokens = source.usedTokens
+      fork.history = source.history.map((r) => ({ ...r, sessionId: fork.id }))
+      setTimeout(() => announceCommands(ctx.client, fork.id), 0)
+      return { sessionId: fork.id, ...sessionSetup(fork) }
     })
     .onRequest(methods.agent.session.list, (ctx) => {
       const cwd = ctx.params.cwd ?? null

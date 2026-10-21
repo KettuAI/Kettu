@@ -305,6 +305,7 @@ export class AgentHost {
       'sessions.prompt': ({ sessionId, content }) => sessions.prompt(sessionId, content),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.retry': ({ sessionId }) => sessions.retry(sessionId),
+      'sessions.fork': ({ sessionId }) => sessions.fork(sessionId),
       'sessions.setConfigOption': ({ sessionId, optionId, value }) =>
         sessions.setConfigOption(sessionId, optionId, value),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),

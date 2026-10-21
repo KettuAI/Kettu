@@ -639,6 +639,7 @@ export class AgentManager {
         resumeSession: capabilities?.resumeSession ?? false,
         closeSession: capabilities?.closeSession ?? false,
         deleteSession: capabilities?.deleteSession ?? false,
+        forkSession: capabilities?.forkSession ?? false,
       },
     }
   }

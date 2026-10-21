@@ -74,8 +74,16 @@ export interface SlashCommand {
 }
 
 export type ThreadEntry =
-  | { kind: 'user'; id: string; content: UserContent[] }
-  | { kind: 'agent'; id: string; markdown: string; attachments: ContentRef[]; streaming: boolean }
+  // `at`: when the message was sent or began, for live messages only; a replay carries no times.
+  | { kind: 'user'; id: string; content: UserContent[]; at?: number }
+  | {
+      kind: 'agent'
+      id: string
+      markdown: string
+      attachments: ContentRef[]
+      streaming: boolean
+      at?: number
+    }
   | { kind: 'thought'; id: string; markdown: string; streaming: boolean; durationMs?: number }
   | ToolEntry
   | { kind: 'subagent'; id: string; sessionId: string } // a sub-session the agent started here

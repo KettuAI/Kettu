@@ -10,7 +10,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 2   | Choosing a model does not close the model menu                 | Model menu     | Fixed        |
 | 3   | No switch for Claude Code's ultracode                          | Model menu     | Open         |
 | 4   | The model menu does not look polished                          | Model menu     | Open         |
-| 5   | Messages have no action row                                    | Thread entries | Open         |
+| 5   | Messages have no action row                                    | Thread entries | Fixed        |
 | 6   | Markdown looks plain and file references do not stand out      | Markdown       | Open         |
 | 7   | The usage popover shows too little and needs a full redesign   | Usage          | Open         |
 | 8   | Session rows show their time badly                             | Sidebar        | Open         |
@@ -67,6 +67,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Agent reply, aligned with its start: copy, a fork-style arrow, pin, a speaker icon, then the relative time ("just now").
   - User message, aligned with its end: the relative time, a double check, copy, a counter-clockwise arrow, then the fork-style arrow.
 - **Today**: neither [Interface: thread entries](../design/ui.md#thread) nor the code has message actions. Thread entries carry no time of their own, so the relative time needs one in the thread model. To settle when planning, after reading the reference: what each icon does, whether the row is always shown or only on hover, and which actions M0 can back, since session fork and checkpoints with undo are [out of M0](./m0.md#out-planned-for-later-milestones) and ACP's `session/fork` is still unstable.
+- **Fixed**: user messages get a time and **Copy** on hover; each reply gets a row with **Copy**, **Read aloud**, **Fork into a new session** under the latest reply, the turn-end text and the time ([Interface: message actions](../design/ui.md#message-actions)). Messages carry the time they were sent or began, for live messages only. Fork goes through `session/fork` when the agent advertises it; the reference's pin, double check and rewind are left out, since M0 has no pins and no checkpoints.
 
 ## 6. Markdown looks plain and file references do not stand out
 

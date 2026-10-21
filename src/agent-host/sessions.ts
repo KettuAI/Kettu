@@ -1086,7 +1086,7 @@ export class SessionManager {
     }
     const now = this.now()
     const patches: Patch[] = [
-      { op: 'entry.add', entry: { kind: 'user', id: this.nextId(live), content } },
+      { op: 'entry.add', entry: { kind: 'user', id: this.nextId(live), content, at: now } },
     ]
     this.emit(live, patches)
     if (live.thread.session.title === null) {
@@ -1111,6 +1111,71 @@ export class SessionManager {
     this.persist(live)
     this.touch(live.id)
     void this.runTurn(live, turn)
+  }
+
+  /**
+   * `session/fork`: a new session that starts from this one's history. The agent keeps the
+   * history; the fork shows a copy of this thread until it is replayed on a later open.
+   */
+  async fork(sessionId: string): Promise<SessionSummary> {
+    const source = this.liveFor(sessionId)
+    if (source.record.origin === 'subagent') {
+      throw new HostError('restricted', 'A subagent session cannot be forked')
+    }
+    if (source.thread.session.status !== 'ready' || !source.connection) {
+      throw new HostError(
+        'busy',
+        `The session is ${source.thread.session.status.replace('_', ' ')}`,
+      )
+    }
+    const runtime = await this.deps.agents.ensureReady(source.record.agentId)
+    if (!runtime.init.capabilities.forkSession) {
+      throw new HostError(
+        'agent_unavailable',
+        `${this.deps.agents.name(source.record.agentId)} cannot fork sessions`,
+      )
+    }
+    let setup
+    try {
+      setup = await runtime.connection.forkSession(
+        source.record.acpSessionId,
+        source.record.projectPath,
+      )
+    } catch (error) {
+      throw agentError(error)
+    }
+    const now = this.now()
+    const record: SessionRecord = {
+      ...source.record,
+      id: randomUUID(),
+      acpSessionId: setup.acpSessionId,
+      title: source.thread.session.title,
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      branch: null,
+    }
+    const live = this.makeLive(record, false, 'ready')
+    live.unread = false
+    // Subagent cards point at the source's sub-sessions, which the fork does not have.
+    const entries = threadEntries(source.thread).filter((entry) => entry.kind !== 'subagent')
+    for (const entry of entries) {
+      const n = Number(/^\w+:(\d+)$/.exec(entry.id)?.[1] ?? 0)
+      if (n > live.counter) live.counter = n
+    }
+    this.emit(
+      live,
+      entries.map((entry) => ({ op: 'entry.add', entry })),
+    )
+    this.attach(live, runtime.connection)
+    this.update(live, {
+      acpSessionId: setup.acpSessionId,
+      config: mergeConfig(source.thread.session.config, setup.config),
+      usage: source.thread.session.usage,
+    })
+    this.save(live)
+    this.touch(live.id)
+    return this.summary(live.id)
   }
 
   private async runTurnAgain(live: Live, content: UserContent[]): Promise<void> {

@@ -90,8 +90,16 @@ interface SlashCommand {
 
 ```ts
 type ThreadEntry =
-  | { kind: 'user'; id: string; content: UserContent[] }
-  | { kind: 'agent'; id: string; markdown: string; attachments: ContentRef[]; streaming: boolean }
+  // `at`: when a live message was sent or began; a replay carries no times, so it has none.
+  | { kind: 'user'; id: string; content: UserContent[]; at?: number }
+  | {
+      kind: 'agent'
+      id: string
+      markdown: string
+      attachments: ContentRef[]
+      streaming: boolean
+      at?: number
+    }
   | { kind: 'thought'; id: string; markdown: string; streaming: boolean; durationMs?: number }
   | ToolEntry
   | { kind: 'subagent'; id: string; sessionId: string } // a sub-session the agent started here
@@ -279,6 +287,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 | Close                      | `session/close` when supported                    | Live state dropped; the index entry stays, so it can be reopened.                                    |
 | Delete                     | `session/delete` when supported                   | Removed from the agent and from the index, after the user confirms.                                  |
 | Import                     | `session/list` with `cwd`, following `nextCursor` | Sessions started elsewhere, such as in the CLI, can be added to the index and opened.                |
+| Fork                       | `session/fork`, when the agent advertises it      | A new session in the same project that starts from the whole history; see below.                     |
 
 ### Recovering after a crash
 
@@ -294,6 +303,7 @@ These details are settled by the implementation in `src/agent-host/sessions.ts`:
 - **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in, `session/load` for a failed load or resume, and for a `disconnected` session it restarts the agent, whose restart resumes it. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
 - **Unread**: `sessions.watch`, `sessions.unwatch`, and a turn ending while a port watches set `lastViewedAt`. A turn ending with no port watching sets `unread`. After a restart a session is unread when `updatedAt` is later than `lastViewedAt`; a session never viewed (`lastViewedAt: null`) is not.
 - **Attention** is `permission` while a request is pending, then `error` for a `failed` session or a set `error`, then `unread`.
+- **Fork**: `sessions.fork` takes a top-level session that is `ready` and calls `session/fork` (ACP's unstable schema, only when `sessionCapabilities.fork` is advertised). The new session is saved at once, with the source's title, config and usage, and shows a copy of the source's thread without its subagent cards, whose sub-sessions stay with the source; its next ids continue after the copied ones. A later open replays the fork's own history from the agent.
 - **Sequence numbers** continue across a close and a reopen, so a port still holding an old replica sees a gap and asks for a snapshot instead of mixing two runs.
 
 ### Titles

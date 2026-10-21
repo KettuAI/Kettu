@@ -20,6 +20,7 @@ import {
   TurnEndEntry,
   UserEntry,
 } from './entries/basic'
+import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { SubagentCard } from './entries/subagent-card'
 import { ToolCard } from './entries/tool-card'
@@ -87,7 +88,14 @@ export const Thread = memo(function Thread({
                     index === items.length - 1 && '[content-visibility:visible]',
                   )}
                 >
-                  {item.type === 'run' ? (
+                  {item.type === 'reply' ? (
+                    <ReplyFooter
+                      sessionId={sessionId}
+                      agentIds={item.agentIds}
+                      endId={item.endId}
+                      latest={item.latest}
+                    />
+                  ) : item.type === 'run' ? (
                     <RunGroup
                       sessionId={sessionId}
                       entryIds={item.ids}

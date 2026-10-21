@@ -53,7 +53,7 @@ const thought = (id: string): ThreadEntry => ({
 const plan = (id: string): ThreadEntry => ({ kind: 'plan', id, items: [] })
 
 describe('signatureOf', () => {
-  it('marks users, groupable lookups, thoughts and other tools', () => {
+  it('marks users, thoughts, groupable lookups, other tools and agent messages', () => {
     const s = state([
       user('u1'),
       thought('h1'),
@@ -62,7 +62,7 @@ describe('signatureOf', () => {
       tool('x1', 'execute'),
       agent('a1'),
     ])
-    expect(signatureOf(s)).toBe('uhgtto')
+    expect(signatureOf(s)).toBe('uhgtta')
   })
 
   it('does not group a lookup that runs or waits for permission', () => {
@@ -87,13 +87,13 @@ describe('buildItems', () => {
       tool('e1', 'edit'),
       agent('a1'),
     ])
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a1'])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a1', 'reply:u1'])
     expect(result[1]).toMatchObject({ type: 'run', ids: ['h1', 'x1', 'e1'], signature: 'htt' })
   })
 
   it('leaves a single step as its own entry', () => {
     const result = items([user('u1'), tool('x1', 'execute'), agent('a1'), thought('h1')])
-    expect(result.map((i) => i.type)).toEqual(['entry', 'entry', 'entry', 'entry'])
+    expect(result.map((i) => i.type)).toEqual(['entry', 'entry', 'entry', 'entry', 'reply'])
   })
 
   it('breaks a run at a plan, a subagent or a notice', () => {
@@ -143,18 +143,55 @@ describe('buildItems', () => {
   })
 
   it('marks user entries as turn starts', () => {
-    const result = items([user('u1'), agent('a1'), user('u2')])
-    expect(result.map((i) => i.type === 'entry' && i.turnStart)).toEqual([true, false, true])
+    const result = items([user('u1'), agent('a1'), user('u2')]).filter((i) => i.type === 'entry')
+    expect(result.map((i) => i.turnStart)).toEqual([true, false, true])
   })
 
   it("anchors the scroll to the latest turn's start only", () => {
-    const result = items([user('u1'), agent('a1'), user('u2'), agent('a2')])
-    expect(result.map((i) => i.type === 'entry' && i.scrollAnchor)).toEqual([
-      false,
-      false,
-      true,
-      false,
-    ])
+    const result = items([user('u1'), agent('a1'), user('u2'), agent('a2')]).filter(
+      (i) => i.type === 'entry',
+    )
+    expect(result.map((i) => i.scrollAnchor)).toEqual([false, false, true, false])
+  })
+})
+
+describe('reply footers', () => {
+  const end = (id: string): ThreadEntry => ({
+    kind: 'turn_end',
+    id,
+    stopReason: 'end_turn',
+    durationMs: 1000,
+  })
+  const keys = (entries: ThreadEntry[], live = false) => {
+    const s = state(entries)
+    return buildItems(s.order, signatureOf(s), live).map((i) => i.key)
+  }
+
+  it("take the place of a turn's end, after its messages", () => {
+    const s = state([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2'), end('t1')])
+    const result = buildItems(s.order, signatureOf(s))
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'x1', 'a2', 'reply:u1'])
+    expect(result.at(-1)).toMatchObject({
+      type: 'reply',
+      agentIds: ['a1', 'a2'],
+      endId: 't1',
+      latest: true,
+    })
+  })
+
+  it('close a turn from history that has no end of its own', () => {
+    const s = state([user('u1'), agent('a1'), user('u2'), agent('a2')])
+    const result = buildItems(s.order, signatureOf(s))
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'reply:u1', 'u2', 'a2', 'reply:u2'])
+    expect(result[2]).toMatchObject({ endId: null, latest: false })
+  })
+
+  it('wait for the running turn to end', () => {
+    expect(keys([user('u1'), agent('a1')], true)).toEqual(['u1', 'a1'])
+  })
+
+  it('leave a turn without a message to its end marker', () => {
+    expect(keys([user('u1'), tool('x1', 'execute'), end('t1')])).toEqual(['u1', 'x1', 't1'])
   })
 })
 

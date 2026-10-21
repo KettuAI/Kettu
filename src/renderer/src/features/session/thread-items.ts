@@ -1,7 +1,8 @@
 import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
-// streamed token: u user, h thought, g groupable lookup, t other tool, o anything else.
+// streamed token: u user, a agent, h thought, g groupable lookup, t other tool, e turn end, o
+// anything else.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -12,6 +13,8 @@ export function signatureOf(state: ThreadState | null | undefined): string {
 function charOf(entry: ThreadEntry | undefined): string {
   if (!entry) return 'o'
   if (entry.kind === 'user') return 'u'
+  if (entry.kind === 'agent') return 'a'
+  if (entry.kind === 'turn_end') return 'e'
   if (entry.kind === 'thought') return 'h'
   if (entry.kind !== 'tool') return 'o'
   if (
@@ -45,6 +48,8 @@ export type Item =
   | { key: string; type: 'group'; ids: string[] }
   // Two or more steps between messages, folded into one summary line.
   | { key: string; type: 'run'; ids: string[]; signature: string }
+  // The actions under a turn's reply, with its turn-end marker when it has one.
+  | { key: string; type: 'reply'; agentIds: string[]; endId: string | null; latest: boolean }
 
 /**
  * The thread's items. With `live`, a turn is running and the run at the thread's end is still
@@ -53,7 +58,13 @@ export type Item =
 export function buildItems(order: string[], signature: string, live = false): Item[] {
   const items: Item[] = []
   const latestTurn = signature.lastIndexOf('u')
+  const { replacing, after } = replyFooters(order, signature, live)
   for (let i = 0; i < order.length; i++) {
+    const footer = replacing.get(i)
+    if (footer) {
+      items.push(footer)
+      continue
+    }
     if (isStep(signature[i])) {
       let end = i
       while (isStep(signature[end + 1])) end++
@@ -74,6 +85,8 @@ export function buildItems(order: string[], signature: string, live = false): It
         }
       }
       i = end
+      const closing = after.get(i)
+      if (closing) items.push(closing)
       continue
     }
     const id = order[i]!
@@ -84,8 +97,47 @@ export function buildItems(order: string[], signature: string, live = false): It
       turnStart: signature[i] === 'u',
       scrollAnchor: i === latestTurn,
     })
+    const closing = after.get(i)
+    if (closing) items.push(closing)
   }
   return items
+}
+
+/**
+ * One footer per turn with a message, a turn running from a user message to the next. It takes
+ * the place of the turn's end marker, or closes a turn from history that has none; the turn still
+ * running gets its footer when it ends.
+ */
+function replyFooters(
+  order: string[],
+  signature: string,
+  live: boolean,
+): { replacing: Map<number, Item>; after: Map<number, Item> } {
+  const replacing = new Map<number, Item>()
+  const after = new Map<number, Item>()
+  const starts = [0]
+  for (let i = 1; i < signature.length; i++) if (signature[i] === 'u') starts.push(i)
+  starts.forEach((start, n) => {
+    const end = starts[n + 1] ?? signature.length
+    const latest = end === signature.length
+    const agentIds: string[] = []
+    let endAt = -1
+    for (let i = start; i < end; i++) {
+      if (signature[i] === 'a') agentIds.push(order[i]!)
+      else if (signature[i] === 'e') endAt = i
+    }
+    if (agentIds.length === 0 || (latest && live && endAt === -1)) return
+    const footer: Item = {
+      key: `reply:${order[start]}`,
+      type: 'reply',
+      agentIds,
+      endId: endAt === -1 ? null : order[endAt]!,
+      latest,
+    }
+    if (endAt === -1) after.set(end - 1, footer)
+    else replacing.set(endAt, footer)
+  })
+  return { replacing, after }
 }
 
 /** A run's steps, with consecutive completed lookups grouped. */

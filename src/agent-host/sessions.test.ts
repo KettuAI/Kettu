@@ -38,6 +38,44 @@ function tools(port: TestPort, sessionId: string): ToolEntry[] {
   return port.entries(sessionId).filter((entry): entry is ToolEntry => entry.kind === 'tool')
 }
 
+describe('forking', () => {
+  it('starts a new session from the history, shown with its entries', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    await port.untilStatus(sessionId, 'ready')
+
+    const fork = await port.request('sessions.fork', { sessionId })
+    expect(fork).toMatchObject({
+      projectPath: t.project,
+      status: 'ready',
+      title: 'Fix the flaky login test',
+      origin: 'user',
+    })
+    expect(fork.id).not.toBe(sessionId)
+    await port.open(fork.id)
+    expect(port.entries(fork.id)).toEqual(port.entries(sessionId))
+
+    await turn(port, fork.id, 'Fix the flaky login test')
+    await port.until(
+      () => port.entries(fork.id).filter((entry) => entry.kind === 'turn_end').length === 2,
+    )
+    const ids = port.entries(fork.id).map((entry) => entry.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'turn_end')).toHaveLength(1)
+  })
+
+  it('refuses while a turn runs', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    await expect(port.request('sessions.fork', { sessionId })).rejects.toMatchObject({
+      code: 'busy',
+    })
+  })
+})
+
 describe('a prompt turn', () => {
   it('streams a whole turn into the watching port', async () => {
     const { t, port } = await setup()
@@ -54,9 +92,10 @@ describe('a prompt turn', () => {
       kind: 'user',
       id: 'e:1',
       content: [{ type: 'text', text: 'Fix the flaky login test' }],
+      at: expect.any(Number),
     })
     const agent = entries.find((entry) => entry.kind === 'agent')
-    expect(agent).toMatchObject({ streaming: false })
+    expect(agent).toMatchObject({ streaming: false, at: expect.any(Number) })
     expect(agent?.id.startsWith('m:')).toBe(true)
     expect(tools(port, sessionId).some((tool) => tool.content.some((c) => c.type === 'diff'))).toBe(
       true,

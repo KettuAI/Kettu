@@ -115,6 +115,7 @@ export interface AgentInit {
     resumeSession: boolean
     closeSession: boolean
     deleteSession: boolean
+    forkSession: boolean
     logout: boolean
   }
   authMethods: AuthMethodInfo[]
@@ -363,6 +364,7 @@ export class AgentConnection {
         resumeSession: session.resume != null,
         closeSession: session.close != null,
         deleteSession: session.delete != null,
+        forkSession: session.fork != null,
         logout: caps.auth?.logout != null,
       },
       authMethods: (init.authMethods ?? []).map((method) => {
@@ -410,6 +412,24 @@ export class AgentConnection {
       }),
     )
     return { config: mapConfig(response.configOptions, response.modes) }
+  }
+
+  /** `session/fork`, from ACP's unstable schema: a new session that starts from this one. */
+  async forkSession(
+    acpSessionId: string,
+    cwd: string,
+  ): Promise<SessionSetup & { acpSessionId: string }> {
+    const response = await this.call(() =>
+      this.connection.agent.request(methods.agent.session.fork, {
+        sessionId: acpSessionId,
+        cwd,
+        mcpServers: [],
+      }),
+    )
+    return {
+      acpSessionId: response.sessionId,
+      config: mapConfig(response.configOptions, response.modes),
+    }
   }
 
   async closeSession(acpSessionId: string): Promise<void> {

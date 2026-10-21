@@ -255,7 +255,16 @@ function FetchFooter({ status }: { status: GitStatus }) {
   )
 }
 
-export function CopyButton({ text, label }: { text: string; label: string }) {
+/** `text` may be a function, for text too costly to build on every render. */
+export function CopyButton({
+  text,
+  label,
+  className,
+}: {
+  text: string | (() => string)
+  label: string
+  className?: string
+}) {
   const [copied, setCopied] = useState(false)
   return (
     <Button
@@ -263,12 +272,12 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
       size="icon-xs"
       aria-label={label}
       onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => {
+        void navigator.clipboard.writeText(typeof text === 'function' ? text() : text).then(() => {
           setCopied(true)
           setTimeout(() => setCopied(false), 1500)
         })
       }}
-      className="shrink-0 rounded-[6px]"
+      className={cn('shrink-0 rounded-[6px]', className)}
     >
       {copied ? (
         <CheckIcon className="size-3.5 animate-in text-success animation-duration-(--duration-fast) fade-in zoom-in-75" />

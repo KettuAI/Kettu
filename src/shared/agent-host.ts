@@ -59,6 +59,7 @@ export interface AgentStatus {
     resumeSession: boolean
     closeSession: boolean
     deleteSession: boolean
+    forkSession: boolean
   }
 }
 
@@ -167,6 +168,7 @@ export interface HostContract {
   'sessions.prompt': { params: { sessionId: string; content: UserContent[] }; result: void }
   'sessions.cancel': { params: { sessionId: string }; result: void }
   'sessions.retry': { params: { sessionId: string }; result: void }
+  'sessions.fork': { params: { sessionId: string }; result: SessionSummary }
   'sessions.setConfigOption': {
     params: { sessionId: string; optionId: string; value: string | boolean }
     result: void
@@ -214,6 +216,7 @@ export const HOST_METHODS = [
   'sessions.prompt',
   'sessions.cancel',
   'sessions.retry',
+  'sessions.fork',
   'sessions.setConfigOption',
   'sessions.close',
   'sessions.delete',

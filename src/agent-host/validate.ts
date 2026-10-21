@@ -190,6 +190,7 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.cancel': session,
     'sessions.retry': session,
+    'sessions.fork': session,
     'sessions.setConfigOption': (params) => {
       const o = fields(params)
       const value = o.value

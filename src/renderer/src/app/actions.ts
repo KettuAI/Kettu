@@ -71,6 +71,13 @@ export async function createSession(
   }
 }
 
+/** Forks the session into a new one in the same project and shows it. */
+export async function forkSession(sessionId: string): Promise<void> {
+  const summary = await host('sessions.fork', { sessionId })
+  useSessionsStore.getState().upsert(summary)
+  openSession(summary.id, summary.projectPath)
+}
+
 export function cancelPendingSession(): void {
   usePendingSession.setState({ pending: null })
 }
