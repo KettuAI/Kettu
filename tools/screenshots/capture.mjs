@@ -108,16 +108,9 @@ async function run() {
   log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
   await shoot('welcome')
 
+  // With a project and no session to restore, the app opens on the project's home.
   cdp = await openProject(port, cdp, project)
   await setup()
-  await waitFor(
-    `[...document.querySelectorAll('[data-sidebar=menu-button]')].some((b) => b.textContent.startsWith('New session'))`,
-    'the sidebar',
-  )
-  await click(
-    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('New session'))`,
-    'New session',
-  )
   await waitFor(
     `[...document.querySelectorAll('button')].some((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`,
     'the fake agent on the project home',
@@ -125,14 +118,22 @@ async function run() {
   await sleep(800)
   await shoot('project-home')
 
+  // A click, not the shortcut: on macOS the app menu owns Cmd+N, and input from here skips it.
   await click(
-    `return [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`,
-    'the fake agent card',
+    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('New session'))`,
+    'New session',
   )
+  await waitFor(`document.querySelector('button[aria-label=Agent]')`, 'the New session screen')
+  await click(`return document.querySelector('button[aria-label=Agent]')`, 'the agent menu')
+  await waitFor(`document.querySelector('[role=menu]')`, 'the agent menu')
+  await click(byText('[role=menuitemradio]', 'Fake agent'), 'the fake agent')
   await waitFor(
     `[...document.querySelectorAll('p')].some((p) => p.textContent.startsWith('What should'))`,
-    'the new session',
+    'the fake agent on the New session screen',
   )
+  await sleep(400)
+  await shoot('new-session')
+
   const prompt = async (text) => {
     await cdp.evaluate(`document.querySelector('textarea').focus()`)
     // The trailing space closes the slash menu, which would otherwise take the Enter.

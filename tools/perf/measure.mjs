@@ -126,18 +126,21 @@ const byText = (selector, text) =>
 const sessionTitle = () =>
   evaluate(`document.querySelector('header [data-slot=dropdown-menu-trigger]')?.textContent.trim()`)
 
+const fakeAgentCard = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`
+
+// From a card on the project home, so the session is empty and ready before anything is measured;
+// New session creates it with the first message instead.
 async function newFakeSession() {
-  // A click, not the shortcut: on macOS the app menu owns Cmd+N, and input from here skips it.
-  await click(
-    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('New session'))`,
-    'New session in the sidebar',
-  )
-  await waitFor(
-    `[...document.querySelectorAll('button')].some((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`,
-    {
-      what: 'the fake agent on the project home (open a project; packaged builds need OVERBENCH_FAKE_AGENT)',
-    },
-  )
+  if (!(await evaluate(`Boolean(${fakeAgentCard})`))) {
+    // The first project's row comes first; its name opens the project home.
+    await click(
+      `return document.querySelector('[data-sidebar=menu-button][aria-expanded]')`,
+      'the project in the sidebar',
+    )
+  }
+  await waitFor(`Boolean(${fakeAgentCard})`, {
+    what: 'the fake agent on the project home (open a project; packaged builds need OVERBENCH_FAKE_AGENT)',
+  })
   await click(
     `return [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`,
     'the fake agent card',
