@@ -909,3 +909,9 @@
   --diffs-light-bg: var(--card);
   --diffs-dark-bg: var(--card);
 }
+
+/* The Files pane's preview fills the pane, so a short file ends where the pane does. */
+.file-preview {
+  --diffs-light-bg: var(--background);
+  --diffs-dark-bg: var(--background);
+}
