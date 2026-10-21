@@ -46,7 +46,7 @@ export async function createSession(
   parentId: string | null = null,
 ): Promise<void> {
   usePendingSession.setState({ pending: { agentId, projectPath, parentId, error: null } })
-  useViewStore.setState({ projectPath, settings: { open: false, section: null } })
+  useViewStore.setState((s) => ({ projectPath, settings: { ...s.settings, open: false } }))
   try {
     const summary = await host('sessions.create', {
       agentId,

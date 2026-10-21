@@ -20,6 +20,7 @@ export type SettingsSection =
 interface ViewStore {
   projectPath: string | null
   main: MainView
+  /** `section` is the page shown while open and the one to return to; null until one is chosen. */
   settings: { open: boolean; section: SettingsSection | null }
   sidebarCollapsed: boolean
   /** Project groups the user collapsed; open by default. */
@@ -74,27 +75,30 @@ useViewStore.subscribe((state) => {
 export function openSession(sessionId: string, projectPath: string): void {
   const { main } = useViewStore.getState()
   if (main.kind !== 'session' || main.sessionId !== sessionId) markSwitchStart(sessionId)
-  useViewStore.setState({
+  useViewStore.setState((s) => ({
     main: { kind: 'session', sessionId },
     projectPath,
-    settings: { open: false, section: null },
-  })
+    settings: { ...s.settings, open: false },
+  }))
 }
 
 export function openProjectHome(projectPath: string | null): void {
-  useViewStore.setState({
+  useViewStore.setState((s) => ({
     main: { kind: 'home' },
     projectPath,
-    settings: { open: false, section: null },
-  })
+    settings: { ...s.settings, open: false },
+  }))
 }
 
+/** Without a section, shows the one shown last; with one, switches to it even when already open. */
 export function openSettings(section: SettingsSection | null = null): void {
-  useViewStore.setState({ settings: { open: true, section } })
+  useViewStore.setState((s) => ({
+    settings: { open: true, section: section ?? s.settings.section },
+  }))
 }
 
 export function closeSettings(): void {
-  useViewStore.setState({ settings: { open: false, section: null } })
+  useViewStore.setState((s) => ({ settings: { ...s.settings, open: false } }))
 }
 
 export function toggleSidebar(): void {

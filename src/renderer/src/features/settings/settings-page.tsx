@@ -7,8 +7,12 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { prefersReducedMotion } from '@renderer/stores/settings'
-import { closeSettings, useViewStore, type SettingsSection } from '@renderer/stores/view'
+import {
+  closeSettings,
+  openSettings,
+  useViewStore,
+  type SettingsSection,
+} from '@renderer/stores/view'
 import { matches, type RowDef, type SectionDef } from './model'
 import {
   useAboutSection,
@@ -22,7 +26,10 @@ import {
   useTerminalSection,
 } from './section-defs'
 
-/** Settings take the whole window: one scrolling page with a table of contents and search. */
+/**
+ * Settings take the whole window: a list of sections and search on the left, the selected section
+ * as a page of its own on the right. While searching, the page gives way to grouped results.
+ */
 export default function SettingsPage() {
   const sections: SectionDef[] = [
     useGeneralSection(),
@@ -42,47 +49,27 @@ export default function SettingsPage() {
     rows: s.rows.filter((r) => matches(r, query.trim())),
   }))
   const anyMatch = shown.some((s) => s.rows.length > 0)
-  const initial = useViewStore((s) => s.settings.section)
-  const [active, setActive] = useState<SettingsSection>(initial ?? 'general')
+  const active = useViewStore((s) => s.settings.section) ?? 'general'
+  const page = shown.find((s) => s.id === active) ?? shown[0]
   const scroller = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
 
-  const scrollTo = (id: SettingsSection, smooth: boolean) => {
-    const el = scroller.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)
-    el?.scrollIntoView({
-      block: 'start',
-      behavior: smooth && !prefersReducedMotion() ? 'smooth' : 'auto',
-    })
-  }
-  const jump = (id: SettingsSection) => {
-    setActive(id)
-    scrollTo(id, true)
+  // Opening a section from elsewhere, such as the app menu, leaves the results behind.
+  const [seen, setSeen] = useState(active)
+  if (seen !== active) {
+    setSeen(active)
+    setQuery('')
   }
 
-  // Opening at a section, such as Agents from the sign-in notice, lands on it at once.
+  const choose = (id: SettingsSection) => {
+    setQuery('')
+    openSettings(id)
+  }
+
+  // Every page, and the results, start at the top.
   useLayoutEffect(() => {
-    if (initial) scrollTo(initial, false)
-    // Only on open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // The table of contents follows the section in view.
-  useEffect(() => {
-    const root = scroller.current
-    if (!root) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
-        const id = visible?.target.getAttribute('data-section') as SettingsSection | null
-        if (id) setActive(id)
-      },
-      { root, rootMargin: '0px 0px -70% 0px' },
-    )
-    for (const el of root.querySelectorAll('[data-section]')) observer.observe(el)
-    return () => observer.disconnect()
-  }, [query])
+    if (scroller.current) scroller.current.scrollTop = 0
+  }, [active, searching])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -152,16 +139,17 @@ export default function SettingsPage() {
           {shown.map((section) => {
             const count = section.rows.length
             const disabled = searching && count === 0
+            const selected = !searching && section.id === active
             return (
               <button
                 key={section.id}
                 type="button"
                 disabled={disabled}
-                aria-current={!searching && active === section.id ? 'true' : undefined}
-                onClick={() => jump(section.id)}
+                aria-current={selected ? 'page' : undefined}
+                onClick={() => choose(section.id)}
                 className={cn(
                   'flex h-row items-center gap-2 rounded-lg px-2 text-left text-[13px] outline-none transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50',
-                  !searching && active === section.id
+                  selected
                     ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                     : 'text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground',
                   disabled && 'pointer-events-none opacity-40',
@@ -185,33 +173,54 @@ export default function SettingsPage() {
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="app-region-drag h-top-bar shrink-0" />
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-          <div className="mx-auto flex max-w-[700px] flex-col gap-9 px-8 pt-1 pb-24">
-            {shown.map(
-              (section) =>
-                section.rows.length > 0 && (
-                  <section
-                    key={section.id}
-                    data-section={section.id}
-                    aria-labelledby={`settings-${section.id}`}
-                    className="flex scroll-mt-4 flex-col gap-2.5"
-                  >
-                    <h2 id={`settings-${section.id}`} className="px-1 text-[13px] font-semibold">
-                      {section.title}
-                    </h2>
-                    <SectionBody section={section} />
-                    {!searching && section.footer}
-                  </section>
-                ),
-            )}
-            {!anyMatch && (
-              <Empty className="pt-16">
-                <EmptyHeader>
-                  <EmptyTitle>No settings match “{query.trim()}”</EmptyTitle>
-                  <EmptyDescription>
-                    Try another word, such as theme, proxy or shell.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
+          <div
+            key={searching ? 'results' : page.id}
+            className="mx-auto flex max-w-[700px] animate-in flex-col gap-9 px-8 pt-1 pb-24 fade-in animation-duration-(--duration-fast)"
+          >
+            {searching ? (
+              <>
+                {shown.map(
+                  (section) =>
+                    section.rows.length > 0 && (
+                      <section
+                        key={section.id}
+                        aria-labelledby={`settings-${section.id}`}
+                        className="flex flex-col gap-2.5"
+                      >
+                        <h2
+                          id={`settings-${section.id}`}
+                          className="px-1 text-[13px] font-semibold"
+                        >
+                          {section.title}
+                        </h2>
+                        <SectionBody section={section} />
+                      </section>
+                    ),
+                )}
+                {!anyMatch && (
+                  <Empty className="pt-16">
+                    <EmptyHeader>
+                      <EmptyTitle>No settings match “{query.trim()}”</EmptyTitle>
+                      <EmptyDescription>
+                        Try another word, such as theme, proxy or shell.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                )}
+              </>
+            ) : (
+              <section aria-labelledby={`settings-${page.id}`} className="flex flex-col gap-4">
+                <h2
+                  id={`settings-${page.id}`}
+                  className="px-1 text-[22px] font-semibold tracking-[-0.015em] text-balance"
+                >
+                  {page.title}
+                </h2>
+                <div className="flex flex-col gap-2.5">
+                  <SectionBody section={page} />
+                  {page.footer}
+                </div>
+              </section>
             )}
           </div>
         </div>
