@@ -1,5 +1,5 @@
 import 'streamdown/styles.css'
-import { memo, useDeferredValue } from 'react'
+import { memo, useDeferredValue, useState } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
 import {
@@ -21,6 +21,7 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { PrChip } from '@renderer/features/git/pr-chip'
 import { cn } from '@renderer/lib/utils'
+import { splitIntoChunks } from './chunks'
 
 const plugins = {
   code: createCodePlugin({ themes: ['github-light-default', 'github-dark-default'] }),
@@ -69,10 +70,21 @@ const controls = {
   mermaid: false,
 }
 
+/** The text's chunks, kept from the previous render while the text only grows. */
+function useChunks(markdown: string): string[] {
+  const [split, setSplit] = useState(() => ({ markdown, ...splitIntoChunks(markdown) }))
+  if (split.markdown === markdown) return split.chunks
+  const next = { markdown, ...splitIntoChunks(markdown, split) }
+  setSplit(next)
+  return next.chunks
+}
+
 /**
- * Agent prose. Raw HTML never renders. Streaming mode splits the text into memoized blocks, and
- * the mode never changes: static mode renders one tree, so switching when a message finishes
- * would rebuild all of it. Finishing only turns off incomplete-markdown repair and the caret.
+ * Agent prose. Raw HTML never renders. A long text renders in chunks (`chunks.ts`), so a streamed
+ * update re-renders, lays out and paints the live tail instead of the whole message. Streaming
+ * mode splits each chunk into memoized blocks, and the mode never changes: static mode renders
+ * one tree, so switching when a message finishes would rebuild all of it. Finishing only turns
+ * off incomplete-markdown repair.
  */
 function MarkdownImpl({
   markdown,
@@ -86,6 +98,18 @@ function MarkdownImpl({
   // Finishing re-renders every code block and table to enable their controls; deferring it lets
   // React split that work across frames instead of blocking one.
   const live = useDeferredValue(streaming)
+  const chunks = useChunks(markdown)
+  return (
+    <div className={cn('markdown', className)}>
+      {chunks.map((chunk, i) => (
+        // By position: when the tail settles, the chunk in its place keeps its rendered blocks.
+        <Chunk key={i} markdown={chunk} live={live} />
+      ))}
+    </div>
+  )
+}
+
+const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: boolean }) {
   return (
     <Streamdown
       mode="streaming"
@@ -98,11 +122,10 @@ function MarkdownImpl({
       controls={controls}
       codeBlockMaxHeight={480}
       lineNumbers={false}
-      className={cn('markdown', className)}
     >
       {markdown}
     </Streamdown>
   )
-}
+})
 
 export default memo(MarkdownImpl)
