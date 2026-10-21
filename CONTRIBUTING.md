@@ -43,4 +43,4 @@ Each concern has exactly one library. Build with these instead of adding an alte
 
 ## Dependencies
 
-Libraries used only by the renderer go in `devDependencies`: Vite bundles them, while everything in `dependencies` is copied into the packaged app. Only modules a process loads at runtime instead of from the bundle belong in `dependencies`, such as `node-pty`, a native module the terminal host loads. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
+Libraries used only by the renderer go in `devDependencies`: Vite bundles them, while everything in `dependencies` is copied into the packaged app. Only modules a process loads at runtime instead of from the bundle belong in `dependencies`, such as `node-pty`, a native module the terminal host loads, and `electron-updater`, which main loads. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
