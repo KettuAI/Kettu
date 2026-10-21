@@ -84,6 +84,10 @@ describe('isAbsolutePath and folderName', () => {
     expect(isAbsolutePath('/x', 'linux')).toBe(true)
     expect(isAbsolutePath('C:\\x', 'win32')).toBe(true)
     expect(isAbsolutePath('\\\\server\\share', 'win32')).toBe(true)
+    // Rooted on whatever drive the process happens to run on: not a project path.
+    expect(isAbsolutePath('\\x', 'win32')).toBe(false)
+    expect(isAbsolutePath('/x', 'win32')).toBe(false)
+    expect(isAbsolutePath('C:x', 'win32')).toBe(false)
     expect(isAbsolutePath('x', 'darwin')).toBe(false)
     expect(folderName('/Users/me/overbench', 'darwin')).toBe('overbench')
     expect(folderName('C:\\Users\\me\\overbench', 'win32')).toBe('overbench')

@@ -22,8 +22,13 @@ function trimTrailingSeparators(value: string, platform: Platform): string {
   return value.slice(0, end)
 }
 
+/**
+ * A fully qualified path. On Windows that is a drive path (`C:\x`) or a UNC path; a path
+ * rooted without a drive (`\x`) depends on the process's current drive, so it is refused.
+ */
 export function isAbsolutePath(value: string, platform: Platform): boolean {
-  return api(platform).isAbsolute(value)
+  if (platform !== 'win32') return path.posix.isAbsolute(value)
+  return /^[A-Za-z]:[\\/]/.test(value) || /^[\\/]{2}[^\\/]/.test(value)
 }
 
 /**
