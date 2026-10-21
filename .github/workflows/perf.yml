@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Commit, branch or tag to measure, if not the one dispatched from
+        description: Full commit SHA, branch or tag to measure, if not the one dispatched from
         required: false
         default: ''
       os:
