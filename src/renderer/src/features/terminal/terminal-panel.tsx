@@ -79,7 +79,7 @@ export function TerminalPanel({
         <div
           role="tablist"
           aria-label="Terminals"
-          className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
+          className="no-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto"
         >
           {list.map((t) => (
             <TerminalTab

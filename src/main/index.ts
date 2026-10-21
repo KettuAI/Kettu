@@ -28,8 +28,8 @@ const APP_USER_MODEL_ID = 'com.overbench.app'
 const log = createLogger('main')
 
 // Chromium draws classic scrollbars with arrow buttons on Linux; overlay ones take no room and
-// fade when idle, as on macOS. Windows reads the feature before this code runs, so it keeps
-// Chromium's Fluent scrollbars.
+// fade when idle, as on macOS. Windows reads the feature before this code runs, so the renderer
+// draws its scrollbars there (globals.css).
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-features', 'OverlayScrollbar')
 }

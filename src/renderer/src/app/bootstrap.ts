@@ -1,6 +1,7 @@
 import type { HostEvent } from '@shared/agent-host'
 import { usePendingSession } from '@renderer/app/actions'
 import { sessionToRestore } from '@renderer/app/restore'
+import { platform } from '@renderer/lib/platform'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useConnectionStore } from '@renderer/stores/connection'
 import {
@@ -78,6 +79,8 @@ function restoreLastSession(): void {
 let wasDisconnected = false
 
 export function bootstrap(): void {
+  // Platform styles, such as the Windows scrollbars, key off this.
+  document.documentElement.dataset.platform = platform
   installPerfCounters()
   const agents = window.overbench.agents
   agents.onEvent(onHostEvent)

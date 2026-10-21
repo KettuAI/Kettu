@@ -256,6 +256,9 @@
   --icon-size: 16px;
   --top-bar: 40px;
   --scroll-fade-size: 28px;
+  /* Windows only, where the app draws its scrollbars: a 4 px thumb in a 10 px gutter. */
+  --scrollbar-size: 10px;
+  --scrollbar-inset: 3px;
 
   /* Motion. */
   --duration-instant: 60ms;
@@ -499,6 +502,35 @@
     animation-fill-mode: both;
     animation-timeline: scroll(self y);
   }
+}
+
+/* Chromium on Windows draws Fluent scrollbars with arrow buttons whenever scrollbar-width or
+   scrollbar-color is set, and its overlay scrollbars cannot be switched on from the app there.
+   The scrollbar pseudo-elements draw thin ones instead; they apply only while both are auto. */
+:root[data-platform='win32'],
+:root[data-platform='win32'] :not(.no-scrollbar) {
+  scrollbar-width: auto !important;
+  scrollbar-color: auto !important;
+}
+:root[data-platform='win32'] ::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+:root[data-platform='win32'] ::-webkit-scrollbar-track,
+:root[data-platform='win32'] ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+:root[data-platform='win32'] ::-webkit-scrollbar-thumb {
+  border: var(--scrollbar-inset) solid transparent;
+  border-radius: calc(infinity * 1px);
+  background: var(--border-strong) padding-box;
+}
+:root[data-platform='win32'] ::-webkit-scrollbar-thumb:hover {
+  border-width: calc(var(--scrollbar-inset) - 1px);
+}
+/* MessageScroller hides its scrollbar while it follows output. */
+:root[data-platform='win32'] [data-autoscrolling]::-webkit-scrollbar-thumb {
+  background: transparent;
 }
 
 /* The names of the top reasoning levels. */
