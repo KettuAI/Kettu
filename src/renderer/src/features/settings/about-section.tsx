@@ -44,7 +44,7 @@ export function Version() {
   )
 }
 
-export function UpdateRow({ status }: { status: UpdateStatus | null }) {
+export function UpdateRow({ status, label }: { status: UpdateStatus | null; label: ReactNode }) {
   const justChecked = useUpdatesStore((s) => s.justChecked)
   const now = useNow()
   const [error, setError] = useState<string | null>(null)
@@ -52,7 +52,14 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
     setError(null)
     action().catch((e: unknown) => setError(errorMessage(e)))
   }
-  if (!status) return <Spinner className="size-3.5 text-muted-foreground" />
+  if (!status) {
+    return (
+      <div className="flex min-h-[28px] items-center gap-6">
+        <div className="min-w-0 flex-1">{label}</div>
+        <Spinner className="size-3.5 text-muted-foreground" />
+      </div>
+    )
+  }
   const { state } = status
   const whatsNew = (version: string) => (
     <a
@@ -80,16 +87,9 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   } else {
     switch (state.kind) {
       case 'idle':
-        text = (
-          <span className="flex flex-col">
-            <span>You're up to date</span>
-            {state.checkedAt && (
-              <span className="text-xs text-muted-foreground">
-                Checked {longAgo(state.checkedAt, now)}
-              </span>
-            )}
-          </span>
-        )
+        text = state.checkedAt
+          ? `You're up to date · Checked ${longAgo(state.checkedAt, now)}`
+          : "You're up to date"
         action = (
           <Button variant="outline" size="compact" onClick={() => run(checkForUpdates)}>
             Check for updates
@@ -98,8 +98,8 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
         break
       case 'checking':
         text = (
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <Spinner className="size-3.5" />
+          <span className="inline-flex items-center gap-1.5">
+            <Spinner className="size-3" />
             Checking for updates…
           </span>
         )
@@ -152,10 +152,8 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       case 'error':
         text = (
           <span className="flex flex-col">
-            <span>Couldn't check for updates</span>
-            <span className="text-xs text-muted-foreground" data-selectable="">
-              {state.message}
-            </span>
+            <span className="text-destructive">Couldn't check for updates</span>
+            <span data-selectable="">{state.message}</span>
           </span>
         )
         action = (
@@ -166,7 +164,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
         break
       case 'off':
         text = (
-          <span className="text-muted-foreground">
+          <span>
             {state.reason === 'development'
               ? 'Updates are off in development builds'
               : 'Updates are installed by your package manager'}
@@ -174,9 +172,13 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
         )
     }
   }
+  // The status reads as the row's description, so the action sits beside it like any other row's.
   return (
-    <div className="flex min-h-control w-full items-center gap-3 text-[13px]">
-      <span className="min-w-0 flex-1">{text}</span>
+    <div className="flex min-h-[28px] items-center gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {label}
+        <span className="text-xs leading-normal text-muted-foreground">{text}</span>
+      </div>
       <ControlError error={error} />
       {action && <span className="flex shrink-0 items-center gap-1.5">{action}</span>}
     </div>

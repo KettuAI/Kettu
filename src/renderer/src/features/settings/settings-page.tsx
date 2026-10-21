@@ -235,7 +235,7 @@ function SectionBody({ section }: { section: SectionDef }) {
       <div className="flex flex-col gap-2.5">
         {section.rows.map((row) => (
           <div key={row.id} className="rounded-xl bg-card px-4 py-3.5 shadow-card">
-            {row.render()}
+            {row.render(null)}
           </div>
         ))}
       </div>
@@ -262,14 +262,11 @@ function Row({ row, first }: { row: RowDef; first: boolean }) {
   return (
     <div className={cn('px-4 py-3', !first && 'border-t border-border-soft')}>
       {row.layout === 'block' ? (
-        <div className="flex flex-col gap-3">
-          {text}
-          {row.render()}
-        </div>
+        row.render(text)
       ) : (
         <div className="flex min-h-[28px] items-center gap-6">
           <div className="min-w-0 flex-1">{text}</div>
-          <div className="flex shrink-0 items-center gap-2">{row.render()}</div>
+          <div className="flex shrink-0 items-center gap-2">{row.render(text)}</div>
         </div>
       )}
     </div>

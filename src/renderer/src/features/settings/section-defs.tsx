@@ -240,7 +240,7 @@ export function useAdvancedSection(): SectionDef {
         description: 'For agents, npx and updates.',
         keywords: 'http https network',
         layout: 'block',
-        render: () => <Proxy />,
+        render: (text) => <Proxy label={text} />,
       },
       {
         id: 'diagnostics',
@@ -303,7 +303,7 @@ export function useAboutSection(): SectionDef {
         name: 'Updates',
         keywords: 'update check download restart',
         layout: 'block',
-        render: () => <UpdateRow status={status} />,
+        render: (text) => <UpdateRow status={status} label={text} />,
       },
       ...(updatesOff
         ? []

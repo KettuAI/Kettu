@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { FileDownIcon, FolderOpenIcon, TrashIcon } from 'lucide-react'
 import type { SettingsFile } from '@shared/settings'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
@@ -395,12 +395,16 @@ export function NotificationSwitch({
 
 // ---- Advanced
 
-export function Proxy() {
+export function Proxy({ label }: { label: ReactNode }) {
   const proxy = useSettings().proxy
   const [apply, error] = useApply()
   const [url, setUrl] = useState(proxy.mode === 'custom' ? proxy.url : '')
   const [noProxy, setNoProxy] = useState(proxy.mode === 'custom' ? proxy.noProxy : '')
   const [invalid, setInvalid] = useState<string | null>(null)
+  // Custom shows its fields before any URL is saved; the setting changes once a valid URL is in.
+  const [choosing, setChoosing] = useState(false)
+  const custom = proxy.mode === 'custom' || choosing
+  const urlInput = useRef<HTMLInputElement>(null)
 
   const save = () => {
     const trimmed = url.trim()
@@ -415,35 +419,42 @@ export function Proxy() {
 
   return (
     <div className="flex w-full flex-col gap-3">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex min-h-[28px] items-center gap-6">
+        <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
-        <span className="flex-1" />
         <Segmented
           label="Proxy"
-          value={proxy.mode}
+          value={custom ? 'custom' : 'environment'}
           options={[
             { value: 'environment', label: 'Use the environment' },
             { value: 'custom', label: 'Custom' },
           ]}
           onChange={(mode) => {
-            if (mode === 'environment') apply({ proxy: { mode: 'environment' } })
-            else if (url.trim()) save()
-            else apply({ proxy: { mode: 'custom', url: '', noProxy: '' } })
+            if (mode === 'environment') {
+              setChoosing(false)
+              setInvalid(null)
+              if (proxy.mode !== 'environment') apply({ proxy: { mode: 'environment' } })
+            } else if (url.trim()) save()
+            else {
+              setChoosing(true)
+              requestAnimationFrame(() => urlInput.current?.focus())
+            }
           }}
         />
       </div>
-      {proxy.mode === 'custom' && (
+      {custom && (
         <div className="grid animate-in grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 fade-in animation-duration-(--duration-base)">
           <label htmlFor="proxy-url" className="text-xs text-muted-foreground">
             URL
           </label>
           <Input
+            ref={urlInput}
             id="proxy-url"
             value={url}
             placeholder="http://proxy.example.com:8080"
             aria-invalid={!!invalid}
             onChange={(e) => setUrl(e.target.value)}
-            onBlur={save}
+            onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
             onKeyDown={(e) => e.key === 'Enter' && save()}
             className="h-control font-mono text-xs"
           />

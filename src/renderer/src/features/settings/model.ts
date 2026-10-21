@@ -8,9 +8,12 @@ export interface RowDef {
   description?: string
   /** Extra words search should find, such as "dark" for the theme row. */
   keywords?: string
-  /** `block` puts the control under the text; `custom` renders only the control, a card. */
+  /**
+   * `block` hands the row's text to the control, which keeps it beside its main control on the
+   * first line and puts what it reveals underneath; `custom` renders only the control, a card.
+   */
   layout?: 'inline' | 'block' | 'custom'
-  render: () => ReactNode
+  render: (text: ReactNode) => ReactNode
 }
 
 export interface SectionDef {
