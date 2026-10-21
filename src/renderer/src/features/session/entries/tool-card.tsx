@@ -376,8 +376,9 @@ function ContentBlock({ content, projectPath }: { content: ToolContent; projectP
         </div>
       )
     case 'diff':
+      // Inset by the hairline so the diff's opaque lines leave the card's inset ring visible.
       return (
-        <div className="flex flex-col">
+        <div className="mx-(--hairline) flex flex-col last:mb-(--hairline)">
           <Clamp maxHeight={480} more="Show full diff" buttonClassName="mx-2 my-1">
             <Diff
               path={relativePath(content.path, projectPath)}

@@ -864,3 +864,10 @@
   font-size: 13px;
   line-height: 1.55;
 }
+
+/* Diffs sit on the card like code blocks, not on the Shiki theme's own background. Outer
+   declarations win over the theme's :host rule inside the diff's shadow root. */
+.diff {
+  --diffs-light-bg: var(--card);
+  --diffs-dark-bg: var(--card);
+}
