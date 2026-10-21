@@ -174,9 +174,10 @@ async function runTurn(prompt, whileRunning) {
 /** Observers for long animation frames, keystroke timing and frame intervals. */
 async function startObserving() {
   await evaluate(`(() => {
-    const run = (window.__measure = { loaf: [], events: [], typed: new Set(), toFrame: [], frames: [], stop: false })
+    const run = (window.__measure = { loaf: [], events: [], typed: new Set(), toFrame: [], delivery: [], frames: [], stop: false })
     // Only the letters typed while the turn runs count, not the shortcuts that send or clear.
-    run.onKey = (e) => { if (e.key === 'a' && !e.metaKey && !e.ctrlKey) { run.typed.add(e.timeStamp); run.lastKey = e.timeStamp } }
+    // The event's timeStamp is when the browser took it in; the delay to this handler is delivery.
+    run.onKey = (e) => { if (e.key === 'a' && !e.metaKey && !e.ctrlKey) { run.typed.add(e.timeStamp); run.lastKey = e.timeStamp; run.delivery.push(performance.now() - e.timeStamp) } }
     // Renderer side: from the key to the start of the frame after the one that shows the letter.
     // A timer would wait behind the agent's messages in the task queue and overstate it.
     run.onInput = () => {
@@ -209,6 +210,7 @@ async function stopObserving() {
     document.removeEventListener('keydown', run.onKey, true)
     document.removeEventListener('input', run.onInput, true)
     const toFrame = run.toFrame.sort((a, b) => a - b)
+    const delivery = run.delivery.sort((a, b) => a - b)
     const slow = run.events.filter((e) => run.typed.has(e.start)).map((e) => e.duration)
     const sorted = run.frames.slice(2).sort((a, b) => a - b)
     const at = (p) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] : 0
@@ -222,6 +224,8 @@ async function stopObserving() {
       keystrokeDurations: slow.sort((a, b) => a - b),
       keyToFrameP95: toFrame.length ? toFrame[Math.min(toFrame.length - 1, Math.floor(toFrame.length * 0.95))] : null,
       keyToFrameMax: toFrame.at(-1) ?? null,
+      deliveryP95: delivery.length ? delivery[Math.min(delivery.length - 1, Math.floor(delivery.length * 0.95))] : null,
+      deliveryMax: delivery.at(-1) ?? null,
       updates: window.__overbenchPerf.frames(),
     }
   })()`)
@@ -372,6 +376,9 @@ if (asJson) {
   console.log('')
   console.log(
     `Also: reopening the 1,000-entry session with session/load took ${ms(results.reopenMs)}.`,
+  )
+  console.log(
+    `Of the keystroke time, delivery from the browser to the renderer's handler: p95 ${ms(results.stream.deliveryP95)}, slowest ${ms(results.stream.deliveryMax)}.`,
   )
   // Event Timing runs to the frame's presentation, so it includes the OS compositor as well.
   console.log(
