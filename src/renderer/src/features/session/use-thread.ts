@@ -21,6 +21,6 @@ export function useSessionView(sessionId: string): SessionView | undefined {
 export function useEntryAnimation(sessionId: string, entryId: string): string | undefined {
   const [fresh] = useState(() => isFresh(sessionId, entryId))
   return fresh
-    ? 'animate-in fade-in slide-in-from-bottom-1 duration-(--duration-slow) ease-out-quint'
+    ? 'animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-slow) ease-out-quint'
     : undefined
 }

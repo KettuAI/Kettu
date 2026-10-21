@@ -82,7 +82,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   } else if (empty && status === 'ready') {
     body = (
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-16">
-        <p className="animate-in text-[15px] text-muted-foreground fade-in duration-(--duration-slow)">
+        <p className="animate-in text-[15px] text-muted-foreground fade-in animation-duration-(--duration-slow)">
           What should {name} work on?
         </p>
       </div>
@@ -166,7 +166,7 @@ function Disconnected({ sessionId, name }: { sessionId: string; name: string }) 
     }
   }
   return (
-    <Alert className="animate-in fade-in duration-(--duration-base)">
+    <Alert className="animate-in fade-in animation-duration-(--duration-base)">
       <Spinner className="size-4 text-muted-foreground" />
       <AlertTitle>{name} stopped unexpectedly. Reconnecting…</AlertTitle>
       {error && <AlertDescription className="text-destructive">{error}</AlertDescription>}

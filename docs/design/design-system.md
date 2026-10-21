@@ -207,7 +207,7 @@ The reference uses nine curves, several of them nearly identical. OverBench keep
 | `card`          | 320 / 28 / 1               | Cards, drag release |
 | `panel`         | 1200 / 80 / 0.1            | Panels and sheets   |
 
-Durations are custom properties used as `duration-(--duration-fast)`; easings are `--ease-*` theme variables, which give `ease-*` utilities. Springs are exported from `src/renderer/src/lib/motion.ts`.
+Durations are custom properties: `duration-(--duration-fast)` times a transition, and `animation-duration-(--duration-fast)` times a tw-animate-css enter or exit animation. Never time an animation with `duration-*`: it also sets `transition-duration`, and with the default `transition-property: all` the element would then transition every property that changes, including inherited ones such as `scrollbar-color`, recalculating its whole subtree on each frame. Easings are `--ease-*` theme variables, which give `ease-*` utilities. Springs are exported from `src/renderer/src/lib/motion.ts`.
 
 ### CSS or Motion
 

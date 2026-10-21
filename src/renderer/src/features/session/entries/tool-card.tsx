@@ -245,7 +245,7 @@ function ToolHeader({
         {label.target && <Target label={label} />}
       </span>
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
-        <span className="shrink-0 animate-in font-mono text-[11.5px] tabular duration-(--duration-base) fade-in">
+        <span className="shrink-0 animate-in font-mono text-[11.5px] tabular animation-duration-(--duration-base) fade-in">
           <span className="text-success-text">+{stats.insertions}</span>{' '}
           <span className="text-destructive">−{stats.deletions}</span>
         </span>
@@ -308,7 +308,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
       </span>
     )
   }
-  const icon = 'size-3.5 shrink-0 animate-in fade-in duration-(--duration-fast)'
+  const icon = 'size-3.5 shrink-0 animate-in fade-in animation-duration-(--duration-fast)'
   switch (entry.status) {
     case 'pending':
       return (
@@ -490,7 +490,7 @@ function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissio
   return (
     <span
       className={cn(
-        'shrink-0 animate-in text-xs text-muted-foreground duration-(--duration-base) fade-in',
+        'shrink-0 animate-in text-xs text-muted-foreground animation-duration-(--duration-base) fade-in',
         rejected && 'text-destructive',
       )}
     >

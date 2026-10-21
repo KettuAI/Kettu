@@ -433,7 +433,7 @@ export function Proxy() {
         />
       </div>
       {proxy.mode === 'custom' && (
-        <div className="grid animate-in grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 fade-in duration-(--duration-base)">
+        <div className="grid animate-in grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 fade-in animation-duration-(--duration-base)">
           <label htmlFor="proxy-url" className="text-xs text-muted-foreground">
             URL
           </label>

@@ -57,6 +57,9 @@ export const Thread = memo(function Thread({
                 scrollAnchor={item.type === 'entry' && item.turnStart}
                 className={cn(
                   index > 0 && (item.type === 'entry' && item.turnStart ? 'pt-4' : 'pt-2.5'),
+                  // The growing tail would flip between skipped and rendered on every chunk,
+                  // recalculating its whole subtree each time.
+                  index === items.length - 1 && '[content-visibility:visible]',
                 )}
               >
                 {item.type === 'group' ? (
@@ -79,7 +82,7 @@ export const Thread = memo(function Thread({
             ))}
             {awaitingReply && (
               <MessageScrollerItem messageId="working" className="pt-2.5">
-                <p className="animate-in text-prose text-muted-foreground duration-(--duration-base) fade-in">
+                <p className="animate-in text-prose text-muted-foreground animation-duration-(--duration-base) fade-in">
                   <span className="shimmer">Working…</span>
                 </p>
               </MessageScrollerItem>

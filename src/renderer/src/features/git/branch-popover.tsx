@@ -291,7 +291,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
       className="shrink-0 rounded-[6px]"
     >
       {copied ? (
-        <CheckIcon className="size-3.5 animate-in text-success duration-(--duration-fast) fade-in zoom-in-75" />
+        <CheckIcon className="size-3.5 animate-in text-success animation-duration-(--duration-fast) fade-in zoom-in-75" />
       ) : (
         <CopyIcon className="size-3.5" />
       )}

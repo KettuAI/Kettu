@@ -62,7 +62,7 @@ export const SubagentCard = memo(function SubagentCard({
           {running && step && (
             <span
               key={latest?.id}
-              className="flex min-w-0 animate-in items-center gap-1.5 text-xs text-muted-foreground duration-(--duration-base) fade-in slide-in-from-bottom-1"
+              className="flex min-w-0 animate-in items-center gap-1.5 text-xs text-muted-foreground animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
             >
               {step.verb && <span className="shrink-0">{step.verb}</span>}
               <span className={cn('truncate', step.kind !== 'title' && 'font-mono text-[11.5px]')}>

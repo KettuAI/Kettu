@@ -71,7 +71,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
     text = (
       <span
         key="checked"
-        className="inline-flex animate-in items-center gap-1.5 fade-in duration-(--duration-base)"
+        className="inline-flex animate-in items-center gap-1.5 fade-in animation-duration-(--duration-base)"
       >
         <CircleCheckIcon className="size-3.5 text-success" />
         Up to date

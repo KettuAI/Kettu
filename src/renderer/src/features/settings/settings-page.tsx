@@ -104,7 +104,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex h-full animate-in bg-background fade-in duration-(--duration-fast)">
+    <div className="flex h-full animate-in bg-background fade-in animation-duration-(--duration-fast)">
       <aside className="flex w-[244px] shrink-0 flex-col bg-sidebar">
         <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2.5 pl-3">
           {isMac && <span aria-hidden className="w-[66px] shrink-0" />}
@@ -171,7 +171,7 @@ export default function SettingsPage() {
                 {searching && count > 0 && (
                   <span
                     key={count}
-                    className="animate-in text-xs text-muted-foreground tabular fade-in duration-(--duration-base)"
+                    className="animate-in text-xs text-muted-foreground tabular fade-in animation-duration-(--duration-base)"
                   >
                     {count}
                   </span>

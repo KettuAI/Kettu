@@ -57,7 +57,7 @@ export function SignIn({
   }
 
   return (
-    <Empty className="animate-in fade-in duration-(--duration-slow)">
+    <Empty className="animate-in fade-in animation-duration-(--duration-slow)">
       <EmptyHeader>
         <EmptyMedia>
           <AgentTile agent={agentId} />

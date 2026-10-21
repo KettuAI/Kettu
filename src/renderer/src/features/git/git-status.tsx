@@ -98,7 +98,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
       )}
       {upstream && upstream.ahead > 0 && (
         <span
-          className="ml-1 inline-flex animate-in items-center gap-px text-foreground duration-(--duration-base) fade-in slide-in-from-bottom-1"
+          className="ml-1 inline-flex animate-in items-center gap-px text-foreground animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
           key={`a${upstream.ahead}`}
         >
           <ArrowUpIcon strokeWidth={2} className="size-3" />
@@ -108,7 +108,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
       {upstream && upstream.behind > 0 && (
         <span
           className={cn(
-            'inline-flex animate-in items-center gap-px duration-(--duration-base) fade-in slide-in-from-bottom-1',
+            'inline-flex animate-in items-center gap-px animation-duration-(--duration-base) fade-in slide-in-from-bottom-1',
             upstream.ahead ? 'ml-0.5' : 'ml-1',
           )}
           key={`b${upstream.behind}`}
@@ -131,7 +131,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
       ) : (
         changed > 0 && (
           <span
-            className="ml-1 inline-flex animate-in items-center gap-[3px] duration-(--duration-base) fade-in slide-in-from-bottom-1"
+            className="ml-1 inline-flex animate-in items-center gap-[3px] animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
             key={`c${changed}`}
           >
             <FileDiffIcon className="size-[13px]" />

@@ -125,7 +125,7 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
             <Button
               variant="outline"
               size="xs"
-              className="absolute z-10 animate-in shadow-md fade-in zoom-in-95 duration-(--duration-fast)"
+              className="absolute z-10 animate-in shadow-md fade-in zoom-in-95 animation-duration-(--duration-fast)"
               style={{
                 left: `calc(12px + ${selection.x}px)`,
                 top: `calc(4px + ${selection.y}px + 2px)`,
@@ -165,7 +165,7 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
         </ContextMenuContent>
       </ContextMenu>
       {(exited || stopped) && (
-        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-border-soft px-3 text-xs text-muted-foreground fade-in duration-(--duration-base)">
+        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-border-soft px-3 text-xs text-muted-foreground fade-in animation-duration-(--duration-base)">
           <span className={cn(stopped && 'text-destructive')}>
             {stopped ? 'Terminal stopped unexpectedly' : `Exited with code ${terminal.exitCode}`}
           </span>

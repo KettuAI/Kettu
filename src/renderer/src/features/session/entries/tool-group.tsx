@@ -54,7 +54,7 @@ export const ToolGroup = memo(function ToolGroup({
         </span>
         <span
           key={entryIds.length}
-          className="min-w-0 flex-1 truncate animate-in fade-in duration-(--duration-base)"
+          className="min-w-0 flex-1 truncate animate-in fade-in animation-duration-(--duration-base)"
         >
           {groupLabel(kinds)}
         </span>

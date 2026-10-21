@@ -90,7 +90,7 @@ export function UsageButton({
           <span
             key={`${warning.window}-${warning.usedPercent}`}
             className={cn(
-              'animate-in fade-in slide-in-from-bottom-1 duration-(--duration-base)',
+              'animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)',
               warning.state === 'reached' ? 'text-destructive' : 'text-attention-text',
             )}
           >
@@ -101,7 +101,7 @@ export function UsageButton({
         {usage && full && (
           <span
             key={Math.round(share * 100)}
-            className="animate-in text-attention-text fade-in slide-in-from-bottom-1 duration-(--duration-base)"
+            className="animate-in text-attention-text fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
           >
             {Math.round(share * 100)}%
           </span>

@@ -55,7 +55,12 @@ function MessageScrollerContent({
   return (
     <MessageScrollerPrimitive.Content
       data-slot="message-scroller-content"
-      className={cn('flex h-max min-h-full flex-col gap-6', className)}
+      // The viewport hides its scrollbar while it autoscrolls. scrollbar-color is inherited, so
+      // without its own value here every toggle would recalculate the style of the whole thread.
+      className={cn(
+        'flex h-max min-h-full flex-col gap-6 [scrollbar-color:var(--border-strong)_transparent]',
+        className,
+      )}
       {...props}
     />
   )

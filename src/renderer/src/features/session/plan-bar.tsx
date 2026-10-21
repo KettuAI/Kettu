@@ -39,7 +39,7 @@ export function PlanBar({ sessionId, running }: { sessionId: string; running: bo
           Plan{' '}
           <span
             key={done}
-            className="inline-block animate-in fade-in slide-in-from-bottom-1 duration-(--duration-base)"
+            className="inline-block animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
           >
             {done}/{plan.items.length}
           </span>
@@ -47,7 +47,7 @@ export function PlanBar({ sessionId, running }: { sessionId: string; running: bo
         {current && !open && (
           <span
             key={current.content}
-            className="min-w-0 flex-1 animate-in truncate text-muted-foreground fade-in duration-(--duration-base)"
+            className="min-w-0 flex-1 animate-in truncate text-muted-foreground fade-in animation-duration-(--duration-base)"
           >
             {current.content}
           </span>

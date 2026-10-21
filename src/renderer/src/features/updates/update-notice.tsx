@@ -52,7 +52,7 @@ export function UpdateNotice() {
   const row = (
     <div
       role="status"
-      className="group/update relative flex min-h-9 animate-in items-center gap-2 rounded-[8px] bg-card pr-1 pl-2.5 text-xs shadow-card duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1"
+      className="group/update relative flex min-h-9 animate-in items-center gap-2 rounded-[8px] bg-card pr-1 pl-2.5 text-xs shadow-card animation-duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1"
     >
       {notice.kind === 'updated' ? (
         <CircleCheckIcon className="size-[15px] shrink-0 text-success" />

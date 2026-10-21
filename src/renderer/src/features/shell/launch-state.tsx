@@ -33,7 +33,7 @@ export function LaunchState() {
   return (
     <div
       role="status"
-      className="flex h-full animate-in items-center justify-center gap-2.5 pb-10 text-[15px] font-medium text-muted-foreground duration-(--duration-base) fade-in"
+      className="flex h-full animate-in items-center justify-center gap-2.5 pb-10 text-[15px] font-medium text-muted-foreground animation-duration-(--duration-base) fade-in"
     >
       <Spinner className="size-[18px]" />
       Starting OverBench…

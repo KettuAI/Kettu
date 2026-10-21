@@ -43,7 +43,7 @@ export function StartingAgent({ agentId }: { agentId: AgentId }) {
           {progress.slice(-3).map((line, i) => (
             <span
               key={`${i}-${line}`}
-              className="truncate animate-in fade-in duration-(--duration-base)"
+              className="truncate animate-in fade-in animation-duration-(--duration-base)"
             >
               {line}
             </span>
@@ -82,7 +82,7 @@ export function FailedState({
   }
   return (
     <div
-      className="flex animate-in flex-col gap-2.5 rounded-xl bg-card px-3.5 py-3 shadow-card fade-in duration-(--duration-base)"
+      className="flex animate-in flex-col gap-2.5 rounded-xl bg-card px-3.5 py-3 shadow-card fade-in animation-duration-(--duration-base)"
       role="alert"
     >
       <div className="flex items-start gap-2">

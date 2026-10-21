@@ -193,7 +193,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                       variant="default"
                       aria-label="Stop"
                       onClick={cancel}
-                      className="animate-in zoom-in-75 fade-in duration-(--duration-fast)"
+                      className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
                     />
                   }
                 >
@@ -211,7 +211,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 aria-label="Send"
                 disabled={!canSend}
                 onClick={send}
-                className="animate-in zoom-in-75 fade-in duration-(--duration-fast)"
+                className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
               >
                 <ArrowUpIcon strokeWidth={2.25} />
               </InputGroupButton>
@@ -226,7 +226,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             sideOffset={6}
             className="isolate z-50 outline-none"
           >
-            <Autocomplete.Popup className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] origin-(--transform-origin) overflow-y-auto rounded-xl bg-popover p-1 text-popover-foreground shadow-menu duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+            <Autocomplete.Popup className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] origin-(--transform-origin) overflow-y-auto rounded-xl bg-popover p-1 text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
               <Autocomplete.List>
                 {(command: SlashCommand) => (
                   <Autocomplete.Item

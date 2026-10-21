@@ -14,7 +14,7 @@ export const fadeExit = { opacity: 0, transition: { duration: 0.12 } }
 export function rise(index: number, base = 60): { className: string; style: CSSProperties } {
   return {
     className:
-      'animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-(--duration-slow) ease-out-quint',
+      'animate-in fade-in slide-in-from-bottom-1 fill-mode-both animation-duration-(--duration-slow) ease-out-quint',
     style: { animationDelay: `${base + index * 30}ms` },
   }
 }
