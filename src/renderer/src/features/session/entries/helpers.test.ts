@@ -29,6 +29,17 @@ describe('toolLabel', () => {
     expect(toolLabel({ ...base, toolKind: 'execute', title: 'ls' }, '/repo').target).toBe('ls')
   })
 
+  it('drops the verb from a title that already starts with it', () => {
+    expect(toolLabel({ ...base, toolKind: 'execute', title: 'Run pnpm build' }, '/repo')).toEqual({
+      verb: 'Run',
+      target: 'pnpm build',
+      kind: 'command',
+    })
+    expect(toolLabel({ ...base, toolKind: 'execute', title: 'Runner' }, '/repo').target).toBe(
+      'Runner',
+    )
+  })
+
   it("falls back to the agent's title", () => {
     expect(toolLabel({ ...base, toolKind: 'search', title: 'grep foo' }, '/repo')).toEqual({
       verb: null,

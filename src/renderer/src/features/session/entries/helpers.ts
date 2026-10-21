@@ -24,7 +24,9 @@ export function toolLabel(
     return { verb, target: relativePath(location, projectPath), kind: 'path' }
   }
   if (entry.toolKind === 'execute') {
-    return { verb: 'Run', target: entry.rawInput ?? entry.title, kind: 'command' }
+    // Without the input, the title is the agent's own label and may already say "Run".
+    const target = entry.rawInput ?? entry.title.replace(/^run\s+/i, '')
+    return { verb: 'Run', target, kind: 'command' }
   }
   return { verb: null, target: entry.title, kind: 'title' }
 }
