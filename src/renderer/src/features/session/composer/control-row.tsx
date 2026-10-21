@@ -1,6 +1,6 @@
 import { useCallback, useId, useState, type KeyboardEvent } from 'react'
 import { ChevronDownIcon, RotateCcwIcon } from 'lucide-react'
-import type { ConfigOption, SessionView } from '@shared/thread'
+import { ULTRACODE_OPTION_ID, type ConfigOption, type SessionView } from '@shared/thread'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -80,7 +80,14 @@ export function ControlRow({
     SelectOption | undefined
   const effort = config.find((o) => o.category === 'thought_level' && isSelect(o)) as
     SelectOption | undefined
-  const switches = config.filter((o) => o.type === 'boolean')
+  const running = session.status === 'running' || session.status === 'awaiting_permission'
+  // Ultracode takes effect only with a model that offers the high tier (xhigh), so the switch
+  // shows only then, or while it is on.
+  const highTier = !!effort && effort.choices.some((c) => tierOf(effort, c.value) !== null)
+  const ultracodeOn = config.some((o) => o.id === ULTRACODE_OPTION_ID && o.value === true)
+  const switches = config.filter(
+    (o) => o.type === 'boolean' && (o.id !== ULTRACODE_OPTION_ID || highTier || o.value === true),
+  )
   const others = config.filter(
     (o): o is SelectOption => isSelect(o) && o !== mode && o !== model && o !== effort,
   )
@@ -113,7 +120,7 @@ export function ControlRow({
       {rightOthers.map((o) => (
         <OptionMenu key={o.id} option={o} onSelect={set} />
       ))}
-      {ultracode && (
+      {(ultracode || ultracodeOn) && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -123,12 +130,20 @@ export function ControlRow({
             <span className="text-effort-max">Ultracode</span>
           </TooltipTrigger>
           <TooltipContent>
-            This message runs with ultracode: dynamic workflows on the task
+            {ultracodeOn
+              ? 'Ultracode is on for this session: dynamic workflows on substantial tasks'
+              : 'This message runs with ultracode: dynamic workflows on the task'}
           </TooltipContent>
         </Tooltip>
       )}
       {(model || effort || switches.length > 0) && (
-        <ModelMenu model={model} effort={effort} switches={switches} onSelect={set} />
+        <ModelMenu
+          model={model}
+          effort={effort}
+          switches={switches}
+          running={running}
+          onSelect={set}
+        />
       )}
       <UsageButton
         usage={session.usage}
@@ -228,11 +243,13 @@ function ModelMenu({
   model,
   effort,
   switches,
+  running,
   onSelect,
 }: {
   model: SelectOption | undefined
   effort: SelectOption | undefined
   switches: ConfigOption[]
+  running: boolean
   onSelect: Select
 }) {
   const [open, setOpen] = useState(false)
@@ -346,12 +363,17 @@ function ModelMenu({
                     closeOnClick={false}
                     role="menuitemcheckbox"
                     aria-checked={o.value === true}
+                    disabled={o.idleOnly && running}
                     onClick={() => void onSelect(o.id, o.value !== true)}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span>{o.name}</span>
-                      {o.description && (
-                        <span className="text-xs text-muted-foreground">{o.description}</span>
+                      {o.idleOnly && running ? (
+                        <span className="text-xs text-muted-foreground">Changes between turns</span>
+                      ) : (
+                        o.description && (
+                          <span className="text-xs text-muted-foreground">{o.description}</span>
+                        )
                       )}
                     </span>
                     <Switch

@@ -217,6 +217,7 @@ export interface SessionRecord {
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
+  ultracode?: boolean // Claude Code's ultracode, once set from OverBench
 }
 
 export interface SessionsFile {
@@ -320,6 +321,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       description: item.description,
       branch: item.branch,
       ...queueOf(item.queue),
+      ...(typeof item.ultracode === 'boolean' ? { ultracode: item.ultracode } : {}),
     })
   }
   return { version: 1, sessions }

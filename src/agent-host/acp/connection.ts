@@ -387,9 +387,16 @@ export class AgentConnection {
     }
   }
 
-  async newSession(cwd: string): Promise<SessionSetup & { acpSessionId: string }> {
+  async newSession(
+    cwd: string,
+    meta?: Record<string, unknown>,
+  ): Promise<SessionSetup & { acpSessionId: string }> {
     const response = await this.call(() =>
-      this.connection.agent.request(methods.agent.session.new, { cwd, mcpServers: [] }),
+      this.connection.agent.request(methods.agent.session.new, {
+        cwd,
+        mcpServers: [],
+        ...(meta ? { _meta: meta } : {}),
+      }),
     )
     return {
       acpSessionId: response.sessionId,
@@ -397,23 +404,33 @@ export class AgentConnection {
     }
   }
 
-  async loadSession(acpSessionId: string, cwd: string): Promise<SessionSetup> {
+  async loadSession(
+    acpSessionId: string,
+    cwd: string,
+    meta?: Record<string, unknown>,
+  ): Promise<SessionSetup> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.load, {
         sessionId: acpSessionId,
         cwd,
         mcpServers: [],
+        ...(meta ? { _meta: meta } : {}),
       }),
     )
     return { config: mapConfig(response.configOptions, response.modes) }
   }
 
-  async resumeSession(acpSessionId: string, cwd: string): Promise<SessionSetup> {
+  async resumeSession(
+    acpSessionId: string,
+    cwd: string,
+    meta?: Record<string, unknown>,
+  ): Promise<SessionSetup> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.resume, {
         sessionId: acpSessionId,
         cwd,
         mcpServers: [],
+        ...(meta ? { _meta: meta } : {}),
       }),
     )
     return { config: mapConfig(response.configOptions, response.modes) }
@@ -423,12 +440,14 @@ export class AgentConnection {
   async forkSession(
     acpSessionId: string,
     cwd: string,
+    meta?: Record<string, unknown>,
   ): Promise<SessionSetup & { acpSessionId: string }> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.fork, {
         sessionId: acpSessionId,
         cwd,
         mcpServers: [],
+        ...(meta ? { _meta: meta } : {}),
       }),
     )
     return {

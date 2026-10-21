@@ -22,6 +22,7 @@ import type {
   ToolKind,
   UserContent,
 } from '@shared/thread'
+import { ULTRACODE_OPTION_ID } from '@shared/thread'
 
 /** Per-turn bookkeeping the mapper needs to find "current" entries. */
 export interface TurnScope {
@@ -515,14 +516,21 @@ export function mapConfig(
   return mapped
 }
 
-/** New options replace the old ones, keeping the synthetic mode when nothing replaces it. */
+/**
+ * New options replace the old ones, keeping the synthetic mode when nothing replaces it and the
+ * host's own ultracode switch, which the agent never sends.
+ */
 export function mergeConfig(
   previous: readonly ConfigOption[],
   next: ConfigOption[],
 ): ConfigOption[] {
   const synthetic = previous.find((option) => option.id === SYNTHETIC_MODE_ID)
-  if (synthetic && !next.some((option) => option.category === 'mode')) return [synthetic, ...next]
-  return next
+  const ultracode = previous.find((option) => option.id === ULTRACODE_OPTION_ID)
+  const merged =
+    synthetic && !next.some((option) => option.category === 'mode') ? [synthetic, ...next] : next
+  return ultracode && !merged.some((option) => option.id === ULTRACODE_OPTION_ID)
+    ? [...merged, ultracode]
+    : merged
 }
 
 function mapCommands(commands: readonly acp.AvailableCommand[]): SlashCommand[] {

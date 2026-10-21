@@ -143,6 +143,59 @@ describe('the queue', () => {
   })
 })
 
+describe('ultracode', () => {
+  const sent = async (port: TestPort, method: string) => {
+    const bundle = await port.request('diagnostics.collect', undefined)
+    const fake = bundle.agents.find((agent) => agent.status.id === 'fake-agent')!
+    return fake.traffic
+      .filter((r) => r.direction === 'out' && r.method === method)
+      .map((r) => (r.message as { params: { _meta?: unknown } }).params._meta)
+  }
+
+  it('is a switch that leaves the agent its own setting until it is used', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    expect(port.thread(sessionId).session.config.at(-1)).toMatchObject({
+      id: '__ultracode',
+      type: 'boolean',
+      value: false,
+      idleOnly: true,
+    })
+    expect(await sent(port, 'session/new')).toEqual([undefined])
+  })
+
+  it('restarts the session with the new setting between turns', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await port.request('sessions.setConfigOption', {
+      sessionId,
+      optionId: '__ultracode',
+      value: true,
+    })
+    await port.until(
+      () =>
+        port.thread(sessionId).session.config.find((o) => o.id === '__ultracode')?.value === true,
+    )
+    expect(port.summary(sessionId)?.status).toBe('ready')
+    expect(await sent(port, 'session/resume')).toEqual([
+      { claudeCode: { options: { settings: { ultracode: true } } } },
+    ])
+  })
+
+  it('waits for the running turn', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    await expect(
+      port.request('sessions.setConfigOption', {
+        sessionId,
+        optionId: '__ultracode',
+        value: true,
+      }),
+    ).rejects.toMatchObject({ code: 'busy' })
+  })
+})
+
 describe('forking', () => {
   it('starts a new session from the history, shown with its entries', async () => {
     const { t, port } = await setup()
@@ -218,6 +271,7 @@ describe('a prompt turn', () => {
       'model',
       'thought_level',
       'fast',
+      '__ultracode',
     ])
     expect(t.sent).toContainEqual(
       expect.objectContaining({ type: 'host:attention', sessionId, kind: 'turn-ended' }),

@@ -24,6 +24,7 @@ import {
   type ThreadState,
   type TokenTotals,
   type UserContent,
+  ULTRACODE_OPTION_ID,
 } from '@shared/thread'
 import type {
   AgentConnection,
@@ -145,6 +146,35 @@ export function fallbackTitle(content: readonly UserContent[]): string | null {
     return chars.length > TITLE_LENGTH ? chars.slice(0, TITLE_LENGTH).join('').trimEnd() : line
   }
   return null
+}
+
+/** Agents with OverBench's ultracode switch: Claude Code, and the fake agent that stands in for it. */
+function hasUltracode(agentId: AgentId): boolean {
+  return agentId === 'claude-code' || agentId === 'fake-agent'
+}
+
+/** `_meta` for session setup: Claude Code's adapter passes `claudeCode.options` to its SDK. */
+function sessionMeta(record: SessionRecord): Record<string, unknown> | undefined {
+  if (!hasUltracode(record.agentId) || record.ultracode === undefined) return undefined
+  return { claudeCode: { options: { settings: { ultracode: record.ultracode } } } }
+}
+
+/** The agent's options with the ultracode switch at the end, for agents that have it. */
+function withUltracode(record: SessionRecord, config: readonly ConfigOption[]): ConfigOption[] {
+  const rest = config.filter((option) => option.id !== ULTRACODE_OPTION_ID)
+  if (!hasUltracode(record.agentId)) return rest
+  return [
+    ...rest,
+    {
+      id: ULTRACODE_OPTION_ID,
+      name: 'Ultracode',
+      description: 'Dynamic workflows for substantial tasks; restarts Claude Code',
+      category: 'other',
+      type: 'boolean',
+      value: record.ultracode === true,
+      idleOnly: true,
+    },
+  ]
 }
 
 const CONNECTED: ReadonlySet<SessionStatus> = new Set([
@@ -773,13 +803,16 @@ export class SessionManager {
   private async startNew(live: Live): Promise<void> {
     const runtime = await this.deps.agents.ensureReady(live.record.agentId)
     try {
-      const setup = await runtime.connection.newSession(live.record.projectPath)
+      const setup = await runtime.connection.newSession(
+        live.record.projectPath,
+        sessionMeta(live.record),
+      )
       live.record.acpSessionId = setup.acpSessionId
       this.attach(live, runtime.connection)
       live.failure = null
       this.update(live, {
         acpSessionId: setup.acpSessionId,
-        config: setup.config,
+        config: withUltracode(live.record, setup.config),
         status: 'ready',
         error: null,
       })
@@ -875,16 +908,20 @@ export class SessionManager {
         this.prepareReplay(live, connection)
         let setup
         try {
-          setup = await connection.loadSession(acpSessionId, projectPath)
+          setup = await connection.loadSession(acpSessionId, projectPath, sessionMeta(live.record))
         } catch (error) {
           this.finishReplay(live, false)
           throw error
         }
         this.finishReplay(live, true)
-        this.update(live, { config: mergeConfig(live.thread.session.config, setup.config) })
+        this.update(live, { config: withUltracode(live.record, setup.config) })
       } else {
-        const setup = await connection.resumeSession(acpSessionId, projectPath)
-        this.update(live, { config: mergeConfig(live.thread.session.config, setup.config) })
+        const setup = await connection.resumeSession(
+          acpSessionId,
+          projectPath,
+          sessionMeta(live.record),
+        )
+        this.update(live, { config: withUltracode(live.record, setup.config) })
         if (mode === 'load' && live.thread.order.length === 0) {
           this.emit(live, [
             {
@@ -1255,6 +1292,7 @@ export class SessionManager {
       setup = await runtime.connection.forkSession(
         source.record.acpSessionId,
         source.record.projectPath,
+        sessionMeta(source.record),
       )
     } catch (error) {
       throw agentError(error)
@@ -1285,7 +1323,7 @@ export class SessionManager {
     this.attach(live, runtime.connection)
     this.update(live, {
       acpSessionId: setup.acpSessionId,
-      config: mergeConfig(source.thread.session.config, setup.config),
+      config: withUltracode(record, mergeConfig(source.thread.session.config, setup.config)),
       usage: source.thread.session.usage,
     })
     this.save(live)
@@ -1609,6 +1647,10 @@ export class SessionManager {
     ) {
       throw invalidParams(`${String(value)} is not a choice of ${option.name}`)
     }
+    if (optionId === ULTRACODE_OPTION_ID) {
+      await this.setUltracode(live, value as boolean)
+      return
+    }
     try {
       if (optionId === SYNTHETIC_MODE_ID) {
         await live.connection.setMode(live.record.acpSessionId, value as string)
@@ -1627,6 +1669,41 @@ export class SessionManager {
       }
     } catch (error) {
       throw agentError(error)
+    }
+  }
+
+  /**
+   * Claude Code reads ultracode from its settings when its query starts, so a change goes out as
+   * `session/resume` with new settings, which the adapter answers by restarting the query. That
+   * would abort a turn, so it waits for none to run.
+   */
+  private async setUltracode(live: Live, on: boolean): Promise<void> {
+    if (live.turn || live.thread.session.status !== 'ready' || !live.connection) {
+      throw new HostError('busy', 'Ultracode changes between turns')
+    }
+    const before = live.record.ultracode
+    live.record.ultracode = on
+    this.update(live, {
+      status: 'starting',
+      config: withUltracode(live.record, live.thread.session.config),
+    })
+    this.touch(live.id)
+    try {
+      const setup = await live.connection.resumeSession(
+        live.record.acpSessionId,
+        live.record.projectPath,
+        sessionMeta(live.record),
+      )
+      this.update(live, {
+        status: 'ready',
+        config: withUltracode(live.record, mergeConfig(live.thread.session.config, setup.config)),
+      })
+      this.save(live)
+      this.touch(live.id)
+    } catch (error) {
+      live.record.ultracode = before
+      this.update(live, { config: withUltracode(live.record, live.thread.session.config) })
+      throw this.failStart(live, error, { action: 'resume' })
     }
   }
 

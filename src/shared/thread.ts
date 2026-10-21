@@ -73,7 +73,11 @@ export interface ConfigOption {
   type: 'select' | 'boolean'
   value: string | boolean
   choices?: { value: string; name: string; description?: string; group?: string }[]
+  idleOnly?: boolean // can change only while no turn runs
 }
+
+/** Claude Code's ultracode, an option OverBench adds since the adapter offers none. */
+export const ULTRACODE_OPTION_ID = '__ultracode'
 
 export interface SlashCommand {
   name: string

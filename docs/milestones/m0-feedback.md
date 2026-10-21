@@ -8,7 +8,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | --- | -------------------------------------------------------------- | -------------- | ------------ |
 | 1   | Thoughts and tool calls cannot be folded together              | Thread entries | Fixed        |
 | 2   | Choosing a model does not close the model menu                 | Model menu     | Fixed        |
-| 3   | No switch for Claude Code's ultracode                          | Model menu     | Open         |
+| 3   | No switch for Claude Code's ultracode                          | Model menu     | Fixed        |
 | 4   | The model menu does not look polished                          | Model menu     | Open         |
 | 5   | Messages have no action row                                    | Thread entries | Fixed        |
 | 6   | Markdown looks plain and file references do not stand out      | Markdown       | Open         |
@@ -51,6 +51,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: nothing in the model menu or the control row turns ultracode on.
 - **Expected**: a switch for ultracode mode.
 - **Today**: Claude Code's ACP adapter offers no option for ultracode; it turns on for a message that contains the word. OverBench only shows an **Ultracode** hint in the control row while a Claude Code draft contains `ultracode` ([Interface: ultracode](../design/ui.md#composer)). This was already an open question after the previous acceptance round. A switch either needs the adapter to offer one or has to work through the prompt OverBench sends.
+- **Fixed**: an **Ultracode** switch in the model menu for Claude Code, through `_meta.claudeCode.options.settings` and a `session/resume` that restarts Claude Code between turns, as [M0 feedback findings](./m0-feedback-findings.md#3-ultracode) recommended ([Session model: config options](../design/session-model.md#config-options)). Checked in a live session: after the switch, the restarted Claude Code process runs with `"ultracode":true` in its settings, and with `false` after switching back. Not checked: a turn with it on, which would start a workflow on the account's quota. New sessions leave the setting to Claude Code until the switch is used. When the adapter offers its own option (upstream PR #924), OverBench moves to it.
 
 ## 4. The model menu does not look polished
 
