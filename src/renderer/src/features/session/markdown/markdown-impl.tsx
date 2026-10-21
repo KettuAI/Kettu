@@ -1,11 +1,12 @@
 import 'streamdown/styles.css'
-import { memo, useDeferredValue, useState } from 'react'
+import { memo, useDeferredValue, useState, type ComponentProps } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
 import {
   defaultComponents,
   Streamdown,
   type Components,
+  type ExtraProps,
   type LinkSafetyModalProps,
 } from 'streamdown'
 import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
@@ -19,6 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { FileLink } from '@renderer/features/files/file-link'
+import { useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
@@ -30,13 +33,33 @@ const plugins = {
 
 const DefaultLink = defaultComponents.a
 
-const components: Components = {
-  a: (props) => {
-    const href = typeof props.href === 'string' ? props.href : ''
-    if (GITHUB_PULL_REQUEST_URL.test(href)) return <PrChip url={href} />
-    return <DefaultLink {...props} />
-  },
+/** A link: a pull request chip, a project file, or the default link with its safety check. */
+function Link(props: ComponentProps<'a'> & ExtraProps) {
+  const href = typeof props.href === 'string' ? props.href : ''
+  const file = useFileRef(href)
+  if (GITHUB_PULL_REQUEST_URL.test(href)) return <PrChip url={href} />
+  if (file) {
+    return (
+      <FileLink file={file}>
+        <span data-streamdown="link">{props.children}</span>
+      </FileLink>
+    )
+  }
+  return <DefaultLink {...props} />
 }
+
+/** Inline code, which opens the file in the Files pane when it is a path in the project. */
+function InlineCode({ className, children }: ComponentProps<'code'> & ExtraProps) {
+  const file = useFileRef(typeof children === 'string' ? children : null)
+  const code = (
+    <code className={className} data-streamdown="inline-code">
+      {children}
+    </code>
+  )
+  return file ? <FileLink file={file}>{code}</FileLink> : code
+}
+
+const components: Components = { a: Link, inlineCode: InlineCode }
 
 function LinkConfirm({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProps) {
   return (

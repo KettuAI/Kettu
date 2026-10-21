@@ -11,7 +11,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 3   | No switch for Claude Code's ultracode                          | Model menu     | Fixed        |
 | 4   | The model menu does not look polished                          | Model menu     | Open         |
 | 5   | Messages have no action row                                    | Thread entries | Fixed        |
-| 6   | Markdown looks plain and file references do not stand out      | Markdown       | Open         |
+| 6   | Markdown looks plain and file references do not stand out      | Markdown       | Partly fixed |
 | 7   | The usage popover shows too little and needs a full redesign   | Usage          | Open         |
 | 8   | Session rows show their time badly                             | Sidebar        | Open         |
 | 9   | New session is tied to the selected project                    | Sidebar        | Fixed        |
@@ -76,6 +76,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: file paths in a reply, such as `internal/drivers/providers/providers.go:16`, render as the same grey inline code as any identifier, so nothing marks them as files. The markdown as a whole reads as library defaults.
 - **Expected**: file references stand out, and the markdown has a designed look of OverBench's own. The reference (Claude Desktop) shows file references as accent-coloured links ("m0-feedback.md", "ui.md") and inline code in a tinted colour; it is a starting point, not something to copy.
 - **Today**: `src/renderer/src/features/session/markdown/markdown-impl.tsx` renders replies with Streamdown, and `.markdown` in `src/renderer/src/styles/globals.css` sets spacing, headings and lists, a `--muted` chip for inline code and an underlined link in the text colour. Paths are not recognised, and every link other than a pull request uses Streamdown's default link. [Interface: markdown](../design/ui.md#markdown) does not cover file references. To settle when planning: how a file reference is recognised (markdown links, paths in inline code, `path:line`), what clicking one does, and the markdown look as a whole, written into the design system.
+- **Partly fixed**: file references are recognised and open the file in the [Files pane](../design/ui.md#files) at their line: inline code or a link that names a file of the project, relative or absolute inside it, with an optional `:line`, `:line:column` or `#Lline` ([Interface: markdown](../design/ui.md#markdown)). They take the link's underline for now. The markdown's designed look, file references included, is still to be designed.
 
 ## 7. The usage popover shows too little and needs a full redesign
 

@@ -5,8 +5,10 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/comp
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { markThreadShown } from '@renderer/app/perf'
+import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
+import { ensureFiles } from '@renderer/stores/files'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
 import { openSettings } from '@renderer/stores/view'
@@ -42,6 +44,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     preloadRenderers()
     void focusSession(sessionId)
   }, [sessionId])
+
+  // File references in replies link to the project's files once their list is known.
+  useEffect(() => ensureFiles(summary.projectPath), [summary.projectPath])
 
   const [actionError, setActionError] = useState<string | null>(null)
   const status = session?.status ?? summary.status
@@ -112,7 +117,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <SessionHeader summary={summary} />
-      <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+      <ProjectPathContext value={summary.projectPath}>
+        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+      </ProjectPathContext>
       <div className="mx-auto flex w-full max-w-[760px] flex-col gap-2 px-6 pb-3">
         {session && status === 'disconnected' && <Disconnected sessionId={sessionId} name={name} />}
         {session && status === 'failed' && (

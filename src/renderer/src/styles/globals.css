@@ -739,6 +739,26 @@
     }
   }
 
+  /* A file reference opens the file in the Files pane; it reads as a link. */
+  & [data-file-ref] {
+    cursor: pointer;
+    border-radius: 5px;
+    text-align: inherit;
+    outline: none;
+    &:focus-visible {
+      box-shadow: 0 0 0 2px var(--ring);
+    }
+    & [data-streamdown='inline-code'] {
+      text-decoration: underline;
+      text-decoration-color: var(--border-strong);
+      text-underline-offset: 0.2em;
+      transition: text-decoration-color var(--duration-fast);
+    }
+    &:hover [data-streamdown='inline-code'] {
+      text-decoration-color: currentColor;
+    }
+  }
+
   & [data-streamdown='inline-code'] {
     border-radius: 5px;
     background: var(--muted);
