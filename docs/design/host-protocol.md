@@ -41,6 +41,7 @@ interface HostError {
     | 'unknown_method'
     | 'not_found'
     | 'busy'
+    | 'restricted' // not allowed on a subagent session
     | 'agent_unavailable'
     | 'auth_required'
     | 'agent_error'
@@ -54,35 +55,41 @@ interface HostError {
 
 - Values cross the port by structured clone, and then once more through `contextBridge`. Payloads stay plain data: no class instances, functions or `Map`s.
 - Request ids are per port. The host answers every request exactly once.
+- A message that is not a request, or a request without a numeric `id`, cannot be answered: the host drops it and logs a warning.
 
 ## Requests
 
-| Method                     | Params                                   | Result                                          | Notes                                                               |
-| -------------------------- | ---------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
-| `agents.list`              | none                                     | `AgentStatus[]`                                 | Detection state, version, sign-in state, capabilities summary       |
-| `agents.check`             | `{ agentId? }`                           | `AgentStatus[]`                                 | Runs detection again                                                |
-| `agents.reloadEnvironment` | none                                     | `AgentStatus[]`                                 | Resolves the shell environment again, then runs detection           |
-| `agents.authenticate`      | `{ agentId, methodId }`                  | none                                            | `agent`-type methods only                                           |
-| `agents.logout`            | `{ agentId }`                            | none                                            | Only when the agent advertises logout                               |
-| `agents.listSessions`      | `{ agentId, projectPath, cursor? }`      | `{ sessions: ImportableSession[], nextCursor }` | The agent's own `session/list`, for import                          |
-| `projects.list`            | none                                     | `Project[]`                                     |                                                                     |
-| `projects.add`             | `{ path }`                               | `Project`                                       | The path comes from main's folder picker                            |
-| `projects.remove`          | `{ path }`                               | none                                            | Removes the project and its index entries, not the agent's sessions |
-| `sessions.list`            | `{ projectPath? }`                       | `SessionSummary[]`                              |                                                                     |
-| `sessions.create`          | `{ agentId, projectPath }`               | `SessionSummary`                                | Resolves when `session/new` succeeds                                |
-| `sessions.import`          | `{ agentId, projectPath, acpSessionId }` | `SessionSummary`                                |                                                                     |
-| `sessions.open`            | `{ sessionId }`                          | `SessionSnapshot`                               | Loads or resumes as needed; live sessions return at once            |
-| `sessions.snapshot`        | `{ sessionId }`                          | `SessionSnapshot`                               | For gaps and reconnects                                             |
-| `sessions.watch`           | `{ sessionId }`                          | none                                            | Start receiving `session.patches` for it                            |
-| `sessions.unwatch`         | `{ sessionId }`                          | none                                            |                                                                     |
-| `sessions.prompt`          | `{ sessionId, content: UserContent[] }`  | none                                            | Resolves once the turn starts; the turn itself arrives as patches   |
-| `sessions.cancel`          | `{ sessionId }`                          | none                                            |                                                                     |
-| `sessions.setConfigOption` | `{ sessionId, optionId, value }`         | none                                            | The new config arrives as a patch                                   |
-| `sessions.close`           | `{ sessionId }`                          | none                                            |                                                                     |
-| `sessions.delete`          | `{ sessionId }`                          | none                                            | The UI confirms first                                               |
-| `permissions.respond`      | `{ sessionId, requestId, optionId }`     | none                                            |                                                                     |
-| `diagnostics.collect`      | none                                     | `DiagnosticsBundle`                             | Main writes it to disk ([agent host](./agent-host.md#diagnostics))  |
-| `git.*`                    |                                          |                                                 | Repository status and pull requests ([git](./git.md#host-protocol)) |
+| Method                     | Params                                   | Result                                          | Notes                                                                                 |
+| -------------------------- | ---------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `agents.list`              | none                                     | `AgentStatus[]`                                 | Waits for the first detection, which waits for the environment                        |
+| `agents.check`             | `{ agentId? }`                           | `AgentStatus[]`                                 | Runs detection again                                                                  |
+| `agents.reloadEnvironment` | none                                     | `AgentStatus[]`                                 | Resolves the shell environment again, then runs detection                             |
+| `agents.environment`       | none                                     | `EnvironmentInfo`                               | Where the agent environment came from, for Settings › Agents                          |
+| `agents.authenticate`      | `{ agentId, methodId }`                  | none                                            | `agent`-type methods only                                                             |
+| `agents.logout`            | `{ agentId }`                            | none                                            | Only when the agent advertises logout                                                 |
+| `agents.retry`             | `{ agentId }`                            | none                                            | Clears `failed`; starts the agent if live sessions need it                            |
+| `agents.listSessions`      | `{ agentId, projectPath, cursor? }`      | `{ sessions: ImportableSession[], nextCursor }` | The agent's own `session/list`, for import                                            |
+| `projects.list`            | none                                     | `Project[]`                                     |                                                                                       |
+| `projects.add`             | `{ path }`                               | `Project`                                       | The path comes from main's folder picker                                              |
+| `projects.remove`          | `{ path }`                               | none                                            | Removes the project and its index entries, not the agent's sessions                   |
+| `projects.touch`           | `{ path }`                               | none                                            | Marks the project opened now, for the recent list                                     |
+| `sessions.list`            | `{ projectPath? }`                       | `SessionSummary[]`                              |                                                                                       |
+| `sessions.create`          | `{ agentId, projectPath, parentId? }`    | `SessionSummary`                                | Resolves when `session/new` succeeds, or in `auth_required`                           |
+| `sessions.import`          | `{ agentId, projectPath, acpSessionId }` | `SessionSummary`                                |                                                                                       |
+| `sessions.open`            | `{ sessionId }`                          | `SessionSnapshot`                               | Loads or resumes as needed; live sessions return at once                              |
+| `sessions.snapshot`        | `{ sessionId }`                          | `SessionSnapshot`                               | For gaps and reconnects                                                               |
+| `sessions.watch`           | `{ sessionId }`                          | none                                            | Start receiving `session.patches` for it                                              |
+| `sessions.unwatch`         | `{ sessionId }`                          | none                                            |                                                                                       |
+| `sessions.prompt`          | `{ sessionId, content: UserContent[] }`  | none                                            | Resolves once the turn starts; the turn itself arrives as patches                     |
+| `sessions.cancel`          | `{ sessionId }`                          | none                                            |                                                                                       |
+| `sessions.retry`           | `{ sessionId }`                          | none                                            | Re-runs what failed ([session model](./session-model.md#how-the-host-keeps-sessions)) |
+| `sessions.setConfigOption` | `{ sessionId, optionId, value }`         | none                                            | The new config arrives as a patch                                                     |
+| `sessions.close`           | `{ sessionId }`                          | none                                            |                                                                                       |
+| `sessions.delete`          | `{ sessionId }`                          | none                                            | The UI confirms first; sub-sessions go with it                                        |
+| `sessions.removeAll`       | none                                     | none                                            | Clears the index; the agents keep their transcripts                                   |
+| `permissions.respond`      | `{ sessionId, requestId, optionId }`     | none                                            |                                                                                       |
+| `diagnostics.collect`      | none                                     | `DiagnosticsBundle`                             | Main writes it to disk ([agent host](./agent-host.md#diagnostics))                    |
+| `git.*`                    |                                          |                                                 | Repository status and pull requests ([git](./git.md#host-protocol))                   |
 
 ```ts
 interface SessionSummary {
@@ -152,13 +159,16 @@ interface ImportableSession {
 
 ## Events
 
-| Event                   | Payload                           | Sent to                                                             |
-| ----------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `session.patches`       | `PatchBatch`                      | Ports watching that session                                         |
-| `session.summary`       | `SessionSummary`                  | All ports, whenever status, title, attention or `updatedAt` changes |
-| `session.removed`       | `{ sessionId }`                   | All ports                                                           |
-| `agent.status`          | `AgentStatus`                     | All ports, also when its account or a plan limit changes            |
-| `git.changed`, `git.pr` | See [git](./git.md#host-protocol) | Ports keeping that project live                                     |
+| Event                   | Payload                           | Sent to                                                                                                       |
+| ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `session.patches`       | `PatchBatch`                      | Ports watching that session                                                                                   |
+| `session.summary`       | `SessionSummary`                  | All ports, whenever a field changes: status, title, attention, `permissionCount`, `updatedAt`, `branch`, `pr` |
+| `session.removed`       | `{ sessionId }`                   | All ports                                                                                                     |
+| `agent.status`          | `AgentStatus`                     | All ports, also when its account or a plan limit changes                                                      |
+| `projects.changed`      | `Project[]`                       | All ports, whenever the list or a folder's `missing` changes                                                  |
+| `environment.changed`   | `EnvironmentInfo`                 | All ports, after each resolution of the environment                                                           |
+| `git.changed`, `git.pr` | See [git](./git.md#host-protocol) | Ports keeping that project live                                                                               |
+| `git.tools`             | `GitTools`                        | All ports                                                                                                     |
 
 Terminals use a port of their own to the terminal host, with the same envelope ([terminal](./terminal.md#host-protocol)).
 
@@ -177,3 +187,7 @@ Only watched sessions stream patches. Every other session costs the renderer one
 - Prompt content is limited to 10 MB in total; images must have an image MIME type.
 - Validators are small hand-written type guards. The contract is small enough that a schema library would cost more than it saves.
 - A request that fails validation gets `invalid_params` and changes nothing.
+- Validators return fresh params holding only the fields they know; unknown fields are dropped. Methods without params accept nothing, `null` or `{}`.
+- An unknown `agentId` is `invalid_params`, since the catalog is fixed. A session or permission request that does not exist is `not_found`. Requests that need a live session (`sessions.prompt`, `sessions.cancel`, `sessions.setConfigOption`) fail with `busy` for one that is not open.
+- A prompt holds text, images (base64 data with an `image/*` type) and links; an `unsupported` ref cannot be sent, and a prompt with no text and no ref is empty and refused.
+- Every `git.*` request answers `git_error` with "Git is not available yet" while the host runs without a git service.

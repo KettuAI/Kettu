@@ -20,7 +20,7 @@ Electron itself is cross-platform, but this process is where OverBench meets the
    })
    ```
    electron-vite builds `src/agent-host/index.ts` as its own bundle because of the `?modulePath` import.
-2. Main sends `host:init` (data directory, app version, platform, whether the app is packaged, Electron's executable, the fake agent's path and the agent part of the settings). The host loads its JSON state, starts resolving the shell environment in the background, and replies `host:ready`. Agents wait for the environment; listing projects and sessions does not. A host that sends no `host:ready` within 20 s is killed and counts as a crash.
+2. Main sends `host:init` (data directory, app version, platform, whether the app is packaged, Electron's executable, the fake agent's path and the agent part of the settings). The host loads its JSON state, sends `host:projects`, starts resolving the shell environment in the background, and replies `host:ready`. Agents wait for the environment; listing projects and sessions does not. Messages from main that arrive while the state loads wait for it; a port's messages queue in the port until then. A host that sends no `host:ready` within 20 s is killed and counts as a crash.
 3. Each renderer gets its own port. When a page loads, its preload sends `agent-host:connect`; main checks that the sender is the main frame of one of its windows with `isRendererUrl`, creates a `MessageChannelMain`, passes `port1` to the host in `host:connect` and `port2` to the page with `webContents.postMessage('agent-host:port', null, [port2])`. A reload repeats this, so a page never reuses a stale port. A request that arrives while the host starts or restarts waits and is answered once it is ready.
 4. The host's stdout and stderr are forwarded to main's log, line by line, as info and warnings.
 
@@ -52,18 +52,18 @@ Typed in `src/shared/host-control.ts`.
 | main → host | `host:busy-request`    | `requestId`, before quitting                                                                                                              |
 | main → host | `host:shutdown`        | none                                                                                                                                      |
 | host → main | `host:ready`           | none                                                                                                                                      |
-| host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent                                                                                              |
+| host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent, whenever that set changes                                                                   |
 | host → main | `host:projects`        | The project paths, whenever the list changes; main relays them to the [terminal host](./terminal.md#shells)                               |
 | host → main | `host:auth-commands`   | The terminal sign-in commands it built; main relays them to the terminal host, which runs only these ([terminal](./terminal.md#security)) |
 | host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body`                                                                |
-| host → main | `host:badge`           | `count`: pending permission requests across all sessions                                                                                  |
-| host → main | `host:busy`            | `requestId`, and the sessions with a turn running                                                                                         |
-| host → main | `host:log`             | `level`, `message`, written to main's log                                                                                                 |
+| host → main | `host:badge`           | `count`: pending permission requests across all sessions, whenever it changes                                                             |
+| host → main | `host:busy`            | `requestId`, and the sessions that are `running` or `awaiting_permission`                                                                 |
+| host → main | `host:log`             | `level`, `message`: every entry of the host log, such as a corrupt state file                                                             |
 | host → main | `host:stopped`         | none; sent just before a clean exit                                                                                                       |
 
 `fakeAgentPath` is `tools/fake-agent/main.ts` under the app path in development, and `OVERBENCH_FAKE_AGENT` (or null) in a packaged build.
 
-`host:attention` lets main show an OS notification when no OverBench window is focused, including when every window is closed on macOS. Each kind follows its switch in Settings › Notifications, and **Play a sound** decides `silent`. A session has at most one notification at a time: a newer one replaces it. Clicking the notification focuses a window, or opens one, and sends it `app:command` `{ kind: 'open-session', sessionId }`; a page that has not subscribed yet receives the command when it does.
+`host:attention` lets main show an OS notification when no OverBench window is focused, including when every window is closed on macOS. Each kind follows its switch in Settings › Notifications, and **Play a sound** decides `silent`. A session has at most one notification at a time: a newer one replaces it. Clicking the notification focuses a window, or opens one, and sends it `app:command` `{ kind: 'open-session', sessionId }`; a page that has not subscribed yet receives the command when it does. The host sends `error` attention only for sessions in the index; a failed create is reported by the rejected request instead.
 
 `host:badge` puts the count where the platform shows one, while Settings › Notifications › **Show a count on the Dock icon** is on:
 
@@ -73,7 +73,9 @@ Typed in `src/shared/host-control.ts`.
 
 The badge clears when the host stops or crashes, until the new host reports again.
 
-`settings` is the agent part of the [settings](./persistence.md#settings): binary overrides and the proxy. Main owns the settings file; the host only receives this part.
+`settings` is the agent part of the [settings](./persistence.md#settings): binary overrides, the proxy and background fetch. Main owns the settings file; the host only receives this part. A new `host:settings` applies at once: changed binary overrides run detection again for those agents, the proxy applies to agents started from then on and to the git service, and background fetch goes to the git service. A running agent keeps the environment it started with.
+
+On `host:shutdown` the host flushes pending patches, stops every agent with the sequence below, stops the git service, writes pending state, closes the ports, and sends `host:stopped` before it exits.
 
 The renderer never sends the host a path to an executable. Changing an agent's binary goes through a main-process IPC call that shows a native file dialog, saves the choice in settings and sends `host:settings`.
 
@@ -82,13 +84,16 @@ The renderer never sends the host a path to an executable. Changing an agent's b
 `src/agent-host/catalog.ts` is the only place that knows how to launch an agent.
 
 ```ts
-type AgentId = 'claude-code' | 'codex' | 'opencode'
+type AgentId = 'claude-code' | 'codex' | 'opencode' | 'fake-agent'
 
 interface AgentDefinition {
   id: AgentId
   name: string
   registryId: string
-  launch: { kind: 'npx'; package: string } | { kind: 'binary'; command: string; args: string[] }
+  launch:
+    | { kind: 'npx'; package: string }
+    | { kind: 'binary'; command: string; args: string[] }
+    | { kind: 'node-script'; script: string } // the fake agent, on Electron's Node.js
   requiresNode?: string
   install: { hint: string; url: string }
 }
@@ -102,7 +107,8 @@ interface AgentDefinition {
 
 - Package versions are pinned to the ACP Registry entries and bumped deliberately, after a pass with the fake agent and the real agent.
 - `opencode` is looked up on `PATH` unless the user picked a binary in settings.
-- In development builds only, the catalog adds `fake-agent`, which runs `tools/fake-agent/main.ts` with Electron's own Node.js (see [testing](./testing.md#fake-agent)).
+- In development builds only, the catalog adds `fake-agent`, which runs `tools/fake-agent/main.ts` with Electron's own Node.js (see [testing](./testing.md#fake-agent)). It exists exactly when `host:init` carries a `fakeAgentPath`; the host runs `<electronPath> <fakeAgentPath>` with `ELECTRON_RUN_AS_NODE=1`, so it needs no Node.js on the machine.
+- Both pinned packages were checked to exist on npm with `npm view` on 2026-10-20.
 - Each agent is shown with its official mark, bundled with the app; the sources and colors are in the [design system](./design-system.md#agent-marks).
 
 ## Resolving the environment
@@ -149,8 +155,9 @@ stateDiagram-v2
 - **Lazy start**: an agent starts with the first session that needs it.
 - **Shared process**: one process serves every session of that agent across all projects; ACP multiplexes sessions by `sessionId`.
 - **Idle stop**: an agent with no live sessions for 30 minutes is stopped to free memory, and starts again on demand.
-- **Restarts**: if an agent exits while it has live sessions, the host restarts it with backoff (1 s, 2 s, 4 s, up to 30 s) and resumes those sessions ([session model](./session-model.md#recovering-after-a-crash)). After five failed restarts in five minutes it gives up and marks the agent `failed`; the user can retry.
-- **Timeouts**: `initialize` must answer within 180 s on an agent's first launch, because `npx` may be downloading the adapter, and within 30 s afterwards.
+- **Restarts**: if an agent exits while it has live sessions, the host restarts it with backoff (1 s, 2 s, 4 s, up to 30 s) and resumes those sessions ([session model](./session-model.md#recovering-after-a-crash)). After five failed restarts in five minutes it gives up and marks the agent `failed`; the user can retry. Crashes and failed restarts both count toward the five. A start on demand that fails marks the agent `failed` at once, with the reason as `detail`.
+- **Live sessions** are those the host holds that are `starting`, `auth_required`, `ready`, `running`, `awaiting_permission` or `disconnected`; they decide both restarts and the idle stop.
+- **Timeouts**: `initialize` must answer within 180 s on an agent's first launch in the host's lifetime, because `npx` may be downloading the adapter, and within 30 s afterwards. The host cannot tell whether `npx` has the adapter cached, so every agent's first launch gets the long timeout.
 
 ### Spawning
 
@@ -194,7 +201,9 @@ const init = await connection.agent.request(methods.agent.initialize, {
 })
 ```
 
-- `PROTOCOL_VERSION`, `client`, `methods` and `ndJsonStream` come from `@agentclientprotocol/sdk`, the stable v1 entrypoint. The SDK is bundled into the host build.
+- `PROTOCOL_VERSION`, `client`, `methods` and `ndJsonStream` come from the SDK's `@agentclientprotocol/sdk/unstable` entrypoint, not the stable one. The SDK's client validates every `session/update` against its entrypoint's schema before any handler runs, and the stable schema has no `subagent_update` or `session_message`, so sub-sessions would never arrive. Nothing else unstable is advertised or called: the client capabilities add only `subagents: {}`, and the prompt response's `usage` is read when present. The SDK is bundled into the host build.
+- An update variant the schema does not know would fail that validation and be logged by the SDK, so the host's stream tap drops variants outside the mapper's list before the SDK sees them and records each in the agent's diagnostics.
+- Updates for a session id nobody registered yet, such as the commands an agent sends right after answering `session/new`, wait in a bounded buffer (32 sessions, 2,000 updates, 60 s) and are delivered when the session registers. Updates for a session OverBench closed are dropped and recorded instead.
 - If `init.protocolVersion` is not 1, the agent is marked `failed` with "unsupported protocol version".
 - The host keeps `init.agentCapabilities`, `init.authMethods` and `init.agentInfo` per agent. Every optional call is gated on these capabilities.
 - Why each client capability is on or off is explained in the [architecture](../architecture.md#client-capabilities).
@@ -212,7 +221,7 @@ The same sequence runs on idle stop, restart and quit, for every agent in parall
 ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The host then sets the agent's sign-in state, and every session waiting on it shows the agent's `authMethods`.
 
 - **`agent` methods** (Codex): the host calls `authenticate` with the method `id`. The agent runs its own flow, such as opening the browser. On success the host retries what failed.
-- **`terminal` methods** (Claude Code, OpenCode): the agent must run interactively. The command is the agent's launch command plus the method's `args`, for example `npx -y @agentclientprotocol/claude-agent-acp@0.94.0 --cli auth login --claudeai` or `opencode acp --login`. **Sign in in terminal** runs that command in the built-in [terminal](./terminal.md#working-with-the-session) and retries when it finishes. The command is also shown quoted for the user's platform, with a copy button and **I've signed in, retry**, for those who prefer their own terminal.
+- **`terminal` methods** (Claude Code, OpenCode): the agent must run interactively. The command is the agent's launch command plus the method's `args`, with its `env` and the launch's variables as a prefix (`NAME=value …` on macOS and Linux, `set "NAME=value" && …` on Windows), for example `npx -y @agentclientprotocol/claude-agent-acp@0.94.0 --cli auth login --claudeai` or `opencode acp --login`. **Sign in in terminal** runs that command in the built-in [terminal](./terminal.md#working-with-the-session) and retries when it finishes. The command is also shown quoted for the user's platform, with a copy button and **I've signed in, retry**, for those who prefer their own terminal.
 - **Logout** is offered only when the agent advertises `agentCapabilities.auth.logout`. It calls `logout`; the agent's sessions then need sign-in again.
 - Claude Code and Codex also push `_auth/status_update`, an adapter extension that names the account and plan ("Claude Max", "ChatGPT Plus"). It sets the sign-in state without waiting for a failed request, and the plan label heads the [plan limits](./session-model.md#plan-limits).
 - OverBench never reads, stores or forwards credentials.
@@ -222,7 +231,8 @@ ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The 
 - For each agent, the host keeps the last 2,000 ACP messages (direction, time, method, size and the full JSON) in a ring buffer, plus the stderr ring buffer and process events (start, exit code, restarts).
 - **Export diagnostics** asks the host for a bundle: app and agent versions, agent states, capabilities, the buffers, and the platform. The environment is reduced to `PATH`, `SHELL` and the detected Node.js version; other variables can hold secrets and are left out. The renderer passes the bundle to main (`diagnostics:save`), which adds its own section under `main` and writes pretty JSON to a path chosen in a save dialog, `overbench-diagnostics-<date>-<time>.json` in Downloads by default. Main's section holds the app, Electron, Chromium, Node.js and V8 versions, the platform, architecture and OS version, the launch time to the first interactive frame, the state and supervision events of both hosts, and main's last 500 log records.
 - Before exporting, the UI warns that the bundle contains prompts and code from recent sessions.
-- In development, `OVERBENCH_ACP_LOG=1` also mirrors ACP traffic to the host's stdout.
+- In development, `OVERBENCH_ACP_LOG=1` also mirrors ACP traffic to the host's stdout; packaged builds ignore it.
+- The buffers are bounded by size as well as count: the traffic of one agent holds at most 8 MB of JSON, a message over 256 KB is kept as a truncated preview, each agent keeps its last 500 process events, and the host log its last 2,000 entries. Messages are stored as JSON text, which costs far less memory than the parsed objects.
 
 ## Platform differences
 
@@ -238,7 +248,7 @@ ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The 
 | Data directory            | `~/Library/Application Support/OverBench`                               | `~/.config/OverBench`          | `%APPDATA%\OverBench`                                       |
 | Shell quoting for display | POSIX single quotes                                                     | POSIX single quotes            | `cmd.exe` double quotes                                     |
 
-Paths are always compared after canonicalizing with `path.resolve` and `fs.realpath.native`, never as raw strings.
+Paths are always compared after canonicalizing with `path.resolve` and `fs.realpath.native`, never as raw strings. On Windows only drive paths (`C:\…`) and UNC paths count as absolute; a path such as `\src` depends on the host's current drive and is refused.
 
 ## Alternatives considered
 

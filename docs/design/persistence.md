@@ -44,6 +44,7 @@ interface SessionsFile {
 
 - `name` defaults to the folder name.
 - `lastViewedAt` decides the `unread` attention state after a restart.
+- A session enters the index once its `session/new` succeeds, when it is imported, or, for a subagent, as soon as its parent is in the index. Its entry is rewritten when its title, `updatedAt`, `lastViewedAt`, description or branch changes.
 
 ## Settings
 
@@ -129,7 +130,7 @@ interface AppStateFile {
 
 ## Writing safely
 
-- Writes are debounced by 500 ms per file: the first change starts the window, and every change within it shares the one write that ends it, so a steady stream of changes still reaches disk twice a second.
+- Writes are debounced by 500 ms per file: the first change starts the window, and every change within it shares the one write that ends it, so a steady stream of changes still reaches disk twice a second. The data is serialized when the write happens, so it carries the latest state and a change costs nothing more than scheduling.
 - Each write goes to `<file>.tmp`, is flushed with `fsync`, and is renamed over the original. A crash mid-write leaves the previous version intact. On Windows the rename is retried a few times on `EPERM`, `EACCES` and `EBUSY`, which a virus scanner or indexer holding the file causes. Writes to one file are serialized.
 - Only the agent host writes its files, and the single-instance lock in main guarantees there is one host.
 - On quit, pending writes are flushed before the host reports `host:stopped`.

@@ -92,7 +92,7 @@ interface SlashCommand {
 type ThreadEntry =
   | { kind: 'user'; id: string; content: UserContent[] }
   | { kind: 'agent'; id: string; markdown: string; attachments: ContentRef[]; streaming: boolean }
-  | { kind: 'thought'; id: string; markdown: string; streaming: boolean }
+  | { kind: 'thought'; id: string; markdown: string; streaming: boolean; durationMs?: number }
   | ToolEntry
   | { kind: 'subagent'; id: string; sessionId: string } // a sub-session the agent started here
   | { kind: 'session_message'; id: string; senderId: string | null; content: UserContent[] }
@@ -172,6 +172,7 @@ interface PlanItem {
 ```
 
 - `diff.oldText` is `null` for a new file.
+- A thought's `durationMs` is set when it closes: when the next entry arrives, or when the turn ends. It runs from the thought's first chunk, and replayed thoughts have none.
 - `ContentRef` with `kind: 'unsupported'` keeps content the UI cannot show yet (audio, embedded resources) visible as a labelled chip instead of dropping it.
 - Text from tools is normalized to LF line endings before it enters the model.
 
@@ -205,13 +206,13 @@ interface SessionSnapshot {
 
 ### Entry ids
 
-- Messages with an ACP `messageId`: `m:<messageId>`.
+- Messages with an ACP `messageId`: `m:<messageId>`. Agents may reuse one message id for a thought and its answer, so when `m:<messageId>` already names an entry of another kind, the new one is `m:<messageId>#<kind>` (`#agent`, `#thought` or `#user`).
 - Tool calls: `t:<toolCallId>`.
 - Compactions: `c:<compactionId>`.
 - Git events: `g:<n>`, from the same counter as `e:<n>`.
 - Subagent announcements: `s:<child session id>`.
 - Session messages: `sm:<messageId>`.
-- Everything else: `e:<n>`, from a per-session counter in the host.
+- Everything else: `e:<n>`, from a per-session counter in the host. That includes the user entry the host adds when it sends a prompt, and messages without a `messageId`.
 
 ## Mapping ACP v1 to patches
 
@@ -235,6 +236,7 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `compaction_summary_chunk`  | Appends text to that compaction entry's `summary`.                                                                                                                                                                                      |
 | `subagent_update`           | Creates or updates a child session ([Sub-sessions](#sub-sessions)); the first update for a child also adds a `subagent` entry to the parent's thread.                                                                                   |
 | `session_message`           | Adds or replaces the `session_message` entry for `messageId` in the session it arrives on.                                                                                                                                              |
+| `session_message_chunk`     | Appends its content block to the `session_message` entry for `messageId`, or adds that entry.                                                                                                                                           |
 | anything else               | Ignored and recorded in diagnostics, so a newer agent never breaks the thread.                                                                                                                                                          |
 
 Content blocks map as follows: `text` to markdown, `image` to an image ref, `resource_link` to a link ref, and `audio` and `resource` to `unsupported` refs. In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
@@ -247,7 +249,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 2. The host adds the user entry, sets `status: 'running'` and `turnStartedAt`, and sends `session/prompt` with the content as ACP content blocks.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
 4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, sets `usage.tokens` when present. The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
-5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready`, `auth_required` or `disconnected` depending on the cause.
+5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready`, `auth_required` or `disconnected` depending on the cause. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
 
 ## Permissions
 
@@ -263,6 +265,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 2. The host immediately answers every pending permission request of that session with `{ outcome: { outcome: 'cancelled' } }`, as the protocol requires, and records `permissionResult: 'cancelled'`.
 3. The session stays `running` until `session/prompt` returns with `stopReason: 'cancelled'`.
 4. If the agent has not returned 10 s later, the host ends the turn itself, adds a warning notice that the agent did not confirm cancellation, and sets `status: 'ready'`.
+5. A permission request that arrives after the user cancelled the turn, or while the session is closing, is answered `cancelled` at once; it never becomes pending.
 
 ## Session lifecycle
 
@@ -278,7 +281,19 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 
 ### Recovering after a crash
 
-When an agent process exits, its live sessions become `disconnected` and keep their threads. When the agent restarts, the host calls `session/resume` for each; on success they return to `ready`. A turn that was running when the agent died ends with an error notice. If resuming fails, the session becomes `failed` with **Reopen**, which runs `session/load`.
+When an agent process exits, its live sessions become `disconnected` and keep their threads. When the agent restarts, the host calls `session/resume` for each; on success they return to `ready`. A turn that was running when the agent died ends with an error notice, and its pending permission requests are cleared as `withdrawn`. If resuming fails, the session becomes `failed` with **Reopen**, which runs `session/load`. An agent without `session/resume` is reconnected with `session/load` instead, which replays the history.
+
+### How the host keeps sessions
+
+These details are settled by the implementation in `src/agent-host/sessions.ts`:
+
+- **Live and closed**: a session is live while the host holds its thread. A session that is only in the index reports `status: 'closed'`, and its snapshot has the stored title and no entries; `sessions.open` makes it live with `session/load`, or `session/resume` with the notice above.
+- **Create**: `sessions.create` sends the session's summary with `starting` at once, and resolves when `session/new` succeeds. When it fails with `auth_required`, it resolves anyway, with the session live in `auth_required` but not yet in the index; signing in, or `sessions.retry`, runs `session/new` again. Any other failure rejects the request and sends `session.removed`. Creating a session also adds its folder to the projects.
+- **Open**: `sessions.open` waits for the load or resume, so its snapshot already holds the replay. A renderer watches first, so it also receives the replay's patches. When the agent cannot start, or the load fails, the session stays live in `failed` (or `auth_required`) and the snapshot shows it, for **Retry**.
+- **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in, `session/load` for a failed load or resume, and for a `disconnected` session it restarts the agent, whose restart resumes it. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
+- **Unread**: `sessions.watch`, `sessions.unwatch`, and a turn ending while a port watches set `lastViewedAt`. A turn ending with no port watching sets `unread`. After a restart a session is unread when `updatedAt` is later than `lastViewedAt`; a session never viewed (`lastViewedAt: null`) is not.
+- **Attention** is `permission` while a request is pending, then `error` for a `failed` session or a set `error`, then `unread`.
+- **Sequence numbers** continue across a close and a reopen, so a port still holding an old replica sees a gap and asks for a snapshot instead of mixing two runs.
 
 ### Titles
 
@@ -301,9 +316,10 @@ The subagents RFD ([agent-client-protocol#1992](https://github.com/agentclientpr
 - `state` maps to the child's status: `running` to `running`, `requires_action` to `awaiting_permission`, and `idle` to `ready`, keeping `stopReason`. `unknown` keeps the last status and sets `stateKnown: false`, so the UI shows it as last known rather than current.
 - Updates that name the child's `sessionId` go through the same mapper into the child's own thread. Its permission requests work as in any session.
 - `session_message` adds a `session_message` entry: the parent's instructions to the child, which open the child's thread, and any later messages between them.
-- A subagent session is restricted: `sessions.prompt` fails with `restricted`, and `sessions.cancel` sends `session/cancel` for the child only when `canCancel` is true.
+- A subagent session is restricted: `sessions.prompt`, `sessions.setConfigOption`, `sessions.close` and `sessions.delete` fail with `restricted`, and `sessions.cancel` sends `session/cancel` for the child only when `canCancel` is true (otherwise `restricted` too). `sessions.retry` on a child does nothing; it recovers with its parent. Opening a child that is not live opens its parent, whose load replays the child.
+- While a child has a pending permission request it is `awaiting_permission`, whatever its last state said. Its work runs from the first `running` state to the next `idle`; that `idle` adds a `turn_end` entry to the child's thread with the stop reason and that duration, and its `usage` sets the child's token totals.
 - When the agent reports the child's work ended with an error, the child becomes `failed` with that error.
-- Children are saved in the index with the parent, so the sidebar shows them after a restart. Their threads come back with the parent's `session/load`, which replays the children too; a child the replay does not mention is marked missing.
+- Children are saved in the index with the parent, so the sidebar shows them after a restart. Their threads come back with the parent's `session/load`, which replays the children too; a child a successful replay does not mention is marked missing. After a failed load the children simply stay closed.
 
 ### Rules for both
 
@@ -337,7 +353,9 @@ interface PlanLimit {
 }
 ```
 
-- Each `_claude/rateLimit` value updates the window named by its `rateLimitType` and leaves the others as they are; windows never reported are not shown. M0.2 checks the unit of `utilization` against a live session and records it here.
+- Each `_claude/rateLimit` value updates the window named by its `rateLimitType` and leaves the others as they are; windows never reported are not shown.
+- **Units** (checked on 2026-10-20 against the sources, not yet against a live session): `claude-agent-acp` 0.94.0 passes Claude Code's `rate_limit_info` through unchanged, and Claude Code 2.1.304 treats `utilization` as a fraction from 0 to 1 (it shows `Math.round(u * 1000) / 10` percent, capped at 100, and compares it with thresholds of 0.25, 0.5, 0.75 and 0.9) and `resetsAt` as Unix seconds. The host stores `usedPercent = round(utilization × 1000) / 10`, clamped to 0–100, and `resetsAt` in milliseconds; a `resetsAt` that is already in milliseconds (10¹² or more) is kept as is. A live session should confirm this before M0.2 is signed off.
+- `rateLimitType` values seen in Claude Code: `five_hour` ("5-hour"), `seven_day` ("Weekly"), `seven_day_opus` ("Weekly · Opus"), `seven_day_sonnet` ("Weekly · Sonnet") and `overage` ("Extra usage"); others, such as `seven_day_overage_included`, get a label made from the name. `status` is `allowed`, `allowed_warning` or `rejected`.
 - Limits are kept in memory for the life of the host. After a restart they appear again with the first update.
 - An account with `kind: 'none'` sets the agent's `signIn` to `required`; any other kind sets `signed-in`.
 - Cost is shown only when the account is not a subscription, because for a plan it is not what the user pays.
