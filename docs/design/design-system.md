@@ -263,7 +263,7 @@ The Welcome screen and Project home have a quiet background: a dot grid that a s
 ### Reduce motion
 
 - Motion components follow the root `<MotionConfig reducedMotion="user">`: movement is removed and opacity remains.
-- CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: movement and loops stop (pulses hold still, shimmer stops), opacity and color transitions remain, and disclosures open at once.
+- CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: movement and loops stop (slides, zooms and spins hold still, pulses and shimmer stop), opacity and color transitions remain, and disclosures open at once.
 - The ambient field's light rests at the centre of the content, a staggered entry becomes a plain fade, and a hovered card keeps its glow and shadow but does not rise.
 
 ## Layout behavior
