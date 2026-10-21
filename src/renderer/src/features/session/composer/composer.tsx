@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
 import { ArrowUpIcon, SquareIcon } from 'lucide-react'
 import type { SessionView, SlashCommand } from '@shared/thread'
@@ -67,6 +67,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       }),
     [sessionId],
   )
+
+  // A textarea scrolls only the caret into view, not its padding, so typing at the end of a long
+  // draft would leave the last line on the box's edge.
+  useLayoutEffect(() => {
+    const el = textarea.current
+    if (!el || document.activeElement !== el || el.selectionEnd !== el.value.length) return
+    if (el.scrollHeight > el.clientHeight) el.scrollTop = el.scrollHeight
+  }, [text])
 
   // Starting a session focuses the composer, as the reference does.
   useEffect(() => {
