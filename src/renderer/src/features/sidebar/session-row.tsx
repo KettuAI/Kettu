@@ -151,25 +151,22 @@ export const SessionRow = memo(function SessionRow({
   return (
     <SidebarMenuItem>
       <ContextMenu>
-        <ContextMenuTrigger
-          render={
-            summary.branch ? (
-              <Tooltip>
-                <TooltipTrigger render={button} delay={700} />
-                <TooltipContent side="right" className="flex-col items-start gap-0.5">
-                  <span className="font-mono">{summary.branch}</span>
-                  {summary.pr && (
-                    <span className="opacity-70">
-                      #{summary.pr.number} · {PR_STATE_TEXT[summary.pr.state]}
-                    </span>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              button
-            )
-          }
-        />
+        {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
+        {summary.branch ? (
+          <Tooltip>
+            <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
+            <TooltipContent side="right" className="flex-col items-start gap-0.5">
+              <span className="font-mono">{summary.branch}</span>
+              {summary.pr && (
+                <span className="opacity-70">
+                  #{summary.pr.number} · {PR_STATE_TEXT[summary.pr.state]}
+                </span>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <ContextMenuTrigger render={button} />
+        )}
         <SessionMenu
           sessionId={summary.id}
           projectPath={summary.projectPath}
