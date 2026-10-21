@@ -81,6 +81,14 @@ export class Updater {
   }
 
   async download(): Promise<void> {
+    const off = this.status.state
+    if (off.kind === 'off') {
+      throw new Error(
+        off.reason === 'development'
+          ? 'Updates are off in development builds'
+          : 'Updates for this installation come from the package manager',
+      )
+    }
     if (this.mode === 'link') {
       throw new Error('This build cannot install updates; open the release page to download it')
     }
