@@ -213,6 +213,20 @@ describe('TerminalManager', () => {
     ])
   })
 
+  it("shows a Windows title that is an executable's path as the program's name", async () => {
+    const { manager, ptys, infos } = setup('win32')
+    await manager.create('p1', { projectPath: PROJECT, cols: 80, rows: 24 })
+    ptys[0].emit('\x1b]0;Administrator: C:\\Program Files\\PowerShell\\7\\pwsh.exe\x07PS> ')
+    vi.advanceTimersByTime(105)
+    expect(infos().at(-1)).toMatchObject({ title: 'pwsh' })
+    ptys[0].emit('\x1b]0;C:\\WINDOWS\\system32\\cmd.exe\x07')
+    vi.advanceTimersByTime(105)
+    expect(infos().at(-1)).toMatchObject({ title: 'cmd' })
+    ptys[0].emit('\x1b]0;npm run dev\x07')
+    vi.advanceTimersByTime(105)
+    expect(infos().at(-1)).toMatchObject({ title: 'npm run dev' })
+  })
+
   it('reports the exit code and can restart the shell', async () => {
     const { manager, ptys, infos } = setup()
     const { id } = await manager.create('p1', { projectPath: PROJECT, cols: 80, rows: 24 })

@@ -107,6 +107,14 @@ function foregroundName(pty: PtyProcess | null): string | null {
   return (raw.split(/[\\/]/).pop() ?? '').replace(/^-/, '')
 }
 
+/**
+ * Windows shells title the console with their executable's path, often behind a prefix such as
+ * "Administrator: "; the tab shows the program's name instead, as it does on macOS and Linux.
+ */
+function programTitle(title: string): string {
+  return /(?:^|[\\/]|:\s+)([^\\/:]+)\.exe$/i.exec(title)?.[1] ?? title
+}
+
 /** Owns every pty: spawning, output batching, flow control, replay, titles and exit. */
 export class TerminalManager {
   private readonly terminals = new Map<string, Terminal>()
@@ -359,7 +367,8 @@ export class TerminalManager {
     let title: string
     let busy = info.busy
     if (this.options.platform === 'win32') {
-      title = terminal.scanner.title ?? terminal.shell.name
+      const shellTitle = terminal.scanner.title
+      title = shellTitle ? programTitle(shellTitle) : terminal.shell.name
     } else {
       const foreground = foregroundName(pty)
       if (foreground === null) return
