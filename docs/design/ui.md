@@ -129,6 +129,15 @@ The thread uses shadcn's `MessageScroller` with `autoScroll`: it follows new out
 
 M0.3 compares its behavior with the reference's measurements: following within 40 px of the bottom, your own scroll winning over following for 150 ms, jump-to-latest beyond 120 px, and instant rather than smooth following. Where `MessageScroller` differs and offers no option, OverBench keeps its behavior and records the difference here; it never adds a second scroll hook.
 
+Against `@shadcn/react` 0.3.1:
+
+| Behavior        | Reference                      | OverBench                                                                                                       |
+| --------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Following       | Within 40 px of the bottom     | The same, through `scrollEdgeThreshold={40}`                                                                    |
+| Your scroll     | Wins over following for 150 ms | A wheel, touch or scroll key stops following at once, with no timer, and following picks up again at the bottom |
+| Jump to latest  | Beyond 120 px                  | Beyond 40 px: the scroller uses one threshold for following and for the button                                  |
+| Scroll behavior | Instant following              | Instant following; the jump button scrolls smoothly                                                             |
+
 Turns are 16 px apart, and the blocks within a turn 10 px.
 
 | Entry           | Presentation                                                                                                                                                                                                                                                                                                           |
@@ -351,15 +360,15 @@ The [updater](./updates.md) works in the background, and the interface shows it 
 
 ## States
 
-| Situation             | What the user sees                                                                                                                                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Agent starting        | Thread skeleton, "Starting Codex…", and the latest stderr lines while `npx` downloads on first run                                                                                                                                               |
-| Loading history       | `Skeleton` entries, replaced progressively as the replay streams in                                                                                                                                                                              |
-| New, empty session    | One quiet line: "What should Claude Code work on?"                                                                                                                                                                                               |
-| Sign-in needed        | `Empty` with the agent's sign-in methods ([agent host](./agent-host.md#sign-in)); in a session with history, an `Alert` above the composer with **Retry** and **Sign in…**, which opens Settings at Agents; signing in there resumes the session |
-| Disconnected          | An `Alert` above the composer: "Codex stopped unexpectedly. Reconnecting…", then **Reconnect** if it fails                                                                                                                                       |
-| Failed                | The error and its detail, with **Retry** and **Export diagnostics**                                                                                                                                                                              |
-| Agent host restarting | A thin banner at the top of the window; everything comes back by itself                                                                                                                                                                          |
+| Situation             | What the user sees                                                                                                                                                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent starting        | Thread skeleton, "Starting Codex…", and the latest stderr lines while `npx` downloads on first run                                                                                                                                                      |
+| Loading history       | `Skeleton` entries, replaced progressively as the replay streams in                                                                                                                                                                                     |
+| New, empty session    | One quiet line: "What should Claude Code work on?"                                                                                                                                                                                                      |
+| Sign-in needed        | `Empty` with the agent's sign-in methods ([agent host](./agent-host.md#sign-in)); in a session with history, an `Alert` above the composer with **Retry** and **Sign in…**, which opens Settings at Agents; signing in there resumes the session        |
+| Disconnected          | An `Alert` above the composer: "Codex stopped unexpectedly. Reconnecting…", then **Reconnect** if it fails                                                                                                                                              |
+| Failed                | The error and its detail, with **Retry** and **Export diagnostics**                                                                                                                                                                                     |
+| Agent host restarting | A small status pill floating over the centre of the top bar, so it never pushes the window down or meets the traffic lights; everything comes back by itself. If the host cannot restart, the pill says so, with **Restart** and **Export diagnostics** |
 
 Every one of these exists in light and dark themes before M0.3 is done.
 
