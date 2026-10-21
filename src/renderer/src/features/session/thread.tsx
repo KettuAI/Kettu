@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo, startTransition, useEffect, useMemo, useState } from 'react'
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -25,6 +25,23 @@ import { ToolCard } from './entries/tool-card'
 import { ToolGroup } from './entries/tool-group'
 import { buildItems, signatureOf } from './thread-items'
 
+// A long history renders from its end: the first frame shows the last items, and older ones
+// follow in transitions after it, which MessageScroller keeps in place as they are prepended.
+const FIRST_ITEMS = 40
+const MORE_ITEMS = 60
+
+function useShownFrom(total: number): number {
+  const [limit, setLimit] = useState(FIRST_ITEMS)
+  useEffect(() => {
+    if (limit >= total) return
+    const frame = requestAnimationFrame(() =>
+      startTransition(() => setLimit((l) => l + MORE_ITEMS)),
+    )
+    return () => cancelAnimationFrame(frame)
+  }, [limit, total])
+  return Math.max(0, total - limit)
+}
+
 export const Thread = memo(function Thread({
   sessionId,
   projectPath,
@@ -41,6 +58,7 @@ export const Thread = memo(function Thread({
   const signature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
   const items = useMemo(() => buildItems(order ?? [], signature), [order, signature])
   const awaitingReply = working && signature.endsWith('u')
+  const shownFrom = useShownFrom(items.length)
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
@@ -50,36 +68,39 @@ export const Thread = memo(function Thread({
           className="[scrollbar-gutter:stable_both-edges]"
         >
           <MessageScrollerContent className="mx-auto w-full max-w-[760px] gap-0 px-6 pt-5 pb-8">
-            {items.map((item, index) => (
-              <MessageScrollerItem
-                key={item.key}
-                messageId={item.key}
-                scrollAnchor={item.type === 'entry' && item.turnStart}
-                className={cn(
-                  index > 0 && (item.type === 'entry' && item.turnStart ? 'pt-4' : 'pt-2.5'),
-                  // The growing tail would flip between skipped and rendered on every chunk,
-                  // recalculating its whole subtree each time.
-                  index === items.length - 1 && '[content-visibility:visible]',
-                )}
-              >
-                {item.type === 'group' ? (
-                  <ToolGroup
-                    sessionId={sessionId}
-                    entryIds={item.ids}
-                    projectPath={projectPath}
-                    agentName={agentName}
-                  />
-                ) : (
-                  <Entry
-                    sessionId={sessionId}
-                    entryId={item.id}
-                    projectPath={projectPath}
-                    agentName={agentName}
-                    keepOpen={item.keepOpen}
-                  />
-                )}
-              </MessageScrollerItem>
-            ))}
+            {items.slice(shownFrom).map((item, shownIndex) => {
+              const index = shownFrom + shownIndex
+              return (
+                <MessageScrollerItem
+                  key={item.key}
+                  messageId={item.key}
+                  scrollAnchor={item.type === 'entry' && item.turnStart}
+                  className={cn(
+                    index > 0 && (item.type === 'entry' && item.turnStart ? 'pt-4' : 'pt-2.5'),
+                    // The growing tail would flip between skipped and rendered on every chunk,
+                    // recalculating its whole subtree each time.
+                    index === items.length - 1 && '[content-visibility:visible]',
+                  )}
+                >
+                  {item.type === 'group' ? (
+                    <ToolGroup
+                      sessionId={sessionId}
+                      entryIds={item.ids}
+                      projectPath={projectPath}
+                      agentName={agentName}
+                    />
+                  ) : (
+                    <Entry
+                      sessionId={sessionId}
+                      entryId={item.id}
+                      projectPath={projectPath}
+                      agentName={agentName}
+                      keepOpen={item.keepOpen}
+                    />
+                  )}
+                </MessageScrollerItem>
+              )
+            })}
             {awaitingReply && (
               <MessageScrollerItem messageId="working" className="pt-2.5">
                 <p className="animate-in text-prose text-muted-foreground animation-duration-(--duration-base) fade-in">

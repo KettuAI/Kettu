@@ -439,6 +439,7 @@ Menu commands that need a window open one if every window was closed; **Toggle S
 - Entry components are memoized and select only their own entry from the store.
 - Streamdown stays in `streaming` mode, so a finished message keeps its rendered blocks. Props it reads through context, such as `controls`, are module constants: a new object per render would re-render every code block and table on each chunk.
 - Diff highlighting runs in `@pierre/diffs`' worker pool (`WorkerPoolContextProvider`), off the main thread.
+- A thread renders from its end: the first frame mounts its last 40 items, and older ones follow 60 at a time in transitions on the next frames, which MessageScroller keeps in place as they are prepended. Switching to a session with 1,000 entries paints in about 35 ms instead of 260 ms.
 - Thread items use `content-visibility: auto` with an intrinsic size estimate, except the last one: while it grows it would flip between skipped and rendered on every chunk, recalculating its whole subtree each time.
 - Micro-interactions and looping indicators are CSS; no component re-renders to animate.
 - Markdown, Shiki and the diff renderer are loaded lazily the first time a session needs them; xterm.js and its addons the first time a terminal opens.
