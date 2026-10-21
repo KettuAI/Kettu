@@ -1,0 +1,2 @@
+# Prettier checks for LF; without this, Windows checkouts get CRLF and fail it.
+* text=auto eol=lf
