@@ -4,7 +4,7 @@ const DAY = 24 * HOUR
 
 const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
 const monthDay = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
-const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 const full = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 
 /** A compact relative time for lists: "now", "4m", "2h", "Mon", "Oct 3". */

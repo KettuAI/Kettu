@@ -241,7 +241,7 @@ export function LimitsPart({
               {limit.resetsAt ? (
                 <Tooltip>
                   <TooltipTrigger
-                    render={<span className="w-10 text-right text-muted-foreground" />}
+                    render={<span className="text-right whitespace-nowrap text-muted-foreground" />}
                   >
                     {resetTime(limit.resetsAt, now)}
                   </TooltipTrigger>
