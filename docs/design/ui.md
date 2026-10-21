@@ -194,7 +194,7 @@ Between sending a prompt and the first output, a status line ("Working…") with
 - Options appear in the agent's order. `allow_once` is the primary button, `allow_always` is `outline`, and `reject_*` options use shadcn's `destructive` variant, a soft tinted button rather than a solid red one.
 - Number keys `1` to `4` pick an option when the composer is empty and not focused; within the options, the arrow keys move focus.
 - While a request is pending, the composer shows "Waiting for your approval" and the session's sidebar row shows the attention dot.
-- After an answer the buttons give way to the choice made ("Allowed once"), so the history reads clearly.
+- After an answer the buttons give way to the choice made ("Allowed once"), shown in the card's header so the history reads clearly even with the card closed.
 
 ## Composer
 
@@ -218,7 +218,7 @@ The layout follows the reference: the box holds only your text and the send butt
 - While a turn runs, the send button becomes a round **Stop** and `Esc` cancels the turn. You can keep writing a draft meanwhile; queueing a prompt during a turn comes later ([M0 scope](../milestones/m0.md#out-planned-for-later-milestones)).
 - While a permission request is pending, the placeholder reads "Waiting for your approval" and the send button is disabled.
 - While the agent is starting, the text area is disabled and the control row is hidden, because the config options are not known yet.
-- **Usage**: a 16 px ring showing `used / size` of the context, alone at first. From 80% it turns `--attention` and shows the percentage next to it. When a plan limit of the agent's account reaches its warning state, its window and percentage appear in front of the ring in `--attention` ("5h 92%"); once a limit is reached, the composer's placeholder says when it resets. A click opens the [usage popover](#usage-popover).
+- **Usage**: a 16 px ring showing `used / size` of the context, alone at first; below 3% only its track shows, since a short round-capped arc reads as a spinner. From 80% it turns `--attention` and shows the percentage next to it. When a plan limit of the agent's account reaches its warning state, its window and percentage appear in front of the ring in `--attention` ("5h 92%"); once a limit is reached, the composer's placeholder says when it resets. A click opens the [usage popover](#usage-popover).
 
 ### Usage popover
 

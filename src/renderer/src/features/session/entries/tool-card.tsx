@@ -177,10 +177,8 @@ export const ToolCard = memo(function ToolCard({
             {entry.content.map((c, i) => (
               <ContentBlock key={i} content={c} projectPath={projectPath} />
             ))}
-            {permission ? (
+            {permission && (
               <PermissionPrompt sessionId={sessionId} entry={entry} agentName={agentName} />
-            ) : (
-              entry.permissionResult && <PermissionAnswer result={entry.permissionResult} />
             )}
           </div>
         </CollapsibleContent>
@@ -250,6 +248,9 @@ function ToolHeader({
           <span className="text-success-text">+{stats.insertions}</span>{' '}
           <span className="text-destructive">−{stats.deletions}</span>
         </span>
+      )}
+      {!entry.permission && entry.permissionResult && (
+        <PermissionAnswer result={entry.permissionResult} />
       )}
       <ToolStatus entry={entry} />
     </>
@@ -475,14 +476,13 @@ function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissio
   const rejected =
     result !== 'cancelled' && result !== 'withdrawn' && result.kind.startsWith('reject')
   return (
-    <p
+    <span
       className={cn(
-        'flex items-center gap-1.5 px-3 pt-1 pb-2.5 text-xs text-muted-foreground',
+        'shrink-0 animate-in text-xs text-muted-foreground duration-(--duration-base) fade-in',
         rejected && 'text-destructive',
       )}
     >
-      {rejected ? <XIcon className="size-3" /> : <CheckIcon className="size-3" />}
       {text}
-    </p>
+    </span>
   )
 }
