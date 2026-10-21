@@ -218,7 +218,7 @@ The layout follows the reference: the box holds only your text and the send butt
 - While a turn runs, the send button becomes a round **Stop** and `Esc` cancels the turn. You can keep writing a draft meanwhile; queueing a prompt during a turn comes later ([M0 scope](../milestones/m0.md#out-planned-for-later-milestones)).
 - While a permission request is pending, the placeholder reads "Waiting for your approval" and the send button is disabled.
 - While the agent is starting, the text area is disabled and the control row is hidden, because the config options are not known yet.
-- **Usage**: a 16 px ring showing `used / size` of the context, alone at first; below 3% only its track shows, since a short round-capped arc reads as a spinner. From 80% it turns `--attention` and shows the percentage next to it. When a plan limit of the agent's account reaches its warning state, its window and percentage appear in front of the ring in `--attention` ("5h 92%"); once a limit is reached, the composer's placeholder says when it resets. A click opens the [usage popover](#usage-popover).
+- **Usage**: a 16 px pie inside a thin ring showing `used / size` of the context, alone at first; a filling wedge, unlike a short arc, never reads as a spinner. From 80% it turns `--attention` and shows the percentage next to it. When a plan limit of the agent's account reaches its warning state, its window and percentage appear in front of the ring in `--attention` ("5h 92%"); once a limit is reached, the composer's placeholder says when it resets. A click opens the [usage popover](#usage-popover).
 
 ### Usage popover
 

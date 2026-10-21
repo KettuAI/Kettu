@@ -27,27 +27,31 @@ function warningLimit(limits: PlanLimit[]): PlanLimit | null {
   return warnings.sort((a, b) => (b.usedPercent ?? 0) - (a.usedPercent ?? 0))[0] ?? null
 }
 
-// Below this, a round-capped arc is a short stub that reads as a loading spinner.
-const MIN_RING_SHARE = 0.03
-
+/** A pie inside a ring: a filling wedge, which a short arc would not be, cannot read as a spinner. */
 function Ring({ share, tone }: { share: number; tone: 'muted' | 'attention' }) {
-  const r = 6
+  // A circle stroked as wide as its diameter paints the wedge that its dash covers.
+  const r = 2.75
   const c = 2 * Math.PI * r
   return (
     <svg aria-hidden viewBox="0 0 16 16" className="size-4 -rotate-90">
-      <circle cx="8" cy="8" r={r} fill="none" strokeWidth="2" className="stroke-track" />
       <circle
-        opacity={share < MIN_RING_SHARE ? 0 : 1}
+        cx="8"
+        cy="8"
+        r="6.75"
+        fill="none"
+        strokeWidth="1.5"
+        className={tone === 'attention' ? 'stroke-attention/45' : 'stroke-track'}
+      />
+      <circle
         cx="8"
         cy="8"
         r={r}
         fill="none"
-        strokeWidth="2"
-        strokeLinecap="round"
+        strokeWidth={r * 2}
         strokeDasharray={c}
         strokeDashoffset={c * (1 - Math.min(1, Math.max(0, share)))}
         className={cn(
-          'transition-[stroke-dashoffset,opacity] duration-(--duration-slow) ease-out-quint',
+          'transition-[stroke-dashoffset] duration-(--duration-slow) ease-out-quint',
           tone === 'attention' ? 'stroke-attention' : 'stroke-muted-foreground',
         )}
       />
