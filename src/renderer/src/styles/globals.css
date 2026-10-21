@@ -453,6 +453,25 @@
   width: var(--hairline);
 }
 
+/* lightningcss folds animation-timeline into the animation shorthand, which Chromium rejects, so
+   the production build loses shadcn's scroll fades. Restated in longhands, which it leaves alone. */
+@supports (animation-timeline: scroll()) {
+  .scroll-fade-y {
+    animation-name: scroll-fade-reveal-t, scroll-fade-reveal-b;
+    animation-duration: 1ms;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self y), scroll(self y);
+  }
+  .scroll-fade-b {
+    animation-name: scroll-fade-reveal-b;
+    animation-duration: 1ms;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self y);
+  }
+}
+
 /* One-time attention pulse: the halo grows to 6 px and settles at 3 px. */
 @keyframes attention-pulse {
   0% {
