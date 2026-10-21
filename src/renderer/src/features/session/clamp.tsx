@@ -1,6 +1,36 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import { Button } from '@renderer/components/ui/button'
 import { cn } from '@renderer/lib/utils'
+
+interface Measured {
+  el: HTMLElement
+  setHeight: (height: number) => void
+}
+
+const measuredBy = new Map<Element, Measured>()
+let sharedObserver: ResizeObserver | null = null
+
+/**
+ * One observer for every Clamp. Its callback runs after layout and before paint: it reads every
+ * changed height while the layout is clean, then commits them in one synchronous render, so a
+ * mount forces no layout of its own and the first paint is already clamped. Measuring in each
+ * Clamp's layout effect instead laid out the whole thread once per commit of a long history.
+ */
+function observer(): ResizeObserver {
+  sharedObserver ??= new ResizeObserver((entries) => {
+    const changed = new Set<Measured>()
+    for (const entry of entries) {
+      const measured = measuredBy.get(entry.target)
+      if (measured) changed.add(measured)
+    }
+    const heights = [...changed].map((m) => [m, m.el.scrollHeight] as const)
+    flushSync(() => {
+      for (const [m, height] of heights) m.setHeight(height)
+    })
+  })
+  return sharedObserver
+}
 
 /**
  * Content cut at a height behind a fade, with a button that shows the rest. The height animates
@@ -28,12 +58,19 @@ export function Clamp({
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const measure = () => setHeight(el.scrollHeight)
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    for (const child of el.children) observer.observe(child)
-    return () => observer.disconnect()
+    const measured = { el, setHeight }
+    // The children too: the clamped box itself stops growing at its max-height.
+    const targets = [el, ...el.children]
+    for (const target of targets) {
+      measuredBy.set(target, measured)
+      observer().observe(target)
+    }
+    return () => {
+      for (const target of targets) {
+        observer().unobserve(target)
+        measuredBy.delete(target)
+      }
+    }
   }, [])
 
   const tall = height > maxHeight + 24

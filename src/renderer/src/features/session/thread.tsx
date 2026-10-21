@@ -27,16 +27,15 @@ import { buildItems, signatureOf } from './thread-items'
 
 // A long history renders from its end: the first frame shows the last items, and older ones
 // follow in transitions after it, which MessageScroller keeps in place as they are prepended.
+// Each prepend lays the thread out again, so the shown count doubles rather than growing by a
+// fixed step: a thread of N items takes log2(N / 40) passes instead of N / 60.
 const FIRST_ITEMS = 40
-const MORE_ITEMS = 60
 
 function useShownFrom(total: number): number {
   const [limit, setLimit] = useState(FIRST_ITEMS)
   useEffect(() => {
     if (limit >= total) return
-    const frame = requestAnimationFrame(() =>
-      startTransition(() => setLimit((l) => l + MORE_ITEMS)),
-    )
+    const frame = requestAnimationFrame(() => startTransition(() => setLimit((l) => l * 2)))
     return () => cancelAnimationFrame(frame)
   }, [limit, total])
   return Math.max(0, total - limit)
