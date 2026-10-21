@@ -7,7 +7,6 @@ import {
   GitBranchIcon,
   GitPullRequestCreateArrowIcon,
   RefreshCwIcon,
-  SquareTerminalIcon,
 } from 'lucide-react'
 import type { GitStatus, PullRequest } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
@@ -18,19 +17,10 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { receiveGitStatus, useGitStore } from '@renderer/stores/git'
-import { toggleTerminal } from '@renderer/stores/view'
 import { BranchLane } from './branch-lane'
 import { PrDetails } from './pr-chip'
 
-export function BranchPopover({
-  status,
-  pr,
-  onClose,
-}: {
-  status: GitStatus
-  pr: PullRequest | null
-  onClose: () => void
-}) {
+export function BranchPopover({ status, pr }: { status: GitStatus; pr: PullRequest | null }) {
   const now = useNow()
   const tools = useGitStore((s) => s.tools)
   const [commitsShown, setCommitsShown] = useState(5)
@@ -150,13 +140,7 @@ export function BranchPopover({
       <PullRequestPart status={status} pr={pr} tools={tools} github={!!github} />
       <Separator className="bg-border-soft" />
 
-      <FetchFooter
-        status={status}
-        onTerminal={() => {
-          onClose()
-          toggleTerminal(status.projectPath, true)
-        }}
-      />
+      <FetchFooter status={status} />
     </div>
   )
 }
@@ -228,7 +212,7 @@ function PullRequestPart({
   return null
 }
 
-function FetchFooter({ status, onTerminal }: { status: GitStatus; onTerminal: () => void }) {
+function FetchFooter({ status }: { status: GitStatus }) {
   const now = useNow()
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -267,10 +251,6 @@ function FetchFooter({ status, onTerminal }: { status: GitStatus; onTerminal: ()
           Fetch
         </Button>
       )}
-      <Button variant="quiet" size="xs" onClick={onTerminal}>
-        <SquareTerminalIcon data-icon="inline-start" />
-        Terminal
-      </Button>
     </div>
   )
 }

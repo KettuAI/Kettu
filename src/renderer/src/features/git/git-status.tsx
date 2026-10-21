@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react'
+import type { KeyboardEvent } from 'react'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -30,7 +30,6 @@ const segment =
 export function GitStatusCluster({ projectPath }: { projectPath: string }) {
   const status = useGitStore((s) => s.status[projectPath])
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
-  const [open, setOpen] = useState(false)
   if (!status?.repo) return null
 
   return (
@@ -40,12 +39,12 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
       className="inline-flex items-center gap-px"
       onKeyDown={arrowFocus}
     >
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover>
         <PopoverTrigger className={segment} aria-label={branchLabel(status)}>
           <BranchSummary status={status} />
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={6} className="w-[372px] gap-0 overflow-hidden p-0">
-          <BranchPopover status={status} pr={pr} onClose={() => setOpen(false)} />
+          <BranchPopover status={status} pr={pr} />
         </PopoverContent>
       </Popover>
       {pr && (

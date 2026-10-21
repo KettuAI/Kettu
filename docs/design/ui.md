@@ -293,7 +293,7 @@ The right side of the top bar shows the project's repository at a glance. Everyt
 │   Open · into main · ✓ 3 passed · ◌ 1 pending  │
 │   Review required              Open on GitHub  │
 ├────────────────────────────────────────────────┤
-│ Fetched 12 min ago          Fetch   Terminal   │
+│ Fetched 12 min ago                     Fetch   │
 └────────────────────────────────────────────────┘
 ```
 
@@ -303,7 +303,7 @@ The right side of the top bar shows the project's repository at a glance. Everyt
 - **Commits**: the branch's newest commits, five at first and up to twenty with a scroll: id in monospace, subject, relative time, and `ArrowUp` on those not pushed.
 - **Working tree**: files changed with added and removed lines in `tabular-nums`, then the staged, untracked and conflicted counts.
 - **Pull request**: state icon and title, number, base, checks summary and review state, and **Open on GitHub**. A published branch without one offers **Create pull request**, which opens GitHub's compare page in the browser. Without `gh`, a muted line says "Install the GitHub CLI to see pull requests"; signed out, it shows `gh auth login` with a copy button.
-- **Footer**: when the remote was last fetched, **Fetch** (a spinner while it runs, git's message inline if it fails), and **Terminal**, which opens a terminal in the project.
+- **Footer**: when the remote was last fetched, and **Fetch** (a spinner while it runs, git's message inline if it fails). A terminal opens from the top bar's toggle only.
 
 ### Pull requests
 

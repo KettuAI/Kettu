@@ -18,7 +18,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 10  | The welcome screen and the project home lack polish            | Home           | Open         |
 | 11  | No steering or queued messages while a turn runs               | Composer       | Open         |
 | 12  | Switching sessions visibly stalls                              | Performance    | Partly fixed |
-| 13  | The git popover only displays, and repeats the terminal toggle | Git            | Open         |
+| 13  | The git popover only displays, and repeats the terminal toggle | Git            | Partly fixed |
 | 14  | The terminal panel's own buttons do nothing                    | Terminal       | Fixed        |
 | 15  | Settings selects show names only and keep the default look     | Settings       | Partly fixed |
 | 16  | Switches keep shadcn's default look                            | Settings       | Open         |
@@ -130,6 +130,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the branch popover shows the branch, its lane against the base, the commits and the changed files, but nothing in it does anything beyond copying the branch name, **Terminal**, and **Fetch** when there is a remote. It is decoration rather than a tool. Its **Terminal** button repeats the terminal toggle right next to it in the top bar.
 - **Expected**: git in OverBench designed as a whole: what it can do, its UI and interactions, and how the functions are organised. The popover's **Terminal** and the top bar's terminal are reconciled into one way in.
 - **Today**: [Interface: branch popover](../design/ui.md#branch-popover) and [Git](../design/git.md), built in `src/renderer/src/features/git/branch-popover.tsx`. It is read-only on purpose: git actions in the interface (staging, committing, pushing, creating pull requests from a form) are [out of M0](./m0.md#out-planned-for-later-milestones). The footer's **Terminal** "opens a terminal in the project", as the toggle at the right of the top bar does. To settle when planning: which git actions come in and when, where they live (this popover, a Changes panel, the thread), and the one place that opens a terminal.
+- **Partly fixed**: the popover's **Terminal** button is gone, so the top bar's toggle is the one way in. Git actions and the popover's design are still to be decided.
 
 ## 14. The terminal panel's own buttons do nothing
 
@@ -145,8 +146,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the Default agent select lists "Ask each time", "Claude Code", "Codex" and "OpenCode" as bare names, without the agents' marks. The select itself looks like the library default: it opens over its trigger and covers the row below.
 - **Expected**: options show a mark with the name, which is required for agents, so a choice is recognised at a glance; and the select gets a look designed for OverBench.
 - **Today**: both selects in Settings, Default agent in General and Automatic updates in About, go through `SettingSelect` in `src/renderer/src/features/settings/controls.tsx`. It takes only a value and a label per option and renders shadcn's `Select` unchanged, which lines the chosen item up with the trigger by default (`alignItemWithTrigger`). The agents' marks already exist ([Design system: agent marks](../design/design-system.md#agent-marks)). To settle when planning: the select's design and whether other selects in the app follow it, and what "Ask each time" and options that are not agents show in place of a mark.
-
 - **Partly fixed**: `SettingSelect` options take an icon, shown in the list and the trigger; Default agent shows each agent's mark and a neutral `CircleHelp` for "Ask each time". The select's look is still to be designed.
+
 ## 16. Switches keep shadcn's default look
 
 - **Reported**: 2026-10-21, with a screenshot of two switches in Settings › General.
