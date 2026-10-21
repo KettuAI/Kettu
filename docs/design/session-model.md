@@ -8,7 +8,7 @@ This document defines OverBench's own model of a session and its thread, how ACP
 
 - The **agent host** holds the authoritative state of every live session. The mapper turns ACP messages into patches, and the host applies them to its copy.
 - The **renderer** holds a replica of the sessions it shows. It starts from a snapshot and applies patch batches in sequence order.
-- Both sides apply patches with the same pure function, `applyPatches`, so they cannot drift apart.
+- Both sides apply patches with the same rules from `src/shared/thread.ts`, so they cannot drift apart. The renderer uses `applyPatches`, which shares every unchanged object. The host owns its copy alone and uses `applyPatchInPlace`, which writes into its `order` and `byId` instead of copying them per patch: with a copy per patch a `session/load` replay of N entries is O(N^2), 3.1 s of patching at 4,000 entries against about 1 ms in place. Unit tests hold the two equal, and the host's process tests compare a replica built with `applyPatches` with the host's snapshot.
 
 ## Types
 

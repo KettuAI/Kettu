@@ -272,6 +272,37 @@ export function applyPatches(state: ThreadState, patches: readonly Patch[]): Thr
   return { session, order, byId }
 }
 
+/**
+ * Applies one patch to a state the caller owns alone, writing into its `order` and `byId` instead
+ * of copying them, which `applyPatches` does once per call and makes a replay of N entries cost
+ * O(N^2). Changed entries are still new objects. For the agent host's own copy only: the renderer
+ * relies on the structural sharing of `applyPatches` for its per-entry selectors.
+ */
+export function applyPatchInPlace(state: ThreadState, patch: Patch): ThreadState {
+  switch (patch.op) {
+    case 'entry.add':
+      if (!(patch.entry.id in state.byId)) state.order.push(patch.entry.id)
+      state.byId[patch.entry.id] = patch.entry
+      return state
+    case 'entry.appendText': {
+      const entry = state.byId[patch.id]
+      if (!entry) throw new UnknownEntryError(patch.id)
+      state.byId[patch.id] = appendText(entry, patch.text)
+      return state
+    }
+    case 'entry.update': {
+      const entry = state.byId[patch.id]
+      if (!entry) throw new UnknownEntryError(patch.id)
+      state.byId[patch.id] = { ...entry, ...patch.changes } as ThreadEntry
+      return state
+    }
+    case 'session.update':
+      return { ...state, session: { ...state.session, ...patch.changes } }
+    case 'thread.reset':
+      return { session: state.session, order: [], byId: {} }
+  }
+}
+
 function appendText(entry: ThreadEntry, text: string): ThreadEntry {
   switch (entry.kind) {
     case 'agent':

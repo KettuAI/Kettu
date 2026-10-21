@@ -166,7 +166,7 @@ sequenceDiagram
 
 ## State and data flow
 
-The agent host is the source of truth for every live session. Its mapper turns ACP messages into patches against OverBench's own [session model](./design/session-model.md) and applies them to its copy. The renderer holds a replica: it starts from a snapshot and applies patch batches in sequence order, refetching a snapshot on any gap. Both sides use the same pure `applyPatches`. Window reloads, closing and reopening a window on macOS, and future multi-window support all work without special cases.
+The agent host is the source of truth for every live session. Its mapper turns ACP messages into patches against OverBench's own [session model](./design/session-model.md) and applies them to its copy. The renderer holds a replica: it starts from a snapshot and applies patch batches in sequence order, refetching a snapshot on any gap. Both sides apply the same patch rules: the renderer with `applyPatches`, which shares unchanged objects, and the host in place with `applyPatchInPlace`, since it owns its copy alone and copying per patch made replays quadratic. Window reloads, closing and reopening a window on macOS, and future multi-window support all work without special cases.
 
 ### Keeping streaming smooth
 
@@ -235,7 +235,7 @@ src/
     ├── agent-host.ts      Renderer to agent host contract
     ├── host-control.ts    Main to agent host messages
     ├── terminal-host.ts   Renderer to terminal host contract
-    └── thread.ts          Session model and applyPatches
+    └── thread.ts          Session model, applyPatches and applyPatchInPlace
 tools/
 ├── fake-agent/            Scripted ACP agent for development and tests
 ├── perf/                  Performance measurement script and its CI runner

@@ -6,7 +6,7 @@ import type { ImportableSession, SessionAttention, SessionSummary } from '@share
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import {
-  applyPatches,
+  applyPatchInPlace,
   coalescePatches,
   threadEntries,
   threadFromSnapshot,
@@ -325,7 +325,7 @@ export class SessionManager {
   private emit(live: Live, patches: readonly Patch[]): void {
     for (const patch of patches) {
       try {
-        live.thread = applyPatches(live.thread, [patch])
+        live.thread = applyPatchInPlace(live.thread, patch)
       } catch (error) {
         if (!(error instanceof UnknownEntryError)) throw error
         // A bug in the mapper, not in the agent: recorded, and the patch is not sent.

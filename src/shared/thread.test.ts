@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyPatchInPlace,
   applyPatches,
   coalescePatches,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
+  type Patch,
   type SessionView,
   type ThreadEntry,
   type ThreadState,
@@ -122,6 +124,52 @@ describe('applyPatches', () => {
       { op: 'entry.appendText', id: 'c:1', text: 'B' },
     ])
     expect(after.byId['c:1']).toMatchObject({ summary: 'AB' })
+  })
+})
+
+describe('applyPatchInPlace', () => {
+  const patches: Patch[] = [
+    { op: 'entry.appendText', id: 'm:1', text: 'lo' },
+    { op: 'entry.add', entry: { kind: 'user', id: 'e:2', content: [] } },
+    { op: 'entry.update', id: 'm:1', changes: { streaming: false } },
+    { op: 'entry.add', entry: { ...user, content: [{ type: 'text', text: 'Hi again' }] } },
+    { op: 'session.update', changes: { title: 'Greeting' } },
+  ]
+
+  it('ends where applyPatches does', () => {
+    let owned = state()
+    for (const patch of patches) owned = applyPatchInPlace(owned, patch)
+    expect(owned).toEqual(applyPatches(state(), patches))
+  })
+
+  it('reuses the containers it owns instead of copying them', () => {
+    const owned = state()
+    const { order, byId } = owned
+    const after = applyPatchInPlace(owned, patches[1])
+    expect(after.byId).toBe(byId)
+    expect(after.order).toBe(order)
+    expect(order).toEqual(['e:1', 'm:1', 'e:2'])
+  })
+
+  it('replaces a changed entry rather than mutating it', () => {
+    const owned = state()
+    applyPatchInPlace(owned, patches[0])
+    expect(agent.kind === 'agent' && agent.markdown).toBe('Hel')
+    expect(owned.byId['m:1']).toMatchObject({ markdown: 'Hello' })
+  })
+
+  it('clears the thread on reset', () => {
+    const after = applyPatchInPlace(state(), { op: 'thread.reset' })
+    expect(after.order).toEqual([])
+    expect(after.byId).toEqual({})
+  })
+
+  it('throws for an unknown entry and leaves the state as it was', () => {
+    const owned = state()
+    expect(() =>
+      applyPatchInPlace(owned, { op: 'entry.appendText', id: 'nope', text: 'x' }),
+    ).toThrow(UnknownEntryError)
+    expect(owned).toEqual(state())
   })
 })
 
