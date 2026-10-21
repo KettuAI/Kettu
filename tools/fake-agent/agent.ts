@@ -96,13 +96,19 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
     new Promise((resolve) => {
       if (signal?.aborted) return resolve()
+      const scaled = ms * scale
+      // A timer waits for the next system tick, about 15 ms on Windows, so a stream behind its
+      // schedule would never catch up; with no wait left it only yields.
+      if (scaled <= 0) {
+        setImmediate(resolve)
+        return
+      }
       const done = (): void => {
         signal?.removeEventListener('abort', done)
         clearTimeout(timer)
         resolve()
       }
-      const scaled = ms * scale
-      const timer = scaled > 0 ? setTimeout(done, scaled) : setTimeout(done, 0)
+      const timer = setTimeout(done, scaled)
       signal?.addEventListener('abort', done, { once: true })
     })
 
