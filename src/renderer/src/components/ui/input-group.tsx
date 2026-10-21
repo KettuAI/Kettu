@@ -15,7 +15,7 @@ const inputGroupVariants = cva(
           'border border-input has-disabled:bg-input/50 has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50 has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-3 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:bg-input/30 dark:has-disabled:bg-input/80 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40',
         // Raised on surface 3; only color and shadow change on hover and focus, so the text never moves.
         composer:
-          'min-h-(--composer-min) items-end rounded-2xl bg-popover shadow-composer transition-shadow duration-(--duration-fast) not-focus-within:hover:shadow-composer-hover focus-within:shadow-composer-focus has-disabled:opacity-100',
+          'h-auto min-h-(--composer-min) items-end rounded-2xl bg-popover shadow-composer transition-shadow duration-(--duration-fast) not-focus-within:hover:shadow-composer-hover focus-within:shadow-composer-focus has-disabled:opacity-100',
       },
     },
     defaultVariants: { variant: 'default' },
