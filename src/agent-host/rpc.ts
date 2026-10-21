@@ -1,0 +1,136 @@
+// The renderer ports: the request/response/event envelope, validation and dispatch.
+
+import {
+  HOST_METHODS,
+  type HostEvent,
+  type HostMethod,
+  type HostParams,
+  type HostResult,
+} from '@shared/agent-host'
+import type { FromPort, PortError } from '@shared/port-rpc'
+import { HostError, isHostError } from './errors'
+
+/** One renderer's port, as the hub sees it; index.ts adapts `MessagePortMain` to this. */
+export interface PortChannel {
+  send(message: FromPort<HostEvent>): void
+  onMessage(listener: (data: unknown) => void): void
+  onClose(listener: () => void): void
+  close(): void
+}
+
+export interface RequestContext {
+  portId: string
+}
+
+export type Handlers = {
+  [M in HostMethod]: (
+    params: HostParams<M>,
+    ctx: RequestContext,
+  ) => Promise<HostResult<M>> | HostResult<M>
+}
+
+export type Validators = { [M in HostMethod]: (params: unknown) => HostParams<M> }
+
+export interface PortHubDeps {
+  handlers: Handlers
+  validators: Validators
+  /** A port closed: its watches and retains go with it. */
+  closed(portId: string): void
+  log(level: 'info' | 'warn' | 'error', message: string): void
+}
+
+const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
+
+function toPortError(error: unknown): PortError {
+  if (isHostError(error)) return error.toPortError()
+  return { code: 'internal', message: (error as Error)?.message ?? String(error) }
+}
+
+export class PortHub {
+  private readonly ports = new Map<string, PortChannel>()
+  private counter = 0
+
+  constructor(private readonly deps: PortHubDeps) {}
+
+  add(channel: PortChannel): string {
+    const portId = `port-${++this.counter}`
+    this.ports.set(portId, channel)
+    channel.onMessage((data) => void this.receive(portId, channel, data))
+    channel.onClose(() => {
+      if (!this.ports.delete(portId)) return
+      this.deps.closed(portId)
+    })
+    return portId
+  }
+
+  has(portId: string): boolean {
+    return this.ports.has(portId)
+  }
+
+  broadcast(event: HostEvent): void {
+    for (const channel of this.ports.values()) channel.send({ type: 'event', event })
+  }
+
+  send(portIds: Iterable<string>, event: HostEvent): void {
+    for (const portId of portIds) this.ports.get(portId)?.send({ type: 'event', event })
+  }
+
+  closeAll(): void {
+    for (const [portId, channel] of [...this.ports]) {
+      this.ports.delete(portId)
+      channel.close()
+      this.deps.closed(portId)
+    }
+  }
+
+  private async receive(portId: string, channel: PortChannel, data: unknown): Promise<void> {
+    const message = data as { type?: unknown; id?: unknown; method?: unknown; params?: unknown }
+    if (typeof message !== 'object' || message === null || message.type !== 'request') {
+      this.deps.log('warn', `Port ${portId} sent a message that is not a request`)
+      return
+    }
+    const id = message.id
+    if (typeof id !== 'number' || !Number.isSafeInteger(id)) {
+      this.deps.log('warn', `Port ${portId} sent a request without a numeric id`)
+      return
+    }
+    const reply = (response: FromPort<HostEvent>): void => {
+      // The page may have gone while the request ran.
+      if (this.ports.has(portId)) channel.send(response)
+    }
+    const method = message.method
+    if (typeof method !== 'string' || !METHODS.has(method)) {
+      reply({
+        type: 'error',
+        id,
+        error: { code: 'unknown_method', message: `Unknown method "${String(method)}"` },
+      })
+      return
+    }
+    try {
+      const result = await this.dispatch(method as HostMethod, message.params, { portId })
+      reply({ type: 'response', id, result })
+    } catch (error) {
+      const portError = toPortError(error)
+      if (portError.code === 'internal') {
+        this.deps.log('error', `${method} failed: ${(error as Error)?.stack ?? String(error)}`)
+      }
+      reply({ type: 'error', id, error: portError })
+    }
+  }
+
+  private async dispatch<M extends HostMethod>(
+    method: M,
+    raw: unknown,
+    ctx: RequestContext,
+  ): Promise<HostResult<M>> {
+    let params: HostParams<M>
+    try {
+      params = this.deps.validators[method](raw)
+    } catch (error) {
+      if (isHostError(error)) throw error
+      throw new HostError('invalid_params', (error as Error).message)
+    }
+    return this.deps.handlers[method](params, ctx)
+  }
+}
