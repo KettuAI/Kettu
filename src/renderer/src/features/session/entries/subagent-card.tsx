@@ -50,8 +50,11 @@ export const SubagentCard = memo(function SubagentCard({
         animation,
       )}
     >
-      <span className="flex min-h-card-header w-full items-start gap-2 px-3 py-2">
-        <BotIcon className="mt-px size-3.5 shrink-0 text-muted-foreground" />
+      {/* One line is as tall as a tool card's header; the icon and status center on that line. */}
+      <span className="flex w-full items-start gap-2 px-3 py-[calc((var(--card-header)-1lh)/2)]">
+        <span className="flex h-lh shrink-0 items-center">
+          <BotIcon className="size-3.5 text-muted-foreground" />
+        </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-baseline gap-1.5">
             <span className="truncate font-medium">{child ? sessionTitle(child) : 'Subagent'}</span>
@@ -71,21 +74,21 @@ export const SubagentCard = memo(function SubagentCard({
             </span>
           )}
         </span>
-        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="flex h-lh shrink-0 items-center gap-1.5 text-muted-foreground">
           {waiting ? (
-            <span className="inline-flex items-center gap-1.5 font-medium text-attention-text">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-attention-text">
               <span aria-hidden className="size-1.5 rounded-full bg-attention" />
               Needs approval
             </span>
           ) : failed ? (
-            <span className="inline-flex items-center gap-1 text-destructive">
+            <span className="inline-flex items-center gap-1 text-xs text-destructive">
               <CircleAlertIcon className="size-3.5" />
               Failed
             </span>
           ) : running ? (
             <Spinner aria-label="Running" className="size-3.5" />
           ) : child ? (
-            <span>Done</span>
+            <span className="text-xs">Done</span>
           ) : null}
           <ChevronRightIcon className="size-3.5 opacity-0 transition-opacity duration-(--duration-fast) group-hover/subagent:opacity-100" />
         </span>
