@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { BotIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import {
+  BotIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CornerDownRightIcon,
+  Trash2Icon,
+  XIcon,
+} from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
 import { closeSession, createSession } from '@renderer/app/actions'
@@ -66,7 +73,10 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
               <>
                 <DropdownMenuGroup>
                   <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>New sub-session</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>
+                      <CornerDownRightIcon />
+                      New sub-session
+                    </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-48">
                       {agents.map((agent) => (
                         <DropdownMenuItem
@@ -88,9 +98,14 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
             )}
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => void closeSession(summary.id)}>
+                <XIcon />
                 Close
               </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
               <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
+                <Trash2Icon />
                 Delete…
               </DropdownMenuItem>
             </DropdownMenuGroup>
