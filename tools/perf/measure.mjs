@@ -174,7 +174,7 @@ async function runTurn(prompt, whileRunning) {
 /** Observers for long animation frames, keystroke timing and frame intervals. */
 async function startObserving() {
   await evaluate(`(() => {
-    const run = (window.__measure = { loaf: [], events: [], typed: new Set(), toFrame: [], delivery: [], frames: [], stop: false })
+    const run = (window.__measure = { loaf: [], events: [], typed: new Set(), toFrame: [], delivery: [], toInput: [], frames: [], stop: false })
     // Only the letters typed while the turn runs count, not the shortcuts that send or clear.
     // The event's timeStamp is when the browser took it in; the delay to this handler is delivery.
     run.onKey = (e) => { if (e.key === 'a' && !e.metaKey && !e.ctrlKey) { run.typed.add(e.timeStamp); run.lastKey = e.timeStamp; run.delivery.push(performance.now() - e.timeStamp) } }
@@ -183,7 +183,9 @@ async function startObserving() {
     run.onInput = () => {
       const start = run.lastKey
       run.lastKey = undefined
-      if (start !== undefined) requestAnimationFrame(() => requestAnimationFrame(() => run.toFrame.push(performance.now() - start)))
+      if (start === undefined) return
+      run.toInput.push(performance.now() - start)
+      requestAnimationFrame(() => requestAnimationFrame(() => run.toFrame.push(performance.now() - start)))
     }
     document.addEventListener('keydown', run.onKey, true)
     document.addEventListener('input', run.onInput, true)
@@ -211,6 +213,7 @@ async function stopObserving() {
     document.removeEventListener('input', run.onInput, true)
     const toFrame = run.toFrame.sort((a, b) => a - b)
     const delivery = run.delivery.sort((a, b) => a - b)
+    const toInput = run.toInput.sort((a, b) => a - b)
     const slow = run.events.filter((e) => run.typed.has(e.start)).map((e) => e.duration)
     const sorted = run.frames.slice(2).sort((a, b) => a - b)
     const at = (p) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] : 0
@@ -226,6 +229,7 @@ async function stopObserving() {
       keyToFrameMax: toFrame.at(-1) ?? null,
       deliveryP95: delivery.length ? delivery[Math.min(delivery.length - 1, Math.floor(delivery.length * 0.95))] : null,
       deliveryMax: delivery.at(-1) ?? null,
+      toInputP95: toInput.length ? toInput[Math.min(toInput.length - 1, Math.floor(toInput.length * 0.95))] : null,
       updates: window.__overbenchPerf.frames(),
     }
   })()`)
@@ -378,7 +382,7 @@ if (asJson) {
     `Also: reopening the 1,000-entry session with session/load took ${ms(results.reopenMs)}.`,
   )
   console.log(
-    `Of the keystroke time, delivery from the browser to the renderer's handler: p95 ${ms(results.stream.deliveryP95)}, slowest ${ms(results.stream.deliveryMax)}.`,
+    `Of the keystroke time, delivery from the browser to the renderer's handler: p95 ${ms(results.stream.deliveryP95)}, slowest ${ms(results.stream.deliveryMax)}; to the composer's input event: p95 ${ms(results.stream.toInputP95)}.`,
   )
   // Event Timing runs to the frame's presentation, so it includes the OS compositor as well.
   console.log(
