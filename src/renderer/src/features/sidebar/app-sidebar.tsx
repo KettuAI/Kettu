@@ -48,7 +48,7 @@ export function AppSidebar() {
           onClick={newSession}
         />
       </div>
-      <SidebarContent className="gap-0 px-2" onKeyDown={moveRowFocus}>
+      <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
         <SidebarGroup className="gap-0.5 p-0">
           <div className="flex h-6 items-center pr-1 pl-2">
             <SidebarGroupLabel className="h-auto flex-1 p-0 text-xs font-medium text-muted-foreground">
