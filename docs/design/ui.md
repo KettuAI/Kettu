@@ -123,7 +123,7 @@ Search filters rows in every section by name and description. While you search, 
 
 ## Thread
 
-The thread uses shadcn's `MessageScroller` with `autoScroll`: it follows new output, yields as soon as you scroll up, shows `MessageScrollerButton` to jump back, and fades its edges. The user message that starts a turn is the `scrollAnchor`, so a new turn opens with your prompt in view. Opening a session lands at the bottom.
+The thread uses shadcn's `MessageScroller` with `autoScroll`: it follows new output, yields as soon as you scroll up, shows `MessageScrollerButton` to jump back, and fades its edges. The user message that starts the latest turn is the `scrollAnchor`, so a new turn opens with your prompt in view. Older turns are not anchors: when an update keeps the number of items, such as a reply replacing "Working…" or lookups merging into a group, `MessageScroller` scrolls to the first anchor it has not handled, and every anchor it mounted from history or remounted is one, so the view would jump back to the start of the thread. Opening a session lands at the bottom.
 
 M0.3 compares its behavior with the reference's measurements: following within 40 px of the bottom, your own scroll winning over following for 150 ms, jump-to-latest beyond 120 px, and instant rather than smooth following. Where `MessageScroller` differs and offers no option, OverBench keeps its behavior and records the difference here; it never adds a second scroll hook.
 

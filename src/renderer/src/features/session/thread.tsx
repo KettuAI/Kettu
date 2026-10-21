@@ -74,7 +74,7 @@ export const Thread = memo(function Thread({
                 <MessageScrollerItem
                   key={item.key}
                   messageId={item.key}
-                  scrollAnchor={item.type === 'entry' && item.turnStart}
+                  scrollAnchor={item.type === 'entry' && item.scrollAnchor}
                   className={cn(
                     index > 0 && (item.type === 'entry' && item.turnStart ? 'pt-4' : 'pt-2.5'),
                     // The growing tail would flip between skipped and rendered on every chunk,

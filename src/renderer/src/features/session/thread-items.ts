@@ -27,7 +27,17 @@ function charOf(entry: ThreadEntry | undefined): string {
 }
 
 export type Item =
-  | { key: string; type: 'entry'; id: string; turnStart: boolean; keepOpen: boolean }
+  | {
+      key: string
+      type: 'entry'
+      id: string
+      turnStart: boolean
+      // Only the latest turn's start: when an update keeps the item count, MessageScroller
+      // scrolls to the first anchor it has not handled, which any anchor from history or a
+      // remounted item is, so an older one would throw the view back to it.
+      scrollAnchor: boolean
+      keepOpen: boolean
+    }
   | { key: string; type: 'group'; ids: string[] }
 
 export function buildItems(order: string[], signature: string): Item[] {
@@ -52,6 +62,7 @@ export function buildItems(order: string[], signature: string): Item[] {
       type: 'entry',
       id,
       turnStart: signature[i] === 'u',
+      scrollAnchor: i === latestTurn,
       keepOpen: i === keepOpenAt,
     })
   }

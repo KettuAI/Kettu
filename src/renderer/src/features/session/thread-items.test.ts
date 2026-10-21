@@ -103,6 +103,16 @@ describe('buildItems', () => {
     expect(result.map((i) => i.type === 'entry' && i.turnStart)).toEqual([true, false, true])
   })
 
+  it("anchors the scroll to the latest turn's start only", () => {
+    const result = items([user('u1'), agent('a1'), user('u2'), agent('a2')])
+    expect(result.map((i) => i.type === 'entry' && i.scrollAnchor)).toEqual([
+      false,
+      false,
+      true,
+      false,
+    ])
+  })
+
   it("keeps only the latest turn's last edit open", () => {
     const result = items([
       user('u1'),
