@@ -9,6 +9,7 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
+import { openSettings } from '@renderer/stores/view'
 import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
@@ -122,15 +123,18 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           />
         )}
         {session && status === 'auth_required' && !empty && (
-          <Alert variant="warning">
+          <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
             <CircleAlertIcon />
             <AlertTitle>Sign in to {name} to continue</AlertTitle>
             <AlertDescription>
               Your history stays here; the session picks up where it was.
             </AlertDescription>
-            <AlertAction>
+            <AlertAction className="flex gap-1.5">
               <Button size="xs" variant="outline" onClick={retry}>
                 Retry
+              </Button>
+              <Button size="xs" onClick={() => openSettings('agents')}>
+                Sign in…
               </Button>
             </AlertAction>
           </Alert>

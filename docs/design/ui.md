@@ -351,15 +351,15 @@ The [updater](./updates.md) works in the background, and the interface shows it 
 
 ## States
 
-| Situation             | What the user sees                                                                                         |
-| --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Agent starting        | Thread skeleton, "Starting Codex…", and the latest stderr lines while `npx` downloads on first run         |
-| Loading history       | `Skeleton` entries, replaced progressively as the replay streams in                                        |
-| New, empty session    | One quiet line: "What should Claude Code work on?"                                                         |
-| Sign-in needed        | `Empty` with the agent's sign-in methods ([agent host](./agent-host.md#sign-in))                           |
-| Disconnected          | An `Alert` above the composer: "Codex stopped unexpectedly. Reconnecting…", then **Reconnect** if it fails |
-| Failed                | The error and its detail, with **Retry** and **Export diagnostics**                                        |
-| Agent host restarting | A thin banner at the top of the window; everything comes back by itself                                    |
+| Situation             | What the user sees                                                                                                                                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Agent starting        | Thread skeleton, "Starting Codex…", and the latest stderr lines while `npx` downloads on first run                                                                                                                                               |
+| Loading history       | `Skeleton` entries, replaced progressively as the replay streams in                                                                                                                                                                              |
+| New, empty session    | One quiet line: "What should Claude Code work on?"                                                                                                                                                                                               |
+| Sign-in needed        | `Empty` with the agent's sign-in methods ([agent host](./agent-host.md#sign-in)); in a session with history, an `Alert` above the composer with **Retry** and **Sign in…**, which opens Settings at Agents; signing in there resumes the session |
+| Disconnected          | An `Alert` above the composer: "Codex stopped unexpectedly. Reconnecting…", then **Reconnect** if it fails                                                                                                                                       |
+| Failed                | The error and its detail, with **Retry** and **Export diagnostics**                                                                                                                                                                              |
+| Agent host restarting | A thin banner at the top of the window; everything comes back by itself                                                                                                                                                                          |
 
 Every one of these exists in light and dark themes before M0.3 is done.
 
