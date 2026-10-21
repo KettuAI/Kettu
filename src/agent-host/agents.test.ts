@@ -182,7 +182,8 @@ describe('AgentManager', () => {
       .status('fake-agent')
       .authMethods.find((method) => method.type === 'terminal')
     expect(terminal?.command).toContain('ELECTRON_RUN_AS_NODE=1')
-    expect(terminal?.command).toMatch(/main\.ts'? --login$/)
+    // Quoted with single quotes on POSIX and double quotes for cmd.exe, when a path needs it.
+    expect(terminal?.command).toMatch(/main\.ts["']? --login$/)
     await m.agents.stopAll()
   })
 })
