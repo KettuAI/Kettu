@@ -1,5 +1,5 @@
 import 'streamdown/styles.css'
-import { memo } from 'react'
+import { memo, useDeferredValue } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
 import {
@@ -61,7 +61,19 @@ const linkSafety = {
   renderModal: (props: LinkSafetyModalProps) => <LinkConfirm {...props} />,
 }
 
-/** Agent prose: streaming mode while text arrives, static afterwards. Raw HTML never renders. */
+// Module constants: Streamdown's context depends on these, and a new object per render would
+// re-render every code block and table on each streamed chunk.
+const controls = {
+  code: { copy: true, download: false },
+  table: { copy: true, download: false, fullscreen: false },
+  mermaid: false,
+}
+
+/**
+ * Agent prose. Raw HTML never renders. Streaming mode splits the text into memoized blocks, and
+ * the mode never changes: static mode renders one tree, so switching when a message finishes
+ * would rebuild all of it. Finishing only turns off incomplete-markdown repair and the caret.
+ */
 function MarkdownImpl({
   markdown,
   streaming = false,
@@ -71,20 +83,19 @@ function MarkdownImpl({
   streaming?: boolean
   className?: string
 }) {
+  // Finishing re-renders every code block and table to enable their controls; deferring it lets
+  // React split that work across frames instead of blocking one.
+  const live = useDeferredValue(streaming)
   return (
     <Streamdown
-      mode={streaming ? 'streaming' : 'static'}
-      parseIncompleteMarkdown={streaming}
-      isAnimating={streaming}
+      mode="streaming"
+      parseIncompleteMarkdown={live}
+      isAnimating={live}
       skipHtml
       plugins={plugins}
       components={components}
       linkSafety={linkSafety}
-      controls={{
-        code: { copy: true, download: false },
-        table: { copy: true, download: false, fullscreen: false },
-        mermaid: false,
-      }}
+      controls={controls}
       codeBlockMaxHeight={480}
       lineNumbers={false}
       className={cn('markdown', className)}

@@ -149,7 +149,7 @@ Between sending a prompt and the first output, a status line ("Working…") with
 
 ### Markdown
 
-- Streamdown in `streaming` mode with `parseIncompleteMarkdown` while the message streams, then `static` mode.
+- Streamdown in `streaming` mode, which splits the text into memoized blocks, with `parseIncompleteMarkdown` and the caret while the message streams. The mode never changes: `static` mode renders one tree, so switching to it when a message finishes would rebuild the whole message.
 - Plugins: `@streamdown/code` for Shiki highlighting, with a light and a dark theme matched to the app's tokens, and `@streamdown/cjk` so emphasis and line breaking work around Chinese, Japanese and Korean text.
 - `skipHtml` is on: agent output never renders raw HTML. Links pass through Streamdown's link safety and open in the system browser. A GitHub pull request URL renders as a [pull request chip](#pull-requests) instead of a plain link.
 - Code blocks are Streamdown's, with its copy button, on surface 2 with a hairline ring.
@@ -173,7 +173,7 @@ Between sending a prompt and the first output, a status line ("Working…") with
   - `failed`: a destructive cross, and the card opens to show why.
 - **Kind icons** (Lucide): `read` FileText, `edit` FilePen, `delete` Trash2, `move` ArrowRightLeft, `search` Search, `execute` SquareTerminal, `think` Brain, `fetch` Globe, `switch_mode` Repeat, `other` Wrench.
 - **Paths and commands** are monospace, middle-truncated so the file name stays visible, with the full value in a tooltip.
-- **Content**: markdown through Streamdown in `static` mode; diffs through `@pierre/diffs` `MultiFileDiff` in `unified` style with wrapping, at most 480 px high with **Show full diff**.
+- **Content**: markdown through Streamdown, finished from the start; diffs through `@pierre/diffs` `MultiFileDiff` in `unified` style with wrapping, at most 480 px high with **Show full diff**.
 - **Grouping**: consecutive completed `read`, `search` and `fetch` calls collapse into one row, "Explored 4 files" or "Searched 3 times", which expands to the individual calls. Edits, commands and failures are never grouped.
 - **Defaults**: running cards and cards waiting for permission are open; completed cards are collapsed, except that a turn's last edit stays open until the next turn starts.
 
@@ -437,7 +437,7 @@ Menu commands that need a window open one if every window was closed; **Toggle S
 ## Performance rules for components
 
 - Entry components are memoized and select only their own entry from the store.
-- Finished messages switch Streamdown to `static` mode.
+- Streamdown stays in `streaming` mode, so a finished message keeps its rendered blocks. Props it reads through context, such as `controls`, are module constants: a new object per render would re-render every code block and table on each chunk.
 - Diff highlighting runs in `@pierre/diffs`' worker pool (`WorkerPoolContextProvider`), off the main thread.
 - Thread items use `content-visibility: auto` with an intrinsic size estimate.
 - Micro-interactions and looping indicators are CSS; no component re-renders to animate.
