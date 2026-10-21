@@ -243,6 +243,24 @@ async function run() {
   )
   log(`thread scrollbar ${gutter} px`)
   await shoot('session')
+  // Overlay scrollbars show only while the view scrolls, so this one is taken mid-scroll.
+  const thread = await cdp.evaluate(
+    `(() => { const r = document.querySelector('[data-slot=message-scroller-viewport]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`,
+  )
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...thread })
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseWheel',
+    ...thread,
+    deltaX: 0,
+    deltaY: -400,
+  })
+  await sleep(150)
+  const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+  writeFileSync(
+    join(out, `${platform}-session-scrolling-light.png`),
+    Buffer.from(shot.data, 'base64'),
+  )
+  log('captured session-scrolling')
 
   await click(`return document.querySelector('button[aria-label=Model]')`, 'the model button')
   await waitFor(`document.querySelector('[role=menu]')`, 'the model menu')

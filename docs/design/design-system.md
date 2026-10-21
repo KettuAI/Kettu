@@ -324,4 +324,5 @@ The Welcome screen and Project home have a quiet background: a dot grid that a s
 ## Layout behavior
 
 - Components adapt to their container with container queries (`@container`), not viewport media queries, because panels resize independently of the window.
+- Scrollbars are the platform's, thinned with `scrollbar-width: thin` and tinted `--border-strong` through `scrollbar-color`. On macOS they are overlay scrollbars unless the system setting shows them always. On Linux the main process switches on Chromium's `OverlayScrollbar` feature, because Chromium would otherwise draw classic scrollbars with arrow buttons there. On Windows that switch has no effect from the app's code, since the native theme reads it before the main script runs, so Windows keeps Chromium's Fluent scrollbars, 10 px wide with arrow buttons, as in Edge. No layout depends on a scrollbar's width: scrollers that must not shift use `scrollbar-gutter: stable`.
 - A list that acts as one control, such as the sidebar, a menu or a set of permission options, has one Tab stop and moves focus with the arrow keys (roving focus).
