@@ -67,6 +67,8 @@ export function TerminalPanel({
       )}
       data-terminal-panel=""
     >
+      {/* The header is a window drag region, which takes every click on macOS, so its tabs and
+          buttons opt out. */}
       <div
         className={cn(
           'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2',
@@ -79,7 +81,7 @@ export function TerminalPanel({
         <div
           role="tablist"
           aria-label="Terminals"
-          className="no-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto"
+          className="no-scrollbar app-region-no-drag flex min-w-0 items-center gap-0.5 overflow-x-auto"
         >
           {list.map((t) => (
             <TerminalTab
@@ -240,7 +242,15 @@ function PanelButton({
   return (
     <Tooltip>
       <TooltipTrigger
-        render={<Button variant="quiet" size="icon-xs" aria-label={label} onClick={onClick} />}
+        render={
+          <Button
+            variant="quiet"
+            size="icon-xs"
+            aria-label={label}
+            onClick={onClick}
+            className="app-region-no-drag"
+          />
+        }
       >
         {children}
       </TooltipTrigger>
