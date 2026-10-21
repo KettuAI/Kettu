@@ -23,7 +23,7 @@ import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isWindows } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { AGENT_NAMES } from '@renderer/stores/agents'
-import { useGitStore } from '@renderer/stores/git'
+import { loadGitTools, useGitStore } from '@renderer/stores/git'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { ControlError, Segmented, SettingSelect, SettingSwitch } from './controls'
@@ -296,9 +296,22 @@ export function ToolState({
   )
 }
 
+function ToolsPending() {
+  const error = useGitStore((s) => s.toolsError)
+  if (!error) return <Spinner className="size-3.5 text-muted-foreground" />
+  return (
+    <span className="flex items-center gap-2">
+      <ControlError error={error} />
+      <Button variant="outline" size="compact" onClick={() => void loadGitTools()}>
+        Retry
+      </Button>
+    </span>
+  )
+}
+
 export function GitTool() {
   const tools = useGitStore((s) => s.tools)
-  if (!tools) return <Spinner className="size-3.5 text-muted-foreground" />
+  if (!tools) return <ToolsPending />
   return tools.git.found ? (
     <ToolState found label="Found" detail={tools.git.version} />
   ) : (
@@ -308,7 +321,7 @@ export function GitTool() {
 
 export function GhTool() {
   const tools = useGitStore((s) => s.tools)
-  if (!tools) return <Spinner className="size-3.5 text-muted-foreground" />
+  if (!tools) return <ToolsPending />
   const { gh } = tools
   if (gh.state === 'not-installed') {
     return (

@@ -1,12 +1,14 @@
 import { create } from 'zustand'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
-import { host } from '@renderer/lib/host'
+import { errorMessage, host } from '@renderer/lib/host'
 
 interface GitStore {
   status: Record<string, GitStatus>
   currentPr: Record<string, PullRequest | null>
   pullRequests: Record<string, PullRequest> // by URL, for chips
   tools: GitTools | null
+  /** Why the last tools check failed; cleared while a new check runs. */
+  toolsError: string | null
 }
 
 export const useGitStore = create<GitStore>()(() => ({
@@ -14,6 +16,7 @@ export const useGitStore = create<GitStore>()(() => ({
   currentPr: {},
   pullRequests: {},
   tools: null,
+  toolsError: null,
 }))
 
 export function receiveGitStatus(status: GitStatus): void {
@@ -76,9 +79,10 @@ export function loadPullRequest(url: string): Promise<PullRequest | null> {
 }
 
 export async function loadGitTools(): Promise<void> {
+  useGitStore.setState({ toolsError: null })
   try {
     useGitStore.setState({ tools: await host('git.tools', undefined) })
-  } catch {
-    useGitStore.setState({ tools: null })
+  } catch (error) {
+    useGitStore.setState({ tools: null, toolsError: errorMessage(error) })
   }
 }
