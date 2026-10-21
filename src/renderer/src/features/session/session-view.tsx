@@ -72,6 +72,12 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             onRetry={() => void reloadSession(sessionId)}
           />
         </div>
+      ) : summary.status === 'starting' ? (
+        // A session that is not live waits for its agent and the whole `session/load` replay.
+        <div className="flex min-h-0 flex-1 flex-col">
+          <StartingAgent agentId={summary.agentId} loading />
+          <ThreadSkeleton className="opacity-70" />
+        </div>
       ) : (
         <ThreadSkeleton />
       )

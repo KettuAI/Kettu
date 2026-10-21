@@ -29,14 +29,28 @@ export function ThreadSkeleton({ className }: { className?: string }) {
 
 const NO_LINES: string[] = []
 
-/** "Starting Codex…" with the latest lines the agent printed, such as npx downloading it. */
-export function StartingAgent({ agentId }: { agentId: AgentId }) {
+/**
+ * "Starting Codex…" with the latest lines the agent printed, such as npx downloading it. With
+ * `loading`, a session being opened says "Loading the conversation…" once the agent runs.
+ */
+export function StartingAgent({
+  agentId,
+  loading = false,
+}: {
+  agentId: AgentId
+  loading?: boolean
+}) {
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
+  const agentStarting = useAgentsStore((s) => s.byId[agentId]?.state !== 'ready')
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-2 text-center" role="status">
       <span className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
         <Spinner className="size-3.5" />
-        <span className="shimmer">Starting {agentName(agentId)}…</span>
+        <span className="shimmer">
+          {loading && !agentStarting
+            ? 'Loading the conversation…'
+            : `Starting ${agentName(agentId)}…`}
+        </span>
       </span>
       {progress.length > 0 && (
         <div className="flex max-w-[560px] flex-col gap-0.5 font-mono text-[11.5px] text-muted-foreground/80">
