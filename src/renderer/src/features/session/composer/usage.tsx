@@ -1,5 +1,6 @@
 import type { AgentAccount, PlanLimit } from '@shared/agent-host'
-import type { SessionUsage } from '@shared/thread'
+import type { AgentId, SessionUsage } from '@shared/thread'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Progress } from '@renderer/components/ui/progress'
@@ -201,16 +202,28 @@ function ContextPart({
 export function LimitsPart({
   limits,
   account,
+  agent,
 }: {
   limits: PlanLimit[]
   account: AgentAccount | null
+  /** Names whose limits these are, where nothing around the popover does. */
+  agent?: { id: AgentId; name: string }
 }) {
   const now = useNow()
   const observed = limits.reduce((at, l) => Math.max(at, l.observedAt), 0)
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
       <div className="flex items-baseline justify-between text-[13px]">
-        <span className="font-medium">{account?.label ?? 'Plan'}</span>
+        <span className="flex min-w-0 items-center gap-1.5 font-medium">
+          {agent && (
+            <>
+              <AgentMark agent={agent.id} size={13} />
+              <span>{agent.name}</span>
+              <span className="text-muted-foreground">·</span>
+            </>
+          )}
+          <span className="truncate">{account?.label ?? 'Plan'}</span>
+        </span>
         {limits.length > 0 && <span className="text-xs text-muted-foreground">Plan limits</span>}
       </div>
       {limits.length > 0 && (
