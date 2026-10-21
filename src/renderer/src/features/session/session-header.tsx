@@ -111,13 +111,13 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* In a narrow window the name gives way first, down to the mark alone. */}
+        {/* In a narrow top bar the name gives way first, down to the mark alone. */}
         <span
           className="ml-1 inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"
           title={agentName(summary.agentId)}
         >
           <AgentMark agent={summary.agentId} size={13} />
-          <span className="truncate">{agentName(summary.agentId)}</span>
+          <span className="truncate @max-[520px]/top-bar:hidden">{agentName(summary.agentId)}</span>
         </span>
       </NoDrag>
       <span className="flex-1" />

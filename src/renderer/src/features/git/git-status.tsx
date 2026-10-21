@@ -83,7 +83,11 @@ function BranchSummary({ status }: { status: GitStatus }) {
       ) : (
         <GitBranchIcon className="size-3.5" />
       )}
-      <span className="font-mono text-xs text-foreground" title={head.branch ?? undefined}>
+      {/* A narrow top bar caps the branch and keeps "Not published" to its icon, so the title keeps room. */}
+      <span
+        className="min-w-0 truncate font-mono text-xs text-foreground @max-[520px]/top-bar:max-w-24"
+        title={head.branch ?? undefined}
+      >
         {head.detached
           ? (head.oid?.slice(0, 7) ?? 'HEAD')
           : middleTruncate(head.branch ?? 'HEAD', 28)}
@@ -93,7 +97,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
       {!upstream && !head.detached && !unborn && (
         <span className="ml-1 inline-flex items-center gap-1">
           <CloudUploadIcon className="size-[13px]" />
-          Not published
+          <span className="@max-[520px]/top-bar:sr-only">Not published</span>
         </span>
       )}
       {upstream && upstream.ahead > 0 && (

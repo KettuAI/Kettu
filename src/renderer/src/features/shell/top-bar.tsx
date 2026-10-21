@@ -19,7 +19,7 @@ export function TopBar({ children, className }: { children: ReactNode; className
   return (
     <header
       className={cn(
-        'app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 pr-2.5 pl-5',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 pr-2.5 pl-5',
         collapsed && (isMac ? 'pl-[84px]' : 'pl-2'),
         !isMac &&
           !besidePanel &&
