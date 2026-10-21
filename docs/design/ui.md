@@ -92,8 +92,8 @@ Settings is one scrolling page, the way VS Code's settings editor works. A colum
 | Git                | Whether `git` and the GitHub CLI were found and whether `gh` is signed in, with the command to run when it is not · **Fetch in the background** every 5 minutes                                                                                                                                                                                                                                                                      |
 | Notifications      | Shown only when no OverBench window is focused: **Needs approval**, **Turn finished**, **Errors**, **Play a sound** (the system notification sound), and **Show a count on the Dock icon** (the taskbar button on Windows; not shown on Linux, where desktops differ)                                                                                                                                                                |
 | Keyboard shortcuts | The [shortcuts](#keyboard), read-only, with the platform's modifier                                                                                                                                                                                                                                                                                                                                                                  |
-| Advanced           | **Proxy** for agents and `npx`: Use the environment, or Custom with a URL and a no-proxy list · **Diagnostics**: Export diagnostics · **Data folder**: Show in Finder (Explorer, the file manager) · **Remove all sessions from OverBench**, which clears the index after a confirmation and leaves the agents' transcripts alone                                                                                                    |
-| About              | The version, with the Electron, Chromium and Node.js versions and **Copy**; links to the source code and the third-party notices                                                                                                                                                                                                                                                                                                     |
+| Advanced           | **Proxy** for agents, `npx` and updates: Use the environment, or Custom with a URL and a no-proxy list · **Diagnostics**: Export diagnostics · **Data folder**: Show in Finder (Explorer, the file manager) · **Remove all sessions from OverBench**, which clears the index after a confirmation and leaves the agents' transcripts alone                                                                                           |
+| About              | The version, with the Electron, Chromium and Node.js versions and **Copy**; the [update status](#updates) with its action and **Automatic updates**; links to the source code and the third-party notices                                                                                                                                                                                                                            |
 
 - The sign-in notice in the sidebar footer opens Settings at Agents.
 - Settings shows only what M0 supports; there are no disabled placeholders for later features.
@@ -118,7 +118,7 @@ Settings is one scrolling page, the way VS Code's settings editor works. A colum
 - **New sub-session** is in the session's title menu and its row's context menu.
 - Indicators always pair a color with a shape or label, never color alone.
 - The sidebar list has one Tab stop; the arrow keys move between rows.
-- The footer holds **Settings** (`Mod+,`) and, above it, a tinted `--attention` notice when an agent needs sign-in ("Codex needs you to sign in"). The notice opens Settings at Agents and is hidden while that section is open.
+- The footer holds **Settings** (`Mod+,`) and, above it, a tinted `--attention` notice when an agent needs sign-in ("Codex needs you to sign in"). The notice opens Settings at Agents and is hidden while that section is open. The [update notice](#updates) sits between the two.
 - Later, not in M0: pinned sessions with drag reordering, and grouping by status or date.
 
 ## Thread
@@ -321,6 +321,31 @@ The built-in [terminal](./terminal.md) is a panel at the bottom of the main area
 - **Projects**: the panel shows the current project's terminals. In a project without one, the open panel shows a quiet empty state with **New terminal**; it never starts a shell by itself when you switch projects.
 - **States**: starting (a `Spinner` in the tab while the shell starts), exited (the output stays, with **Restart**), and terminal host stopped (each tab shows "Terminal stopped unexpectedly" with **Restart**).
 
+## Updates
+
+The [updater](./updates.md) works in the background, and the interface shows it only when there is something to do: an update is ready, or it has just been installed. Checking and downloading never show outside Settings.
+
+- **Update notice**: when an update is ready, a row in the sidebar footer, directly above **Settings** and below the sign-in notice when both show. It is a raised row on surface 2 with `--card-ring`, so it reads as an object rather than a warning: the `CircleArrowUp` icon, "Update ready" with the version in `--muted-foreground`, and a small outline **Restart** button. It is neutral, not `--attention`, because nothing waits on it. Hovering it shows "OverBench 0.3.0 is downloaded. Restart to finish; your sessions come back." and an × that dismisses it until a newer version is found.
+- In Link mode ([platforms](./updates.md#platforms)) the notice reads "0.3.0 is available" with **Download**, which opens the release page in the browser.
+- **After an update**, the same row reads "Updated to 0.3.0" with **What's new**, which opens the release page, and an ×. It shows for that launch only. There is no dialog and no OS notification.
+- With the sidebar collapsed, the sidebar toggle in the top bar carries a small `--foreground` dot, and its tooltip names the version.
+- **Restart** with agents working or terminal commands running first opens an `AlertDialog`: "Restart to update?", the running sessions with their agent marks and the busy terminals by command, "Your sessions and drafts come back after the restart.", then **Cancel** and **Restart**. With nothing running it restarts at once. The dialog follows **Ask before quitting while agents or terminal commands are running**.
+- **Settings › About** holds the whole status in one row under the version, the state on the left and its action on the right:
+
+  | State        | Text                                                                                        | Action                       |
+  | ------------ | ------------------------------------------------------------------------------------------- | ---------------------------- |
+  | Up to date   | "You're up to date" · "Checked 5 minutes ago"                                               | **Check for updates**        |
+  | Checking     | `Spinner` "Checking for updates…"                                                           | none                         |
+  | Just checked | `CircleCheck` "Up to date", for 4 s after a check you started                               | none                         |
+  | Downloading  | "Downloading 0.3.0" with a `Progress` bar and the percentage                                | none                         |
+  | Ready        | "0.3.0 is ready to install"                                                                 | **What's new**, **Restart**  |
+  | Available    | "0.3.0 is available"                                                                        | **What's new**, **Download** |
+  | Error        | "Couldn't check for updates" and the reason                                                 | **Try again**                |
+  | Off          | "Updates are installed by your package manager", or "Updates are off in development builds" | none                         |
+
+- Below it, **Automatic updates**: Download and install, Notify only, or Off ([checking and downloading](./updates.md#checking-and-downloading)).
+- On macOS the app menu has **Check for Updates…** under OverBench. It opens Settings at About and checks there instead of showing a dialog.
+
 ## States
 
 | Situation             | What the user sees                                                                                         |
@@ -357,6 +382,7 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 | Counts in the git status and the usage ring                      | Status text                             |
 | Terminal panel                                                   | None: it opens and closes at once       |
 | Copying code                                                     | Copy feedback                           |
+| Update notice appears                                            | New entry                               |
 | Dismissed alerts and banners                                     | Motion exit: opacity, `--duration-fast` |
 | Menus, popovers and dialogs                                      | shadcn's built-in transitions           |
 

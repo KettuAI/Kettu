@@ -14,6 +14,7 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | `state/sessions.json` | Agent host | The session index                                                                                                                                  |
 | `settings.json`       | Main       | [Settings](#settings)                                                                                                                              |
 | `window-state.json`   | Main       | Window size, position and maximized state                                                                                                          |
+| `app-state.json`      | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
 | `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts
@@ -76,13 +77,14 @@ interface SettingsFile {
     fontSize: 12 | 13 | 14
   }
   git: { backgroundFetch: boolean }
+  updates: { automatic: 'download' | 'notify' | 'off' }
 }
 ```
 
-- Defaults: no default agent, Enter sends, restore and confirm on, the system theme, the default text size, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, and no background fetch.
+- Defaults: no default agent, Enter sends, restore and confirm on, the system theme, the default text size, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, and updates downloaded and installed automatically.
 - The renderer reads them with `settings:get` and changes them with `settings:update`, which takes a partial object. Main validates it against the schema, rejects unknown keys and values, writes the file and sends `settings:changed` to every window.
 - The renderer applies appearance settings as attributes on `<html>` (`data-theme`, `data-text-size`, `data-reduce-motion`), so tokens switch in CSS without re-rendering components.
-- `agents`, `proxy` and `git` go to the agent host in `host:init` and `host:settings` ([agent host](./agent-host.md#main-and-host-messages)); `terminal` goes to the terminal host when it starts and when it changes.
+- `agents`, `proxy` and `git` go to the agent host in `host:init` and `host:settings` ([agent host](./agent-host.md#main-and-host-messages)); `terminal` goes to the terminal host when it starts and when it changes. `updates` and `proxy` also configure the [updater](./updates.md) in main.
 - Terminals themselves are not stored: their output and processes end with the app in M0 ([terminal](./terminal.md#terminals-and-projects)).
 - Missing keys take their defaults, so adding a setting needs no migration.
 - **Restore the last session** uses the session id kept in `localStorage` with the other per-device view state.

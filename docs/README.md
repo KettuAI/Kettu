@@ -10,6 +10,7 @@ Design documents for OverBench. Start with the architecture, then read the desig
 | [Host protocol](./design/host-protocol.md) | The preload API, requests, events and validation between the renderer and the agent host                                            | Draft   |
 | [Git](./design/git.md)                     | Repository status, pull requests through `gh`, and git events in the thread                                                         | Draft   |
 | [Terminal](./design/terminal.md)           | The terminal host, shells, flow control, rendering, and how terminals relate to projects and sessions                               | Draft   |
+| [Updates](./design/updates.md)             | Checking, downloading and installing new versions, per platform, and what the user sees                                             | Draft   |
 | [Persistence](./design/persistence.md)     | What is stored on disk, how it is written, versioned and recovered                                                                  | Draft   |
 | [Design system](./design/design-system.md) | The design reference and its boundaries, surfaces, lines, elevation, density, typography and motion tokens                          | Draft   |
 | [Interface](./design/ui.md)                | Layout, screens, sidebar, thread entries, composer, states, motion per element and shortcuts                                        | Draft   |
