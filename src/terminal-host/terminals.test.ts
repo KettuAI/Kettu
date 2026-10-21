@@ -181,6 +181,16 @@ describe('TerminalManager', () => {
     expect(await manager.busy()).toEqual([])
   })
 
+  it('sees a command typed before the first title check as busy', async () => {
+    const { manager, ptys, infos } = setup()
+    await manager.create('p1', { projectPath: PROJECT, cols: 80, rows: 24 })
+    ptys[0].emit('$ ')
+    ptys[0].process = 'sleep'
+    ptys[0].emit('sleep 3\r\n')
+    vi.advanceTimersByTime(105)
+    expect(infos().at(-1)).toMatchObject({ title: 'sleep', busy: true })
+  })
+
   it('treats the first foreground name as the shell itself', async () => {
     const { manager, ptys, infos } = setup()
     manager.setShellPath('/bin/sh')

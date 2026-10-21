@@ -86,14 +86,24 @@ interface Terminal {
   pending: string
   batchTimer: NodeJS.Timeout | null
   titleTimer: NodeJS.Timeout | null
-  shellProcess: string | null // the foreground process name once the shell is up
+  shellProcess: string | null // the foreground name at the shell's first output
   command: TerminalCommand | null // typed once the shell is ready
   readyTimer: NodeJS.Timeout | null
   readyLimit: NodeJS.Timeout | null
 }
 
-/** A foreground process as a title: Linux reports argv[0], which may be a path or "-bash". */
-function processLabel(raw: string): string {
+/**
+ * The terminal's foreground process as a title, or null when it cannot be read. Linux reports
+ * argv[0], which may be a path or "-bash"; macOS reports the short process name.
+ */
+function foregroundName(pty: PtyProcess | null): string | null {
+  let raw: unknown
+  try {
+    raw = pty?.process
+  } catch {
+    return null
+  }
+  if (typeof raw !== 'string') return null
   return (raw.split(/[\\/]/).pop() ?? '').replace(/^-/, '')
 }
 
@@ -107,6 +117,16 @@ export class TerminalManager {
 
   constructor(private readonly options: TerminalManagerOptions) {
     this.findOnPath = options.findOnPath ?? pathLookup(options.env, options.platform)
+  }
+
+  /** Loads node-pty ahead of the first terminal; resolves to why it cannot load, or null. */
+  async warmUp(): Promise<string | null> {
+    try {
+      await this.loadPty()
+      return null
+    } catch (error) {
+      return (error as Error).message
+    }
   }
 
   setShellPath(shellPath: string | null): void {
@@ -297,6 +317,11 @@ export class TerminalManager {
   }
 
   private receive(terminal: Terminal, data: string): void {
+    // The first output comes from the shell once it runs, before anything typed can start a
+    // command; the name in the foreground then is the shell's own (bash when /bin/sh is bash).
+    if (terminal.shellProcess === null && this.options.platform !== 'win32') {
+      terminal.shellProcess = foregroundName(terminal.pty) ?? ''
+    }
     terminal.pending += data
     terminal.batchTimer ??= setTimeout(() => this.flush(terminal), TERMINAL_FLOW.batchMs)
   }
@@ -336,14 +361,8 @@ export class TerminalManager {
     if (this.options.platform === 'win32') {
       title = terminal.scanner.title ?? terminal.shell.name
     } else {
-      let foreground: string
-      try {
-        foreground = processLabel(pty.process)
-      } catch {
-        return
-      }
-      // The first name seen counts as the shell too: /bin/sh is bash on macOS, for example.
-      terminal.shellProcess ??= foreground
+      const foreground = foregroundName(pty)
+      if (foreground === null) return
       title = foreground || terminal.shell.name
       busy =
         foreground.length > 0 &&

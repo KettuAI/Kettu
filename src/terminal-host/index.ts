@@ -71,6 +71,12 @@ function init(message: Extract<MainToTerminalHost, { type: 'terminal-host:init' 
     warn,
   )
   send({ type: 'terminal-host:ready' })
+  // The host starts with the first terminal anyway, so loading node-pty now costs nothing and
+  // reports a broken native module before anyone types.
+  void terminals.warmUp().then((error) => {
+    if (error) console.error(error)
+    else console.log('node-pty loaded')
+  })
 }
 
 parentPort.on('message', ({ data, ports }) => {
