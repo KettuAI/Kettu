@@ -163,11 +163,14 @@ const CLIENT_CAPABILITIES = {
 const PENDING_SESSIONS = 32
 const PENDING_UPDATES = 2_000
 const PENDING_TTL_MS = 60_000
+// Sessions OverBench closed: their late updates are dropped, not kept for a later register.
+const CLOSED_SESSIONS = 256
 
 export class AgentConnection {
   private readonly connection: ClientConnection
   private readonly targets = new Map<string, SessionTarget>()
   private readonly pending = new Map<string, { at: number; updates: SessionUpdate[] }>()
+  private readonly unregistered = new Set<string>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -256,6 +259,10 @@ export class AgentConnection {
       target.apply(mapSessionUpdate(update, target.context()))
       return
     }
+    if (this.unregistered.has(acpSessionId)) {
+      this.hooks.ignored(acpSessionId, 'update for a session OverBench closed')
+      return
+    }
     const now = Date.now()
     for (const [id, entry] of this.pending) {
       if (now - entry.at > PENDING_TTL_MS) {
@@ -281,6 +288,7 @@ export class AgentConnection {
   /** Routes a session's updates to `target`, first replaying any that arrived early. */
   register(acpSessionId: string, target: SessionTarget): void {
     this.targets.set(acpSessionId, target)
+    this.unregistered.delete(acpSessionId)
     const early = this.pending.get(acpSessionId)
     if (!early) return
     this.pending.delete(acpSessionId)
@@ -288,7 +296,12 @@ export class AgentConnection {
   }
 
   unregister(acpSessionId: string, target?: SessionTarget): void {
-    if (!target || this.targets.get(acpSessionId) === target) this.targets.delete(acpSessionId)
+    if (target && this.targets.get(acpSessionId) !== target) return
+    this.targets.delete(acpSessionId)
+    this.unregistered.add(acpSessionId)
+    if (this.unregistered.size > CLOSED_SESSIONS) {
+      this.unregistered.delete(this.unregistered.values().next().value!)
+    }
   }
 
   get closed(): Promise<void> {
