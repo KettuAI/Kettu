@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { chmod, mkdir, writeFile } from 'node:fs/promises'
-import { delimiter, join } from 'node:path'
+import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises'
+import { delimiter, dirname, join } from 'node:path'
 import type { GitStatus } from '@shared/git'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { GitServiceApi } from './api'
 import type { Exec } from './exec'
+import { findWindowsExecutable } from './executable'
 import { createGitService, projectKey } from './service'
 import { createTestService, result, sleep, waitFor } from './service-test-support'
 import { createSandbox, type Sandbox } from './test-support'
@@ -31,6 +32,28 @@ async function repoWithCommit(): Promise<string> {
   const dir = await s.initRepo(name('repo'))
   await s.commit(dir, 'a.txt', 'chore: init')
   return dir
+}
+
+// The sandbox environment with a PATH that finds git but not gh: the other tests fake gh, and a
+// real one can take longer than a test to answer, as on Windows runners.
+async function envWithGitOnly(): Promise<NodeJS.ProcessEnv> {
+  let bin: string
+  if (process.platform === 'win32') {
+    // Git for Windows' git.exe needs the files beside it, so it is not linked; gh is elsewhere.
+    const git = await findWindowsExecutable('git', s.env)
+    if (git === null) throw new Error('git was not found on PATH')
+    bin = dirname(git)
+  } else {
+    bin = join(s.root, name('bin'))
+    await mkdir(bin)
+    await symlink(
+      execFileSync('which', ['git'], { env: s.env }).toString().trim(),
+      join(bin, 'git'),
+    )
+  }
+  // Windows spells it Path, and a second spelling would leave the lookup to chance.
+  const env = Object.entries(s.env).filter(([key]) => key.toUpperCase() !== 'PATH')
+  return { ...Object.fromEntries(env), PATH: bin }
 }
 
 async function publishedRepo(): Promise<{ work: string; origin: string }> {
@@ -332,7 +355,7 @@ describe('lifecycle', () => {
     services.push(svc)
     expect((await svc.status(dir)).repo).toBeNull()
     expect((await svc.tools()).git.found).toBe(false)
-    svc.setEnvironment(s.env)
+    svc.setEnvironment(await envWithGitOnly())
     expect((await svc.reloadTools()).git.found).toBe(true)
     expect((await svc.status(dir)).repo?.root).toBe(dir)
   })
