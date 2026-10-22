@@ -10,7 +10,7 @@ on:
       os:
         description: Runners to measure on, as a JSON list
         required: false
-        default: '["macos-latest", "windows-latest", "ubuntu-latest"]'
+        default: '["macos-latest", "windows-latest", "ubuntu-24.04"]'
 
 jobs:
   measure:
@@ -21,11 +21,11 @@ jobs:
         os: ${{ fromJSON(inputs.os) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -44,7 +44,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: xvfb-run -a --server-args="-screen 0 1920x1080x24" node tools/perf/run.mjs 2>&1 | tee perf-${{ runner.os }}.txt; exit ${PIPESTATUS[0]}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: perf-${{ runner.os }}
