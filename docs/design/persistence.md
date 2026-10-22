@@ -12,6 +12,7 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `state/projects.json` | Agent host | Recent project folders                                                                                                                             |
 | `state/sessions.json` | Agent host | The session index                                                                                                                                  |
+| `state/agents.json`   | Agent host | The account and plan limits each agent last reported, shown after a restart until it reports again ([sign-in](./agent-host.md#sign-in))            |
 | `settings.json`       | Main       | [Settings](#settings)                                                                                                                              |
 | `window-state.json`   | Main       | Window size, position and maximized state                                                                                                          |
 | `app-state.json`      | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
@@ -23,6 +24,11 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 interface ProjectsFile {
   version: 1
   projects: { path: string; name: string; addedAt: number; lastOpenedAt: number }[]
+}
+
+interface AgentsFile {
+  version: 1
+  agents: Partial<Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[] }>> // no signed-out accounts
 }
 
 interface SessionsFile {

@@ -12,6 +12,7 @@ import { CLAUDE_CODE, detectAgent, fakeAgent, type AgentDefinition } from './cat
 import { Diagnostics } from './diagnostics'
 import type { Env } from './find-command'
 import { EnvironmentService } from './shell-env'
+import type { AgentsFile } from './storage'
 import {
   FAKE_AGENT_MAIN,
   inProcessLauncher,
@@ -28,7 +29,9 @@ beforeAll(async () => {
 function manager(
   env: Env = {},
   timings: Partial<AgentTimings> = {},
-  extra: Partial<Pick<AgentManagerDeps, 'catalog' | 'detect' | 'install' | 'adaptersDir'>> = {},
+  extra: Partial<
+    Pick<AgentManagerDeps, 'catalog' | 'detect' | 'install' | 'adaptersDir' | 'remember'>
+  > = {},
 ) {
   const launcher = inProcessLauncher(module, env)
   const statuses: AgentStatus[] = []
@@ -474,5 +477,92 @@ describe('details', () => {
     await expect(m.agents.details('gemini' as AgentId)).rejects.toMatchObject({
       code: 'invalid_params',
     })
+  })
+})
+
+describe('remembered accounts', () => {
+  const account = { kind: 'account' as const, label: 'Fake Pro', email: 'developer@example.com' }
+  const limit = {
+    window: 'five_hour',
+    label: '5-hour',
+    usedPercent: 42,
+    resetsAt: 1_000,
+    state: 'ok' as const,
+    observedAt: 500,
+  }
+
+  it('shows what an earlier run reported without starting the agent or claiming a sign-in', async () => {
+    const saved: AgentsFile[] = []
+    const m = manager({}, {}, { remember: (file) => saved.push(file) })
+    m.agents.restore({ version: 1, agents: { 'fake-agent': { account, limits: [limit] } } })
+    expect(m.agents.status('fake-agent')).toMatchObject({
+      account,
+      limits: [limit],
+      signIn: 'unknown',
+      state: 'available',
+    })
+    expect(m.launcher.launches).toBe(0)
+    expect(saved).toEqual([])
+  })
+
+  it('remembers the account an agent reports, and forgets it on sign-out', async () => {
+    const saved: AgentsFile[] = []
+    const m = manager({}, {}, { remember: (file) => saved.push(file) })
+    await m.agents.ensureReady('fake-agent')
+    await until(() => m.agents.status('fake-agent').account !== null)
+    expect(saved.at(-1)).toEqual({
+      version: 1,
+      agents: { 'fake-agent': { account, limits: [] } },
+    })
+    await m.agents.logout('fake-agent')
+    expect(m.agents.status('fake-agent').account).toBeNull()
+    expect(saved.at(-1)).toEqual({ version: 1, agents: {} })
+    await m.agents.stopAll()
+  })
+})
+
+describe('refreshAccount', () => {
+  it('starts an agent that reports its account', async () => {
+    const m = manager()
+    await m.agents.refreshAccount('fake-agent')
+    await until(() => m.agents.status('fake-agent').account !== null)
+    expect(m.launcher.launches).toBe(1)
+    await m.agents.stopAll()
+  })
+
+  it('leaves alone an agent that reports no account, and one that would need an install', async () => {
+    const quiet = manager(
+      {},
+      {},
+      { catalog: [{ ...fakeAgent(FAKE_AGENT_MAIN), reportsAccount: false }] },
+    )
+    await quiet.agents.refreshAccount('fake-agent')
+    expect(quiet.launcher.launches).toBe(0)
+
+    const def: AgentDefinition = {
+      ...fakeAgent(FAKE_AGENT_MAIN),
+      launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
+    }
+    const installs: InstallOptions[] = []
+    const uninstalled = manager(
+      {},
+      {},
+      {
+        catalog: [def],
+        detect: (d, ctx) =>
+          detectAgent(d, {
+            ...ctx,
+            node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
+            installed: async () => [],
+          }),
+        install: async (options) => {
+          installs.push(options)
+          return { version: options.version, dir: '/a', entry: '/a/index.js' }
+        },
+      },
+    )
+    await uninstalled.agents.refreshAccount('fake-agent')
+    expect(installs).toEqual([])
+    expect(uninstalled.launcher.launches).toBe(0)
   })
 })

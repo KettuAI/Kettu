@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  agentsFile,
   corruptName,
   JsonFile,
   migrate,
+  parseAgentsFile,
   parseProjectsFile,
   parseSessionsFile,
   projectsFile,
@@ -219,5 +221,29 @@ describe('the host files', () => {
     )
     const store = projectsFile(dir, log)
     expect(store.file).toBe(path.join(dir, 'state', 'projects.json'))
+  })
+
+  it('keeps what each agent reported and drops what does not parse, entry by entry', () => {
+    const account = { kind: 'account', label: 'Claude Max', email: 'me@example.com' }
+    const limit = {
+      window: 'five_hour',
+      label: '5-hour',
+      usedPercent: 42,
+      resetsAt: 1_000,
+      state: 'ok',
+      observedAt: 500,
+    }
+    expect(
+      parseAgentsFile({
+        agents: {
+          'claude-code': { account, limits: [limit, { ...limit, state: 'odd' }] },
+          codex: { account: { kind: 'none', label: 'Not signed in', email: null }, limits: [] },
+          opencode: 'nothing',
+          gemini: { account, limits: [] },
+        },
+      }),
+    ).toEqual({ version: 1, agents: { 'claude-code': { account, limits: [limit] } } })
+    expect(parseAgentsFile({ agents: [] })).toBe('agents is not an object')
+    expect(agentsFile(dir, log).file).toBe(path.join(dir, 'state', 'agents.json'))
   })
 })

@@ -28,7 +28,7 @@ import { PortHub, type Handlers, type PortChannel } from './rpc'
 import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
-import { projectsFile, sessionsFile } from './storage'
+import { agentsFile, projectsFile, sessionsFile, type AgentsFile, type JsonFile } from './storage'
 import { createValidators } from './validate'
 
 export interface HostOptions {
@@ -57,6 +57,8 @@ export class AgentHost {
   readonly projects: Projects
   readonly scratch: ScratchFolders
   readonly agents: AgentManager
+  /** What the agents last reported about their accounts and plans, kept across runs. */
+  private readonly remembered: JsonFile<AgentsFile>
   readonly sessions: SessionManager
   readonly hub: PortHub
   private settings: HostSettings
@@ -92,6 +94,7 @@ export class AgentHost {
     this.files = new FilesService({ exec: this.execRunner.exec, platform })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
+    this.remembered = agentsFile(options.userDataPath, log)
     this.agents = new AgentManager({
       catalog: buildCatalog(options.fakeAgentPath),
       platform,
@@ -108,6 +111,7 @@ export class AgentHost {
       status: (status) => this.hub.broadcast({ type: 'agent.status', status }),
       processes: (processes) => this.reportProcesses(processes),
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
+      remember: (file) => this.remembered.save(file),
     })
     this.sessions = new SessionManager({
       platform,
@@ -160,7 +164,13 @@ export class AgentHost {
   /** Loads the state, answers `host:ready`, and resolves the environment in the background. */
   static async start(options: HostOptions): Promise<AgentHost> {
     const host = new AgentHost(options)
-    await Promise.all([host.scratch.ready(), host.projects.load(), host.sessions.load()])
+    const [, , , remembered] = await Promise.all([
+      host.scratch.ready(),
+      host.projects.load(),
+      host.sessions.load(),
+      host.remembered.load(),
+    ])
+    host.agents.restore(remembered)
     host.sendFolders()
     options.send({ type: 'host:ready' })
     void host.agents.detectAll()
@@ -254,7 +264,7 @@ export class AgentHost {
           )
         }),
       ])
-      await Promise.all([this.projects.flush(), this.sessions.flush()])
+      await Promise.all([this.projects.flush(), this.sessions.flush(), this.remembered.flush()])
       this.hub.closeAll()
       this.options.send({ type: 'host:stopped' })
     })()
@@ -336,6 +346,7 @@ export class AgentHost {
       },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.details': ({ agentId }) => agents.details(agentId),
+      'agents.refreshAccount': ({ agentId }) => agents.refreshAccount(agentId),
       'agents.listSessions': ({ agentId, projectPath, cursor }) =>
         sessions.listImportable(agentId, projectPath, cursor ?? null),
       'projects.list': () => {

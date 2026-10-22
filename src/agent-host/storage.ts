@@ -2,6 +2,7 @@
 
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
+import type { AgentAccount, PlanLimit } from '@shared/agent-host'
 import { AGENT_IDS, type AgentId, type QueuedPrompt } from '@shared/thread'
 
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void
@@ -225,11 +226,19 @@ export interface SessionsFile {
   sessions: SessionRecord[]
 }
 
+/** What each agent last reported about its account and plan, shown until it reports again. */
+export interface AgentsFile {
+  version: 1
+  agents: Partial<Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[] }>>
+}
+
 export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
+export const AGENTS_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
 export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -327,6 +336,60 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
   return { version: 1, sessions }
 }
 
+// Not 'none': whether a signed-out agent is still signed out is known only once it runs.
+const ACCOUNT_KINDS: ReadonlySet<unknown> = new Set(['account', 'api_key', 'external', 'gateway'])
+const LIMIT_STATES: ReadonlySet<unknown> = new Set(['ok', 'warning', 'reached'])
+const isNullableNumber = isNullable(
+  (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value),
+)
+
+function accountOf(value: unknown): AgentAccount | null {
+  if (!isRecord(value) || !ACCOUNT_KINDS.has(value.kind) || !isString(value.label)) return null
+  return {
+    kind: value.kind as AgentAccount['kind'],
+    label: value.label,
+    email: isString(value.email) ? value.email : null,
+  }
+}
+
+function limitOf(value: unknown): PlanLimit | null {
+  if (
+    !isRecord(value) ||
+    !isString(value.window) ||
+    !isString(value.label) ||
+    !isNullableNumber(value.usedPercent) ||
+    !isNullableNumber(value.resetsAt) ||
+    !LIMIT_STATES.has(value.state) ||
+    !isTime(value.observedAt)
+  ) {
+    return null
+  }
+  return {
+    window: value.window,
+    label: value.label,
+    usedPercent: value.usedPercent,
+    resetsAt: value.resetsAt,
+    state: value.state as PlanLimit['state'],
+    observedAt: value.observedAt,
+  }
+}
+
+// A cache of what the agents report: an entry that does not parse is dropped, not the file.
+export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | string {
+  if (!isRecord(data.agents)) return 'agents is not an object'
+  const agents: AgentsFile['agents'] = {}
+  for (const id of AGENT_IDS) {
+    const entry = data.agents[id]
+    if (!isRecord(entry)) continue
+    const limits = Array.isArray(entry.limits)
+      ? entry.limits.map(limitOf).filter((l): l is PlanLimit => l !== null)
+      : []
+    const account = accountOf(entry.account)
+    if (account || limits.length > 0) agents[id] = { account, limits }
+  }
+  return { version: 1, agents }
+}
+
 export function projectsFile(userDataPath: string, log: LogFn): JsonFile<ProjectsFile> {
   return new JsonFile<ProjectsFile>({
     file: path.join(userDataPath, 'state', 'projects.json'),
@@ -345,6 +408,17 @@ export function sessionsFile(userDataPath: string, log: LogFn): JsonFile<Session
     migrations: SESSIONS_MIGRATIONS,
     parse: parseSessionsFile,
     empty: () => ({ version: 1, sessions: [] }),
+    log,
+  })
+}
+
+export function agentsFile(userDataPath: string, log: LogFn): JsonFile<AgentsFile> {
+  return new JsonFile<AgentsFile>({
+    file: path.join(userDataPath, 'state', 'agents.json'),
+    version: AGENTS_VERSION,
+    migrations: AGENTS_MIGRATIONS,
+    parse: parseAgentsFile,
+    empty: () => ({ version: 1, agents: {} }),
     log,
   })
 }

@@ -82,6 +82,7 @@ export interface AgentStatus {
     forkSession: boolean
     steering: boolean // `_session/steering` into a running turn
     reports: boolean // plan limits and context breakdowns from its own `/usage` and `/context`
+    account: boolean // names its account through `_auth/status_update` as it starts
   }
 }
 
@@ -188,6 +189,7 @@ export interface HostContract {
   'agents.start': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
+  'agents.refreshAccount': { params: { agentId: AgentId }; result: void }
   'agents.listSessions': {
     params: { agentId: AgentId; projectPath: string; cursor?: string }
     result: { sessions: ImportableSession[]; nextCursor: string | null }
@@ -261,6 +263,7 @@ export const HOST_METHODS = [
   'agents.start',
   'agents.refreshLimits',
   'agents.details',
+  'agents.refreshAccount',
   'agents.listSessions',
   'projects.list',
   'projects.add',

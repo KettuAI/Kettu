@@ -74,16 +74,25 @@ function limitsReadable(status: AgentStatus): boolean {
   return status.capabilities.reports && isInstalled(status) && status.signIn !== 'required'
 }
 
-/** Reads what an agent's row and page show: its details, and the limits of a running agent. */
-function useAgentReads(status: AgentStatus) {
-  const readable = limitsReadable(status)
-  const running = status.state === 'ready'
+/**
+ * Reads what an agent's row and page show: its account and plan limits, starting an agent that
+ * reports them, and its details. True while the account and limits are being read.
+ */
+function useAgentReads(status: AgentStatus): boolean {
+  const [reading, setReading] = useState(true)
   useEffect(() => {
-    if (!readable || !running) return
-    refreshLimits(status.id).catch((e: unknown) =>
-      console.warn(`Could not read the plan limits: ${errorMessage(e)}`),
-    )
-  }, [readable, running, status.id])
+    let current = true
+    host('agents.refreshAccount', { agentId: status.id })
+      .catch((e: unknown) =>
+        console.warn(`Could not read the account and plan limits: ${errorMessage(e)}`),
+      )
+      .finally(() => {
+        if (current) setReading(false)
+      })
+    return () => {
+      current = false
+    }
+  }, [status.id])
   // Again on each state change, so an adapter installed meanwhile shows its CLI version.
   useEffect(() => {
     useAgentsStore
@@ -91,6 +100,12 @@ function useAgentReads(status: AgentStatus) {
       .loadDetails(status.id)
       .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
   }, [status.id, status.state])
+  return reading
+}
+
+/** The windows whose reset has not passed; an older reading of them no longer holds. */
+function currentLimits(limits: PlanLimit[], now: number): PlanLimit[] {
+  return limits.filter((l) => l.resetsAt === null || l.resetsAt > now)
 }
 
 /** The agent's own version: for a package agent the CLI its adapter runs, never the adapter's. */
@@ -102,19 +117,45 @@ function agentVersion(status: AgentStatus, details: AgentDetails | undefined): s
 export function AgentListItem({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
   const details = useAgentsStore((s) => s.details[status.id])
+  const now = useNow()
   const r = readiness(status)
-  useAgentReads(status)
+  const reading = useAgentReads(status)
   const version = agentVersion(status, details)
-  // The account once the agent has reported it; until then what it needs, or where it is set up.
-  const summary = status.account
-    ? [status.account.label, status.account.email].filter(Boolean).join(' · ')
-    : r.kind === 'missing' || r.kind === 'failed'
-      ? r.message
-      : r.kind === 'sign-in'
-        ? t('agents.needsSignIn', { name: status.name })
-        : status.package && !status.package.installed
-          ? t('agents.installsOnFirstUse')
-          : (details?.config.find((item) => item.id === 'folder')?.path ?? null)
+  const account = status.account?.kind === 'none' ? null : status.account
+  const limits = currentLimits(status.limits, now)
+  // What it needs first; then who it is signed in as; else how it runs or where it is set up.
+  const summary: ReactNode =
+    r.kind === 'missing' || r.kind === 'failed' ? (
+      r.message
+    ) : r.kind === 'sign-in' ? (
+      t('agents.needsSignIn', { name: status.name })
+    ) : account ? (
+      <>
+        {account.label}
+        {account.email && (
+          <>
+            {' · '}
+            <span className="text-foreground/80">{account.email}</span>
+          </>
+        )}
+      </>
+    ) : reading && status.capabilities.account ? (
+      t('agents.readingAccount')
+    ) : status.package && !status.package.installed ? (
+      t('agents.installsOnFirstUse')
+    ) : (
+      (details?.config.find((item) => item.id === 'folder')?.path ?? null)
+    )
+  const usage =
+    limits.length > 0 ? (
+      <UsageMeters limits={limits} />
+    ) : r.kind === 'missing' ? null : status.capabilities.reports ? (
+      <span className="text-xs text-muted-foreground">
+        {t(reading ? 'agents.readingUsage' : 'agents.usageOnceRunning')}
+      </span>
+    ) : (
+      <span className="text-xs text-muted-foreground">{t('agents.noUsage')}</span>
+    )
   return (
     <button
       type="button"
@@ -132,7 +173,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
           )}
         </div>
         {summary && <span className="truncate text-xs text-muted-foreground">{summary}</span>}
-        {status.limits.length > 0 && <UsageMeters limits={status.limits} />}
+        {usage}
       </div>
       <div className="flex shrink-0 items-center gap-2 self-center">
         <AgentStateLine status={status} />
@@ -146,7 +187,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
 function UsageMeters({ limits }: { limits: PlanLimit[] }) {
   const { t } = useTranslation('composer')
   const now = useNow()
-  const shown = limits.filter((l) => l.resetsAt === null || l.resetsAt > now).slice(0, 2)
+  const shown = limits.slice(0, 2)
   return (
     <div className="mt-1.5 grid max-w-md grid-cols-2 gap-x-6">
       {shown.map((limit) => {
@@ -212,7 +253,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const override = useSettingsStore((s) => s.settings.agents[status.id]?.binaryPath)
   const [act, busy, error] = useAction()
   const r = readiness(status)
-  useAgentReads(status)
+  const reading = useAgentReads(status)
   const version = agentVersion(status, details)
   const running = status.state === 'ready'
 
@@ -338,6 +379,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           <div className="-mx-2.5">
             <LimitsPart limits={status.limits} account={status.account} />
           </div>
+        ) : reading && status.capabilities.reports ? (
+          <p className="px-1 py-3 text-xs text-muted-foreground">{t('agents.readingUsage')}</p>
         ) : limitsReadable(status) && !running ? (
           <RowFrame first text={<RowText name={t('agents.planLimits')} />}>
             <Button

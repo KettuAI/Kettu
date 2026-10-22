@@ -51,6 +51,7 @@ import { formatCommand } from './quote'
 import { hasReports, runReport } from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
+import type { AgentsFile } from './storage'
 
 export interface LaunchedAgent {
   readonly pid: number | null
@@ -141,6 +142,8 @@ export interface AgentManagerDeps {
   status(status: AgentStatus): void
   processes(processes: { agentId: AgentId; pid: number }[]): void
   authCommands(commands: string[]): void
+  /** Keeps what the agents last reported about their accounts and plans, for the next run. */
+  remember?(file: AgentsFile): void
 }
 
 class Slot {
@@ -166,6 +169,8 @@ class Slot {
   signIn: AgentStatus['signIn'] = 'unknown'
   account: AgentAccount | null = null
   limits = new Map<string, PlanLimit>()
+  /** The account and limits as last remembered, so only a change is written. */
+  remembered = ''
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
   progress = new TextRing(8 * 1024)
@@ -188,6 +193,17 @@ function exitText(agent: string, info: ExitInfo): string {
   if (info.error) return t('agent.exit.error', { agent, error: info.error })
   if (info.signal) return t('agent.exit.signal', { agent, signal: info.signal })
   return t('agent.exit.code', { agent, code: String(info.code) })
+}
+
+// A signed-out account is not kept: whether it is still signed out shows once the agent runs.
+function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
+  const account = slot.account?.kind === 'none' ? null : slot.account
+  const limits = [...slot.limits.values()]
+  return account || limits.length > 0 ? { account, limits } : null
+}
+
+function rememberedJson(slot: Slot): string {
+  return JSON.stringify(rememberedEntry(slot))
 }
 
 export class AgentManager {
@@ -816,6 +832,35 @@ export class AgentManager {
     })
   }
 
+  /** What the agents reported in an earlier run, shown until each reports again. */
+  restore(file: AgentsFile): void {
+    for (const [agentId, entry] of Object.entries(file.agents) as [
+      AgentId,
+      AgentsFile['agents'][AgentId],
+    ][]) {
+      const slot = this.slots.get(agentId)
+      if (!slot || !entry) continue
+      slot.account = entry.account
+      slot.limits = new Map(entry.limits.map((limit) => [limit.window, limit]))
+      slot.remembered = rememberedJson(slot)
+      this.emit(slot)
+    }
+  }
+
+  /**
+   * Brings an agent's account and plan limits up to date for Settings › Agents, starting an agent
+   * that reports them. Never installs: an agent that would need an install first is left alone.
+   */
+  async refreshAccount(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    if (!slot.def.reportsAccount) return
+    await this.detectAll()
+    if (slot.signIn === 'required') return
+    if (!slot.runtime && (slot.detection?.state !== 'available' || !slot.detection.spec)) return
+    if (hasReports(agentId)) await this.refreshLimits(agentId)
+    else await this.ensureReady(agentId)
+  }
+
   authRequired(agentId: AgentId): void {
     const slot = this.slots.get(agentId)
     if (!slot || slot.signIn === 'required') return
@@ -861,6 +906,8 @@ export class AgentManager {
     }
     const slot = this.slot(agentId)
     slot.signIn = 'required'
+    slot.account = null
+    slot.limits.clear()
     this.emit(slot)
   }
 
@@ -943,6 +990,7 @@ export class AgentManager {
         // running (its PR #593 would fix it), which OverBench would not know about.
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
         reports: hasReports(slot.def.id),
+        account: slot.def.reportsAccount ?? false,
       },
     }
   }
@@ -994,6 +1042,11 @@ export class AgentManager {
       slot.lastStatus = json
       this.deps.status(status)
     }
+    const remembered = rememberedJson(slot)
+    if (remembered !== slot.remembered) {
+      slot.remembered = remembered
+      this.remember()
+    }
     const commands = this.statuses().flatMap((s) =>
       s.authMethods.flatMap((method) => (method.command ? [method.command] : [])),
     )
@@ -1002,6 +1055,16 @@ export class AgentManager {
       this.lastAuthCommands = commandsJson
       this.deps.authCommands(commands)
     }
+  }
+
+  private remember(): void {
+    if (!this.deps.remember) return
+    const agents: AgentsFile['agents'] = {}
+    for (const [agentId, slot] of this.slots) {
+      const entry = rememberedEntry(slot)
+      if (entry) agents[agentId] = entry
+    }
+    this.deps.remember({ version: 1, agents })
   }
 
   private emitProcesses(): void {

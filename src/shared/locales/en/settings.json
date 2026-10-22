@@ -224,7 +224,11 @@
     "notCreated": "Not created yet",
     "showIn": "Show in {{name}}",
     "noConfig": "No configuration files to show.",
-    "advanced": "Advanced"
+    "advanced": "Advanced",
+    "readingAccount": "Reading the account…",
+    "readingUsage": "Reading plan usage…",
+    "noUsage": "No plan usage reported",
+    "usageOnceRunning": "Plan usage shows once it runs"
   },
   "about": {
     "version": {

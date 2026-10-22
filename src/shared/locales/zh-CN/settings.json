@@ -223,7 +223,11 @@
     "notCreated": "尚未创建",
     "showIn": "在{{name}}中显示",
     "noConfig": "没有可显示的配置文件。",
-    "advanced": "高级"
+    "advanced": "高级",
+    "readingAccount": "正在读取账号…",
+    "readingUsage": "正在读取套餐用量…",
+    "noUsage": "不提供套餐用量",
+    "usageOnceRunning": "运行后显示套餐用量"
   },
   "about": {
     "version": {

@@ -23,6 +23,8 @@ export interface AgentDefinition {
   launch: LaunchKind
   requiresNode?: string
   install: { hint: HostKey; url: string }
+  /** Pushes `_auth/status_update` as it starts, naming its account. */
+  reportsAccount?: boolean
 }
 
 const NODE_INSTALL: AgentDefinition['install'] = {
@@ -37,6 +39,7 @@ export const CLAUDE_CODE: AgentDefinition = {
   launch: { kind: 'package', package: '@agentclientprotocol/claude-agent-acp', version: '0.94.0' },
   requiresNode: '>=22',
   install: NODE_INSTALL,
+  reportsAccount: true,
 }
 
 export const CODEX: AgentDefinition = {
@@ -46,6 +49,7 @@ export const CODEX: AgentDefinition = {
   launch: { kind: 'package', package: '@agentclientprotocol/codex-acp', version: '2.2.2' },
   requiresNode: '>=22',
   install: NODE_INSTALL,
+  reportsAccount: true,
 }
 
 export const OPENCODE: AgentDefinition = {
@@ -69,6 +73,7 @@ export function fakeAgent(script: string): AgentDefinition {
       hint: 'detect.hint.fakeAgent',
       url: 'https://agentclientprotocol.com',
     },
+    reportsAccount: true,
   }
 }
 
