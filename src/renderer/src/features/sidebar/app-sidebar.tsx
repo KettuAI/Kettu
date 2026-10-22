@@ -50,12 +50,17 @@ export function AppSidebar() {
           current={drafting}
           onClick={() => newSession()}
         />
-        {/* Holds the place of a feature planned after this version. */}
-        <NavRow
-          icon={<ShapesIcon className="text-muted-foreground" />}
-          label={t('nav.artifacts')}
-          disabled
-        />
+        <Tooltip>
+          {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
+          <TooltipTrigger render={<span className="flex" />}>
+            <NavRow
+              icon={<ShapesIcon className="text-muted-foreground" />}
+              label={t('nav.artifacts')}
+              disabled
+            />
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('nav.artifactsLater')}</TooltipContent>
+        </Tooltip>
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
