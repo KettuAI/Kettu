@@ -204,15 +204,17 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 
 ### Typefaces
 
-| Text                                   | Typeface                                                                                                      | Source                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Latin letters, digits and punctuation  | Inter Variable, with its optical-size axis                                                                    | Bundled: `@fontsource-variable/inter`, 73 KB for the Latin file          |
-| Chinese                                | The platform's interface face: PingFang SC on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC on Linux    | The system; a Chinese face runs to several megabytes, so none is bundled |
-| Code, commands and other text set mono | The platform's monospace: SF Mono on macOS, Cascadia Code or Consolas on Windows, the system default on Linux | The system, for now; whether to bundle one face for all three is open    |
+| Text                                   | Typeface                                                                                                   | Source                                                                      |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Latin letters, digits and punctuation  | Inter Variable, with its optical-size axis                                                                 | Bundled: `@fontsource-variable/inter`, 73 KB for the Latin file             |
+| Chinese                                | The platform's interface face: PingFang SC on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC on Linux | The system; a Chinese face runs to several megabytes, so none is bundled    |
+| Code, commands and other text set mono | JetBrains Mono Variable, the same on every platform                                                        | Bundled: `@fontsource-variable/jetbrains-mono` (OFL-1.1), chosen 2026-10-22 |
 
 - Inter comes first in the stack (`--font-sans`), so in a Chinese sentence the Latin words, digits and punctuation are Inter and only the Chinese characters fall through to the platform face. `system-ui` ends the stack.
 - Inter is the nearest open typeface to the reference's own sans at interface sizes: the same tall x-height, width and rhythm, where Geist read a size smaller and a shade lighter (chosen 2026-10-21 from a six-way render in the real build).
 - With `font-optical-sizing: auto`, Inter takes its text design at interface sizes and its display design at title sizes by itself; no second family is loaded for headings.
+- JetBrains Mono was chosen on 2026-10-22 over the platform's own monospace, Geist Mono and IBM Plex Mono, from a side-by-side render of code, diffs, branch names and look-alike characters in both themes. It keeps code, diffs and the terminal identical on macOS, Windows and Linux, where the platform faces differ in width and weight, and its tall x-height sits well beside Inter from 11.5 to 13 px. It is a renderer-only dependency, so it goes in `devDependencies`; only its Latin weight file is loaded, and it is added when the code is aligned with this scale.
+- `--font-mono` is JetBrains Mono Variable, then `ui-monospace`, SF Mono, Cascadia Code, Menlo and Consolas as fallbacks; Chinese in mono text falls through to the platform's Chinese face. The terminal and the Files editor read `--font-mono`, so they follow it. xterm.js measures its cells when a terminal opens, so the face is loaded (`document.fonts.load`) before the first terminal opens, or the cells take the fallback's width.
 - No other typeface: no serif, no display face, no icon font.
 
 ### Type scale
