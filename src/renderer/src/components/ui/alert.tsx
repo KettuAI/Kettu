@@ -12,6 +12,12 @@ const alertVariants = cva(
           'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
         warning:
           'bg-attention-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-attention-text',
+        // Something to decide or a task under way, such as an agent update: tinted, no ring.
+        info: 'bg-checked-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-checked-text',
+        success:
+          'bg-success-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-success-text',
+        error:
+          'bg-destructive-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-destructive',
       },
     },
     defaultVariants: {

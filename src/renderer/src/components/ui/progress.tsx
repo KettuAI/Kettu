@@ -3,6 +3,8 @@ import { cn } from 'cn'
 
 const TONE = {
   default: 'bg-primary',
+  success: 'bg-success',
+  checked: 'bg-checked',
   attention: 'bg-attention',
   destructive: 'bg-destructive',
 }

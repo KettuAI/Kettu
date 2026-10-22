@@ -78,7 +78,13 @@
   --color-attention-text: var(--attention-text);
   --color-attention-tint: var(--attention-tint);
   --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
   --color-checked: var(--checked);
+  --color-checked-text: var(--checked-text);
+  --color-checked-tint: var(--checked-tint);
+  --color-checked-tint-hover: var(--checked-tint-hover);
+  --color-destructive-tint-hover: var(--destructive-tint-hover);
+  --color-mark: var(--mark);
   --color-running: var(--running);
   --color-unread: var(--checked);
   --color-success-text: var(--success-text);
@@ -126,9 +132,24 @@
   --container-thread: calc(42 * var(--prose-size) + 3rem);
   --text-ui: var(--ui-size);
   --text-prose--line-height: 1.75;
+  /* The type scale of the design system, used by Settings first. */
+  --text-title: 22px;
+  --text-title--line-height: 28px;
+  --text-title--letter-spacing: -0.015em;
+  --text-heading: 16px;
+  --text-heading--line-height: 24px;
+  --text-small: 13px;
+  --text-small--line-height: 1.6;
+  --text-control: 12.5px;
+  --text-control--line-height: 16px;
+  --text-code: 12px;
+  --text-code--line-height: 18px;
+  --text-meta: 11.5px;
+  --text-meta--line-height: 16px;
 }
 
-:root {
+:root,
+.light {
   color-scheme: light;
 
   /* Surfaces 0-3, mapped onto shadcn's tokens. */
@@ -175,7 +196,14 @@
   --attention-halo: oklch(0.78 0.15 72 / 20%);
   --success: oklch(0.56 0.14 150);
   --success-text: oklch(0.42 0.12 150);
+  --success-tint: oklch(0.56 0.14 150 / 11%);
   --checked: oklch(0.6 0.17 255);
+  --checked-text: oklch(0.47 0.16 255);
+  --checked-tint: oklch(0.6 0.17 255 / 9%);
+  --checked-tint-hover: oklch(0.6 0.17 255 / 15%);
+  --destructive-tint-hover: oklch(0.5 0.17 27 / 13%);
+  /* A search match marked in its text. */
+  --mark: oklch(0.88 0.15 90 / 55%);
   --running: oklch(0.62 0.07 255);
   --merged: oklch(0.55 0.19 300);
   --diff-add: oklch(0.62 0.15 150 / 9%);
@@ -295,7 +323,8 @@
 }
 
 @media (resolution >= 2x) {
-  :root {
+  :root,
+  .light {
     --hairline: 0.5px;
     --border: oklch(0 0 0 / 16%);
     --border-soft: oklch(0 0 0 / 9%);
@@ -351,7 +380,13 @@
   --attention-halo: oklch(0.8 0.15 75 / 16%);
   --success: oklch(0.74 0.15 150);
   --success-text: oklch(0.8 0.13 150);
+  --success-tint: oklch(0.74 0.15 150 / 13%);
   --checked: oklch(0.66 0.15 255);
+  --checked-text: oklch(0.8 0.1 255);
+  --checked-tint: oklch(0.66 0.15 255 / 14%);
+  --checked-tint-hover: oklch(0.66 0.15 255 / 22%);
+  --destructive-tint-hover: oklch(0.7 0.16 22 / 18%);
+  --mark: oklch(0.8 0.14 85 / 32%);
   --running: oklch(0.7 0.07 255);
   --merged: oklch(0.72 0.15 300);
   --diff-add: oklch(0.7 0.15 150 / 12%);

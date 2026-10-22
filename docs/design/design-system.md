@@ -55,6 +55,9 @@ Lines are translucent, so one token reads the same on every surface step. The al
 - `--primary` stays shadcn's neutral: near black in the light theme, near white in the dark one. OverBench has no brand accent, so color is left for meaning.
 - `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user. It is the loudest color in the app.
 - `--success` (green): completed checks.
+- **Tints** are a meaning color at a low alpha, the fill of a status pill or a notice, with the color's text step on top: `--success-tint` with `--success-text`; `--checked-tint` with `--checked-text` (`oklch(0.47 0.16 255)` light, `oklch(0.8 0.1 255)` dark) for information and an action on offer, such as an agent update; `--attention-tint` with `--attention-text`; `--destructive-tint` with `--destructive`. A pill that is a button deepens its tint on hover (`--checked-tint-hover`, `--destructive-tint-hover`). Light tints are 9 to 13% and dark ones 13 to 22%, so they read the same on surfaces 0 and 1.
+- `--mark` (a soft yellow, `oklch(0.88 0.15 90 / 55%)` light and `oklch(0.8 0.14 85 / 32%)` dark): the text a search matched, and the brief flash on the row a search result jumps to. It is no state, so it never appears outside search.
+- **Usage levels**: a bar of plan usage takes `--success` below 60% used, `--attention` from 60% and `--destructive` from 90% or once the limit is reached, and its percentage the matching text step, so how much is left reads before the number does. Progress that is not usage, such as a download, stays `--checked`.
 - `--checked` (blue): a control that is on or chosen, today the switch's track. It is the blue macOS, Windows and GNOME tint their own controls with, so the state reads at a glance. The sidebar's unread dot takes the same blue through `bg-unread`, the usual mark of something new.
 - `--running` (slate blue, `oklch(0.62 0.07 255)` light and `oklch(0.7 0.07 255)` dark): the sidebar's running dot. It is quieter than `--checked`, so a turn still working stays calm and one that finished stands out.
 - `--destructive` is a brick red, `oklch(0.5 0.17 27)` light and `oklch(0.7 0.16 22)` dark, calmer than shadcn's saturated red. It marks errors, conflicts and deletion in text and icons and tints destructive buttons, so a loud red would shout from every one of them; the darker light value still reaches 5.9:1 on surface 0. `--ring` stays shadcn's.
@@ -181,8 +184,10 @@ M0 ships the compact density only. The comfortable values are recorded so that a
 | `--card-header`       | Card headers, such as a permission request's                       | 30 px                      | 36 px                |
 | `--composer-min`      | The composer with one line of text                                 | 52 px                      | 56 px                |
 | `--icon-size`         | UI icons; 14 px inside cards and controls                          | 16 px                      | 20 px                |
-| Icon stroke           | Every Lucide icon, set once with `LucideProvider` in `main.tsx`    | 1.5                        | 1.5                  |
+| Icon stroke           | Every Lucide icon, set once with `LucideProvider` in `main.tsx`    | 1 px at every size         | 1 px at every size   |
 | Spacing steps         | Gaps between and around components                                 | 4, 6, 8, 10, 12, 16, 28 px | 8, 12, 16, 28, 40 px |
+
+- The icon stroke is 1 screen pixel whatever the icon's size: `LucideProvider` sets `strokeWidth={1}` with `nonScalingStroke`, which draws the stroke with `vector-effect: non-scaling-stroke`. Lucide's own `absoluteStrokeWidth` scales the width by the `size` prop, which OverBench never passes because sizes come from classes, so it would draw a 16 px icon at 0.67 px. Chosen 2026-10-22 on the Settings canvas from 0.65, 0.8 and 1 px side by side, replacing the relative 1.5, which drew 14 and 12 px icons thinner than 16 px ones ([problem 37](../milestones/m0-feedback.md#37-icons-look-heavy-use-thin-line-icons-from-a-library)).
 
 The radius scale is shadcn's, derived from `--radius`, so shadcn components follow it without new tokens:
 
@@ -238,7 +243,7 @@ Every size in the interface is one of these steps. Line heights sit on a 4 px gr
 - `--ui-size` is the reference's interface size, 14 px. The root stays 16 px, so Tailwind's rem scale is unchanged.
 - Tracking is negative only on the two steps that use Inter's display design, and never positive: there are no uppercase or letter-spaced labels.
 - 11.5 px is the smallest text in the interface. A count in a pill, a badge or a chart label takes the meta step, never less.
-- `text-prose`, `text-ui` and `text-xs` exist today; the other utilities are added to `globals.css`, each with its line height and tracking, when the code is aligned with this scale.
+- `text-title`, `text-heading`, `text-prose`, `text-ui`, `text-small`, `text-control`, `text-xs`, `text-code` and `text-meta` are in `globals.css`, each with its line height and tracking; `text-display` is added with its first use.
 
 ### Weights
 
@@ -291,6 +296,23 @@ A choice among two to six ordered or exclusive values, such as the theme in Sett
 | Switch        | A 28 × 16 px pill (24 × 14 px at `size="sm"`, inside menus) with a 12 px (10 px) thumb inset 2 px. On, the track is `--checked`; off, `--input` with the card ring, so it reads as a recess. The thumb is `--background` in the light theme and `--foreground` in the dark one, with `--thumb-shadow` (a 2 px contact shadow and a hairline) so it sits on the track rather than in it |
 | Switch motion | The thumb slides with `translate` over `--duration-base` and `--ease-out-quart`, and the track's color changes over `--duration-fast`; while pressed, the thumb stretches 3 px toward where it will go, as the platform's switches do. Reduce motion keeps the color change only                                                                                                       |
 | Select        | The trigger is an outline control at `--control-height`, 12.5 px text, with a 14 px chevron in `--muted-foreground`. Its list is a menu: it opens below the trigger, at least as wide as it and never over it, with the menu's surface, radius, padding, labels, separators and `rounded-lg` items, and a 14 px `Check` on the chosen item                                             |
+| Quiet select  | `SelectTrigger` `variant="quiet"`, for Settings rows: no fill, ring or shadow at rest, the `--accent` fill under the pointer and while open, the value at the interface size. A page of rows then reads as settings, not as a form. An item can carry a muted hint after its name and be disabled ("Not installed")                                                                    |
+
+### Status pills
+
+A state shown in a row, such as "Signed in", "Not found on PATH" or an agent's update, is a pill: `Badge` with a status variant, 20 px high, `rounded-full`, 12 px text at weight 500 and a 12 px icon in its leading slot.
+
+| Variant   | Fill and text                               | Used for                                               |
+| --------- | ------------------------------------------- | ------------------------------------------------------ |
+| `success` | `--success-tint`, `--success-text`          | Found, signed in, updated                              |
+| `info`    | `--checked-tint`, `--checked-text`          | Something on offer or under way: an update, an install |
+| `warning` | `--attention-tint`, `--attention-text`      | Something to do: not signed in                         |
+| `error`   | `--destructive-tint`, `--destructive`       | A failure, with its retry                              |
+| `neutral` | `--muted`, `--muted-foreground`, weight 400 | A plain value, such as the shell in use                |
+
+- A pill can be the action itself, rendered as a `button` (`render`), and then keeps its states inside it: the offer, a `Spinner` with a small × that cancels, the failure with `RotateCw`, and the result. The row around it never changes its layout ([Settings › Agents](./ui.md#settings--agents)).
+- A pill never shows a percentage it does not have: a task with no measured progress shows the `Spinner` and its words.
+- The notices that go with pills are `Alert`s with the same tints and no ring, so Settings keeps to no cards and no shadows: `info` (`--checked-tint`), `success` (`--success-tint`), `warning` (`--attention-tint`) and `error` (`--destructive-tint`). The `destructive` variant, a card, stays for surfaces that have cards. A log or a command inside a notice sits on `--card` with no ring.
 
 ### Toggle buttons
 
@@ -322,13 +344,13 @@ Every menu, the dropdown menus and the context menus alike, shares one set of me
 
 ### Tokens
 
-| Duration             | Value  | Used for                              |
-| -------------------- | ------ | ------------------------------------- |
-| `--duration-instant` | 60 ms  | Focus, checkbox                       |
-| `--duration-fast`    | 120 ms | Hover, color changes, icon crossfades |
-| `--duration-base`    | 200 ms | Disclosures, status text              |
-| `--duration-slow`    | 300 ms | New thread entries, panels            |
-| `--duration-slower`  | 450 ms | The one-time attention pulse          |
+| Duration             | Value  | Used for                                                     |
+| -------------------- | ------ | ------------------------------------------------------------ |
+| `--duration-instant` | 60 ms  | Focus, checkbox                                              |
+| `--duration-fast`    | 120 ms | Hover, color changes, icon crossfades                        |
+| `--duration-base`    | 200 ms | Disclosures, status text                                     |
+| `--duration-slow`    | 300 ms | New thread entries, panels                                   |
+| `--duration-slower`  | 450 ms | The one-time attention pulse, a search result's flash fading |
 
 | Easing             | Curve                                    | Used for                                     |
 | ------------------ | ---------------------------------------- | -------------------------------------------- |

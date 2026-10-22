@@ -11,8 +11,8 @@ import { Root } from './app/root'
 void bootstrap().then(() =>
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      {/* One line weight for every icon (design system: icons). */}
-      <LucideProvider strokeWidth={1.5}>
+      {/* One 1 px line at every icon size (design system: density and sizing). */}
+      <LucideProvider strokeWidth={1} nonScalingStroke>
         <Root />
       </LucideProvider>
     </StrictMode>,
