@@ -29,6 +29,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 21  | No file browser or preview                                     | Side panel     | Fixed        |
 | 22  | The New session project and agent menus look crude             | New session    | Fixed        |
 | 23  | The project chevron sits before the name and always shows      | Sidebar        | Open         |
+| 24  | The Projects header row can go; each project gets a +          | Sidebar        | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -229,3 +230,19 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - On a collapsed project it stays shown, so a folded group is still recognisable without the pointer.
 - **Reference**: in the sidebar of Claude Desktop the group "overbench" reads "overbench ⌄" under the pointer and plain "overbench" otherwise, while the collapsed group "This computer" always reads "This computer ›". A **+** sits at the row's end in both states there; OverBench shows its **+** only on hover.
 - **Today**: `ProjectGroup` in `src/renderer/src/features/sidebar/app-sidebar.tsx` renders the chevron (`ChevronDownIcon` or `ChevronRightIcon`, in a 14 px slot) as the first child of the row, before the name, with no hover condition. [Interface: sidebar](../design/ui.md#sidebar) does not describe the chevron. The row's `→` and `←` keys still fold and unfold it. To settle when planning: the chevron's direction and slot after the name, how the name's truncation leaves room for it, whether the row's **+** should show without hover as in the reference, the same treatment for the **No project** group, and the rule written into [Interface: sidebar](../design/ui.md#sidebar). The reduced-motion and keyboard-focus states need a visible chevron too, since a focused row has no hover.
+
+## 24. The Projects header row can go; each project gets a +
+
+- **Reported**: 2026-10-22, with a screenshot of the sidebar and an arrow at the **Projects** row.
+- **Observed**: a **Projects** label row sits above the project list, with a **+** at its end that opens a folder as a project. It costs a row and adds a second **+** that does something different from a project's own, which shows only on hover.
+- **Expected**: the row is removed. Every real project shows a **+** after its name that starts a session in that project. **New session** shows the global session creation screen.
+- **Today**:
+  - The row is the `SidebarGroupLabel` with a ghost **+** button in `AppSidebar` (`src/renderer/src/features/sidebar/app-sidebar.tsx`); the button calls `openProjectDialog()` ("Open project", `Mod+O`).
+  - A project's own **+** exists already, but only on hover (`SidebarMenuAction` with `showOnHover` in `ProjectGroup`), and it calls `newSession(projectPath)`, as [problem 9](#9-new-session-is-tied-to-the-selected-project) built it. In the screenshot no row is hovered, so no project shows one.
+  - The **New session** row calls `newSession()`, which opens the [New session screen](../design/ui.md#new-session) already, with the project menu starting at the selected project and the agent at the default.
+- **To settle when planning**:
+  - Where adding a project lives once the header's **+** is gone. What stays: `Mod+O`, File › Open Project…, **Open project…** in the New session screen's project menu, and the button on the Welcome screen while there are no projects. Whether that is enough or the sidebar needs another entry.
+  - Whether a project's **+** shows always or only on hover. The reference's sidebar shows it without hover (see [problem 23](#23-the-project-chevron-sits-before-the-name-and-always-shows)); a hover-only one is what the maintainer did not find.
+  - Whether the **No project** group keeps its **+**, since "real projects" were named, and New session's project menu already offers **No project**.
+  - Whether New session should still start at the selected project, or at no project chosen, as [problem 9](#9-new-session-is-tied-to-the-selected-project) first asked ("assumes no project").
+  - Where the list's empty text, loading skeleton and load error go without the header above them.
