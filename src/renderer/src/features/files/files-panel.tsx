@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronRightIcon,
+  FolderTreeIcon,
   ListIcon,
   ListTreeIcon,
   Maximize2Icon,
   Minimize2Icon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
   SearchIcon,
   XIcon,
 } from 'lucide-react'
@@ -91,7 +90,8 @@ export default function FilesPanel({
           label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}
           onClick={() => (listHidden ? list.current?.expand() : list.current?.collapse())}
         >
-          {listHidden ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
+          {/* At the top bar's pane toggle size, as the Folder toggle beside it. */}
+          <FolderTreeIcon className="size-[15px]" />
         </PanelButton>
         {!listHidden && (
           <InputGroup className="app-region-no-drag h-7 max-w-80 min-w-0 flex-1 bg-background/60">
