@@ -38,6 +38,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Open         |
 | 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Open         |
 | 32  | No message outline beside the thread, expanding on hover       | Thread         | Open         |
+| 33  | Title menu needs polish; agent mark goes before the title      | Top bar        | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -374,3 +375,19 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Room: it needs margin beside the 760 px column, so what happens in a narrow window or with the side panel open, and how it sits against the sidebar and the scroll-edge fades.
   - Opening on hover: the delay before it opens and closes, no shift of the thread, the menu surface and its tokens from the [design system](../design/design-system.md#menus-and-dialogs), a list that scrolls when the turns are many, and keyboard reach (focus opens it, arrow keys move, Enter jumps) with an accessible name.
   - Where the rule is written: [Interface: thread](../design/ui.md#thread).
+
+## 33. Title menu needs polish; agent mark goes before the title
+
+- **Reported**: 2026-10-22, with a screenshot of the reference's session title menu (Claude Desktop) and one of OverBench's.
+- **Observed**: the top bar shows the session title as a button with a menu, then the agent's mark and its name ("Claude Code") in muted text. The menu holds **New sub-session** (a submenu of agents), **Close** and **Delete…**, and is plainer than the reference's.
+- **Expected**:
+  - The panel polished toward the reference.
+  - The agent's name removed from the top bar, and its mark moved to before the session title. The mark says which agent it is, so the name is not needed.
+- **Reference**: the reference's menu has four groups divided by hairlines, with a one-key accelerator at the right of most rows: **Open in** ▸; **Rename** (`R`) and **Fork** (`F`); **Transcript view** ▸ and **Output style** ▸; **Archive** (`A`) and **Delete** (`D`, in the destructive color). In its top bar the title button carries a chevron and takes a soft fill while the menu is open. The set of rows is the same question as [problem 30](#30-the-session-context-menu-lacks-rename-pin-and-archive), since the title menu and the sidebar row's menu share their items.
+- **Today**: `SessionHeader` in `src/renderer/src/features/session/session-header.tsx` renders the title in a `DropdownMenu`, and after it a span with the agent's `AgentMark` (13 px) and `agentName`, which hides its name below a 520 px top bar and keeps the full name as its `title`. A sub-agent's session already shows a `Bot` icon before its title; a sub-session's top bar starts with its parent's title as a link. [Interface: session](../design/ui.md#session) says "The title is followed by the agent's mark and name in `--muted-foreground`".
+- **To settle when planning**:
+  - The panel itself: its width, row height, text size, group spacing and accelerators, taken from the reference's menu in the same way as the earlier [menus](../design/design-system.md#menus-and-dialogs) pass, with the rows from problem 30.
+  - The mark before the title: its size, whether it is always in colour, and what names the agent once the text is gone (a tooltip and an accessible name; the mark already has a `title`).
+  - How it sits with the `Bot` icon of a sub-agent's session and with the parent link of a sub-session: which comes first, and whether a sub-agent keeps both marks.
+  - Whether the title button's hit area and hover fill include the mark, so it reads as one control.
+  - The rule changes in [Interface: session](../design/ui.md#session).
