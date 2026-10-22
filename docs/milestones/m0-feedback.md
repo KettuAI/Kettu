@@ -54,6 +54,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 46  | A session's error mark stays after it has been seen            | Sidebar        | Open         |
 | 47  | A crowded top bar cuts the session title first                 | Top bar        | Open         |
 | 48  | The spinner's screen reader label is not translated            | Localization   | Open         |
+| 49  | No multimodal support: images, audio and video                 | Media          | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -672,3 +673,24 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **To settle when planning**:
   - Whether callers pass a translated label, or the component reads it from the catalogs itself, given that the shadcn CLI manages `components/ui` and an edit there has to survive updates.
   - The key, since the catalogs have no generic "Loading" yet.
+
+## 49. No multimodal support: images, audio and video
+
+- **Reported**: 2026-10-22, in a sentence: multimodal support is needed, for images, video, audio and the like.
+- **Expected**: images, audio and video can be given to an agent and shown in the app, as far as the protocol and each agent allow (below). [Problem 36](#36-the-composer-has-no--menu-file-or-image-attachments) covers the composer's way in, the **+** menu with files and photos; this problem covers the kinds of media themselves, from sending to showing.
+- **Today**:
+  - **Sending**: the host already accepts images and links in a prompt (`promptContent` in `src/agent-host/validate.ts`, at most 10 MB in all), and a user message shows its images (`user-content.tsx`), but the composer has no way to add one: no paste, drop or picker.
+  - **What agents send**: an image in an agent message renders inline from its `data:` URL, at most 288 px high (`AgentEntry` in `src/renderer/src/features/session/entries/basic.tsx`), with no way to open it larger. Audio and embedded resources become `unsupported` refs ([Session model: mapping ACP v1 to patches](../design/session-model.md#mapping-acp-v1-to-patches)). A tool card shows them as labelled chips, but an agent message renders its images only, so audio or a link attached to a message does not show at all, although [Session model: thread entries](../design/session-model.md#thread-entries) says such content stays visible as a labelled chip.
+  - **Files pane**: a raster image, audio or video file in the project gets the binary file notice instead of a preview (`file-preview.tsx`); an SVG shows as text.
+  - **CSP**: `img-src 'self' data:` allows inline images. There is no `media-src`, so audio and video fall back to `default-src 'self'`, which blocks `data:` and `blob:` sources; playing media needs a stated change to the CSP in `src/renderer/index.html`.
+- **What the protocol and the agents carry**, observed on 2026-10-22 in the installed adapters' sources and the OpenCode binary:
+  - ACP v1's content blocks are `text`, `image`, `audio`, `resource_link` and `resource`; there is no video block. A prompt may carry `image` or `audio` only when the agent advertises `promptCapabilities.image` or `.audio`.
+  - claude-agent-acp 0.94.0, codex-acp 2.2.2 and OpenCode 2.0.32 all advertise `image` and `embeddedContext`, and none advertises `audio`; codex-acp drops an `audio` block from a prompt.
+  - So images reach all three as images. Audio and video can reach an agent only as files, a link to a path or an embedded resource that the agent's tools may process, not as sound or pictures the model takes in.
+- **To settle when planning**:
+  - What support means for audio and video given the above: sending them as file attachments, with the user told that the agent receives a file, and `audio` blocks only to an agent that advertises them.
+  - Images beyond problem 36's picker: paste and drop, formats the models do not take (such as HEIC), and shrinking large images before sending, since the 10 MB limit covers the whole prompt.
+  - Showing media: a larger view of an image in the thread, image previews and players for audio and video in the Files pane and the thread, and the CSP change playback needs, with its reason.
+  - Agent messages showing their other attachments as chips, as the session model says.
+  - What comes back when a session is reopened: `session/load` replays the user's messages from the agent, so whether each agent replays their images and files.
+  - The rules written into [Interface: composer](../design/ui.md#composer), [Interface: files](../design/ui.md#files) and [Session model](../design/session-model.md#thread-entries), and the README's roadmap updated in both languages.
