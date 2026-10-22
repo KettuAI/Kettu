@@ -33,6 +33,7 @@ import { AgentHost, type HostOptions } from '../host'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
 import { inThreadWorker } from './thread-worker'
+import { inUsageWorker } from './usage-worker'
 
 export const FAKE_AGENT_MAIN = path.resolve('tools/fake-agent/main.ts')
 
@@ -281,6 +282,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       agents: DEFAULT_SETTINGS.agents,
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
+      usage: { fromComputer: false },
     },
     baseEnv: { ...process.env, ...options.agentEnv },
     send: (message) => sent.push(structuredClone(message)),
@@ -307,6 +309,8 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     sessionTimings: options.sessionTimings ?? {},
     ...(options.treeNoteMs !== undefined ? { treeNoteMs: options.treeNoteMs } : {}),
     threadWorker: inThreadWorker,
+    usageWorker: inUsageWorker,
+    homeDir: dir,
   })
   let stopped = false
   return {

@@ -20,6 +20,12 @@ import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { initTerminals } from '@renderer/stores/terminals'
 import { forgetSession, receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { initUpdates } from '@renderer/stores/updates'
+import {
+  loadToday,
+  loadUsageStatus,
+  receiveUsageStatus,
+  usageChanged,
+} from '@renderer/stores/usage'
 import { lastSessionId, openSession, useViewStore } from '@renderer/stores/view'
 import { installPerfCounters } from './perf'
 
@@ -56,6 +62,12 @@ function onHostEvent(event: HostEvent): void {
     case 'git.tools':
       useGitStore.setState({ tools: event.tools })
       break
+    case 'usage.changed':
+      usageChanged()
+      break
+    case 'usage.status':
+      receiveUsageStatus(event.status)
+      break
   }
 }
 
@@ -71,7 +83,7 @@ function loadSessionState(): Promise<unknown> {
 
 /** Loads everything the shell shows; also runs after the agent host comes back. */
 export async function loadHostState(): Promise<void> {
-  await Promise.allSettled([loadSessionState(), loadGitTools()])
+  await Promise.allSettled([loadSessionState(), loadGitTools(), loadUsageStatus(), loadToday()])
 }
 
 /** Reopens the session shown when the app last closed, as Settings › General allows. */

@@ -57,6 +57,7 @@ const SECTION_FIELDS = {
   git: { backgroundFetch: isBoolean },
   updates: { automatic: oneOf('download', 'notify', 'off') },
   privacy: { hideAccount: isBoolean },
+  usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'limit', 'off') },
 } as const satisfies Record<string, Record<string, Check>>
 
 type FieldSection = keyof typeof SECTION_FIELDS
@@ -293,7 +294,16 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     agents: structuredClone(settings.agents),
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },
+    usage: { fromComputer: settings.usage.fromComputer },
   }
+}
+
+// The sections `hostSettings` reads, besides the language.
+const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set(['agents', 'proxy', 'git', 'usage'])
+
+/** Whether a change touches what the agent host is sent; a language change is checked apart. */
+export function reachesHost(changed: ReadonlySet<SettingsSection>): boolean {
+  return [...changed].some((section) => HOST_SECTIONS.has(section))
 }
 
 export function terminalSettings(settings: SettingsFile): TerminalSettings {

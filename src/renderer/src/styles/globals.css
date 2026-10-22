@@ -92,6 +92,15 @@
   --color-diff-add: var(--diff-add);
   --color-diff-del: var(--diff-del);
   --color-brand-claude: var(--brand-claude);
+  --color-agent-claude-code: var(--agent-claude-code);
+  --color-agent-codex: var(--agent-codex);
+  --color-agent-opencode: var(--agent-opencode);
+  --color-agent-other: var(--agent-other);
+  --color-heat-0: var(--heat-0);
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-heat-4: var(--heat-4);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -267,6 +276,17 @@
   --brand-opencode-frame: #17181c;
   --brand-opencode-fill: #e6e5e6;
 
+  /* Usage charts: each agent's series, from its mark, and the heatmap's five steps. */
+  --agent-claude-code: var(--brand-claude);
+  --agent-codex: var(--brand-codex-2);
+  --agent-opencode: oklch(0.6 0 0);
+  --agent-other: oklch(0.78 0 0);
+  --heat-0: oklch(0 0 0 / 5.5%);
+  --heat-1: color-mix(in oklch, var(--checked) 26%, transparent);
+  --heat-2: color-mix(in oklch, var(--checked) 48%, transparent);
+  --heat-3: color-mix(in oklch, var(--checked) 74%, transparent);
+  --heat-4: var(--checked);
+
   /* Terminal, read by xterm.js. VS Code's default ANSI colors (MIT). */
   --terminal-background: var(--sidebar);
   --terminal-foreground: var(--foreground);
@@ -421,6 +441,10 @@
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
+
+  --agent-opencode: oklch(0.72 0 0);
+  --agent-other: oklch(0.45 0 0);
+  --heat-0: oklch(1 0 0 / 6.5%);
 
   --terminal-selection: oklch(1 0 0 / 20%);
   --ansi-green: #0dbc79;

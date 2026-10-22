@@ -7,6 +7,7 @@ import { createGitService } from './git'
 import { AgentHost } from './host'
 import type { PortChannel } from './rpc'
 import { nodeThreadWorker } from './threads/store'
+import { nodeUsageWorker } from './usage/store'
 
 const parentPort = process.parentPort
 
@@ -43,6 +44,8 @@ function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
     mirrorTraffic: !message.isPackaged && process.env.OVERBENCH_ACP_LOG === '1',
     threadWorker: (file) =>
       nodeThreadWorker(new Worker(message.threadWorkerPath, { workerData: { file } })),
+    usageWorker: (file) =>
+      nodeUsageWorker(new Worker(message.usageWorkerPath, { workerData: { file } })),
   })
   host.catch((error: unknown) => {
     // Without its state the host cannot run; main restarts it with backoff.

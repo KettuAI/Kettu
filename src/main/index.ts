@@ -13,7 +13,7 @@ import { installMenu } from './menu'
 import { notifyAttention } from './notifications'
 import { QuitFlow } from './quit'
 import { SettingsStore } from './settings'
-import { hostSettings, terminalSettings } from './settings-schema'
+import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { TerminalHost } from './terminal-host'
 import { Updater } from './updater'
 import {
@@ -106,7 +106,7 @@ async function start(): Promise<void> {
       setLocale(localeOf(next))
       installMenu(menuDeps)
     }
-    if (changed.has('agents') || changed.has('proxy') || changed.has('git') || localeChanged) {
+    if (reachesHost(changed) || localeChanged) {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
     if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))

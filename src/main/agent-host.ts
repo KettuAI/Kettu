@@ -5,6 +5,7 @@ import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
+import usageWorkerPath from '../agent-host/usage/worker?modulePath'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
@@ -66,6 +67,7 @@ export class AgentHost {
           ? (process.env.OVERBENCH_FAKE_AGENT ?? null)
           : join(app.getAppPath(), 'tools/fake-agent/main.ts'),
         threadWorkerPath,
+        usageWorkerPath,
         settings: deps.settings(),
       }),
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),

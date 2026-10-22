@@ -15,6 +15,9 @@ function makeFormatters(locale: string) {
     monthDay: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
     clock: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }),
     full: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }),
+    compact: new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }),
+    integer: new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }),
+    percent: new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }),
   }
 }
 
@@ -76,12 +79,19 @@ export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   return weekly ? i18n.t('planWindow.weeklyOf', { model: weekly[1] }) : limit.label
 }
 
-/** "980", "41k", "1.2M". */
+/** Token counts everywhere: "980", "41K", "1.2M", "41.7B"; "4.1万" and "2.7亿" in Chinese. */
 export function tokens(n: number): string {
-  if (n < 1000) return String(n)
-  if (n < 10_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`
-  if (n < 1_000_000) return `${Math.round(n / 1000)}k`
-  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  return format().compact.format(n)
+}
+
+/** A count in full, for tables and tooltips: "35,317,988,871". */
+export function exactCount(n: number): string {
+  return format().integer.format(n)
+}
+
+/** A share as a percentage with one decimal: "98.5%". */
+export function percent(share: number): string {
+  return format().percent.format(share)
 }
 
 /** "812 B", "41 kB", "1.2 MB", in the locale's number format. */

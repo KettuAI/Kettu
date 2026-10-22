@@ -44,13 +44,6 @@
     "signInOne": "{{name}} needs you to sign in",
     "signInMany": "{{count}} agents need you to sign in"
   },
-  "planUsage": {
-    "group": "Plan usage",
-    "unknown": "unknown",
-    "chip": "{{agent}} plan usage: {{limit}} {{used}}",
-    "chipResets": "{{agent}} plan usage: {{limit}} {{used}}, resets in {{left}}",
-    "chipNone": "{{agent}} plan usage: not known since its windows reset"
-  },
   "countdown": {
     "minutes": "{{count}}m",
     "hours": "{{count}}h",

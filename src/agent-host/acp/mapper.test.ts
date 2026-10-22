@@ -12,6 +12,7 @@ import {
   addTokenTotals,
   mapAuthStatus,
   mapConfig,
+  mapModelUsage,
   mapPermissionOptions,
   mapPermissionToolCall,
   mapRateLimit,
@@ -837,6 +838,65 @@ describe('extensions and helpers', () => {
         cacheWrite: null,
       }),
     ).toEqual({ total: 17, input: 5, output: 5, thought: 3, cacheRead: 2, cacheWrite: null })
+  })
+
+  it('reads the tokens per model, with either name for the cache write', () => {
+    const claude = {
+      quota: {
+        model_usage: [
+          {
+            model: 'claude-opus-5-5',
+            token_count: {
+              totalTokens: 166_135,
+              inputTokens: 8,
+              cachedInputTokens: 80_289,
+              cachedWriteTokens: 85_417,
+              outputTokens: 421,
+              reasoningOutputTokens: 0,
+            },
+          },
+          { model: 'broken', token_count: { inputTokens: -1, outputTokens: 2 } },
+        ],
+      },
+    }
+    expect(mapModelUsage(claude)).toEqual([
+      {
+        model: 'claude-opus-5-5',
+        tokens: {
+          total: 166_135,
+          input: 8,
+          output: 421,
+          thought: 0,
+          cacheRead: 80_289,
+          cacheWrite: 85_417,
+        },
+      },
+    ])
+    const codex = {
+      quota: {
+        model_usage: [
+          {
+            model: 'gpt-5.6-sol',
+            token_count: {
+              inputTokens: 5,
+              cachedInputTokens: 10,
+              cacheWriteInputTokens: 2,
+              outputTokens: 7,
+            },
+          },
+        ],
+      },
+    }
+    expect(mapModelUsage(codex)[0]?.tokens).toEqual({
+      total: 24,
+      input: 5,
+      output: 7,
+      thought: null,
+      cacheRead: 10,
+      cacheWrite: 2,
+    })
+    expect(mapModelUsage(undefined)).toEqual([])
+    expect(mapModelUsage({ quota: { model_usage: 'x' } })).toEqual([])
   })
 
   it('maps token totals and prompt content', () => {

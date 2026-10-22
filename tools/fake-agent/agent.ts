@@ -289,6 +289,28 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     }
   }
 
+  // `_meta.quota.model_usage`, as Claude Code and Codex send it: the turn's counts per model.
+  const modelUsage = (session: FakeSession) => {
+    const usage = tokenUsage(session)
+    return {
+      quota: {
+        model_usage: [
+          {
+            model: session.model,
+            token_count: {
+              totalTokens: usage.totalTokens,
+              inputTokens: usage.inputTokens,
+              cachedInputTokens: usage.cachedReadTokens,
+              cachedWriteTokens: usage.cachedWriteTokens,
+              outputTokens: usage.outputTokens,
+              reasoningOutputTokens: usage.thoughtTokens,
+            },
+          },
+        ],
+      },
+    }
+  }
+
   const replay = async (client: AgentContext, session: FakeSession): Promise<void> => {
     if (session.largeHistory !== null) {
       for (const update of syntheticHistory(session.largeHistory)) {
@@ -626,6 +648,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         return {
           stopReason: abort.signal.aborted ? 'cancelled' : stopReason,
           usage: tokenUsage(session),
+          _meta: modelUsage(session),
         }
       } finally {
         session.turn = null

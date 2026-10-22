@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { usePendingSession } from '@renderer/app/actions'
 import { ProjectHome } from '@renderer/features/home/project-home'
 import { Welcome } from '@renderer/features/home/welcome'
@@ -12,9 +12,11 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useViewStore } from '@renderer/stores/view'
 
+const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
+
 /**
- * What the main area shows: Welcome, a project's home, New session, a session being created, or a
- * session, in a project or in a scratch folder.
+ * What the main area shows: Welcome, a project's home, New session, a session being created, a
+ * session, in a project or in a scratch folder, or the usage page.
  */
 export function MainArea() {
   const projects = useProjectsStore((s) => s.projects)
@@ -38,6 +40,13 @@ export function MainArea() {
     showProject(projectPath)
   }, [projectPath])
 
+  if (main.kind === 'usage') {
+    return (
+      <Suspense fallback={null}>
+        <UsagePage />
+      </Suspense>
+    )
+  }
   if (pending && pending.projectPath === null) return <PendingSessionView pending={pending} />
   if (main.kind === 'new' && main.noProject) return <NewSessionView project={null} noProject />
   if (scratch) {

@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { duration, limitLabel, longAgo, resetTime, shortAgo } from './format'
+import {
+  duration,
+  exactCount,
+  limitLabel,
+  longAgo,
+  percent,
+  resetTime,
+  shortAgo,
+  tokens,
+} from './format'
 import { i18n } from './i18n'
 
 const NOW = Date.UTC(2026, 9, 21, 12)
@@ -39,5 +48,20 @@ describe('format in the interface language', () => {
     expect(limitLabel({ window: 'seven_day_fable', label: 'Weekly · Fable' })).toBe('每周 · Fable')
     expect(limitLabel({ window: 'monthly', label: 'Monthly' })).toBe('每月')
     expect(limitLabel({ window: '2_day', label: '2-day' })).toBe('2-day')
+  })
+})
+
+describe('token counts', () => {
+  it('are compact in each language, with exact values and shares beside them', async () => {
+    expect([980, 41_000, 1_234_567, 41_700_000_000].map(tokens)).toEqual([
+      '980',
+      '41K',
+      '1.2M',
+      '41.7B',
+    ])
+    expect(exactCount(35_317_988_871)).toBe('35,317,988,871')
+    expect(percent(0.9853)).toBe('98.5%')
+    await i18n.changeLanguage('zh-CN')
+    expect([41_000, 274_500_000].map(tokens)).toEqual(['4.1万', '2.7亿'])
   })
 })

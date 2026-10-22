@@ -9,6 +9,7 @@ export type MainView =
   // The New session screen; the session is created on the first send. With `noProject`, in a
   // scratch folder of its own rather than the selected project.
   | { kind: 'new'; agentId: AgentId | null; noProject: boolean }
+  | { kind: 'usage' } // the usage page, opened from the sidebar
 
 // The No project group's key in `collapsedProjects`, which no folder's path can take.
 export const NO_PROJECT_GROUP = 'no-project'
@@ -23,6 +24,7 @@ export type SettingsSection =
   | 'terminal'
   | 'git'
   | 'notifications'
+  | 'usage'
   | 'shortcuts'
   | 'advanced'
   | 'about'
@@ -108,6 +110,13 @@ export function openProjectHome(projectPath: string | null): void {
   useViewStore.setState((s) => ({
     main: { kind: 'home' },
     projectPath,
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+export function openUsage(): void {
+  useViewStore.setState((s) => ({
+    main: { kind: 'usage' },
     settings: { ...s.settings, open: false },
   }))
 }

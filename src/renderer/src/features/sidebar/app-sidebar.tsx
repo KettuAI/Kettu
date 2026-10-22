@@ -1,9 +1,16 @@
-import { useMemo, type KeyboardEvent } from 'react'
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon, ShapesIcon } from 'lucide-react'
+import { useEffect, useMemo, type KeyboardEvent } from 'react'
+import {
+  ChartNoAxesColumnIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  ShapesIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { Project } from '@shared/agent-host'
+import type { AgentStatus, PlanLimit, Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Kbd } from '@renderer/components/ui/kbd'
 import {
   Sidebar,
@@ -18,11 +25,18 @@ import {
 } from '@renderer/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { dayOf } from '@renderer/features/usage/model'
+import { limitLabel, tokens } from '@renderer/lib/format'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
+import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { sessionTree, useSessionsStore } from '@renderer/stores/sessions'
-import { NO_PROJECT_GROUP, openProjectHome, useViewStore } from '@renderer/stores/view'
+import { useSettingsStore } from '@renderer/stores/settings'
+import { loadToday, useUsageStore } from '@renderer/stores/usage'
+import { NO_PROJECT_GROUP, openProjectHome, openUsage, useViewStore } from '@renderer/stores/view'
+import { tightestLimit, usageTone } from './plan-usage'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
 
@@ -61,6 +75,7 @@ export function AppSidebar() {
           </TooltipTrigger>
           <TooltipContent side="right">{t('nav.artifactsLater')}</TooltipContent>
         </Tooltip>
+        <UsageNavRow />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
@@ -132,6 +147,84 @@ export function NavRow({
           </Kbd>
         ))}
     </SidebarMenuButton>
+  )
+}
+
+/** The Usage row; its end shows today's tokens or the tightest plan limit, as Settings chooses. */
+function UsageNavRow() {
+  const { t } = useTranslation('usage')
+  const current = useViewStore((s) => s.main.kind === 'usage' && !s.settings.open)
+  const end = useSettingsStore((s) => s.settings.usage.sidebar)
+  return (
+    <NavRow
+      icon={<ChartNoAxesColumnIcon className="text-muted-foreground" />}
+      label={t('nav.usage')}
+      current={current}
+      onClick={openUsage}
+      extra={end === 'today' ? <TodayTokens /> : end === 'limit' ? <TightestLimit /> : undefined}
+    />
+  )
+}
+
+function TodayTokens() {
+  const { t } = useTranslation('usage')
+  const today = useUsageStore((s) => s.today)
+  const day = dayOf(useNow())
+  // A new day starts from nothing, whether or not a turn ends to say so.
+  useEffect(() => void loadToday(), [day])
+  // Quiet until there is something to count.
+  if (!today) return null
+  return (
+    <span className="text-xs font-normal text-muted-foreground tabular-nums">
+      <span aria-hidden>{tokens(today)}</span>
+      <span className="sr-only">{t('nav.today', { tokens: tokens(today) })}</span>
+    </span>
+  )
+}
+
+const TONE_TEXT = { success: '', attention: 'text-attention-text', destructive: 'text-destructive' }
+
+/** Across the agents, a reached window first, then the fullest. */
+function tightestOf(
+  agents: AgentStatus[],
+  now: number,
+): { agent: AgentStatus; limit: PlanLimit } | null {
+  let best: { agent: AgentStatus; limit: PlanLimit } | null = null
+  for (const agent of agents) {
+    const limit = tightestLimit(agent.limits, now)
+    if (!limit || limit.usedPercent === null) continue
+    const rank = (l: PlanLimit) => (l.state === 'reached' ? 1000 : 0) + (l.usedPercent ?? 0)
+    if (!best || rank(limit) > rank(best.limit)) best = { agent, limit }
+  }
+  return best
+}
+
+function TightestLimit() {
+  const { t } = useTranslation('usage')
+  const agents = useAgentsStore(
+    useShallow((s) =>
+      s.order.map((id) => s.byId[id]).filter((a): a is AgentStatus => !!a && a.limits.length > 0),
+    ),
+  )
+  const tightest = tightestOf(agents, useNow())
+  if (!tightest) return null
+  const { agent, limit } = tightest
+  const percent = `${Math.round(limit.usedPercent ?? 0)}%`
+  return (
+    <span
+      className={cn(
+        'flex min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground tabular-nums',
+        TONE_TEXT[usageTone(limit)],
+      )}
+    >
+      <AgentMark agent={agent.id} size={12} />
+      <span aria-hidden className="truncate">
+        {t('nav.limitShort', { limit: limitLabel(limit), percent })}
+      </span>
+      <span className="sr-only">
+        {t('nav.limit', { agent: agent.name, limit: limitLabel(limit), percent })}
+      </span>
+    </span>
   )
 }
 

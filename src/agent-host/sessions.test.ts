@@ -348,6 +348,45 @@ describe('a prompt turn', () => {
     })
   })
 
+  it("records each turn's usage per model", async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    await port.untilStatus(sessionId, 'ready')
+    const turnEnd = port.entries(sessionId).find((entry) => entry.kind === 'turn_end')!
+    const day = (at: number) => new Date(at).setHours(0, 0, 0, 0)
+    const today = day(Date.now())
+    // As the page does: read again once the host says the figures changed.
+    await port.until(() => port.events.some((event) => event.type === 'usage.changed'))
+    const summary = await port.request('usage.summary', {
+      dayStarts: [today, today + 86_400_000],
+      from: today,
+      to: today + 86_400_000,
+      scope: 'overbench',
+    })
+    expect(summary.days).toEqual([
+      {
+        day: 0,
+        agentId: 'fake-agent',
+        input: 900,
+        output: 420,
+        reasoning: 0,
+        cacheRead: 1200,
+        cacheWrite: 200,
+      },
+    ])
+    expect(summary.projects).toEqual([
+      expect.objectContaining({ agentId: 'fake-agent', project: t.project, output: 420 }),
+    ])
+    expect(summary.sources['fake-agent']).toBe('overbench')
+    expect(summary.first).toBeGreaterThanOrEqual(today)
+    expect(turnEnd.id).toMatch(/^e:/)
+    const status = await port.request('usage.status', undefined)
+    expect(status).toMatchObject({ fromComputer: false, scanning: null, unavailable: false })
+    expect(status.recordSince).not.toBeNull()
+  })
+
   it('streams a whole turn into the watching port', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)

@@ -33,6 +33,7 @@ import {
   KNOWN_UPDATES,
   mapAuthStatus,
   mapConfig,
+  mapModelUsage,
   mapPermissionOptions,
   mapPermissionToolCall,
   mapSessionUpdate,
@@ -40,6 +41,7 @@ import {
   promptBlocks,
   type MapperContext,
   type MapperOutput,
+  type ModelTokens,
 } from './mapper'
 
 /** A message-level stream to an agent, from a process's stdio or an in-process agent. */
@@ -499,7 +501,7 @@ export class AgentConnection {
   async prompt(
     acpSessionId: string,
     content: readonly UserContent[],
-  ): Promise<{ stopReason: StopReason; tokens: TokenTotals | null }> {
+  ): Promise<{ stopReason: StopReason; tokens: TokenTotals | null; models: ModelTokens[] }> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.prompt, {
         sessionId: acpSessionId,
@@ -509,6 +511,7 @@ export class AgentConnection {
     return {
       stopReason: isStopReason(response.stopReason) ? response.stopReason : 'end_turn',
       tokens: mapTokenTotals(response.usage),
+      models: mapModelUsage(response._meta),
     }
   }
 

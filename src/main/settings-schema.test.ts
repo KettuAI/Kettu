@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type SettingsFile } from '@shared/settings'
 import {
   changedSections,
+  reachesHost,
   hostSettings,
   mergeSettings,
   parseSettingsFile,
@@ -179,6 +180,7 @@ describe('derived settings', () => {
       agents: { opencode: { binaryPath: '/opt/oc' } },
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
+      usage: { fromComputer: false },
     })
     expect(
       hostSettings({ ...settings, general: { ...settings.general, language: 'en' } }, 'zh-CN')
@@ -196,5 +198,15 @@ describe('derived settings', () => {
     })
     expect([...changedSections(before, after)].sort()).toEqual(['appearance', 'proxy'])
     expect(changedSections(before, structuredClone(before)).size).toBe(0)
+  })
+
+  it('sends the agent host the sections it reads', () => {
+    const before = defaults()
+    const changed = (patch: Parameters<typeof mergeSettings>[1]) =>
+      reachesHost(changedSections(before, mergeSettings(before, patch)))
+    expect(changed({ usage: { fromComputer: true } })).toBe(true)
+    expect(changed({ git: { backgroundFetch: true } })).toBe(true)
+    expect(changed({ usage: { sidebar: 'off' } })).toBe(true)
+    expect(changed({ appearance: { theme: 'dark' } })).toBe(false)
   })
 })

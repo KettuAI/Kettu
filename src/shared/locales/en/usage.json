@@ -1,0 +1,159 @@
+{
+  "nav": {
+    "usage": "Usage",
+    "today": "Today: {{tokens}} tokens",
+    "limit": "{{agent}}, {{limit}}: {{percent}} used",
+    "limitShort": "{{limit}} {{percent}} used"
+  },
+  "page": {
+    "title": "Usage",
+    "synced": "Logs synced {{ago}}",
+    "syncing": "Reading the logs…",
+    "record": "OverBench's record",
+    "sync": "Sync now",
+    "agent": "Agent",
+    "allShort": "All",
+    "range": "Time range",
+    "ranges": {
+      "7": "7 days",
+      "30": "30 days",
+      "90": "90 days",
+      "365": "A year",
+      "all": "All time"
+    },
+    "scope": "Count from",
+    "scopes": {
+      "computer": "This computer",
+      "overbench": "OverBench only"
+    },
+    "importing": "Reading the agents' logs: {{done}} of {{total}}"
+  },
+  "figures": {
+    "total": "Tokens",
+    "days_one": "{{range}} · {{count}} day",
+    "days_other": "{{range}} · {{count}} days",
+    "average": "Daily average",
+    "active_one": "Used on {{active}} of {{count}} day",
+    "active_other": "Used on {{active}} of {{count}} days",
+    "peak": "Busiest day",
+    "cacheShare": "Cache reads",
+    "cacheShareNote": "Of all input, cached or not",
+    "none": "No usage"
+  },
+  "trend": {
+    "daily": "Tokens per day",
+    "weekly": "Tokens per week",
+    "label": "{{date}}: {{tokens}} tokens"
+  },
+  "limits": {
+    "title": "Plan limits",
+    "none": "No agent has reported plan limits yet."
+  },
+  "activity": {
+    "title": "Activity",
+    "weeks": "Last 53 weeks",
+    "less": "Less",
+    "more": "More",
+    "outside": "Days outside the range are dimmed",
+    "label": "Tokens per day over the last 53 weeks; use the arrow keys to move between days"
+  },
+  "parts": {
+    "title": "Tokens by type",
+    "type": "Type",
+    "tokens": "Tokens",
+    "share": "Share",
+    "input": "Input",
+    "output": "Output",
+    "reasoning": "Reasoning",
+    "cacheRead": "Cache read",
+    "cacheWrite": "Cache write",
+    "total": "Total"
+  },
+  "models": {
+    "title": "By model",
+    "name": "Model",
+    "unknown": "Unknown model"
+  },
+  "projects": {
+    "title": "By project",
+    "name": "Project",
+    "none": "No project"
+  },
+  "noUsage": "No usage in this range.",
+  "empty": {
+    "title": "No usage yet",
+    "description": "OverBench counts the tokens of every turn it runs from now on. To include what the agents used before, and in a terminal, count from their logs on this computer.",
+    "fromComputer": "Count usage on this computer",
+    "waiting": "OverBench counts the tokens of every turn it runs from now on."
+  },
+  "error": {
+    "title": "The usage could not be read",
+    "retry": "Retry",
+    "unavailable": "The usage database could not be opened. Restart OverBench; if it stays closed, export diagnostics from Settings › Advanced."
+  },
+  "picker": {
+    "button": "Custom",
+    "label": "Choose a time range",
+    "presets": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisWeek": "This week",
+      "lastWeek": "Last week",
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days",
+      "last90": "Last 90 days",
+      "thisYear": "This year",
+      "allTime": "All time"
+    },
+    "start": "Start",
+    "end": "End",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "invalid": "Enter a date as YYYY-MM-DD",
+    "cancel": "Cancel",
+    "apply": "Apply"
+  },
+  "settings": {
+    "title": "Usage",
+    "description": "What the Usage page counts, and what the sidebar shows of it.",
+    "groups": {
+      "sources": "Count from",
+      "logs": "Logs",
+      "display": "Sidebar",
+      "danger": "Danger zone"
+    },
+    "fromComputer": {
+      "name": "Usage on this computer",
+      "description": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on this computer, before OverBench and in a terminal. Only token counts, models and times are read, never what was said, and nothing leaves this computer.",
+      "keywords": "logs history import tokens statistics"
+    },
+    "notFound": "No logs found",
+    "notRead": "Not read yet",
+    "covers_one": "Since {{date}} · {{requests}} request",
+    "covers_other": "Since {{date}} · {{requests}} requests",
+    "coversNone": "No requests yet",
+    "synced": "synced {{ago}}",
+    "reimport": {
+      "button": "Re-import…",
+      "title": "Re-import {{agent}}'s logs?",
+      "description": "OverBench forgets what it imported from {{agent}} and reads its logs again. History the agent has since deleted from its logs cannot come back.",
+      "confirm": "Re-import"
+    },
+    "sidebar": {
+      "name": "Show in the sidebar",
+      "description": "What the end of the sidebar's Usage row shows.",
+      "today": "Today's tokens",
+      "limit": "Tightest plan limit",
+      "off": "Nothing"
+    },
+    "clear": {
+      "name": "Clear OverBench's record",
+      "description": "Deletes the tokens OverBench recorded for each turn. The agents' logs, and what was imported from them, stay.",
+      "button": "Clear…",
+      "title": "Clear OverBench's usage record?",
+      "confirm": "Clear record"
+    }
+  }
+}

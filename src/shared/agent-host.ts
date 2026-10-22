@@ -3,6 +3,7 @@
 import type { FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { GitStatus, GitTools, PullRequest, PullRequestState } from './git'
 import type { PortConnectionState } from './port-rpc'
+import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
   ConfigOption,
@@ -320,6 +321,17 @@ export interface HostContract {
     params: { projectPath: string; path: string; text: string; version: string | null }
     result: FileWritten
   }
+  // `dayStarts`: the local days to sum, as n + 1 ascending boundaries for n days.
+  'usage.summary': {
+    params: { dayStarts: number[]; from: number; to: number; scope: UsageScope }
+    result: UsageSummary
+  }
+  'usage.total': { params: { from: number; to: number }; result: UsageTotal }
+  'usage.status': { params: void; result: UsageStatus }
+  // Resolves once the scan is done; does nothing while Usage on this computer is off.
+  'usage.sync': { params: void; result: void }
+  'usage.reimport': { params: { agentId: AgentId }; result: void }
+  'usage.clearRecord': { params: void; result: void }
 }
 
 export type HostMethod = keyof HostContract
@@ -384,6 +396,12 @@ export const HOST_METHODS = [
   'files.read',
   'files.search',
   'files.write',
+  'usage.summary',
+  'usage.total',
+  'usage.status',
+  'usage.sync',
+  'usage.reimport',
+  'usage.clearRecord',
 ] as const satisfies readonly HostMethod[]
 
 export type HostEvent =
@@ -397,6 +415,8 @@ export type HostEvent =
   | { type: 'git.changed'; status: GitStatus }
   | { type: 'git.pr'; projectPath: string; pr: PullRequest | null }
   | { type: 'git.tools'; tools: GitTools }
+  | { type: 'usage.changed' } // the figures changed; a page showing them reads again
+  | { type: 'usage.status'; status: UsageStatus }
 
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>

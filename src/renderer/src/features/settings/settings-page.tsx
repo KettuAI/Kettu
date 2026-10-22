@@ -37,6 +37,7 @@ import {
   useNotificationsSection,
   useShortcutsSection,
   useTerminalSection,
+  useUsageSection,
 } from './section-defs'
 
 const FLASH_MS = 1200
@@ -52,7 +53,7 @@ export default function SettingsPage() {
   // the rest.
   const clusters: SectionDef[][] = [
     [useGeneralSection(), useAppearanceSection(), useNotificationsSection(), useShortcutsSection()],
-    [useAgentsSection(), useTerminalSection(), useGitSection()],
+    [useAgentsSection(), useUsageSection(), useTerminalSection(), useGitSection()],
     [useAdvancedSection(), useAboutSection()],
   ]
   const sections = clusters.flat()

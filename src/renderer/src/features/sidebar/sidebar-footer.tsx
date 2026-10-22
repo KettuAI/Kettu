@@ -5,7 +5,6 @@ import { UpdateNotice } from '@renderer/features/updates/update-notice'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { openSettings, useViewStore } from '@renderer/stores/view'
 import { NavRow } from './app-sidebar'
-import { PlanUsageStrip } from './plan-usage-strip'
 
 export function SidebarFooterContent() {
   const { t } = useTranslation('sidebar')
@@ -14,7 +13,6 @@ export function SidebarFooterContent() {
     <>
       <SignInNotice />
       <UpdateNotice />
-      <PlanUsageStrip />
       <NavRow
         icon={<SettingsIcon className="text-muted-foreground" />}
         label={t('footer.settings')}

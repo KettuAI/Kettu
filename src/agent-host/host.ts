@@ -1,6 +1,7 @@
 // The agent host, assembled: state, agents, sessions, git and the ports. index.ts runs it in
 // the utility process; tests run it in-process with fakes for the launcher, shell and git.
 
+import os from 'node:os'
 import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
 import type { AgentProcess, HostToMain } from '@shared/host-control'
@@ -42,6 +43,9 @@ import {
   type JsonFile,
 } from './storage'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
+import { UsageManager, type UsageTimings } from './usage/manager'
+import { LOG_READERS } from './usage/readers'
+import { UsageStore, type UsageWorkerFactory } from './usage/store'
 import { createValidators } from './validate'
 
 export interface HostOptions {
@@ -66,6 +70,11 @@ export interface HostOptions {
   mirrorTraffic?: boolean
   /** Starts the worker that owns the thread database; without it no thread is stored. */
   threadWorker?: ThreadWorkerFactory
+  /** Starts the worker that owns the usage database; without it no usage is kept. */
+  usageWorker?: UsageWorkerFactory
+  usageTimings?: Partial<UsageTimings>
+  /** Where the agents' logs are looked for; the user's home by default. */
+  homeDir?: string
 }
 
 export class AgentHost {
@@ -85,6 +94,8 @@ export class AgentHost {
   readonly sessions: SessionManager
   /** Every session's thread, read a page at a time, in a worker of its own. */
   readonly threads: ThreadStore | null
+  /** OverBench's record and the agents' logs, in a worker of its own. */
+  readonly usage: UsageManager
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
@@ -139,6 +150,31 @@ export class AgentHost {
           log,
         })
       : null
+    const usageStore = options.usageWorker
+      ? new UsageStore({
+          file: path.join(options.userDataPath, 'state', 'usage.db'),
+          createWorker: options.usageWorker,
+          log,
+          onChanged: () => this.usage.rowsChanged(),
+          onProgress: (progress) => this.usage.progressed(progress),
+        })
+      : null
+    this.usage = new UsageManager({
+      store: usageStore,
+      readers: LOG_READERS,
+      fromComputer: options.settings.usage.fromComputer,
+      platform,
+      home: options.homeDir ?? os.homedir(),
+      env: async () => {
+        await this.env.ready()
+        return this.env.agentEnv()
+      },
+      isScratch: (folder) => this.scratch.contains(folder),
+      log,
+      changed: () => this.hub.broadcast({ type: 'usage.changed' }),
+      status: (status) => this.hub.broadcast({ type: 'usage.status', status }),
+      ...(options.usageTimings ? { timings: options.usageTimings } : {}),
+    })
     this.agents = new AgentManager({
       catalog: buildCatalog(options.fakeAgentPath),
       platform,
@@ -166,6 +202,7 @@ export class AgentHost {
       scratch: this.scratch,
       file: sessionsFile(options.userDataPath, log),
       threads: this.threads,
+      usage: this.usage,
       diagnostics: this.diagnostics,
       git: () => this.git,
       options: this.agentOptions,
@@ -224,6 +261,7 @@ export class AgentHost {
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
     host.sendFolders()
+    host.usage.start()
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
     void host.agents.detectAll().then(() => host.agents.scheduleUpdateChecks())
@@ -295,6 +333,7 @@ export class AgentHost {
     if (previous.git.backgroundFetch !== next.git.backgroundFetch) {
       this.git?.setBackgroundFetch(next.git.backgroundFetch)
     }
+    this.usage.setFromComputer(next.usage.fromComputer)
     await this.agents.settingsChanged(previous, next)
   }
 
@@ -306,6 +345,7 @@ export class AgentHost {
   shutdown(): Promise<void> {
     this.stopping ??= (async () => {
       this.sessions.shutdown()
+      this.usage.stop()
       this.execRunner.killAll()
       for (const unsubscribe of this.gitUnsubscribe) unsubscribe()
       await Promise.all([
@@ -325,6 +365,7 @@ export class AgentHost {
         this.trees.flush(),
         this.agentOptions.flush(),
         this.threads?.close(),
+        this.usage.close(),
       ])
       this.hub.closeAll()
       this.options.send({ type: 'host:stopped' })
@@ -500,6 +541,13 @@ export class AgentHost {
         this.filesCall(projectPath, (root) => this.files.search(root, query)),
       'files.write': ({ projectPath, path, text, version }) =>
         this.filesCall(projectPath, (root) => this.files.write(root, path, text, version)),
+      'usage.summary': ({ dayStarts, from, to, scope }) =>
+        this.usage.summary(dayStarts, from, to, scope),
+      'usage.total': ({ from, to }) => this.usage.total(from, to),
+      'usage.status': () => this.usage.status(),
+      'usage.sync': () => this.usage.sync(),
+      'usage.reimport': ({ agentId }) => this.usage.reimport(agentId),
+      'usage.clearRecord': () => this.usage.clearRecord(),
     }
   }
 }

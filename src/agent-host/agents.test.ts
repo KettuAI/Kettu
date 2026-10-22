@@ -79,6 +79,7 @@ function manager(
       agents: {},
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
+      usage: { fromComputer: false },
     }),
     reportsDir: path.join(os.tmpdir(), 'overbench-agent-reports'),
     adaptersDir: path.join(os.tmpdir(), 'overbench-no-adapters'),

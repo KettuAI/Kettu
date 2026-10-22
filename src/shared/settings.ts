@@ -32,6 +32,10 @@ export interface SettingsFile {
   git: { backgroundFetch: boolean }
   updates: { automatic: 'download' | 'notify' | 'off' }
   privacy: { hideAccount: boolean } // masks emails and account names on screen
+  usage: {
+    fromComputer: boolean // read the agents' own logs; see docs/design/usage.md
+    sidebar: 'today' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
+  }
 }
 
 /** Chrome's page zoom steps from 80% to 150%. */
@@ -59,6 +63,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   git: { backgroundFetch: false },
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
+  usage: { fromComputer: false, sidebar: 'today' },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -83,6 +88,7 @@ export interface SettingsPatch {
   git?: Partial<SettingsFile['git']>
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
+  usage?: Partial<SettingsFile['usage']>
 }
 
 /** The part of the settings the agent host receives. */
@@ -91,6 +97,7 @@ export interface HostSettings {
   agents: SettingsFile['agents']
   proxy: ProxySettings
   git: SettingsFile['git']
+  usage: { fromComputer: boolean }
 }
 
 /** The part of the settings the terminal host receives. */

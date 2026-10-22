@@ -48,6 +48,7 @@ import {
   SYNTHETIC_MODE_ID,
   type MapperEffect,
   type MapperOutput,
+  type ModelTokens,
   type SubagentState,
   type TurnScope,
 } from './acp/mapper'
@@ -74,6 +75,8 @@ import {
   type ThreadWrite,
 } from './threads/model'
 import type { ThreadStore } from './threads/store'
+import type { UsageRow } from './usage/model'
+import { recordRows } from './usage/record'
 
 export interface SessionTimings {
   /** Patches of a session are flushed at most this often. */
@@ -125,6 +128,8 @@ export interface SessionManagerDeps {
   events: SessionEvents
   /** Each agent's options for New session, kept from its new sessions and the user's choices. */
   options?: AgentOptionsStore
+  /** Where each turn's usage is recorded; without it nothing is. */
+  usage?: { record(rows: UsageRow[]): void }
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -2091,7 +2096,7 @@ export class SessionManager {
       const result = await connection.prompt(live.record.acpSessionId, turn.content)
       if (turn.ended) return
       this.deps.agents.signedIn(live.record.agentId)
-      this.endTurn(live, turn, result.stopReason, result.tokens)
+      this.endTurn(live, turn, result.stopReason, result.tokens, result.models)
     } catch (error) {
       if (turn.ended) return
       this.failTurn(live, turn, error)
@@ -2125,26 +2130,28 @@ export class SessionManager {
     if (patches.length > 0) this.emit(live, patches)
   }
 
-  private finishTurn(live: Live, turn: Turn, stopReason: StopReason | null): void {
+  /** Settles the turn; returns its `turn_end` entry's id when there is a stop reason. */
+  private finishTurn(live: Live, turn: Turn, stopReason: StopReason | null): string | null {
     turn.ended = true
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
     if (live.turn === turn) live.turn = null
     this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
-    if (stopReason) {
-      this.emit(live, [
-        {
-          op: 'entry.add',
-          entry: {
-            kind: 'turn_end',
-            id: this.nextId(live),
-            stopReason,
-            durationMs: Math.max(0, this.now() - turn.startedAt),
-          },
+    if (!stopReason) return null
+    const id = this.nextId(live)
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'turn_end',
+          id,
+          stopReason,
+          durationMs: Math.max(0, this.now() - turn.startedAt),
         },
-      ])
-    }
+      },
+    ])
+    return id
   }
 
   private endTurn(
@@ -2152,18 +2159,35 @@ export class SessionManager {
     turn: Turn,
     stopReason: StopReason,
     tokens: TokenTotals | null,
+    models: ModelTokens[] = [],
   ): void {
-    this.finishTurn(live, turn, stopReason)
+    const turnEntryId = this.finishTurn(live, turn, stopReason)
     const now = this.now()
     const changes: Partial<SessionView> = { status: 'ready', turnStartedAt: null, updatedAt: now }
-    if (tokens) {
+    const turnTokens = models.length > 0 ? sumModelTokens(models, tokens) : tokens
+    if (turnTokens) {
       const usage = live.thread.session.usage
       changes.usage = {
         used: usage?.used ?? 0,
         size: usage?.size ?? 0,
         cost: usage?.cost ?? null,
-        tokens: addTokenTotals(usage?.tokens ?? null, tokens),
+        tokens: addTokenTotals(usage?.tokens ?? null, turnTokens),
       }
+    }
+    if (turnEntryId && this.deps.usage) {
+      this.deps.usage.record(
+        recordRows({
+          sessionId: live.id,
+          acpSessionId: live.record.acpSessionId,
+          agentId: live.record.agentId,
+          project: live.record.projectPath,
+          turnEntryId,
+          at: now,
+          tokens,
+          models,
+          model: modelOf(live.thread.session.config),
+        }),
+      )
     }
     this.update(live, changes)
     const git = this.deps.git()
@@ -2797,4 +2821,20 @@ function stoppedNotice(name: string): { title: string; description: string } {
     title: t('notice.stopped.title', { agent: name }),
     description: t('notice.stopped.description'),
   }
+}
+
+/**
+ * A turn's totals from its counts per model, which hold Claude Code's subagents where its
+ * `usage` does not. Reasoning comes from `usage`, since only Codex reports it in both.
+ */
+function sumModelTokens(models: ModelTokens[], usage: TokenTotals | null): TokenTotals {
+  let sum: TokenTotals | null = null
+  for (const { tokens } of models) sum = addTokenTotals(sum, { ...tokens, thought: null })
+  return { ...sum!, thought: usage?.thought ?? null }
+}
+
+/** The session's model option, for an agent that names no model per turn. */
+function modelOf(config: readonly ConfigOption[]): string | null {
+  const option = config.find((o) => o.category === 'model' && typeof o.value === 'string')
+  return typeof option?.value === 'string' ? option.value : null
 }

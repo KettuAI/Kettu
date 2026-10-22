@@ -655,6 +655,52 @@ export function mapTokenTotals(usage: acp.Usage | null | undefined): TokenTotals
   }
 }
 
+/** A turn's tokens for one model, as the agent names it. */
+export interface ModelTokens {
+  model: string
+  tokens: TokenTotals
+}
+
+const count = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+
+/**
+ * `_meta.quota.model_usage` of a prompt response: the turn's tokens per model, the only counts
+ * of Claude Code's that include its subagents. Claude Code names the cache write
+ * `cachedWriteTokens`, Codex `cacheWriteInputTokens`.
+ */
+export function mapModelUsage(meta: unknown): ModelTokens[] {
+  if (typeof meta !== 'object' || meta === null) return []
+  const quota = (meta as { quota?: unknown }).quota
+  if (typeof quota !== 'object' || quota === null) return []
+  const list = (quota as { model_usage?: unknown }).model_usage
+  if (!Array.isArray(list)) return []
+  const models: ModelTokens[] = []
+  for (const item of list as unknown[]) {
+    if (typeof item !== 'object' || item === null) continue
+    const { model, token_count: tokenCount } = item as Record<string, unknown>
+    if (typeof model !== 'string' || typeof tokenCount !== 'object' || tokenCount === null) continue
+    const fields = tokenCount as Record<string, unknown>
+    const input = count(fields.inputTokens)
+    const output = count(fields.outputTokens)
+    if (input === null || output === null) continue
+    const cacheRead = count(fields.cachedInputTokens)
+    const cacheWrite = count(fields.cachedWriteTokens) ?? count(fields.cacheWriteInputTokens)
+    models.push({
+      model,
+      tokens: {
+        total: count(fields.totalTokens) ?? input + output + (cacheRead ?? 0) + (cacheWrite ?? 0),
+        input,
+        output,
+        thought: count(fields.reasoningOutputTokens),
+        cacheRead,
+        cacheWrite,
+      },
+    })
+  }
+  return models
+}
+
 /**
  * A session's totals with one more turn in them. The adapters report each turn's own counts, though
  * ACP's schema calls them totals. A count no turn has reported yet stays null.

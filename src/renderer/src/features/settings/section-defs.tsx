@@ -1,6 +1,7 @@
 import {
   BellIcon,
   BotIcon,
+  ChartNoAxesColumnIcon,
   GitBranchIcon,
   InfoIcon,
   KeyboardIcon,
@@ -13,10 +14,12 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import { listedInstalled } from '@renderer/features/agents/readiness'
+import { i18n } from '@renderer/lib/i18n'
 import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
-import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { useUsageStore } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
 import {
   AboutHero,
@@ -52,6 +55,7 @@ import {
   ThemeTiles,
   Zoom,
 } from './sections'
+import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage-section'
 
 // The sections of the Settings page as data, so search and the match counts read the same rows
 // the page draws.
@@ -264,6 +268,67 @@ export function useNotificationsSection(): SectionDef {
     title: t('sections.notifications'),
     description: t('pages.notifications'),
     icon: BellIcon,
+    rows,
+  }
+}
+
+export function useUsageSection(): SectionDef {
+  const { t } = useTranslation('usage')
+  const en = i18n.getFixedT('en', 'usage')
+  const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
+  const logs = useUsageStore(useShallow((s) => s.status?.logs ?? []))
+  const sources = group('sources', t('settings.groups.sources'))
+  const rows: RowDef[] = [
+    {
+      id: 'from-computer',
+      name: t('settings.fromComputer.name'),
+      english: en('settings.fromComputer.name'),
+      description: t('settings.fromComputer.description'),
+      keywords: t('settings.fromComputer.keywords'),
+      group: sources,
+      render: () => <FromComputer />,
+    },
+  ]
+  if (fromComputer) {
+    const logGroup = group('logs', t('settings.groups.logs'), {
+      count: logs.length,
+      actions: <SyncLogs />,
+    })
+    rows.push(
+      ...logs.map((log): RowDef => ({
+        id: `logs-${log.agentId}`,
+        name: agentName(log.agentId),
+        description: log.locations.join(' '),
+        keywords: t('settings.groups.logs'),
+        group: logGroup,
+        layout: 'block',
+        render: () => <LogRow log={log} />,
+      })),
+    )
+  }
+  rows.push(
+    {
+      id: 'sidebar',
+      name: t('settings.sidebar.name'),
+      english: en('settings.sidebar.name'),
+      description: t('settings.sidebar.description'),
+      group: group('display', t('settings.groups.display')),
+      render: () => <SidebarEnd />,
+    },
+    {
+      id: 'clear-record',
+      name: t('settings.clear.name'),
+      english: en('settings.clear.name'),
+      description: t('settings.clear.description'),
+      group: group('danger', t('settings.groups.danger'), { tone: 'danger' }),
+      render: () => <ClearRecord />,
+    },
+  )
+  return {
+    id: 'usage',
+    title: t('settings.title'),
+    description: t('settings.description'),
+    icon: ChartNoAxesColumnIcon,
     rows,
   }
 }

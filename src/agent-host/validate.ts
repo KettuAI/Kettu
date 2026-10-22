@@ -103,6 +103,41 @@ function position(o: Fields, key: string): number {
   return value
 }
 
+function time(o: Fields, key: string): number {
+  const value = o[key]
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw invalidParams(`${key} must be a time in ms, a whole number from 0`)
+  }
+  return value
+}
+
+// Fifty years of days, past any history an agent keeps.
+const USAGE_DAYS = 18_263
+
+function dayStarts(o: Fields): number[] {
+  const value = o.dayStarts
+  if (!Array.isArray(value) || value.length > USAGE_DAYS + 1) {
+    throw invalidParams(`dayStarts must be an array of at most ${USAGE_DAYS + 1} times`)
+  }
+  const days = value.map((day: unknown, index) => {
+    if (typeof day !== 'number' || !Number.isSafeInteger(day) || day < 0) {
+      throw invalidParams(`dayStarts[${index}] must be a time in ms`)
+    }
+    return day
+  })
+  if (days.some((day, index) => index > 0 && day <= days[index - 1]!)) {
+    throw invalidParams('dayStarts must ascend')
+  }
+  return days
+}
+
+function range(o: Fields): { from: number; to: number } {
+  const from = time(o, 'from')
+  const to = time(o, 'to')
+  if (to < from) throw invalidParams('to must not be before from')
+  return { from, to }
+}
+
 function sessionId(o: Fields): string {
   return string(o, 'sessionId', ID_CHARS)
 }
@@ -324,6 +359,18 @@ export function createValidators(platform: Platform): Validators {
     },
     'git.currentPullRequest': project,
     'git.tools': none,
+    'usage.summary': (params) => {
+      const o = fields(params)
+      if (o.scope !== 'computer' && o.scope !== 'overbench') {
+        throw invalidParams('scope must be computer or overbench')
+      }
+      return { dayStarts: dayStarts(o), ...range(o), scope: o.scope }
+    },
+    'usage.total': (params) => range(fields(params)),
+    'usage.status': none,
+    'usage.sync': none,
+    'usage.reimport': agent,
+    'usage.clearRecord': none,
     'files.list': project,
     'files.read': (params) => {
       const o = fields(params)
