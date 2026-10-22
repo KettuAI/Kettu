@@ -33,6 +33,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 25  | The sidebar footer needs a design of its own                   | Sidebar        | Open         |
 | 26  | Account details cannot be hidden                               | Settings       | Open         |
 | 27  | Agent adapters have no update check or one-click update        | Agents         | Open         |
+| 28  | The Ready label next to the status dot is redundant            | Settings       | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -289,3 +290,14 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Where the notice shows: Settings › Agents (the list row and the agent's page, with an **Update** button and its progress) and the home screens, the [project home](../design/ui.md#project-home)'s agent cards and the [Welcome](../design/ui.md#welcome) screen. Whether the sidebar footer, which already holds the update and sign-in notices, needs one too. It should be quiet and neutral like the app's update notice, with a way to dismiss a version.
   - What OpenCode gets: nothing, or a notice that a newer release exists with a pointer to how the user installed it.
   - The rule changes in [Agent host: installing adapters](../design/agent-host.md#installing-adapters), where pins are "bumped deliberately", and in [Interface: settings](../design/ui.md#settings--agents).
+
+## 28. The Ready label next to the status dot is redundant
+
+- **Reported**: 2026-10-22, with a screenshot of Settings › Agents and an arrow at the **Ready** state of Claude Code.
+- **Observed**: every agent's row ends with a green dot and the word "Ready". The page only shows state, so the green dot already says it, and the word beside it gets in the way of the look.
+- **Expected**: the dot alone, without the name.
+- **Today**: the state is `AgentStateLine` in `src/renderer/src/features/agents/agent-state.tsx`, which draws a `bg-success` dot (hidden from assistive tech) and the text `state.ready`. The same component feeds the list rows in Settings, the agent cards on the [project home](../design/ui.md#project-home) and the [Welcome](../design/ui.md#welcome) screen, so a change reaches all three. The other states carry words too: "Sign in to start", "Installing…", "Starting…", "Restarting…", "Failed", "Not available". [Interface: sidebar](../design/ui.md#sidebar) states a rule for status marks: "Indicators always pair a color with a shape or label, never color alone".
+- **To settle when planning**:
+  - Whether only **Ready** loses its word, since it is the state that needs no attention, while states that ask something of the user keep theirs.
+  - How the bare dot stays readable without color alone: an accessible name on the dot and a tooltip with the word, and the rule above amended for it.
+  - Whether the project home's cards and the Welcome screen follow the Settings list. The maintainer pointed at Settings only; the card there shows "Ready" the same way.
