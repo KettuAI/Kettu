@@ -3,6 +3,7 @@ import { usePendingSession } from '@renderer/app/actions'
 import { sessionToRestore } from '@renderer/app/restore'
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
+import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useConnectionStore } from '@renderer/stores/connection'
 import {
@@ -37,6 +38,9 @@ function onHostEvent(event: HostEvent): void {
     case 'agent.status':
       useAgentsStore.getState().setOne(event.status)
       break
+    case 'agent.options':
+      receiveAgentOptions(event.options)
+      break
     case 'projects.changed':
       useProjectsStore.getState().setAll(event.projects)
       break
@@ -61,6 +65,7 @@ function loadSessionState(): Promise<unknown> {
     useProjectsStore.getState().refresh(),
     useSessionsStore.getState().refresh(),
     useAgentsStore.getState().refresh(),
+    loadAgentOptions(),
   ])
 }
 

@@ -5,6 +5,7 @@ import type { GitStatus, GitTools, PullRequest, PullRequestState } from './git'
 import type { PortConnectionState } from './port-rpc'
 import type {
   AgentId,
+  ConfigOption,
   OlderPage,
   PatchBatch,
   SessionSnapshot,
@@ -91,6 +92,18 @@ export interface AgentStatus {
     account: boolean // names its account through `_auth/status_update` as it starts
     progressNotes: boolean // its messages that more work in a turn follows are progress notes
   }
+}
+
+/**
+ * What New session shows for an agent before a session exists, since ACP lists the options only in
+ * answer to `session/new`. See config options in the session model.
+ */
+export interface AgentOptions {
+  agentId: AgentId
+  config: ConfigOption[] // from the agent's last `session/new`, at the agent's own values
+  levels: Record<string, ConfigOption> // the `thought_level` option each model offered, by model
+  remembered: Record<string, string | boolean> // the user's last values, by option id
+  observedAt: number
 }
 
 /** An agent's page in Settings › Agents: what its status leaves out, read when the page opens. */
@@ -201,6 +214,7 @@ export interface HostContract {
     params: { agentId: AgentId; projectPath: string; cursor?: string }
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
+  'agents.options': { params: void; result: AgentOptions[] }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
@@ -208,7 +222,13 @@ export interface HostContract {
   'sessions.list': { params: { projectPath?: string }; result: SessionSummary[] }
   'sessions.create': {
     // projectPath null: No project, in a new scratch folder.
-    params: { agentId: AgentId; projectPath: string | null; parentId?: string }
+    // options: config values to start with, by option id.
+    params: {
+      agentId: AgentId
+      projectPath: string | null
+      parentId?: string
+      options?: Record<string, string | boolean>
+    }
     result: SessionSummary
   }
   'sessions.import': {
@@ -283,6 +303,7 @@ export const HOST_METHODS = [
   'agents.details',
   'agents.refreshAccount',
   'agents.listSessions',
+  'agents.options',
   'projects.list',
   'projects.add',
   'projects.remove',
@@ -329,6 +350,7 @@ export type HostEvent =
   | { type: 'session.summary'; summary: SessionSummary }
   | { type: 'session.removed'; sessionId: string }
   | { type: 'agent.status'; status: AgentStatus }
+  | { type: 'agent.options'; options: AgentOptions }
   | { type: 'projects.changed'; projects: Project[] }
   | { type: 'environment.changed'; info: EnvironmentInfo }
   | { type: 'git.changed'; status: GitStatus }

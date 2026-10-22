@@ -6,6 +6,7 @@ import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
 import type { AgentProcess, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
+import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import {
@@ -73,6 +74,8 @@ export class AgentHost {
   readonly agents: AgentManager
   /** What the agents last reported about their accounts and plans, kept across runs. */
   private readonly remembered: JsonFile<AgentsFile>
+  /** Each agent's config options from its last new session, for New session. */
+  private readonly agentOptions: AgentOptionsStore
   /** The agent processes and what they leave behind, until seen gone. */
   private readonly trees: AgentTrees
   readonly sessions: SessionManager
@@ -113,6 +116,10 @@ export class AgentHost {
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
+    this.agentOptions = new AgentOptionsStore({
+      file: agentOptionsFile(options.userDataPath, log),
+      changed: (changed) => this.hub.broadcast({ type: 'agent.options', options: changed }),
+    })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
       control: processControl(platform),
@@ -155,6 +162,7 @@ export class AgentHost {
       threads: this.threads,
       diagnostics: this.diagnostics,
       git: () => this.git,
+      options: this.agentOptions,
       ...(options.sessionTimings ? { timings: options.sessionTimings } : {}),
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
@@ -204,6 +212,7 @@ export class AgentHost {
       host.sessions.load(),
       host.remembered.load(),
       host.trees.load(),
+      host.agentOptions.load(),
     ])
     host.agents.restore(remembered)
     host.sendFolders()
@@ -305,6 +314,7 @@ export class AgentHost {
         this.sessions.flush(),
         this.remembered.flush(),
         this.trees.flush(),
+        this.agentOptions.flush(),
         this.threads?.close(),
       ])
       this.hub.closeAll()
@@ -389,6 +399,7 @@ export class AgentHost {
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.details': ({ agentId }) => agents.details(agentId),
       'agents.refreshAccount': ({ agentId }) => agents.refreshAccount(agentId),
+      'agents.options': () => this.agentOptions.list(),
       'agents.listSessions': ({ agentId, projectPath, cursor }) =>
         sessions.listImportable(agentId, projectPath, cursor ?? null),
       'projects.list': () => {

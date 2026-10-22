@@ -196,6 +196,55 @@ describe('ultracode', () => {
   })
 })
 
+describe('starting with chosen options', () => {
+  const value = (port: TestPort, sessionId: string, id: string) =>
+    port.thread(sessionId).session.config.find((o) => o.id === id)?.value
+
+  it('sets the chosen values before the session is ready, and remembers the model', async () => {
+    const { t, port } = await setup()
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      options: { thought_level: 'high', mode: 'code', model: 'deep', __ultracode: true },
+    })
+    expect(summary.status).toBe('ready')
+    await port.open(summary.id)
+    expect(value(port, summary.id, 'model')).toBe('deep')
+    expect(value(port, summary.id, 'thought_level')).toBe('high')
+    expect(value(port, summary.id, 'mode')).toBe('code')
+    expect(value(port, summary.id, '__ultracode')).toBe(true)
+    const [options] = await port.request('agents.options', undefined)
+    expect(options).toMatchObject({
+      agentId: 'fake-agent',
+      remembered: { model: 'deep', thought_level: 'high' },
+    })
+    // The agent's own defaults stay as they were, so the next session starts from them.
+    expect(options?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
+    expect(Object.keys(options?.levels ?? {})).toEqual(['balanced', 'deep'])
+  })
+
+  it('keeps the agent value for an option the session does not offer', async () => {
+    const { t, port } = await setup()
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      options: { model: 'retired', unknown: true },
+    })
+    expect(summary.status).toBe('ready')
+    await port.open(summary.id)
+    expect(value(port, summary.id, 'model')).toBe('balanced')
+  })
+
+  it("remembers a model chosen in a session for the agent's next one", async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await port.request('sessions.setConfigOption', { sessionId, optionId: 'model', value: 'swift' })
+    await port.request('sessions.setConfigOption', { sessionId, optionId: 'mode', value: 'plan' })
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.remembered).toEqual({ model: 'swift' })
+  })
+})
+
 describe('forking', () => {
   it('starts a new session from the history, shown with its entries', async () => {
     const { t, port } = await setup()

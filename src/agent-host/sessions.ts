@@ -52,6 +52,7 @@ import {
   type TurnScope,
 } from './acp/mapper'
 import { parseContextReport } from './acp/claude-reports'
+import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams, notFound } from './errors'
@@ -122,6 +123,8 @@ export interface SessionManagerDeps {
   diagnostics: Diagnostics
   git(): GitServiceApi | null
   events: SessionEvents
+  /** Each agent's options for New session, kept from its new sessions and the user's choices. */
+  options?: AgentOptionsStore
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -226,7 +229,10 @@ function sessionMeta(record: SessionRecord): Record<string, unknown> | undefined
 }
 
 /** The agent's options with the ultracode switch at the end, for agents that have it. */
-function withUltracode(record: SessionRecord, config: readonly ConfigOption[]): ConfigOption[] {
+function withUltracode(
+  record: Pick<SessionRecord, 'agentId' | 'ultracode'>,
+  config: readonly ConfigOption[],
+): ConfigOption[] {
   const rest = config.filter((option) => option.id !== ULTRACODE_OPTION_ID)
   if (!hasUltracode(record.agentId)) return rest
   return [
@@ -1096,6 +1102,7 @@ export class SessionManager {
     agentId: AgentId
     projectPath: string | null
     parentId?: string
+    options?: Record<string, string | boolean>
   }): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
@@ -1128,12 +1135,14 @@ export class SessionManager {
       description: null,
       branch: null,
     }
+    const { [ULTRACODE_OPTION_ID]: ultracode, ...options } = params.options ?? {}
+    if (typeof ultracode === 'boolean' && hasUltracode(record.agentId)) record.ultracode = ultracode
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
     this.touch(live.id)
     try {
-      await this.startNew(live)
+      await this.startNew(live, options)
     } catch (error) {
       if (!(error instanceof HostError && error.code === 'auth_required')) {
         this.dropLive(live)
@@ -1144,8 +1153,14 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
-  /** `session/new`; on `auth_required` the session waits in that state and stays live. */
-  private async startNew(live: Live): Promise<void> {
+  /**
+   * `session/new`, then the start values that differ from the new session's own; on
+   * `auth_required` the session waits in that state and stays live.
+   */
+  private async startNew(
+    live: Live,
+    options: Record<string, string | boolean> = {},
+  ): Promise<void> {
     const runtime = await this.deps.agents.ensureReady(live.record.agentId)
     try {
       const setup = await runtime.connection.newSession(
@@ -1155,17 +1170,65 @@ export class SessionManager {
       live.record.acpSessionId = setup.acpSessionId
       this.attach(live, runtime.connection)
       live.failure = null
+      // As the agent's defaults: ultracode off, whatever this session starts with.
+      this.deps.options?.started(
+        live.record.agentId,
+        withUltracode({ agentId: live.record.agentId }, setup.config),
+      )
       this.update(live, {
         acpSessionId: setup.acpSessionId,
         config: withUltracode(live.record, setup.config),
-        status: 'ready',
         error: null,
       })
+      await this.applyStartOptions(live, runtime.connection, options)
+      this.update(live, { status: 'ready' })
       this.deps.agents.signedIn(live.record.agentId)
       this.save(live)
       this.touch(live.id)
     } catch (error) {
       throw this.failStart(live, error, { action: 'create' })
+    }
+  }
+
+  /**
+   * Sets the values New session chose, in `startOrder`, each against the options as they stand
+   * after the one before. A value the session does not offer, or one the agent refuses, is
+   * logged and left at the agent's value, so the start itself never fails on it.
+   */
+  private async applyStartOptions(
+    live: Live,
+    connection: AgentConnection,
+    options: Record<string, string | boolean>,
+  ): Promise<void> {
+    const { agentId, acpSessionId } = live.record
+    for (const id of startOrder(live.thread.session.config, Object.keys(options))) {
+      const value = options[id]
+      const config = live.thread.session.config
+      const option = config.find((o) => o.id === id)
+      if (value === undefined || option?.value === value) continue
+      if (!option || !isValueOf(option, value)) {
+        this.deps.diagnostics.log(
+          'warn',
+          `${agentId} session ${live.id} does not offer ${id} = ${String(value)}; keeping the agent's value`,
+        )
+        continue
+      }
+      try {
+        let next: ConfigOption[]
+        if (id === SYNTHETIC_MODE_ID) {
+          await connection.setMode(acpSessionId, value as string)
+          next = config.map((o): ConfigOption => (o.id === id ? { ...o, value } : o))
+        } else {
+          next = mergeConfig(config, await connection.setConfigOption(acpSessionId, id, value))
+        }
+        this.update(live, { config: withUltracode(live.record, next) })
+        this.deps.options?.chose(agentId, option, value, next)
+      } catch (error) {
+        this.deps.diagnostics.log(
+          'warn',
+          `${agentId} session ${live.id} refused ${id} = ${String(value)}: ${agentError(error).message}`,
+        )
+      }
     }
   }
 
@@ -2373,7 +2436,9 @@ export class SessionManager {
         })
       } else {
         const config = await connection.setConfigOption(live.record.acpSessionId, optionId, value)
-        this.update(live, { config: mergeConfig(live.thread.session.config, config) })
+        const next = mergeConfig(live.thread.session.config, config)
+        this.update(live, { config: next })
+        this.deps.options?.chose(live.record.agentId, option, value, next)
       }
     } catch (error) {
       throw agentError(error)

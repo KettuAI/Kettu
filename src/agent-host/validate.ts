@@ -51,6 +51,29 @@ function agentId(o: Fields, key = 'agentId'): AgentId {
   return value as AgentId
 }
 
+const CONFIG_VALUES = 64
+
+/** Config values by option id, as `sessions.setConfigOption` takes them one at a time. */
+function configValues(value: unknown): Record<string, string | boolean> {
+  const o = fields(value)
+  const entries = Object.entries(o)
+  if (entries.length > CONFIG_VALUES)
+    throw invalidParams(`options holds more than ${CONFIG_VALUES}`)
+  const values: Record<string, string | boolean> = {}
+  for (const [id, v] of entries) {
+    if (id.length === 0 || id.length > ID_CHARS) throw invalidParams('An option id is too long')
+    if (
+      typeof v === 'boolean' ||
+      (typeof v === 'string' && v.length > 0 && v.length <= TEXT_CHARS)
+    ) {
+      values[id] = v
+    } else {
+      throw invalidParams(`options.${id} must be 1 to ${TEXT_CHARS} characters or a boolean`)
+    }
+  }
+  return values
+}
+
 function absolutePath(o: Fields, key: string, platform: Platform): string {
   const value = string(o, key, PATH_CHARS)
   if (value.includes('\0')) throw invalidParams(`${key} contains a NUL character`)
@@ -171,6 +194,7 @@ export function createValidators(platform: Platform): Validators {
     'agents.refreshLimits': agent,
     'agents.details': agent,
     'agents.refreshAccount': agent,
+    'agents.options': none,
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)
@@ -193,11 +217,13 @@ export function createValidators(platform: Platform): Validators {
     'sessions.create': (params) => {
       const o = fields(params)
       const parentId = optionalString(o, 'parentId', ID_CHARS)
+      const options = o.options === undefined ? undefined : configValues(o.options)
       return {
         agentId: agentId(o),
         // null: no project, so the host makes a scratch folder.
         projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
         ...(parentId !== undefined ? { parentId } : {}),
+        ...(options !== undefined ? { options } : {}),
       }
     },
     'sessions.import': (params) => {

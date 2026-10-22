@@ -78,6 +78,20 @@ describe('createValidators', () => {
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
   })
 
+  it('takes start values as strings or booleans by option id', () => {
+    const options = { model: 'opus', fast: true }
+    expect(
+      posix['sessions.create']({ agentId: 'codex', projectPath: null, options, extra: 1 }),
+    ).toEqual({ agentId: 'codex', projectPath: null, options })
+    rejects(() => posix['sessions.create']({ agentId: 'codex', projectPath: null, options: [] }))
+    rejects(() =>
+      posix['sessions.create']({ agentId: 'codex', projectPath: null, options: { model: 3 } }),
+    )
+    rejects(() =>
+      posix['sessions.create']({ agentId: 'codex', projectPath: null, options: { model: '' } }),
+    )
+  })
+
   it('takes a string or a boolean for a config value', () => {
     const v = posix['sessions.setConfigOption']
     expect(v({ sessionId: 's', optionId: 'fast', value: false })).toMatchObject({ value: false })
