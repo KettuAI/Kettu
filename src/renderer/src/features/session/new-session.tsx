@@ -3,7 +3,7 @@ import { ArrowUpIcon, ChevronDownIcon, FolderIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { addProjectFromDialog, createSession } from '@renderer/app/actions'
+import { addProjectFromDialog, createSession, warmAgent } from '@renderer/app/actions'
 import { onAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
@@ -47,6 +47,11 @@ export function NewSessionView({ project }: { project: Project | null }) {
   const agentId = installed ? chosenId : null
   const name = agentId ? agentName(agentId) : null
   const usable = !!project && !project.missing
+
+  // The agent starts while the message is written; the first send then waits for the session only.
+  useEffect(() => {
+    if (agentId) warmAgent(agentId)
+  }, [agentId])
 
   let line
   if (!project) line = 'Choose a project to work in'

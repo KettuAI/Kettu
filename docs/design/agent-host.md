@@ -152,7 +152,7 @@ stateDiagram-v2
   failed --> starting: user retries
 ```
 
-- **Lazy start**: an agent starts with the first session that needs it.
+- **Lazy start**: an agent starts with the first session that needs it, or earlier when the New session screen shows it as the chosen agent (`agents.start`), so the first send waits for the session alone. An agent started that way and never used is stopped by the idle stop.
 - **Shared process**: one process serves every session of that agent across all projects; ACP multiplexes sessions by `sessionId`.
 - **Idle stop**: an agent with no live sessions for 30 minutes is stopped to free memory, and starts again on demand.
 - **Restarts**: if an agent exits while it has live sessions, the host restarts it with backoff (1 s, 2 s, 4 s, up to 30 s) and resumes those sessions ([session model](./session-model.md#recovering-after-a-crash)). After five failed restarts in five minutes it gives up and marks the agent `failed`; the user can retry. Crashes and failed restarts both count toward the five. A start on demand that fails marks the agent `failed` at once, with the reason as `detail`.

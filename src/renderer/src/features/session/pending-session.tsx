@@ -12,7 +12,7 @@ import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { agentName } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import { FailedState, StartingAgent, ThreadSkeleton } from './session-states'
+import { FailedState, FirstMessage, StartingAgent, ThreadSkeleton } from './session-states'
 import { SignIn } from './sign-in'
 
 /** A session being created: the agent starts, asks you to sign in, or fails. */
@@ -35,6 +35,8 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
         <FailedState title={`Couldn't start ${name}`} message={error.message} onRetry={retry} />
       </div>
     )
+  } else if (pending.prompt) {
+    body = <FirstMessage agentId={pending.agentId} text={pending.prompt} />
   } else {
     body = (
       <div className="flex min-h-0 flex-1 flex-col">

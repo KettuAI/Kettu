@@ -97,15 +97,25 @@ describe('createSession with a first message', () => {
     writeDraft(NEW_SESSION_DRAFT, 'Fix the build')
   })
 
-  it('sends it once the session exists, then shows the session', async () => {
-    request.mockImplementation(async (method: string) =>
-      method === 'sessions.create' ? created('ready') : undefined,
-    )
+  it('sends it once the session exists, then shows the session with its thread loaded', async () => {
+    let shownWhileLoading: string | null = null
+    request.mockImplementation(async (method: string) => {
+      if (method === 'sessions.create') return created('ready')
+      if (method === 'sessions.open') shownWhileLoading = useViewStore.getState().main.kind
+      return undefined
+    })
     await createSession('codex', '/repo', null, 'Fix the build')
-    expect(request).toHaveBeenLastCalledWith('sessions.prompt', {
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      'sessions.create',
+      'sessions.prompt',
+      'sessions.watch',
+      'sessions.open',
+    ])
+    expect(request).toHaveBeenCalledWith('sessions.prompt', {
       sessionId: 'n1',
       content: [{ type: 'text', text: 'Fix the build' }],
     })
+    expect(shownWhileLoading).toBe('new')
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
     expect(readDraft('n1')).toBe('')
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
@@ -143,7 +153,8 @@ describe('createSession with a first message', () => {
     )
     retryPendingSession()
     await vi.waitFor(() =>
-      expect(request).toHaveBeenLastCalledWith('sessions.prompt', expect.anything()),
+      expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' }),
     )
+    expect(request).toHaveBeenCalledWith('sessions.prompt', expect.anything())
   })
 })

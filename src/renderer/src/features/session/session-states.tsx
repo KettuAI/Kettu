@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
 import type { AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
+import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import { Button } from '@renderer/components/ui/button'
+import { Message } from '@renderer/components/ui/message'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { UserContentView } from './entries/user-content'
 
 /** A few entry-shaped placeholders while a thread loads or the agent starts. */
 export function ThreadSkeleton({ className }: { className?: string }) {
@@ -64,6 +67,40 @@ export function StartingAgent({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The first message of a session being created, as its thread will show it, with what the session
+ * waits for under it, so a send shows at once.
+ */
+export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string }) {
+  const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+      <div className="mx-auto flex w-full max-w-[760px] flex-col px-6 pt-5">
+        <Message align="end">
+          <Bubble variant="muted">
+            <BubbleContent className="rounded-2xl px-3.5 py-2 text-prose leading-normal">
+              <UserContentView content={[{ type: 'text', text }]} />
+            </BubbleContent>
+          </Bubble>
+        </Message>
+        <div role="status" className="flex flex-col gap-0.5 pt-2.5">
+          <p className="text-prose text-muted-foreground">
+            <span className="shimmer">Starting {agentName(agentId)}…</span>
+          </p>
+          {progress.slice(-3).map((line, i) => (
+            <span
+              key={`${i}-${line}`}
+              className="truncate font-mono text-[11.5px] text-muted-foreground/80 animate-in fade-in animation-duration-(--duration-base)"
+            >
+              {line}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

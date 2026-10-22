@@ -164,6 +164,7 @@ export interface HostContract {
   'agents.authenticate': { params: { agentId: AgentId; methodId: string }; result: void }
   'agents.logout': { params: { agentId: AgentId }; result: void }
   'agents.retry': { params: { agentId: AgentId }; result: void }
+  'agents.start': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.listSessions': {
     params: { agentId: AgentId; projectPath: string; cursor?: string }
@@ -233,6 +234,7 @@ export const HOST_METHODS = [
   'agents.authenticate',
   'agents.logout',
   'agents.retry',
+  'agents.start',
   'agents.refreshLimits',
   'agents.listSessions',
   'projects.list',

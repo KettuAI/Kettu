@@ -5,11 +5,12 @@ import {
   NEW_SESSION_DRAFT,
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
+import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { forgetSession } from '@renderer/stores/threads'
+import { focusSession, forgetSession } from '@renderer/stores/threads'
 import { openNewSession, openProjectHome, openSession, useViewStore } from '@renderer/stores/view'
 import { create } from 'zustand'
 
@@ -53,6 +54,7 @@ export async function createSession(
 ): Promise<void> {
   usePendingSession.setState({ pending: { agentId, projectPath, parentId, prompt, error: null } })
   useViewStore.setState((s) => ({ projectPath, settings: { ...s.settings, open: false } }))
+  preloadRenderers()
   try {
     const summary = await host('sessions.create', {
       agentId,
@@ -61,6 +63,8 @@ export async function createSession(
     })
     useSessionsStore.getState().upsert(summary)
     if (prompt !== null) await sendFirstPrompt(summary, prompt)
+    // The session shows with its thread and renderer ready, so no skeleton flashes in between.
+    await Promise.all([focusSession(summary.id), loadMarkdown().catch(() => {})])
     const current = usePendingSession.getState().pending
     if (current?.agentId === agentId && current.projectPath === projectPath) {
       usePendingSession.setState({ pending: null })
@@ -100,6 +104,16 @@ async function sendFirstPrompt(summary: SessionSummary, prompt: string): Promise
     }
   }
   writeDraft(summary.id, prompt)
+}
+
+/**
+ * Starts the agent while the New session screen is shown, so the first send waits only for the
+ * session; a failure shows when the session is created.
+ */
+export function warmAgent(agentId: AgentId): void {
+  host('agents.start', { agentId }).catch((error: unknown) =>
+    console.warn(`Could not start ${agentId} ahead of the session: ${errorMessage(error)}`),
+  )
 }
 
 /** Forks the session into a new one in the same project and shows it. */

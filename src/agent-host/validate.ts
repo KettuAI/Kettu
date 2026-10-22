@@ -157,6 +157,7 @@ export function createValidators(platform: Platform): Validators {
     },
     'agents.logout': agent,
     'agents.retry': agent,
+    'agents.start': agent,
     'agents.refreshLimits': agent,
     'agents.listSessions': (params) => {
       const o = fields(params)

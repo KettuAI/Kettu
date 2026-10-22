@@ -300,6 +300,9 @@ export class AgentHost {
       'agents.authenticate': ({ agentId, methodId }) => agents.authenticate(agentId, methodId),
       'agents.logout': ({ agentId }) => agents.logout(agentId),
       'agents.retry': ({ agentId }) => agents.retry(agentId),
+      'agents.start': async ({ agentId }) => {
+        await agents.ensureReady(agentId)
+      },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.listSessions': ({ agentId, projectPath, cursor }) =>
         sessions.listImportable(agentId, projectPath, cursor ?? null),

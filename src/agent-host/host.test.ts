@@ -76,6 +76,16 @@ describe('the port envelope', () => {
     const reloaded = await port.request('agents.reloadEnvironment', undefined)
     expect(reloaded).toHaveLength(4)
   })
+
+  it('starts an agent before any session needs it, and refuses one that cannot run', async () => {
+    const { port } = await setup()
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    const agents = await port.request('agents.list', undefined)
+    expect(agents.find((a) => a.id === 'fake-agent')?.state).toBe('ready')
+    await expect(port.request('agents.start', { agentId: 'codex' })).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+  })
 })
 
 describe('main messages', () => {

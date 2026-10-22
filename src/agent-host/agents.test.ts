@@ -178,6 +178,14 @@ describe('AgentManager', () => {
     expect(m.launcher.launches).toBe(1)
   })
 
+  it('stops an agent started ahead of a session that never came', async () => {
+    const m = manager({}, { idleMs: 40 })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.state()).toBe('ready')
+    await until(() => m.state() === 'available')
+    expect(m.launcher.launches).toBe(1)
+  })
+
   it('reports terminal sign-in methods as a quoted command', async () => {
     const m = manager()
     await m.agents.ensureReady('fake-agent')
