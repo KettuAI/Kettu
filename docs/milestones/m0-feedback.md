@@ -47,6 +47,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Open         |
 | 40  | The Settings pages look crude and their colours are untuned    | Settings       | Open         |
 | 41  | The plan usage strip is unclear and needs a better place       | Sidebar        | Open         |
+| 42  | Long lines in the file preview run off the pane                | Side panel     | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -561,3 +562,16 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The popover it opens, and the context and plan parts of the composer's usage popover ([problem 7](#7-the-usage-popover-shows-too-little-and-needs-a-full-redesign)), so the same figures are not drawn twice in two styles.
   - The colour and the form (chips, a bar, a ring), following [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) and [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library).
   - The rule rewritten in [Interface: sidebar](../design/ui.md#sidebar) and [Interface: usage popover](../design/ui.md#usage-popover).
+
+## 42. Long lines in the file preview run off the pane
+
+- **Reported**: 2026-10-22, with a screenshot of the Files pane showing `internal/cli/commands.go` and one of a reference code view that wraps.
+- **Observed**: a line longer than the preview is cut at the pane's right edge, and the rest can only be reached by scrolling sideways; in the screenshot most of lines 94 to 137 run out of view.
+- **Expected**: long lines wrap inside the pane, as in the reference, and a wrapped line keeps one line number: its continuation rows have none, so the numbers stay those of the file. The preview then fits any pane width.
+- **Reference**: the reference wraps a long line under the start of its code, with the line number only on the first row (line 24 runs on for two more rows, and line 25 follows), and the indent guides continue beside the wrapped rows.
+- **Today**: `src/renderer/src/features/files/file-preview.tsx` renders the diffs library's `File` with `overflow: 'scroll'`. The library (`@pierre/diffs` 1.6.0) also offers `overflow: 'wrap'`, which the thread's diffs already use (`diff-impl.tsx`).
+- **To settle when planning**:
+  - That the library's wrap mode numbers only the first row of a wrapped line and keeps the rows aligned with their numbers, checked in the app.
+  - That wrapping stays fast in the virtualized preview at the 1 MiB cap, since wrapped rows have uneven heights, and that the line a file reference points to is still centred.
+  - Whether wrapping is the only mode or a toggle in the preview header lets the user switch back to scrolling, as code editors do.
+  - The rule written into [Interface: files](../design/ui.md#files), next to the preview.
