@@ -264,6 +264,30 @@ async function run() {
   await waitFor(`document.querySelector('[data-slot=calendar]')`, 'the calendar')
   await sleep(400)
   await shoot('usage-range')
+  // Typed dates are checked in place: a start after the end is said and holds Apply.
+  const daysAgo = (n) => {
+    const d = new Date()
+    d.setDate(d.getDate() - n)
+    return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+      .map((part) => String(part).padStart(2, '0'))
+      .join('-')
+  }
+  for (const [field, value] of [
+    ['End', daysAgo(10)],
+    ['Start', daysAgo(5)],
+  ]) {
+    const input = `[...document.querySelectorAll('[data-slot=popover-content] label')].find((l) => l.textContent.startsWith(${JSON.stringify(field)}))?.querySelector('input')`
+    await click(`return ${input}`, `the ${field} field`)
+    // The start shows the end's day once the end alone is typed; typing replaces it.
+    await cdp.evaluate(`${input}.select()`)
+    await cdp.send('Input.insertText', { text: value })
+  }
+  await waitFor(
+    `document.body.innerText.includes('The start is after the end')`,
+    'the date order message',
+  )
+  await sleep(300)
+  await shoot('usage-range-error')
   await press('Escape', 27)
   await sleep(300)
 

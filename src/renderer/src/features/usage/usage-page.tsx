@@ -310,58 +310,57 @@ function Dashboard({ page }: { page: PageData }) {
 
   return (
     <>
+      {/* What is counted on the left, and when on the right; the right wraps under the left. */}
       <div
         role="toolbar"
         aria-label={t('page.range')}
-        className="flex flex-wrap items-center gap-2"
+        className="flex flex-wrap items-center justify-between gap-2"
       >
-        {/* With usage from one agent only, All is the only choice. */}
-        {choices.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* With usage from one agent only, All is the only choice. */}
+          {choices.length > 1 && (
+            <SegmentedControl
+              aria-label={t('page.agent')}
+              value={agent}
+              onChange={(value) => setUsageFilters({ agent: value })}
+              segments={[
+                { value: 'all', label: t('page.allShort') },
+                ...choices.map((id) => ({ value: id, label: <AgentSegment agentId={id} /> })),
+              ]}
+            />
+          )}
+          {fromComputer && (
+            <SegmentedControl
+              aria-label={t('page.scope')}
+              value={filters.scope}
+              onChange={(scope) => setUsageFilters({ scope })}
+              segments={[
+                { value: 'computer', label: t('page.scopes.computer') },
+                { value: 'overbench', label: t('page.scopes.overbench') },
+              ]}
+            />
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <SegmentedControl
-            aria-label={t('page.agent')}
-            value={agent}
-            onChange={(value) => setUsageFilters({ agent: value })}
-            segments={[
-              { value: 'all', label: t('page.allShort') },
-              ...choices.map((id) => ({
-                value: id,
-                label: (
-                  <span className="flex items-center gap-1.5">
-                    <AgentMark agent={id} size={12} />
-                    {agentName(id)}
-                  </span>
-                ),
-              })),
-            ]}
+            aria-label={t('page.range')}
+            value={filters.range.kind}
+            onChange={(value) => setUsageFilters({ range: { kind: value as RangeKind } })}
+            segments={RANGE_KINDS.map((kind) => ({
+              value: kind,
+              label: t(`page.ranges.${kind}`),
+            }))}
           />
-        )}
-        <span className="flex-1" />
-        <SegmentedControl
-          aria-label={t('page.range')}
-          value={filters.range.kind}
-          onChange={(value) => setUsageFilters({ range: { kind: value as RangeKind } })}
-          segments={RANGE_KINDS.map((kind) => ({ value: kind, label: t(`page.ranges.${kind}`) }))}
-        />
-        <RangePicker
-          value={custom}
-          label={custom ? rangeText(custom.from, addDays(custom.to, 1)) : null}
-          today={today}
-          firstDay={firstDay}
-          first={summary.first}
-          used={used}
-          onApply={(chosen) => setUsageFilters({ range: { kind: 'custom', ...chosen } })}
-        />
-        {fromComputer && (
-          <SegmentedControl
-            aria-label={t('page.scope')}
-            value={filters.scope}
-            onChange={(scope) => setUsageFilters({ scope })}
-            segments={[
-              { value: 'computer', label: t('page.scopes.computer') },
-              { value: 'overbench', label: t('page.scopes.overbench') },
-            ]}
+          <RangePicker
+            value={custom}
+            label={custom ? rangeText(custom.from, addDays(custom.to, 1)) : null}
+            today={today}
+            firstDay={firstDay}
+            first={summary.first}
+            used={used}
+            onApply={(chosen) => setUsageFilters({ range: { kind: 'custom', ...chosen } })}
           />
-        )}
+        </div>
       </div>
 
       <Figures facts={facts} rangeLabel={rangeText(range.from, range.to)} />
@@ -394,6 +393,20 @@ function Dashboard({ page }: { page: PageData }) {
         />
       </div>
     </>
+  )
+}
+
+/** An agent's segment: its mark, with its name in a tooltip and for screen readers. */
+function AgentSegment({ agentId }: { agentId: AgentId }) {
+  const name = agentName(agentId)
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="flex items-center px-0.5" />}>
+        <AgentMark agent={agentId} size={14} />
+        <span className="sr-only">{name}</span>
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -614,6 +627,7 @@ function LimitsCard() {
         agents.map((status) => (
           <LimitsPart
             key={status.id}
+            titled={false}
             limits={status.limits}
             account={status.account}
             agent={{ id: status.id, name: status.name }}
@@ -627,7 +641,6 @@ function LimitsCard() {
 function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
   const { t, i18n } = useTranslation('usage')
   const [shown, setShown] = useState<DayTotal | null>(null)
-            titled={false}
   const monthLabel = useCallback(
     (day: number) => new Intl.DateTimeFormat(i18n.language, { month: 'short' }).format(day),
     [i18n.language],

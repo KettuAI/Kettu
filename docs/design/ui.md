@@ -163,6 +163,8 @@ Opening a subagent ([sub-sessions](./session-model.md#sub-sessions)) shows its o
 
 The usage page, opened from the sidebar's **Usage** row, is designed in [usage statistics](./usage.md#interface): a dashboard of the agents' tokens for a chosen agent, time range and source, with the plan limits beside the trend. Its settings are Settings › Usage ([settings](./usage.md#settings)), the section after Agents.
 
+- **Filter row on a narrow window**: the filters are two groups, what is counted (the agent, then the source) on the left and when (the range, then **Custom**) on the right. At the default window, 1280 px with the sidebar open, in English and Chinese, they share one line: an agent's segment is its mark alone, with its name in a tooltip and as its accessible name. On a narrower window the right group wraps under the left one, whole; only below the width of one group do its own controls wrap. Decided while the maintainer was away; to be reviewed.
+
 ### Settings
 
 Opened from **Settings** in the sidebar footer or with `Mod+,`. Settings takes the whole window: the app sidebar goes away, and the top bar holds a **Back** button after the window controls that returns to where you were. `Esc` does the same when no field has focus. While a session waits for your approval, the Back button carries the `--attention` count, so the signal the sidebar gave is not lost.

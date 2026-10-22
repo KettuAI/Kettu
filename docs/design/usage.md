@@ -185,10 +185,10 @@ A **Usage** screen of its own, laid out as a dashboard. Of the three mockups (a 
 
 - **Opening it**: a **Usage** row in the sidebar (`ChartNoAxesColumn`), after **Artifacts**. The row's end shows today's tokens or the tightest plan limit ([interface](./ui.md#sidebar), [settings](#settings)).
 - **Header**: the title, when the logs last synced ("Reading the logs…" during a scan, "OverBench's record" while the logs are off, "Could not sync" in `--destructive` with the reason in its tooltip when **Sync now** failed), and **Sync now**.
-- **Filters**, one row that every panel follows, wrapping on a narrow window:
-  - the agent: **All**, or one agent, each with its mark; shown once two agents have usage, since with one, **All** is the only choice;
-  - the range: **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied;
-  - the source: **This computer** or **OverBench only**, shown only while **Usage on this computer** is on.
+- **Filters**, one row that every panel follows, in two groups that wrap as [the interface](./ui.md#usage) describes, what is counted on the left and when on the right:
+  - the agent: **All**, or one agent by its mark, with its name in a tooltip; shown once two agents have usage, since with one, **All** is the only choice;
+  - the source: **This computer** or **OverBench only**, shown only while **Usage on this computer** is on;
+  - the range: **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied.
 - **Figures**: four cards, total tokens with the range's dates and length, the daily average with how many of the range's days were active, the busiest day, and the cache share. Each number is compact with the exact value in a tooltip.
 - **Trend** and **Plan limits** side by side. The trend is a bar chart, stacked by agent with a legend when all are shown; the busiest bar, or the one under the pointer or chosen with the arrow keys, puts its date (or week) and tokens in the panel's header, and its date labels name the year when the bars cross one. Plan limits give one block per agent with its plan, the [plan limits](./session-model.md#plan-limits) rows and when they were read, which is the better place [problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place) asks for; the page reads them afresh when it opens.
 - **Activity** and **Tokens by type** side by side: the heatmap, and a table of the parts (reasoning only when an agent reported it) and their sum with exact counts and shares.
