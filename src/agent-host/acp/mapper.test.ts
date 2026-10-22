@@ -9,6 +9,7 @@ import {
   type ThreadState,
 } from '@shared/thread'
 import {
+  addTokenTotals,
   mapAuthStatus,
   mapConfig,
   mapPermissionOptions,
@@ -821,6 +822,21 @@ describe('extensions and helpers', () => {
     })
     expect(mapRateLimit({ status: 'allowed' }, 5)).toBeNull()
     expect(mapRateLimit('nope', 5)).toBeNull()
+  })
+
+  it('adds a turn to the token totals', () => {
+    const turn = { total: 10, input: 4, output: 3, thought: null, cacheRead: 2, cacheWrite: null }
+    expect(addTokenTotals(null, turn)).toBe(turn)
+    expect(
+      addTokenTotals(turn, {
+        total: 7,
+        input: 1,
+        output: 2,
+        thought: 3,
+        cacheRead: null,
+        cacheWrite: null,
+      }),
+    ).toEqual({ total: 17, input: 5, output: 5, thought: 3, cacheRead: 2, cacheWrite: null })
   })
 
   it('maps token totals and prompt content', () => {

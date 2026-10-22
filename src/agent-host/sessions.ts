@@ -41,6 +41,7 @@ import {
   type SessionTarget,
 } from './acp/connection'
 import {
+  addTokenTotals,
   isStopReason,
   mergeConfig,
   newTurnScope,
@@ -996,13 +997,14 @@ export class SessionManager {
           changes.status = child.permissions.size > 0 ? 'awaiting_permission' : 'ready'
           changes.error = null
         }
-        if (state.tokens) {
+        // A replay reports work the totals already hold.
+        if (state.tokens && !child.replaying) {
           const usage = child.thread.session.usage
           changes.usage = {
             used: usage?.used ?? 0,
             size: usage?.size ?? 0,
             cost: usage?.cost ?? null,
-            tokens: state.tokens,
+            tokens: addTokenTotals(usage?.tokens ?? null, state.tokens),
           }
         }
         if (startedAt !== null && isStopReason(state.stopReason) && !child.replaying) {
@@ -2097,7 +2099,7 @@ export class SessionManager {
         used: usage?.used ?? 0,
         size: usage?.size ?? 0,
         cost: usage?.cost ?? null,
-        tokens,
+        tokens: addTokenTotals(usage?.tokens ?? null, tokens),
       }
     }
     this.update(live, changes)

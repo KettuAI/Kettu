@@ -273,16 +273,19 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       .join('')
       .trim()
 
+  // The turn's own counts, as every adapter reports them; cache reads grow with the context.
   const tokenUsage = (session: FakeSession): Usage => {
-    const input = 1200 + session.turns * 900
-    const output = 300 + session.turns * 120
+    const input = 900
+    const output = 420
+    const cacheRead = 1200 * session.turns
+    const cacheWrite = 200
     return {
-      totalTokens: input + output,
+      totalTokens: input + output + cacheRead + cacheWrite,
       inputTokens: input,
       outputTokens: output,
-      thoughtTokens: 80 * session.turns,
-      cachedReadTokens: 400 * session.turns,
-      cachedWriteTokens: 200,
+      thoughtTokens: 80,
+      cachedReadTokens: cacheRead,
+      cachedWriteTokens: cacheWrite,
     }
   }
 

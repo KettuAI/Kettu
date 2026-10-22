@@ -280,6 +280,25 @@ describe('reports', () => {
 })
 
 describe('a prompt turn', () => {
+  it("adds each turn's tokens to the session's totals", async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const turnEnds = () => port.entries(sessionId).filter((e) => e.kind === 'turn_end').length
+    for (const [index, text] of ['Fix the flaky login test', 'And the docs'].entries()) {
+      await turn(port, sessionId, text)
+      await port.until(() => turnEnds() === index + 1)
+      await port.untilStatus(sessionId, 'ready')
+    }
+    expect(port.thread(sessionId).session.usage?.tokens).toEqual({
+      total: 6640,
+      input: 1800,
+      output: 840,
+      thought: 160,
+      cacheRead: 3600,
+      cacheWrite: 400,
+    })
+  })
+
   it('streams a whole turn into the watching port', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)

@@ -655,6 +655,24 @@ export function mapTokenTotals(usage: acp.Usage | null | undefined): TokenTotals
   }
 }
 
+/**
+ * A session's totals with one more turn in them. The adapters report each turn's own counts, though
+ * ACP's schema calls them totals. A count no turn has reported yet stays null.
+ */
+export function addTokenTotals(sum: TokenTotals | null, turn: TokenTotals): TokenTotals {
+  if (!sum) return turn
+  const add = (a: number | null, b: number | null): number | null =>
+    a === null ? b : b === null ? a : a + b
+  return {
+    total: sum.total + turn.total,
+    input: sum.input + turn.input,
+    output: sum.output + turn.output,
+    thought: add(sum.thought, turn.thought),
+    cacheRead: add(sum.cacheRead, turn.cacheRead),
+    cacheWrite: add(sum.cacheWrite, turn.cacheWrite),
+  }
+}
+
 type CompactionStatus = Extract<ThreadEntry, { kind: 'compaction' }>['status']
 
 const NOTICE_SEVERITIES: ReadonlySet<string> = new Set(['info', 'warning', 'error'])

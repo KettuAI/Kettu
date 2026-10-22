@@ -32,7 +32,7 @@ So the record keeps one row per turn and model, written by the agent host when t
 
 Cost is not recorded: for a subscription it is not what the user pays ([plan limits](./session-model.md#plan-limits)), and only some agents report it.
 
-Today the usage popover labels the last turn's counts as "This session" ([interface](./ui.md#usage-popover)); with the record, the session's real totals are the sum of its turns. That fix is separate from this feature.
+The session's own totals, which the usage popover shows, are summed the same way ([prompt turns](./session-model.md#prompt-turns)).
 
 ## Usage on this computer
 

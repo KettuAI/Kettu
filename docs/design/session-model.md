@@ -57,7 +57,7 @@ interface SessionUsage {
   used: number // tokens in the context window now
   size: number // the context window
   cost: { amount: number; currency: string } | null
-  tokens: TokenTotals | null // session totals, when the agent reports them
+  tokens: TokenTotals | null // session totals, summed over its turns, when the agent reports them
 }
 
 interface TokenTotals {
@@ -280,7 +280,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 1. `sessions.prompt` is accepted only when the session is `ready`; otherwise it fails with `busy`. M0 runs one turn at a time per session; a prompt sent during a turn waits in the [queue](#queue-and-steering).
 2. The host adds the user entry, sets `status: 'running'` and `turnStartedAt`, and sends `session/prompt` with the content as ACP content blocks.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
-4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, sets `usage.tokens` when present. The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
+4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, is added to `usage.tokens` when present: the schema calls its fields totals across the session, but claude-agent-acp 0.94, codex-acp 2.2.2 and opencode 2.0.32 all send the turn's own counts (read in their source on 2026-10-22), so the host sums them. A count no turn has reported stays `null`. A fork starts from its source's totals, as it starts from its thread. The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
 5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready` or `auth_required` depending on the cause, or `closed` when the agent exited. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
 
 ## Queue and steering
@@ -383,7 +383,7 @@ The subagents RFD ([agent-client-protocol#1992](https://github.com/agentclientpr
 - Updates that name the child's `sessionId` go through the same mapper into the child's own thread. Its permission requests work as in any session.
 - `session_message` adds a `session_message` entry: the parent's instructions to the child, which open the child's thread, and any later messages between them.
 - A subagent session is restricted: `sessions.prompt`, `sessions.setConfigOption`, `sessions.close` and `sessions.delete` fail with `restricted`, and `sessions.cancel` sends `session/cancel` for the child only when `canCancel` is true (otherwise `restricted` too). `sessions.retry` on a child does nothing; it recovers with its parent. Opening a child that is not live opens its parent, whose load replays the child.
-- While a child has a pending permission request it is `awaiting_permission`, whatever its last state said. Its work runs from the first `running` state to the next `idle`; that `idle` adds a `turn_end` entry to the child's thread with the stop reason and that duration, and its `usage` sets the child's token totals.
+- While a child has a pending permission request it is `awaiting_permission`, whatever its last state said. Its work runs from the first `running` state to the next `idle`; that `idle` adds a `turn_end` entry to the child's thread with the stop reason and that duration, and its `usage`, the counts of that work, is added to the child's token totals. An `idle` replayed by `session/load` adds nothing, since the stored totals already hold it.
 - When the agent reports the child's work ended with an error, the child becomes `failed` with that error.
 - Children are saved in the index with the parent, so the sidebar shows them after a restart. Their threads come back with the parent's `session/load`, which replays the children too; a child a successful replay does not mention is marked missing. After a failed load the children simply stay closed.
 
