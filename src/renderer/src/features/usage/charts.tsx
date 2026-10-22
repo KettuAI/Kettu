@@ -67,7 +67,7 @@ export function TrendChart({
       role="group"
       tabIndex={0}
       aria-label={label}
-      className="flex h-40 items-end gap-px rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="flex h-40 items-end justify-center gap-px rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       onPointerLeave={() => setChosen(null)}
       onBlur={() => setChosen(null)}
       onKeyDown={(event) => {
@@ -79,7 +79,8 @@ export function TrendChart({
         <div
           key={bar.from}
           className={cn(
-            'flex h-full min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
+            // A few days stay bars, not blocks across the chart.
+            'flex h-full max-w-12 min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
             shown !== null && shown !== i && chosen !== null && 'opacity-60',
           )}
           onPointerEnter={() => setChosen(i)}

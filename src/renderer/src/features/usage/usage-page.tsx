@@ -496,16 +496,28 @@ function TrendCard({
         label={weekly ? t('trend.weekly') : t('trend.daily')}
         onShow={setShown}
       />
-      {first && last && (
-        <div
-          className="flex justify-between text-xs text-muted-foreground tabular-nums"
-          aria-hidden
-        >
-          <span>{short.format(first.from)}</span>
-          {middle && bars.length > 2 && <span>{short.format(middle.from)}</span>}
-          <span>{short.format(addDays(last.to, -1))}</span>
-        </div>
-      )}
+      {/* A slot per bar, as wide as its bar, so each label sits under the bar it names. */}
+      <div
+        className="flex justify-center gap-px text-xs text-muted-foreground tabular-nums"
+        aria-hidden
+      >
+        {bars.map((bar, i) => {
+          const end = i === bars.length - 1
+          const shown = i === 0 || end || (bars.length > 2 && bar === middle)
+          return (
+            <span
+              key={bar.from}
+              className={cn(
+                'flex max-w-12 min-w-0 flex-1 justify-center whitespace-nowrap',
+                bars.length > 1 && i === 0 && 'justify-start',
+                bars.length > 1 && end && 'justify-end',
+              )}
+            >
+              {shown && short.format(end ? addDays(bar.to, -1) : bar.from)}
+            </span>
+          )
+        })}
+      </div>
       {legend && agents.length > 1 && (
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           {agents.map((id) => (

@@ -71,7 +71,12 @@ export function RangePicker({
     to: null,
   })
   const [month, setMonth] = useState(() => new Date(today))
-  const startMonth = new Date(first === null ? addDays(today, -365) : Math.min(dayOf(first), today))
+  // From the first month with usage, and at least last month, so two months always show.
+  const todayDate = new Date(today)
+  const lastMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1).getTime()
+  const startMonth = new Date(
+    Math.min(first === null ? addDays(today, -365) : dayOf(first), lastMonth),
+  )
   const locale = currentLocale() === 'zh-CN' ? zhCN : enUS
   const presetList = useMemo(() => presets(today, firstDay, first), [today, firstDay, first])
 
