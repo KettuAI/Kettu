@@ -108,29 +108,35 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 
 ## Typography
 
+The typefaces, the type scale and the weights are in the [design system](./design-system.md#typography). This section says which step each piece of text takes and how text is set.
+
 ### Roles
 
-Every piece of text takes one of these roles. The sizes come from [typography](./design-system.md#typography) and [prose](./design-system.md#prose); a size that is not here is off the scale.
+Every piece of text takes one of these roles. A size, weight, line height or color that is not here is off the scale.
 
-| Role                                                                     | Size         | Weight | Color                                |
-| ------------------------------------------------------------------------ | ------------ | ------ | ------------------------------------ |
-| Page title: a Settings page, the project home                            | 22 px        | 600    | `--foreground`                       |
-| Dialog title                                                             | 16 px        | 500    | `--foreground`                       |
-| Thread prose                                                             | `text-prose` | 400    | `--foreground` at 90%                |
-| Interface text: rows, menu items, buttons, setting names                 | `text-ui`    | 400    | `--foreground`                       |
-| A label that names a thing: a model's name, a selected row, a card title | `text-ui`    | 500    | `--foreground`                       |
-| Tool call rows, a dialog's description                                   | 13 px        | 400    | `--muted-foreground`                 |
-| Segments, `compact` buttons, select triggers                             | 12.5 px      | 500    | `--muted-foreground`, chosen in full |
-| Secondary text: descriptions, hints, shortcuts                           | 12 px        | 400    | `--muted-foreground`                 |
-| Group labels in menus and settings                                       | 12 px        | 500    | `--muted-foreground`                 |
-| Code, commands, branch names, diffs                                      | 12 px mono   | 400    | as their context                     |
-| Meta: versions, times, counts, diff stats, commit ids                    | 11.5 px mono | 400    | `--muted-foreground`                 |
+| Role                                                                         | Step           | Color                                |
+| ---------------------------------------------------------------------------- | -------------- | ------------------------------------ |
+| The Welcome wordmark, until the logo replaces it                             | Display        | `--foreground`                       |
+| Page title: a Settings page, the project home                                | Title          | `--foreground`                       |
+| Dialog title, the Settings column's title                                    | Heading        | `--foreground`                       |
+| Thread prose                                                                 | Prose          | `--foreground` at 90%                |
+| Interface text: rows, menu items, buttons, setting names                     | Interface      | `--foreground`                       |
+| A label that names a thing: a project, a model, a selected row, a card title | Interface, 500 | `--foreground`                       |
+| A sentence that explains a screen: an `Empty` state, the Welcome line        | Interface      | `--muted-foreground`                 |
+| Tool call rows, a dialog's description                                       | Small          | `--muted-foreground`                 |
+| Segments, `compact` buttons, select triggers                                 | Control        | `--muted-foreground`, chosen in full |
+| Secondary text: descriptions, hints, a path, an empty list's line            | Caption        | `--muted-foreground`                 |
+| Group labels in menus, lists and settings                                    | Caption, 500   | `--muted-foreground`                 |
+| Code, commands, branch names, diffs                                          | Code           | as their context                     |
+| Meta: versions, times, counts, diff stats, commit ids                        | Meta           | `--muted-foreground`                 |
 
 ### Rules
 
+- **Two typefaces, one stack.** Latin is Inter and Chinese the platform's face, mixed within a line by the font stack; nothing sets a font family of its own. Mono is the only other family, and only for the roles above that name it.
+- **Mono is for what the user would type or copy**: code, commands, branch names, ids, versions, times and counts. Names, descriptions, labels and a project's path shown as its location are never mono ([problems 22, 34](../milestones/m0-feedback.md#34-the-slash-command-popover-looks-crude)).
 - **Two levels of text color** in chrome: `--foreground` and `--muted-foreground`. Opacity is never a third level; a disabled control dims through its component's disabled state.
-- **Weights** are 400, 500 and 600 only; never 700. In the dark theme they drop by 40 on their own.
-- **Mono** is for what the user would type or copy: code, commands, paths in code, branch names, ids, versions. Names, descriptions and labels are never mono ([problems 22, 34](../milestones/m0-feedback.md#34-the-slash-command-popover-looks-crude)).
+- **Weights** are 400, 500 and 600 only, set through the weight tokens so the dark theme can lighten them; never a raw `font-weight`.
+- **Chinese is set as Chinese**: no letter spacing, no italic (emphasis is the medium weight), full-width punctuation, and a space between Chinese and Latin words or digits in the interface's own copy ([localization](./localization.md#chinese-copy)).
 - **Numbers** that change in place use `tabular-nums`.
 - **One line, then cut.** A name that does not fit truncates with an ellipsis and shows in full in its tooltip. A description is never cut mid-sentence: it wraps, or moves into a tooltip ([problem 34](../milestones/m0-feedback.md#34-the-slash-command-popover-looks-crude)).
 - **No stacked identity.** A row shows a thing by its name alone, not its name over its full path; two that share a name add the fewest words that tell them apart ([problem 22](../milestones/m0-feedback.md#22-the-new-session-project-and-agent-menus-look-crude)).

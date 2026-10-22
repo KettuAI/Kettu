@@ -202,9 +202,50 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 
 ## Typography
 
-- **Families**: Inter Variable for the interface and prose, loaded with its optical-size axis so interface sizes get Inter's text design, falling back to PingFang SC, Microsoft YaHei and Noto Sans CJK SC for Chinese, then `system-ui`. Inter is the nearest open typeface to the reference's own sans at interface sizes: the same tall x-height, width and rhythm, where Geist read a size smaller and a shade lighter. Mono: `ui-monospace`, SF Mono, Cascadia Code, JetBrains Mono, Menlo, Consolas.
-- **Sizes**: 22 px (weight 600, tracking −1.5%) for page titles, 15 px with a 1.75 line height for thread prose (`--prose-size`; **Text size** sets 14, 15 or 16 px), 14 px for the sidebar, menus and controls (`--ui-size`, the `text-ui` utility; the reference's interface size), 12 px for code, diffs and secondary labels, 11.5 px mono for versions, times and diff stats. Prose keeps 1.75 instead of the reference's 1.43 because CJK text needs the extra leading.
-- **Weights**: 400 for text, 500 for labels and titles, 600 for markdown headings. In the dark theme every weight drops by 40 on Inter's weight axis (400 becomes 360, 500 becomes 460, 600 becomes 560), as in the reference, because light text on a dark surface looks heavier than it is.
+### Typefaces
+
+| Text                                   | Typeface                                                                                                      | Source                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Latin letters, digits and punctuation  | Inter Variable, with its optical-size axis                                                                    | Bundled: `@fontsource-variable/inter`, 73 KB for the Latin file          |
+| Chinese                                | The platform's interface face: PingFang SC on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC on Linux    | The system; a Chinese face runs to several megabytes, so none is bundled |
+| Code, commands and other text set mono | The platform's monospace: SF Mono on macOS, Cascadia Code or Consolas on Windows, the system default on Linux | The system, for now; whether to bundle one face for all three is open    |
+
+- Inter comes first in the stack (`--font-sans`), so in a Chinese sentence the Latin words, digits and punctuation are Inter and only the Chinese characters fall through to the platform face. `system-ui` ends the stack.
+- Inter is the nearest open typeface to the reference's own sans at interface sizes: the same tall x-height, width and rhythm, where Geist read a size smaller and a shade lighter (chosen 2026-10-21 from a six-way render in the real build).
+- With `font-optical-sizing: auto`, Inter takes its text design at interface sizes and its display design at title sizes by itself; no second family is loaded for headings.
+- No other typeface: no serif, no display face, no icon font.
+
+### Type scale
+
+Every size in the interface is one of these steps. Line heights sit on a 4 px grid, except prose and the small step, whose ratios come from the [prose](#prose) spec.
+
+| Step      | Utility        | Size    | Line height | Weight | Tracking | Family |
+| --------- | -------------- | ------- | ----------- | ------ | -------- | ------ |
+| Display   | `text-display` | 28 px   | 36 px       | 600    | −2%      | Sans   |
+| Title     | `text-title`   | 22 px   | 28 px       | 600    | −1.5%    | Sans   |
+| Heading   | `text-heading` | 16 px   | 24 px       | 500    | 0        | Sans   |
+| Prose     | `text-prose`   | 15 px   | 1.75        | 400    | 0        | Sans   |
+| Interface | `text-ui`      | 14 px   | 20 px       | 400    | 0        | Sans   |
+| Small     | `text-small`   | 13 px   | 1.6         | 400    | 0        | Sans   |
+| Control   | `text-control` | 12.5 px | 16 px       | 500    | 0        | Sans   |
+| Caption   | `text-xs`      | 12 px   | 16 px       | 400    | 0        | Sans   |
+| Code      | `text-code`    | 12 px   | 18 px       | 400    | 0        | Mono   |
+| Meta      | `text-meta`    | 11.5 px | 16 px       | 400    | 0        | Mono   |
+
+- `--prose-size` is 15 px; **Text size** sets 14, 15 or 16 px. Prose keeps 1.75 instead of the reference's 1.43 because CJK text needs the extra leading.
+- `--ui-size` is the reference's interface size, 14 px. The root stays 16 px, so Tailwind's rem scale is unchanged.
+- Tracking is negative only on the two steps that use Inter's display design, and never positive: there are no uppercase or letter-spaced labels.
+- 11.5 px is the smallest text in the interface. A count in a pill, a badge or a chart label takes the meta step, never less.
+- `text-prose`, `text-ui` and `text-xs` exist today; the other utilities are added to `globals.css`, each with its line height and tracking, when the code is aligned with this scale.
+
+### Weights
+
+- 400 for text, 500 for names and labels, 600 for titles and markdown headings; never 700.
+- In the dark theme every weight drops by 40 on Inter's weight axis (400 becomes 360, 500 becomes 460, 600 becomes 560), as in the reference, because light text on a dark surface looks heavier than it is.
+- The platform's Chinese faces have fixed weights, and CSS matches a weight of 360 to their Light (300), a step thinner than intended: measured on 2026-10-22 with PingFang SC in Chromium, 360 renders as Light, 460 as Medium and 560 as Semibold. So Chinese goes through an alias family whose `@font-face` rules map 300–449 to the face's Regular, 450–549 to its Medium and 550–700 to its Semibold (or the nearest weight a face has, since Microsoft YaHei has fewer), with `local()` sources for each platform's face, and sits second in `--font-sans`. Chinese text therefore keeps Regular, Medium and Semibold in both themes, while Inter takes the lighter dark weights. Checked on macOS; the Windows and Linux faces are checked in the [screenshots](./testing.md#screenshots).
+
+### Setting text
+
 - Numbers that change in place, such as timers, token counts, diff stats and counters, use `tabular-nums` so they do not jitter.
 - Headings use `text-wrap: balance` and prose `text-wrap: pretty`. Paths, URLs and long identifiers use `overflow-wrap: anywhere`, so they never push a card wider than the column.
 - Icons inline with text sit at `vertical-align: -0.125em`, which centres them on the text.
