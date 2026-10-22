@@ -11,11 +11,10 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { stepItems } from '../thread-items'
+import { runParts, type RunPart } from '../thread-items'
 import { useEntryAnimation } from '../use-thread'
-import { ThoughtEntry } from './basic'
+import { Entry } from './entry'
 import { PANEL, runSummary, type RunStep } from './helpers'
-import { ToolCard } from './tool-card'
 import { ToolGroup } from './tool-group'
 import { useDiffStats } from './use-diff-stats'
 
@@ -29,9 +28,10 @@ interface RunGroupProps {
 }
 
 /**
- * Two or more thoughts and tool calls between messages, folded into one line that says what they
- * did ("Ran 3 commands, edited ui.md +3 −0") and expands to the steps. A step waiting for
- * permission holds it open.
+ * Two or more thoughts and tool calls between messages, or a finished turn's work before its
+ * answer, folded into one line that says what they did ("Ran 3 commands, edited ui.md +3 −0")
+ * and expands to the steps, and to the turn's earlier messages. A step waiting for permission
+ * holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,
@@ -68,11 +68,7 @@ export const RunGroup = memo(function RunGroup({
   }
   const stats = useDiffStats(edits)
   const { parts, editAt, failed, running } = runSummary(steps)
-  const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
-  const thoughts = useMemo(
-    () => new Set(entryIds.filter((_, i) => signature[i] === 'h')),
-    [entryIds, signature],
-  )
+  const contents = useMemo(() => runParts(entryIds, signature), [entryIds, signature])
   const open = waiting || (userOpen ?? false)
 
   return (
@@ -109,28 +105,38 @@ export const RunGroup = memo(function RunGroup({
         {running && <Spinner aria-label={t('status.running')} className="size-3 shrink-0" />}
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
-        <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-border pl-3.5">
-          {items.map((item) =>
-            item.type === 'group' ? (
-              <ToolGroup
-                key={item.key}
-                sessionId={sessionId}
-                entryIds={item.ids}
-                projectPath={projectPath}
-                agentName={agentName}
-              />
-            ) : thoughts.has(item.id) ? (
-              <ThoughtEntry key={item.key} sessionId={sessionId} entryId={item.id} />
-            ) : (
-              <ToolCard
-                key={item.key}
-                sessionId={sessionId}
-                entryId={item.id}
-                projectPath={projectPath}
-                agentName={agentName}
-              />
-            ),
-          )}
+        <div className="mt-1 ml-1.5 flex flex-col border-l border-border pl-3.5">
+          {contents.map((part, n) => (
+            // Steps sit 4 px apart; a message keeps 16 px from what is around it.
+            <div
+              key={part.key}
+              className={cn(n > 0 && (isStep(part) && isStep(contents[n - 1]!) ? 'pt-1' : 'pt-4'))}
+            >
+              {part.type === 'run' ? (
+                <RunGroup
+                  sessionId={sessionId}
+                  entryIds={part.ids}
+                  signature={part.signature}
+                  projectPath={projectPath}
+                  agentName={agentName}
+                />
+              ) : part.type === 'group' ? (
+                <ToolGroup
+                  sessionId={sessionId}
+                  entryIds={part.ids}
+                  projectPath={projectPath}
+                  agentName={agentName}
+                />
+              ) : (
+                <Entry
+                  sessionId={sessionId}
+                  entryId={part.id}
+                  projectPath={projectPath}
+                  agentName={agentName}
+                />
+              )}
+            </div>
+          ))}
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -148,3 +154,5 @@ function sameRun(a: RunGroupProps, b: RunGroupProps): boolean {
     a.entryIds.every((id, i) => id === b.entryIds[i])
   )
 }
+
+const isStep = (part: RunPart): boolean => part.type !== 'entry' || part.step

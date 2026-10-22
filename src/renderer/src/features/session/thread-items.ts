@@ -30,6 +30,32 @@ function charOf(entry: ThreadEntry | undefined): string {
 /** Thoughts and tool calls: the steps a run of work is made of. */
 const isStep = (char: string | undefined): boolean => char === 'h' || char === 'g' || char === 't'
 
+/**
+ * The work of each finished turn: what comes before its answer, the trailing agent messages,
+ * from its start or a message steered into it. It folds as one run when it holds a step and
+ * more than one entry. The running turn is left out, so it shows as it goes. Start to end index.
+ */
+function turnWork(signature: string, live: boolean): Map<number, number> {
+  const ranges = new Map<number, number>()
+  const starts = [0]
+  for (let i = 1; i < signature.length; i++) if (signature[i] === 'u') starts.push(i)
+  starts.forEach((start, n) => {
+    const end = starts[n + 1] ?? signature.length
+    if (live && end === signature.length) return
+    let answer = signature.lastIndexOf('a', end - 1)
+    if (answer < start) return
+    while (answer - 1 >= start && signature[answer - 1] === 'a') answer--
+    let from = start
+    for (let i = start; i <= answer; i++) {
+      if (i < answer && signature[i] !== 'u' && signature[i] !== 's') continue
+      const work = signature.slice(from, i)
+      if (work.length > 1 && [...work].some(isStep)) ranges.set(from, i - 1)
+      from = i + 1
+    }
+  })
+  return ranges
+}
+
 /** A step on its own, or a run of completed lookups ("Explored 4 files"). */
 export type Step =
   { key: string; type: 'entry'; id: string } | { key: string; type: 'group'; ids: string[] }
@@ -46,23 +72,40 @@ export type Item =
       scrollAnchor: boolean
     }
   | { key: string; type: 'group'; ids: string[] }
-  // Two or more steps between messages, folded into one summary line.
+  // Two or more steps between messages, or a finished turn's work before its answer, folded
+  // into one summary line.
   | { key: string; type: 'run'; ids: string[]; signature: string }
   // The actions under a turn's reply, with its turn-end marker when it has one.
   | { key: string; type: 'reply'; agentIds: string[]; endId: string | null; latest: boolean }
 
 /**
  * The thread's items. With `live`, a turn is running and the run at the thread's end is still
- * growing, so it shows step by step; it folds once a message or the turn's end follows it.
+ * growing, so it shows step by step; it folds once a message or the turn's end follows it, and
+ * once the turn ends, all its work before the answer folds into one run.
  */
 export function buildItems(order: string[], signature: string, live = false): Item[] {
   const items: Item[] = []
   const latestTurn = signature.lastIndexOf('u')
   const { replacing, after } = replyFooters(order, signature, live)
+  const work = turnWork(signature, live)
   for (let i = 0; i < order.length; i++) {
     const footer = replacing.get(i)
     if (footer) {
       items.push(footer)
+      continue
+    }
+    const workEnd = work.get(i)
+    if (workEnd !== undefined) {
+      const ids = order.slice(i, workEnd + 1)
+      items.push({
+        key: `run:${ids[0]}`,
+        type: 'run',
+        ids,
+        signature: signature.slice(i, workEnd + 1),
+      })
+      i = workEnd
+      const closing = after.get(i)
+      if (closing) items.push(closing)
       continue
     }
     if (isStep(signature[i])) {
@@ -157,4 +200,43 @@ export function stepItems(ids: string[], signature: string): Step[] {
     steps.push({ key: ids[i]!, type: 'entry', id: ids[i]! })
   }
   return steps
+}
+
+/** What an opened run lists. A step's part is a step; an earlier message of the turn is not. */
+export type RunPart =
+  | { key: string; type: 'entry'; id: string; step: boolean }
+  | { key: string; type: 'group'; ids: string[] }
+  | { key: string; type: 'run'; ids: string[]; signature: string }
+
+/**
+ * An opened run's parts: its steps, with lookups grouped; in a turn's work, its earlier messages
+ * too, with two or more steps between them folded again.
+ */
+export function runParts(ids: string[], signature: string): RunPart[] {
+  if ([...signature].every(isStep)) {
+    return stepItems(ids, signature).map((step) =>
+      step.type === 'entry' ? { ...step, step: true } : step,
+    )
+  }
+  const parts: RunPart[] = []
+  for (let i = 0; i < ids.length; i++) {
+    if (!isStep(signature[i])) {
+      parts.push({ key: ids[i]!, type: 'entry', id: ids[i]!, step: false })
+      continue
+    }
+    let end = i
+    while (isStep(signature[end + 1])) end++
+    if (end > i) {
+      parts.push({
+        key: `run:${ids[i]}`,
+        type: 'run',
+        ids: ids.slice(i, end + 1),
+        signature: signature.slice(i, end + 1),
+      })
+    } else {
+      parts.push({ key: ids[i]!, type: 'entry', id: ids[i]!, step: true })
+    }
+    i = end
+  }
+  return parts
 }
