@@ -97,6 +97,34 @@ describe('detectAgent', () => {
     ).toMatchObject({ state: 'available', adapter: { installed: true, npm: null } })
   })
 
+  it("starts Codex's binary directly, without npm's codex.js", async () => {
+    const nm = '/data/agents/codex/2.2.2/node_modules'
+    const binary = `${nm}/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex`
+    const files = new Set([
+      `${nm}/@openai/codex/package.json`,
+      `${nm}/@openai/codex-darwin-arm64/package.json`,
+      binary,
+    ])
+    const detection = await detectAgent(
+      CODEX,
+      context({
+        installed: installed('2.2.2'),
+        isFile: async (file) => files.has(file),
+        realpath: async (file) => file,
+      }),
+    )
+    const env = {
+      CODEX_PATH: binary,
+      CODEX_MANAGED_BY_NPM: '1',
+      CODEX_MANAGED_PACKAGE_ROOT: `${nm}/@openai/codex`,
+    }
+    expect(detection).toMatchObject({
+      state: 'available',
+      spec: { args: [entry('codex', '@agentclientprotocol/codex-acp', '2.2.2')], env },
+    })
+    if (detection.state === 'available') expect(detection.spec?.display.env).toEqual(env)
+  })
+
   it('needs a recent enough Node.js', async () => {
     expect(
       await detectAgent(

@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import { listInstalled, type InstalledAdapter } from './adapter-install'
+import { codexLaunchEnv, type AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
 import { t, type HostKey } from './i18n'
 import { satisfiesNode, type NodeProbe } from './shell-env'
@@ -31,6 +32,8 @@ export interface AgentDefinition {
    * the thread tells them by the work that follows.
    */
   progressNotes?: boolean
+  /** Variables a package agent's launch adds, from what its install holds. */
+  launchEnv?(lookup: AdapterLookup): Promise<Record<string, string>>
 }
 
 const NODE_INSTALL: AgentDefinition['install'] = {
@@ -57,6 +60,7 @@ export const CODEX: AgentDefinition = {
   install: NODE_INSTALL,
   reportsAccount: true,
   progressNotes: true,
+  launchEnv: codexLaunchEnv,
 }
 
 export const OPENCODE: AgentDefinition = {
@@ -155,14 +159,31 @@ export type Detection =
   | { state: 'not-installed' | 'node-missing' | 'node-outdated'; detail: string }
 
 /** `node <entry>`, never through a shell unless `node` itself is a `.cmd` shim. */
-export function packageSpec(node: string, entry: string, platform: Platform): LaunchSpec {
+export function packageSpec(
+  node: string,
+  entry: string,
+  platform: Platform,
+  env: Record<string, string> = {},
+): LaunchSpec {
   return {
     command: node,
     args: [entry],
-    env: {},
+    env,
     shell: needsShell(node, platform),
-    display: { command: node, args: [entry], env: {} },
+    display: { command: node, args: [entry], env },
   }
+}
+
+/** `node <entry>` for an installed adapter, with what the agent's `launchEnv` finds in it. */
+export async function installedSpec(
+  def: AgentDefinition,
+  node: string,
+  installed: InstalledAdapter,
+  lookup: Omit<AdapterLookup, 'dir' | 'entry'>,
+): Promise<LaunchSpec> {
+  const env =
+    (await def.launchEnv?.({ ...lookup, dir: installed.dir, entry: installed.entry })) ?? {}
+  return packageSpec(node, installed.entry, lookup.platform, env)
 }
 
 export interface DetectContext {
@@ -175,6 +196,7 @@ export interface DetectContext {
   adaptersDir: string
   isExecutable(file: string): Promise<boolean>
   isFile?(file: string): Promise<boolean>
+  realpath?(file: string): Promise<string>
   installed?(agentId: AgentId, packageName: string): Promise<InstalledAdapter[]>
 }
 
@@ -220,9 +242,15 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           detail: t('detect.npmMissing', { agent: def.name, hint: t(def.install.hint) }),
         }
       }
+      const lookup = {
+        platform: ctx.platform,
+        env: ctx.env,
+        ...(ctx.isFile ? { isFile: ctx.isFile } : {}),
+        ...(ctx.realpath ? { realpath: ctx.realpath } : {}),
+      }
       return {
         state: 'available',
-        spec: pinned ? packageSpec(nodePath, pinned.entry, ctx.platform) : null,
+        spec: pinned ? await installedSpec(def, nodePath, pinned, lookup) : null,
         adapter: {
           package: launch.package,
           version: launch.version,
@@ -231,7 +259,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           nodeVersion,
           npm: npmPath,
           fallback: other
-            ? { version: other.version, spec: packageSpec(nodePath, other.entry, ctx.platform) }
+            ? { version: other.version, spec: await installedSpec(def, nodePath, other, lookup) }
             : null,
         },
       }

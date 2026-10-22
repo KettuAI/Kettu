@@ -37,7 +37,7 @@ import type { AgentTrees } from './agent-trees'
 import {
   detectAgent,
   displayCommand,
-  packageSpec,
+  installedSpec,
   type AgentDefinition,
   type CommandWords,
   type DetectContext,
@@ -514,7 +514,10 @@ export class AgentManager {
         onOutput: (text) => this.onProgress(slot, text),
       })
       diagnostics.event(agentId, 'installed', `${adapter.version} in ${Date.now() - started} ms`)
-      const spec = packageSpec(adapter.node, installed.entry, platform)
+      const spec = await installedSpec(slot.def, adapter.node, installed, {
+        platform,
+        env: this.deps.env.agentEnv(),
+      })
       slot.detection = { ...detection, spec, adapter: { ...adapter, installed: true } }
       slot.adapterNote = null
       return spec
