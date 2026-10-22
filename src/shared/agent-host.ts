@@ -83,6 +83,7 @@ export interface AgentStatus {
     steering: boolean // `_session/steering` into a running turn
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
     account: boolean // names its account through `_auth/status_update` as it starts
+    progressNotes: boolean // its messages that more work in a turn follows are progress notes
   }
 }
 

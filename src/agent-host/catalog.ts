@@ -25,6 +25,12 @@ export interface AgentDefinition {
   install: { hint: HostKey; url: string }
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
+  /**
+   * Writes progress notes as messages before its tool calls, Codex's commentary. Its adapter does
+   * not say which messages they are (codex-acp sends the phase to JetBrains AIR clients only), so
+   * the thread tells them by the work that follows.
+   */
+  progressNotes?: boolean
 }
 
 const NODE_INSTALL: AgentDefinition['install'] = {
@@ -50,6 +56,7 @@ export const CODEX: AgentDefinition = {
   requiresNode: '>=22',
   install: NODE_INSTALL,
   reportsAccount: true,
+  progressNotes: true,
 }
 
 export const OPENCODE: AgentDefinition = {

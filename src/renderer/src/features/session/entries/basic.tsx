@@ -57,13 +57,22 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   )
 })
 
-export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: EntryProps) {
+/** An agent message; `note` sets a progress note in a folded run, muted like a thought. */
+export const AgentEntry = memo(function AgentEntry({
+  sessionId,
+  entryId,
+  note = false,
+}: EntryProps & { note?: boolean }) {
   const entry = useEntry(sessionId, entryId, 'agent')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
   return (
-    <div className={cn('min-w-0', animation)} data-selectable="">
-      <Markdown markdown={entry.markdown} streaming={entry.streaming} />
+    <div className={cn('min-w-0', note && 'text-muted-foreground', animation)} data-selectable="">
+      <Markdown
+        markdown={entry.markdown}
+        streaming={entry.streaming}
+        className={note ? 'markdown-muted' : undefined}
+      />
       {entry.attachments.length > 0 && (
         <div className="mt-2 flex flex-wrap items-start gap-1.5">
           {entry.attachments.map((ref, i) =>

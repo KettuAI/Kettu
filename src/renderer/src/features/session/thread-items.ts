@@ -29,11 +29,30 @@ function charOf(entry: ThreadEntry | undefined): string {
 }
 
 /**
- * The agent's work between messages, which a run folds: thoughts, tool calls, plan updates and
- * compactions. Messages never fold.
+ * The agent's work between messages, which a run folds: thoughts, tool calls, plan updates,
+ * compactions and progress notes (c, below). Messages never fold.
  */
 const isStep = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't' || char === 'p'
+  char === 'h' || char === 'g' || char === 't' || char === 'p' || char === 'c'
+
+/**
+ * Marks progress notes as c: an agent message that more work in its turn follows, as Codex's
+ * commentary, which it writes before its tool calls and never after its final answer. The turn
+ * still running is work to its end, since a message that streams may yet be a note.
+ */
+function markNotes(signature: string, live: boolean): string {
+  const chars = [...signature]
+  const starts = [0]
+  for (let i = 1; i < chars.length; i++) if (chars[i] === 'u') starts.push(i)
+  starts.forEach((start, n) => {
+    const end = starts[n + 1] ?? chars.length
+    let workEnd = end
+    if (!(live && end === chars.length))
+      while (workEnd > start && !isStep(chars[workEnd - 1])) workEnd--
+    for (let i = start; i < workEnd; i++) if (chars[i] === 'a') chars[i] = 'c'
+  })
+  return chars.join('')
+}
 
 /** A step on its own, or a run of completed lookups ("Explored 4 files"). */
 export type Step =
@@ -58,9 +77,11 @@ export type Item =
 
 /**
  * The thread's items. With `live`, a turn is running and the run at the thread's end is still
- * growing, so it shows step by step; it folds once a message or the turn's end follows it.
+ * growing, so it shows step by step; it folds once a message or the turn's end follows it. With
+ * `notes`, the agent's messages that more work follows are progress notes and fold with it.
  */
-export function buildItems(order: string[], signature: string, live = false): Item[] {
+export function buildItems(order: string[], shape: string, live = false, notes = false): Item[] {
+  const signature = notes ? markNotes(shape, live) : shape
   const items: Item[] = []
   const latestTurn = signature.lastIndexOf('u')
   const { replacing, after } = replyFooters(order, signature, live)

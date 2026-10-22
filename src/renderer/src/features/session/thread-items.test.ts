@@ -191,6 +191,74 @@ describe('buildItems', () => {
   })
 })
 
+describe('progress notes', () => {
+  // As Codex's commentary: a message that more work in the same turn follows.
+  const notes = (entries: ThreadEntry[], live = false) => {
+    const s = state(entries)
+    return buildItems(s.order, signatureOf(s), live, true)
+  }
+
+  it('fold with the work, and the answer stays', () => {
+    const result = notes([
+      user('u1'),
+      thought('h1'),
+      agent('a1'),
+      tool('x1', 'execute'),
+      thought('h2'),
+      agent('a2'),
+      tool('x2', 'execute'),
+      agent('a3'),
+    ])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a3', 'reply:u1'])
+    expect(result[1]).toMatchObject({ signature: 'hcthct' })
+    expect(result[3]).toMatchObject({ agentIds: ['a3'] })
+  })
+
+  it('leave every message as it is for other agents', () => {
+    const result = items([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'x1', 'a2', 'reply:u1'])
+  })
+
+  it('keep a turn without work as its answer', () => {
+    expect(notes([user('u1'), agent('a1')]).map((i) => i.key)).toEqual(['u1', 'a1', 'reply:u1'])
+  })
+
+  it('end with their turn', () => {
+    const result = notes([
+      user('u1'),
+      agent('a1'),
+      tool('x1', 'execute'),
+      agent('a2'),
+      user('u2'),
+      agent('a3'),
+    ])
+    expect(result.map((i) => i.key)).toEqual([
+      'u1',
+      'run:a1',
+      'a2',
+      'reply:u1',
+      'u2',
+      'a3',
+      'reply:u2',
+    ])
+  })
+
+  it('keep the running turn one growing run, so it does not fold while a note streams', () => {
+    const result = notes(
+      [
+        user('u1'),
+        tool('x1', 'execute'),
+        tool('x2', 'execute'),
+        agent('a1'),
+        tool('x3', 'execute'),
+        agent('a2'),
+      ],
+      true,
+    )
+    expect(result.map((i) => i.key)).toEqual(['u1', 'x1', 'x2', 'a1', 'x3', 'a2'])
+  })
+})
+
 describe('reply footers', () => {
   const end = (id: string): ThreadEntry => ({
     kind: 'turn_end',

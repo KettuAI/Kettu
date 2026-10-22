@@ -991,6 +991,7 @@ export class AgentManager {
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
         reports: limitsReport(slot.def.id) !== null,
         account: slot.def.reportsAccount ?? false,
+        progressNotes: slot.def.progressNotes ?? false,
       },
     }
   }

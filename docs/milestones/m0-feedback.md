@@ -55,7 +55,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 47  | A crowded top bar cuts the session title first                 | Top bar        | Fixed        |
 | 48  | The spinner's screen reader label is not translated            | Localization   | Fixed        |
 | 49  | No multimodal support: images, audio and video                 | Media          | Partly fixed |
-| 50  | Codex's progress notes read as its answer                      | Thread entries | Open         |
+| 50  | Codex's progress notes read as its answer                      | Thread entries | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -744,3 +744,5 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **To settle**: how OverBench tells Codex's notes from its answer.
   - Infer it: in a Codex turn, a message that more work follows is commentary, since Codex ends a turn with its final answer. Commentary would then fold with the work around it, and the turn would read as one folded run before the answer. While a turn runs, a note shows as text until work follows it.
   - Get it from the adapter: ask codex-acp to send the phase to every client, then use it.
+- **Decided**: 2026-10-22, by the maintainer: infer it from the turn's shape.
+- **Fixed**: the catalog marks Codex with `progressNotes`; in its turns a message that more work follows folds with the work as a muted note, so a finished turn reads as one run above its answer, and Copy takes the answer only. The running turn shows as it goes and folds when it ends ([Interface: tool calls](../design/ui.md#tool-calls)). The bare "Thought" from history is left as it is.

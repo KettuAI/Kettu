@@ -8,7 +8,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { markThreadShown } from '@renderer/app/perf'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { errorMessage, host } from '@renderer/lib/host'
-import { agentName } from '@renderer/stores/agents'
+import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles } from '@renderer/stores/files'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
@@ -41,6 +41,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const session = useSessionView(sessionId)
   const renderersReady = useRenderersReady()
   const name = agentName(summary.agentId)
+  const progressNotes = useAgentsStore(
+    (s) => s.byId[summary.agentId]?.capabilities.progressNotes ?? false,
+  )
 
   useEffect(() => {
     preloadRenderers()
@@ -110,6 +113,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         projectPath={summary.projectPath}
         agentName={name}
         working={running}
+        progressNotes={progressNotes}
       />
     )
   }

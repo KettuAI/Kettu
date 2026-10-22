@@ -58,19 +58,22 @@ export const Thread = memo(function Thread({
   projectPath,
   agentName,
   working,
+  progressNotes,
 }: {
   sessionId: string
   projectPath: string
   agentName: string
   /** A turn is running and the agent has not answered yet. */
   working: boolean
+  /** The agent's messages that more work follows are progress notes, folded with the work. */
+  progressNotes: boolean
 }) {
   const { t } = useTranslation('session')
   const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
   const signature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
   const items = useMemo(
-    () => buildItems(order ?? [], signature, working),
-    [order, signature, working],
+    () => buildItems(order ?? [], signature, working, progressNotes),
+    [order, signature, working, progressNotes],
   )
   const steps = useMemo(() => stepIds(order ?? [], signature), [order, signature])
   const replies = useMemo(() => replyKeys(items), [items])

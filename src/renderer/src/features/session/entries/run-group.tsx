@@ -13,6 +13,7 @@ import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { stepItems } from '../thread-items'
 import { useEntryAnimation } from '../use-thread'
+import { AgentEntry } from './basic'
 import { Entry } from './entry'
 import { PANEL, runSummary, type RunStep } from './helpers'
 import { ToolGroup } from './tool-group'
@@ -72,8 +73,12 @@ export const RunGroup = memo(function RunGroup({
   const stats = useDiffStats(edits)
   const { parts, editAt, failed, running } = runSummary(steps)
   const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
-  const cards = useMemo(
-    () => new Set(entryIds.filter((_, i) => signature[i] === 'p')),
+  const spaced = useMemo(
+    () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'c')),
+    [entryIds, signature],
+  )
+  const notes = useMemo(
+    () => new Set(entryIds.filter((_, i) => signature[i] === 'c')),
     [entryIds, signature],
   )
   const open = waiting || (userOpen ?? false)
@@ -123,14 +128,18 @@ export const RunGroup = memo(function RunGroup({
                 agentName={agentName}
               />
             ) : (
-              // A plan or a compaction is a card or a marker, so it keeps room from the rows.
-              <div key={item.key} className={cn(cards.has(item.id) && 'py-1.5')}>
-                <Entry
-                  sessionId={sessionId}
-                  entryId={item.id}
-                  projectPath={projectPath}
-                  agentName={agentName}
-                />
+              // A plan, a compaction or a progress note is not a row, so it keeps room from them.
+              <div key={item.key} className={cn(spaced.has(item.id) && 'py-1.5')}>
+                {notes.has(item.id) ? (
+                  <AgentEntry sessionId={sessionId} entryId={item.id} note />
+                ) : (
+                  <Entry
+                    sessionId={sessionId}
+                    entryId={item.id}
+                    projectPath={projectPath}
+                    agentName={agentName}
+                  />
+                )}
               </div>
             ),
           )}
