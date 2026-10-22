@@ -15,6 +15,12 @@ interface AgentsStore {
   reloadEnvironment(): Promise<void>
 }
 
+/** A reply can land after a newer `environment.changed` event, so the later reading wins. */
+function laterEnvironment(current: EnvironmentInfo | null, next: EnvironmentInfo): EnvironmentInfo {
+  if (current?.resolvedAt == null) return next
+  return next.resolvedAt != null && next.resolvedAt >= current.resolvedAt ? next : current
+}
+
 export const useAgentsStore = create<AgentsStore>()((set, get) => ({
   byId: {},
   order: [],
@@ -39,14 +45,15 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
       host('agents.environment', undefined),
     ])
     get().setAll(statuses)
-    set({ environment })
+    set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
   },
   async check(agentId) {
     get().setAll(await host('agents.check', agentId ? { agentId } : {}))
   },
   async reloadEnvironment() {
     get().setAll(await host('agents.reloadEnvironment', undefined))
-    set({ environment: await host('agents.environment', undefined) })
+    const environment = await host('agents.environment', undefined)
+    set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
   },
 }))
 
