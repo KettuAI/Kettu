@@ -12,6 +12,8 @@ export interface RowDef {
   keywords?: string
   /** The name in English, so a search in English finds the row in any language. */
   english?: string
+  /** Consecutive rows with the same group show under its name and count. */
+  group?: string
   /**
    * `block` hands the row's text to the control, which keeps it beside its main control on the
    * first line and puts what it reveals underneath; `custom` renders only the control, a card.

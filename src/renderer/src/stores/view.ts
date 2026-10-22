@@ -30,8 +30,11 @@ export type SettingsSection =
 interface ViewStore {
   projectPath: string | null
   main: MainView
-  /** `section` is the page shown while open and the one to return to; null until one is chosen. */
-  settings: { open: boolean; section: SettingsSection | null }
+  /**
+   * `section` is the page shown while open and the one to return to; null until one is chosen.
+   * `agent` is the agent whose own page Agents shows instead of the list.
+   */
+  settings: { open: boolean; section: SettingsSection | null; agent: AgentId | null }
   sidebarCollapsed: boolean
   /** Project groups the user collapsed, by path or `NO_PROJECT_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
@@ -59,7 +62,7 @@ const saved = readJson<Partial<Persisted>>(KEY, {})
 export const useViewStore = create<ViewStore>()(() => ({
   projectPath: saved.projectPath ?? null,
   main: { kind: 'home' },
-  settings: { open: false, section: null },
+  settings: { open: false, section: null, agent: null },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
   expandedParents: saved.expandedParents ?? {},
@@ -147,8 +150,20 @@ export function chooseNewSessionProject(projectPath: string | null): void {
 /** Without a section, shows the one shown last; with one, switches to it even when already open. */
 export function openSettings(section: SettingsSection | null = null): void {
   useViewStore.setState((s) => ({
-    settings: { open: true, section: section ?? s.settings.section },
+    settings: section ? { open: true, section, agent: null } : { ...s.settings, open: true },
   }))
+}
+
+/** Opens Agents at one agent's page, or at the list with null. */
+export function openAgentSettings(agent: AgentId | null): void {
+  useViewStore.setState({ settings: { open: true, section: 'agents', agent } })
+}
+
+/** What Esc does in Settings: from an agent's page to the list, else out of Settings. */
+export function settingsBack(): void {
+  const { settings } = useViewStore.getState()
+  if (settings.agent) openAgentSettings(null)
+  else closeSettings()
 }
 
 export function closeSettings(): void {

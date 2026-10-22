@@ -201,7 +201,30 @@
       "inherited": "Inherited from how OverBench was started.",
       "fallback": "Using a fallback PATH.",
       "reload": "Reload environment"
-    }
+    },
+    "groups": {
+      "installed": "Installed",
+      "notInstalled": "Not installed"
+    },
+    "search": "Search agents",
+    "noMatch": "No matching agents",
+    "version": "Version",
+    "loginMethod": "Login method",
+    "email": "Email",
+    "notReported": "Not reported",
+    "planLimits": "Plan limits",
+    "usageNotReported": "{{name}} does not report plan usage.",
+    "configuration": "Configuration",
+    "config": {
+      "folder": "Config folder",
+      "settings": "Settings file",
+      "instructions": "Instructions"
+    },
+    "setBy": "Set by {{env}}",
+    "notCreated": "Not created yet",
+    "showIn": "Show in {{name}}",
+    "noConfig": "No configuration files to show.",
+    "advanced": "Advanced"
   },
   "about": {
     "version": {

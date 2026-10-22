@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentStatus, EnvironmentInfo } from '@shared/agent-host'
+import type { AgentDetails, AgentStatus, EnvironmentInfo } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { host } from '@renderer/lib/host'
 
@@ -7,12 +7,15 @@ interface AgentsStore {
   byId: Partial<Record<AgentId, AgentStatus>>
   order: AgentId[]
   environment: EnvironmentInfo | null
+  /** Each agent's page in Settings, read when it shows; kept so it does not flash empty. */
+  details: Partial<Record<AgentId, AgentDetails>>
   loaded: boolean
   setAll(statuses: AgentStatus[]): void
   setOne(status: AgentStatus): void
   refresh(): Promise<void>
   check(agentId?: AgentId): Promise<void>
   reloadEnvironment(): Promise<void>
+  loadDetails(agentId: AgentId): Promise<void>
 }
 
 /** A reply can land after a newer `environment.changed` event, so the later reading wins. */
@@ -25,6 +28,7 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
   byId: {},
   order: [],
   environment: null,
+  details: {},
   loaded: false,
   setAll(statuses) {
     set({
@@ -54,6 +58,10 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
     get().setAll(await host('agents.reloadEnvironment', undefined))
     const environment = await host('agents.environment', undefined)
     set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
+  },
+  async loadDetails(agentId) {
+    const details = await host('agents.details', { agentId })
+    set((state) => ({ details: { ...state.details, [agentId]: details } }))
   },
 }))
 

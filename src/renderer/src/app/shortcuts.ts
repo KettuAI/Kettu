@@ -3,7 +3,7 @@ import { isMac, isMod } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { flattenTree, sessionTree, useSessionsStore } from '@renderer/stores/sessions'
 import {
-  closeSettings,
+  settingsBack,
   NO_PROJECT_GROUP,
   openSession,
   openSettings,
@@ -39,7 +39,7 @@ export function useKeyboardShortcuts(): void {
 
       if (event.key === 'Escape' && view.settings.open && !isEditable(event.target)) {
         event.preventDefault()
-        closeSettings()
+        settingsBack()
         return
       }
 

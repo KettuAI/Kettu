@@ -12,14 +12,16 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import type { AgentStatus } from '@shared/agent-host'
 import { buttonVariants } from '@renderer/components/ui/button'
 import { Kbd } from '@renderer/components/ui/kbd'
+import { readiness } from '@renderer/features/agents/readiness'
 import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
 import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { AutomaticUpdates, UpdateRow, Version } from './about-section'
-import { AgentCard, EnvironmentFooter } from './agents-section'
-import { english, type SectionDef } from './model'
+import { AgentListItem, EnvironmentFooter } from './agents-section'
+import { english, type RowDef, type SectionDef } from './model'
 import {
   BackgroundFetch,
   DataFolder,
@@ -333,18 +335,25 @@ export function useAdvancedSection(): SectionDef {
 export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  const installed = agents.filter((a) => readiness(a).kind !== 'missing')
+  const missing = agents.filter((a) => readiness(a).kind === 'missing')
+  const row = (status: AgentStatus, group: string): RowDef => ({
+    id: status.id,
+    name: status.name,
+    description: status.account?.label ?? undefined,
+    keywords: t('agents.keywords'),
+    group,
+    layout: 'custom',
+    render: () => <AgentListItem status={status} />,
+  })
   return {
     id: 'agents',
     title: t('sections.agents'),
     icon: BotIcon,
-    rows: agents.map((status) => ({
-      id: status.id,
-      name: status.name,
-      description: status.account?.label ?? undefined,
-      keywords: t('agents.keywords'),
-      layout: 'custom' as const,
-      render: () => <AgentCard status={status} />,
-    })),
+    rows: [
+      ...installed.map((a) => row(a, t('agents.groups.installed'))),
+      ...missing.map((a) => row(a, t('agents.groups.notInstalled'))),
+    ],
     footer: <EnvironmentFooter />,
   }
 }

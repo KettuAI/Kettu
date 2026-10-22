@@ -14,7 +14,9 @@ import {
   useViewStore,
   type SettingsSection,
 } from '@renderer/stores/view'
-import { matches, type RowDef, type SectionDef } from './model'
+import { AgentPage } from './agents-section'
+import { matches, type SectionDef } from './model'
+import { SectionBody } from './rows'
 import {
   useAboutSection,
   useAdvancedSection,
@@ -53,6 +55,7 @@ export default function SettingsPage() {
   const anyMatch = shown.some((s) => s.rows.length > 0)
   const active = useViewStore((s) => s.settings.section) ?? 'general'
   const page = shown.find((s) => s.id === active) ?? shown[0]
+  const agent = useViewStore((s) => (s.settings.section === 'agents' ? s.settings.agent : null))
   const scroller = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
 
@@ -71,7 +74,7 @@ export default function SettingsPage() {
   // Every page, and the results, start at the top.
   useLayoutEffect(() => {
     if (scroller.current) scroller.current.scrollTop = 0
-  }, [active, searching])
+  }, [active, agent, searching])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -191,7 +194,7 @@ export default function SettingsPage() {
           className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable]"
         >
           <div
-            key={searching ? 'results' : page.id}
+            key={searching ? 'results' : agent ? `agents/${agent}` : page.id}
             className="flex max-w-3xl animate-in flex-col gap-9 pt-1 pb-24 fade-in animation-duration-(--duration-fast)"
           >
             {searching ? (
@@ -220,6 +223,8 @@ export default function SettingsPage() {
                   </Empty>
                 )}
               </>
+            ) : agent ? (
+              <AgentPage agentId={agent} />
             ) : (
               <section aria-labelledby={`settings-${page.id}`} className="flex flex-col gap-4">
                 <h2
@@ -237,50 +242,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </main>
-    </div>
-  )
-}
-
-function SectionBody({ section }: { section: SectionDef }) {
-  if (section.rows.every((r) => r.layout === 'custom')) {
-    return (
-      <div className="flex flex-col">
-        {section.rows.map((row, i) => (
-          <div key={row.id} className={cn('px-1 py-4', i > 0 && 'border-t border-border-soft')}>
-            {row.render(null)}
-          </div>
-        ))}
-      </div>
-    )
-  }
-  return (
-    <div className="flex flex-col">
-      {section.rows.map((row, i) => (
-        <Row key={row.id} row={row} first={i === 0} />
-      ))}
-    </div>
-  )
-}
-
-function Row({ row, first }: { row: RowDef; first: boolean }) {
-  const text = (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-ui font-medium">{row.name}</span>
-      {row.description && (
-        <span className="text-xs leading-normal text-muted-foreground">{row.description}</span>
-      )}
-    </div>
-  )
-  return (
-    <div className={cn('px-1 py-3', !first && 'border-t border-border-soft')}>
-      {row.layout === 'block' ? (
-        row.render(text)
-      ) : (
-        <div className="flex min-h-[28px] items-center gap-6">
-          <div className="min-w-0 flex-1">{text}</div>
-          <div className="flex shrink-0 items-center gap-2">{row.render(text)}</div>
-        </div>
-      )}
     </div>
   )
 }
