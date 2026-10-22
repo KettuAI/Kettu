@@ -35,13 +35,13 @@ Design in OverBench is not decoration on top of the tool. It is the tool.
 
 OverBench talks to every agent over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP) and works with the agent CLIs you already use: your installation, your account, your configuration.
 
-| Agent                                                    | How OverBench runs it                                                | Status |
-| -------------------------------------------------------- | -------------------------------------------------------------------- | ------ |
-| [Claude Code](https://github.com/anthropics/claude-code) | The ACP adapter `@agentclientprotocol/claude-agent-acp`, through npx | M0     |
-| [Codex CLI](https://github.com/openai/codex)             | The ACP adapter `@agentclientprotocol/codex-acp`, through npx        | M0     |
-| [opencode](https://opencode.ai)                          | Your installed `opencode`, as `opencode acp`                         | M0     |
+| Agent                                                    | How OverBench runs it                                                                    | Status |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------ |
+| [Claude Code](https://github.com/anthropics/claude-code) | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed from npm on first use | M0     |
+| [Codex CLI](https://github.com/openai/codex)             | The ACP adapter `@agentclientprotocol/codex-acp`, installed from npm on first use        | M0     |
+| [opencode](https://opencode.ai)                          | Your installed `opencode`, as `opencode acp`                                             | M0     |
 
-The Claude Code and Codex adapters need Node.js 22 or later, which OverBench finds through your login shell. You sign in with each agent's own flow, so OverBench never sees your credentials.
+The Claude Code and Codex adapters need Node.js 22 or later with npm, which OverBench finds through your login shell; it installs each adapter once, on first use, into its own data folder. You sign in with each agent's own flow, so OverBench never sees your credentials.
 
 ## Features
 

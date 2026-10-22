@@ -35,13 +35,13 @@ OverBench 想给这些 Agent 一个适合长时间工作的家，它的核心信
 
 OverBench 通过 [Agent Client Protocol](https://agentclientprotocol.com)（ACP）与各个 Agent 通信，直接使用你已经在用的 Agent CLI：你自己的安装、你自己的账号、你自己的配置。
 
-| Agent                                                    | OverBench 如何运行它                                             | 状态 |
-| -------------------------------------------------------- | ---------------------------------------------------------------- | ---- |
-| [Claude Code](https://github.com/anthropics/claude-code) | 通过 npx 运行 ACP 适配器 `@agentclientprotocol/claude-agent-acp` | M0   |
-| [Codex CLI](https://github.com/openai/codex)             | 通过 npx 运行 ACP 适配器 `@agentclientprotocol/codex-acp`        | M0   |
-| [opencode](https://opencode.ai)                          | 你自己安装的 `opencode`，以 `opencode acp` 运行                  | M0   |
+| Agent                                                    | OverBench 如何运行它                                                     | 状态 |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ | ---- |
+| [Claude Code](https://github.com/anthropics/claude-code) | 首次使用时从 npm 安装 ACP 适配器 `@agentclientprotocol/claude-agent-acp` | M0   |
+| [Codex CLI](https://github.com/openai/codex)             | 首次使用时从 npm 安装 ACP 适配器 `@agentclientprotocol/codex-acp`        | M0   |
+| [opencode](https://opencode.ai)                          | 你自己安装的 `opencode`，以 `opencode acp` 运行                          | M0   |
 
-Claude Code 和 Codex 的适配器需要 Node.js 22 及以上版本，OverBench 会通过你的登录 shell 找到它。登录走各个 Agent 自己的流程，OverBench 不会接触你的凭据。
+Claude Code 和 Codex 的适配器需要 Node.js 22 及以上版本和 npm，OverBench 会通过你的登录 shell 找到它们，并在首次使用时把适配器安装到自己的数据目录，只装一次。登录走各个 Agent 自己的流程，OverBench 不会接触你的凭据。
 
 ## 功能
 

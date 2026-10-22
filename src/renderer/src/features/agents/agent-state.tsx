@@ -4,7 +4,7 @@ import { readiness } from './readiness'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 
-/** A short status with its dot or icon: "Ready", "Sign in to start", "Starting…". */
+/** A short status with its dot or icon: "Ready", "Sign in to start", "Installing…". */
 export function AgentStateLine({ status, className }: { status: AgentStatus; className?: string }) {
   const r = readiness(status)
   const base = cn('inline-flex items-center gap-1.5 text-xs', className)
@@ -23,12 +23,17 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
           Sign in to start
         </span>
       )
+    case 'installing':
     case 'starting':
     case 'restarting':
       return (
         <span className={cn(base, 'text-muted-foreground')}>
           <Spinner className="size-3" />
-          {r.kind === 'starting' ? 'Starting…' : 'Restarting…'}
+          {r.kind === 'installing'
+            ? 'Installing…'
+            : r.kind === 'starting'
+              ? 'Starting…'
+              : 'Restarting…'}
         </span>
       )
     case 'failed':

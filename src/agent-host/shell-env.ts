@@ -199,18 +199,18 @@ export async function resolveShellEnvironment(options: ResolveOptions): Promise<
 
 export interface NodeProbe {
   nodeVersion: string | null
-  npxPath: string | null
+  npmPath: string | null
   nodePath: string | null
 }
 
-/** Finds `npx` and asks `node --version`, with the agent environment. */
+/** Finds `node` and `npm` and asks `node --version`, with the agent environment. */
 export async function probeNode(env: Env, platform: Platform): Promise<NodeProbe> {
   const lookup = { platform, env, isExecutable: (file: string) => isExecutableFile(file, platform) }
-  const [nodePath, npxPath] = await Promise.all([
+  const [nodePath, npmPath] = await Promise.all([
     findCommand('node', lookup),
-    findCommand('npx', lookup),
+    findCommand('npm', lookup),
   ])
-  if (!nodePath) return { nodeVersion: null, npxPath, nodePath }
+  if (!nodePath) return { nodeVersion: null, npmPath, nodePath }
   const nodeVersion = await new Promise<string | null>((resolve) => {
     execFile(
       nodePath,
@@ -219,7 +219,7 @@ export async function probeNode(env: Env, platform: Platform): Promise<NodeProbe
       (error, stdout) => resolve(error ? null : stdout.trim() || null),
     )
   })
-  return { nodeVersion, npxPath, nodePath }
+  return { nodeVersion, npmPath, nodePath }
 }
 
 /** Whether a `v24.1.0`-style version satisfies a `>=22`-style requirement. */
@@ -246,7 +246,7 @@ export interface EnvironmentServiceDeps {
  */
 export class EnvironmentService {
   private resolved: ShellEnvironment | null = null
-  private node: NodeProbe = { nodeVersion: null, npxPath: null, nodePath: null }
+  private node: NodeProbe = { nodeVersion: null, npmPath: null, nodePath: null }
   private current: Promise<void> | null = null
   private proxy: ProxySettings = { mode: 'environment' }
   private resolvedAt: number | null = null
@@ -301,7 +301,7 @@ export class EnvironmentService {
       durationMs: resolved?.durationMs ?? null,
       warning: resolved?.warning ?? null,
       nodeVersion: this.node.nodeVersion,
-      npxPath: this.node.npxPath,
+      npmPath: this.node.npmPath,
     }
   }
 

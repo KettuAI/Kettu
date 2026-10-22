@@ -167,7 +167,7 @@ describe('EnvironmentService', () => {
       },
       probe: async () => ({
         nodeVersion: 'v24.1.0',
-        npxPath: '/login/npx',
+        npmPath: '/login/npm',
         nodePath: '/login/node',
       }),
     })
@@ -180,7 +180,7 @@ describe('EnvironmentService', () => {
     expect(service.info()).toMatchObject({
       source: 'login-shell',
       nodeVersion: 'v24.1.0',
-      npxPath: '/login/npx',
+      npmPath: '/login/npm',
     })
     await service.reload()
     expect(runs).toBe(2)

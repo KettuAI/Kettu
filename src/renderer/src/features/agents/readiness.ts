@@ -3,6 +3,7 @@ import type { AgentStatus } from '@shared/agent-host'
 export type AgentReadiness =
   | { kind: 'ready' }
   | { kind: 'sign-in' }
+  | { kind: 'installing' }
   | { kind: 'starting' }
   | { kind: 'restarting' }
   | { kind: 'failed'; message: string }
@@ -25,6 +26,8 @@ export function readiness(status: AgentStatus): AgentReadiness {
         action: 'Install Node.js',
         url: status.installUrl,
       }
+    case 'installing':
+      return { kind: 'installing' }
     case 'starting':
       return { kind: 'starting' }
     case 'crashed':
@@ -40,5 +43,6 @@ export function readiness(status: AgentStatus): AgentReadiness {
 export function agentSubline(status: AgentStatus): string {
   if (status.version) return `v${status.version}`
   if (status.binaryOverride) return status.binaryOverride
+  if (status.package && !status.package.installed) return 'Installs on first use'
   return status.launchCommand
 }

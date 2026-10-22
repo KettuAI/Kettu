@@ -33,7 +33,7 @@ export function ThreadSkeleton({ className }: { className?: string }) {
 const NO_LINES: string[] = []
 
 /**
- * "Starting Codex…" with the latest lines the agent printed, such as npx downloading it. With
+ * "Starting Codex…" with the latest lines the agent printed, or "Installing Codex…" with npm's. With
  * `loading`, a session being opened says "Loading the conversation…" once the agent runs.
  */
 export function StartingAgent({
@@ -44,7 +44,8 @@ export function StartingAgent({
   loading?: boolean
 }) {
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
-  const agentStarting = useAgentsStore((s) => s.byId[agentId]?.state !== 'ready')
+  const state = useAgentsStore((s) => s.byId[agentId]?.state)
+  const agentStarting = state !== 'ready'
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-2 text-center" role="status">
       <span className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
@@ -52,7 +53,7 @@ export function StartingAgent({
         <span className="shimmer">
           {loading && !agentStarting
             ? 'Loading the conversation…'
-            : `Starting ${agentName(agentId)}…`}
+            : `${state === 'installing' ? 'Installing' : 'Starting'} ${agentName(agentId)}…`}
         </span>
       </span>
       {progress.length > 0 && (
@@ -77,6 +78,7 @@ export function StartingAgent({
  */
 export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string }) {
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
+  const installing = useAgentsStore((s) => s.byId[agentId]?.state === 'installing')
   return (
     <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
       <div className="mx-auto flex w-full max-w-[760px] flex-col px-6 pt-5">
@@ -89,7 +91,9 @@ export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string
         </Message>
         <div role="status" className="flex flex-col gap-0.5 pt-2.5">
           <p className="text-prose text-muted-foreground">
-            <span className="shimmer">Starting {agentName(agentId)}…</span>
+            <span className="shimmer">
+              {installing ? 'Installing' : 'Starting'} {agentName(agentId)}…
+            </span>
           </p>
           {progress.slice(-3).map((line, i) => (
             <span

@@ -1,5 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ExternalLinkIcon, LogOutIcon, RefreshCwIcon, RotateCwIcon } from 'lucide-react'
+import {
+  DownloadIcon,
+  ExternalLinkIcon,
+  LogOutIcon,
+  RefreshCwIcon,
+  RotateCwIcon,
+} from 'lucide-react'
 import type { AgentStatus } from '@shared/agent-host'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
@@ -123,6 +129,12 @@ export function AgentCard({ status }: { status: AgentStatus }) {
         </div>
       </div>
 
+      {r.kind !== 'failed' && r.kind !== 'missing' && status.detail && (
+        <p className="pl-11 text-xs text-attention-text" data-selectable="">
+          {status.detail}
+        </p>
+      )}
+
       {(r.kind === 'failed' || r.kind === 'missing') && (
         <p
           className={cn(
@@ -179,6 +191,36 @@ export function AgentCard({ status }: { status: AgentStatus }) {
           </code>
           <CopyButton text={status.launchCommand} label="Copy launch command" />
         </Detail>
+        {status.package && (
+          <Detail label="Adapter">
+            <span
+              className="min-w-0 truncate font-mono text-[11.5px]"
+              title={`${status.package.name}@${status.package.version}`}
+              data-selectable=""
+            >
+              {status.package.name}@{status.package.version}
+            </span>
+            {status.package.installed ? (
+              <Button
+                variant="quiet"
+                size="xs"
+                disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
+                onClick={() => act(() => host('agents.reinstall', { agentId: status.id }))}
+              >
+                {busy ? (
+                  <Spinner data-icon="inline-start" className="size-3" />
+                ) : (
+                  <DownloadIcon data-icon="inline-start" />
+                )}
+                Reinstall
+              </Button>
+            ) : (
+              r.kind !== 'installing' && (
+                <span className="shrink-0 text-muted-foreground">Installs on first use</span>
+              )
+            )}
+          </Detail>
+        )}
         {status.id !== 'opencode' && environment?.nodeVersion && (
           <Detail label="Node.js">
             <span className="font-mono text-[11.5px]">{environment.nodeVersion}</span>

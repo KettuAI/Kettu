@@ -292,7 +292,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
         warning: null,
       })),
     // No Node.js is found, so only the fake agent is available.
-    probeNode: async () => ({ nodeVersion: null, npxPath: null, nodePath: null }),
+    probeNode: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
     detect: async (def, ctx) => {
       if (def.id !== 'fake-agent') {
         return { state: 'not-installed', detail: `${def.name} is not part of the tests` }

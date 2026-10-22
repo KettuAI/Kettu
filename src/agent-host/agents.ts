@@ -3,6 +3,7 @@
 
 import { mkdir } from 'node:fs/promises'
 import os from 'node:os'
+import path from 'node:path'
 import type {
   AgentAccount,
   AgentAuthMethod,
@@ -21,10 +22,19 @@ import {
   type ConnectionHooks,
 } from './acp/connection'
 import { parseUsageReport } from './acp/claude-reports'
+import {
+  installAdapter,
+  removeOtherVersions,
+  readInstallFiles,
+  removeVersion,
+  type InstalledAdapter,
+  type InstallOptions,
+} from './adapter-install'
 import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
 import {
   detectAgent,
   displayCommand,
+  packageSpec,
   type AgentDefinition,
   type CommandWords,
   type DetectContext,
@@ -73,8 +83,9 @@ export function processLauncher(platform: Platform, timings?: StopTimings): Agen
 
 export interface AgentTimings {
   idleMs: number
-  initializeFirstMs: number
   initializeMs: number
+  /** How long an adapter install may take, download included. */
+  installMs: number
   restartDelaysMs: readonly number[]
   failureWindowMs: number
   maxFailures: number
@@ -85,9 +96,8 @@ export interface AgentTimings {
 
 export const AGENT_TIMINGS: AgentTimings = {
   idleMs: 30 * 60_000,
-  // npx may be downloading the adapter on an agent's first launch.
-  initializeFirstMs: 180_000,
   initializeMs: 30_000,
+  installMs: 15 * 60_000,
   restartDelaysMs: [1_000, 2_000, 4_000, 8_000, 16_000, 30_000],
   failureWindowMs: 5 * 60_000,
   maxFailures: 5,
@@ -120,7 +130,10 @@ export interface AgentManagerDeps {
   settings(): HostSettings
   /** The folder the `/usage` report's session runs in. */
   reportsDir: string
+  /** `<userData>/agents`, where package agents are installed. */
+  adaptersDir: string
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
+  install?(options: InstallOptions): Promise<InstalledAdapter>
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
   processes(processes: { agentId: AgentId; pid: number }[]): void
@@ -136,8 +149,16 @@ class Slot {
   launched: LaunchedAgent | null = null
   starting: Promise<AgentRuntime> | null = null
   stopping: Promise<void> | null = null
+  /** An install on its own, from a reinstall; installs before a start run inside `starting`. */
+  installing: Promise<unknown> | null = null
+  installAbort: AbortController | null = null
+  /** Says the agent runs an older version because the pinned one could not be installed. */
+  adapterNote: string | null = null
+  /** What the last launch ran, for restarts while an older version stands in. */
+  launchSpec: LaunchSpec | null = null
+  /** Older versions are deleted once per host, after the pinned one first initializes. */
+  versionsCleaned = false
   intentionalStop = false
-  launches = 0
   failures: number[] = []
   signIn: AgentStatus['signIn'] = 'unknown'
   account: AgentAccount | null = null
@@ -210,11 +231,17 @@ export class AgentManager {
       electronPath: this.deps.electronPath,
       binaryOverride: override,
       node: this.deps.env.nodeProbe(),
+      adaptersDir: this.deps.adaptersDir,
       isExecutable: (file) => isExecutableFile(file, platform),
     })
     slot.detection = detection
-    // A running, failed or recovering agent keeps its lifecycle state.
-    const idle = !slot.launched && !slot.starting && slot.state !== 'failed' && !slot.restartTimer
+    // A running, installing, failed or recovering agent keeps its lifecycle state.
+    const idle =
+      !slot.launched &&
+      !slot.starting &&
+      !slot.installing &&
+      slot.state !== 'failed' &&
+      !slot.restartTimer
     if (idle) {
       slot.state = detection.state
       slot.detail = detection.state === 'available' ? null : detection.detail
@@ -260,6 +287,7 @@ export class AgentManager {
     const slot = this.slot(agentId)
     await this.detectAll()
     if (slot.stopping) await slot.stopping
+    if (slot.installing) await slot.installing.catch(() => {})
     if (slot.runtime) return slot.runtime
     if (slot.starting) return slot.starting
     if (slot.state === 'failed') {
@@ -283,19 +311,21 @@ export class AgentManager {
     return this.start(slot, detection.spec, 'demand')
   }
 
+  /** Launches `spec`, or installs the pinned adapter first when it is null. */
   private async start(
     slot: Slot,
-    spec: LaunchSpec,
+    spec: LaunchSpec | null,
     reason: 'demand' | 'restart',
   ): Promise<AgentRuntime> {
     if (slot.restartTimer) {
       clearTimeout(slot.restartTimer)
       slot.restartTimer = null
     }
-    const run = this.launch(slot, spec)
+    const run = (async () => this.launch(slot, spec ?? (await this.install(slot))))()
     slot.starting = run
     try {
       const runtime = await run
+      this.cleanUpVersions(slot)
       this.hooks.agentReady(slot.def.id, runtime)
       this.sessionsChanged(slot.def.id)
       return runtime
@@ -330,9 +360,8 @@ export class AgentManager {
     slot.detail = null
     slot.progress.clear()
     slot.intentionalStop = false
+    slot.launchSpec = spec
     this.emit(slot)
-    const first = slot.launches === 0
-    slot.launches++
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
     const launched = this.deps.launcher.launch(slot.def, spec, this.deps.env.agentEnv(), {
       stderr: (text) => this.onStderr(slot, text),
@@ -344,7 +373,7 @@ export class AgentManager {
     void launched.exited.then((info) => this.onExit(slot, launched, connection, info))
 
     const abort = new AbortController()
-    const timeoutMs = first ? this.timings.initializeFirstMs : this.timings.initializeMs
+    const timeoutMs = this.timings.initializeMs
     let timer: ReturnType<typeof setTimeout> | null = null
     try {
       const init = await Promise.race([
@@ -446,10 +475,136 @@ export class AgentManager {
       }
       const detection = slot.detection
       if (detection?.state !== 'available') return
-      this.start(slot, detection.spec, 'restart').catch(() => {
+      this.start(slot, detection.spec ?? slot.launchSpec, 'restart').catch(() => {
         // start() records the failure and schedules the next attempt.
       })
     }, delay)
+  }
+
+  // Adapter installs.
+
+  /**
+   * Installs the pinned adapter and returns how to run it. When that fails and another version is
+   * installed, returns that one instead and says so in the status.
+   */
+  private async install(slot: Slot): Promise<LaunchSpec> {
+    const detection = slot.detection
+    const adapter = detection?.state === 'available' ? detection.adapter : null
+    if (!detection || detection.state !== 'available' || !adapter) {
+      throw new Error(`${slot.def.name} has no adapter to install.`)
+    }
+    const { diagnostics, platform } = this.deps
+    const agentId = slot.def.id
+    slot.state = 'installing'
+    slot.detail = null
+    slot.progress.clear()
+    this.emit(slot)
+    const abort = new AbortController()
+    slot.installAbort = abort
+    const started = Date.now()
+    diagnostics.event(agentId, 'install', `${adapter.package}@${adapter.version}`)
+    try {
+      if (!adapter.npm) throw new Error('npm was not found on PATH.')
+      const installed = await (this.deps.install ?? installAdapter)({
+        root: this.deps.adaptersDir,
+        agentId,
+        package: adapter.package,
+        version: adapter.version,
+        npm: adapter.npm,
+        nodeVersion: adapter.nodeVersion,
+        platform,
+        env: this.deps.env.agentEnv(),
+        timeoutMs: this.timings.installMs,
+        signal: abort.signal,
+        onOutput: (text) => this.onProgress(slot, text),
+      })
+      diagnostics.event(agentId, 'installed', `${adapter.version} in ${Date.now() - started} ms`)
+      const spec = packageSpec(adapter.node, installed.entry, platform)
+      slot.detection = { ...detection, spec, adapter: { ...adapter, installed: true } }
+      slot.adapterNote = null
+      return spec
+    } catch (error) {
+      const message = (error as Error).message
+      diagnostics.event(agentId, 'install failed', message)
+      if (adapter.fallback && !abort.signal.aborted) {
+        slot.adapterNote = `Running ${adapter.fallback.version}: ${adapter.version} could not be installed. ${message}`
+        return adapter.fallback.spec
+      }
+      throw new Error(`${slot.def.name} could not be installed. ${message}`, { cause: error })
+    } finally {
+      slot.installAbort = null
+    }
+  }
+
+  /** Once the pinned version runs, the versions it replaced go. */
+  private cleanUpVersions(slot: Slot): void {
+    const detection = slot.detection
+    if (slot.versionsCleaned || detection?.state !== 'available' || !detection.adapter?.installed) {
+      return
+    }
+    if (!detection.spec || slot.launchSpec !== detection.spec) return
+    slot.versionsCleaned = true
+    const agentId = slot.def.id
+    removeOtherVersions(this.deps.adaptersDir, agentId, detection.adapter.version).then(
+      (removed) => {
+        if (removed.length > 0) this.deps.diagnostics.event(agentId, 'removed', removed.join(', '))
+      },
+      (error: unknown) =>
+        this.deps.diagnostics.log(
+          'warn',
+          `${slot.def.name}: could not remove older versions: ${(error as Error).message}`,
+        ),
+    )
+  }
+
+  /**
+   * Deletes the installed adapter and installs it again, while no session uses the agent. The
+   * slot is claimed before the first await, so a start that comes meanwhile waits for the result.
+   */
+  async reinstall(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    const { launch } = slot.def
+    if (launch.kind !== 'package') {
+      throw invalidParams(`${slot.def.name} is not installed by OverBench`)
+    }
+    if (slot.installing || slot.starting) {
+      throw new HostError('busy', `${slot.def.name} is already being installed or started`)
+    }
+    if (this.hooks.liveSessions(agentId) > 0) {
+      throw new HostError('busy', `Close the sessions that use ${slot.def.name} first`)
+    }
+    const run = (async () => {
+      await this.detectAll()
+      await this.stopProcess(slot)
+      await removeVersion(this.deps.adaptersDir, agentId, launch.version)
+      slot.failures = []
+      slot.versionsCleaned = false
+      slot.state = 'available'
+      slot.detail = null
+      await this.detect(slot)
+      if (slot.detection?.state !== 'available') {
+        throw new HostError(
+          'agent_unavailable',
+          slot.detection?.detail ?? `${slot.def.name} cannot be installed`,
+        )
+      }
+      try {
+        await this.install(slot)
+        slot.state = 'available'
+      } catch (error) {
+        slot.state = 'failed'
+        slot.detail = (error as Error).message
+        throw new HostError('agent_unavailable', slot.detail, { agentId, state: 'failed' })
+      } finally {
+        this.emit(slot)
+      }
+    })()
+    slot.installing = run
+    try {
+      await run
+    } finally {
+      slot.installing = null
+    }
   }
 
   /** Clears `failed` and starts the agent again when live sessions need it. */
@@ -491,6 +646,13 @@ export class AgentManager {
 
   async stop(agentId: AgentId): Promise<void> {
     const slot = this.slot(agentId)
+    slot.installAbort?.abort()
+    if (slot.installing) await slot.installing.catch(() => {})
+    await this.stopProcess(slot)
+  }
+
+  /** Stops the agent's process, after a start in progress settles. */
+  private async stopProcess(slot: Slot): Promise<void> {
     for (const timer of [slot.idleTimer, slot.restartTimer, slot.progressTimer]) {
       if (timer) clearTimeout(timer)
     }
@@ -660,9 +822,14 @@ export class AgentManager {
   // Status.
 
   private display(slot: Slot): CommandWords {
-    if (slot.detection?.state === 'available') return slot.detection.spec.display
+    const detection = slot.detection
+    if (detection?.state === 'available') {
+      const spec = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
+      const shown = spec ?? detection.spec
+      if (shown) return shown.display
+    }
     const override = this.deps.settings().agents[slot.def.id]?.binaryPath ?? null
-    return displayCommand(slot.def, this.deps.electronPath, override)
+    return displayCommand(slot.def, this.deps.electronPath, override, this.deps.adaptersDir)
   }
 
   status(agentId: AgentId): AgentStatus {
@@ -689,24 +856,35 @@ export class AgentManager {
         : {}),
     }))
     const capabilities = init?.capabilities
+    const { launch } = slot.def
+    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
     return {
       id: slot.def.id,
       name: slot.def.name,
       state: slot.state,
       version: init?.version ?? null,
+      package:
+        launch.kind === 'package'
+          ? {
+              name: launch.package,
+              version: launch.version,
+              installed: adapter?.installed ?? false,
+            }
+          : null,
       signIn: slot.signIn,
       authMethods,
       canLogout: capabilities?.logout ?? false,
       account: slot.account,
       limits: [...slot.limits.values()],
-      detail: slot.detail,
+      detail: slot.detail ?? slot.adapterNote,
       installUrl:
         slot.state === 'not-installed' ||
         slot.state === 'node-missing' ||
         slot.state === 'node-outdated'
           ? slot.def.install.url
           : null,
-      progress: slot.state === 'starting' ? slot.progress.lastLines(5) : [],
+      progress:
+        slot.state === 'starting' || slot.state === 'installing' ? slot.progress.lastLines(5) : [],
       launchCommand: formatCommand(display, platform),
       binaryOverride: this.deps.settings().agents[slot.def.id]?.binaryPath ?? null,
       capabilities: {
@@ -728,6 +906,17 @@ export class AgentManager {
     return [...this.slots.keys()].map((agentId) => this.status(agentId))
   }
 
+  /** The files of the adapter version in use, for diagnostics. */
+  async adapterFiles(agentId: AgentId): Promise<{ installed: unknown; lock: unknown } | null> {
+    const slot = this.slots.get(agentId)
+    const detection = slot?.detection
+    const adapter = detection?.state === 'available' ? detection.adapter : null
+    if (!slot || !adapter) return null
+    const version = adapter.installed ? adapter.version : adapter.fallback?.version
+    if (!version) return null
+    return readInstallFiles(path.join(this.deps.adaptersDir, agentId, version))
+  }
+
   /** The raw capabilities of each agent's last `initialize`, for diagnostics. */
   rawCapabilities(agentId: AgentId): unknown {
     return this.slots.get(agentId)?.init?.raw ?? null
@@ -739,9 +928,14 @@ export class AgentManager {
 
   private onStderr(slot: Slot, text: string): void {
     this.deps.diagnostics.stderr(slot.def.id, text)
-    if (slot.state !== 'starting') return
+    if (slot.state === 'starting') this.onProgress(slot, text)
+  }
+
+  /** npm's output while installing, or the agent's stderr while starting. */
+  private onProgress(slot: Slot, text: string): void {
+    if (slot.state === 'installing') this.deps.diagnostics.stderr(slot.def.id, text)
     slot.progress.push(text)
-    // Progress lines while `npx` downloads arrive fast; a few status events a second is enough.
+    // Progress lines arrive fast while npm downloads; a few status events a second is enough.
     slot.progressTimer ??= setTimeout(() => {
       slot.progressTimer = null
       this.emit(slot)

@@ -98,6 +98,7 @@ export class AgentHost {
       launcher: options.launcher ?? processLauncher(platform),
       settings: () => this.settings,
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
+      adaptersDir: path.join(options.userDataPath, 'agents'),
       ...(options.detect ? { detect: options.detect } : {}),
       ...(options.agentTimings ? { timings: options.agentTimings } : {}),
       status: (status) => this.hub.broadcast({ type: 'agent.status', status }),
@@ -238,8 +239,11 @@ export class AgentHost {
     return this.stopping
   }
 
-  collectDiagnostics(): DiagnosticsBundle {
+  async collectDiagnostics(): Promise<DiagnosticsBundle> {
     const node = this.env.nodeProbe()
+    const adapters = await Promise.all(
+      this.agents.ids().map((agentId) => this.agents.adapterFiles(agentId).catch(() => null)),
+    )
     return {
       createdAt: Date.now(),
       appVersion: this.options.appVersion,
@@ -250,10 +254,11 @@ export class AgentHost {
         node: node.nodeVersion,
       },
       environmentInfo: this.env.info(),
-      agents: this.agents.ids().map((agentId) => ({
+      agents: this.agents.ids().map((agentId, i) => ({
         status: this.agents.status(agentId),
         capabilities: this.agents.rawCapabilities(agentId),
         ...this.diagnostics.agentRecords(agentId),
+        adapter: adapters[i] ?? null,
       })),
       sessions: this.sessions.list(),
       log: this.diagnostics.logEntries(),
@@ -300,6 +305,7 @@ export class AgentHost {
       'agents.authenticate': ({ agentId, methodId }) => agents.authenticate(agentId, methodId),
       'agents.logout': ({ agentId }) => agents.logout(agentId),
       'agents.retry': ({ agentId }) => agents.retry(agentId),
+      'agents.reinstall': ({ agentId }) => agents.reinstall(agentId),
       'agents.start': async ({ agentId }) => {
         await agents.ensureReady(agentId)
       },

@@ -42,6 +42,7 @@ export type AgentState =
   | 'node-missing'
   | 'node-outdated'
   | 'available'
+  | 'installing'
   | 'starting'
   | 'ready'
   | 'stopping'
@@ -61,6 +62,7 @@ export interface AgentStatus {
   name: string
   state: AgentState
   version: string | null // from agentInfo, once initialized
+  package: { name: string; version: string; installed: boolean } | null // a package agent's pinned adapter
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: AgentAuthMethod[]
   canLogout: boolean
@@ -68,7 +70,7 @@ export interface AgentStatus {
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   installUrl: string | null
-  progress: string[] // latest stderr lines while starting
+  progress: string[] // latest npm output or stderr lines while installing or starting
   launchCommand: string // as shown in Settings › Agents, quoted for the platform
   binaryOverride: string | null // the program picked in Settings, if any
   capabilities: {
@@ -91,7 +93,7 @@ export interface EnvironmentInfo {
   durationMs: number | null
   warning: string | null // why it fell back, or a note such as the Windows restart hint
   nodeVersion: string | null
-  npxPath: string | null
+  npmPath: string | null
 }
 
 export interface Project {
@@ -142,6 +144,8 @@ export interface AgentDiagnostics {
   traffic: TrafficRecord[]
   stderr: string
   events: { at: number; event: string; detail?: string }[]
+  /** The installed adapter's `installed.json` and `package-lock.json`, for a package agent. */
+  adapter: { installed: unknown; lock: unknown } | null
 }
 
 export interface DiagnosticsBundle {
@@ -164,6 +168,7 @@ export interface HostContract {
   'agents.authenticate': { params: { agentId: AgentId; methodId: string }; result: void }
   'agents.logout': { params: { agentId: AgentId }; result: void }
   'agents.retry': { params: { agentId: AgentId }; result: void }
+  'agents.reinstall': { params: { agentId: AgentId }; result: void }
   'agents.start': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.listSessions': {
@@ -234,6 +239,7 @@ export const HOST_METHODS = [
   'agents.authenticate',
   'agents.logout',
   'agents.retry',
+  'agents.reinstall',
   'agents.start',
   'agents.refreshLimits',
   'agents.listSessions',

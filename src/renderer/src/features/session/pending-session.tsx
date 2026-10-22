@@ -10,7 +10,7 @@ import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupTextarea } from '@renderer/components/ui/input-group'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { agentName } from '@renderer/stores/agents'
+import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { FailedState, FirstMessage, StartingAgent, ThreadSkeleton } from './session-states'
 import { SignIn } from './sign-in'
@@ -18,6 +18,7 @@ import { SignIn } from './sign-in'
 /** A session being created: the agent starts, asks you to sign in, or fails. */
 export function PendingSessionView({ pending }: { pending: PendingSession }) {
   const name = agentName(pending.agentId)
+  const installing = useAgentsStore((s) => s.byId[pending.agentId]?.state === 'installing')
   const parent = useSessionsStore((s) => (pending.parentId ? s.byId[pending.parentId] : undefined))
   const retry = useCallback(() => retryPendingSession(), [])
   const error = pending.error
@@ -78,7 +79,11 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
             rows={1}
             disabled
             aria-label={`Message ${name}`}
-            placeholder={error ? `${name} is not running` : `Starting ${name}…`}
+            placeholder={
+              error
+                ? `${name} is not running`
+                : `${installing ? 'Installing' : 'Starting'} ${name}…`
+            }
             className="min-h-(--composer-min) py-[15px] pl-4 text-prose leading-[22px] md:text-prose"
           />
         </InputGroup>
