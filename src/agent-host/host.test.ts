@@ -1,7 +1,7 @@
 // The host as main and the renderer see it: the port envelope, main's messages, the state
 // files and the git wiring.
 
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
@@ -440,5 +440,45 @@ describe('project files', () => {
     await expect(
       port.request('files.read', { projectPath: t.project, path: '../outside.txt' }),
     ).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+})
+
+describe('sessions without a project', () => {
+  const create = (port: ReturnType<TestHost['connect']>, params: object) =>
+    port.request('sessions.create', { agentId: 'fake-agent', projectPath: null, ...params })
+
+  it('runs each in a scratch folder of its own, outside the projects', async () => {
+    const { t, port } = await setup()
+    const summary = await create(port, {})
+    expect(summary.scratch).toBe(true)
+    expect(path.dirname(summary.projectPath)).toBe(path.join(await realpath(t.dir), 'scratch'))
+    expect(path.basename(summary.projectPath)).toMatch(/^scratch-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}$/)
+    expect(await readdir(summary.projectPath)).toEqual([])
+    expect(await port.request('projects.list', undefined)).toEqual([])
+    expect(t.sent).toContainEqual({ type: 'host:projects', paths: [summary.projectPath] })
+    expect(await port.request('files.list', { projectPath: summary.projectPath })).toEqual({
+      paths: [],
+      truncated: false,
+    })
+
+    const second = await create(port, {})
+    expect(second.projectPath).not.toBe(summary.projectPath)
+    const inProject = await create(port, { projectPath: t.project })
+    expect(inProject.scratch).toBe(false)
+  })
+
+  it("keeps sub-sessions in their parent's folder", async () => {
+    const { port } = await setup()
+    const parent = await create(port, {})
+    const child = await create(port, { projectPath: parent.projectPath, parentId: parent.id })
+    expect(child).toMatchObject({
+      projectPath: parent.projectPath,
+      scratch: true,
+      parentId: parent.id,
+    })
+    expect(await port.request('projects.list', undefined)).toEqual([])
+    await expect(create(port, { parentId: parent.id })).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
   })
 })

@@ -70,7 +70,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
           </span>
         </NoDrag>
         <span className="flex-1" />
-        <HeaderTools projectPath={pending.projectPath} />
+        {pending.projectPath !== null && <HeaderTools projectPath={pending.projectPath} />}
       </TopBar>
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       <div className="mx-auto w-full max-w-[760px] px-6 pb-3">

@@ -77,7 +77,7 @@ interface HostError {
 | `projects.remove`          | `{ path }`                               | none                                            | Removes the project and its index entries, not the agent's sessions                                                                                                      |
 | `projects.touch`           | `{ path }`                               | none                                            | Marks the project opened now, for the recent list                                                                                                                        |
 | `sessions.list`            | `{ projectPath? }`                       | `SessionSummary[]`                              |                                                                                                                                                                          |
-| `sessions.create`          | `{ agentId, projectPath, parentId? }`    | `SessionSummary`                                | Resolves when `session/new` succeeds, or in `auth_required`                                                                                                              |
+| `sessions.create`          | `{ agentId, projectPath, parentId? }`    | `SessionSummary`                                | Resolves when `session/new` succeeds, or in `auth_required`; `projectPath: null` starts it in a [scratch folder](./session-model.md#sessions-without-a-project)          |
 | `sessions.import`          | `{ agentId, projectPath, acpSessionId }` | `SessionSummary`                                |                                                                                                                                                                          |
 | `sessions.open`            | `{ sessionId }`                          | `SessionSnapshot`                               | Loads or resumes as needed; live sessions return at once                                                                                                                 |
 | `sessions.snapshot`        | `{ sessionId }`                          | `SessionSnapshot`                               | For gaps and reconnects                                                                                                                                                  |
@@ -108,6 +108,7 @@ interface SessionSummary {
   id: string
   agentId: AgentId
   projectPath: string
+  scratch: boolean // started with No project, in its own scratch folder
   title: string | null
   status: SessionStatus
   attention: 'none' | 'permission' | 'unread' | 'error'

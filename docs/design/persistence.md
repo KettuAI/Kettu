@@ -16,6 +16,7 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | `window-state.json`   | Main       | Window size, position and maximized state                                                                                                          |
 | `app-state.json`      | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
 | `agents/`             | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and version                                                     |
+| `scratch/`            | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
 | `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts

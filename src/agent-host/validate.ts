@@ -184,7 +184,8 @@ export function createValidators(platform: Platform): Validators {
       const parentId = optionalString(o, 'parentId', ID_CHARS)
       return {
         agentId: agentId(o),
-        projectPath: absolutePath(o, 'projectPath', platform),
+        // null: no project, so the host makes a scratch folder.
+        projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
         ...(parentId !== undefined ? { parentId } : {}),
       }
     },

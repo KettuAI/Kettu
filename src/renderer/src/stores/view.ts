@@ -6,8 +6,12 @@ import { readJson, writeJson } from '@renderer/lib/storage'
 export type MainView =
   | { kind: 'home' } // Welcome without projects, else the selected project's home
   | { kind: 'session'; sessionId: string }
-  // The New session screen; the session is created on the first send.
-  | { kind: 'new'; agentId: AgentId | null }
+  // The New session screen; the session is created on the first send. With `noProject`, in a
+  // scratch folder of its own rather than the selected project.
+  | { kind: 'new'; agentId: AgentId | null; noProject: boolean }
+
+// The No project group's key in `collapsedProjects`, which no folder's path can take.
+export const NO_PROJECT_GROUP = 'no-project'
 
 /** What the side panel shows; one pane at a time. */
 export type SidePane = 'terminal' | 'files'
@@ -29,7 +33,7 @@ interface ViewStore {
   /** `section` is the page shown while open and the one to return to; null until one is chosen. */
   settings: { open: boolean; section: SettingsSection | null }
   sidebarCollapsed: boolean
-  /** Project groups the user collapsed; open by default. */
+  /** Project groups the user collapsed, by path or `NO_PROJECT_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
   /** Parent sessions the user collapsed or expanded; others follow activity. */
   expandedParents: Record<string, boolean>
@@ -105,13 +109,39 @@ export function openProjectHome(projectPath: string | null): void {
   }))
 }
 
-/** The New session screen, in the given project or the selected one; a shown one keeps its agent. */
-export function openNewSession(projectPath: string | null, agentId: AgentId | null): void {
-  useViewStore.setState((s) => ({
-    main: s.main.kind === 'new' ? s.main : { kind: 'new', agentId },
-    projectPath: projectPath ?? s.projectPath,
-    settings: { ...s.settings, open: false },
-  }))
+/**
+ * The New session screen, in the given project, with No project, or in the selected project; a
+ * shown one keeps its agent, and its No project unless given a project.
+ */
+export function openNewSession(
+  projectPath: string | null,
+  agentId: AgentId | null,
+  noProject = false,
+): void {
+  useViewStore.setState((s) => {
+    const shown = s.main.kind === 'new' ? s.main : null
+    return {
+      main: {
+        kind: 'new',
+        agentId: shown ? shown.agentId : agentId,
+        noProject: noProject || (projectPath === null && !!shown?.noProject),
+      },
+      projectPath: projectPath ?? s.projectPath,
+      settings: { ...s.settings, open: false },
+    }
+  })
+}
+
+/** Chooses where New session starts: a project, or null for No project. */
+export function chooseNewSessionProject(projectPath: string | null): void {
+  useViewStore.setState((s) =>
+    s.main.kind !== 'new'
+      ? s
+      : {
+          main: { ...s.main, noProject: projectPath === null },
+          projectPath: projectPath ?? s.projectPath,
+        },
+  )
 }
 
 /** Without a section, shows the one shown last; with one, switches to it even when already open. */

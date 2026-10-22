@@ -14,7 +14,7 @@ const { NEW_SESSION_DRAFT, readDraft, writeDraft } =
 const { useSessionsStore } = await import('@renderer/stores/sessions')
 const { useSettingsStore } = await import('@renderer/stores/settings')
 const { useThreadsStore } = await import('@renderer/stores/threads')
-const { useViewStore } = await import('@renderer/stores/view')
+const { chooseNewSessionProject, useViewStore } = await import('@renderer/stores/view')
 
 const summary = { id: 's1', projectPath: '/repo' } as SessionSummary
 
@@ -76,11 +76,85 @@ describe('newSession', () => {
   })
 
   it('takes the project it is given, and keeps the agent chosen on a shown screen', () => {
-    useViewStore.setState({ main: { kind: 'new', agentId: 'opencode' }, projectPath: '/repo' })
+    useViewStore.setState({
+      main: { kind: 'new', agentId: 'opencode', noProject: false },
+      projectPath: '/repo',
+    })
     newSession('/other')
     expect(useViewStore.getState()).toMatchObject({
       main: { kind: 'new', agentId: 'opencode' },
       projectPath: '/other',
+    })
+  })
+})
+
+describe('New session with No project', () => {
+  beforeEach(() => {
+    request.mockReset()
+    usePendingSession.setState({ pending: null })
+    useSessionsStore.setState({ byId: {} })
+  })
+
+  it("starts there when asked, or when the selected folder is a scratch session's", () => {
+    useViewStore.setState({ main: { kind: 'home' }, projectPath: '/repo' })
+    newSession(null, true)
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', noProject: true },
+      projectPath: '/repo',
+    })
+
+    const scratch = { id: 'x1', projectPath: '/data/scratch/a', scratch: true } as SessionSummary
+    useSessionsStore.setState({ byId: { x1: scratch } })
+    useViewStore.setState({
+      main: { kind: 'session', sessionId: 'x1' },
+      projectPath: scratch.projectPath,
+    })
+    newSession()
+    expect(useViewStore.getState().main).toMatchObject({ kind: 'new', noProject: true })
+  })
+
+  it('switches between No project and a project', () => {
+    useViewStore.setState({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/repo',
+    })
+    chooseNewSessionProject(null)
+    expect(useViewStore.getState()).toMatchObject({
+      main: { noProject: true },
+      projectPath: '/repo',
+    })
+    newSession()
+    expect(useViewStore.getState().main).toMatchObject({ noProject: true })
+    chooseNewSessionProject('/other')
+    expect(useViewStore.getState()).toMatchObject({
+      main: { noProject: false },
+      projectPath: '/other',
+    })
+  })
+
+  it('creates the session without a folder and shows it in the one the host made', async () => {
+    useViewStore.setState({
+      main: { kind: 'new', agentId: 'codex', noProject: true },
+      projectPath: '/repo',
+    })
+    const made = {
+      id: 'x2',
+      projectPath: '/data/scratch/b',
+      scratch: true,
+      agentId: 'codex',
+      status: 'ready',
+    } as SessionSummary
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? made : undefined,
+    )
+    const started = createSession('codex', null)
+    expect(usePendingSession.getState().pending).toMatchObject({ projectPath: null })
+    expect(useViewStore.getState().projectPath).toBe('/repo')
+    await started
+    expect(request).toHaveBeenCalledWith('sessions.create', { agentId: 'codex', projectPath: null })
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'session', sessionId: 'x2' },
+      projectPath: '/data/scratch/b',
     })
   })
 })
@@ -93,7 +167,10 @@ describe('createSession with a first message', () => {
     request.mockReset()
     usePendingSession.setState({ pending: null })
     useSessionsStore.setState({ byId: {} })
-    useViewStore.setState({ main: { kind: 'new', agentId: 'codex' }, projectPath: '/repo' })
+    useViewStore.setState({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/repo',
+    })
     writeDraft(NEW_SESSION_DRAFT, 'Fix the build')
   })
 

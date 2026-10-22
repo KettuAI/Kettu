@@ -40,15 +40,21 @@ import { isMod } from '@renderer/lib/platform'
 import { agentName, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { useViewStore } from '@renderer/stores/view'
+import { chooseNewSessionProject, useViewStore } from '@renderer/stores/view'
 import { flushDraft, NEW_SESSION_DRAFT, readDraft, writeDraft } from './composer/drafts'
 import { nameHints } from './project-names'
 
 /**
- * The New session screen: a composer with the project and the agent to start in. The session is
- * created on the first send, which also sends the message.
+ * The New session screen: a composer with the project, or No project, and the agent to start in.
+ * The session is created on the first send, which also sends the message.
  */
-export function NewSessionView({ project }: { project: Project | null }) {
+export function NewSessionView({
+  project,
+  noProject = false,
+}: {
+  project: Project | null
+  noProject?: boolean
+}) {
   const chosenId = useViewStore((s) => (s.main.kind === 'new' ? s.main.agentId : null))
   const installed = useAgentsStore((s) => {
     const status = chosenId ? s.byId[chosenId] : undefined
@@ -56,7 +62,7 @@ export function NewSessionView({ project }: { project: Project | null }) {
   })
   const agentId = installed ? chosenId : null
   const name = agentId ? agentName(agentId) : null
-  const usable = !!project && !project.missing
+  const usable = noProject || (!!project && !project.missing)
 
   // The agent starts while the message is written; the first send then waits for the session only.
   useEffect(() => {
@@ -64,8 +70,8 @@ export function NewSessionView({ project }: { project: Project | null }) {
   }, [agentId])
 
   let line
-  if (!project) line = 'Choose a project to work in'
-  else if (project.missing) line = `${project.name} no longer exists`
+  if (!project && !noProject) line = 'Choose a project to work in'
+  else if (project?.missing) line = `${project.name} no longer exists`
   else if (!name) line = 'Choose an agent for this session'
   else line = `What should ${name} work on?`
 
@@ -87,10 +93,11 @@ export function NewSessionView({ project }: { project: Project | null }) {
         <DraftComposer
           agentId={agentId}
           agentName={name}
-          projectPath={usable ? project.path : null}
+          ready={usable}
+          projectPath={noProject ? null : (project?.path ?? null)}
         />
         <div className="flex h-row items-center gap-0.5 px-1">
-          <ProjectMenu project={project} />
+          <ProjectMenu project={noProject ? null : project} noProject={noProject} />
           <AgentMenu agentId={agentId} />
         </div>
       </div>
@@ -101,16 +108,20 @@ export function NewSessionView({ project }: { project: Project | null }) {
 function DraftComposer({
   agentId,
   agentName,
+  ready,
   projectPath,
 }: {
   agentId: AgentId | null
   agentName: string | null
+  /** Whether a usable project, or No project, is chosen. */
+  ready: boolean
+  /** null: No project. */
   projectPath: string | null
 }) {
   const [text, setText] = useState(() => readDraft(NEW_SESSION_DRAFT))
   const textarea = useRef<HTMLTextAreaElement>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
-  const canSend = !!agentId && !!projectPath && text.trim().length > 0
+  const canSend = !!agentId && ready && text.trim().length > 0
 
   useEffect(() => {
     textarea.current?.focus()
@@ -192,19 +203,20 @@ function DraftComposer({
   )
 }
 
-// The value of the Open project… item, which no project's path can take.
+// The values of the No project and Open project… items, which no project's path can take.
+const NO_PROJECT = '\0no-project'
 const OPEN_PROJECT = '\0open-project'
 
 interface ProjectGroup {
-  value: 'recent' | 'open'
+  value: 'none' | 'recent' | 'open'
   items: string[]
 }
 
 /**
- * The projects by name, most recently opened first, with a search field over them and Open
- * project… last. The items are paths.
+ * No project, then the projects by name, most recently opened first, with a search field over
+ * them and Open project… last. The items are paths.
  */
-function ProjectMenu({ project }: { project: Project | null }) {
+function ProjectMenu({ project, noProject }: { project: Project | null; noProject: boolean }) {
   const projects = useProjectsStore((s) => s.projects)
   const [error, setError] = useState<string | null>(null)
   const { contains } = useComboboxFilter()
@@ -212,17 +224,19 @@ function ProjectMenu({ project }: { project: Project | null }) {
   const hints = useMemo(() => nameHints(projects.map((p) => p.path)), [projects])
   const groups = useMemo<ProjectGroup[]>(
     () => [
+      { value: 'none', items: [NO_PROJECT] },
       { value: 'recent', items: projects.map((p) => p.path) },
       { value: 'open', items: [OPEN_PROJECT] },
     ],
     [projects],
   )
-  const choose = (projectPath: string) => useViewStore.setState({ projectPath })
+  const label = (value: string) =>
+    value === NO_PROJECT ? 'No project' : (byPath.get(value)?.name ?? value)
   const open = async () => {
     setError(null)
     try {
       const path = await addProjectFromDialog()
-      if (path) choose(path)
+      if (path) chooseNewSessionProject(path)
     } catch (e) {
       setError(errorMessage(e))
     }
@@ -232,15 +246,15 @@ function ProjectMenu({ project }: { project: Project | null }) {
     <>
       <Combobox
         items={groups}
-        value={project?.path ?? null}
+        value={noProject ? NO_PROJECT : (project?.path ?? null)}
         onValueChange={(value: string | null) => {
           if (value === OPEN_PROJECT) void open()
-          else if (value) choose(value)
+          else if (value === NO_PROJECT) chooseNewSessionProject(null)
+          else if (value) chooseNewSessionProject(value)
         }}
-        itemToStringLabel={(path: string) => byPath.get(path)?.name ?? path}
-        filter={(path: string, query: string) =>
-          path === OPEN_PROJECT ||
-          contains(`${byPath.get(path)?.name ?? path} ${hints.get(path) ?? ''}`, query)
+        itemToStringLabel={label}
+        filter={(value: string, query: string) =>
+          value === OPEN_PROJECT || contains(`${label(value)} ${hints.get(value) ?? ''}`, query)
         }
       >
         <ComboboxTrigger
@@ -255,7 +269,9 @@ function ProjectMenu({ project }: { project: Project | null }) {
           }
         >
           <FolderIcon data-icon="inline-start" />
-          <span className="truncate text-foreground">{project?.name ?? 'Choose a project'}</span>
+          <span className="truncate text-foreground">
+            {noProject ? 'No project' : (project?.name ?? 'Choose a project')}
+          </span>
         </ComboboxTrigger>
         <ComboboxContent side="top" sideOffset={6} className="max-w-80">
           <ComboboxInput
@@ -266,8 +282,19 @@ function ProjectMenu({ project }: { project: Project | null }) {
           />
           <ComboboxList className="max-h-none overflow-y-visible">
             {(group: ProjectGroup, index: number) =>
-              group.value === 'recent' ? (
+              group.value === 'none' ? (
                 <ComboboxGroup key={group.value} items={group.items}>
+                  <ComboboxCollection>
+                    {(value: string) => (
+                      <ComboboxItem key={value} value={value}>
+                        No project
+                      </ComboboxItem>
+                    )}
+                  </ComboboxCollection>
+                </ComboboxGroup>
+              ) : group.value === 'recent' ? (
+                <ComboboxGroup key={group.value} items={group.items}>
+                  {index > 0 && <ComboboxSeparator />}
                   <ComboboxLabel>Recent</ComboboxLabel>
                   {/* Only the projects scroll, leaving room for the search field and Open project… */}
                   <div className="relative -mx-1.5 max-h-[min(--spacing(72),calc(var(--available-height)---spacing(28)))] scroll-fade-y overflow-y-auto overscroll-contain px-1.5">

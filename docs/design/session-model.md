@@ -315,13 +315,23 @@ When an agent process exits, its live sessions become `disconnected` and keep th
 These details are settled by the implementation in `src/agent-host/sessions.ts`:
 
 - **Live and closed**: a session is live while the host holds its thread. A session that is only in the index reports `status: 'closed'`, and its snapshot has the stored title and no entries; `sessions.open` makes it live with `session/load`, or `session/resume` with the notice above.
-- **Create**: `sessions.create` sends the session's summary with `starting` at once, and resolves when `session/new` succeeds. When it fails with `auth_required`, it resolves anyway, with the session live in `auth_required` but not yet in the index; signing in, or `sessions.retry`, runs `session/new` again. Any other failure rejects the request and sends `session.removed`. Creating a session also adds its folder to the projects.
+- **Create**: `sessions.create` sends the session's summary with `starting` at once, and resolves when `session/new` succeeds. When it fails with `auth_required`, it resolves anyway, with the session live in `auth_required` but not yet in the index; signing in, or `sessions.retry`, runs `session/new` again. Any other failure rejects the request and sends `session.removed`. Creating a session also adds its folder to the projects, unless the folder is a [scratch folder](#sessions-without-a-project).
 - **Open**: `sessions.open` waits for the load or resume, so its snapshot already holds the replay. A renderer watches first, so it also receives the replay's patches. When the agent cannot start, or the load fails, the session stays live in `failed` (or `auth_required`) and the snapshot shows it, for **Retry**.
 - **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in, `session/load` for a failed load or resume, and for a `disconnected` session it restarts the agent, whose restart resumes it. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
 - **Unread**: `sessions.watch`, `sessions.unwatch`, and a turn ending while a port watches set `lastViewedAt`. A turn ending with no port watching sets `unread`. After a restart a session is unread when `updatedAt` is later than `lastViewedAt`; a session never viewed (`lastViewedAt: null`) is not.
 - **Attention** is `permission` while a request is pending, then `error` for a `failed` session or a set `error`, then `unread`.
 - **Fork**: `sessions.fork` takes a top-level session that is `ready` and calls `session/fork` (ACP's unstable schema, only when `sessionCapabilities.fork` is advertised). The new session is saved at once, with the source's title, config and usage, and shows a copy of the source's thread without its subagent cards, whose sub-sessions stay with the source; its next ids continue after the copied ones. A later open replays the fork's own history from the agent.
 - **Sequence numbers** continue across a close and a reopen, so a port still holding an old replica sees a gap and asks for a snapshot instead of mixing two runs.
+
+### Sessions without a project
+
+Some work needs an agent but none of your folders, so New session offers **No project**, as the reference offers **No folder**. An ACP session always has a working directory (`cwd` in `session/new`), so each such session gets a scratch folder of its own, as the reference does (observed 2026-10-21: an empty `scratch-<date>-<6 hex>` folder per session under its data folder):
+
+- `sessions.create` with `projectPath: null` makes an empty folder, `<userData>/scratch/scratch-<YYYY-MM-DD>-<6 hex>` (mode `0700`), and starts the session there. The folder is not added to the projects.
+- A session is a scratch session when its folder is inside `<userData>/scratch`, and its summary says so with `scratch: true`. The index stores the path only, as for any session.
+- Its sub-sessions and forks share its folder, as sub-sessions share their parent's project.
+- The folder serves git, the Files pane and the terminal as a project's folder does: git finds no repository, the Files pane shows what the agent wrote there, and the terminal opens in it, since the host adds the scratch folders of its sessions to the folders it relays to the terminal host (`host:projects`).
+- Deleting the session leaves its folder, which may hold the agent's work; nothing removes scratch folders.
 
 ### Titles
 

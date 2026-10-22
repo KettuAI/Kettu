@@ -34,6 +34,11 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
   },
 }))
 
+/** Whether a folder is the scratch folder of a session started with No project. */
+export function isScratchFolder(byId: Record<string, SessionSummary>, path: string): boolean {
+  return Object.values(byId).some((s) => s.scratch && s.projectPath === path)
+}
+
 export interface SessionNode {
   summary: SessionSummary
   children: SessionNode[]
@@ -43,12 +48,17 @@ export interface SessionNode {
   running: boolean
 }
 
-/** The project's sessions as a tree, newest first, with attention summed up from descendants. */
+/**
+ * The project's sessions as a tree, newest first, with attention summed up from descendants;
+ * null for the sessions started with No project, across their scratch folders.
+ */
 export function sessionTree(
   byId: Record<string, SessionSummary>,
-  projectPath: string,
+  projectPath: string | null,
 ): SessionNode[] {
-  const inProject = Object.values(byId).filter((s) => s.projectPath === projectPath)
+  const inProject = Object.values(byId).filter((s) =>
+    projectPath === null ? s.scratch : s.projectPath === projectPath,
+  )
   const children = new Map<string, SessionSummary[]>()
   const roots: SessionSummary[] = []
   for (const s of inProject) {

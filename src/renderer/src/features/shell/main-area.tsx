@@ -9,12 +9,12 @@ import { PendingSessionView } from '@renderer/features/session/pending-session'
 import { SessionView } from '@renderer/features/session/session-view'
 import { showProject } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useViewStore } from '@renderer/stores/view'
 
 /**
  * What the main area shows: Welcome, a project's home, New session, a session being created, or a
- * session.
+ * session, in a project or in a scratch folder.
  */
 export function MainArea() {
   const projects = useProjectsStore((s) => s.projects)
@@ -23,14 +23,34 @@ export function MainArea() {
   const main = useViewStore((s) => s.main)
   const pending = usePendingSession((s) => s.pending)
   const sessionExists = useSessionsStore((s) => main.kind === 'session' && !!s.byId[main.sessionId])
+  // A session started with No project, or one being created there, shows in its scratch folder.
+  const scratch = useSessionsStore((s) => {
+    const path =
+      pending?.projectPath ??
+      (!pending && main.kind === 'session' ? s.byId[main.sessionId]?.projectPath : null)
+    return path && isScratchFolder(s.byId, path) ? path : null
+  })
 
   const project = projects.find((p) => p.path === selected) ?? projects[0] ?? null
-  const projectPath = project?.path ?? null
+  const projectPath = scratch ?? project?.path ?? null
 
   useEffect(() => {
     showProject(projectPath)
   }, [projectPath])
 
+  if (pending && pending.projectPath === null) return <PendingSessionView pending={pending} />
+  if (main.kind === 'new' && main.noProject) return <NewSessionView project={null} noProject />
+  if (scratch) {
+    return (
+      <SidePanelArea projectPath={scratch}>
+        {pending ? (
+          <PendingSessionView pending={pending} />
+        ) : (
+          main.kind === 'session' && <SessionView key={main.sessionId} sessionId={main.sessionId} />
+        )}
+      </SidePanelArea>
+    )
+  }
   // New session asks for no project; without one, it offers to open one.
   if (loaded && !project && main.kind === 'new') return <NewSessionView project={null} />
   if (loaded && !project) return <Welcome />

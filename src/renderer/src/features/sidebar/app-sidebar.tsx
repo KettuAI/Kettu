@@ -23,7 +23,7 @@ import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { sessionTree, useSessionsStore } from '@renderer/stores/sessions'
-import { openProjectHome, useViewStore } from '@renderer/stores/view'
+import { NO_PROJECT_GROUP, openProjectHome, useViewStore } from '@renderer/stores/view'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
 
@@ -88,12 +88,17 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
-          ) : projects.length === 0 ? (
-            <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
-              Projects you open appear here.
-            </p>
           ) : (
-            projects.map((project) => <ProjectGroup key={project.path} project={project} />)
+            <>
+              {projects.length === 0 ? (
+                <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
+                  Projects you open appear here.
+                </p>
+              ) : (
+                projects.map((project) => <ProjectGroup key={project.path} project={project} />)
+              )}
+              <ProjectGroup project={null} />
+            </>
           )}
         </SidebarGroup>
       </SidebarContent>
@@ -137,24 +142,32 @@ export function NavRow({
   )
 }
 
-function ProjectGroup({ project }: { project: Project }) {
-  const open = useViewStore((s) => !s.collapsedProjects[project.path])
+/** A project's sessions, or with a null project those started with No project, if any. */
+function ProjectGroup({ project }: { project: Project | null }) {
+  const key = project?.path ?? NO_PROJECT_GROUP
+  const name = project?.name ?? 'No project'
+  const open = useViewStore((s) => !s.collapsedProjects[key])
   const current = useViewStore(
-    (s) => s.projectPath === project.path && s.main.kind === 'home' && !s.settings.open,
+    (s) =>
+      !!project && s.projectPath === project.path && s.main.kind === 'home' && !s.settings.open,
   )
   const summaries = useSessionsStore(
-    useShallow((s) => Object.values(s.byId).filter((x) => x.projectPath === project.path)),
+    useShallow((s) =>
+      Object.values(s.byId).filter((x) => (project ? x.projectPath === project.path : x.scratch)),
+    ),
   )
+  const projectPath = project?.path ?? null
   const tree = useMemo(
-    () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), project.path),
-    [summaries, project.path],
+    () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath),
+    [summaries, projectPath],
   )
+  if (!project && summaries.length === 0) return null
 
   const toggle = () =>
     useViewStore.setState((s) => {
       const collapsedProjects = { ...s.collapsedProjects }
-      if (collapsedProjects[project.path]) delete collapsedProjects[project.path]
-      else collapsedProjects[project.path] = true
+      if (collapsedProjects[key]) delete collapsedProjects[key]
+      else collapsedProjects[key] = true
       return { collapsedProjects }
     })
 
@@ -172,14 +185,15 @@ function ProjectGroup({ project }: { project: Project }) {
                 tabIndex={-1}
                 aria-expanded={open}
                 onClick={() => {
-                  if (current || !open) toggle()
-                  openProjectHome(project.path)
+                  // No project has no home, so its name only folds the group.
+                  if (current || !open || !project) toggle()
+                  if (project) openProjectHome(project.path)
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'ArrowRight' && !open) toggle()
                   else if (event.key === 'ArrowLeft' && open) toggle()
                 }}
-                className={cn('gap-1.5 font-medium', project.missing && 'text-muted-foreground')}
+                className={cn('gap-1.5 font-medium', project?.missing && 'text-muted-foreground')}
               />
             }
           >
@@ -197,30 +211,36 @@ function ProjectGroup({ project }: { project: Project }) {
                 <ChevronRightIcon strokeWidth={2} className="size-3!" />
               )}
             </span>
-            <span className="min-w-0 flex-1 truncate">{project.name}</span>
-            {project.missing && (
+            <span className="min-w-0 flex-1 truncate">{name}</span>
+            {project?.missing && (
               <span className="text-[11.5px] font-normal text-muted-foreground">Missing</span>
             )}
           </TooltipTrigger>
-          <TooltipContent side="right" className="max-w-sm font-mono break-all">
-            {project.path}
-          </TooltipContent>
+          {project ? (
+            <TooltipContent side="right" className="max-w-sm font-mono break-all">
+              {project.path}
+            </TooltipContent>
+          ) : (
+            <TooltipContent side="right">Each runs in a scratch folder of its own</TooltipContent>
+          )}
         </Tooltip>
-        {!project.missing && (
+        {!project?.missing && (
           <Tooltip>
             <TooltipTrigger
               render={
                 <SidebarMenuAction
                   showOnHover
-                  aria-label={`New session in ${project.name}`}
-                  onClick={() => newSession(project.path)}
+                  aria-label={project ? `New session in ${name}` : 'New session with No project'}
+                  onClick={() => newSession(projectPath, !project)}
                   className="top-1 text-muted-foreground [&>svg]:size-3.5"
                 />
               }
             >
               <PlusIcon />
             </TooltipTrigger>
-            <TooltipContent>New session in {project.name}</TooltipContent>
+            <TooltipContent>
+              {project ? `New session in ${name}` : 'New session with No project'}
+            </TooltipContent>
           </Tooltip>
         )}
       </div>

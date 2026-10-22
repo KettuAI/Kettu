@@ -8,7 +8,7 @@ import {
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
 import { openNewSession, openProjectHome, openSession, useViewStore } from '@renderer/stores/view'
@@ -17,7 +17,7 @@ import { create } from 'zustand'
 /** A session being created: shown in place of the thread until `session/new` answers. */
 export interface PendingSession {
   agentId: AgentId
-  projectPath: string
+  projectPath: string | null // null: No project, whose folder the host makes
   parentId: string | null
   /** The first message, from the New session screen, sent once the session exists. */
   prompt: string | null
@@ -41,19 +41,35 @@ export async function openProjectDialog(): Promise<void> {
   if (path) openProjectHome(path)
 }
 
-/** The New session screen, in the given project or the selected one, with the default agent. */
-export function newSession(projectPath: string | null = null): void {
-  openNewSession(projectPath, useSettingsStore.getState().settings.general.defaultAgent)
+/**
+ * The New session screen, with the default agent, in the given project or the selected one; with
+ * No project when asked, or when the selected folder is a scratch session's.
+ */
+export function newSession(projectPath: string | null = null, noProject = false): void {
+  const selected = useViewStore.getState().projectPath
+  const inScratch =
+    projectPath === null &&
+    selected !== null &&
+    isScratchFolder(useSessionsStore.getState().byId, selected)
+  openNewSession(
+    projectPath,
+    useSettingsStore.getState().settings.general.defaultAgent,
+    noProject || inScratch,
+  )
 }
 
+/** Starts a session in the project, or with a null `projectPath` in a scratch folder. */
 export async function createSession(
   agentId: AgentId,
-  projectPath: string,
+  projectPath: string | null,
   parentId: string | null = null,
   prompt: string | null = null,
 ): Promise<void> {
   usePendingSession.setState({ pending: { agentId, projectPath, parentId, prompt, error: null } })
-  useViewStore.setState((s) => ({ projectPath, settings: { ...s.settings, open: false } }))
+  useViewStore.setState((s) => ({
+    projectPath: projectPath ?? s.projectPath,
+    settings: { ...s.settings, open: false },
+  }))
   preloadRenderers()
   try {
     const summary = await host('sessions.create', {
@@ -68,7 +84,7 @@ export async function createSession(
     const current = usePendingSession.getState().pending
     if (current?.agentId === agentId && current.projectPath === projectPath) {
       usePendingSession.setState({ pending: null })
-      openSession(summary.id, projectPath)
+      openSession(summary.id, summary.projectPath)
     }
   } catch (error) {
     usePendingSession.setState({

@@ -109,6 +109,7 @@ export interface SessionSummary {
   id: string
   agentId: AgentId
   projectPath: string
+  scratch: boolean // started with No project: projectPath is its own scratch folder
   title: string | null
   status: SessionStatus
   attention: SessionAttention
@@ -181,7 +182,8 @@ export interface HostContract {
   'projects.touch': { params: { path: string }; result: void }
   'sessions.list': { params: { projectPath?: string }; result: SessionSummary[] }
   'sessions.create': {
-    params: { agentId: AgentId; projectPath: string; parentId?: string }
+    // projectPath null: No project, in a new scratch folder.
+    params: { agentId: AgentId; projectPath: string | null; parentId?: string }
     result: SessionSummary
   }
   'sessions.import': {

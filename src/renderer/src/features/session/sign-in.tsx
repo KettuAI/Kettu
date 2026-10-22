@@ -27,7 +27,8 @@ export function SignIn({
   onRetry,
 }: {
   agentId: AgentId
-  projectPath: string
+  /** Where Sign in in terminal opens its terminal; null before a No project session has one. */
+  projectPath: string | null
   onRetry: () => void
 }) {
   const methods = useAgentsStore((s) => s.byId[agentId]?.authMethods ?? NO_METHODS)
@@ -96,20 +97,22 @@ export function SignIn({
                 <CopyButton text={method.command} label="Copy command" />
               </div>
               <div className="flex flex-wrap gap-1.5">
-                <Button
-                  size="compact"
-                  onClick={() =>
-                    emitAppEvent({
-                      kind: 'sign-in-terminal',
-                      projectPath,
-                      command: method.command!,
-                      agentId,
-                    })
-                  }
-                >
-                  <SquareTerminalIcon data-icon="inline-start" />
-                  Sign in in terminal
-                </Button>
+                {projectPath !== null && (
+                  <Button
+                    size="compact"
+                    onClick={() =>
+                      emitAppEvent({
+                        kind: 'sign-in-terminal',
+                        projectPath,
+                        command: method.command!,
+                        agentId,
+                      })
+                    }
+                  >
+                    <SquareTerminalIcon data-icon="inline-start" />
+                    Sign in in terminal
+                  </Button>
+                )}
                 <Button variant="outline" size="compact" onClick={onRetry}>
                   <RotateCwIcon data-icon="inline-start" />
                   I've signed in, retry

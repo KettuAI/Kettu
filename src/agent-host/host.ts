@@ -24,6 +24,7 @@ import { createExec, type ExecRunner } from './git/exec'
 import { pathKey } from './paths'
 import { Projects } from './projects'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
+import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
 import { projectsFile, sessionsFile } from './storage'
@@ -55,6 +56,7 @@ export class AgentHost {
   readonly diagnostics: Diagnostics
   readonly env: EnvironmentService
   readonly projects: Projects
+  readonly scratch: ScratchFolders
   readonly agents: AgentManager
   readonly sessions: SessionManager
   readonly hub: PortHub
@@ -67,6 +69,7 @@ export class AgentHost {
   /** Ports keeping a project's git status live, by path key. */
   private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
   private lastProcesses = '[]'
+  private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
 
   private constructor(private readonly options: HostOptions) {
@@ -88,6 +91,7 @@ export class AgentHost {
     this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
     this.files = new FilesService({ exec: this.execRunner.exec, platform })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
+    this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.agents = new AgentManager({
       catalog: buildCatalog(options.fakeAgentPath),
       platform,
@@ -109,14 +113,21 @@ export class AgentHost {
       platform,
       agents: this.agents,
       projects: this.projects,
+      scratch: this.scratch,
       file: sessionsFile(options.userDataPath, log),
       diagnostics: this.diagnostics,
       git: () => this.git,
       ...(options.sessionTimings ? { timings: options.sessionTimings } : {}),
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
-        summary: (summary) => this.hub.broadcast({ type: 'session.summary', summary }),
-        removed: (sessionId) => this.hub.broadcast({ type: 'session.removed', sessionId }),
+        summary: (summary) => {
+          this.hub.broadcast({ type: 'session.summary', summary })
+          if (summary.scratch) this.sendFolders()
+        },
+        removed: (sessionId) => {
+          this.hub.broadcast({ type: 'session.removed', sessionId })
+          this.sendFolders()
+        },
         attention: (sessionId, kind, title, body) =>
           options.send({ type: 'host:attention', sessionId, kind, title, body }),
         badge: (count) => options.send({ type: 'host:badge', count }),
@@ -130,7 +141,7 @@ export class AgentHost {
     })
     this.projects.onChange((projects) => {
       this.broadcast({ type: 'projects.changed', projects })
-      options.send({ type: 'host:projects', paths: projects.map((p) => p.path) })
+      this.sendFolders()
     })
     this.env.onChange((info) => {
       this.broadcast({ type: 'environment.changed', info })
@@ -149,8 +160,8 @@ export class AgentHost {
   /** Loads the state, answers `host:ready`, and resolves the environment in the background. */
   static async start(options: HostOptions): Promise<AgentHost> {
     const host = new AgentHost(options)
-    await Promise.all([host.projects.load(), host.sessions.load()])
-    options.send({ type: 'host:projects', paths: host.projects.paths() })
+    await Promise.all([host.scratch.ready(), host.projects.load(), host.sessions.load()])
+    host.sendFolders()
     options.send({ type: 'host:ready' })
     void host.agents.detectAll()
     return host
@@ -169,6 +180,15 @@ export class AgentHost {
       git.onBranchPullRequests((projectPath) => this.sessions.pullRequestsChanged(projectPath)),
       git.onSessionEvents((sessionId, events) => this.sessions.gitEvents(sessionId, events)),
     ]
+  }
+
+  /** The folders terminals may open in, sent when they change: the projects and scratch folders. */
+  private sendFolders(): void {
+    const paths = [...this.projects.paths(), ...this.sessions.scratchFolders()]
+    const key = paths.join('\n')
+    if (key === this.sentFolders) return
+    this.sentFolders = key
+    this.options.send({ type: 'host:projects', paths })
   }
 
   private broadcast(event: HostEvent): void {
@@ -282,10 +302,13 @@ export class AgentHost {
     }
   }
 
-  /** Runs a file request for a registered project, once the environment git needs is resolved. */
+  /**
+   * Runs a file request for a registered project or a scratch folder, once the environment git
+   * needs is resolved.
+   */
   private async filesCall<T>(projectPath: string, run: (root: string) => Promise<T>): Promise<T> {
     const canonical = await this.projects.resolveDirectory(projectPath)
-    this.projects.match(canonical)
+    if (!this.scratch.contains(canonical)) this.projects.match(canonical)
     await this.env.ready()
     return run(canonical)
   }

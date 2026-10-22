@@ -55,6 +55,7 @@ import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
 import { hasReports, runReport } from './reports'
+import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
 
 export interface SessionTimings {
@@ -83,6 +84,7 @@ export interface SessionManagerDeps {
   platform: Platform
   agents: AgentManager
   projects: Projects
+  scratch: ScratchFolders
   file: JsonFile<SessionsFile>
   diagnostics: Diagnostics
   git(): GitServiceApi | null
@@ -314,6 +316,7 @@ export class SessionManager {
       id: record.id,
       agentId: record.agentId,
       projectPath: record.projectPath,
+      scratch: this.deps.scratch.contains(record.projectPath),
       title: session ? session.title : record.title,
       status,
       attention,
@@ -339,6 +342,17 @@ export class SessionManager {
         out.push(summary)
     }
     return out.sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
+  /** The scratch folders sessions run in, live or indexed, so terminals may open there. */
+  scratchFolders(): string[] {
+    const { platform, scratch } = this.deps
+    const folders = new Map<string, string>()
+    const records = [...this.records.values(), ...[...this.live.values()].map((l) => l.record)]
+    for (const { projectPath } of records) {
+      if (scratch.contains(projectPath)) folders.set(pathKey(projectPath, platform), projectPath)
+    }
+    return [...folders.values()]
   }
 
   /** Sends the summary to every port if it changed, after the session's pending patches. */
@@ -763,21 +777,28 @@ export class SessionManager {
 
   // Creating, opening and recovering.
 
+  /** Without a `projectPath`, the session gets a scratch folder of its own. */
   async create(params: {
     agentId: AgentId
-    projectPath: string
+    projectPath: string | null
     parentId?: string
   }): Promise<SessionSummary> {
-    const { agents, projects } = this.deps
+    const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
-    const projectPath = await projects.resolveDirectory(params.projectPath)
+    if (params.projectPath === null && params.parentId !== undefined) {
+      throw invalidParams('A sub-session belongs to the project of its parent')
+    }
+    const projectPath =
+      params.projectPath === null
+        ? await scratch.create()
+        : await projects.resolveDirectory(params.projectPath)
     if (params.parentId !== undefined) {
       const parent = this.recordOf(params.parentId)
       if (!samePath(parent.projectPath, projectPath, this.deps.platform)) {
         throw invalidParams('A sub-session belongs to the project of its parent')
       }
     }
-    await projects.add(projectPath)
+    if (!scratch.contains(projectPath)) await projects.add(projectPath)
     const now = this.now()
     const record: SessionRecord = {
       id: randomUUID(),

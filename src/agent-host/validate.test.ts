@@ -52,6 +52,11 @@ describe('createValidators', () => {
     expect(
       posix['sessions.create']({ agentId: 'codex', projectPath: '/p', parentId: undefined }),
     ).toEqual({ agentId: 'codex', projectPath: '/p' })
+    expect(posix['sessions.create']({ agentId: 'codex', projectPath: null })).toEqual({
+      agentId: 'codex',
+      projectPath: null,
+    })
+    rejects(() => posix['sessions.create']({ agentId: 'codex' }))
     expect(
       posix['agents.listSessions']({ agentId: 'codex', projectPath: '/p', cursor: '10' }),
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
