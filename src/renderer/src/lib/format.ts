@@ -79,7 +79,7 @@ export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   return weekly ? i18n.t('planWindow.weeklyOf', { model: weekly[1] }) : limit.label
 }
 
-/** Token counts everywhere: "980", "41K", "1.2M", "41.7B"; "4.1万" and "2.7亿" in Chinese. */
+/** Token counts everywhere: "980", "41K", "1.2M", "41.7B"; in Chinese, in its own wan and yi. */
 export function tokens(n: number): string {
   return format().compact.format(n)
 }

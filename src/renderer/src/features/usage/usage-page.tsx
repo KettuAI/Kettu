@@ -390,7 +390,7 @@ function Dashboard({ page }: { page: PageData }) {
   )
 }
 
-/** "Sep 1 – Oct 22" for [from, to), or one day alone. */
+/** "Sep 1 - Oct 22" for [from, to), or one day alone. */
 function useRangeText(): (from: number, to: number) => string {
   const { i18n } = useTranslation('usage')
   return useCallback(
