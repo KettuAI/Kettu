@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -80,6 +81,18 @@ function agentId(value: unknown): AgentId {
     throw new Error(`Unknown agent "${String(value)}"`)
   }
   return value as AgentId
+}
+
+const SHOW_ITEM_MAX_CHARS = 4_096
+
+/** A path to reveal in the file manager: untrusted input from the renderer. */
+function absolutePath(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > SHOW_ITEM_MAX_CHARS) {
+    throw new Error(`A path must be a string of 1 to ${SHOW_ITEM_MAX_CHARS} characters`)
+  }
+  if (value.includes('\0')) throw new Error('A path must not contain a NUL character')
+  if (!isAbsolute(value)) throw new Error('A path must be absolute')
+  return value
 }
 
 async function chooseProgram(window: BrowserWindow | null, title: string): Promise<string | null> {
@@ -170,6 +183,11 @@ export function registerIpcHandlers({
   handle('shell:show-data-folder', 0, async () => {
     const error = await shell.openPath(app.getPath('userData'))
     if (error) throw new Error(error)
+  })
+
+  // Revealing selects the item in the file manager and never runs it, unlike shell.openPath.
+  handle('shell:show-item', 1, (_, target) => {
+    shell.showItemInFolder(absolutePath(target))
   })
 
   handle('update:get-status', 0, () => updater.getStatus())

@@ -86,6 +86,19 @@ describe('the port envelope', () => {
       code: 'agent_unavailable',
     })
   })
+
+  it('tells where an agent keeps its configuration, without needing the agent to run', async () => {
+    const { port } = await setup()
+    expect(await port.request('agents.details', { agentId: 'fake-agent' })).toEqual({
+      cliVersion: null,
+      config: [],
+    })
+    const codex = await port.request('agents.details', { agentId: 'codex' })
+    expect(codex.config.map((item) => item.id)).toEqual(['folder', 'settings', 'instructions'])
+    await expect(
+      port.request('agents.details', { agentId: 'gemini' as 'codex' }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+  })
 })
 
 describe('main messages', () => {

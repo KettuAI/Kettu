@@ -335,6 +335,7 @@ export class AgentHost {
         await agents.ensureReady(agentId)
       },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
+      'agents.details': ({ agentId }) => agents.details(agentId),
       'agents.listSessions': ({ agentId, projectPath, cursor }) =>
         sessions.listImportable(agentId, projectPath, cursor ?? null),
       'projects.list': () => {

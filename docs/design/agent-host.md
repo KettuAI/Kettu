@@ -252,6 +252,28 @@ ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The 
 - Claude Code and Codex also push `_auth/status_update`, an adapter extension that names the account and plan ("Claude Max", "ChatGPT Plus"). It sets the sign-in state without waiting for a failed request, and the plan label heads the [plan limits](./session-model.md#plan-limits).
 - OverBench never reads, stores or forwards credentials.
 
+## Agent configuration
+
+Settings › Agents shows, in its list and on each agent's page, which CLI version its adapter runs and where the agent reads its own configuration, with a button to reveal each place in the system file manager. `agents.details` ([host protocol](./host-protocol.md#requests)) answers when they show; `src/agent-host/agent-details.ts` does the work. OverBench never reads or changes these files. It only checks whether they exist, and main reveals one with `shell:show-item`, which selects it in the file manager and never opens it.
+
+| Agent         | Folder                                                | Settings                                                                                          | Instructions      |
+| ------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------- |
+| `claude-code` | `$CLAUDE_CONFIG_DIR`, else `~/.claude`                | `settings.json` in the folder                                                                     | `CLAUDE.md` in it |
+| `codex`       | `$CODEX_HOME`, else `~/.codex`                        | `config.toml` in the folder                                                                       | `AGENTS.md` in it |
+| `opencode`    | `opencode` in `$XDG_CONFIG_HOME`, else in `~/.config` | `$OPENCODE_CONFIG`, else `opencode.json` or `opencode.jsonc` in the folder, the first that exists | `AGENTS.md` in it |
+| `fake-agent`  | none                                                  | none                                                                                              | none              |
+
+- **Variables** come from the [resolved agent environment](#resolving-the-environment), not from the host's own, so they match what the agent sees. A blank value counts as unset, and a relative one is taken from the home directory, where agents are spawned. Each item's `env` names the variable that set that exact path, so a moved folder says so while the files inside it, which only follow the folder, carry none; `OPENCODE_CONFIG` names the settings file itself.
+- **Existence** is one `stat` per place, following symbolic links: the folder must be a directory and the others files. A missing path, or one below a file, is `exists: false`. Any other error also gives `exists: false` and a warning in the host log. For OpenCode, when neither settings file exists the item shows `opencode.json`.
+- **CLI version** is read from the installed adapter's dependencies, never by running the CLI: `<userData>/agents/<agentId>/<version>/node_modules/` plus the file below, for the adapter version in use: the pinned one, or the fallback until the pinned one installs, as for diagnostics. The answer is `null` while no adapter is installed, which is normal before the agent's first start, and for an agent with no bundled CLI; a file that does not parse or lacks the field is also `null`, with a warning in the host log. OpenCode is its own CLI, so its version is the `version` of its status.
+
+  | Agent         | File                                          | Field               | What it names                                                   |
+  | ------------- | --------------------------------------------- | ------------------- | --------------------------------------------------------------- |
+  | `claude-code` | `@anthropic-ai/claude-agent-sdk/package.json` | `claudeCodeVersion` | The Claude Code CLI that the adapter's SDK bundles              |
+  | `codex`       | `@openai/codex/package.json`                  | `version`           | The CLI that codex-acp starts from `@openai/codex/bin/codex.js` |
+
+  Checked on 2026-10-21 with claude-agent-acp 0.94.0 (SDK 0.3.303, Claude Code 2.1.303) and codex-acp 2.2.2 (Codex 0.160.1).
+
 ## Diagnostics
 
 - For each agent, the host keeps the last 2,000 ACP messages (direction, time, method, size and the full JSON) in a ring buffer, plus the stderr ring buffer and process events (start, exit code, restarts).

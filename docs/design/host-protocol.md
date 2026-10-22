@@ -71,6 +71,7 @@ interface HostError {
 | `agents.reinstall`         | `{ agentId }`                            | none                                            | Stops the agent, deletes the installed adapter and installs it again; `busy` while a session uses the agent ([installing adapters](./agent-host.md#installing-adapters)) |
 | `agents.start`             | `{ agentId }`                            | none                                            | Starts the agent ahead of a session; rejects with `agent_unavailable` when it cannot run                                                                                 |
 | `agents.refreshLimits`     | `{ agentId }`                            | none                                            | Reads the plan limits from the agent's `/usage`, at most once a minute ([plan limits](./session-model.md#plan-limits))                                                   |
+| `agents.details`           | `{ agentId }`                            | `AgentDetails`                                  | The agent's own CLI version and where it reads its configuration, for its page in Settings › Agents ([agent configuration](./agent-host.md#agent-configuration))         |
 | `agents.listSessions`      | `{ agentId, projectPath, cursor? }`      | `{ sessions: ImportableSession[], nextCursor }` | The agent's own `session/list`, for import                                                                                                                               |
 | `projects.list`            | none                                     | `Project[]`                                     |                                                                                                                                                                          |
 | `projects.add`             | `{ path }`                               | `Project`                                       | The path comes from main's folder picker                                                                                                                                 |
@@ -153,6 +154,18 @@ interface AgentStatus {
   progress: string[] // latest npm output or stderr lines while installing or starting
 }
 
+interface AgentDetails {
+  cliVersion: string | null // the CLI an adapter runs, such as Claude Code inside its ACP adapter; null for the others
+  config: AgentConfigItem[] // in the order Settings lists them: folder, settings, instructions
+}
+
+interface AgentConfigItem {
+  id: 'folder' | 'settings' | 'instructions'
+  path: string
+  exists: boolean
+  env: string | null // the variable that set this path, such as CLAUDE_CONFIG_DIR; null at the default
+}
+
 interface Project {
   path: string
   name: string
@@ -171,6 +184,7 @@ interface ImportableSession {
 - `state` follows the [agent process lifecycle](./agent-host.md#agent-process-lifecycle), plus the detection results that come before it.
 - Stable ACP v1 has no way to ask whether an agent is signed in, so `signIn` starts as `unknown`. It becomes `required` when a request fails with `auth_required`, and `signed-in` after `authenticate` or any session request succeeds. Agents that push `_auth/status_update` (Claude Code and Codex) set it directly, before any session exists ([plan limits](./session-model.md#plan-limits)).
 - For `terminal` methods, `command` is the full command to show, already quoted for the user's platform.
+- `agents.details` is read when the Agents list or an agent's page shows, and is not pushed: the host looks at the disk for each request and answers without starting the agent. It never returns the contents of the configuration files. Unknown agents are `invalid_params`; the fake agent has no configuration, so its `config` is empty.
 
 ## Events
 

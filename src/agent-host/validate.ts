@@ -160,6 +160,7 @@ export function createValidators(platform: Platform): Validators {
     'agents.reinstall': agent,
     'agents.start': agent,
     'agents.refreshLimits': agent,
+    'agents.details': agent,
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)

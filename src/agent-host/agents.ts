@@ -7,6 +7,7 @@ import path from 'node:path'
 import type {
   AgentAccount,
   AgentAuthMethod,
+  AgentDetails,
   AgentState,
   AgentStatus,
   PlanLimit,
@@ -30,6 +31,7 @@ import {
   type InstalledAdapter,
   type InstallOptions,
 } from './adapter-install'
+import { readAgentDetails } from './agent-details'
 import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
 import {
   detectAgent,
@@ -794,6 +796,24 @@ export class AgentManager {
       slot.limits.set(limit.window, held ? { ...limit, state: before.state } : limit)
     }
     this.emit(slot)
+  }
+
+  /** Where the agent reads its configuration and which CLI its adapter runs, for its page. */
+  async details(agentId: AgentId): Promise<AgentDetails> {
+    const slot = this.slot(agentId)
+    await this.detectAll()
+    const { launch } = slot.def
+    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+    // The version in use, as for diagnostics: the pinned one, or the fallback until it installs.
+    const inUse = adapter && !adapter.installed ? adapter.fallback?.version : undefined
+    return readAgentDetails(agentId, {
+      getEnv: (name) => this.deps.env.get(name),
+      home: os.homedir(),
+      platform: this.deps.platform,
+      adaptersDir: this.deps.adaptersDir,
+      adapterVersion: launch.kind === 'package' ? (inUse ?? launch.version) : null,
+      log: (level, message) => this.deps.diagnostics.log(level, message),
+    })
   }
 
   authRequired(agentId: AgentId): void {

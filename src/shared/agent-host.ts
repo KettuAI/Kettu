@@ -85,6 +85,21 @@ export interface AgentStatus {
   }
 }
 
+/** An agent's page in Settings › Agents: what its status leaves out, read when the page opens. */
+export interface AgentDetails {
+  /** The CLI an adapter runs, such as Claude Code inside its ACP adapter; null for the others. */
+  cliVersion: string | null
+  config: AgentConfigItem[]
+}
+
+/** A place the agent reads its own configuration from, in the order Settings lists them. */
+export interface AgentConfigItem {
+  id: 'folder' | 'settings' | 'instructions'
+  path: string
+  exists: boolean
+  env: string | null // the variable that moved it, such as CLAUDE_CONFIG_DIR; null at the default
+}
+
 /** Where the agent environment came from, for Settings › Agents. */
 export interface EnvironmentInfo {
   source: 'pending' | 'login-shell' | 'inherited' | 'fallback'
@@ -172,6 +187,7 @@ export interface HostContract {
   'agents.reinstall': { params: { agentId: AgentId }; result: void }
   'agents.start': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
+  'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
   'agents.listSessions': {
     params: { agentId: AgentId; projectPath: string; cursor?: string }
     result: { sessions: ImportableSession[]; nextCursor: string | null }
@@ -244,6 +260,7 @@ export const HOST_METHODS = [
   'agents.reinstall',
   'agents.start',
   'agents.refreshLimits',
+  'agents.details',
   'agents.listSessions',
   'projects.list',
   'projects.add',

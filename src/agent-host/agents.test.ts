@@ -1,13 +1,14 @@
 // The agent lifecycle with the fake agent in-process: start, timeouts, restarts, idle stop.
 
-import { mkdir, mkdtemp, readdir } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { AgentStatus } from '@shared/agent-host'
+import type { AgentId } from '@shared/thread'
 import type { InstalledAdapter, InstallOptions } from './adapter-install'
 import { AgentManager, type AgentManagerDeps, type AgentTimings } from './agents'
-import { detectAgent, fakeAgent, type AgentDefinition } from './catalog'
+import { CLAUDE_CODE, detectAgent, fakeAgent, type AgentDefinition } from './catalog'
 import { Diagnostics } from './diagnostics'
 import type { Env } from './find-command'
 import { EnvironmentService } from './shell-env'
@@ -389,5 +390,89 @@ describe('AgentManager with an installed adapter', () => {
       message: 'Fake agent could not be installed. The install was stopped.',
     })
     expect(m.launcher.launches).toBe(0)
+  })
+})
+
+describe('details', () => {
+  it('reads the pinned adapter and the environment the agents see', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const sdk = path.join(
+      dir,
+      'claude-code',
+      '1.2.3',
+      'node_modules',
+      '@anthropic-ai',
+      'claude-agent-sdk',
+    )
+    await mkdir(sdk, { recursive: true })
+    await writeFile(
+      path.join(sdk, 'package.json'),
+      JSON.stringify({ claudeCodeVersion: '2.1.303' }),
+    )
+    const def: AgentDefinition = {
+      ...CLAUDE_CODE,
+      launch: { kind: 'package', package: 'adapter', version: '1.2.3' },
+    }
+    const m = manager({}, {}, { catalog: [def], adaptersDir: dir })
+    const configDir = path.join(dir, 'claude-config')
+    const before = process.env.CLAUDE_CONFIG_DIR
+    process.env.CLAUDE_CONFIG_DIR = configDir
+    try {
+      expect(await m.agents.details('claude-code')).toEqual({
+        cliVersion: '2.1.303',
+        config: [
+          { id: 'folder', path: configDir, exists: false, env: 'CLAUDE_CONFIG_DIR' },
+          { id: 'settings', path: path.join(configDir, 'settings.json'), exists: false, env: null },
+          { id: 'instructions', path: path.join(configDir, 'CLAUDE.md'), exists: false, env: null },
+        ],
+      })
+    } finally {
+      if (before === undefined) delete process.env.CLAUDE_CONFIG_DIR
+      else process.env.CLAUDE_CONFIG_DIR = before
+    }
+  })
+
+  it('reads the CLI of the fallback adapter while the pinned one is not installed', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const sdk = path.join(
+      dir,
+      'claude-code',
+      '1.0.0',
+      'node_modules',
+      '@anthropic-ai',
+      'claude-agent-sdk',
+    )
+    await mkdir(sdk, { recursive: true })
+    await writeFile(
+      path.join(sdk, 'package.json'),
+      JSON.stringify({ claudeCodeVersion: '2.1.200' }),
+    )
+    const def: AgentDefinition = {
+      ...CLAUDE_CODE,
+      launch: { kind: 'package', package: 'adapter', version: '1.2.3' },
+    }
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [def],
+        adaptersDir: dir,
+        detect: (d, ctx) =>
+          detectAgent(d, {
+            ...ctx,
+            node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
+            installed: async () => [{ version: '1.0.0', dir: '/a', entry: '/a/index.js' }],
+          }),
+      },
+    )
+    expect((await m.agents.details('claude-code')).cliVersion).toBe('2.1.200')
+  })
+
+  it('has no CLI version or configuration to show for the fake agent, and refuses unknown agents', async () => {
+    const m = manager()
+    expect(await m.agents.details('fake-agent')).toEqual({ cliVersion: null, config: [] })
+    await expect(m.agents.details('gemini' as AgentId)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
   })
 })
