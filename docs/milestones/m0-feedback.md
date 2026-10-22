@@ -44,6 +44,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 36  | The composer has no + menu, file or image attachments          | Composer       | Open         |
 | 37  | Icons look heavy; use thin line icons from a library           | Design system  | Open         |
 | 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Open         |
+| 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -505,3 +506,16 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - Conflicts: the open file reloads from disk today, which must not discard unsaved edits, and an agent may edit the same file meanwhile.
     - Whether the agent should be told about a user's edits, and how far editing goes: plain text with highlighting and save, or an editor with search and more.
   - **Where the rule goes**: [Interface: files](../design/ui.md#files) and the [host's project files](../design/agent-host.md#project-files), which both say read-only today.
+
+## 39. Terminal tabs cannot be renamed or reordered and look crude
+
+- **Reported**: 2026-10-22, with a screenshot of the terminal panel holding two tabs, both titled "zsh".
+- **Observed**: a tab's title always follows its foreground process, so two shells show the same name and cannot be told apart; the tabs keep the order in which they were opened; and the maintainer finds the tabs' look somewhat ugly.
+- **Expected**: tabs can be renamed and dragged into a new order, and the tab strip is redesigned to look better.
+- **Today**: [Interface: terminal](../design/ui.md#terminal) describes the tabs: 24 px high, the `SquareTerminal` icon and the foreground process as the title, the active tab raised like a segmented control's thumb, a hovered one on a flat fill, a close button, and **New terminal** after the last tab. `TerminalTab` in `src/renderer/src/features/terminal/terminal-panel.tsx` renders them from the terminal's `title`, which the host sets from the process or the shell ([Terminal](../design/terminal.md)); the user has no title of their own and no way to reorder. `@dnd-kit/react`, the one drag library the stack names, is a dependency already but nothing in `src` uses it yet.
+- **To settle when planning**:
+  - **Rename**: how it starts (double-click a tab, a context menu item, a key), editing in place with `Enter` to accept and `Esc` to cancel and no send of half-typed text during IME composition, and an empty name returning the tab to its automatic title. A renamed tab stops following the process, so where the process shows (a tooltip) needs deciding. Terminals do not survive a restart in M0, so whether the name needs saving at all follows from that.
+  - **Reorder**: sortable tabs through `@dnd-kit/react`, with the row that scrolls when the tabs overflow, keyboard reordering, a drag preview and drop motion that move only `transform`, and the order kept per project.
+  - **The design**: what makes the strip ugly was not itemised. In the screenshot the two labels are identical, the close button shows on the active tab only, the raised active tab sits against a flat inactive one, and **New terminal** floats apart from the tabs. A redesign should be drawn against the reference's tabs and checked in both themes, with the palette and icon decisions of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) and [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library) applied.
+  - A tab's context menu (rename, close and the like) is a candidate that was not asked for.
+  - The rule rewritten in [Interface: terminal](../design/ui.md#terminal) and [Terminal](../design/terminal.md).
