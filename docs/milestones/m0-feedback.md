@@ -64,9 +64,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 56  | The empty Files pane's hint is not centred                     | Side panel     | Fixed        |
 | 57  | A finished session leaves no mark, and the running dot is loud | Sidebar        | Fixed        |
 | 58  | Read aloud under replies is not wanted                         | Thread         | Fixed        |
-| 59  | The interface reads small and cannot be zoomed                 | Window         | Fixed        |
 | 59  | A reply that opens with a heading leaves a gap above it        | Markdown       | Fixed        |
 | 60  | Renaming a session goes through a dialog                       | Session        | Fixed        |
+| 62  | The interface reads small and cannot be zoomed                 | Window         | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -822,13 +822,14 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Cause**: the rules that drop the margin above a reply's first block and below its last had the same specificity as the block rules after them, so a heading, code block, table or rule at either end kept its margin. A leading h2 added 1.75em, 30 px at the default size, to the thread's 16 px between entries.
 - **Fixed**: the edge rules outrank the block rules, as the [design system](../design/design-system.md) already specified. Measured in the app, a reply opening with a heading now sits 16 px below the entry above it, and headings inside a reply keep their margins.
 
-## 59. The interface reads small and cannot be zoomed
-
-- **Reported**: 2026-10-22, in words: the whole interface looks a little small, and `Cmd+Shift+=` and `Cmd+-` do not zoom.
-- **Cause**: the macOS menu had no zoom items, Windows and Linux have no menu, and the renderer handled no zoom keys. `watchWindowShortcuts` from `@electron-toolkit/utils`, which main installs on every window, also swallows `Mod+-` and `Mod+Shift+=` in `before-input-event` unless it is given `zoom: true`.
-- **Fixed**: the window zooms in Chrome's steps from 80% to 150% and opens at 110%. `Mod+=` and `Mod+-`, with or without `Shift`, zoom in and out, and `Mod+0` returns to 110%, from the View menu on macOS and from the renderer on Windows and Linux; Settings › Keyboard shortcuts lists them, and the level is kept in settings ([Interface: zoom](../design/ui.md#zoom)). The traffic lights and the window controls follow the zoomed top bar. Measured in a production build at every step: the traffic lights stay centred in the top bar, and the room left for them ends within 1 px of their edge; at 80% the old fixed inset would have put the sidebar toggle over them.
-
 ## 60. Renaming a session goes through a dialog
 
 - **Reported**: 2026-10-22, with screenshots of the reference (Claude Desktop) and of OverBench's title menu. In the reference a click on the session title in the top bar turns it into a text field, and a double click on a row in the sidebar does the same there; OverBench asked for **Rename…** in a menu, which opened a dialog.
 - **Fixed**: the session is renamed in place. A click on the top bar's title, a double click on its sidebar row, or **Rename** in any of its menus turns the title into a field with its text selected; `Enter` or leaving the field saves, `Esc` cancels, and an empty title returns to the agent's. The title menu opens from its own chevron button, so the title no longer opens it, and the rename dialog is gone ([Interface: session](../design/ui.md#session), [sidebar](../design/ui.md#sidebar)). Checked on a production build in both themes: every way in, saving, cancelling, an empty title, the focus going back to the title or the row, and a long title in a narrow window.
+
+## 62. The interface reads small and cannot be zoomed
+
+- **Reported**: 2026-10-22, in words: the whole interface looks a little small, and `Cmd+Shift+=` and `Cmd+-` do not zoom.
+- **Cause**: the macOS menu had no zoom items, Windows and Linux have no menu, and the renderer handled no zoom keys. `watchWindowShortcuts` from `@electron-toolkit/utils`, which main installs on every window, also swallows `Mod+-` and `Mod+Shift+=` in `before-input-event` unless it is given `zoom: true`.
+- **Fixed**: the window zooms in Chrome's steps from 80% to 150% and opens at 110%. `Mod+=` and `Mod+-`, with or without `Shift`, zoom in and out, and `Mod+0` returns to 110%, from the View menu on macOS and from the renderer on Windows and Linux; Settings › Keyboard shortcuts lists them, and the level is kept in settings ([Interface: zoom](../design/ui.md#zoom)). The traffic lights and the window controls follow the zoomed top bar. Measured in a production build at every step: the traffic lights stay centred in the top bar, and the room left for them ends within 1 px of their edge; at 80% the old fixed inset would have put the sidebar toggle over them.
+- **Settled**: 2026-10-22, by the maintainer, after screenshots of OverBench at 110% and of the reference (Claude Desktop) at the same pixel density. At 110% the frame, the sidebar rows and the top bar's title, was 10% larger than the reference's, the sidebar text 22% and the thread text 31%; at 100% the frame matches the reference's and the text is still 11% and 19% larger. The window opens at 100%, and `Mod+0` returns there.

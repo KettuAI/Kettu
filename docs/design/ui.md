@@ -15,7 +15,7 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 
 ### Zoom
 
-- The whole window zooms with Chromium's page zoom, in Chrome's steps of 80, 90, 100, 110, 125 and 150%, and opens at 110%, because the interface read small at 100% ([problem 59](../milestones/m0-feedback.md#59-the-interface-reads-small-and-cannot-be-zoomed)). The [keyboard](#keyboard) and, on macOS, the View menu change it.
+- The whole window zooms with Chromium's page zoom, in Chrome's steps of 80, 90, 100, 110, 125 and 150%, and opens at 100%, where its frame matches the reference's ([problem 62](../milestones/m0-feedback.md#62-the-interface-reads-small-and-cannot-be-zoomed)). The [keyboard](#keyboard) and, on macOS, the View menu change it.
 - The level is `appearance.zoom` in [settings](./persistence.md#settings), and the renderer sets it on `<html>` as `--zoom`. Main sets it on every load of a window (`did-navigate`), where it applies before the page's first script; `webPreferences.zoomFactor` would come back on a reload after the user chose 100%.
 - Sizes in the [design system](./design-system.md) are CSS pixels at 100%.
 
@@ -509,7 +509,7 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 | `Mod+Shift+[` / `Mod+Shift+]`              | Previous / next session in the sidebar |
 | `Mod+,`                                    | Settings; `Esc` goes back              |
 | `Mod+=` / `Mod+-`, with or without `Shift` | Zoom in / out                          |
-| `Mod+0`                                    | Reset the zoom to 110%                 |
+| `Mod+0`                                    | Reset the zoom to 100%                 |
 | `` Ctrl+` ``                               | Show or hide the terminal              |
 | `` Ctrl+Shift+` ``                         | New terminal                           |
 | `Mod+L` with terminal text selected        | Ask the agent about the selection      |

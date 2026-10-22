@@ -50,7 +50,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     restoreLastSession: true,
     confirmQuitWhileRunning: true,
   },
-  appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system', zoom: 1.1 },
+  appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system', zoom: 1 },
   notifications: { permission: true, turnEnded: true, error: true, sound: false, badge: true },
   agents: {},
   proxy: { mode: 'environment' },

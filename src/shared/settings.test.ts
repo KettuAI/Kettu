@@ -16,6 +16,6 @@ describe('stepZoom', () => {
 
   it('resets to the default', () => {
     expect(stepZoom(1.5, 0)).toBe(DEFAULT_SETTINGS.appearance.zoom)
-    expect(DEFAULT_SETTINGS.appearance.zoom).toBe(1.1)
+    expect(DEFAULT_SETTINGS.appearance.zoom).toBe(1)
   })
 })
