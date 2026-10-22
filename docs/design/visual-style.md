@@ -156,7 +156,7 @@ Every piece of text takes one of these roles. A size, weight, line height or col
   - a control that is on or chosen: `--checked`;
   - cost: the [reasoning levels](./design-system.md#reasoning-levels) gradient;
   - identity: the agent marks and the file-type icons, the only multicolor images, and each agent's series in a chart, in its mark's color;
-  - amount, in a chart only: one hue that deepens with the amount, the [data graphics](./design-system.md#data-graphics) steps of `--checked`.
+  - amount, in a chart only: one hue that deepens with the amount, the [data graphics](./design-system.md#data-graphics) steps of `--checked` (decided while the maintainer was away; to be reviewed).
 - **Quiet for ongoing, clear for done.** A state that lasts is the quieter tone, as `--running` is beside `--checked` ([problem 57](../milestones/m0-feedback.md#57-a-finished-session-leaves-no-mark-and-the-running-dot-is-loud)). `--attention` is the loudest color in the app and only marks something waiting on the user.
 - **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exception.
 - **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` in a component, and no Tailwind palette utilities (`bg-white`, `text-red-500`). A new color is a token in `globals.css` and a row in the design system first, in both themes, at AA contrast on every surface it sits on.
@@ -208,7 +208,7 @@ A row is the unit of every list: the sidebar, menus, Settings, the Files tree, t
 ### Pages and columns
 
 - A page's content sits in one centred column with a maximum width: 42em for prose, 560 px for Settings, 960 px for the usage dashboard. It never stretches to the window.
-- A page starts with its title at the page title role; groups inside it are introduced by group labels, not by cards or headings of their own. A dashboard of figures is the one exception: the [usage page](./usage.md#interface) sets each figure, chart and table on a card with its title inside, so panels side by side read as separate.
+- A page starts with its title at the page title role; groups inside it are introduced by group labels, not by cards or headings of their own. A dashboard of figures is the one exception: the [usage page](./usage.md#interface) sets each figure, chart and table on a card with its title inside, so panels side by side read as separate (decided while the maintainer was away; to be reviewed).
 - Containers adapt to their own width with container queries ([layout behavior](./design-system.md#layout-behavior)); what gives way first in a crowded bar is written in [Interface](./ui.md) for that bar, the least important part first.
 
 ## Space and size
