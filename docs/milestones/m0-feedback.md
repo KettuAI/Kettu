@@ -46,6 +46,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Open         |
 | 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Open         |
 | 40  | The Settings pages look crude and their colours are untuned    | Settings       | Open         |
+| 41  | The plan usage strip is unclear and needs a better place       | Sidebar        | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -541,3 +542,18 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The colour: surfaces, hover and selected fills, status colours, links and destructive actions designed on purpose, following the palette decision of problem 35.
   - Where other problems meet in Settings, so one redesign covers them: the empty space of problem 19, the icons of [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library), Agents ([17](#17-settings--agents-leaves-out-what-matters), [27](#27-agent-adapters-have-no-update-check-or-one-click-update), [29](#29-agents-that-are-not-installed-cannot-be-installed-from-here), [26](#26-account-details-cannot-be-hidden), [28](#28-the-ready-label-next-to-the-status-dot-is-redundant)) and About ([18](#18-the-about-page-needs-redoing)).
   - The proof: each of the nine pages in both themes and at several widths, next to the reference, as in the other polish passes.
+
+## 41. The plan usage strip is unclear and needs a better place
+
+- **Reported**: 2026-10-22, with a screenshot of the sidebar's footer and arrows at the plan usage chips.
+- **Observed**: the quota display is not clear at a glance. Each chip is an agent's mark, a percentage and a time ("78% 2d 4h"), and nothing on it says which limit the percentage belongs to, whether it counts what is used or what is left, or that the time is the wait until the reset. With three agents the chips wrap onto two lines.
+- **Expected**: the display redesigned, with a position where it is easy to see and does not get in the way of the user's work. It must read clearly and at once.
+- **Today**: `PlanUsageStrip` in `src/renderer/src/features/sidebar/plan-usage-strip.tsx` shows one chip per agent that has reported limits, for its tightest window: the used percentage, turning `--attention-text` at the warning state and `--destructive` when reached, and the reset countdown. The window's name and the word "used" appear only in the chip's accessible label ("Claude Code plan usage: 5-hour 62%, resets in 2h 10m"), not on screen. A click opens a popover with the agent's windows. The strip lives in the sidebar footer, so it goes away with the sidebar when that collapses ([Interface: sidebar](../design/ui.md#sidebar)).
+- **To settle when planning**:
+  - What it says: used or left, the window's name ("Weekly", "5-hour", "Monthly"), the reset as a time left, and one window or all of an agent's. Agents differ: Claude Code reports several, Codex on a free plan a single 30-day window.
+  - Where it lives so it is in reach without intruding: the sidebar's footer as now, a single icon that opens the details, next to the model button and the agent of the session on screen, the top bar, or Settings only. The sidebar footer also holds the notices and **Settings** ([problem 25](#25-the-sidebar-footer-needs-a-design-of-its-own)), and hides when the sidebar collapses.
+  - Whether it shows only the agent of the session on screen, since the others are not the user's concern at that moment, and when it should stay quiet and when it should speak up, such as near a limit, with no layout shift and no new attention-grabbing element in the normal case.
+  - How fresh it is: the numbers are read when the popover opens and when a session starts, so how old a shown value may be and how that shows.
+  - The popover it opens, and the context and plan parts of the composer's usage popover ([problem 7](#7-the-usage-popover-shows-too-little-and-needs-a-full-redesign)), so the same figures are not drawn twice in two styles.
+  - The colour and the form (chips, a bar, a ring), following [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) and [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library).
+  - The rule rewritten in [Interface: sidebar](../design/ui.md#sidebar) and [Interface: usage popover](../design/ui.md#usage-popover).
