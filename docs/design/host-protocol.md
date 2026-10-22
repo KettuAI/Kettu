@@ -148,7 +148,7 @@ interface AgentStatus {
     | 'stopping'
     | 'failed'
   version: string | null // from agentInfo, once initialized
-  package: { name: string; version: string; installed: boolean } | null // a package agent's adapter: the version a start runs, else the pinned one
+  package: { name: string; version: string; installed: boolean } | null // a package agent's adapter: the version a start runs (an older one kept when the pin could not be installed), else the pinned one
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: {
     id: string
@@ -172,6 +172,7 @@ interface AgentTask {
   kind: 'install' | 'update'
   state: 'running' | 'failed'
   command: string // what runs, quoted for the platform
+  method: 'brew' | 'npm' | 'script' | null // the route a binary agent's install took, which a retry takes again
   progress: string[] // the latest output lines
   error: string | null // why it failed, in the user's terms
 }
@@ -207,7 +208,7 @@ interface ImportableSession {
 - Stable ACP v1 has no way to ask whether an agent is signed in, so `signIn` starts as `unknown`. It becomes `required` when a request fails with `auth_required`, and `signed-in` after `authenticate` or any session request succeeds. Agents that push `_auth/status_update` (Claude Code and Codex) set it directly, before any session exists ([plan limits](./session-model.md#plan-limits)).
 - For `terminal` methods, `command` is the full command to show, already quoted for the user's platform.
 - `update` is decided against what is installed whenever the status is built, from the last check's result, so it shows after a restart without the network and clears once the update is installed. While an update runs, the agent's `state` is unchanged: a running agent keeps running, and `task` carries the progress. A package agent's first-use install shows as `state: 'installing'` with `progress`, not as a `task`, since a start waiting on it shares it ([installing adapters](./agent-host.md#installing-adapters)).
-- `agents.update` and `agents.install` resolve once their work is done or cancelled, and reject with its failure; `agents.install` ignores `method` for a package agent. A failed `task` stays until `agents.cancelTask` clears it or the request runs again, and never changes `state`. A cancelled task leaves no `task`.
+- `agents.update` and `agents.install` resolve once their work is done or cancelled, and reject with its failure; `agents.install` ignores `method` for a package agent. A failed `task` stays until `agents.cancelTask` clears it, the request runs again, or its aim is reached another way (the agent is found installed, or the update is no longer offered), and never changes `state`. A cancelled task leaves no `task`.
 - `agents.details` is read when the Agents list or an agent's page shows, and is not pushed: the host looks at the disk for each request and answers without starting the agent. It never returns the contents of the configuration files. Unknown agents are `invalid_params`; the fake agent has no configuration, so its `config` is empty.
 
 ## Events

@@ -41,7 +41,11 @@ interface AgentUpdatesFile {
   agents: Partial<
     Record<
       AgentId,
-      { checkedAt: number; latest: { adapterVersion: string; cliVersion: string | null } }
+      {
+        checkedAt: number | null // the last check that found something
+        attemptedAt: number // the last check, found or failed; files without it take checkedAt
+        latest: { adapterVersion: string; cliVersion: string | null } | null
+      }
     >
   >
 }

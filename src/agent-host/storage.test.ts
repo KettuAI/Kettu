@@ -267,7 +267,23 @@ describe('the host files', () => {
           gemini: { checkedAt: 1_000, latest },
         },
       }),
-    ).toEqual({ version: 1, agents: { codex: { checkedAt: 1_000, latest } } })
+    ).toEqual({ version: 1, agents: { codex: { checkedAt: 1_000, attemptedAt: 1_000, latest } } })
+    // A check that failed is kept by when it ran, so the next one waits a day from it.
+    expect(
+      parseAgentUpdatesFile({
+        agents: {
+          codex: { checkedAt: 1_000, attemptedAt: 5_000, latest },
+          'claude-code': { checkedAt: null, attemptedAt: 7_000, latest: null },
+          opencode: { attemptedAt: 'soon' },
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      agents: {
+        codex: { checkedAt: 1_000, attemptedAt: 5_000, latest },
+        'claude-code': { checkedAt: null, attemptedAt: 7_000, latest: null },
+      },
+    })
     expect(parseAgentUpdatesFile({ agents: null })).toBe('agents is not an object')
     expect(agentUpdatesFile(dir, log).file).toBe(path.join(dir, 'state', 'agent-updates.json'))
   })

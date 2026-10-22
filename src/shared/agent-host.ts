@@ -75,6 +75,7 @@ export interface AgentTask {
   kind: 'install' | 'update'
   state: 'running' | 'failed'
   command: string // what runs, quoted for the platform
+  method: AgentInstallMethod['id'] | null // the route a binary agent's install took; null otherwise
   progress: string[] // the latest output lines
   error: string | null // why it failed, in the user's terms
 }

@@ -62,6 +62,7 @@ import { limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile } from './storage'
+import { compareVersions } from './versions'
 
 export interface LaunchedAgent {
   readonly pid: number | null
@@ -201,6 +202,8 @@ class Slot {
   /** What the last update check found, and when it finished. */
   latest: AgentUpdate | null = null
   checkedAt: number | null = null
+  /** When a check last ran for this agent, found or failed; the daily check waits from it. */
+  attemptedAt: number | null = null
   rememberedUpdate = 'null'
   /** The CLI version of the install a start runs, read at detection. */
   installedCli: string | null = null
@@ -253,7 +256,12 @@ function rememberedJson(slot: Slot): string {
 }
 
 function updateJson(slot: Slot): string {
-  return JSON.stringify(slot.latest && { checkedAt: slot.checkedAt, latest: slot.latest })
+  return JSON.stringify(updateEntry(slot))
+}
+
+function updateEntry(slot: Slot): AgentUpdatesFile['agents'][AgentId] {
+  if (slot.attemptedAt === null) return undefined
+  return { checkedAt: slot.checkedAt, attemptedAt: slot.attemptedAt, latest: slot.latest }
 }
 
 export class AgentManager {
@@ -262,6 +270,7 @@ export class AgentManager {
   private detected: Promise<void> | null = null
   private lastAuthCommands = '[]'
   private updateCheck: Promise<UpdateCheck> | null = null
+  private updateCheckAll = false
   private updateAbort: AbortController | null = null
   private updateTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
@@ -316,11 +325,12 @@ export class AgentManager {
       adaptersDir: this.deps.adaptersDir,
       isExecutable,
     })
-    const current = detection.state === 'available' ? detection.adapter?.current : null
+    const adapter = detection.state === 'available' ? detection.adapter : null
+    const running = adapter?.current ?? adapter?.fallback
     const log = (level: 'info' | 'warn' | 'error', message: string): void =>
       this.deps.diagnostics.log(level, message)
     const [installedCli, plans] = await Promise.all([
-      current ? readCliVersion(slot.def.id, current.dir, log) : null,
+      running ? readCliVersion(slot.def.id, running.dir, log) : null,
       slot.def.installs
         ? installPlans(slot.def.installs, { platform, env, npm: node.npmPath, isExecutable })
         : [],
@@ -719,14 +729,24 @@ export class AgentManager {
 
   // Updates and installs the user asks for.
 
-  /** The update to offer: what the last check found, against the install a start runs. */
+  /**
+   * The update to offer: what the last check found, against the install a start runs. An agent
+   * that runs an install below the pin, because the pinned one could not be installed, is offered
+   * the pin at least.
+   */
   private updateOf(slot: Slot): AgentUpdate | null {
     const detection = slot.detection
-    const current = detection?.state === 'available' ? detection.adapter?.current : null
-    return decideUpdate(
-      slot.latest,
-      current ? { version: current.version, cliVersion: slot.installedCli } : null,
-    )
+    const adapter = detection?.state === 'available' ? detection.adapter : null
+    const running = adapter?.current ?? adapter?.fallback
+    if (!adapter || !running) return null
+    const offered = decideUpdate(slot.latest, {
+      version: running.version,
+      cliVersion: slot.installedCli,
+    })
+    if (adapter.current) return offered
+    return offered && compareVersions(offered.adapterVersion, adapter.version) >= 0
+      ? offered
+      : { adapterVersion: adapter.version, cliVersion: null }
   }
 
   /** What an earlier run's update check found, so an update shows without the network. */
@@ -739,53 +759,69 @@ export class AgentManager {
       if (!slot || !entry || slot.def.launch.kind !== 'package') continue
       slot.latest = entry.latest
       slot.checkedAt = entry.checkedAt
+      slot.attemptedAt = entry.attemptedAt
       slot.rememberedUpdate = updateJson(slot)
       this.emit(slot)
     }
   }
 
   /**
-   * Checks once the oldest check is a day old, but no sooner than a minute after start, then once a
-   * day while the host runs. Called once the first detection is done.
+   * Checks each agent once its last check, found or failed, is a day old, but no sooner than a
+   * minute after start. Called once the first detection is done, and again after each check.
    */
   scheduleUpdateChecks(): void {
     if (this.updateTimer || this.stopped) return
-    const slots = [...this.slots.values()].filter((slot) => slot.def.launch.kind === 'package')
+    const slots = this.checkable()
     if (slots.length === 0) return
-    const last = Math.min(...slots.map((slot) => slot.checkedAt ?? 0))
-    const due = last + this.timings.updateIntervalMs - Date.now()
-    this.armUpdateCheck(Math.max(this.timings.updateDelayMs, due))
-  }
-
-  private armUpdateCheck(delayMs: number): void {
+    const next = Math.min(...slots.map((slot) => this.checkDue(slot)))
+    const delayMs = Math.max(this.timings.updateDelayMs, next - Date.now())
     this.updateTimer = setTimeout(() => {
       this.updateTimer = null
-      void this.runUpdateCheck().then(() => {
-        if (!this.stopped) this.armUpdateCheck(this.timings.updateIntervalMs)
-      })
+      void this.runUpdateCheck(false).then(() => this.scheduleUpdateChecks())
     }, delayMs)
     this.updateTimer.unref?.()
   }
 
-  /** Every package agent whose npm was found; never rejects, and a failure keeps the last one. */
-  private runUpdateCheck(): Promise<UpdateCheck> {
-    this.updateCheck ??= (async () => {
+  /** The package agents whose npm was found, which a check can ask about. */
+  private checkable(): Slot[] {
+    return [...this.slots.values()].filter(
+      (slot) =>
+        slot.def.launch.kind === 'package' &&
+        slot.detection?.state === 'available' &&
+        slot.detection.adapter?.npm,
+    )
+  }
+
+  private checkDue(slot: Slot): number {
+    return (slot.attemptedAt ?? 0) + this.timings.updateIntervalMs
+  }
+
+  /**
+   * The user's check (`all`) asks about every agent; the daily one only about those due, so an
+   * agent whose check keeps failing waits a day like the others. Never rejects, and a failure
+   * keeps the last result. A user's check during a daily one runs after it.
+   */
+  private runUpdateCheck(all: boolean): Promise<UpdateCheck> {
+    if (this.updateCheck && (this.updateCheckAll || !all)) return this.updateCheck
+    const before = this.updateCheck
+    const run: Promise<UpdateCheck> = (async () => {
+      await before
       await this.detectAll()
       const abort = new AbortController()
       this.updateAbort = abort
-      const slots = [...this.slots.values()].filter(
-        (slot) =>
-          slot.def.launch.kind === 'package' &&
-          slot.detection?.state === 'available' &&
-          slot.detection.adapter?.npm,
-      )
+      const now = Date.now()
+      const slots = this.checkable().filter((slot) => all || this.checkDue(slot) <= now)
       const results = await Promise.all(slots.map((slot) => this.checkSlot(slot, abort.signal)))
       return { checked: slots.length, failures: results.filter((r) => r !== null) }
     })().finally(() => {
+      if (this.updateCheck !== run) return
       this.updateCheck = null
+      this.updateCheckAll = false
       this.updateAbort = null
     })
-    return this.updateCheck
+    this.updateCheck = run
+    this.updateCheckAll = all
+    return run
   }
 
   private async checkSlot(slot: Slot, signal: AbortSignal): Promise<string | null> {
@@ -805,6 +841,7 @@ export class AgentManager {
       })
       slot.latest = latest
       slot.checkedAt = Date.now()
+      slot.attemptedAt = slot.checkedAt
       const cli = latest.cliVersion ? `, CLI ${latest.cliVersion}` : ''
       this.deps.diagnostics.event(slot.def.id, 'update check', `${latest.adapterVersion}${cli}`)
       this.emit(slot)
@@ -812,13 +849,15 @@ export class AgentManager {
     } catch (error) {
       const message = (error as Error).message
       this.deps.diagnostics.log('warn', `${slot.def.name}: the update check failed: ${message}`)
+      slot.attemptedAt = Date.now()
+      this.emit(slot)
       return message
     }
   }
 
   /** The user's check: resolves with the statuses, or rejects when no agent could be checked. */
   async checkUpdates(): Promise<AgentStatus[]> {
-    const { checked, failures } = await this.runUpdateCheck()
+    const { checked, failures } = await this.runUpdateCheck(true)
     if (checked === 0) throw new HostError('agent_unavailable', t('agent.update.noNpm'))
     if (failures.length === checked) {
       throw new HostError('agent_error', t('agent.update.checkFailed', { reason: failures[0] }))
@@ -937,8 +976,15 @@ export class AgentManager {
           slot.detail = null
           return
         }
+        const message = (error as Error).message
+        // An older install still runs, so the agent stays usable and only this install failed.
+        if (detection.adapter?.fallback) {
+          slot.state = slot.detection?.state ?? 'available'
+          slot.detail = null
+          throw new HostError('agent_error', message, { agentId })
+        }
         slot.state = 'failed'
-        slot.detail = (error as Error).message
+        slot.detail = message
         throw new HostError('agent_unavailable', slot.detail, { agentId, state: 'failed' })
       } finally {
         this.emit(slot)
@@ -1016,6 +1062,7 @@ export class AgentManager {
         )
       },
       (message) => t('agent.installFailed', { agent, message }),
+      plan.id,
     )
   }
 
@@ -1041,10 +1088,11 @@ export class AgentManager {
     command: string,
     work: (signal: AbortSignal, onOutput: (text: string) => void) => Promise<void>,
     failure: (message: string) => string,
+    method: AgentTask['method'] = null,
   ): Promise<void> {
     const abort = new AbortController()
     slot.taskOutput.clear()
-    slot.task = { kind, state: 'running', command, error: null }
+    slot.task = { kind, state: 'running', command, method, error: null }
     slot.taskAbort = abort
     this.emit(slot)
     const run = (async () => {
@@ -1058,7 +1106,7 @@ export class AgentManager {
         }
         const message = failure((error as Error).message)
         this.deps.diagnostics.event(slot.def.id, `${kind} failed`, message)
-        slot.task = { kind, state: 'failed', command, error: message }
+        slot.task = { kind, state: 'failed', command, method, error: message }
         throw new HostError('agent_error', message, { agentId: slot.def.id })
       } finally {
         slot.taskAbort = null
@@ -1094,6 +1142,16 @@ export class AgentManager {
       slot.installAbort.abort()
       await Promise.all([slot.installing?.catch(() => {}), slot.starting?.catch(() => {})])
     }
+  }
+
+  /**
+   * A failed task whose aim was reached some other way: the agent was installed meanwhile, such as
+   * by a program picked in Settings, or the update it was for is no longer offered.
+   */
+  private taskSettled(slot: Slot): boolean {
+    if (slot.task?.kind === 'update') return this.updateOf(slot) === null
+    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+    return slot.detection?.state === 'available' && (!adapter || !!adapter.current)
   }
 
   private onTaskOutput(slot: Slot, text: string): void {
@@ -1444,8 +1502,9 @@ export class AgentManager {
         launch.kind === 'package'
           ? {
               name: launch.package,
-              version: adapter?.current?.version ?? launch.version,
-              installed: adapter?.installed ?? false,
+              version: (adapter?.current ?? adapter?.fallback)?.version ?? launch.version,
+              // An install below the pin runs too, when the pinned one cannot be installed.
+              installed: !!(adapter?.current ?? adapter?.fallback),
             }
           : null,
       signIn: slot.signIn,
@@ -1529,6 +1588,7 @@ export class AgentManager {
   }
 
   private emit(slot: Slot): void {
+    if (slot.task?.state === 'failed' && this.taskSettled(slot)) slot.task = null
     const status = this.status(slot.def.id)
     const json = JSON.stringify(status)
     if (json !== slot.lastStatus) {
@@ -1569,9 +1629,8 @@ export class AgentManager {
     if (!this.deps.rememberUpdates) return
     const agents: AgentUpdatesFile['agents'] = {}
     for (const [agentId, slot] of this.slots) {
-      if (slot.latest && slot.checkedAt !== null) {
-        agents[agentId] = { checkedAt: slot.checkedAt, latest: slot.latest }
-      }
+      const entry = updateEntry(slot)
+      if (entry) agents[agentId] = entry
     }
     this.deps.rememberUpdates({ version: 1, agents })
   }

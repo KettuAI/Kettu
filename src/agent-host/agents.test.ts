@@ -707,6 +707,7 @@ describe('update checks', () => {
       agents: {
         codex: {
           checkedAt: status!.updateCheckedAt,
+          attemptedAt: status!.updateCheckedAt,
           latest: { adapterVersion: '2.0.0', cliVersion: '0.160.3' },
         },
       },
@@ -774,6 +775,7 @@ describe('update checks', () => {
       agents: {
         codex: {
           checkedAt: Date.now() - 1_000,
+          attemptedAt: Date.now() - 1_000,
           latest: { adapterVersion: '1.0.0', cliVersion: null },
         },
       },
@@ -788,7 +790,11 @@ describe('update checks', () => {
     fresh.agents.restoreUpdates({
       version: 1,
       agents: {
-        codex: { checkedAt: Date.now(), latest: { adapterVersion: '1.0.0', cliVersion: null } },
+        codex: {
+          checkedAt: Date.now(),
+          attemptedAt: Date.now(),
+          latest: { adapterVersion: '1.0.0', cliVersion: null },
+        },
       },
     })
     await fresh.agents.detectAll()
@@ -796,6 +802,41 @@ describe('update checks', () => {
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(fresh.checks).toEqual([])
     await fresh.agents.stopAll()
+  })
+
+  it('waits a day after a failed check too, across a restart', async () => {
+    const timings = { updateDelayMs: 20, updateIntervalMs: 60_000 }
+    const failing = await updateManager({
+      timings,
+      latest: async () => {
+        throw new Error('404 Not Found - GET https://npm.example.com/fake-adapter')
+      },
+    })
+    await failing.write('2.0.0', '2.0.0', '0.160.1', 1)
+    await failing.agents.detectAll()
+    failing.agents.scheduleUpdateChecks()
+    await until(() => failing.checks.length === 1, 1_000)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(failing.checks).toHaveLength(1)
+    await failing.agents.stopAll()
+    const file = failing.saved.at(-1)!
+    expect(file.agents.codex).toEqual({
+      checkedAt: null,
+      attemptedAt: expect.any(Number),
+      latest: null,
+    })
+
+    // The next run does not check again within the day.
+    const next = await updateManager({ timings })
+    next.agents.restoreUpdates(file)
+    await next.agents.detectAll()
+    next.agents.scheduleUpdateChecks()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(next.checks).toEqual([])
+    // The user's own check still asks.
+    await next.agents.checkUpdates()
+    expect(next.checks).toHaveLength(1)
+    await next.agents.stopAll()
   })
 })
 
@@ -902,6 +943,55 @@ describe('updates', () => {
       code: 'invalid_params',
       message: 'Codex has no update to install',
     })
+  })
+})
+
+describe('failed tasks and older installs', () => {
+  it('clears a failed update once that update is no longer offered', async () => {
+    const m = await updateManager()
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    await m.agents.checkUpdates()
+    m.onInstall(async () => {
+      throw new Error('ENOSPC: no space left on device')
+    })
+    await expect(m.agents.update('codex')).rejects.toMatchObject({ code: 'agent_error' })
+    expect(m.status().task).toMatchObject({ kind: 'update', state: 'failed', method: null })
+    // The newer CLI arrived another way, so there is nothing left to retry.
+    await m.write('2.0.0~2', '2.0.0', '0.160.3', 2)
+    await m.agents.check('codex')
+    expect(m.status()).toMatchObject({ update: null, task: null })
+  })
+
+  it('counts an install below the pin as installed, and offers the pin', async () => {
+    const m = await updateManager()
+    await m.write('1.9.0', '1.9.0', '0.159.0', 1)
+    expect((await m.agents.list())[0]).toMatchObject({
+      package: { version: '1.9.0', installed: true },
+      update: { adapterVersion: '2.0.0', cliVersion: null },
+    })
+    await m.agents.update('codex')
+    expect(m.installs.map((i) => [i.version, i.alongside])).toEqual([['2.0.0', true]])
+    expect(m.status()).toMatchObject({
+      package: { version: '2.0.0', installed: true },
+      update: null,
+      task: null,
+    })
+  })
+
+  it('keeps an agent with an older install usable when installing the pin fails', async () => {
+    const m = await updateManager()
+    await m.write('1.9.0', '1.9.0', '0.159.0', 1)
+    m.onInstall(async () => {
+      throw new Error('npm error code ENOTFOUND')
+    })
+    await m.agents.list()
+    await expect(m.agents.install('codex')).rejects.toMatchObject({ code: 'agent_error' })
+    expect(m.status().state).toBe('available')
+    // A start still runs the older install.
+    await expect(m.agents.ensureReady('codex')).resolves.toBeDefined()
+    expect(m.status()).toMatchObject({ state: 'ready', package: { version: '1.9.0' } })
+    await m.agents.stopAll()
   })
 })
 
@@ -1057,9 +1147,14 @@ describe('installing a binary agent', () => {
         kind: 'install',
         state: 'failed',
         command: 'npm install -g opencode-ai',
+        method: 'npm',
         error: message,
       },
     })
+    // Once the user puts it on PATH, the failed install has nothing left to do.
+    await m.executable('fake-opencode')
+    await m.agents.check('opencode')
+    expect(m.status()).toMatchObject({ state: 'available', task: null })
   })
 
   it("reports the tool's failure, and stops it when cancelled", async () => {

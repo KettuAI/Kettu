@@ -168,7 +168,15 @@ export async function readInstallFiles(
 
 /** Deletes one install, for a reinstall. */
 export async function removeInstall(dir: string): Promise<void> {
-  await rm(dir, { recursive: true, force: true })
+  await removeTree(dir)
+}
+
+/**
+ * Deletes a directory npm just wrote to. On Windows a virus scan or npm's own child may hold a
+ * file for a moment, so EBUSY and EPERM are retried, as for the rename below.
+ */
+export async function removeTree(dir: string): Promise<void> {
+  await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }
 
 export interface ProgramRun {
@@ -423,11 +431,11 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
         // Another instance finished the same version first; an incomplete one is replaced.
         const existing = await readInstall(target, options.package)
         if (existing?.version === options.version) {
-          await rm(partial, { recursive: true, force: true })
+          await removeTree(partial)
           return existing
         }
         if (!(await stat(target).catch(() => null))) throw error
-        await rm(target, { recursive: true, force: true })
+        await removeTree(target)
         await renameWithRetry(partial, target, platform)
       }
     }
@@ -437,7 +445,8 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
     }
     return installed
   } catch (error) {
-    await rm(partial, { recursive: true, force: true }).catch(() => {})
+    // A partial left behind anyway goes with the stale ones at a later install.
+    await removeTree(partial).catch(() => {})
     throw error
   }
 }

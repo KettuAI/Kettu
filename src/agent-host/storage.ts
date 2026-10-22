@@ -240,7 +240,13 @@ export interface AgentsFile {
  */
 export interface AgentUpdatesFile {
   version: 1
-  agents: Partial<Record<AgentId, { checkedAt: number; latest: AgentUpdate }>>
+  /**
+   * `attemptedAt`: when a check last ran, found or failed; `checkedAt` and `latest`: the last one
+   * that found something, or null. Files written before `attemptedAt` take `checkedAt` for it.
+   */
+  agents: Partial<
+    Record<AgentId, { checkedAt: number | null; attemptedAt: number; latest: AgentUpdate | null }>
+  >
 }
 
 /** Agent processes, and what they left behind, not yet seen gone; the next host stops them. */
@@ -420,10 +426,19 @@ export function parseAgentUpdatesFile(data: Record<string, unknown>): AgentUpdat
   const agents: AgentUpdatesFile['agents'] = {}
   for (const id of AGENT_IDS) {
     const entry = data.agents[id]
-    if (!isRecord(entry) || !isTime(entry.checkedAt) || !isRecord(entry.latest)) continue
-    const { adapterVersion, cliVersion } = entry.latest
-    if (!isVersion(adapterVersion) || !(cliVersion === null || isVersion(cliVersion))) continue
-    agents[id] = { checkedAt: entry.checkedAt, latest: { adapterVersion, cliVersion } }
+    if (!isRecord(entry)) continue
+    const latest = isRecord(entry.latest) ? entry.latest : null
+    const found =
+      latest &&
+      isTime(entry.checkedAt) &&
+      isVersion(latest.adapterVersion) &&
+      (latest.cliVersion === null || isVersion(latest.cliVersion))
+        ? { adapterVersion: latest.adapterVersion, cliVersion: latest.cliVersion }
+        : null
+    const checkedAt = found && isTime(entry.checkedAt) ? entry.checkedAt : null
+    const attemptedAt = isTime(entry.attemptedAt) ? entry.attemptedAt : checkedAt
+    if (attemptedAt === null) continue
+    agents[id] = { checkedAt, attemptedAt, latest: found }
   }
   return { version: 1, agents }
 }
