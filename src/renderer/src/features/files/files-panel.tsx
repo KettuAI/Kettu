@@ -5,11 +5,13 @@ import {
   ListTreeIcon,
   Maximize2Icon,
   Minimize2Icon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
   SearchIcon,
   XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useDefaultLayout } from 'react-resizable-panels'
+import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import {
@@ -58,6 +60,9 @@ export default function FilesPanel({
   const [query, setQuery] = useState('')
   const [flat, setFlat] = useState(false)
   const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
+  // The list folds away to read a file undisturbed; the saved layout keeps it folded.
+  const list = usePanelRef()
+  const [listHidden, setListHidden] = useState(false)
 
   useEffect(() => {
     void loadFiles(projectPath)
@@ -82,27 +87,37 @@ export default function FilesPanel({
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}
-        <InputGroup className="app-region-no-drag h-7 max-w-80 min-w-0 flex-1 bg-background/60">
-          <InputGroupAddon>
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => event.key === 'Escape' && query && setQuery('')}
-            placeholder={t('panel.filterPlaceholder')}
-            aria-label={t('panel.filterLabel')}
-            spellCheck={false}
-            className="text-ui"
-          />
-        </InputGroup>
-        <span className="flex-1" />
         <PanelButton
-          label={flat ? t('panel.showTree') : t('panel.showList')}
-          onClick={() => setFlat(!flat)}
+          label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}
+          onClick={() => (listHidden ? list.current?.expand() : list.current?.collapse())}
         >
-          {flat ? <ListTreeIcon /> : <ListIcon />}
+          {listHidden ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
         </PanelButton>
+        {!listHidden && (
+          <InputGroup className="app-region-no-drag h-7 max-w-80 min-w-0 flex-1 bg-background/60">
+            <InputGroupAddon>
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => event.key === 'Escape' && query && setQuery('')}
+              placeholder={t('panel.filterPlaceholder')}
+              aria-label={t('panel.filterLabel')}
+              spellCheck={false}
+              className="text-ui"
+            />
+          </InputGroup>
+        )}
+        <span className="flex-1" />
+        {!listHidden && (
+          <PanelButton
+            label={flat ? t('panel.showTree') : t('panel.showList')}
+            onClick={() => setFlat(!flat)}
+          >
+            {flat ? <ListTreeIcon /> : <ListIcon />}
+          </PanelButton>
+        )}
         <PanelButton
           label={maximized ? t('panel.restore') : t('panel.maximize')}
           onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
@@ -122,7 +137,16 @@ export default function FilesPanel({
         onLayoutChanged={layout.onLayoutChanged}
         className="min-h-0 flex-1"
       >
-        <ResizablePanel id="files-tree" defaultSize="220px" minSize="160px" className="min-w-0">
+        <ResizablePanel
+          id="files-tree"
+          panelRef={list}
+          defaultSize="220px"
+          minSize="160px"
+          collapsible
+          collapsedSize="0px"
+          onResize={(size) => setListHidden(size.inPixels === 0)}
+          className="min-w-0"
+        >
           <Browser projectPath={projectPath} query={query} flat={flat} openPath={open?.path} />
         </ResizablePanel>
         <ResizableHandle />

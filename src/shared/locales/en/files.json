@@ -4,6 +4,8 @@
     "filterLabel": "Filter files",
     "showTree": "Show as a tree",
     "showList": "Show as a list",
+    "hideFiles": "Hide the file list",
+    "showFiles": "Show the file list",
     "restore": "Restore",
     "maximize": "Maximize"
   },

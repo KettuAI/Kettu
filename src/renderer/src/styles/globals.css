@@ -71,6 +71,8 @@
   --color-track: var(--track);
   --color-segment-track: var(--segment-track);
   --color-segment-thumb: var(--segment-thumb);
+  --color-pressed: var(--pressed);
+  --color-pressed-hover: var(--pressed-hover);
   --color-attention: var(--attention);
   --color-attention-foreground: var(--attention-foreground);
   --color-attention-text: var(--attention-text);
@@ -149,6 +151,9 @@
   --track: oklch(0 0 0 / 12%);
   --segment-track: oklch(0 0 0 / 5%);
   --segment-thumb: oklch(1 0 0);
+  /* A toggle that is on, such as a side pane's: sunk into the bar, flat, with a hairline edge. */
+  --pressed: oklch(0 0 0 / 8%);
+  --pressed-hover: oklch(0 0 0 / 11%);
 
   /* Lines are translucent so one token reads the same on every surface. Alphas are for the
      0.5 px hairline of a 2x display and halved below, so a line keeps its visual weight. */
@@ -320,6 +325,8 @@
   --track: oklch(1 0 0 / 14%);
   --segment-track: oklch(1 0 0 / 6%);
   --segment-thumb: oklch(1 0 0 / 12%);
+  --pressed: oklch(1 0 0 / 10%);
+  --pressed-hover: oklch(1 0 0 / 14%);
 
   --border: oklch(1 0 0 / 7%);
   --border-soft: oklch(1 0 0 / 4%);

@@ -247,6 +247,10 @@ A choice among two to six ordered or exclusive values, such as the theme in Sett
 | Switch motion | The thumb slides with `translate` over `--duration-base` and `--ease-out-quart`, and the track's color changes over `--duration-fast`; while pressed, the thumb stretches 3 px toward where it will go, as the platform's switches do. Reduce motion keeps the color change only                                                                                                       |
 | Select        | The trigger is an outline control at `--control-height`, 12.5 px text, with a 14 px chevron in `--muted-foreground`. Its list is a menu: it opens below the trigger, at least as wide as it and never over it, with the menu's surface, radius, padding, labels, separators and `rounded-lg` items, and a 14 px `Check` on the chosen item                                             |
 
+### Toggle buttons
+
+An icon button that stays on, such as a side pane's toggle in the top bar, says so with `aria-pressed`, and the `quiet` button shows it sunk into its bar: a `--pressed` fill (black 8% in light, white 10% in dark), a hairline `--border` edge inside it, and the icon in `--foreground`; hover deepens the fill to `--pressed-hover`. The reference marks the same state with a blue tint. OverBench keeps to its neutral palette and makes the state plain through the fill and the edge, so it reads at a glance without a color of its own; an open menu's trigger keeps the lighter `--accent`.
+
 ### Menus and dialogs
 
 Every menu, the dropdown menus and the context menus alike, shares one set of measurements, so the session's title menu, its row's context menu and the model menu read as one family.

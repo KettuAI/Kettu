@@ -56,6 +56,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 48  | The spinner's screen reader label is not translated            | Localization   | Fixed        |
 | 49  | No multimodal support: images, audio and video                 | Media          | Partly fixed |
 | 50  | Codex's progress notes read as its answer                      | Thread entries | Fixed        |
+| 51  | The open pane's toggle hardly looks pressed                    | Top bar        | Fixed        |
+| 52  | The file list cannot be hidden while reading a file            | Side panel     | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -746,3 +748,14 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Get it from the adapter: ask codex-acp to send the phase to every client, then use it.
 - **Decided**: 2026-10-22, by the maintainer: infer it from the turn's shape.
 - **Fixed**: the catalog marks Codex with `progressNotes`; in its turns a message that more work follows folds with the work as a muted note, so a finished turn reads as one run above its answer, and Copy takes the answer only. The running turn shows as it goes and folds when it ends ([Interface: tool calls](../design/ui.md#tool-calls)). The bare "Thought" from history is left as it is.
+
+## 51. The open pane's toggle hardly looks pressed
+
+- **Reported**: 2026-10-22, with a screenshot of the top bar beside one of Claude Desktop, whose open pane's button has a blue tint. The maintainer asked for a plainer selected state, without copying the reference outright.
+- **Observed**: the Files toggle of an open pane took the `--accent` fill, 3% darker than the bar, which barely shows.
+- **Fixed**: a pressed `quiet` button sinks into its bar: a `--pressed` fill, black 8% in light and white 10% in dark, with a hairline edge and the icon in `--foreground`, darker again on hover. It stays in the neutral palette rather than taking the reference's blue ([Design system: toggle buttons](../design/design-system.md#toggle-buttons)).
+
+## 52. The file list cannot be hidden while reading a file
+
+- **Reported**: 2026-10-22, with a screenshot of the Files pane: reading a Markdown file, the list beside it distracts.
+- **Fixed**: **Hide the file list** at the start of the pane's header folds the list away, and the preview takes the pane's width; the header keeps only **Show the file list**, **Maximize** and **Close**. The divider folds and opens it too, through react-resizable-panels' collapsible panel, and the pane's saved layout keeps it folded ([Interface: files](../design/ui.md#files)).
