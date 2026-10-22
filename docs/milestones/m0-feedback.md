@@ -233,6 +233,14 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the page's card sits in a narrow column centred in the area right of the section list, with wide empty bands on both sides and most of the window empty below its four rows. The page looks out of balance.
 - **Expected**: the Settings layout reworked so the page fills its space in proportion.
 - **Today**: `src/renderer/src/features/settings/settings-page.tsx` gives the section list a 244 px column and centres the page in the rest at 700 px at most (`mx-auto max-w-[700px]`), whatever the window's width; [Interface: settings](../design/ui.md#settings) describes the layout. To settle when planning: the layout as a whole (widths, alignment, spacing, how the page grows with the window), done together with the other Settings problems: the controls ([15](#15-settings-selects-show-names-only-and-keep-the-default-look), [16](#16-switches-keep-shadcns-default-look)), Agents ([17](#17-settings--agents-leaves-out-what-matters)) and About ([18](#18-the-about-page-needs-redoing)).
+- **Reported again**: 2026-10-22, with a screenshot of Settings › Git (sent twice). The right side of the page is largely empty, which looks out of step with the rest; the maintainer wants a full polish and names GPT's settings (ChatGPT's) as the reference, without a screenshot yet.
+  - **Observed**: the Git page is three rows in a column that stops well short of the window's right edge, and the page below them is empty, so the content sits as a small block in the top left of a large area.
+  - **Today**: the layout of the first report has changed since. In `settings-page.tsx` the page is aligned to its start with a 32 px gutter and at most 768 px wide (`max-w-3xl`), as [Interface: settings](../design/ui.md#settings) now describes. The earlier centred 700 px column is gone, and what is left is the empty area to the right of a left-aligned column and, on a short page like Git's, below it.
+  - **To settle when planning**:
+    - A reference first: screenshots of the settings pages of the reference, at a few window widths and for a short and a long page, since it was named but not seen.
+    - How the space is balanced: a centred column, a wider one, rows grouped into cards, or a second column beside the rows for help or related state. Left alone, a page of three rows will always look sparse, so the rows' own content, such as descriptions and grouping, counts as much as the layout.
+    - How the page grows and shrinks with the window, in both themes.
+    - Doing it together with the other Settings problems, as above.
 
 ## 20. Collapsing the sidebar is abrupt
 
