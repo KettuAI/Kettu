@@ -6,7 +6,6 @@
       "running": "正在运行",
       "awaiting_permission": "等待授权",
       "auth_required": "等待登录",
-      "disconnected": "已断开",
       "failed": "失败",
       "closed": "已关闭"
     },
@@ -38,7 +37,7 @@
     "turnFailed": "本轮对话失败",
     "stopped": {
       "title": "{{agent}} 意外停止",
-      "description": "本轮对话没有得到回复就结束了。Agent 重启后，OverBench 会重新连接这个会话。"
+      "description": "本轮对话没有得到回复就结束了。对话记录已保留，发送下一条消息时会重新启动 Agent。"
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} 没有确认取消",
@@ -71,8 +70,7 @@
     },
     "exited": "{{exit}}。",
     "exitedBeforeReady": "{{exit}}，未能就绪。",
-    "stoppedTooOften_other": "{{detail}} 它在五分钟内停止了 {{count}} 次，OverBench 不再自动重启它。",
-    "failedTooOften_other": "{{detail}} 它在五分钟内启动失败 {{count}} 次，OverBench 不再自动重启它。",
+    "stoppedTooOften_other": "{{detail}} 它在五分钟内停止了 {{count}} 次，在你重试之前 OverBench 不会再启动它。",
     "installFailed": "无法安装 {{agent}}。{{message}}",
     "runningFallback": "正在使用 {{fallback}}：{{version}} 安装失败。{{message}}",
     "installStopped": "安装已停止。",

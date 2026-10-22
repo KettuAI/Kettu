@@ -173,9 +173,8 @@ stateDiagram-v2
   starting --> ready: initialize succeeded
   starting --> failed: spawn error, timeout or protocol mismatch
   ready --> stopping: idle 5 min, quit, or restart
-  ready --> crashed: unexpected exit
-  crashed --> starting: automatic restart
-  crashed --> failed: too many restarts
+  ready --> available: unexpected exit
+  ready --> failed: fifth exit in 5 min
   stopping --> available
   failed --> starting: user retries
 ```
@@ -183,8 +182,8 @@ stateDiagram-v2
 - **Lazy start**: an agent starts with the first session that needs it, or earlier when the New session screen shows it as the chosen agent (`agents.start`), so the first send waits for the session alone. An agent started that way and never used is stopped by the idle stop.
 - **Shared process**: one process serves every session of that agent across all projects; ACP multiplexes sessions by `sessionId`. That is true of the adapters, but Claude Code's adapter runs a Claude Code CLI of its own for each session it has open, so idle sessions [let their agent go](./session-model.md#how-the-host-keeps-sessions).
 - **Idle stop**: an agent with no live sessions for 5 minutes is stopped to free memory, and starts again on demand. Released sessions are `closed` and do not count.
-- **Restarts**: if an agent exits while it has live sessions, the host restarts it with backoff (1 s, 2 s, 4 s, up to 30 s) and resumes those sessions ([session model](./session-model.md#recovering-after-a-crash)). After five failed restarts in five minutes it gives up and marks the agent `failed`; the user can retry. Crashes and failed restarts both count toward the five. A start on demand that fails marks the agent `failed` at once, with the reason as `detail`.
-- **Live sessions** are those the host holds that are `starting`, `auth_required`, `ready`, `running`, `awaiting_permission` or `disconnected`; they decide both restarts and the idle stop.
+- **Crashes**: an agent that exits unexpectedly is not restarted. Its sessions go `closed` with their threads, and the next one used starts it again ([session model](./session-model.md#recovering-after-a-crash)). Restarting it at once would bring back a Claude Code CLI for every session it served, used or not. After five unexpected exits in five minutes the agent is `failed`, and no session starts it until the user retries. A start that fails marks the agent `failed` at once, with the reason as `detail`.
+- **Live sessions** are those the host holds that are `starting`, `auth_required`, `ready`, `running` or `awaiting_permission`; they decide the idle stop.
 - **Timeouts**: `initialize` must answer within 30 s. Installing is a step of its own before the launch, with its own [time limit](#installing-adapters), so a launch never waits for a download.
 
 ### Spawning
@@ -278,7 +277,7 @@ Settings › Agents shows, in its list and on each agent's page, which CLI versi
 
 ## Diagnostics
 
-- For each agent, the host keeps the last 2,000 ACP messages (direction, time, method, size and the full JSON) in a ring buffer, plus the stderr ring buffer and process events (start, exit code, restarts).
+- For each agent, the host keeps the last 2,000 ACP messages (direction, time, method, size and the full JSON) in a ring buffer, plus the stderr ring buffer and process events (start, ready, exit code).
 - **Export diagnostics** asks the host for a bundle: app and agent versions, agent states, capabilities, the buffers, and the platform. The environment is reduced to `PATH`, `SHELL` and the detected Node.js version; other variables can hold secrets and are left out. The renderer passes the bundle to main (`diagnostics:save`), which adds its own section under `main` and writes pretty JSON to a path chosen in a save dialog, `overbench-diagnostics-<date>-<time>.json` in Downloads by default. Main's section holds the app, Electron, Chromium, Node.js and V8 versions, the platform, architecture and OS version, the launch time to the first interactive frame, the state and supervision events of both hosts, and main's last 500 log records.
 - Before exporting, the UI warns that the bundle contains prompts and code from recent sessions.
 - In development, `OVERBENCH_ACP_LOG=1` also mirrors ACP traffic to the host's stdout; packaged builds ignore it.

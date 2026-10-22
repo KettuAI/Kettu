@@ -11,7 +11,6 @@ export type SessionStatus =
   | 'ready'
   | 'running' // a prompt turn is in progress
   | 'awaiting_permission' // running, with at least one unanswered permission request
-  | 'disconnected' // the agent process exited; recoverable
   | 'failed' // could not start or recover; needs user action
   | 'closed'
 

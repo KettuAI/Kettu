@@ -204,7 +204,7 @@ describe('spawnArguments', () => {
 })
 
 describe('a crashed agent process', () => {
-  it('is restarted and its sessions resume', async () => {
+  it('closes its sessions, and the next send starts a new process', async () => {
     const t = await startTestHost({
       launcher: processLauncher(process.platform),
       agentEnv: { FAKE_AGENT_DELAY_SCALE: '0' },
@@ -225,22 +225,21 @@ describe('a crashed agent process', () => {
         sessionId: created.id,
         content: [{ type: 'text', text: '/crash --code 5' }],
       })
-      await port.untilStatus(created.id, 'disconnected')
-      await port.untilStatus(created.id, 'ready')
+      await port.untilStatus(created.id, 'closed')
       const exit = t.host.diagnostics
         .agentRecords('fake-agent')
         .events.find((e) => e.event === 'exit')
       expect(exit?.detail).toBe('exited with code 5')
-      expect(pids()).toContainEqual([])
-      const secondPid = pids().at(-1)?.[0]?.pid
-      expect(secondPid).toBeGreaterThan(0)
-      expect(secondPid).not.toBe(firstPid)
+      expect(pids().at(-1)).toEqual([])
 
       await port.request('sessions.prompt', {
         sessionId: created.id,
         content: [{ type: 'text', text: 'hello again' }],
       })
       await port.untilStatus(created.id, 'ready')
+      const secondPid = pids().at(-1)?.[0]?.pid
+      expect(secondPid).toBeGreaterThan(0)
+      expect(secondPid).not.toBe(firstPid)
       expect(port.entries(created.id).at(-1)).toMatchObject({ stopReason: 'end_turn' })
     } finally {
       await t.stop()

@@ -302,7 +302,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       }
       return detectAgent(def, ctx)
     },
-    agentTimings: { restartDelaysMs: [10], ...options.agentTimings },
+    agentTimings: options.agentTimings ?? {},
     sessionTimings: options.sessionTimings ?? {},
     threadWorker: inThreadWorker,
   })

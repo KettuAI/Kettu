@@ -67,14 +67,13 @@ function manager(
     adaptersDir: path.join(os.tmpdir(), 'overbench-no-adapters'),
     detect: detectAgent,
     ...extra,
-    timings: { restartDelaysMs: [5], ...timings },
+    timings,
     status: (status) => statuses.push(status),
     processes: () => {},
     authCommands: () => {},
   })
   agents.hooks = {
     liveSessions: () => live,
-    agentReady: () => {},
     agentExited: () => {},
     signedIn: () => {},
   }
@@ -136,36 +135,32 @@ describe('AgentManager', () => {
     expect(m.launcher.launches).toBe(1)
   })
 
-  it('restarts a crashed agent that live sessions need, and gives up after five failures', async () => {
+  it('does not restart a crashed agent, and gives up after five crashes', async () => {
     const m = manager()
     m.setLive(1)
     await m.agents.ensureReady('fake-agent')
-    for (let crash = 1; crash <= 4; crash++) {
-      m.launcher.crash(7)
-      await until(() => m.state() === 'crashed' || m.state() === 'starting')
-      await until(() => m.state() === 'ready')
-      expect(m.launcher.launches).toBe(crash + 1)
-    }
     m.launcher.crash(7)
-    await until(() => m.state() === 'failed')
-    expect(m.agents.status('fake-agent').detail).toContain('five minutes')
+    await until(() => m.state() === 'available')
     await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(m.launcher.launches).toBe(5)
+    expect(m.launcher.launches).toBe(1)
+    expect(m.agents.status('fake-agent').detail).toBeNull()
+    // The next session that needs it starts it again.
+    for (let crash = 2; crash <= 5; crash++) {
+      await m.agents.ensureReady('fake-agent')
+      expect(m.launcher.launches).toBe(crash)
+      m.launcher.crash(7)
+      await until(() => m.state() !== 'ready')
+    }
+    expect(m.state()).toBe('failed')
+    expect(m.agents.status('fake-agent').detail).toContain('five minutes')
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
 
     await m.agents.retry('fake-agent')
     expect(m.state()).toBe('ready')
     expect(m.launcher.launches).toBe(6)
     await m.agents.stopAll()
-  })
-
-  it('does not restart an agent nothing needs', async () => {
-    const m = manager()
-    await m.agents.ensureReady('fake-agent')
-    m.launcher.crash(1)
-    await until(() => m.state() === 'crashed')
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(m.launcher.launches).toBe(1)
-    expect(m.agents.status('fake-agent').detail).toBe('Fake agent exited with code 1.')
   })
 
   it('stops an agent after it has been idle', async () => {

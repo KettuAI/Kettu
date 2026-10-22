@@ -248,7 +248,6 @@ const CONNECTED: ReadonlySet<SessionStatus> = new Set([
   'ready',
   'running',
   'awaiting_permission',
-  'disconnected',
 ])
 
 export class SessionManager {
@@ -280,7 +279,6 @@ export class SessionManager {
     this.now = deps.now ?? Date.now
     deps.agents.hooks = {
       liveSessions: (agentId) => this.connectedCount(agentId),
-      agentReady: (agentId) => this.agentReady(agentId),
       agentExited: (agentId) => this.agentExited(agentId),
       signedIn: (agentId) => this.agentSignedIn(agentId),
     }
@@ -1208,13 +1206,13 @@ export class SessionManager {
       return this.snapshot(sessionId)
     }
     const live = this.makeLive(record, true, 'starting')
-    await this.runOpening(live, 'load')
+    await this.runOpening(live)
     return this.snapshot(sessionId)
   }
 
-  private runOpening(live: Live, mode: 'load' | 'resume'): Promise<void> {
+  private runOpening(live: Live): Promise<void> {
     if (live.opening) return live.opening
-    const run = this.reconnect(live, mode)
+    const run = this.reconnect(live)
       .catch(() => {
         // reconnect() already moved the session to failed or auth_required.
       })
@@ -1226,22 +1224,20 @@ export class SessionManager {
     return run
   }
 
-  /** `session/load` (replaying) or `session/resume`, by what the agent supports. */
-  private async reconnect(live: Live, mode: 'load' | 'resume'): Promise<void> {
+  /** `session/load`, replaying the history, or `session/resume` for an agent without it. */
+  private async reconnect(live: Live): Promise<void> {
     this.update(live, { status: 'starting', error: null })
     this.touch(live.id)
     let runtime: AgentRuntime
     try {
       runtime = await this.deps.agents.ensureReady(live.record.agentId)
     } catch (error) {
-      throw this.failStart(live, error, { action: mode })
+      throw this.failStart(live, error, { action: 'load' })
     }
     const caps = runtime.init.capabilities
     const { connection } = runtime
     const { acpSessionId, projectPath } = live.record
-    const useLoad =
-      (mode === 'load' && caps.loadSession) ||
-      (mode === 'resume' && !caps.resumeSession && caps.loadSession)
+    const useLoad = caps.loadSession
     if (!useLoad && !caps.resumeSession) {
       throw this.failStart(
         live,
@@ -1249,7 +1245,7 @@ export class SessionManager {
           'agent_unavailable',
           t('session.cannotLoad', { agent: this.deps.agents.name(live.record.agentId) }),
         ),
-        { action: mode },
+        { action: 'load' },
       )
     }
     this.attach(live, connection)
@@ -1272,7 +1268,7 @@ export class SessionManager {
           sessionMeta(live.record),
         )
         this.update(live, { config: withUltracode(live.record, setup.config) })
-        if (mode === 'load' && live.thread.order.length === 0) {
+        if (live.thread.order.length === 0) {
           this.emit(live, [
             {
               op: 'entry.add',
@@ -1290,16 +1286,7 @@ export class SessionManager {
         }
         for (const child of this.descendants(live.id, 'subagent')) {
           const childLive = this.live.get(child.id)
-          if (!childLive) continue
-          this.attach(childLive, connection)
-          const info = childLive.thread.session.subagent
-          if (childLive.thread.session.status === 'disconnected') {
-            this.update(childLive, {
-              status: 'ready',
-              ...(info ? { subagent: { ...info, stateKnown: false } } : {}),
-            })
-            this.touch(childLive.id)
-          }
+          if (childLive) this.attach(childLive, connection)
         }
       }
     } catch (error) {
@@ -1353,18 +1340,14 @@ export class SessionManager {
     }
   }
 
-  /** The agent restarted: resume every session it dropped. */
-  private agentReady(agentId: AgentId): void {
-    for (const live of [...this.live.values()]) {
-      if (live.record.agentId !== agentId || live.record.origin === 'subagent') continue
-      if (live.thread.session.status !== 'disconnected') continue
-      void this.runOpening(live, 'resume')
-    }
-  }
-
-  /** The agent exited: its sessions keep their threads and become disconnected. */
+  /**
+   * The agent exited unexpectedly: a running turn ends with a notice, and every session it held
+   * goes back to closed with its thread stored, to attach again when it is used. Nothing restarts
+   * the agent, so a crash never brings back sessions no one is using.
+   */
   private agentExited(agentId: AgentId): void {
     const name = this.deps.agents.name(agentId)
+    const held: SessionRecord[] = []
     for (const live of this.live.values()) {
       if (live.record.agentId !== agentId) continue
       live.connection = null
@@ -1390,9 +1373,11 @@ export class SessionManager {
       }
       this.clearPermissions(live, 'withdrawn')
       live.childRunning = false
-      this.update(live, { status: 'disconnected', turnStartedAt: null })
-      this.touch(live.id)
       if (cut) {
+        const now = this.now()
+        this.update(live, { updatedAt: now })
+        if (this.inFront(live.id)) live.record.lastViewedAt = now
+        this.persist(live)
         this.deps.events.attention(
           live.id,
           'error',
@@ -1400,7 +1385,15 @@ export class SessionManager {
           t('notice.stopped.title', { agent: name }),
         )
       }
+      held.push(live.record)
     }
+    // With no connection, closing waits for nothing, so no request comes in between.
+    this.closeAll(held, true).catch((error: unknown) => {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not close sessions of ${agentId}: ${(error as Error).message}`,
+      )
+    })
     this.updateBadge()
   }
 
@@ -1424,13 +1417,6 @@ export class SessionManager {
     if (live.record.origin === 'subagent') return
     const status = live.thread.session.status
     const failure = live.failure
-    if (status === 'disconnected') {
-      // Restarting the agent resumes its disconnected sessions on its own.
-      await this.deps.agents.retry(live.record.agentId).catch(() => {})
-      if (live.opening) await live.opening
-      else if (live.thread.session.status === 'disconnected') await this.runOpening(live, 'resume')
-      return
-    }
     if (status !== 'failed' && status !== 'auth_required') return
     if (this.deps.agents.status(live.record.agentId).state === 'failed') {
       await this.deps.agents.retry(live.record.agentId).catch(() => {})
@@ -1449,7 +1435,7 @@ export class SessionManager {
       case 'load':
       case 'resume':
         // "Reopen": a resume that failed falls back to replaying the history.
-        await this.runOpening(live, 'load')
+        await this.runOpening(live)
         return
       default:
         if (!live.record.acpSessionId) {
@@ -1457,7 +1443,7 @@ export class SessionManager {
           this.touch(live.id)
           await this.startNew(live).catch(() => {})
         } else {
-          await this.runOpening(live, 'load')
+          await this.runOpening(live)
         }
     }
   }
@@ -1581,7 +1567,7 @@ export class SessionManager {
     if (!threads[0]) {
       // Nothing stored, or nothing readable: the agent's own history, as on a first open.
       const live = this.makeLive(record, true, 'starting')
-      await this.runOpening(live, 'load')
+      await this.runOpening(live)
       return live
     }
     tree.forEach((item, i) => {
@@ -2161,7 +2147,9 @@ export class SessionManager {
       this.deps.agents.authRequired(live.record.agentId)
       this.update(live, { status: 'auth_required', turnStartedAt: null, updatedAt: now })
     } else if (closed) {
-      this.update(live, { status: 'disconnected', turnStartedAt: null, updatedAt: now })
+      // The agent's exit, which follows, closes the session; a send before it attaches anew.
+      live.connection = null
+      this.update(live, { status: 'ready', turnStartedAt: null, updatedAt: now })
     } else {
       this.update(live, {
         status: 'ready',

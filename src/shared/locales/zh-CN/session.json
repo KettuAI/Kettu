@@ -189,8 +189,6 @@
     "signInToContinue": "登录 {{agent}} 以继续",
     "historyStays": "历史记录会保留在这里，会话会从中断的地方继续。",
     "signIn": "登录…",
-    "disconnected": "{{agent}} 意外停止，正在重新连接…",
-    "reconnect": "重新连接",
     "announceApproval": "{{agent}} 需要你的授权",
     "announceFinished": "{{agent}} 已完成"
   },

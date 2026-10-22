@@ -536,25 +536,29 @@ describe('opening and recovering', () => {
     expect(stored?.head).toEqual({ agentId: 'fake-agent', acpSessionId: 'cli-refactor-router' })
   })
 
-  it('reconnects with session/resume after the agent crashes', async () => {
+  it('closes the sessions of a crashed agent, and the next send starts it again', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
     await turn(port, sessionId, 'hello')
     await port.untilStatus(sessionId, 'ready')
     await turn(port, sessionId, '/crash --code 9')
-    await port.untilStatus(sessionId, 'disconnected')
+    await port.untilStatus(sessionId, 'closed')
     const notice = port.entries(sessionId).find((entry) => entry.kind === 'notice')
     expect(notice).toMatchObject({ severity: 'error' })
     expect(t.sent).toContainEqual(
       expect.objectContaining({ type: 'host:attention', sessionId, kind: 'error' }),
     )
-    // The agent restarts on its own and the session comes back with its thread.
-    await port.untilStatus(sessionId, 'ready')
+    // Nothing restarts the agent; the thread stays.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(t.launcher).toMatchObject({ launches: 1 })
+    const [agent] = (await port.request('agents.list', undefined)).filter(
+      (s) => s.id === 'fake-agent',
+    )
+    expect(agent).toMatchObject({ state: 'available', detail: null })
     expect(port.entries(sessionId).some((entry) => entry.kind === 'user')).toBe(true)
-    const agentEvents = t.host.diagnostics.agentRecords('fake-agent').events.map((e) => e.event)
-    expect(agentEvents).toEqual(expect.arrayContaining(['exit', 'restart scheduled', 'ready']))
-    expect(t.launcher).toMatchObject({ launches: 2 })
+
     await turn(port, sessionId, 'still there?')
+    expect(t.launcher).toMatchObject({ launches: 2 })
     await port.untilStatus(sessionId, 'ready')
     expect(port.entries(sessionId).at(-1)).toMatchObject({ stopReason: 'end_turn' })
     expect(port.thread(sessionId).session.title).toBe('hello')
@@ -589,13 +593,13 @@ describe('opening and recovering', () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
     await turn(port, sessionId, '/crash')
-    await port.untilStatus(sessionId, 'disconnected')
+    await port.untilStatus(sessionId, 'closed')
     expect(tools(port, sessionId).map((tool) => tool.status)).toEqual(['cancelled'])
     const notices = port.entries(sessionId).filter((entry) => entry.kind === 'notice')
     expect(notices).toEqual([
       expect.objectContaining({
         title: 'Fake agent stopped unexpectedly',
-        description: expect.stringContaining('reconnects the session'),
+        description: expect.stringContaining('next message starts the agent again'),
       }),
     ])
   })
@@ -654,7 +658,7 @@ describe('sign-in', () => {
     expect(port.summary(summary.id)?.status).toBe('ready')
   })
 
-  it('reopens with session/load when the resume after a crash fails', async () => {
+  it('asks for sign-in when the agent comes back signed out after a crash', async () => {
     const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)
     const { t, port } = await setup({
       agentEnv: { FAKE_AGENT_AUTH: 'required', FAKE_AGENT_LOGIN_MARKER: marker },
@@ -662,18 +666,17 @@ describe('sign-in', () => {
     await port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'fake-login' })
     const sessionId = await newSession(t, port)
     await turn(port, sessionId, '/crash')
-    await port.untilStatus(sessionId, 'disconnected')
-    // The restarted agent starts signed out, so its session/resume fails.
+    await port.untilStatus(sessionId, 'closed')
+    // The agent the send starts is signed out, so the resume fails.
+    await turn(port, sessionId, 'still there?')
     await port.untilStatus(sessionId, 'auth_required')
     await writeFile(marker, '')
     await port.request('sessions.retry', { sessionId })
-    expect(port.summary(sessionId)?.status).toBe('ready')
-    // A load replaced the thread with the agent's history, which knows nothing of the crash.
-    const snapshot = await port.request('sessions.snapshot', { sessionId })
-    const users = snapshot.entries.flatMap((entry) => (entry.kind === 'user' ? [entry] : []))
-    expect(users.length).toBeGreaterThan(0)
-    expect(JSON.stringify(users)).not.toContain('/crash')
-    expect(port.entries(sessionId)).toEqual(snapshot.entries)
+    await port.untilStatus(sessionId, 'ready')
+    expect(port.entries(sessionId).at(-1)).toMatchObject({ stopReason: 'end_turn' })
+    const users = port.entries(sessionId).filter((entry) => entry.kind === 'user')
+    expect(JSON.stringify(users)).toContain('/crash')
+    expect(JSON.stringify(users)).toContain('still there?')
   })
 
   it('waits in auth_required and continues after authenticate', async () => {
@@ -817,6 +820,21 @@ describe('sub-sessions', () => {
     })
     expect(port.thread(childId).session.usage?.tokens?.input).toBe(4800)
     expect(port.entries(childId).at(-1)).toMatchObject({ kind: 'turn_end', stopReason: 'end_turn' })
+  })
+
+  it('closes with its parent when the agent crashes', async () => {
+    const { t, port } = await setup()
+    const { parentId, childId } = await runSubagent(t, port)
+    await port.open(childId)
+    await port.until(() => port.summary(childId)?.permissionCount === 1)
+    const other = await newSession(t, port)
+    await turn(port, other, '/crash')
+    await port.untilStatus(parentId, 'closed')
+    await port.untilStatus(childId, 'closed')
+    expect(port.summary(childId)?.permissionCount).toBe(0)
+    expect(tools(port, childId).find((tool) => tool.permissionResult)).toMatchObject({
+      permissionResult: 'withdrawn',
+    })
   })
 
   it('cancels a child that allows it', async () => {

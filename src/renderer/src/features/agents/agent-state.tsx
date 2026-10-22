@@ -37,7 +37,6 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
       )
     case 'installing':
     case 'starting':
-    case 'restarting':
       return (
         <span className={cn(base, 'text-muted-foreground')}>
           <Spinner className="size-3" />

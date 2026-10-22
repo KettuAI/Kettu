@@ -12,7 +12,6 @@
     "signIn": "登录后开始",
     "installing": "正在安装…",
     "starting": "正在启动…",
-    "restarting": "正在重启…",
     "failed": "失败",
     "notAvailable": "不可用"
   }

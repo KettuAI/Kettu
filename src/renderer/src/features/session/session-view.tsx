@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CircleAlertIcon, RotateCwIcon } from 'lucide-react'
+import { CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { markThreadShown } from '@renderer/app/perf'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -129,7 +128,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </ProjectPathContext>
       <div className="mx-auto flex w-full max-w-[760px] flex-col gap-2 px-6 pb-3">
-        {session && status === 'disconnected' && <Disconnected sessionId={sessionId} name={name} />}
         {session && status === 'failed' && (
           <FailedState
             title={t('view.stopped', { agent: name })}
@@ -177,36 +175,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       </div>
       <Announcer summary={summary} name={name} />
     </div>
-  )
-}
-
-function Disconnected({ sessionId, name }: { sessionId: string; name: string }) {
-  const { t } = useTranslation('session')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const reconnect = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      await host('sessions.retry', { sessionId })
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Alert className="animate-in fade-in animation-duration-(--duration-base)">
-      <Spinner className="size-4 text-muted-foreground" />
-      <AlertTitle>{t('view.disconnected', { agent: name })}</AlertTitle>
-      {error && <AlertDescription className="text-destructive">{error}</AlertDescription>}
-      <AlertAction>
-        <Button size="xs" variant="outline" disabled={busy} onClick={() => void reconnect()}>
-          <RotateCwIcon data-icon="inline-start" />
-          {t('view.reconnect')}
-        </Button>
-      </AlertAction>
-    </Alert>
   )
 }
 

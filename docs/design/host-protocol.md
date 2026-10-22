@@ -141,7 +141,6 @@ interface AgentStatus {
     | 'starting'
     | 'ready'
     | 'stopping'
-    | 'crashed'
     | 'failed'
   version: string | null // from agentInfo, once initialized
   package: { name: string; version: string; installed: boolean } | null // a package agent's pinned adapter

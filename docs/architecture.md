@@ -124,13 +124,14 @@ What OverBench advertises in `initialize` for M0, and why:
 
 ### Agents and sessions at a glance
 
-- An agent process starts with the first session that needs it and then serves all of that agent's sessions, in every project. It stops after 30 idle minutes and at quit, and restarts with backoff if it crashes. See [agent host](./design/agent-host.md#agent-process-lifecycle).
+- An agent process starts with the first session that needs it and then serves all of that agent's sessions, in every project. It stops after 5 idle minutes and at quit. After a crash it is not started again until a session needs it. See [agent host](./design/agent-host.md#agent-process-lifecycle).
 - Agents own their credentials. `agent` sign-in methods run through `authenticate`; `terminal` methods run their command in the built-in terminal, or show it to copy. See [sign-in](./design/agent-host.md#sign-in).
-- New sessions use `session/new` with the project folder as `cwd`. Reopening from history uses `session/load`, which replays the conversation; recovering after a crash uses `session/resume`, which does not. See [session lifecycle](./design/session-model.md#session-lifecycle).
+- New sessions use `session/new` with the project folder as `cwd`. Opening a session reads its stored thread and starts no agent; using it attaches it with `session/resume`, which replays nothing, also after a crash. A session with no stored thread opens with `session/load`, which replays the conversation. See [session lifecycle](./design/session-model.md#session-lifecycle).
 
 ```mermaid
 stateDiagram-v2
-  [*] --> starting: session/new, load or resume
+  [*] --> starting: session/new or load
+  [*] --> closed: opened from the store
   starting --> ready
   starting --> auth_required
   auth_required --> starting: signed in
@@ -138,10 +139,9 @@ stateDiagram-v2
   running --> awaiting_permission: session/request_permission
   awaiting_permission --> running: user answers
   running --> ready: stop reason
-  ready --> disconnected: agent exited
-  running --> disconnected: agent exited
-  disconnected --> starting: session/resume
-  ready --> [*]: session/close
+  ready --> closed: session/close, released, or agent exited
+  running --> closed: agent exited
+  closed --> running: prompt, after session/resume
 ```
 
 ### A prompt turn
@@ -218,7 +218,7 @@ src/
 │   ├── validate.ts        Request validators
 │   ├── shell-env.ts       Login shell environment resolution
 │   ├── catalog.ts         Built-in agent definitions
-│   ├── agents.ts          Supervision: detection, lazy start, restarts, sign-in state
+│   ├── agents.ts          Supervision: detection, lazy start, crash counting, sign-in state
 │   ├── agent-process.ts   Spawning, stopping, stderr capture
 │   ├── acp/               SDK connection and the v1 mapper; the only place ACP types live
 │   ├── sessions.ts        Live session state, prompts, permissions

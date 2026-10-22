@@ -200,8 +200,6 @@
     "signInToContinue": "Sign in to {{agent}} to continue",
     "historyStays": "Your history stays here; the session picks up where it was.",
     "signIn": "Sign in…",
-    "disconnected": "{{agent}} stopped unexpectedly. Reconnecting…",
-    "reconnect": "Reconnect",
     "announceApproval": "{{agent}} needs your approval",
     "announceFinished": "{{agent}} finished"
   },

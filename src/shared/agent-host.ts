@@ -53,7 +53,6 @@ export type AgentState =
   | 'starting'
   | 'ready'
   | 'stopping'
-  | 'crashed'
   | 'failed'
 
 export interface AgentAuthMethod {

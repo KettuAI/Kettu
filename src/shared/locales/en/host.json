@@ -6,7 +6,6 @@
       "running": "running",
       "awaiting_permission": "awaiting permission",
       "auth_required": "auth required",
-      "disconnected": "disconnected",
       "failed": "failed",
       "closed": "closed"
     },
@@ -38,7 +37,7 @@
     "turnFailed": "The turn failed",
     "stopped": {
       "title": "{{agent}} stopped unexpectedly",
-      "description": "The turn ended without an answer. OverBench reconnects the session when the agent restarts."
+      "description": "The turn ended without an answer. The thread is kept, and your next message starts the agent again."
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} did not confirm the cancellation",
@@ -71,10 +70,8 @@
     },
     "exited": "{{exit}}.",
     "exitedBeforeReady": "{{exit}} before it was ready.",
-    "stoppedTooOften_one": "{{detail}} It stopped {{count}} time in five minutes, so OverBench stopped restarting it.",
-    "stoppedTooOften_other": "{{detail}} It stopped {{count}} times in five minutes, so OverBench stopped restarting it.",
-    "failedTooOften_one": "{{detail}} It failed {{count}} time in five minutes, so OverBench stopped restarting it.",
-    "failedTooOften_other": "{{detail}} It failed {{count}} times in five minutes, so OverBench stopped restarting it.",
+    "stoppedTooOften_one": "{{detail}} It stopped {{count}} time in five minutes, so OverBench does not start it again until you retry.",
+    "stoppedTooOften_other": "{{detail}} It stopped {{count}} times in five minutes, so OverBench does not start it again until you retry.",
     "installFailed": "{{agent}} could not be installed. {{message}}",
     "runningFallback": "Running {{fallback}}: {{version}} could not be installed. {{message}}",
     "installStopped": "The install was stopped.",

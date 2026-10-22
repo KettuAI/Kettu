@@ -1,5 +1,5 @@
-// Agent supervision: detection, lazy start, one process per agent, idle stop, restarts with
-// backoff, sign-in state and the AgentStatus every port sees.
+// Agent supervision: detection, lazy start, one process per agent, idle stop, crash counting,
+// sign-in state and the AgentStatus every port sees.
 
 import { mkdir } from 'node:fs/promises'
 import os from 'node:os'
@@ -89,7 +89,6 @@ export interface AgentTimings {
   initializeMs: number
   /** How long an adapter install may take, download included. */
   installMs: number
-  restartDelaysMs: readonly number[]
   failureWindowMs: number
   maxFailures: number
   progressMs: number
@@ -101,7 +100,6 @@ export const AGENT_TIMINGS: AgentTimings = {
   idleMs: 5 * 60_000,
   initializeMs: 30_000,
   installMs: 15 * 60_000,
-  restartDelaysMs: [1_000, 2_000, 4_000, 8_000, 16_000, 30_000],
   failureWindowMs: 5 * 60_000,
   maxFailures: 5,
   progressMs: 250,
@@ -117,7 +115,6 @@ export interface AgentRuntime {
 /** What the session layer tells the agents, and hears back. */
 export interface AgentSessionHooks {
   liveSessions(agentId: AgentId): number
-  agentReady(agentId: AgentId, runtime: AgentRuntime): void
   agentExited(agentId: AgentId, info: ExitInfo): void
   signedIn(agentId: AgentId): void
 }
@@ -159,7 +156,7 @@ class Slot {
   installAbort: AbortController | null = null
   /** Says the agent runs an older version because the pinned one could not be installed. */
   adapterNote: string | null = null
-  /** What the last launch ran, for restarts while an older version stands in. */
+  /** What the running launch ran, which is the command shown while it runs. */
   launchSpec: LaunchSpec | null = null
   /** Older versions are deleted once per host, after the pinned one first initializes. */
   versionsCleaned = false
@@ -173,7 +170,6 @@ class Slot {
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
   progress = new TextRing(8 * 1024)
-  restartTimer: ReturnType<typeof setTimeout> | null = null
   idleTimer: ReturnType<typeof setTimeout> | null = null
   progressTimer: ReturnType<typeof setTimeout> | null = null
   lastStatus = ''
@@ -212,7 +208,6 @@ export class AgentManager {
   private lastAuthCommands = '[]'
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
-    agentReady: () => {},
     agentExited: () => {},
     signedIn: () => {},
   }
@@ -261,12 +256,7 @@ export class AgentManager {
     })
     slot.detection = detection
     // A running, installing, failed or recovering agent keeps its lifecycle state.
-    const idle =
-      !slot.launched &&
-      !slot.starting &&
-      !slot.installing &&
-      slot.state !== 'failed' &&
-      !slot.restartTimer
+    const idle = !slot.launched && !slot.starting && !slot.installing && slot.state !== 'failed'
     if (idle) {
       slot.state = detection.state
       slot.detail = detection.state === 'available' ? null : detection.detail
@@ -337,41 +327,23 @@ export class AgentManager {
         },
       )
     }
-    return this.start(slot, detection.spec, 'demand')
+    return this.start(slot, detection.spec)
   }
 
   /** Launches `spec`, or installs the pinned adapter first when it is null. */
-  private async start(
-    slot: Slot,
-    spec: LaunchSpec | null,
-    reason: 'demand' | 'restart',
-  ): Promise<AgentRuntime> {
-    if (slot.restartTimer) {
-      clearTimeout(slot.restartTimer)
-      slot.restartTimer = null
-    }
+  private async start(slot: Slot, spec: LaunchSpec | null): Promise<AgentRuntime> {
     const run = (async () => this.launch(slot, spec ?? (await this.install(slot))))()
     slot.starting = run
     try {
       const runtime = await run
       this.cleanUpVersions(slot)
-      this.hooks.agentReady(slot.def.id, runtime)
       this.sessionsChanged(slot.def.id)
       return runtime
     } catch (error) {
       const message = (error as Error).message
-      const tooMany = this.recordFailure(slot)
-      if (reason === 'demand' || tooMany) {
-        slot.state = 'failed'
-        slot.detail =
-          tooMany && reason === 'restart'
-            ? t('agent.failedTooOften', { detail: message, count: this.timings.maxFailures })
-            : message
-      } else {
-        slot.state = 'crashed'
-        slot.detail = message
-        this.scheduleRestart(slot)
-      }
+      this.recordFailure(slot)
+      slot.state = 'failed'
+      slot.detail = message
       this.emit(slot)
       throw new HostError('agent_unavailable', slot.detail ?? message, {
         agentId: slot.def.id,
@@ -473,18 +445,18 @@ export class AgentManager {
       }
       return
     }
+    // Nothing restarts it: its sessions go back to closed, and the next one used starts it.
     launched.reap()
-    slot.state = 'crashed'
-    slot.detail = t('agent.exited', { exit: exitText(slot.def.name, info) })
     this.hooks.agentExited(agentId, info)
     if (this.recordFailure(slot)) {
       slot.state = 'failed'
       slot.detail = t('agent.stoppedTooOften', {
-        detail: slot.detail,
+        detail: t('agent.exited', { exit: exitText(slot.def.name, info) }),
         count: this.timings.maxFailures,
       })
-    } else if (this.hooks.liveSessions(agentId) > 0) {
-      this.scheduleRestart(slot)
+    } else {
+      slot.state = slot.detection?.state ?? 'available'
+      slot.detail = null
     }
     this.emit(slot)
   }
@@ -494,27 +466,6 @@ export class AgentManager {
     slot.failures = slot.failures.filter((at) => now - at < this.timings.failureWindowMs)
     slot.failures.push(now)
     return slot.failures.length >= this.timings.maxFailures
-  }
-
-  private scheduleRestart(slot: Slot): void {
-    if (slot.restartTimer) return
-    const delays = this.timings.restartDelaysMs
-    const delay = delays[Math.min(slot.failures.length - 1, delays.length - 1)] ?? 0
-    this.deps.diagnostics.event(slot.def.id, 'restart scheduled', `${delay} ms`)
-    slot.restartTimer = setTimeout(() => {
-      slot.restartTimer = null
-      if (slot.state === 'failed' || slot.launched || slot.starting) return
-      if (this.hooks.liveSessions(slot.def.id) === 0) {
-        slot.state = slot.detection?.state ?? 'available'
-        this.emit(slot)
-        return
-      }
-      const detection = slot.detection
-      if (detection?.state !== 'available') return
-      this.start(slot, detection.spec ?? slot.launchSpec, 'restart').catch(() => {
-        // start() records the failure and schedules the next attempt.
-      })
-    }, delay)
   }
 
   // Adapter installs.
@@ -652,12 +603,8 @@ export class AgentManager {
   /** Clears `failed` and starts the agent again when live sessions need it. */
   async retry(agentId: AgentId): Promise<void> {
     const slot = this.slot(agentId)
-    if (slot.state === 'failed' || slot.state === 'crashed') {
+    if (slot.state === 'failed') {
       slot.failures = []
-      if (slot.restartTimer) {
-        clearTimeout(slot.restartTimer)
-        slot.restartTimer = null
-      }
       slot.state = 'available'
       slot.detail = null
       await this.detect(slot)
@@ -695,10 +642,10 @@ export class AgentManager {
 
   /** Stops the agent's process, after a start in progress settles. */
   private async stopProcess(slot: Slot): Promise<void> {
-    for (const timer of [slot.idleTimer, slot.restartTimer, slot.progressTimer]) {
+    for (const timer of [slot.idleTimer, slot.progressTimer]) {
       if (timer) clearTimeout(timer)
     }
-    slot.idleTimer = slot.restartTimer = slot.progressTimer = null
+    slot.idleTimer = slot.progressTimer = null
     if (slot.starting) await slot.starting.catch(() => {})
     const launched = slot.launched
     if (!launched) return

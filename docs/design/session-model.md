@@ -23,7 +23,6 @@ type SessionStatus =
   | 'ready'
   | 'running' // a prompt turn is in progress
   | 'awaiting_permission' // running, with at least one unanswered permission request
-  | 'disconnected' // the agent process exited; recoverable
   | 'failed' // could not start or recover; needs user action
   | 'closed'
 
@@ -282,7 +281,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 2. The host adds the user entry, sets `status: 'running'` and `turnStartedAt`, and sends `session/prompt` with the content as ACP content blocks.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
 4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, sets `usage.tokens` when present. The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
-5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready`, `auth_required` or `disconnected` depending on the cause. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
+5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready` or `auth_required` depending on the cause, or `closed` when the agent exited. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
 
 ## Queue and steering
 
@@ -318,7 +317,7 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 | Open with no stored thread | `session/load`                                    | `thread.reset`, then the replayed history as patches, then `ready`; the thread is then stored.       |
 | Open without `loadSession` | `session/resume`                                  | `ready` with an info notice that earlier history is not available.                                   |
 | Attach on use              | `session/resume`                                  | A `closed` session that sends a prompt, changes a setting or forks attaches to its agent first.      |
-| Recover after a crash      | `session/resume` once the agent restarts          | `ready`, with the thread kept from memory.                                                           |
+| After a crash              | `session/resume` on the next use                  | The sessions go `closed` with their threads; the agent starts again when one is used.                |
 | Close                      | `session/close` when supported                    | Live state dropped; the index entry stays, so it can be reopened.                                    |
 | Delete                     | `session/delete` when supported                   | Removed from the agent and from the index, after the user confirms.                                  |
 | Import                     | `session/list` with `cwd`, following `nextCursor` | Sessions started elsewhere, such as in the CLI, can be added to the index and opened.                |
@@ -326,7 +325,7 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 
 ### Recovering after a crash
 
-When an agent process exits, its live sessions become `disconnected` and keep their threads. When the agent restarts, the host calls `session/resume` for each; on success they return to `ready`. A turn that was running when the agent died ends with an error notice, and its pending permission requests are cleared as `withdrawn`. If resuming fails, the session becomes `failed` with **Reopen**, which runs `session/load`. An agent without `session/resume` is reconnected with `session/load` instead, which replays the history.
+When an agent process exits unexpectedly, the host does not start it again. Its live sessions, subagents included, go `closed` as a [released](#how-the-host-keeps-sessions) session does: their threads are stored, and a renderer showing one keeps it with a composer. A turn that was running ends with an error notice that the agent stopped, its unfinished tool calls become `cancelled`, and its pending permission requests are cleared as `withdrawn`. The next prompt, setting or fork attaches the session again, which starts the agent; one with no use is never resumed, so a crash of Claude Code's adapter brings back only the CLIs of sessions in use. When the agent exits five times in five minutes it is `failed`, and attaching fails until the user retries ([agent host](./agent-host.md#agent-process-lifecycle)).
 
 ### How the host keeps sessions
 
@@ -344,7 +343,7 @@ These details are settled by the implementation in `src/agent-host/sessions.ts`:
 - **Checkpoints**: the host stores each live session's thread as it changes. It notes the entries and the parts of the view each patch changes, and writes them at most 5 s after a change, at once when a turn ends, after a replay, when the session closes and when the host shuts down. A write that fails is logged, and the next one writes the whole thread again. A replay that fails partway is not stored.
 - **Create**: `sessions.create` sends the session's summary with `starting` at once, and resolves when `session/new` succeeds. When it fails with `auth_required`, it resolves anyway, with the session live in `auth_required` but not yet in the index; signing in, or `sessions.retry`, runs `session/new` again. Any other failure rejects the request and sends `session.removed`. Creating a session also adds its folder to the projects, unless the folder is a [scratch folder](#sessions-without-a-project).
 - **Open**: `sessions.open` of a session with a stored thread reads its latest page and starts nothing. Otherwise it waits for the load or resume, so its snapshot already holds the replay. A renderer watches first, so it also receives the replay's patches. When the agent cannot start, or the load fails, the session stays live in `failed` (or `auth_required`) and the snapshot shows it, for **Retry**.
-- **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in or whose session could not attach, `session/load` for a failed load or resume, and for a `disconnected` session it restarts the agent, whose restart resumes it. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
+- **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in or whose session could not attach, and `session/load` for a failed load or resume. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
 - **Unread**: a session counts as seen only while a port shows it in front (`sessions.show`). A renderer also keeps a few recent sessions watched, so switching back is instant, and those do not count. Showing a session, leaving it, and a turn ending while it is in front set `lastViewedAt`; a turn ending while no port shows it sets `unread`. After a restart a session is unread when `updatedAt` is later than `lastViewedAt`; a session never viewed (`lastViewedAt: null`) is not.
 - **Attention** is `permission` while a request is pending, then `error` for a `failed` session or a set `error` the user has not seen, then `unread`. An error is seen once the session is shown, or when it happens while a port shows it; the error notice stays in the thread, and the session keeps `error` set until its next turn. A `failed` session keeps its mark until it recovers, since its **Retry** still waits for the user.
 - **Fork**: `sessions.fork` takes a top-level session that is `ready`, or `closed`, which attaches first since not every agent forks a session it does not have open, and calls `session/fork` (ACP's unstable schema, only when `sessionCapabilities.fork` is advertised). The new session is saved at once, with the source's title, config and usage, and shows a copy of the source's thread without its subagent cards, whose sub-sessions stay with the source; its next ids continue after the copied ones. A later open replays the fork's own history from the agent.

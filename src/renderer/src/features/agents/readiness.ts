@@ -6,7 +6,6 @@ export type AgentReadiness =
   | { kind: 'sign-in' }
   | { kind: 'installing' }
   | { kind: 'starting' }
-  | { kind: 'restarting' }
   | { kind: 'failed'; message: string }
   | { kind: 'missing'; message: string; action: string; url: string | null }
 
@@ -31,8 +30,6 @@ export function readiness(status: AgentStatus): AgentReadiness {
       return { kind: 'installing' }
     case 'starting':
       return { kind: 'starting' }
-    case 'crashed':
-      return { kind: 'restarting' }
     case 'failed':
       return { kind: 'failed', message: status.detail ?? i18n.t('agents:readiness.couldNotStart') }
     default:
