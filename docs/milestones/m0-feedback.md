@@ -34,6 +34,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 26  | Account details cannot be hidden                               | Settings       | Open         |
 | 27  | Agent adapters have no update check or one-click update        | Agents         | Open         |
 | 28  | The Ready label next to the status dot is redundant            | Settings       | Open         |
+| 29  | Agents that are not installed cannot be installed from here    | Settings       | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -301,3 +302,16 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether only **Ready** loses its word, since it is the state that needs no attention, while states that ask something of the user keep theirs.
   - How the bare dot stays readable without color alone: an accessible name on the dot and a tooltip with the word, and the rule above amended for it.
   - Whether the project home's cards and the Welcome screen follow the Settings list. The maintainer pointed at Settings only; the card there shows "Ready" the same way.
+
+## 29. Agents that are not installed cannot be installed from here
+
+- **Reported**: 2026-10-22, with a screenshot of Settings › Agents, where all four agents are installed.
+- **Observed**: the list shows the agents that are installed. A mainstream agent the user has not installed does not show up as something to install.
+- **Expected**: agents that are not installed are listed too, and can be installed from the list: with Codex not installed, the row says it can be installed here instead of being absent. An installed agent and one that is not installed look clearly different.
+- **Today**: [Interface: Settings › Agents](../design/ui.md#settings--agents) already has a **Not installed** group below **Installed** (`section-defs.tsx`, `agents.groups`), but it holds only agents whose prerequisites are missing: OpenCode when `opencode` is not on `PATH`, and the two adapter agents when Node.js is missing or too old. Its row has a muted mark and a **How to install** link to a web page, and no install action. An adapter agent with Node.js present counts as installed from the start: Claude Code and Codex are listed under **Installed** with "Installs on first use", and their adapter installs at the first session ([Agent host: installing adapters](../design/agent-host.md#installing-adapters)), whose CLI the adapter carries. The catalog holds these three agents; custom ACP agents and browsing the ACP Registry are [out of M0](./m0.md#out-planned-for-later-milestones).
+- **To settle when planning**:
+  - What "not installed" means for the adapter agents: an adapter that is not yet installed, listed apart from the installed ones with an **Install** button that runs the install now and shows its progress, instead of waiting for a first session.
+  - What it means for OpenCode, which OverBench does not install: a link to its install instructions, or OverBench running the install for the platform's usual route.
+  - Whether "mainstream agents" means only the three the catalog knows, or more from the ACP Registry, which brings back browsing the registry and custom agents, both left out of M0. If more, which come first.
+  - How the two kinds look apart: a muted mark exists for the missing ones today, and the maintainer asks for a clear difference. The group, the mark, the state word or dot ([problem 28](#28-the-ready-label-next-to-the-status-dot-is-redundant)) and the button are the parts to design together.
+  - The same split in the places that offer agents, the [project home](../design/ui.md#project-home) cards, the [Welcome](../design/ui.md#welcome) screen and the New session agent menu, and its link with the adapter updates of [problem 27](#27-agent-adapters-have-no-update-check-or-one-click-update).
