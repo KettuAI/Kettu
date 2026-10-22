@@ -50,6 +50,10 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 42  | Long lines in the file preview run off the pane                | Side panel     | Open         |
 | 43  | The message body needs a typography pass to a given spec       | Thread         | Open         |
 | 44  | The space beside the window controls needs a design            | Sidebar        | Open         |
+| 45  | Sessions without a message stay in the list                    | Sidebar        | Open         |
+| 46  | A session's error mark stays after it has been seen            | Sidebar        | Open         |
+| 47  | A crowded top bar cuts the session title first                 | Top bar        | Open         |
+| 48  | The spinner's screen reader label is not translated            | Localization   | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -325,6 +329,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - What counts as account details: the email for sure; the plan label, and paths that carry the user name (OpenCode's config folder in the list), were not named.
   - The mask itself: a blur that stays illegible in screenshots, with the value withheld from the accessibility tree and from search while hidden, not only painted over. It must work in both themes and keep the row's layout.
   - Where else an email may appear later (the usage popover shows the plan only today), so the mask is one shared piece, not a per-screen patch.
+- **Amended**: 2026-10-22, from a review of the app that the maintainer asked for, added here at their request. Settings › Git shows the GitHub CLI account in full, "Signed in as" and the account name (`git.gh.signedInAs` in the settings catalog, rendered in `src/renderer/src/features/settings/sections.tsx`). It is an account detail within this problem and takes the same mask.
 
 ## 27. Agent adapters have no update check or one-click update
 
@@ -609,6 +614,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The colour direction: the spec keeps the body to the neutral tokens and no coloured inline code, while [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) asks for colour where it earns its place. The spec governs the body; where colour goes elsewhere is still problem 35's question.
   - The mockup and the text differ in small things (2 px before a chip against 4 px, list markers lighter than `--muted-foreground`), and the mockup shows a muted lead paragraph and a boxed conclusion that a renderer cannot tell apart from other paragraphs. The written spec is taken where they differ, and the lead and conclusion are left out unless asked for.
   - The rules rewritten in [Interface: markdown](../design/ui.md#markdown), [tool calls](../design/ui.md#tool-calls) and [Design system: typography](../design/design-system.md#typography), with the before and after screenshots the spec asks for.
+  - The column width, which the review the maintainer asked for on 2026-10-22 found out of step: [Interface: thread](../design/ui.md#thread) has said 768 px (`max-w-3xl`) while the code has used 760 px since the thread was built (`a2ed8bb`). The spec's `42em` replaces both, and the document is corrected in the same change.
 - **Amended**: 2026-10-22, with a screenshot of a reply whose file references (`README.zh-CN.md`, `docs/development-plan.md`, `docs/architecture.md`) render as underlined text, the same as a web link. A file reference renders as its Material file-type icon followed by the file name, so a file and a link can be told apart at a glance. The icon replaces the spec's generic 10 px file icon and comes from the file icon set chosen in [problem 38](#38-files-pane-no-markdown-preview-file-type-icons-or-editing), Material Icon Theme with lowered saturation, through the same mapping, so a file looks the same in the thread as in the Files pane. To settle: the icon's size inside the 20 px chip, since Material's icons lose detail below about 12 px; whether a reference with a line (`commands.go:12`) shows its line after the name; and a folder icon for a reference to a directory.
 
 ## 44. The space beside the window controls needs a design
@@ -621,3 +627,48 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Candidates talked through: a search icon once session search or a command palette exists (on the roadmap, not built); **New session** as an icon here, which frees a row of the sidebar but is easier to miss. Back and forward buttons were considered and set aside, since the sidebar, Settings' **Back**, a sub-session's parent link and `Mod+Shift+[` / `Mod+Shift+]` already cover the moves.
   - The stretch is where the window is dragged, so part of it stays empty, and any control in it is `app-region-no-drag` ([problem 14](#14-the-terminal-panels-own-buttons-do-nothing)).
   - On Windows and Linux there are no traffic lights on the left and the window controls sit on the right, so the stretch is wider there.
+
+## 45. Sessions without a message stay in the list
+
+- **Reported**: 2026-10-22, found in a review of the app and its code that the maintainer asked for, and recorded at their request. Their screenshots show several sidebar rows titled **New session**.
+- **Observed**: a session that never received a message is saved and listed like any other, under the fallback title **New session**, and stays until it is deleted. Each click on an agent card of a project's home that is not followed by a message adds one.
+- **Expected**: the list holds only sessions with something in them. How is to be decided.
+- **Today**: `createSession` in `src/renderer/src/app/actions.ts` calls `sessions.create` before any message is sent, and three callers pass none: the agent cards of the project home (`project-home.tsx`), and **New sub-session** in a session row's menu (`session-row.tsx`) and in the title menu (`session-header.tsx`). The host saves the index entry as soon as `session/new` succeeds ([Session model: session lifecycle](../design/session-model.md#session-lifecycle)), and a session without a title shows `sessionTitle`'s fallback, **New session** (`src/renderer/src/stores/sessions.ts`). The New session screen creates its session only when its message is sent, so it adds no empty row. Nothing removes them on its own; only the user's delete does.
+- **To settle when planning**:
+  - Whether a session is saved only once its first prompt is sent, or saved at once and dropped when the user leaves it empty, and what happens to the agent's own session then (`session/delete` or `session/close`).
+  - Whether the project home's agent cards open the New session screen with that agent instead of starting a session.
+  - Sub-sessions started from a menu, which have no message yet either.
+  - The empty sessions already in users' indexes.
+  - The rule written into [Session model](../design/session-model.md#session-lifecycle) and [Interface: sidebar](../design/ui.md#sidebar).
+
+## 46. A session's error mark stays after it has been seen
+
+- **Reported**: 2026-10-22, from the same review. A screenshot shows the red error mark on the row of a session last active 23 hours earlier.
+- **Observed**: after a turn fails, the row keeps its error mark when the user has opened the session and read the error, until a new turn starts in it. An unread mark, by contrast, clears when the session is viewed.
+- **Expected**: to be decided. The mark points at something the user has not seen; once it is seen, it could step down to a quieter mark or go, while the error notice stays in the thread.
+- **Today**: after an agent error the session's `error` stays set until the next turn starts ([Session model: prompt turns](../design/session-model.md#prompt-turns)), and attention is `error` for a `failed` session or a set `error`, ahead of `unread` ([Session model: how the host keeps sessions](../design/session-model.md#how-the-host-keeps-sessions)). `summary()` in `src/agent-host/sessions.ts` computes it for live sessions only, so the mark goes once the session closes or the app restarts, while viewing a session clears only its `unread`. `SessionIndicator` (`src/renderer/src/features/sidebar/session-indicator.tsx`) draws it in the row.
+- **To settle when planning**:
+  - Whether seeing the session clears the mark or only steps it down, and whether the same applies to a `failed` session, whose **Reopen** still waits for the user.
+  - Whether a parent row keeps showing an error of a sub-session below it once that sub-session was seen.
+  - The rule written into [Session model](../design/session-model.md#how-the-host-keeps-sessions) and [Interface: sidebar](../design/ui.md#sidebar).
+
+## 47. A crowded top bar cuts the session title first
+
+- **Reported**: 2026-10-22, from the same review. A screenshot with the side panel open shows the session title cut to "Ever…" while the git chip beside it (the branch `feat/login`, "Not published" and one changed file) shows in full. The narrow top bar's priority was also among the open questions of the first acceptance round on 2026-10-21.
+- **Observed**: when the top bar is crowded but still wider than 520 px, the title and the git parts shrink together, so the title, which names the session, gives way before the branch details.
+- **Expected**: the title keeps priority at every width, and the other parts give way first, as they already do below 520 px.
+- **Today**: [Interface: git in the top bar](../design/ui.md#git-in-the-top-bar) gives an order only below 520 px: the agent's name down to its mark, "Not published" down to its icon, then the branch name capped at 96 px, while "the session title keeps the rest". Above 520 px no rule applies: in `src/renderer/src/features/session/session-header.tsx` the title's button is `min-w-0 shrink`, and the branch name in `git-status.tsx` is capped only below 520 px.
+- **To settle when planning**:
+  - The order and the widths at which each part gives way above 520 px, with the side panel open and closed.
+  - A minimum width for the title, and whether a cut title shows in full on hover.
+  - How it fits the agent mark that [problem 33](#33-title-menu-needs-polish-agent-mark-goes-before-the-title) moves before the title.
+
+## 48. The spinner's screen reader label is not translated
+
+- **Reported**: 2026-10-22, from the same review.
+- **Observed**: with the interface in Chinese, a screen reader announces loading spinners in English, as "Loading".
+- **Expected**: the label comes from the locale catalogs, like every other string ([Localization](../design/localization.md)).
+- **Today**: `Spinner` in `src/renderer/src/components/ui/spinner.tsx`, a shadcn/ui component, sets `aria-label="Loading"` as a literal. A caller's own `aria-label` replaces it, but most places that use it pass none. A search found no other hard-coded strings in the features; the only other literal in `components/ui`, the "Close" of `sheet.tsx`, is in a component nothing uses.
+- **To settle when planning**:
+  - Whether callers pass a translated label, or the component reads it from the catalogs itself, given that the shadcn CLI manages `components/ui` and an edit there has to survive updates.
+  - The key, since the catalogs have no generic "Loading" yet.
