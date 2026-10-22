@@ -448,9 +448,6 @@ function EffortSegments({
             </Tooltip>
           )
         )}
-        <span aria-hidden className="px-1 text-[11px] text-muted-foreground">
-          ← →
-        </span>
       </div>
       <div className="pb-1">
         <SegmentedControl

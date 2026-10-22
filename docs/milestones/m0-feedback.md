@@ -60,7 +60,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the menu's presentation is not refined enough.
 - **Expected**: the menu reaches the polish of the reference.
 - **Today**: the menu holds the model list (shortcuts `1` to `4`, scrolling within 288 px behind fades), the reasoning level as a segmented control with a reset button and a `← →` hint, and switches such as Fast mode ([Interface: model menu](../design/ui.md#composer)). The specific problems are to be agreed when planning.
-- **Partly fixed**: the menu follows the refined [menus](../design/design-system.md#menus-and-dialogs) (content-fit width, 12.6 px radius, 6 px padding, the softer popover shadow), model and option names carry weight 500 over their descriptions, and the switches are the redesigned [switch](../design/design-system.md#switches-and-selects). What else falls short is for the maintainer to say against the reference.
+- **Partly fixed**: the menu follows the refined [menus](../design/design-system.md#menus-and-dialogs) (content-fit width, 12.6 px radius, 6 px padding, the softer popover shadow), model and option names carry weight 500 over their descriptions, the switches are the redesigned [switch](../design/design-system.md#switches-and-selects), and the `← →` hint next to the reasoning level is gone (the arrow keys still step it). What else falls short is for the maintainer to say against the reference.
 
 ## 5. Messages have no action row
 
@@ -164,7 +164,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the switches in Settings are shadcn's stock switch, a black track with a white thumb when on.
 - **Expected**: a round of customisation in OverBench's own style.
 - **Today**: `src/renderer/src/components/ui/switch.tsx` is unchanged since it was added. The design system only lightens `--input`, the unchecked track, and leaves switches with shadcn's own feedback ([Design system: meaning](../design/design-system.md#meaning)). The same switch appears in Settings (`SettingSwitch` in `src/renderer/src/features/settings/controls.tsx`) and in the model menu, for options such as Fast mode. To settle when planning: the switch's design (size, on and off colours in both themes, thumb, motion), done together with [problem 15](#15-settings-selects-show-names-only-and-keep-the-default-look) so the settings controls match.
-- **Fixed**: the switch is redrawn as [switches and selects](../design/design-system.md#switches-and-selects) describes: a 28 × 16 px recessed pill with a lifted 12 px thumb (24 × 14 px in menus), `--primary` when on, a slide on `--duration-base` and a stretch while pressed, in both themes.
+- **Fixed**: the switch is redrawn as [switches and selects](../design/design-system.md#switches-and-selects) describes: a 28 × 16 px recessed pill with a lifted 12 px thumb (24 × 14 px in menus), `--checked` blue when on, a slide on `--duration-base` and a stretch while pressed, in both themes.
 
 ## 17. Settings › Agents leaves out what matters
 
