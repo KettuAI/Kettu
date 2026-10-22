@@ -437,7 +437,7 @@ Rate-limit events arrive only when a window changes, so a window can stay unknow
 - Each `**<label>** — **<n>%** · Resets <time>` line under `### Limits` becomes a window: "5-hour limit" is `five_hour`, "Weekly · all models" `seven_day`, and "Weekly · <model>" `seven_day_<model>`, so Opus and Sonnet merge with the windows the events name. `usedPercent` is `n` as printed (already a percentage), and a window at 100% is `reached`.
 - The reset is printed in English without a year, in the zone of the machine (`Oct 24, 6:00 AM PDT`). A `GMT+8` or `UTC` zone is applied as written; a named zone such as `PDT` is the local one it came from. The year is this one, or the next for a reset that would otherwise lie in the past.
 - A window read this way replaces the one in memory, except that a `warning` or `reached` state an event set holds until that window's reset passes, since the report has no state of its own.
-- Text that is not the structured report, such as Claude Code's own output when the adapter falls back to it, changes nothing and is logged.
+- Text that is not the structured report, such as Claude Code's own output when the adapter falls back to it, changes nothing and is logged. The adapter falls back when the structured report fails or takes more than 5 s (`STRUCTURED_USAGE_TIMEOUT_MS`). That report took 2.6 s in a running session and 4.9 s in a new one, measured on 2026-10-22 with claude-agent-acp 0.94.0 and seven days of heavy local use, so on a busy machine a `/usage` the user types can show Claude Code's plain text instead; the thread keeps its lines ([Interface: markdown](./ui.md#markdown)).
 
 ### Reading Codex's limits from `/status`
 

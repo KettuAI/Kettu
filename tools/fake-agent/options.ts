@@ -54,7 +54,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     description: 'Starts a command in the background, as Claude Code does with run_in_background',
   },
   thinking: { description: 'A long thought, then an answer' },
-  usage: { description: "The plan limits, as Claude Code's /usage reports them" },
+  usage: {
+    description: "The plan limits, as Claude Code's /usage reports them",
+    hint: '--plain',
+  },
   status: { description: "The plan limits, as Codex's /status reports them" },
   context: { description: "What fills the context, as Claude Code's /context reports it" },
 }
@@ -67,6 +70,7 @@ export interface ScenarioOptions {
   withdrawMs: number | null // permission: withdraw the request after this long
   exitCode: number
   entries: number // large-history: the entries its replay synthesizes
+  plain: boolean // usage: Claude Code's own text, as the adapter forwards it when its report fails
 }
 
 export interface ScenarioChoice {
@@ -146,6 +150,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     withdrawMs: withdraw === undefined ? null : withdraw === '' ? 1500 : parseNumber(withdraw),
     exitCode: parseNumber(flagValue(args, 'code')) ?? 3,
     entries: historyEntries(env, parseNumber(flagValue(args, 'entries'))),
+    plain: flagValue(args, 'plain') !== undefined,
   }
   return { scenario, options, text }
 }

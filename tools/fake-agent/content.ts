@@ -2,9 +2,7 @@
 
 export const BASIC_REPLY = `## Plan
 
-I looked at \`src/clock.ts\` and found why the login test is flaky: the token expiry is
-computed from two separate reads of the clock, so a slow CI runner can cross a second
-boundary between them.
+I looked at \`src/clock.ts\` and found why the login test is flaky: the token expiry is computed from two separate reads of the clock, so a slow CI runner can cross a second boundary between them.
 
 1. Read the clock once per request.
 2. Pass the timestamp down instead of calling \`Date.now()\` again.
@@ -30,20 +28,11 @@ export const BASIC_DONE = `
 Done. The edit is in place; run \`pnpm test\` to confirm the flake is gone.
 `
 
-export const THOUGHT_TEXT = `The user wants to know why the test fails only on CI. CI runners are slower and share
-CPU, so anything that depends on wall-clock time between two statements can flip. Let me
-check where the clock is read. \`issueToken\` calls \`Date.now()\` and \`validate\` calls it
-again; if a second boundary falls between them the computed expiry differs by one second.
-That would explain a one-in-fifty failure rate. Before editing, I should confirm no other
-caller depends on the second read, because \`refresh\` also calls \`validate\` with its own
-timestamp. The safest change is to thread one timestamp through both functions and keep
-the default parameter for existing callers. I also want a regression test that freezes
-time with fake timers so the failure cannot come back silently.`
+export const THOUGHT_TEXT = `The user wants to know why the test fails only on CI. CI runners are slower and share CPU, so anything that depends on wall-clock time between two statements can flip. Let me check where the clock is read. \`issueToken\` calls \`Date.now()\` and \`validate\` calls it again; if a second boundary falls between them the computed expiry differs by one second. That would explain a one-in-fifty failure rate. Before editing, I should confirm no other caller depends on the second read, because \`refresh\` also calls \`validate\` with its own timestamp. The safest change is to thread one timestamp through both functions and keep the default parameter for existing callers. I also want a regression test that freezes time with fake timers so the failure cannot come back silently.`
 
 export const THINKING_ANSWER = `## Answer
 
-The flake comes from reading the clock twice. Threading a single timestamp through
-\`issueToken\` and \`validate\` removes the race, and a fake-timer test keeps it fixed.
+The flake comes from reading the clock twice. Threading a single timestamp through \`issueToken\` and \`validate\` removes the race, and a fake-timer test keeps it fixed.
 
 - **Cause**: two \`Date.now()\` calls straddling a second boundary
 - **Fix**: one read, passed down as \`now\`
@@ -88,8 +77,7 @@ export function longMarkdown(bytes: number): string {
     const topic = SECTION_TOPICS[index % SECTION_TOPICS.length]!
     const section = `## ${index + 1}. ${topic}
 
-This section walks through ${topic.toLowerCase()} in detail. Each paragraph is long enough
-to wrap a few times, so the renderer has real layout work to do while text streams in.
+This section walks through ${topic.toLowerCase()} in detail. Each paragraph is long enough to wrap a few times, so the renderer has real layout work to do while text streams in.
 
 - Item one for section ${index + 1}, with \`inline code\` and **bold text**
 - Item two, with a [link](https://agentclientprotocol.com/protocol/overview)

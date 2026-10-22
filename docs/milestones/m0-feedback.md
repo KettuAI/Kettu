@@ -66,6 +66,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 58  | Read aloud under replies is not wanted                         | Thread         | Fixed        |
 | 59  | A reply that opens with a heading leaves a gap above it        | Markdown       | Fixed        |
 | 60  | Renaming a session goes through a dialog                       | Session        | Fixed        |
+| 61  | A typed `/usage` shows as one run-on block of text             | Markdown       | Fixed        |
 | 62  | The interface reads small and cannot be zoomed                 | Window         | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
@@ -826,6 +827,12 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 
 - **Reported**: 2026-10-22, with screenshots of the reference (Claude Desktop) and of OverBench's title menu. In the reference a click on the session title in the top bar turns it into a text field, and a double click on a row in the sidebar does the same there; OverBench asked for **Rename…** in a menu, which opened a dialog.
 - **Fixed**: the session is renamed in place. A click on the top bar's title, a double click on its sidebar row, or **Rename** in any of its menus turns the title into a field with its text selected; `Enter` or leaving the field saves, `Esc` cancels, and an empty title returns to the agent's. The title menu opens from its own chevron button, so the title no longer opens it, and the rename dialog is gone ([Interface: session](../design/ui.md#session), [sidebar](../design/ui.md#sidebar)). Checked on a production build in both themes: every way in, saving, cancelling, an empty title, the focus going back to the title or the row, and a long title in a narrow window.
+
+## 61. A typed `/usage` shows as one run-on block of text
+
+- **Reported**: 2026-10-22, with a screenshot of a Claude Code session after `/usage`: the limits, the resets and the usage measures ran together into a few long paragraphs ("… (America/Los_Angeles) Current week (all models): 3% used …"), unreadable and not fit to ship.
+- **Cause**: the reply was not the adapter's markdown report but Claude Code's own plain text, one line per limit and per measure with the measures indented, which claude-agent-acp 0.94 forwards when its structured report fails or takes more than 5 s. That report took 4.9 s in a new session and 2.6 s in a running one on the maintainer's machine, so it misses the limit whenever the machine is busy ([Session model: reading the limits from `/usage`](../design/session-model.md#reading-the-limits-from-usage)). The thread rendered the text as CommonMark, which joins lines that no blank line separates.
+- **Fixed**: a single line break in agent text is a line break (`remark-breaks`), as in the agents' own terminals, so the plain `/usage` text keeps its lines; the indent of the measures is still lost, since markdown drops leading spaces ([Interface: markdown](../design/ui.md#markdown)). The fake agent's `/usage --plain` plays that text. The adapter's 5 s limit is its own and stays.
 
 ## 62. The interface reads small and cannot be zoomed
 

@@ -780,8 +780,47 @@ function usageBar(percent: number): string {
   return `${'█'.repeat(filled)}${'░'.repeat(20 - filled)}`
 }
 
+/** A reset as Claude Code's own `/usage` text writes it: `Oct 22 at 2:19pm (Asia/Shanghai)`. */
+function plainResetText(at: number): string {
+  const day = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(at)
+  const time = new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' })
+    .format(at)
+    .replace(/\s/g, '')
+    .toLowerCase()
+  return `${day} at ${time} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`
+}
+
+/**
+ * Claude Code's own `/usage` text, which claude-agent-acp 0.94 forwards as it is when its
+ * structured report fails or takes more than 5 s: plain lines, some indented.
+ */
+async function plainUsage(turn: Turn): Promise<StopReason> {
+  const { fiveHour, weekly } = planWindows(turn.session.turns)
+  const now = Date.now()
+  const limit = (label: string, share: number, resetsAt: number): string =>
+    `${label}: ${Math.round(share * 100)}% used · resets ${plainResetText(resetsAt)}`
+  const report = [
+    'You are currently using your subscription to power your Claude Code usage',
+    '',
+    limit('Current session', fiveHour, now + 2 * 3600_000 + 840_000),
+    limit('Current week (all models)', weekly, now + 3 * 86_400_000 + 7_200_000),
+    limit('Current week (Fake)', 0.07, now + 3 * 86_400_000 + 7_200_000),
+    '',
+    "What's contributing to your limits usage?",
+    'Approximate, based on local sessions on this machine. Behaviors are independent characteristics, not a breakdown.',
+    '',
+    'Last 24h · 312 requests · 6 sessions',
+    '  48% of your usage was at >150k context',
+    '  21% of your usage came from subagent-heavy sessions',
+    '  Top MCP servers: fake 9%',
+  ].join('\n')
+  await stream(turn, report, { chunks: [report], delayMs: 0 })
+  return 'end_turn'
+}
+
 /** `/usage` as claude-agent-acp 0.94 formats it, with the windows sendUsage pushes. */
 const usage: Scenario = async (turn) => {
+  if (turn.options.plain) return plainUsage(turn)
   const { fiveHour, weekly } = planWindows(turn.session.turns)
   const now = Date.now()
   const limit = (label: string, share: number, resetsAt: number): string[] => {

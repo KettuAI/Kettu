@@ -12,7 +12,6 @@ import { createCodePlugin } from '@streamdown/code'
 import { useTranslation } from 'react-i18next'
 import {
   defaultComponents,
-  defaultRemarkPlugins,
   Streamdown,
   type Components,
   type ExtraProps,
@@ -34,7 +33,8 @@ import { useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
-import { localLinks, localTarget } from './local-links'
+import { localTarget } from './local-links'
+import { remarkPlugins } from './remark'
 
 const plugins = {
   code: createCodePlugin({ themes: ['github-light-default', 'github-dark-default'] }),
@@ -111,8 +111,6 @@ const linkSafety = {
   enabled: true,
   renderModal: (props: LinkSafetyModalProps) => <LinkConfirm {...props} />,
 }
-
-const remarkPlugins = [...Object.values(defaultRemarkPlugins), localLinks]
 
 // Module constants: Streamdown's context depends on these, and a new object per render would
 // re-render every code block and table on each streamed chunk.

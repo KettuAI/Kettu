@@ -19,6 +19,8 @@ describe('chooseScenario', () => {
       size: 10 * 1024,
     })
     expect(chooseScenario('/cancel --ignore-cancel', {}).options.ignoreCancel).toBe(true)
+    expect(chooseScenario('/usage --plain', {}).options.plain).toBe(true)
+    expect(chooseScenario('/usage', {}).options.plain).toBe(false)
     expect(chooseScenario('/compact', {}).scenario).toBe('compact')
   })
 
