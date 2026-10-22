@@ -45,6 +45,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 37  | Icons look heavy; use thin line icons from a library           | Design system  | Open         |
 | 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Open         |
 | 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Open         |
+| 40  | The Settings pages look crude and their colours are untuned    | Settings       | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -527,3 +528,16 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - **The design**: what makes the strip ugly was not itemised. In the screenshot the two labels are identical, the close button shows on the active tab only, the raised active tab sits against a flat inactive one, and **New terminal** floats apart from the tabs. A redesign should be drawn against the reference's tabs and checked in both themes, with the palette and icon decisions of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) and [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library) applied.
   - A tab's context menu (rename, close and the like) is a candidate that was not asked for.
   - The rule rewritten in [Interface: terminal](../design/ui.md#terminal) and [Terminal](../design/terminal.md).
+
+## 40. The Settings pages look crude and their colours are untuned
+
+- **Reported**: 2026-10-22, in words, with no new screenshot; the Settings screenshots of the same day (Git, Agents) show the pages it means.
+- **Observed**: the Settings pages as a whole are still crude and ugly, and their colours have had no tuning or design at all. The maintainer stressed it twice.
+- **Expected**: Settings designed as a whole, with its colour designed rather than left at defaults. Nothing was itemised beyond that.
+- **Today**: from the screenshots, a section list on surface 0 (a title, a search field, icon rows, a filled selected row) beside a page of rows, each a name over a grey description with the control at the right (a switch, or a green dot with a mono version), divided by hairlines, with no sections, headings or cards. Every colour is a neutral grey apart from the green status dot. [Interface: settings](../design/ui.md#settings) gives the structure and the nine sections, and the palette is the neutral one [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) questions.
+- **To settle when planning**:
+  - The direction first. A flat, hairline look was chosen for Settings on the design canvas of 2026-10-21, and [problem 19](#19-settings-leave-too-much-empty-space) names GPT's settings as the reference; whether the first still stands, or what of each is kept, is the maintainer's call and comes before drawing.
+  - The structure: rows grouped under titled sections, the anatomy of a row (name, description, control, state), the hierarchy of sizes and weights, spacing, and how a short page such as Git's fills its space.
+  - The colour: surfaces, hover and selected fills, status colours, links and destructive actions designed on purpose, following the palette decision of problem 35.
+  - Where other problems meet in Settings, so one redesign covers them: the empty space of problem 19, the icons of [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library), Agents ([17](#17-settings--agents-leaves-out-what-matters), [27](#27-agent-adapters-have-no-update-check-or-one-click-update), [29](#29-agents-that-are-not-installed-cannot-be-installed-from-here), [26](#26-account-details-cannot-be-hidden), [28](#28-the-ready-label-next-to-the-status-dot-is-redundant)) and About ([18](#18-the-about-page-needs-redoing)).
+  - The proof: each of the nine pages in both themes and at several widths, next to the reference, as in the other polish passes.
