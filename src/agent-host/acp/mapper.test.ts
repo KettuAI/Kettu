@@ -1,4 +1,4 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable'
+import type { SessionUpdate, ToolCallUpdate } from '@agentclientprotocol/sdk/unstable'
 import { describe, expect, it } from 'vitest'
 import {
   applyPatches,
@@ -318,6 +318,28 @@ describe('tool calls', () => {
     ])
     expect(entries[0]).toMatchObject({ title: 'Tool call', toolKind: 'other', status: 'failed' })
     expect(effects.map((e) => (e.kind === 'tool' ? e.phase : e.kind))).toEqual(['started', 'ended'])
+  })
+
+  it('reports work that runs on in the background after its call, live only', () => {
+    const background = (update: Partial<ToolCallUpdate>): SessionUpdate => ({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'bg',
+      status: 'completed',
+      ...update,
+    })
+    const kinds = (updates: SessionUpdate[], replaying = false) =>
+      run(updates, { replaying }).effects.map((e) => e.kind)
+    const command = { rawInput: { command: 'npm run dev', run_in_background: true } }
+    expect(kinds([background(command)])).toContain('background')
+    expect(kinds([background({ _meta: { claudeCode: { toolName: 'Monitor' } } })])).toContain(
+      'background',
+    )
+    expect(kinds([background(command)], true)).not.toContain('background')
+    expect(kinds([background({ rawInput: { command: 'ls' } })])).not.toContain('background')
+    // A background agent is a subagent, whose own state says when it ends.
+    expect(
+      kinds([background({ rawInput: { prompt: 'Explore', run_in_background: true } })]),
+    ).not.toContain('background')
   })
 
   it('renders raw input as text', () => {

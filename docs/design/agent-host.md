@@ -172,7 +172,7 @@ stateDiagram-v2
   available --> starting: first session needs it
   starting --> ready: initialize succeeded
   starting --> failed: spawn error, timeout or protocol mismatch
-  ready --> stopping: idle 30 min, quit, or restart
+  ready --> stopping: idle 5 min, quit, or restart
   ready --> crashed: unexpected exit
   crashed --> starting: automatic restart
   crashed --> failed: too many restarts
@@ -181,8 +181,8 @@ stateDiagram-v2
 ```
 
 - **Lazy start**: an agent starts with the first session that needs it, or earlier when the New session screen shows it as the chosen agent (`agents.start`), so the first send waits for the session alone. An agent started that way and never used is stopped by the idle stop.
-- **Shared process**: one process serves every session of that agent across all projects; ACP multiplexes sessions by `sessionId`.
-- **Idle stop**: an agent with no live sessions for 30 minutes is stopped to free memory, and starts again on demand.
+- **Shared process**: one process serves every session of that agent across all projects; ACP multiplexes sessions by `sessionId`. That is true of the adapters, but Claude Code's adapter runs a Claude Code CLI of its own for each session it has open, so idle sessions [let their agent go](./session-model.md#how-the-host-keeps-sessions).
+- **Idle stop**: an agent with no live sessions for 5 minutes is stopped to free memory, and starts again on demand. Released sessions are `closed` and do not count.
 - **Restarts**: if an agent exits while it has live sessions, the host restarts it with backoff (1 s, 2 s, 4 s, up to 30 s) and resumes those sessions ([session model](./session-model.md#recovering-after-a-crash)). After five failed restarts in five minutes it gives up and marks the agent `failed`; the user can retry. Crashes and failed restarts both count toward the five. A start on demand that fails marks the agent `failed` at once, with the reason as `detail`.
 - **Live sessions** are those the host holds that are `starting`, `auth_required`, `ready`, `running`, `awaiting_permission` or `disconnected`; they decide both restarts and the idle stop.
 - **Timeouts**: `initialize` must answer within 30 s. Installing is a step of its own before the launch, with its own [time limit](#installing-adapters), so a launch never waits for a download.

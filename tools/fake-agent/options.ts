@@ -15,6 +15,7 @@ export const SCENARIOS = [
   'all-updates',
   'subagent',
   'plan',
+  'background',
   'thinking',
   'usage',
   'status',
@@ -49,6 +50,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'all-updates': { description: 'Sends every session update variant once, plus an unknown one' },
   subagent: { description: 'Runs a subagent in a child session with a permission request' },
   plan: { description: 'A plan whose items progress while the agent works' },
+  background: {
+    description: 'Starts a command in the background, as Claude Code does with run_in_background',
+  },
   thinking: { description: 'A long thought, then an answer' },
   usage: { description: "The plan limits, as Claude Code's /usage reports them" },
   status: { description: "The plan limits, as Codex's /status reports them" },

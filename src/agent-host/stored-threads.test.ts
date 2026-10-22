@@ -332,3 +332,69 @@ describe('attaching on use', () => {
     expect(forked.entries).toEqual(source.entries)
   })
 })
+
+describe('releasing', () => {
+  const quick = { checkpointMs: 10, releaseHiddenMs: 60, releaseShownMs: 800, releaseUnusedMs: 60 }
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const events = (t: TestHost) =>
+    t.host.diagnostics.agentRecords('fake-agent').events.map((e) => `${e.event} ${e.detail ?? ''}`)
+
+  it('lets an idle session out of view go, and attaches it again when used', async () => {
+    const { t, port } = await setup({ sessionTimings: quick })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'hello')
+    await port.request('sessions.show', { sessionId: null })
+    await port.untilStatus(sessionId, 'closed')
+    await port.until(() => port.thread(sessionId).session.status === 'closed')
+    expect(events(t)).toContain(`session released ${sessionId}`)
+    expect(await stored(t, sessionId)).toEqual(port.entries(sessionId))
+
+    await finishTurn(port, sessionId, 'and again')
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'turn_end')).toHaveLength(2)
+  })
+
+  it('keeps the session in front until it has been idle there longer', async () => {
+    const { t, port } = await setup({ sessionTimings: quick })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'hello')
+    await pause(300)
+    expect(port.summary(sessionId)?.status).toBe('ready')
+    await port.untilStatus(sessionId, 'closed')
+    expect(events(t)).toContain(`session released ${sessionId}`)
+  })
+
+  it('lets a session opened only to read go soon, even in front', async () => {
+    const { t, port } = await setup({ sessionTimings: quick })
+    const imported = await port.request('sessions.import', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      acpSessionId: 'cli-refactor-router',
+    })
+    const snapshot = await port.open(imported.id)
+    expect(snapshot.session.status).toBe('ready')
+    await port.untilStatus(imported.id, 'closed')
+  })
+
+  it('keeps a session with work in the background or waiting for the user', async () => {
+    const { t, port } = await setup({ sessionTimings: quick })
+    const background = await newSession(t, port)
+    await finishTurn(port, background, '/background')
+    const waiting = await newSession(t, port)
+    await port.request('sessions.prompt', { sessionId: waiting, content: text('/permission') })
+    await port.until(() => port.summary(waiting)?.permissionCount === 1)
+    await port.request('sessions.show', { sessionId: null })
+    await pause(300)
+    expect(port.summary(background)?.status).toBe('ready')
+    expect(port.summary(waiting)?.status).toBe('awaiting_permission')
+    expect(events(t).some((event) => event.startsWith('session released'))).toBe(false)
+  })
+
+  it('stops the agent once no session holds it', async () => {
+    const { t, port } = await setup({ sessionTimings: quick, agentTimings: { idleMs: 50 } })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'hello')
+    await port.request('sessions.show', { sessionId: null })
+    await port.untilStatus(sessionId, 'closed')
+    await vi.waitFor(() => expect(events(t)).toContain('idle stop '))
+  })
+})

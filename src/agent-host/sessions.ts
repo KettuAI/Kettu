@@ -80,12 +80,21 @@ export interface SessionTimings {
   cancelFallbackMs: number
   /** A changed thread is stored at most this long after its change; a turn's end stores it at once. */
   checkpointMs: number
+  /** An idle session lets its agent go this long after it left the front... */
+  releaseHiddenMs: number
+  /** ...or after this long idle in front... */
+  releaseShownMs: number
+  /** ...or this long after it was only opened to read, nothing sent, wherever it is. */
+  releaseUnusedMs: number
 }
 
 export const SESSION_TIMINGS: SessionTimings = {
   flushMs: 16,
   cancelFallbackMs: 10_000,
   checkpointMs: 5_000,
+  releaseHiddenMs: 60_000,
+  releaseShownMs: 30 * 60_000,
+  releaseUnusedMs: 60_000,
 }
 
 export interface SessionEvents {
@@ -178,6 +187,14 @@ interface Live {
   /** A replay failed partway, so the thread is not stored until one completes. */
   partial: boolean
   checkpointTimer: ReturnType<typeof setTimeout> | null
+  /** Something was sent or set since it went live; one only opened to read is let go sooner. */
+  used: boolean
+  /** It started work that runs on after its tool call, which Claude Code reports no end of. */
+  background: boolean
+  /** Since when nothing has needed its agent, and since when no port has shown it in front. */
+  idleSince: number | null
+  hiddenSince: number | null
+  releaseTimer: ReturnType<typeof setTimeout> | null
 }
 
 const TITLE_LENGTH = 60
@@ -249,6 +266,8 @@ export class SessionManager {
   private readonly listed = new Map<string, { title: string | null; updatedAt: string | null }>()
   /** Sessions being brought back from their stored threads, by id. */
   private readonly reviving = new Map<string, Promise<Live>>()
+  /** Idle sessions being let go, by id. */
+  private readonly releasing = new Map<string, Promise<void>>()
   private readonly timings: SessionTimings
   private readonly now: () => number
   private requestCounter = 0
@@ -464,6 +483,7 @@ export class SessionManager {
   private update(live: Live, changes: Partial<SessionView>): void {
     if (changes.error) live.errorSeen = this.inFront(live.id)
     this.emit(live, [{ op: 'session.update', changes }])
+    if ('status' in changes) this.refreshRelease(live)
   }
 
   private scheduleFlush(live: Live): void {
@@ -766,6 +786,11 @@ export class SessionManager {
       rewrite: false,
       partial: false,
       checkpointTimer: null,
+      used: false,
+      background: false,
+      idleSince: null,
+      hiddenSince: this.inFront(record.id) ? null : this.now(),
+      releaseTimer: null,
     }
     this.live.set(record.id, live)
     this.deps.agents.sessionsChanged(record.agentId)
@@ -783,6 +808,7 @@ export class SessionManager {
   private dropLive(live: Live): void {
     this.flushPatches(live)
     if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
+    if (live.releaseTimer) clearTimeout(live.releaseTimer)
     if (live.turn?.fallback) clearTimeout(live.turn.fallback)
     live.connection?.unregister(live.record.acpSessionId, live.target)
     this.seqs.set(live.id, live.seq)
@@ -853,6 +879,10 @@ export class SessionManager {
       }
       case 'subagent':
         this.applySubagent(live, effect)
+        break
+      case 'background':
+        live.background = true
+        this.refreshRelease(live)
         break
     }
   }
@@ -1033,6 +1063,12 @@ export class SessionManager {
     else this.shown.set(portId, this.recordOf(sessionId).id)
     if (previous !== null && this.has(previous)) this.markViewed(previous, this.recordOf(previous))
     if (sessionId !== null) this.markViewed(sessionId, this.recordOf(sessionId))
+    for (const id of [previous, sessionId]) {
+      const live = id === null ? undefined : this.live.get(id)
+      if (!live) continue
+      live.hiddenSince = this.inFront(live.id) ? null : this.now()
+      this.refreshRelease(live)
+    }
   }
 
   portClosed(portId: string): void {
@@ -1094,6 +1130,7 @@ export class SessionManager {
     }
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
+    live.used = true
     this.touch(live.id)
     try {
       await this.startNew(live)
@@ -1183,6 +1220,7 @@ export class SessionManager {
       })
       .finally(() => {
         live.opening = null
+        this.refreshRelease(live)
       })
     live.opening = run
     return run
@@ -1330,6 +1368,8 @@ export class SessionManager {
     for (const live of this.live.values()) {
       if (live.record.agentId !== agentId) continue
       live.connection = null
+      // Its background work ended with its process.
+      live.background = false
       const status = live.thread.session.status
       if (!CONNECTED.has(status) || status === 'starting' || status === 'auth_required') continue
       const turn = live.turn
@@ -1422,16 +1462,105 @@ export class SessionManager {
     }
   }
 
+  // Releasing: an idle session lets its agent go, so a Claude Code CLI runs only for the sessions
+  // in use. Its thread is stored, and it attaches again with `session/resume` once used.
+
+  /** Whether a session needs its agent now: work runs, waits for the user, or runs on unseen. */
+  private holdsAgent(live: Live): boolean {
+    const { status } = live.thread.session
+    if (status !== 'ready' && status !== 'closed') return true
+    if (live.turn || live.opening || live.attaching || live.background) return true
+    if (live.permissions.size > 0 || this.contextRuns.has(live.id)) return true
+    return this.descendants(live.id, 'subagent').some((record) => {
+      const child = this.live.get(record.id)
+      if (!child) return false
+      const childStatus = child.thread.session.status
+      return (
+        child.childRunning ||
+        child.background ||
+        child.permissions.size > 0 ||
+        childStatus === 'running' ||
+        childStatus === 'awaiting_permission' ||
+        childStatus === 'starting'
+      )
+    })
+  }
+
+  /** The session a subagent's work belongs to, which is released with its subagents. */
+  private rootOf(live: Live): Live | null {
+    let current = live
+    while (current.record.origin === 'subagent' && current.record.parentId) {
+      const parent = this.live.get(current.record.parentId)
+      if (!parent) return null
+      current = parent
+    }
+    return current
+  }
+
+  /** Arms the release of the session `from` belongs to, from when it became idle and hidden. */
+  private refreshRelease(from: Live): void {
+    const live = this.rootOf(from)
+    if (!live) return
+    if (live.releaseTimer) {
+      clearTimeout(live.releaseTimer)
+      live.releaseTimer = null
+    }
+    if (this.stopped || live.closing || !live.saved || live.record.origin !== 'user') return
+    if (this.holdsAgent(live)) {
+      live.idleSince = null
+      return
+    }
+    const now = this.now()
+    live.idleSince ??= now
+    const { releaseHiddenMs, releaseShownMs, releaseUnusedMs } = this.timings
+    const due = !live.used
+      ? live.idleSince + releaseUnusedMs
+      : this.inFront(live.id)
+        ? live.idleSince + releaseShownMs
+        : Math.max(live.idleSince, live.hiddenSince ?? now) + releaseHiddenMs
+    live.releaseTimer = setTimeout(
+      () => {
+        live.releaseTimer = null
+        if (this.live.get(live.id) !== live) return
+        if (this.now() >= due && !live.closing && !this.holdsAgent(live)) this.release(live)
+        else this.refreshRelease(live)
+      },
+      Math.max(0, due - now),
+    )
+  }
+
+  /** Stores the session's thread, closes its agent's session and its subagents, and drops it. */
+  private release(live: Live): void {
+    if (this.releasing.has(live.id)) return
+    this.deps.diagnostics.event(live.record.agentId, 'session released', live.id)
+    const run = this.closeAll([...this.descendants(live.id, 'subagent'), live.record], true)
+      .catch((error: unknown) => {
+        this.deps.diagnostics.log(
+          'warn',
+          `Could not release session ${live.id}: ${(error as Error).message}`,
+        )
+      })
+      .finally(() => this.releasing.delete(live.id))
+    this.releasing.set(live.id, run)
+  }
+
   // Sessions that come back from their stored threads: live without their agent, in `closed`,
   // until a turn or a setting needs it.
 
   /** The live session, brought back from its stored thread when it is not live. */
-  private revive(sessionId: string): Promise<Live> {
+  private async revive(sessionId: string): Promise<Live> {
+    // A session being let go comes back once it has gone.
+    await this.releasing.get(sessionId)
     const live = this.live.get(sessionId)
-    if (live) return Promise.resolve(live)
+    if (live) return live
     let reviving = this.reviving.get(sessionId)
     if (!reviving) {
-      reviving = this.runRevive(sessionId).finally(() => this.reviving.delete(sessionId))
+      reviving = this.runRevive(sessionId)
+        .then((revived) => {
+          this.refreshRelease(revived)
+          return revived
+        })
+        .finally(() => this.reviving.delete(sessionId))
       this.reviving.set(sessionId, reviving)
     }
     return reviving
@@ -1637,7 +1766,11 @@ export class SessionManager {
   context(sessionId: string): Promise<ContextBreakdown | null> {
     const running = this.contextRuns.get(sessionId)
     if (running) return running
-    const run = this.readContext(sessionId).finally(() => this.contextRuns.delete(sessionId))
+    const run = this.readContext(sessionId).finally(() => {
+      this.contextRuns.delete(sessionId)
+      const live = this.live.get(sessionId)
+      if (live) this.refreshRelease(live)
+    })
     this.contextRuns.set(sessionId, run)
     return run
   }
@@ -1689,6 +1822,7 @@ export class SessionManager {
   }
 
   private sendPrompt(live: Live, content: UserContent[]): void {
+    live.used = true
     const now = this.now()
     const patches: Patch[] = [
       { op: 'entry.add', entry: { kind: 'user', id: this.nextId(live), content, at: now } },
@@ -1874,6 +2008,7 @@ export class SessionManager {
     }
     const live = this.makeLive(record, false, 'ready')
     live.unread = false
+    live.used = true
     // Subagent cards point at the source's sub-sessions, which the fork does not have.
     const entries = threadEntries(source.thread).filter((entry) => entry.kind !== 'subagent')
     for (const entry of entries) live.counter = Math.max(live.counter, idNumber(entry.id))
@@ -2238,6 +2373,7 @@ export class SessionManager {
     }
     try {
       const connection = await this.attachClosed(live)
+      live.used = true
       if (optionId === SYNTHETIC_MODE_ID) {
         await connection.setMode(live.record.acpSessionId, value as string)
         this.update(live, {
@@ -2314,8 +2450,14 @@ export class SessionManager {
     if (record.origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.closesWithParent'))
     }
-    await this.reviving.get(sessionId)?.catch(() => {})
+    await this.settled(sessionId)
     await this.closeAll([...this.descendants(sessionId), record], true)
+  }
+
+  /** Waits for a revive or a release of the session in progress. */
+  private async settled(sessionId: string): Promise<void> {
+    await this.reviving.get(sessionId)?.catch(() => {})
+    await this.releasing.get(sessionId)
   }
 
   /**
@@ -2353,7 +2495,13 @@ export class SessionManager {
         )
       })
     }
-    if (kept) this.checkpoint(live)
+    if (kept) {
+      // A renderer still showing it keeps it, closed.
+      if (live.thread.session.status !== 'closed') {
+        this.update(live, { status: 'closed', turnStartedAt: null })
+      }
+      this.checkpoint(live)
+    }
     this.dropLive(live)
     this.updateBadge()
     // A session that never reached the index has nothing to come back to.
@@ -2366,7 +2514,7 @@ export class SessionManager {
     if (record.origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.deletedWithParent'))
     }
-    await this.reviving.get(sessionId)?.catch(() => {})
+    await this.settled(sessionId)
     const all = [...this.descendants(sessionId), record]
     await this.closeAll(all, false)
     for (const item of all) {
@@ -2408,7 +2556,7 @@ export class SessionManager {
 
   /** Clears the index; the agents keep their transcripts. */
   async removeAll(): Promise<void> {
-    await Promise.allSettled([...this.reviving.values()])
+    await Promise.allSettled([...this.reviving.values(), ...this.releasing.values()])
     const live = [...this.live.values()]
     await this.closeAll(
       live.filter((l) => l.record.origin === 'user').map((l) => l.record),
@@ -2425,6 +2573,7 @@ export class SessionManager {
   async removeProject(projectPath: string): Promise<void> {
     const key = pathKey(projectPath, this.deps.platform)
     const inProject = this.list().filter((s) => pathKey(s.projectPath, this.deps.platform) === key)
+    await Promise.all(inProject.map((summary) => this.settled(summary.id)))
     for (const summary of inProject) {
       const live = this.live.get(summary.id)
       if (live) live.closing = true
@@ -2559,6 +2708,7 @@ export class SessionManager {
     for (const live of this.live.values()) {
       this.flushPatches(live)
       if (live.turn?.fallback) clearTimeout(live.turn.fallback)
+      if (live.releaseTimer) clearTimeout(live.releaseTimer)
       this.checkpoint(live)
     }
     this.stopped = true

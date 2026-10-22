@@ -81,6 +81,8 @@ export type MapperEffect =
       toolKind: ToolKind
       output: string
     }
+  // Work the agent runs on after its tool call ended, such as a command in the background.
+  | { kind: 'background' }
 
 export interface MapperOutput {
   patches: Patch[]
@@ -393,6 +395,25 @@ function toolEffects(
 }
 
 /**
+ * Whether a tool call leaves work running once it ends: Claude Code's command with
+ * `run_in_background`, or its Monitor tool, which watches in the background. Claude Code reports
+ * when such work ends only to clients it renders terminals or AIR's async tasks for.
+ */
+function startsBackgroundWork(update: acp.ToolCallUpdate): boolean {
+  const input = update.rawInput
+  if (
+    typeof input === 'object' &&
+    input !== null &&
+    (input as Record<string, unknown>).run_in_background === true &&
+    typeof (input as Record<string, unknown>).command === 'string'
+  ) {
+    return true
+  }
+  const meta = update._meta as { claudeCode?: { toolName?: unknown } } | null | undefined
+  return meta?.claudeCode?.toolName === 'Monitor'
+}
+
+/**
  * Applies a `tool_call` or `tool_call_update`: only the fields present change, and both
  * add the entry when it is new, since agents may announce a call twice or update it first.
  */
@@ -407,6 +428,7 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
   if (update.locations != null) changes.locations = toolLocations(update.locations)
   const raw = rawInputText(update.rawInput)
   if (raw !== undefined) changes.rawInput = raw
+  if (!ctx.replaying && startsBackgroundWork(update)) out.effects.push({ kind: 'background' })
 
   if (existing?.kind === 'tool') {
     if (Object.keys(changes).length > 0) {

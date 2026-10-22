@@ -98,7 +98,7 @@ export interface AgentTimings {
 }
 
 export const AGENT_TIMINGS: AgentTimings = {
-  idleMs: 30 * 60_000,
+  idleMs: 5 * 60_000,
   initializeMs: 30_000,
   installMs: 15 * 60_000,
   restartDelaysMs: [1_000, 2_000, 4_000, 8_000, 16_000, 30_000],

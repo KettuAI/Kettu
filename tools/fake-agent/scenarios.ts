@@ -709,6 +709,38 @@ const plan: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+// Claude Code's Bash call returns as soon as the command goes to the background, and it tells a
+// client without terminals nothing of the command after that.
+const background: Scenario = async (turn) => {
+  const toolCallId = `background-${turn.session.turns}`
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId,
+    title: 'npm run dev',
+    kind: 'execute',
+    status: 'in_progress',
+    rawInput: {
+      command: 'npm run dev',
+      description: 'Start the dev server',
+      run_in_background: true,
+    },
+  })
+  await turn.sleep(100)
+  await turn.send({
+    sessionUpdate: 'tool_call_update',
+    toolCallId,
+    status: 'completed',
+    content: [
+      {
+        type: 'content',
+        content: { type: 'text', text: 'Command running in background with ID: b1' },
+      },
+    ],
+  })
+  await stream(turn, 'The dev server runs in the background.')
+  return 'end_turn'
+}
+
 const thinking: Scenario = async (turn) => {
   if (
     !(await stream(turn, THOUGHT_TEXT, {
@@ -877,6 +909,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'all-updates': allUpdates,
   subagent,
   plan,
+  background,
   thinking,
   usage,
   status,
