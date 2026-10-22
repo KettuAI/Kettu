@@ -46,7 +46,7 @@ Typed in `src/shared/host-control.ts`.
 
 | Direction   | Message                | Payload                                                                                                                                   |
 | ----------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `electronPath`, `fakeAgentPath`, `settings`                                       |
+| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `electronPath`, `fakeAgentPath`, `threadWorkerPath`, `settings`                   |
 | main → host | `host:connect`         | `windowId`, and the port in the transfer list                                                                                             |
 | main → host | `host:settings`        | `settings`, whenever the agent part or the language changes                                                                               |
 | main → host | `host:busy-request`    | `requestId`, before quitting                                                                                                              |
@@ -62,6 +62,8 @@ Typed in `src/shared/host-control.ts`.
 | host → main | `host:stopped`         | none; sent just before a clean exit                                                                                                       |
 
 `fakeAgentPath` is `tools/fake-agent/main.ts` under the app path in development, and `OVERBENCH_FAKE_AGENT` (or null) in a packaged build.
+
+`threadWorkerPath` is the bundle of the [thread worker](./persistence.md#threads), which main builds with `?modulePath` beside the host's, since electron-vite builds the host's own bundle without its worker plugin.
 
 `host:attention` lets main show an OS notification when no OverBench window is focused, including when every window is closed on macOS. Each kind follows its switch in Settings › Notifications, and **Play a sound** decides `silent`. A session has at most one notification at a time: a newer one replaces it. Clicking the notification focuses a window, or opens one, and sends it `app:command` `{ kind: 'open-session', sessionId }`; a page that has not subscribed yet receives the command when it does. The host sends `error` attention only for sessions in the index; a failed create is reported by the rejected request instead.
 

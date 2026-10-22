@@ -59,6 +59,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 51  | The open pane's toggle hardly looks pressed                    | Top bar        | Fixed        |
 | 52  | The file list cannot be hidden while reading a file            | Side panel     | Fixed        |
 | 53  | No line where the sidebar meets the thread                     | Layout         | Fixed        |
+| 54  | Opening a session starts its agent and keeps it running        | Performance    | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -766,3 +767,15 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Reported**: 2026-10-22, with screenshots of Claude Desktop and OverBench side by side: the reference draws a faint line between its sidebar and the conversation, and without one OverBench's edge reads oddly.
 - **Observed**: the sidebar (surface 0, `oklch(0.982 0 0)`) met the thread (surface 1, `oklch(0.991 0 0)`) with no line, as the design system specified; the two surfaces are about 1% apart. The reference's line measures one device pixel at about 6% black on a 2x display.
 - **Fixed**: the resizable handles at the sidebar's edge and the side panel's edge show a `--border-soft` hairline at rest ([Design system: one line per surface](../design/design-system.md#one-line-per-surface)). The side panel takes it too, as the same meeting of surface 0 and surface 1.
+
+## 54. Opening a session starts its agent and keeps it running
+
+- **Reported**: 2026-10-22, in words. Opening any session stalls, even one opened only to read its history, for up to about 11 s. With two sessions in use and three open only to read, the system showed six `claude` processes of 120 to 135 MB each, about 770 MB, and three `node` processes of about 114 MB in all.
+- **Expected**: reading a session's history starts no agent and does not stall; an agent process runs only while a session needs it, an idle one is released and the session still continues; nothing is left running after a session closes or the app quits; the agent processes match the sessions in use.
+- **Cause**, found on 2026-10-22 in the code and the running app's process tree:
+  - `sessions.open` always makes the session live with `session/load`. claude-agent-acp 0.94.0 answers a load by starting a Claude Code CLI of its own for that session (`createSession` with `resume`) while it replays the transcript, and answers only when both are done. Starting the CLI alone took 1.19 s, 1,166 ms of it the SDK's initialization; starting the adapter adds 0.25 s, and the replay grows with the transcript, whose size here is 2.2 MB at the median and 100 MB at the 99th percentile. The renderer waits for the snapshot until then.
+  - Every session the user opens stays live until it is closed by hand, deleted or the app quits: the renderer drops sessions beyond its four most recent with `sessions.unwatch`, which only stops the patches. The idle stop is per agent and needs no live session at all, so it never comes. [Agent host](../design/agent-host.md#agent-process-lifecycle) assumes one process serves every session of an agent, true of the adapter but not of Claude Code, which runs a CLI per session (228 to 265 MB RSS each, measured).
+  - The six `claude` processes each carried `--resume` with the id of one of the six Claude Code sessions in the index, all opened in that run, the first restored at launch; none was orphaned. The `node` processes are the Claude Code adapter (84 MB RSS), the Codex adapter (57 MB) and `codex.js` (38 MB), the npm launcher that only starts Codex's binary.
+  - Codex starts the MCP servers of `~/.codex/config.toml` per thread, here ChatGPT's `computer-use` and `node_repl`, each in a process group of its own, which the stop sequence's signal to the agent's group does not reach.
+- **Decided**: 2026-10-22, by the maintainer. OverBench keeps its own copy of each thread in SQLite through `node:sqlite`, in a worker thread of the host, read a page at a time from the latest turn, 60 entries back to the start of their turn and at most 500, with images over 32 KB stored apart ([Persistence: threads](../design/persistence.md#threads)). Then: open from the copy without an agent, connect an agent with `session/resume` only to continue, release an idle session's agent with `session/close`, and stop agent process trees whole.
+- **In progress**: the thread database, its worker and the host's store are built and tested, and the worker runs in the production build and the packaged app; nothing reads or writes threads yet.

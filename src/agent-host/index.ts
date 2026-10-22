@@ -1,10 +1,12 @@
 // Entry of the agent host utility process: main's messages in, the host's messages out.
 
+import { Worker } from 'node:worker_threads'
 import type { MessagePortMain } from 'electron'
 import type { HostToMain, MainToHost } from '@shared/host-control'
 import { createGitService } from './git'
 import { AgentHost } from './host'
 import type { PortChannel } from './rpc'
+import { nodeThreadWorker } from './threads/store'
 
 const parentPort = process.parentPort
 
@@ -39,6 +41,8 @@ function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
     send,
     git: (deps) => createGitService(deps),
     mirrorTraffic: !message.isPackaged && process.env.OVERBENCH_ACP_LOG === '1',
+    threadWorker: (file) =>
+      nodeThreadWorker(new Worker(message.threadWorkerPath, { workerData: { file } })),
   })
   host.catch((error: unknown) => {
     // Without its state the host cannot run; main restarts it with backoff.

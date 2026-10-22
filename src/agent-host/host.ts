@@ -29,6 +29,7 @@ import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
 import { agentsFile, projectsFile, sessionsFile, type AgentsFile, type JsonFile } from './storage'
+import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { createValidators } from './validate'
 
 export interface HostOptions {
@@ -49,6 +50,8 @@ export interface HostOptions {
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
   mirrorTraffic?: boolean
+  /** Starts the worker that owns the thread database; without it no thread is stored. */
+  threadWorker?: ThreadWorkerFactory
 }
 
 export class AgentHost {
@@ -60,6 +63,8 @@ export class AgentHost {
   /** What the agents last reported about their accounts and plans, kept across runs. */
   private readonly remembered: JsonFile<AgentsFile>
   readonly sessions: SessionManager
+  /** Every session's thread, read a page at a time, in a worker of its own. */
+  readonly threads: ThreadStore | null
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
@@ -95,6 +100,13 @@ export class AgentHost {
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
+    this.threads = options.threadWorker
+      ? new ThreadStore({
+          file: path.join(options.userDataPath, 'state', 'threads.db'),
+          createWorker: options.threadWorker,
+          log,
+        })
+      : null
     this.agents = new AgentManager({
       catalog: buildCatalog(options.fakeAgentPath),
       platform,
@@ -264,7 +276,12 @@ export class AgentHost {
           )
         }),
       ])
-      await Promise.all([this.projects.flush(), this.sessions.flush(), this.remembered.flush()])
+      await Promise.all([
+        this.projects.flush(),
+        this.sessions.flush(),
+        this.remembered.flush(),
+        this.threads?.close(),
+      ])
       this.hub.closeAll()
       this.options.send({ type: 'host:stopped' })
     })()

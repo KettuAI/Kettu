@@ -77,7 +77,7 @@ The [M0 plan](./docs/milestones/m0.md) lists what is in and out, and the [archit
 
 ## Run from source
 
-You need Node.js 22.12 or later and pnpm 10:
+You need Node.js 22.13 or later and pnpm 10:
 
 ```bash
 pnpm install

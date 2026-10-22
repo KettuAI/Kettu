@@ -180,7 +180,7 @@ The agent host is the source of truth for every live session. Its mapper turns A
 
 ### Persistence
 
-The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. Transcripts stay with the agents and come back through `session/load`; credentials and diagnostics are never written. See [persistence](./design/persistence.md).
+The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. The host also keeps its own copy of every session's thread in a SQLite database, owned by a worker thread and read a page at a time, so a session opens without its agent; the agents keep their transcripts and the context a session continues from. Credentials and diagnostics are never written. See [persistence](./design/persistence.md).
 
 ## Security
 
@@ -225,6 +225,7 @@ src/
 │   ├── projects.ts        Recent project folders
 │   ├── git/               Repository status, watchers, pull requests through gh
 │   ├── storage.ts         JSON persistence
+│   ├── threads/           The thread database: its worker, SQLite pages, and the host's store
 │   ├── diagnostics.ts     Traffic and stderr ring buffers
 │   └── i18n.ts            The text the host writes for the user, in the chosen language
 ├── terminal-host/         Utility process owning node-pty terminals

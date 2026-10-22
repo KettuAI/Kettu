@@ -2,7 +2,7 @@
 
 > Status: Draft · Part of the [architecture](../architecture.md) · Built in [M0.4](../milestones/m0.md#work-packages)
 
-OverBench stores as little as it can. Agents already keep transcripts and credentials, so OverBench keeps only what it needs to put its own UI back together.
+OverBench stores as little as it can. Agents already keep transcripts and credentials, so OverBench keeps only what it needs to put its own UI back together, including its own copy of each thread, so a session opens without starting its agent.
 
 ## What is stored, and where
 
@@ -13,6 +13,7 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | `state/projects.json` | Agent host | Recent project folders                                                                                                                             |
 | `state/sessions.json` | Agent host | The session index                                                                                                                                  |
 | `state/agents.json`   | Agent host | The account and plan limits each agent last reported, shown after a restart until it reports again ([sign-in](./agent-host.md#sign-in))            |
+| `state/threads.db`    | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                             |
 | `settings.json`       | Main       | [Settings](#settings)                                                                                                                              |
 | `window-state.json`   | Main       | Window size, position and maximized state                                                                                                          |
 | `app-state.json`      | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
@@ -133,14 +134,64 @@ interface AppStateFile {
 - Sending a prompt or deleting the session removes the draft.
 - A draft larger than 1 MB, or one whose write fails (for example on the storage quota), stays in memory until the app quits, and the failure is logged.
 
+## Threads
+
+OverBench keeps its own copy of every session's thread, the entries it shows, so a session opens from disk without starting its agent, and a long one opens at its latest page. The agent still holds the session's context and continues from it; the copy is only what the thread shows.
+
+> Built so far: the database, its worker and the store; sessions do not read or write threads yet ([M0 feedback, problem 54](../milestones/m0-feedback.md#54-opening-a-session-starts-its-agent-and-keeps-it-running)).
+
+- **Engine**: one SQLite database for every session, `state/threads.db`, through Node.js's built-in `node:sqlite` (SQLite 3.53.4 in Electron 44, checked 2026-10-22), in WAL mode with `synchronous = NORMAL` and incremental auto-vacuum. No npm package: `better-sqlite3` would need a native build for each Electron version and platform.
+- **Worker**: `node:sqlite` is synchronous, and the largest thread measured (11,262 entries, 20 MB of text) takes 270 ms to write whole and 105 ms to delete, so the database lives in a `worker_threads` thread of the agent host and never blocks the event loop that streams sessions. Main builds the worker with `?modulePath`, as it builds the host, and passes its path as `threadWorkerPath` in `host:init`: electron-vite builds the host's own bundle without its worker plugin. The host uses it through `ThreadStore` (`src/agent-host/threads/store.ts`), a promise API answered in the order asked. Every SQLite call is in `db.ts`, so a change to `node:sqlite`, which Node.js 24 still marks experimental (stability 1.1), touches one file.
+- **Schema**:
+
+  ```sql
+  CREATE TABLE threads (
+    session_id     TEXT PRIMARY KEY,  -- OverBench's session id
+    agent_id       TEXT NOT NULL,
+    acp_session_id TEXT NOT NULL,
+    session_json   TEXT NOT NULL,     -- title, config, commands, usage, subagent
+    next_pos       INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+  ) STRICT;
+  CREATE TABLE entries (
+    session_id TEXT NOT NULL REFERENCES threads (session_id) ON DELETE CASCADE,
+    pos        INTEGER NOT NULL,      -- arrival order, from 0
+    turn       INTEGER NOT NULL,      -- pos of the entry that opened the entry's turn
+    entry_id   TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    json       TEXT NOT NULL,         -- the ThreadEntry, large images replaced by blob refs
+    PRIMARY KEY (session_id, pos)
+  ) STRICT, WITHOUT ROWID;
+  CREATE UNIQUE INDEX entries_by_id ON entries (session_id, entry_id);
+  CREATE INDEX entries_by_kind ON entries (session_id, kind, pos);
+  CREATE TABLE blobs (
+    session_id TEXT NOT NULL REFERENCES threads (session_id) ON DELETE CASCADE,
+    hash       TEXT NOT NULL,         -- sha256 of the bytes
+    mime       TEXT NOT NULL,
+    data       BLOB NOT NULL,
+    PRIMARY KEY (session_id, hash)
+  ) STRICT, WITHOUT ROWID;
+  ```
+
+- **Turns**: a turn opens at a prompt of the user's own (not one steered into a running turn) and at the entry after a `turn_end`, which also splits a subagent's thread, since it has no prompts. An entry's `turn` is the position of the entry that opened its turn, so a page that starts at a turn is one range of the primary key.
+- **Pages**: a page reaches back at least 60 entries from its cursor, then on to the start of their turn, so the folding of a finished turn's work never sees half a turn; a turn longer than 500 entries is cut. The latest page is read below the end, each earlier one below the first position of the page after it, and `older` is null once a page starts the thread. A page also carries the latest plan when it lies before the page, for the plan above the composer. Measured on 2026-10-22 (Electron 44, macOS arm64, 40 other sessions in the file): 0.3 ms for the latest page of 137, 2,817 or 11,262 entries alike, about 110 KB each.
+- **Images**: an image whose base64 data is longer than 32 KB is stored once per session as bytes in `blobs`, a quarter smaller than its base64, and the entry keeps `{ kind: 'image', mimeType, blob }` in its place. Reading puts the data back, for the entries of that page only.
+- **Writing**: a write is one transaction of new and changed entries, with the session view when it changed. A changed entry keeps its position and a new one takes the position given; an entry stored at another position, or a position taken by another entry, fails the write with `conflict` and changes nothing, and the caller then writes the thread whole. Writing whole (`replace`), as after a replay from the agent, drops the session's rows and images first. Deleting a session deletes its rows and images by cascade and returns the space with `incremental_vacuum`.
+- **Reading**: every entry read must pass `isThreadEntry` (`src/shared/thread.ts`). A thread with an entry or a session view that does not parse reads as not stored, with an error in the host log, so the session falls back to its agent.
+- **Recovering**: when SQLite reports the file damaged (`SQLITE_CORRUPT` or `SQLITE_NOTADB`), at opening or on any request, the file and its `-wal` and `-shm` are renamed together to `threads.db.corrupt-<timestamp>`, an empty database replaces them, and the host log says so as an error; the request that met the damage fails with `corrupt`. If the worker stops, every request in flight and after fails with `unavailable`, and the host log says why.
+- **Versioning**: the schema version is SQLite's `user_version`, 1 for this schema. A newer schema gets a migration in `db.ts` from each older version. A database whose version is newer than the app understands is neither read nor written that run, as for the JSON files.
+- **Quitting**: after the requests in flight, the worker folds the WAL into the file (`wal_checkpoint(TRUNCATE)`) and closes it; a worker that has not finished after 2 s is stopped.
+
 ## What is never stored
 
-- Transcripts. They come back from the agent through `session/load`.
+- The agents' own transcripts. OverBench's copy of a thread ([threads](#threads)) is what the thread shows; the agent keeps the context a session continues from.
 - Credentials, API keys or tokens.
 - The resolved environment.
 - ACP traffic and diagnostics, which stay in memory until the user exports them.
 
 ## Writing safely
+
+These rules are for the JSON files; SQLite writes the [thread database](#threads) in transactions of its own.
 
 - Writes are debounced by 500 ms per file: the first change starts the window, and every change within it shares the one write that ends it, so a steady stream of changes still reaches disk twice a second. The data is serialized when the write happens, so it carries the latest state and a change costs nothing more than scheduling.
 - Each write goes to `<file>.tmp`, is flushed with `fsync`, and is renamed over the original. A crash mid-write leaves the previous version intact. On Windows the rename is retried a few times on `EPERM`, `EACCES` and `EBUSY`, which a virus scanner or indexer holding the file causes. Writes to one file are serialized.

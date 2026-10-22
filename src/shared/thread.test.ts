@@ -3,6 +3,7 @@ import {
   applyPatchInPlace,
   applyPatches,
   coalescePatches,
+  isThreadEntry,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -189,5 +190,63 @@ describe('coalescePatches', () => {
       { op: 'entry.appendText', id: 'm:2', text: 'c' },
       { op: 'entry.appendText', id: 'm:1', text: 'd' },
     ])
+  })
+})
+
+describe('isThreadEntry', () => {
+  const valid: ThreadEntry[] = [
+    { kind: 'user', id: 'e:1', content: [{ type: 'text', text: 'hi' }], steered: true },
+    {
+      kind: 'agent',
+      id: 'm:1',
+      markdown: 'ok',
+      attachments: [{ kind: 'link', uri: 'https://x', name: 'x' }],
+      streaming: false,
+    },
+    { kind: 'thought', id: 'm:2', markdown: '', streaming: true },
+    {
+      kind: 'tool',
+      id: 't:1',
+      title: 'Edit',
+      toolKind: 'edit',
+      status: 'completed',
+      content: [
+        { type: 'diff', path: 'a.ts', oldText: null, newText: 'x' },
+        { type: 'ref', ref: { kind: 'image', mimeType: 'image/png', data: 'AA' } },
+      ],
+      locations: [{ path: 'a.ts' }],
+      permission: { requestId: 'p1', options: [{ id: 'o', name: 'Allow', kind: 'allow_once' }] },
+      permissionResult: null,
+    },
+    { kind: 'subagent', id: 's:1', sessionId: 'child' },
+    { kind: 'session_message', id: 'sm:1', senderId: null, content: [] },
+    { kind: 'plan', id: 'e:2', items: [{ content: 'x', priority: 'low', status: 'pending' }] },
+    { kind: 'notice', id: 'e:3', severity: 'info', title: 'x' },
+    { kind: 'compaction', id: 'c:1', status: 'completed', summary: '' },
+    { kind: 'turn_end', id: 'e:4', stopReason: 'end_turn', durationMs: 5 },
+    { kind: 'git', id: 'g:1', event: 'commit', commits: [{ oid: 'a', subject: 'b' }], more: 0 },
+    { kind: 'git', id: 'g:2', event: 'branch', branch: 'main' },
+  ]
+
+  it('accepts every kind of entry', () => {
+    for (const entry of valid) expect(isThreadEntry(entry), entry.kind).toBe(true)
+  })
+
+  it('refuses unknown kinds and missing fields the renderer reads', () => {
+    expect(isThreadEntry(null)).toBe(false)
+    expect(isThreadEntry({ kind: 'mystery', id: 'x' })).toBe(false)
+    expect(isThreadEntry({ kind: 'user', content: [] })).toBe(false)
+    expect(isThreadEntry({ kind: 'agent', id: 'x', markdown: '', streaming: false })).toBe(false)
+    expect(
+      isThreadEntry({ kind: 'user', id: 'x', content: [{ type: 'ref', ref: { kind: 'image' } }] }),
+    ).toBe(false)
+    expect(
+      isThreadEntry({
+        ...valid[3],
+        content: [{ type: 'diff', path: 'a', oldText: 1, newText: '' }],
+      }),
+    ).toBe(false)
+    expect(isThreadEntry({ ...valid[3], permission: { requestId: 'p' } })).toBe(false)
+    expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
   })
 })

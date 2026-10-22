@@ -336,6 +336,97 @@ function appendText(entry: ThreadEntry, text: string): ThreadEntry {
   }
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+function isContentRef(value: unknown): value is ContentRef {
+  if (!isRecord(value)) return false
+  switch (value.kind) {
+    case 'image':
+      return typeof value.mimeType === 'string' && typeof value.data === 'string'
+    case 'link':
+      return typeof value.uri === 'string' && typeof value.name === 'string'
+    case 'unsupported':
+      return typeof value.label === 'string'
+    default:
+      return false
+  }
+}
+
+function isUserContent(value: unknown): value is UserContent {
+  if (!isRecord(value)) return false
+  if (value.type === 'text') return typeof value.text === 'string'
+  return value.type === 'ref' && isContentRef(value.ref)
+}
+
+function isToolContent(value: unknown): value is ToolContent {
+  if (!isRecord(value)) return false
+  switch (value.type) {
+    case 'markdown':
+      return typeof value.markdown === 'string'
+    case 'diff':
+      return (
+        typeof value.path === 'string' &&
+        typeof value.newText === 'string' &&
+        (value.oldText === null || typeof value.oldText === 'string')
+      )
+    case 'ref':
+      return isContentRef(value.ref)
+    default:
+      return false
+  }
+}
+
+const isListOf = <T>(value: unknown, guard: (item: unknown) => item is T): value is T[] =>
+  Array.isArray(value) && value.every(guard)
+
+/**
+ * Whether a value has the shape of a thread entry: a known kind, an id, and the fields the
+ * renderer reads without checking. Entries read back from disk pass through it.
+ */
+export function isThreadEntry(value: unknown): value is ThreadEntry {
+  if (!isRecord(value) || typeof value.id !== 'string') return false
+  switch (value.kind) {
+    case 'user':
+    case 'session_message':
+      return isListOf(value.content, isUserContent)
+    case 'agent':
+      return (
+        typeof value.markdown === 'string' &&
+        isListOf(value.attachments, isContentRef) &&
+        typeof value.streaming === 'boolean'
+      )
+    case 'thought':
+      return typeof value.markdown === 'string' && typeof value.streaming === 'boolean'
+    case 'tool':
+      return (
+        typeof value.title === 'string' &&
+        typeof value.toolKind === 'string' &&
+        typeof value.status === 'string' &&
+        isListOf(value.content, isToolContent) &&
+        isListOf(value.locations, isRecord) &&
+        (value.permission == null ||
+          (isRecord(value.permission) && isListOf(value.permission.options, isRecord)))
+      )
+    case 'subagent':
+      return typeof value.sessionId === 'string'
+    case 'plan':
+      return isListOf(value.items, isRecord)
+    case 'notice':
+      return typeof value.severity === 'string' && typeof value.title === 'string'
+    case 'compaction':
+      return typeof value.status === 'string' && typeof value.summary === 'string'
+    case 'turn_end':
+      return typeof value.stopReason === 'string' && typeof value.durationMs === 'number'
+    case 'git':
+      return value.event === 'commit'
+        ? isListOf(value.commits, isRecord)
+        : typeof value.event === 'string'
+    default:
+      return false
+  }
+}
+
 /** Merges consecutive text appends to the same entry, as the host does before a flush. */
 export function coalescePatches(patches: readonly Patch[]): Patch[] {
   const out: Patch[] = []

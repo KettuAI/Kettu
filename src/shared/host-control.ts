@@ -25,6 +25,7 @@ export type MainToHost =
       isPackaged: boolean
       electronPath: string // runs as Node.js with ELECTRON_RUN_AS_NODE, for the shell probe
       fakeAgentPath: string | null // tools/fake-agent/main.ts in development, or from OVERBENCH_FAKE_AGENT
+      threadWorkerPath: string // the thread worker's bundle, which main builds beside the host's
       settings: HostSettings
     }
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list

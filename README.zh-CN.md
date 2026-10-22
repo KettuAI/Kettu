@@ -77,7 +77,7 @@ OverBench 驱动的是你已经在用的 Agent CLI：你自己的安装、你自
 
 ## 从源码运行
 
-需要 Node.js 22.12 及以上版本和 pnpm 10：
+需要 Node.js 22.13 及以上版本和 pnpm 10：
 
 ```bash
 pnpm install

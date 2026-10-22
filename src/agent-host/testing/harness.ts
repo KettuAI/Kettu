@@ -32,6 +32,7 @@ import type { GitServiceApi } from '../git/api'
 import { AgentHost, type HostOptions } from '../host'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
+import { inThreadWorker } from './thread-worker'
 
 export const FAKE_AGENT_MAIN = path.resolve('tools/fake-agent/main.ts')
 
@@ -302,6 +303,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     },
     agentTimings: { restartDelaysMs: [10], ...options.agentTimings },
     sessionTimings: options.sessionTimings ?? {},
+    threadWorker: inThreadWorker,
   })
   let stopped = false
   return {
