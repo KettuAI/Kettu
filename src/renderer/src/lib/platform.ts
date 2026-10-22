@@ -1,3 +1,5 @@
+import { i18n } from './i18n'
+
 export const platform = window.overbench.platform
 export const isMac = platform === 'darwin'
 export const isWindows = platform === 'win32'
@@ -40,4 +42,7 @@ export function isMod(
   return isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
 }
 
-export const fileManagerName = isMac ? 'Finder' : isWindows ? 'Explorer' : 'the file manager'
+/** The platform's file manager, in the interface language: Finder, Explorer or the file manager. */
+export function fileManagerName(): string {
+  return i18n.t(isMac ? 'fileManager.mac' : isWindows ? 'fileManager.windows' : 'fileManager.linux')
+}

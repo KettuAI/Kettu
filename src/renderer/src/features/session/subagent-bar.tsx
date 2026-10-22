@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeftIcon, BotIcon, SquareIcon } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
 import { Button } from '@renderer/components/ui/button'
@@ -17,12 +18,13 @@ export function SubagentBar({
   summary: SessionSummary
   session: SessionView | undefined
 }) {
+  const { t } = useTranslation('session')
   const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
   const [stopping, setStopping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const running = summary.status === 'running' || summary.status === 'awaiting_permission'
   const canStop = running && !!session?.subagent?.canCancel
-  const parentTitle = parent ? sessionTitle(parent) : 'its parent session'
+  const parentTitle = parent ? sessionTitle(parent) : ''
 
   const stop = async () => {
     setStopping(true)
@@ -41,8 +43,21 @@ export function SubagentBar({
       <BotIcon className="size-4 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 flex-col">
         <p className="truncate text-ui text-muted-foreground">
-          {agentName(summary.agentId)} runs this subagent for{' '}
-          <span className="text-foreground">{parentTitle}</span>
+          {parent ? (
+            <Trans
+              t={t}
+              i18nKey="subagentBar.runsFor"
+              values={{ agent: agentName(summary.agentId) }}
+              components={{ parent: <span className="text-foreground">{parentTitle}</span> }}
+            />
+          ) : (
+            <Trans
+              t={t}
+              i18nKey="subagentBar.runsForParent"
+              values={{ agent: agentName(summary.agentId) }}
+              components={{ parent: <span className="text-foreground" /> }}
+            />
+          )}
         </p>
         {error && <p className="truncate text-xs text-destructive">{error}</p>}
       </div>
@@ -53,7 +68,7 @@ export function SubagentBar({
           ) : (
             <SquareIcon data-icon="inline-start" className="size-2.5 fill-current" />
           )}
-          Stop
+          {t('subagentBar.stop')}
         </Button>
       )}
       {parent && (
@@ -63,7 +78,9 @@ export function SubagentBar({
           onClick={() => openSession(parent.id, parent.projectPath)}
         >
           <ArrowLeftIcon data-icon="inline-start" />
-          Back to {parentTitle.length > 24 ? `${parentTitle.slice(0, 23)}…` : parentTitle}
+          {t('subagentBar.back', {
+            title: parentTitle.length > 24 ? `${parentTitle.slice(0, 23)}…` : parentTitle,
+          })}
         </Button>
       )}
     </div>

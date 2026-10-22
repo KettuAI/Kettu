@@ -1,8 +1,10 @@
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { LimitsPart } from '@renderer/features/session/composer/usage'
+import { limitLabel } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -12,6 +14,7 @@ import { countdown, tightestLimit } from './plan-usage'
 
 /** One chip per agent that reports plan limits, each opening that agent's limits. */
 export function PlanUsageStrip() {
+  const { t } = useTranslation('sidebar')
   const agents = useAgentsStore(
     useShallow((s) =>
       s.order.map((id) => s.byId[id]).filter((a): a is AgentStatus => !!a && a.limits.length > 0),
@@ -22,7 +25,7 @@ export function PlanUsageStrip() {
   return (
     <div
       role="group"
-      aria-label="Plan usage"
+      aria-label={t('planUsage.group')}
       className="flex flex-wrap items-center gap-0.5 px-0.5"
     >
       {agents.map((agent) => (
@@ -33,12 +36,18 @@ export function PlanUsageStrip() {
 }
 
 function UsageChip({ agent, now }: { agent: AgentStatus; now: number }) {
+  const { t } = useTranslation('sidebar')
   const limit = tightestLimit(agent.limits, now)
   const percent = limit?.usedPercent == null ? null : Math.round(limit.usedPercent)
   const left = limit?.resetsAt ? countdown(limit.resetsAt - now) : null
   const label = limit
-    ? `${agent.name} plan usage: ${limit.label} ${percent === null ? 'unknown' : `${percent}%`}${left ? `, resets in ${left}` : ''}`
-    : `${agent.name} plan usage: not known since its windows reset`
+    ? t(left ? 'planUsage.chipResets' : 'planUsage.chip', {
+        agent: agent.name,
+        limit: limitLabel(limit),
+        used: percent === null ? t('planUsage.unknown') : `${percent}%`,
+        left,
+      })
+    : t('planUsage.chipNone', { agent: agent.name })
   const onOpenChange = (open: boolean) => {
     if (!open || agent.state !== 'ready') return
     refreshLimits(agent.id).catch((error: unknown) =>

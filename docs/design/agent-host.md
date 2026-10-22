@@ -48,7 +48,7 @@ Typed in `src/shared/host-control.ts`.
 | ----------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `electronPath`, `fakeAgentPath`, `settings`                                       |
 | main → host | `host:connect`         | `windowId`, and the port in the transfer list                                                                                             |
-| main → host | `host:settings`        | `settings`, whenever the agent part changes                                                                                               |
+| main → host | `host:settings`        | `settings`, whenever the agent part or the language changes                                                                               |
 | main → host | `host:busy-request`    | `requestId`, before quitting                                                                                                              |
 | main → host | `host:shutdown`        | none                                                                                                                                      |
 | host → main | `host:ready`           | none                                                                                                                                      |
@@ -73,7 +73,7 @@ Typed in `src/shared/host-control.ts`.
 
 The badge clears when the host stops or crashes, until the new host reports again.
 
-`settings` is the agent part of the [settings](./persistence.md#settings): binary overrides, the proxy and background fetch. Main owns the settings file; the host only receives this part. A new `host:settings` applies at once: changed binary overrides run detection again for those agents, the proxy applies to agents started from then on and to the git service, and background fetch goes to the git service. A running agent keeps the environment it started with.
+`settings` is the agent part of the [settings](./persistence.md#settings): binary overrides, the proxy and background fetch, and `locale`, the resolved interface language for the text the host writes ([localization](./localization.md#switching)). Main owns the settings file; the host only receives this part. A new `host:settings` applies at once: changed binary overrides run detection again for those agents, the proxy applies to agents started from then on and to the git service, background fetch goes to the git service, and a new language runs detection again for every agent and resends the environment. A running agent keeps the environment it started with.
 
 On `host:shutdown` the host flushes pending patches, stops every agent with the sequence below, stops the git service, writes pending state, closes the ports, and sends `host:stopped` before it exits.
 

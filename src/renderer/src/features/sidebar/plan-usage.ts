@@ -1,4 +1,5 @@
 import type { PlanLimit } from '@shared/agent-host'
+import { i18n } from '@renderer/lib/i18n'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -20,11 +21,19 @@ export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLi
 /** Time left in its two largest units: "42m", "5h 12m", "1d 5h"; null once it has passed. */
 export function countdown(ms: number): string | null {
   if (ms <= 0) return null
-  if (ms < HOUR) return `${Math.max(1, Math.floor(ms / MINUTE))}m`
-  if (ms < DAY) {
-    const minutes = Math.floor((ms % HOUR) / MINUTE)
-    return `${Math.floor(ms / HOUR)}h${minutes ? ` ${minutes}m` : ''}`
+  if (ms < HOUR) {
+    return i18n.t('sidebar:countdown.minutes', { count: Math.max(1, Math.floor(ms / MINUTE)) })
   }
+  if (ms < DAY) {
+    const hours = Math.floor(ms / HOUR)
+    const minutes = Math.floor((ms % HOUR) / MINUTE)
+    return minutes
+      ? i18n.t('sidebar:countdown.hoursMinutes', { hours, minutes })
+      : i18n.t('sidebar:countdown.hours', { count: hours })
+  }
+  const days = Math.floor(ms / DAY)
   const hours = Math.floor((ms % DAY) / HOUR)
-  return `${Math.floor(ms / DAY)}d${hours ? ` ${hours}h` : ''}`
+  return hours
+    ? i18n.t('sidebar:countdown.daysHours', { days, hours })
+    : i18n.t('sidebar:countdown.days', { count: days })
 }

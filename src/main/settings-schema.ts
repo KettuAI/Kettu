@@ -8,6 +8,7 @@ import {
   type SettingsPatch,
   type TerminalSettings,
 } from '@shared/settings'
+import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 
 export const SETTINGS_VERSION = 1
@@ -33,6 +34,7 @@ const isBoolean: Check = (value, path) =>
 
 const SECTION_FIELDS = {
   general: {
+    language: oneOf(...LANGUAGE_SETTINGS),
     defaultAgent: oneOf(null, ...AGENT_IDS),
     sendKey: oneOf('enter', 'mod-enter'),
     restoreLastSession: isBoolean,
@@ -282,8 +284,9 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   return { settings, problems, readOnly: version > SETTINGS_VERSION }
 }
 
-export function hostSettings(settings: SettingsFile): HostSettings {
+export function hostSettings(settings: SettingsFile, systemLocale: Locale): HostSettings {
   return {
+    locale: resolveLocale(settings.general.language, systemLocale),
     agents: structuredClone(settings.agents),
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },

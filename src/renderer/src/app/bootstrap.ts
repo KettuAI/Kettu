@@ -82,7 +82,8 @@ function restoreLastSession(): void {
 
 let wasDisconnected = false
 
-export function bootstrap(): void {
+/** Starts loading what the shell shows; resolves once the settings are in, or failed to load. */
+export function bootstrap(): Promise<unknown> {
   // Platform styles, such as the Windows scrollbars, key off this.
   document.documentElement.dataset.platform = platform
   installPerfCounters()
@@ -111,4 +112,5 @@ export function bootstrap(): void {
   void Promise.allSettled([settingsReady, sessionState]).then(restoreLastSession)
 
   window.addEventListener('focus', refreshShownProject)
+  return Promise.allSettled([settingsReady])
 }

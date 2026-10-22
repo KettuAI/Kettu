@@ -54,6 +54,7 @@ function manager(
     diagnostics: new Diagnostics(),
     launcher,
     settings: () => ({
+      locale: 'en',
       agents: {},
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },

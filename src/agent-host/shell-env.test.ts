@@ -2,6 +2,7 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { translate } from './i18n'
 import {
   applyProxy,
   defaultShell,
@@ -108,7 +109,7 @@ describe('resolveShellEnvironment', () => {
       baseEnv: { Path: 'C:\\x', ELECTRON_RUN_AS_NODE: '1' },
     })
     expect(result).toMatchObject({ source: 'inherited', env: { Path: 'C:\\x' } })
-    expect(result.warning).toMatch(/restart/)
+    expect(result.warning).toEqual({ key: 'environment.inherited' })
   })
 
   // The probe spawns a POSIX login shell; Windows has no such step.
@@ -143,7 +144,8 @@ describe('resolveShellEnvironment', () => {
       })
       expect(result.source).toBe('fallback')
       expect(result.env.KEEP).toBe('1')
-      expect(result.warning).toMatch(/did not answer/)
+      expect(result.warning).toMatchObject({ key: 'environment.fallback' })
+      expect(translate(result.warning!)).toMatch(/did not answer/)
     })
   })
 })

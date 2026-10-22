@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { openFile } from '@renderer/stores/files'
 import type { FileRef } from './file-refs'
 
@@ -10,11 +11,12 @@ export function FileLink({
   file: FileRef & { projectPath: string }
   children: ReactNode
 }) {
+  const { t } = useTranslation('files')
   return (
     <button
       type="button"
       data-file-ref=""
-      title={`Open ${file.path}${file.line ? `:${file.line}` : ''}`}
+      title={t('link.open', { target: file.line ? `${file.path}:${file.line}` : file.path })}
       onClick={() => openFile(file.projectPath, file.path, file.line)}
     >
       {children}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import { i18n } from '@renderer/lib/i18n'
 import type { SettingsSection } from '@renderer/stores/view'
 
 /** One row of a settings section: its name and description are what search matches. */
@@ -9,6 +10,8 @@ export interface RowDef {
   description?: string
   /** Extra words search should find, such as "dark" for the theme row. */
   keywords?: string
+  /** The name in English, so a search in English finds the row in any language. */
+  english?: string
   /**
    * `block` hands the row's text to the control, which keeps it beside its main control on the
    * first line and puts what it reveals underneath; `custom` renders only the control, a card.
@@ -28,10 +31,16 @@ export interface SectionDef {
 
 export function matches(row: RowDef, query: string): boolean {
   if (!query) return true
-  const text = `${row.name} ${row.description ?? ''} ${row.keywords ?? ''}`.toLowerCase()
+  const text =
+    `${row.name} ${row.description ?? ''} ${row.keywords ?? ''} ${row.english ?? ''}`.toLowerCase()
   return query
     .toLowerCase()
     .split(/\s+/)
     .filter(Boolean)
     .every((word) => text.includes(word))
+}
+
+/** Settings text in English, whatever the interface language, for `RowDef.english`. */
+export function english() {
+  return i18n.getFixedT('en', 'settings')
 }

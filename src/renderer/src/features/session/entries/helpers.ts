@@ -1,16 +1,19 @@
 import type { StopReason, ToolEntry, ToolKind } from '@shared/thread'
-import { basename, duration, plural, relativePath } from '@renderer/lib/format'
+import { basename, duration, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 
 /** A Collapsible panel animating its height, the one layout animation the design allows. */
 export const PANEL =
   'h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-(--duration-base) ease-out-expo data-ending-style:h-0 data-starting-style:h-0'
 
-const FILE_VERB: Partial<Record<ToolKind, string>> = {
-  read: 'Read',
-  edit: 'Edit',
-  delete: 'Delete',
-  move: 'Move',
+type FileKind = 'read' | 'edit' | 'delete' | 'move'
+
+const FILE_KINDS: Partial<Record<ToolKind, FileKind>> = {
+  read: 'read',
+  edit: 'edit',
+  delete: 'delete',
+  move: 'move',
 }
 
 /** What the header names: a verb with a path or command, or the agent's own title. */
@@ -18,15 +21,19 @@ export function toolLabel(
   entry: Pick<ToolEntry, 'toolKind' | 'title' | 'locations' | 'rawInput'>,
   projectPath: string,
 ): { verb: string | null; target: string | null; kind: 'path' | 'command' | 'title' } {
-  const verb = FILE_VERB[entry.toolKind]
+  const fileKind = FILE_KINDS[entry.toolKind]
   const location = entry.locations[0]?.path
-  if (verb && location) {
-    return { verb, target: relativePath(location, projectPath), kind: 'path' }
+  if (fileKind && location) {
+    return {
+      verb: i18n.t(`session:tool.verb.${fileKind}`),
+      target: relativePath(location, projectPath),
+      kind: 'path',
+    }
   }
   if (entry.toolKind === 'execute') {
     // Without the input, the title is the agent's own label and may already say "Run".
     const target = entry.rawInput ?? entry.title.replace(/^run\s+/i, '')
-    return { verb: 'Run', target, kind: 'command' }
+    return { verb: i18n.t('session:tool.verb.run'), target, kind: 'command' }
   }
   return { verb: null, target: entry.title, kind: 'title' }
 }
@@ -41,11 +48,14 @@ export function groupLabel(kinds: ToolKind[]): string {
   const searches = kinds.filter((k) => k === 'search').length
   const fetches = kinds.filter((k) => k === 'fetch').length
   const parts = [
-    reads ? `explored ${plural(reads, 'file')}` : null,
-    searches ? (searches === 1 ? 'searched once' : `searched ${searches} times`) : null,
-    fetches ? (fetches === 1 ? 'fetched a page' : `fetched ${fetches} pages`) : null,
+    reads ? i18n.t('session:summary.explored', { count: reads }) : null,
+    searches ? i18n.t('session:summary.search', { count: searches }) : null,
+    fetches ? i18n.t('session:summary.fetch', { count: fetches }) : null,
   ].filter((p): p is string => p !== null)
-  const text = parts.join(', ')
+  return capitalize(parts.join(i18n.t('session:summary.separator')))
+}
+
+function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
@@ -56,13 +66,6 @@ export type RunStep =
 
 type RunPart =
   'thought' | 'execute' | 'read' | 'edit' | 'delete' | 'move' | 'search' | 'fetch' | 'other'
-
-const FILE_PAST: Partial<Record<RunPart, string>> = {
-  read: 'read',
-  edit: 'edited',
-  delete: 'deleted',
-  move: 'moved',
-}
 
 function partOf(step: RunStep): RunPart {
   if (step.kind === 'thought') return 'thought'
@@ -103,16 +106,18 @@ export function runSummary(steps: RunStep[]): {
           (sum, s) => sum + (s.kind === 'thought' ? (s.durationMs ?? 0) : 0),
           0,
         )
-        return ms >= 1000 ? `thought for ${duration(ms)}` : 'thought'
+        return ms >= 1000
+          ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
+          : i18n.t('session:summary.thought')
       }
       case 'execute':
-        return n === 1 ? 'ran a command' : `ran ${n} commands`
+        return i18n.t('session:summary.execute', { count: n })
       case 'search':
-        return n === 1 ? 'searched once' : `searched ${n} times`
+        return i18n.t('session:summary.search', { count: n })
       case 'fetch':
-        return n === 1 ? 'fetched a page' : `fetched ${n} pages`
+        return i18n.t('session:summary.fetch', { count: n })
       case 'other':
-        return n === 1 ? 'used a tool' : `used ${n} tools`
+        return i18n.t('session:summary.tool', { count: n })
       default: {
         // Files, not calls: the same file read twice counts once.
         const paths = group.map((s) => (s.kind === 'tool' ? s.path : undefined))
@@ -120,12 +125,12 @@ export function runSummary(steps: RunStep[]): {
         const files = known.size + paths.filter((p) => p === undefined).length
         const [only] = known
         return files === 1 && only
-          ? `${FILE_PAST[part]} ${basename(only)}`
-          : `${FILE_PAST[part]} ${plural(files, 'file')}`
+          ? i18n.t(`session:summary.${part}Named`, { name: basename(only) })
+          : i18n.t(`session:summary.${part}`, { count: files })
       }
     }
   })
-  if (parts[0]) parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1)
+  if (parts[0]) parts[0] = capitalize(parts[0])
   return {
     parts,
     editAt: [...byPart.keys()].indexOf('edit'),
@@ -139,14 +144,14 @@ export function runSummary(steps: RunStep[]): {
 export function stopReasonText(stopReason: StopReason, durationMs: number): string {
   switch (stopReason) {
     case 'end_turn':
-      return `Worked for ${duration(durationMs)}`
+      return i18n.t('session:stopReason.endTurn', { duration: duration(durationMs) })
     case 'cancelled':
-      return 'Cancelled'
+      return i18n.t('session:stopReason.cancelled')
     case 'max_tokens':
-      return 'Stopped at the token limit'
+      return i18n.t('session:stopReason.maxTokens')
     case 'max_turn_requests':
-      return 'Stopped at the request limit'
+      return i18n.t('session:stopReason.maxTurnRequests')
     case 'refusal':
-      return 'Declined'
+      return i18n.t('session:stopReason.refusal')
   }
 }

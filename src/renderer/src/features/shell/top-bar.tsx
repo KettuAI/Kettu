@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { PanelLeftIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
@@ -39,6 +40,7 @@ export function NoDrag({ children, className }: { children: ReactNode; className
 }
 
 export function SidebarToggle({ className }: { className?: string }) {
+  const { t } = useTranslation('shell')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   const update = useUpdatesStore((s) => s.status)
   const updateReady =
@@ -47,7 +49,7 @@ export function SidebarToggle({ className }: { className?: string }) {
     update.dismissed !== versionOf(update.state) &&
     (update.state.kind === 'ready' ||
       (update.state.kind === 'available' && update.state.mode === 'link'))
-  const label = collapsed ? 'Show sidebar' : 'Hide sidebar'
+  const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
   return (
     <Tooltip>
       <TooltipTrigger
@@ -78,7 +80,7 @@ export function SidebarToggle({ className }: { className?: string }) {
         </span>
         {updateReady && update && (
           <span className="opacity-60">
-            OverBench {versionOf(update.state)} is ready to install
+            {t('topBar.updateReady', { version: versionOf(update.state) ?? '' })}
           </span>
         )}
       </TooltipContent>

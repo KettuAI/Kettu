@@ -1,4 +1,5 @@
 import { memo, startTransition, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -55,6 +56,7 @@ export const Thread = memo(function Thread({
   /** A turn is running and the agent has not answered yet. */
   working: boolean
 }) {
+  const { t } = useTranslation('session')
   const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
   const signature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
   const items = useMemo(
@@ -70,7 +72,7 @@ export const Thread = memo(function Thread({
           top, inset, for keyboard focus only. */}
       <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay after:pointer-events-none after:absolute after:inset-0 after:opacity-0 after:ring-2 after:ring-ring/50 after:ring-inset has-[>[data-slot=message-scroller-viewport]:focus-visible]:after:opacity-100">
         <MessageScrollerViewport
-          aria-label="Thread"
+          aria-label={t('thread.label')}
           className="outline-none [scroll-timeline:--scroll-fade-top_y] [scrollbar-gutter:stable_both-edges]"
         >
           <MessageScrollerContent className="mx-auto w-full max-w-[760px] gap-0 px-6 pt-5 pb-8">
@@ -124,7 +126,7 @@ export const Thread = memo(function Thread({
             {awaitingReply && (
               <MessageScrollerItem messageId="working" className="pt-2.5">
                 <p className="animate-in text-prose text-muted-foreground animation-duration-(--duration-base) fade-in">
-                  <span className="shimmer">Working…</span>
+                  <span className="shimmer">{t('thread.working')}</span>
                 </p>
               </MessageScrollerItem>
             )}

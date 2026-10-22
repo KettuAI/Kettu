@@ -8,6 +8,7 @@ import type { EnvironmentInfo } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import type { ProxySettings } from '@shared/settings'
 import { deleteEnv, findCommand, getEnv, isExecutableFile, type Env } from './find-command'
+import { translate, type HostMessage } from './i18n'
 import { quotePosix } from './quote'
 
 export const SHELL_ENV_TIMEOUT_MS = 10_000
@@ -100,7 +101,8 @@ export interface ShellEnvironment {
   source: EnvironmentInfo['source']
   shell: string | null
   durationMs: number
-  warning: string | null
+  // Kept as a message so Settings shows it in the language chosen later.
+  warning: HostMessage | null
 }
 
 export interface ResolveOptions {
@@ -173,7 +175,7 @@ export async function resolveShellEnvironment(options: ResolveOptions): Promise<
       source: 'inherited',
       shell: null,
       durationMs: 0,
-      warning: 'Changes to PATH made after OverBench started take effect after a restart.',
+      warning: { key: 'environment.inherited' },
     }
   }
   const shell = defaultShell(platform, baseEnv)
@@ -192,7 +194,10 @@ export async function resolveShellEnvironment(options: ResolveOptions): Promise<
       source: 'fallback',
       shell,
       durationMs: Date.now() - started,
-      warning: `Could not read the environment of ${shell} (${(error as Error).message}). Agents use the environment OverBench started with.`,
+      warning: {
+        key: 'environment.fallback',
+        params: { shell, error: (error as Error).message },
+      },
     }
   }
 }
@@ -299,7 +304,7 @@ export class EnvironmentService {
       shell: resolved?.shell ?? null,
       resolvedAt: this.resolvedAt,
       durationMs: resolved?.durationMs ?? null,
-      warning: resolved?.warning ?? null,
+      warning: resolved?.warning ? translate(resolved.warning) : null,
       nodeVersion: this.node.nodeVersion,
       npmPath: this.node.npmPath,
     }

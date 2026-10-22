@@ -1,0 +1,112 @@
+{
+  "session": {
+    "status": {
+      "starting": "正在启动",
+      "ready": "就绪",
+      "running": "正在运行",
+      "awaiting_permission": "等待授权",
+      "auth_required": "等待登录",
+      "disconnected": "已断开",
+      "failed": "失败",
+      "closed": "已关闭"
+    },
+    "busy": "会话当前状态：{{status}}",
+    "openFirst": "请先打开这个会话",
+    "noTurn": "当前没有进行中的对话",
+    "cannotLoad": "{{agent}} 不支持加载或恢复会话",
+    "cannotSteer": "{{agent}} 不支持在对话进行中接收消息",
+    "cannotFork": "{{agent}} 不支持分叉会话",
+    "cannotList": "{{agent}} 无法列出它的会话",
+    "ultracodeBetweenTurns": "Ultracode 只能在两轮对话之间切换",
+    "ultracodeDescription": "用于大型任务的动态工作流；切换会重启 Claude Code",
+    "subagent": {
+      "noPrompt": "子 Agent 会话从父会话接收指令",
+      "noFork": "子 Agent 会话不能分叉",
+      "noCancel": "该 Agent 不允许取消这个子 Agent",
+      "noConfig": "子 Agent 会话不能单独配置",
+      "closesWithParent": "子 Agent 会话随父会话一起关闭",
+      "deletedWithParent": "子 Agent 会话随父会话一起删除",
+      "failed": "子 Agent 运行失败"
+    }
+  },
+  "notice": {
+    "historyUnavailable": {
+      "title": "更早的历史记录不可用",
+      "description": "{{agent}} 无法回放会话，这个会话将在没有历史记录的情况下继续。"
+    },
+    "signInNeeded": "{{agent}} 需要你登录",
+    "turnFailed": "本轮对话失败",
+    "stopped": {
+      "title": "{{agent}} 意外停止",
+      "description": "本轮对话没有得到回复就结束了。Agent 重启后，OverBench 会重新连接这个会话。"
+    },
+    "cancelUnconfirmed": {
+      "title": "{{agent}} 没有确认取消",
+      "description": "OverBench 已在 {{seconds}} 秒后结束本轮对话，Agent 可能仍在后台完成工作。"
+    }
+  },
+  "attention": {
+    "permission": "Agent 请求授权",
+    "turnEnd": {
+      "end_turn": "已完成",
+      "cancelled": "已取消",
+      "max_tokens": "已达到 token 上限而停止",
+      "max_turn_requests": "已达到请求次数上限而停止",
+      "refusal": "Agent 拒绝了请求"
+    }
+  },
+  "agent": {
+    "stoppedBeforeAnswer": "Agent 在回复前停止了",
+    "failedToStart": "{{agent}} 启动失败",
+    "notAvailable": "{{agent}} 不可用",
+    "cannotInstall": "无法安装 {{agent}}",
+    "busyInstalling": "{{agent}} 正在安装或启动",
+    "closeSessionsFirst": "请先关闭使用 {{agent}} 的会话",
+    "noLogout": "{{agent}} 不支持退出登录",
+    "initializeTimeout": "{{agent}} 没有在 {{seconds}} 秒内响应 initialize。",
+    "exit": {
+      "code": "{{agent}} 已退出，退出码 {{code}}",
+      "signal": "{{agent}} 被 {{signal}} 信号终止",
+      "error": "{{agent}}：{{error}}"
+    },
+    "exited": "{{exit}}。",
+    "exitedBeforeReady": "{{exit}}，未能就绪。",
+    "stoppedTooOften_other": "{{detail}} 它在五分钟内停止了 {{count}} 次，OverBench 不再自动重启它。",
+    "failedTooOften_other": "{{detail}} 它在五分钟内启动失败 {{count}} 次，OverBench 不再自动重启它。",
+    "installFailed": "无法安装 {{agent}}。{{message}}",
+    "runningFallback": "正在使用 {{fallback}}：{{version}} 安装失败。{{message}}",
+    "installStopped": "安装已停止。",
+    "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成"
+  },
+  "detect": {
+    "nodeMissing": "{{agent}} 需要 Node.js 22 或更高版本，但在 PATH 中找不到 node。",
+    "nodeOutdated": "{{agent}} 需要 Node.js {{required}} 或更高版本，当前安装的是 {{installed}}。",
+    "npmMissing": "{{agent}} 会在首次使用时通过 npm 安装，但在 PATH 中找不到 npm。{{hint}}",
+    "programUnusable": "为 {{agent}} 选择的程序（{{path}}）无法运行。",
+    "commandMissing": "在 PATH 中找不到 {{command}}。{{hint}}",
+    "scriptMissing": "{{script}} 不存在。",
+    "hint": {
+      "node": "请从 nodejs.org 安装 Node.js 22 或更高版本，然后在设置中点击「重新加载环境」。",
+      "opencode": "请安装 OpenCode，或在「设置 › Agent」中选择它的程序。",
+      "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。"
+    }
+  },
+  "environment": {
+    "inherited": "OverBench 启动后对 PATH 的修改要在重启后才生效。",
+    "fallback": "无法读取 {{shell}} 的环境（{{error}}），Agent 将使用 OverBench 启动时的环境。"
+  },
+  "git": {
+    "notReady": "Git 暂不可用",
+    "ghMissing": "未安装 GitHub CLI（gh）",
+    "ghSignedOut": "GitHub CLI 尚未登录，请在终端中运行 \"gh auth login\""
+  },
+  "content": {
+    "audio": "音频（{{type}}）",
+    "resource": "嵌入资源 {{uri}}",
+    "text": "文本",
+    "unknown": "未知内容",
+    "terminal": "终端 {{id}}",
+    "unknownTool": "未知工具内容",
+    "toolCall": "工具调用"
+  }
+}

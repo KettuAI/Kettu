@@ -17,6 +17,7 @@ This document is the overview. Each subsystem has a detailed design:
 | [Git](./design/git.md)                     | Repository status, pull requests through `gh`, and git events in the thread                                                         |
 | [Terminal](./design/terminal.md)           | The terminal host, shells, flow control, rendering, and how terminals relate to projects and sessions                               |
 | [Interface](./design/ui.md)                | Layout, screens, thread entries, composer, states, motion, typography and shortcuts                                                 |
+| [Localization](./design/localization.md)   | English and Simplified Chinese, the Language setting, and how each process translates its own text                                  |
 | [Testing](./design/testing.md)             | Unit, integration and process tests, the fake agent, CI, and how performance is measured                                            |
 
 ## Process model
@@ -208,6 +209,7 @@ src/
 │   ├── agent-host.ts      Starts and supervises the agent host, hands out ports, shows notifications
 │   ├── terminal-host.ts   Starts the terminal host on first use, hands out its ports
 │   ├── menu.ts            The application menu
+│   ├── i18n.ts            Main's own text: the menu, dialogs, the quit confirmation
 │   └── updater.ts         Checks, downloads and installs updates through electron-updater
 ├── agent-host/            Utility process
 │   ├── index.ts           Entry, port wiring
@@ -223,7 +225,8 @@ src/
 │   ├── projects.ts        Recent project folders
 │   ├── git/               Repository status, watchers, pull requests through gh
 │   ├── storage.ts         JSON persistence
-│   └── diagnostics.ts     Traffic and stderr ring buffers
+│   ├── diagnostics.ts     Traffic and stderr ring buffers
+│   └── i18n.ts            The text the host writes for the user, in the chosen language
 ├── terminal-host/         Utility process owning node-pty terminals
 ├── preload/               window.overbench, with its agents and terminals ports
 ├── renderer/src/
@@ -235,7 +238,9 @@ src/
     ├── agent-host.ts      Renderer to agent host contract
     ├── host-control.ts    Main to agent host messages
     ├── terminal-host.ts   Renderer to terminal host contract
-    └── thread.ts          Session model, applyPatches and applyPatchInPlace
+    ├── thread.ts          Session model, applyPatches and applyPatchInPlace
+    ├── locale.ts          Interface languages and the Language setting's resolution
+    └── locales/           Message catalogs, one folder per language
 tools/
 ├── fake-agent/            Scripted ACP agent for development and tests
 ├── perf/                  Performance measurement script and its CI runner
@@ -259,5 +264,6 @@ In line with the project philosophy, these are the implementations this design d
 | [OpenCode](https://github.com/sst/opencode)                                                                                      | Subagents as child sessions of the session that started them; the OpenCode mark                                                                                                                                                                                                                                                                                               |
 | [LobeHub Icons](https://github.com/lobehub/lobe-icons)                                                                           | The Codex mark in its colors                                                                                                                                                                                                                                                                                                                                                  |
 | shadcn/ui chat primitives                                                                                                        | `MessageScroller` for stick-to-bottom, anchoring and jump-to-latest while streaming                                                                                                                                                                                                                                                                                           |
+| [i18next](https://www.i18next.com), as AionUi, Cherry Studio and LobeHub use it                                                  | Message catalogs, plurals and switching the language live in the renderer, main and the agent host ([localization](./design/localization.md))                                                                                                                                                                                                                                 |
 | [Streamdown](https://streamdown.ai) and [Diffs](https://diffs.com)                                                               | Markdown that renders correctly mid-stream, and diffs highlighted off the main thread                                                                                                                                                                                                                                                                                         |
 | Claude Desktop, through the [open-claude-ui](https://github.com/Caho1/open-claude-ui) analysis                                   | The visual and interaction benchmark for the first version: surfaces, density, lines, motion, composer and approvals ([design system](./design/design-system.md#design-reference)); pull request badges on session rows and pull request chips in the thread                                                                                                                  |

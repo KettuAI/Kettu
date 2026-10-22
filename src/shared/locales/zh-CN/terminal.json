@@ -1,0 +1,29 @@
+{
+  "panel": {
+    "tabs": "终端",
+    "starting": "正在启动…",
+    "newTerminal": "新建终端",
+    "restore": "还原",
+    "maximize": "最大化",
+    "empty": "此项目还没有终端。"
+  },
+  "tab": {
+    "newOutput": "有新输出",
+    "close": "关闭 {{name}}"
+  },
+  "closeDialog": {
+    "title": "结束此终端？",
+    "body": "<title/> 仍在运行，关闭标签页会将其结束。",
+    "confirm": "结束进程"
+  },
+  "view": {
+    "askAgent": "询问 {{agent}}",
+    "askGeneric": "询问 Agent",
+    "paste": "粘贴",
+    "selectAll": "全选",
+    "clear": "清屏",
+    "stopped": "终端意外停止",
+    "exited": "已退出，退出码 {{code}}",
+    "restart": "重启"
+  }
+}

@@ -17,7 +17,7 @@ export function UserContentView({ content }: { content: UserContent[] }) {
     <div className="flex flex-col gap-2">
       {text && (
         <div className="flex flex-col gap-1">
-          <Clamp maxHeight={COLLAPSED_HEIGHT} more="Show more" buttonClassName="-mx-1.5 -mb-0.5">
+          <Clamp maxHeight={COLLAPSED_HEIGHT} buttonClassName="-mx-1.5 -mb-0.5">
             <div className="whitespace-pre-wrap" data-selectable="">
               {text}
             </div>

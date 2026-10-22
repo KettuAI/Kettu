@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { BrowserWindow, nativeTheme, screen, shell } from 'electron'
+import type { Locale } from '@shared/locale'
 import type { SettingsFile } from '@shared/settings'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
@@ -98,6 +99,7 @@ export class WindowStateStore {
 export interface WindowOptions {
   state: WindowStateStore
   perf: boolean
+  systemLocale: Locale
 }
 
 let options: WindowOptions | null = null
@@ -127,7 +129,12 @@ export function createMainWindow(): BrowserWindow {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      additionalArguments: options.perf ? ['--overbench-perf'] : [],
+      // The page resolves Settings › General › Language itself; only the system's choice is
+      // main's to know.
+      additionalArguments: [
+        `--overbench-system-locale=${options.systemLocale}`,
+        ...(options.perf ? ['--overbench-perf'] : []),
+      ],
       // A perf run measures frames and timers, which Chromium throttles for a window behind others.
       backgroundThrottling: !options.perf,
     },

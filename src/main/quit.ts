@@ -3,6 +3,7 @@ import type { BusySession, BusyTerminal } from '@shared/host-control'
 import type { QuitRequest } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
 import { sendEvent } from './events'
+import { t } from './i18n'
 import { createLogger } from './log'
 import { currentWindow } from './window'
 
@@ -164,9 +165,9 @@ export class QuitFlow {
     const window = currentWindow()
     const options: Electron.MessageBoxOptions = {
       type: 'warning',
-      message: update ? 'Restart to update?' : 'Quit OverBench?',
+      message: update ? t('quit.titleUpdate') : t('quit.titleQuit', { name: app.name }),
       detail: describeWork(sessions, terminals, update),
-      buttons: ['Cancel', update ? 'Restart' : 'Quit'],
+      buttons: [t('quit.cancel'), update ? t('quit.restart') : t('quit.quit')],
       cancelId: 0,
       defaultId: 1,
       noLink: true,
@@ -178,32 +179,23 @@ export class QuitFlow {
   }
 }
 
-function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`
-}
-
 export function describeWork(
   sessions: BusySession[],
   terminals: BusyTerminal[],
   update: boolean,
 ): string {
   const lines: string[] = []
+  const separator = t('quit.listSeparator')
   if (sessions.length > 0) {
-    const names = sessions.map((session) => session.title ?? 'Untitled session')
-    lines.push(
-      `${plural(sessions.length, 'session is', 'sessions are')} working: ${names.join(', ')}.`,
-    )
+    const names = sessions.map((session) => session.title ?? t('quit.untitledSession'))
+    lines.push(t('quit.sessionsWorking', { count: sessions.length, names: names.join(separator) }))
   }
   if (terminals.length > 0) {
     const names = terminals.map((terminal) => terminal.title)
     lines.push(
-      `${plural(terminals.length, 'terminal is', 'terminals are')} running: ${names.join(', ')}.`,
+      t('quit.terminalsRunning', { count: terminals.length, names: names.join(separator) }),
     )
   }
-  lines.push(
-    update
-      ? 'They stop for the restart. Your sessions and drafts come back after it.'
-      : 'Quitting stops them.',
-  )
+  lines.push(update ? t('quit.stopsForUpdate') : t('quit.stops'))
   return lines.join('\n')
 }

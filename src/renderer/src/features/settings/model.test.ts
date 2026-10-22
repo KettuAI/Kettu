@@ -20,6 +20,12 @@ describe('matches', () => {
     expect(matches(row, 'dark')).toBe(true)
   })
 
+  it('matches the English name in any language', () => {
+    const translated = { ...row, name: '主题', description: undefined, english: 'Theme' }
+    expect(matches(translated, '主题')).toBe(true)
+    expect(matches(translated, 'theme')).toBe(true)
+  })
+
   it('needs every word to match', () => {
     expect(matches(row, 'dark theme')).toBe(true)
     expect(matches(row, 'dark proxy')).toBe(false)

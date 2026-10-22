@@ -1,8 +1,10 @@
+import type { LanguageSetting, Locale } from './locale'
 import type { AgentId } from './thread'
 
 export interface SettingsFile {
   version: 1
   general: {
+    language: LanguageSetting
     defaultAgent: AgentId | null // null: pick one on the New session screen each time
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
     restoreLastSession: boolean
@@ -36,6 +38,7 @@ export type ProxySettings =
 export const DEFAULT_SETTINGS: SettingsFile = {
   version: 1,
   general: {
+    language: 'system',
     defaultAgent: null,
     sendKey: 'enter',
     restoreLastSession: true,
@@ -68,6 +71,7 @@ export interface SettingsPatch {
 
 /** The part of the settings the agent host receives. */
 export interface HostSettings {
+  locale: Locale // the language of the text the host writes for the user
   agents: SettingsFile['agents']
   proxy: ProxySettings
   git: SettingsFile['git']

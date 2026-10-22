@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Maximize2Icon, Minimize2Icon, PlusIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
   AlertDialog,
@@ -37,6 +38,7 @@ export function TerminalPanel({
   projectPath: string
   maximized: boolean
 }) {
+  const { t } = useTranslation(['terminal', 'common'])
   // Maximized with the sidebar collapsed, the header is the window's top left corner.
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
   const list = useTerminalsStore(useShallow((s) => terminalsOf(s.byId, projectPath)))
@@ -80,7 +82,7 @@ export function TerminalPanel({
         {cornered && <SidebarToggle className="mr-1" />}
         <div
           role="tablist"
-          aria-label="Terminals"
+          aria-label={t('panel.tabs')}
           className="no-scrollbar app-region-no-drag flex min-w-0 items-center gap-0.5 overflow-x-auto"
         >
           {list.map((t) => (
@@ -95,12 +97,12 @@ export function TerminalPanel({
           {creating && (
             <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground">
               <Spinner className="size-3" />
-              Starting…
+              {t('panel.starting')}
             </span>
           )}
         </div>
         <PanelButton
-          label="New terminal"
+          label={t('panel.newTerminal')}
           shortcut="Ctrl+Shift+`"
           onClick={() => void newTerminal()}
         >
@@ -113,13 +115,13 @@ export function TerminalPanel({
           </span>
         )}
         <PanelButton
-          label={maximized ? 'Restore' : 'Maximize'}
+          label={maximized ? t('panel.restore') : t('panel.maximize')}
           onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
         >
           {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
         </PanelButton>
         <PanelButton
-          label="Close"
+          label={t('common:actions.close')}
           shortcut="Ctrl+`"
           onClick={() => toggleTerminal(projectPath, false)}
         >
@@ -132,10 +134,10 @@ export function TerminalPanel({
         ) : (
           !creating && (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-ui text-muted-foreground">
-              <span>No terminal in this project.</span>
+              <span>{t('panel.empty')}</span>
               <Button variant="outline" size="compact" onClick={() => void newTerminal()}>
                 <SquareTerminalIcon data-icon="inline-start" />
-                New terminal
+                {t('panel.newTerminal')}
               </Button>
             </div>
           )
@@ -144,14 +146,21 @@ export function TerminalPanel({
       <AlertDialog open={!!closing} onOpenChange={(open) => !open && setClosing(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>End this terminal?</AlertDialogTitle>
+            <AlertDialogTitle>{t('closeDialog.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="font-mono text-xs text-foreground">{closing?.title}</span> is still
-              running. Closing the tab ends it.
+              <Trans
+                t={t}
+                i18nKey="closeDialog.body"
+                components={{
+                  title: (
+                    <span className="font-mono text-xs text-foreground">{closing?.title}</span>
+                  ),
+                }}
+              />
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -159,7 +168,7 @@ export function TerminalPanel({
                 setClosing(null)
               }}
             >
-              End process
+              {t('closeDialog.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -179,6 +188,7 @@ function TerminalTab({
   onSelect: () => void
   onClose: () => void
 }) {
+  const { t } = useTranslation('terminal')
   const exited = terminal.exitCode !== null
   return (
     <div
@@ -208,14 +218,14 @@ function TerminalTab({
         {terminal.activity && !selected && (
           <span
             role="img"
-            aria-label="New output"
+            aria-label={t('tab.newOutput')}
             className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
           />
         )}
       </button>
       <button
         type="button"
-        aria-label={`Close ${terminal.title || terminal.shell}`}
+        aria-label={t('tab.close', { name: terminal.title || terminal.shell })}
         onClick={onClose}
         className={cn(
           'absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-background/60 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/tab:opacity-100',

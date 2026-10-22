@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { loadHostState } from '@renderer/app/bootstrap'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { FailedState } from '@renderer/features/session/session-states'
@@ -9,6 +10,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
  * "Starting OverBench…", so a slow start never looks frozen; a normal start shows nothing.
  */
 export function LaunchState() {
+  const { t } = useTranslation('shell')
   const error = useProjectsStore((s) => s.error)
   const [slow, setSlow] = useState(false)
   useEffect(() => {
@@ -21,7 +23,7 @@ export function LaunchState() {
       <div className="flex h-full items-center justify-center px-6 pb-10">
         <div className="w-full max-w-[460px]">
           <FailedState
-            title="Couldn't load your projects"
+            title={t('launch.loadFailed')}
             message={error}
             onRetry={() => void loadHostState()}
           />
@@ -36,7 +38,7 @@ export function LaunchState() {
       className="flex h-full animate-in items-center justify-center gap-2.5 pb-10 text-[15px] font-medium text-muted-foreground animation-duration-(--duration-base) fade-in"
     >
       <Spinner className="size-[18px]" />
-      Starting OverBench…
+      {t('launch.starting')}
     </div>
   )
 }

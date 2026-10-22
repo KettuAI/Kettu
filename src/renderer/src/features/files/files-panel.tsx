@@ -10,6 +10,7 @@ import {
   SearchIcon,
   XIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useDefaultLayout } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
@@ -52,6 +53,7 @@ export default function FilesPanel({
   projectPath: string
   maximized: boolean
 }) {
+  const { t } = useTranslation(['files', 'common'])
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
   const open = useFilesStore((s) => s.open[projectPath] ?? null)
   const [query, setQuery] = useState('')
@@ -89,26 +91,29 @@ export default function FilesPanel({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.key === 'Escape' && query && setQuery('')}
-            placeholder="Filter, or ? to search in files"
-            aria-label="Filter files"
+            placeholder={t('panel.filterPlaceholder')}
+            aria-label={t('panel.filterLabel')}
             spellCheck={false}
             className="text-ui"
           />
         </InputGroup>
         <span className="flex-1" />
         <PanelButton
-          label={flat ? 'Show as a tree' : 'Show as a list'}
+          label={flat ? t('panel.showTree') : t('panel.showList')}
           onClick={() => setFlat(!flat)}
         >
           {flat ? <ListTreeIcon /> : <ListIcon />}
         </PanelButton>
         <PanelButton
-          label={maximized ? 'Restore' : 'Maximize'}
+          label={maximized ? t('panel.restore') : t('panel.maximize')}
           onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
         >
           {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
         </PanelButton>
-        <PanelButton label="Close" onClick={() => toggleSidePane(projectPath, 'files', false)}>
+        <PanelButton
+          label={t('common:actions.close')}
+          onClick={() => toggleSidePane(projectPath, 'files', false)}
+        >
           <XIcon />
         </PanelButton>
       </div>
@@ -142,6 +147,7 @@ function Browser({
   flat: boolean
   openPath: string | undefined
 }) {
+  const { t } = useTranslation('files')
   const files = useFilesStore((s) => s.byProject[projectPath])
   if (!files) return <LoadingRows />
   if (files.error && files.paths.length === 0) {
@@ -160,7 +166,7 @@ function Browser({
       />
     )
   }
-  if (files.paths.length === 0) return <Message>No files in this project.</Message>
+  if (files.paths.length === 0) return <Message>{t('browser.empty')}</Message>
   return flat ? (
     <FlatList projectPath={projectPath} paths={files.paths} openPath={openPath} />
   ) : (
@@ -273,8 +279,9 @@ function FilteredList({
   query: string
   openPath: string | undefined
 }) {
+  const { t } = useTranslation('files')
   const { matches, total } = useMemo(() => filterPaths(query, paths, FILTER_LIMIT), [query, paths])
-  if (total === 0) return <Message>No file matches “{query.trim()}”.</Message>
+  if (total === 0) return <Message>{t('browser.noMatch', { query: query.trim() })}</Message>
   const more = total - matches.length
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -290,7 +297,7 @@ function FilteredList({
       </VirtualRows>
       {more > 0 && (
         <p className="shrink-0 border-t border-border-soft px-3 py-1.5 text-xs text-muted-foreground">
-          {more.toLocaleString()} more; type more to narrow it down.
+          {t('browser.moreMatches', { count: more })}
         </p>
       )}
     </div>
@@ -339,6 +346,7 @@ type SearchState =
   | { status: 'failed'; query: string; error: string }
 
 function SearchResults({ projectPath, query }: { projectPath: string; query: string }) {
+  const { t } = useTranslation('files')
   const [state, setState] = useState<SearchState>({ status: 'idle' })
 
   useEffect(() => {
@@ -372,17 +380,17 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
     return out
   }, [state])
 
-  if (!query) return <Message>Type after ? to search inside the files.</Message>
+  if (!query) return <Message>{t('browser.searchHint')}</Message>
   if (state.status === 'failed') return <Message tone="error">{state.error}</Message>
   if (state.status !== 'done' || state.query !== query) {
     return (
       <Message>
         <Spinner className="size-3.5" />
-        Searching…
+        {t('browser.searching')}
       </Message>
     )
   }
-  if (rows.length === 0) return <Message>No line contains “{query}”.</Message>
+  if (rows.length === 0) return <Message>{t('browser.noLine', { query })}</Message>
   return (
     <div className="flex h-full min-h-0 flex-col">
       <VirtualRows count={rows.length} className="flex-1 py-1">
@@ -419,7 +427,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
       </VirtualRows>
       {state.result.truncated && (
         <p className="shrink-0 border-t border-border-soft px-3 py-1.5 text-xs text-muted-foreground">
-          Showing the first {state.result.matches.length} lines.
+          {t('browser.truncated', { count: state.result.matches.length })}
         </p>
       )}
     </div>

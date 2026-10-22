@@ -1,0 +1,40 @@
+{
+  "actions": {
+    "cancel": "取消",
+    "close": "关闭",
+    "copy": "复制",
+    "copied": "已复制",
+    "done": "完成",
+    "retry": "重试"
+  },
+  "untitledSession": "未命名会话",
+  "time": {
+    "now": "刚刚",
+    "minutesShort": "{{count}} 分钟",
+    "hoursShort": "{{count}} 小时",
+    "justNow": "刚刚",
+    "minutesAgo_other": "{{count}} 分钟前",
+    "hoursAgo_other": "{{count}} 小时前",
+    "yesterday": "昨天",
+    "onDate": "{{date}}",
+    "seconds": "{{s}} 秒",
+    "minutesSeconds": "{{m}} 分 {{s}} 秒",
+    "hoursMinutes": "{{h}} 小时 {{m}} 分"
+  },
+  "errors": {
+    "hostRestarted": "OverBench 的后台进程已重启，请重试。"
+  },
+  "planWindow": {
+    "five_hour": "5 小时",
+    "seven_day": "每周",
+    "seven_day_opus": "每周 · Opus",
+    "seven_day_sonnet": "每周 · Sonnet",
+    "overage": "额外用量",
+    "weeklyOf": "每周 · {{model}}"
+  },
+  "fileManager": {
+    "mac": "访达",
+    "windows": "资源管理器",
+    "linux": "文件管理器"
+  }
+}

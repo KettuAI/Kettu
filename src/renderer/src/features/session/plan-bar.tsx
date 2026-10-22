@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronUpIcon, ListChecksIcon } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,6 +13,7 @@ import { PANEL } from './entries/helpers'
 
 /** The latest plan, pinned above the composer as "Plan 3/5"; it expands in place. */
 export function PlanBar({ sessionId, running }: { sessionId: string; running: boolean }) {
+  const { t } = useTranslation('session')
   const [open, setOpen] = useState(false)
   const plan = useThreadsStore((s) => {
     const state = s.replicas[sessionId]?.state
@@ -36,13 +38,13 @@ export function PlanBar({ sessionId, running }: { sessionId: string; running: bo
       <CollapsibleTrigger className="group/plan flex h-row w-full items-center gap-2 px-3 text-left text-xs outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
         <ListChecksIcon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="shrink-0 font-medium tabular">
-          Plan{' '}
-          <span
-            key={done}
-            className="inline-block animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
-          >
-            {done}/{plan.items.length}
-          </span>
+          <Trans
+            t={t}
+            i18nKey="planBar.progress"
+            components={{
+              count: <PlanCount done={done} total={plan.items.length} />,
+            }}
+          />
         </span>
         {current && !open && (
           <span
@@ -65,5 +67,16 @@ export function PlanBar({ sessionId, running }: { sessionId: string; running: bo
         </div>
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+function PlanCount({ done, total }: { done: number; total: number }) {
+  return (
+    <span
+      key={done}
+      className="inline-block animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
+    >
+      {done}/{total}
+    </span>
   )
 }

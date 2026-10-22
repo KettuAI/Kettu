@@ -17,6 +17,7 @@ import {
   XIcon,
   type LucideIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { PermissionKind, ToolContent, ToolEntry, ToolKind } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
@@ -56,25 +57,25 @@ const KIND_ICON: Record<ToolKind, LucideIcon> = {
   other: WrenchIcon,
 }
 
-const ASK: Record<ToolKind, string> = {
-  read: 'read this file',
-  edit: 'make this change',
-  delete: 'delete this file',
-  move: 'move this file',
-  search: 'search the project',
-  execute: 'run this command',
-  think: 'use this tool',
-  fetch: 'fetch this page',
-  switch_mode: 'switch modes',
-  other: 'use this tool',
-}
+const ASK_KEY = {
+  read: 'read',
+  edit: 'edit',
+  delete: 'delete',
+  move: 'move',
+  search: 'search',
+  execute: 'execute',
+  think: 'other',
+  fetch: 'fetch',
+  switch_mode: 'switchMode',
+  other: 'other',
+} as const satisfies Record<ToolKind, string>
 
-const ANSWER: Record<PermissionKind, string> = {
-  allow_once: 'Allowed once',
-  allow_always: 'Always allowed',
-  reject_once: 'Rejected',
-  reject_always: 'Always rejected',
-}
+const ANSWER_KEY = {
+  allow_once: 'allowOnce',
+  allow_always: 'allowAlways',
+  reject_once: 'rejectOnce',
+  reject_always: 'rejectAlways',
+} as const satisfies Record<PermissionKind, string>
 
 export interface ToolCardProps {
   sessionId: string
@@ -92,6 +93,7 @@ export const ToolCard = memo(function ToolCard({
   agentName,
   nested = false,
 }: ToolCardProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'tool')
   const animation = useEntryAnimation(sessionId, entryId)
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
@@ -161,10 +163,10 @@ export const ToolCard = memo(function ToolCard({
         <ContextMenuItem
           onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
         >
-          Run in terminal
+          {t('tool.runInTerminal')}
         </ContextMenuItem>
         <ContextMenuItem onClick={() => void navigator.clipboard.writeText(command)}>
-          Copy command
+          {t('tool.copyCommand')}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -263,11 +265,12 @@ function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
 }
 
 function ToolStatus({ entry }: { entry: ToolEntry }) {
+  const { t } = useTranslation('session')
   if (entry.permission) {
     return (
       <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-attention-text">
         <span aria-hidden className="size-1.5 rounded-full bg-attention" />
-        Needs approval
+        {t('status.needsApproval')}
       </span>
     )
   }
@@ -278,20 +281,24 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
         <CircleIcon
           key="pending"
           role="img"
-          aria-label="Pending"
+          aria-label={t('status.pending')}
           className={cn(icon, 'text-muted-foreground/70')}
         />
       )
     case 'in_progress':
       return (
-        <Spinner key="running" aria-label="Running" className={cn(icon, 'text-muted-foreground')} />
+        <Spinner
+          key="running"
+          aria-label={t('status.running')}
+          className={cn(icon, 'text-muted-foreground')}
+        />
       )
     case 'completed':
       return (
         <CheckIcon
           key="done"
           role="img"
-          aria-label="Done"
+          aria-label={t('status.done')}
           className={cn(icon, 'zoom-in-75 text-muted-foreground')}
         />
       )
@@ -300,7 +307,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
         <XIcon
           key="failed"
           role="img"
-          aria-label="Failed"
+          aria-label={t('status.failed')}
           className={cn(icon, 'text-destructive')}
         />
       )
@@ -309,7 +316,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
         <BanIcon
           key="cancelled"
           role="img"
-          aria-label="Cancelled"
+          aria-label={t('status.cancelled')}
           className={cn(icon, 'text-muted-foreground/70')}
         />
       )
@@ -329,11 +336,12 @@ function CommandBlock({ command }: { command: string }) {
 }
 
 function ContentBlock({ content, projectPath }: { content: ToolContent; projectPath: string }) {
+  const { t } = useTranslation('session')
   switch (content.type) {
     case 'markdown':
       return (
         <div className="px-3 py-2.5" data-selectable="">
-          <Clamp maxHeight={320} more="Show all">
+          <Clamp maxHeight={320} more={t('tool.showAll')}>
             <Markdown markdown={content.markdown} className="markdown-compact" />
           </Clamp>
         </div>
@@ -342,7 +350,7 @@ function ContentBlock({ content, projectPath }: { content: ToolContent; projectP
       // Inset by the hairline so the diff's opaque lines leave the card's inset ring visible.
       return (
         <div className="mx-(--hairline) flex flex-col last:mb-(--hairline)">
-          <Clamp maxHeight={480} more="Show full diff" buttonClassName="mx-2 my-1">
+          <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
             <Diff
               path={relativePath(content.path, projectPath)}
               oldText={content.oldText}
@@ -358,7 +366,7 @@ function ContentBlock({ content, projectPath }: { content: ToolContent; projectP
             ? content.ref.name || content.ref.uri
             : content.ref.kind === 'unsupported'
               ? content.ref.label
-              : 'Image'}
+              : t('tool.image')}
         </div>
       )
   }
@@ -380,6 +388,7 @@ function PermissionPrompt({
   entry: ToolEntry
   agentName: string
 }) {
+  const { t } = useTranslation('session')
   const [answering, setAnswering] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const permission = entry.permission!
@@ -407,11 +416,11 @@ function PermissionPrompt({
   return (
     <div className="flex flex-col gap-2.5 px-3 pt-2.5 pb-3">
       <p className="text-ui text-muted-foreground">
-        {agentName} wants to {ASK[entry.toolKind]}.
+        {t(`permission.ask.${ASK_KEY[entry.toolKind]}`, { agent: agentName })}
       </p>
       <div
         role="group"
-        aria-label="Answer"
+        aria-label={t('permission.answerGroup')}
         className="flex flex-wrap gap-1.5"
         onKeyDown={onKeyDown}
       >
@@ -443,12 +452,13 @@ function PermissionPrompt({
 }
 
 function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissionResult']> }) {
+  const { t } = useTranslation('session')
   const text =
     result === 'cancelled'
-      ? 'Cancelled'
+      ? t('permission.answer.cancelled')
       : result === 'withdrawn'
-        ? 'No longer needed'
-        : ANSWER[result.kind]
+        ? t('permission.answer.withdrawn')
+        : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
   const rejected =
     result !== 'cancelled' && result !== 'withdrawn' && result.kind.startsWith('reject')
   return (

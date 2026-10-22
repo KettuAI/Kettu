@@ -1,0 +1,33 @@
+{
+  "panel": {
+    "filterPlaceholder": "筛选文件，或输入 ? 在文件内搜索",
+    "filterLabel": "筛选文件",
+    "showTree": "以树状显示",
+    "showList": "以列表显示",
+    "restore": "还原",
+    "maximize": "最大化"
+  },
+  "browser": {
+    "empty": "此项目中没有文件。",
+    "noMatch": "没有匹配“{{query}}”的文件。",
+    "moreMatches": "还有 {{count, number}} 个文件，输入更多字符可缩小范围。",
+    "searchHint": "在 ? 后输入内容，即可在文件内搜索。",
+    "searching": "正在搜索…",
+    "noLine": "没有包含“{{query}}”的行。",
+    "truncated_other": "仅显示前 {{count}} 行。"
+  },
+  "preview": {
+    "emptyTitle": "打开的文件会显示在这里",
+    "emptyDescription": "在文件树中选择文件，或点击对话中的文件路径。",
+    "copyPath": "复制路径",
+    "closeFile": "关闭文件",
+    "openFailed": "无法打开此文件",
+    "binaryTitle": "二进制文件",
+    "binaryDescription": "{{size}}，不显示预览。",
+    "tooLargeTitle": "文件过大，无法预览",
+    "tooLargeDescription": "{{size}}；预览仅支持不超过 1 MB 的文件。"
+  },
+  "link": {
+    "open": "打开 {{target}}"
+  }
+}

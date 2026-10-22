@@ -19,7 +19,7 @@ function defaults(): SettingsFile {
 describe('validateSettingsPatch', () => {
   it('accepts a partial change in every section', () => {
     const patch = {
-      general: { sendKey: 'mod-enter', defaultAgent: 'codex' },
+      general: { language: 'zh-CN', sendKey: 'mod-enter', defaultAgent: 'codex' },
       appearance: { theme: 'dark' },
       notifications: { sound: true },
       agents: { opencode: { binaryPath: null } },
@@ -41,6 +41,7 @@ describe('validateSettingsPatch', () => {
     [{ version: 2 }, 'Unknown setting "version"'],
     [{ colors: {} }, 'Unknown setting "colors"'],
     [{ general: { sendKey: 'shift-enter' } }, '"general.sendKey" must be one of'],
+    [{ general: { language: 'zh-TW' } }, '"general.language" must be one of'],
     [{ general: { fontFamily: 'x' } }, 'Unknown setting "general.fontFamily"'],
     [{ general: 'enter' }, '"general" must be an object'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
@@ -168,11 +169,16 @@ describe('parseSettingsFile', () => {
 describe('derived settings', () => {
   it('splits out what each host receives', () => {
     const settings = withShellPath(withAgentBinary(defaults(), 'opencode', '/opt/oc'), '/bin/fish')
-    expect(hostSettings(settings)).toEqual({
+    expect(hostSettings(settings, 'zh-CN')).toEqual({
+      locale: 'zh-CN',
       agents: { opencode: { binaryPath: '/opt/oc' } },
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
     })
+    expect(
+      hostSettings({ ...settings, general: { ...settings.general, language: 'en' } }, 'zh-CN')
+        .locale,
+    ).toBe('en')
     expect(terminalSettings(settings)).toEqual({ shellPath: '/bin/fish', fontSize: 13 })
     expect(terminalSettings(defaults()).shellPath).toBeNull()
   })

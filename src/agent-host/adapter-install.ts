@@ -8,6 +8,7 @@ import path from 'node:path'
 import type { Platform } from '@shared/platform'
 import { spawnArguments, taskkill } from './agent-process'
 import { needsShell, type Env } from './find-command'
+import { t } from './i18n'
 import { TextRing } from './ring'
 
 export const INSTALLED_FILE = 'installed.json'
@@ -339,7 +340,7 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
     })
   try {
     const probe = await run(['--version'], 30_000, false)
-    if (probe.aborted) throw new Error('The install was stopped.')
+    if (probe.aborted) throw new Error(t('agent.installStopped'))
     if (probe.error) throw new Error(`npm could not be started: ${probe.error}`)
     const npmVersion = probe.code === 0 ? probe.stdout.trim() || null : null
     await writeFile(
@@ -355,7 +356,7 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
       )}\n`,
     )
     const result = await run(NPM_INSTALL_ARGS, options.timeoutMs, true)
-    if (result.aborted) throw new Error('The install was stopped.')
+    if (result.aborted) throw new Error(t('agent.installStopped'))
     if (result.timedOut) {
       const ms = options.timeoutMs
       const limit = ms >= 60_000 ? `${Math.round(ms / 60_000)} minutes` : `${ms / 1000} s`

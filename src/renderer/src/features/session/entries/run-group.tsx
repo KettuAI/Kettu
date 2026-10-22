@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from 'react'
 import { ChevronRightIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { ToolContent } from '@shared/thread'
 import {
@@ -39,6 +40,7 @@ export const RunGroup = memo(function RunGroup({
   projectPath,
   agentName,
 }: RunGroupProps) {
+  const { t } = useTranslation('session')
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const animation = useEntryAnimation(sessionId, entryIds[0]!)
   const entries = useThreadsStore(
@@ -83,7 +85,7 @@ export const RunGroup = memo(function RunGroup({
         <span className="min-w-0 truncate">
           {parts.map((part, i) => (
             <span key={i}>
-              {i > 0 && ', '}
+              {i > 0 && t('summary.separator')}
               {part}
               {i === editAt && stats && (stats.insertions > 0 || stats.deletions > 0) && (
                 <span className="ml-1.5 font-mono text-[11.5px] tabular">
@@ -93,9 +95,14 @@ export const RunGroup = memo(function RunGroup({
               )}
             </span>
           ))}
-          {failed > 0 && <span className="text-destructive">, {failed} failed</span>}
+          {failed > 0 && (
+            <span className="text-destructive">
+              {t('summary.separator')}
+              {t('summary.failed', { failed })}
+            </span>
+          )}
         </span>
-        {running && <Spinner aria-label="Running" className="size-3 shrink-0" />}
+        {running && <Spinner aria-label={t('status.running')} className="size-3 shrink-0" />}
         <ChevronRightIcon
           aria-hidden
           className="size-3.5 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"

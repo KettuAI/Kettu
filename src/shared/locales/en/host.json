@@ -1,0 +1,114 @@
+{
+  "session": {
+    "status": {
+      "starting": "starting",
+      "ready": "ready",
+      "running": "running",
+      "awaiting_permission": "awaiting permission",
+      "auth_required": "auth required",
+      "disconnected": "disconnected",
+      "failed": "failed",
+      "closed": "closed"
+    },
+    "busy": "The session is {{status}}",
+    "openFirst": "Open the session first",
+    "noTurn": "No turn is running",
+    "cannotLoad": "{{agent}} can neither load nor resume sessions",
+    "cannotSteer": "{{agent}} cannot take messages during a turn",
+    "cannotFork": "{{agent}} cannot fork sessions",
+    "cannotList": "{{agent}} cannot list its sessions",
+    "ultracodeBetweenTurns": "Ultracode changes between turns",
+    "ultracodeDescription": "Dynamic workflows for substantial tasks; restarts Claude Code",
+    "subagent": {
+      "noPrompt": "A subagent session takes its instructions from its parent",
+      "noFork": "A subagent session cannot be forked",
+      "noCancel": "The agent does not allow cancelling this subagent",
+      "noConfig": "A subagent session cannot be configured",
+      "closesWithParent": "A subagent session closes with its parent",
+      "deletedWithParent": "A subagent session is deleted with its parent",
+      "failed": "The subagent failed"
+    }
+  },
+  "notice": {
+    "historyUnavailable": {
+      "title": "Earlier history is not available",
+      "description": "{{agent}} cannot replay sessions, so this one continues without its history."
+    },
+    "signInNeeded": "{{agent}} needs you to sign in",
+    "turnFailed": "The turn failed",
+    "stopped": {
+      "title": "{{agent}} stopped unexpectedly",
+      "description": "The turn ended without an answer. OverBench reconnects the session when the agent restarts."
+    },
+    "cancelUnconfirmed": {
+      "title": "{{agent}} did not confirm the cancellation",
+      "description": "OverBench ended the turn after {{seconds}} seconds. The agent may still be finishing work in the background."
+    }
+  },
+  "attention": {
+    "permission": "The agent asks for permission",
+    "turnEnd": {
+      "end_turn": "Finished",
+      "cancelled": "Cancelled",
+      "max_tokens": "Stopped at the token limit",
+      "max_turn_requests": "Stopped at the request limit",
+      "refusal": "The agent refused"
+    }
+  },
+  "agent": {
+    "stoppedBeforeAnswer": "The agent stopped before it answered",
+    "failedToStart": "{{agent}} failed to start",
+    "notAvailable": "{{agent}} is not available",
+    "cannotInstall": "{{agent}} cannot be installed",
+    "busyInstalling": "{{agent}} is already being installed or started",
+    "closeSessionsFirst": "Close the sessions that use {{agent}} first",
+    "noLogout": "{{agent}} does not support signing out",
+    "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",
+    "exit": {
+      "code": "{{agent}} exited with code {{code}}",
+      "signal": "{{agent}} was stopped by {{signal}}",
+      "error": "{{agent}} {{error}}"
+    },
+    "exited": "{{exit}}.",
+    "exitedBeforeReady": "{{exit}} before it was ready.",
+    "stoppedTooOften_one": "{{detail}} It stopped {{count}} time in five minutes, so OverBench stopped restarting it.",
+    "stoppedTooOften_other": "{{detail}} It stopped {{count}} times in five minutes, so OverBench stopped restarting it.",
+    "failedTooOften_one": "{{detail}} It failed {{count}} time in five minutes, so OverBench stopped restarting it.",
+    "failedTooOften_other": "{{detail}} It failed {{count}} times in five minutes, so OverBench stopped restarting it.",
+    "installFailed": "{{agent}} could not be installed. {{message}}",
+    "runningFallback": "Running {{fallback}}: {{version}} could not be installed. {{message}}",
+    "installStopped": "The install was stopped.",
+    "reportTimeout": "{{command}} did not finish in {{seconds}} s"
+  },
+  "detect": {
+    "nodeMissing": "{{agent}} runs on Node.js 22 or later, and node was not found on PATH.",
+    "nodeOutdated": "{{agent}} needs Node.js {{required}} or later; {{installed}} is installed.",
+    "npmMissing": "{{agent}} is installed with npm on first use, and npm was not found on PATH. {{hint}}",
+    "programUnusable": "The program chosen for {{agent}} ({{path}}) cannot be run.",
+    "commandMissing": "{{command}} was not found on PATH. {{hint}}",
+    "scriptMissing": "{{script}} does not exist.",
+    "hint": {
+      "node": "Install Node.js 22 or later from nodejs.org, then reload the environment in Settings.",
+      "opencode": "Install OpenCode, or choose its binary in Settings › Agents.",
+      "fakeAgent": "The fake agent runs tools/fake-agent/main.ts from the repository."
+    }
+  },
+  "environment": {
+    "inherited": "Changes to PATH made after OverBench started take effect after a restart.",
+    "fallback": "Could not read the environment of {{shell}} ({{error}}). Agents use the environment OverBench started with."
+  },
+  "git": {
+    "notReady": "Git is not available yet",
+    "ghMissing": "The GitHub CLI (gh) is not installed",
+    "ghSignedOut": "The GitHub CLI is not signed in; run \"gh auth login\" in a terminal"
+  },
+  "content": {
+    "audio": "Audio ({{type}})",
+    "resource": "Embedded resource {{uri}}",
+    "text": "Text",
+    "unknown": "Unknown content",
+    "terminal": "Terminal {{id}}",
+    "unknownTool": "Unknown tool content",
+    "toolCall": "Tool call"
+  }
+}

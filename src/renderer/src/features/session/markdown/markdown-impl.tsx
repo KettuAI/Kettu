@@ -2,6 +2,7 @@ import 'streamdown/styles.css'
 import { memo, useDeferredValue, useState, type ComponentProps } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
+import { useTranslation } from 'react-i18next'
 import {
   defaultComponents,
   Streamdown,
@@ -62,18 +63,19 @@ function InlineCode({ className, children }: ComponentProps<'code'> & ExtraProps
 const components: Components = { a: Link, inlineCode: InlineCode }
 
 function LinkConfirm({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProps) {
+  const { t } = useTranslation(['session', 'common'])
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Open this link?</AlertDialogTitle>
+          <AlertDialogTitle>{t('link.title')}</AlertDialogTitle>
           <AlertDialogDescription className="font-mono text-xs break-all" data-selectable="">
             {url}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Open in browser</AlertDialogAction>
+          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{t('link.open')}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

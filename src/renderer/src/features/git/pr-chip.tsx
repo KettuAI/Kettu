@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ExternalLinkIcon } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import { GITHUB_PULL_REQUEST_URL, type PullRequest } from '@shared/git'
 import { buttonVariants } from '@renderer/components/ui/button'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
@@ -7,17 +8,19 @@ import { longAgo } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import { loadPullRequest, useGitStore } from '@renderer/stores/git'
 import { ChecksIcon, PrIcon } from './pr-icon'
-import { PR_STATE_TEXT } from './pr-text'
+import { prStateText } from './pr-text'
 
-const REVIEW_TEXT = {
-  approved: 'Approved',
-  changes_requested: 'Changes requested',
-  review_required: 'Review required',
+const REVIEW_KEY = {
+  approved: 'pr.review.approved',
+  changes_requested: 'pr.review.changesRequested',
+  review_required: 'pr.review.reviewRequired',
 } as const
 
 /** Title, state, branches, checks, review and when it was updated, for the hover card and popover. */
 export function PrDetails({ pr }: { pr: PullRequest }) {
+  const { t } = useTranslation('git')
   const { checks } = pr
+  const when = longAgo(pr.updatedAt)
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-start gap-2">
@@ -27,33 +30,40 @@ export function PrDetails({ pr }: { pr: PullRequest }) {
       </div>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-[23px] text-xs text-muted-foreground tabular">
         <span>
-          {PR_STATE_TEXT[pr.state]} · <span className="font-mono text-[11.5px]">{pr.head}</span>{' '}
-          into <span className="font-mono text-[11.5px]">{pr.base}</span>
+          <Trans
+            t={t}
+            i18nKey="pr.summary"
+            values={{ state: prStateText(pr.state) }}
+            components={{
+              head: <span className="font-mono text-[11.5px]">{pr.head}</span>,
+              base: <span className="font-mono text-[11.5px]">{pr.base}</span>,
+            }}
+          />
         </span>
         {checks.passed > 0 && (
           <span className="inline-flex items-center gap-1">
             <ChecksIcon state="passing" size={12} />
-            {checks.passed} passed
+            {t('pr.checkCount.passed', { count: checks.passed })}
           </span>
         )}
         {checks.failed > 0 && (
           <span className="inline-flex items-center gap-1">
             <ChecksIcon state="failing" size={12} />
-            {checks.failed} failed
+            {t('pr.checkCount.failed', { count: checks.failed })}
           </span>
         )}
         {checks.pending > 0 && (
           <span className="inline-flex items-center gap-1">
             <ChecksIcon state="pending" size={12} />
-            {checks.pending} pending
+            {t('pr.checkCount.pending', { count: checks.pending })}
           </span>
         )}
       </div>
       <div className="flex items-center gap-2 pl-[23px] text-xs text-muted-foreground">
         <span className="flex-1">
-          {[pr.review ? REVIEW_TEXT[pr.review] : null, `Updated ${longAgo(pr.updatedAt)}`]
-            .filter(Boolean)
-            .join(' · ')}
+          {pr.review
+            ? t('pr.reviewUpdated', { review: t(REVIEW_KEY[pr.review]), when })
+            : t('pr.updated', { when })}
         </span>
         <a
           href={pr.url}
@@ -62,7 +72,7 @@ export function PrDetails({ pr }: { pr: PullRequest }) {
           className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), '-mr-1.5')}
         >
           <ExternalLinkIcon data-icon="inline-start" />
-          Open on GitHub
+          {t('pr.openOnGitHub')}
         </a>
       </div>
     </div>

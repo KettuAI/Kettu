@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
 import { ArrowUpIcon, ListPlusIcon, SquareIcon } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import type { SessionView, SlashCommand } from '@shared/thread'
 import { onAppEvent } from '@renderer/app/events'
 import {
@@ -10,7 +11,7 @@ import {
   InputGroupTextarea,
 } from '@renderer/components/ui/input-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { resetTime } from '@renderer/lib/format'
+import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -24,6 +25,7 @@ type BaseUIKeyboardEvent = KeyboardEvent<HTMLTextAreaElement> & {
 
 /** The prompt box and the session's controls under it. */
 export function Composer({ session, agentName }: { session: SessionView; agentName: string }) {
+  const { t } = useTranslation('composer')
   const sessionId = session.id
   const [text, setText] = useState(() => readDraft(sessionId))
   const [error, setError] = useState<string | null>(null)
@@ -165,16 +167,19 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   }
 
   const placeholder = starting
-    ? `Starting ${agentName}…`
+    ? t('prompt.placeholder.starting', { agent: agentName })
     : awaiting
-      ? 'Waiting for your approval'
+      ? t('prompt.placeholder.awaiting')
       : running
         ? steering
-          ? `Queue a message, or steer with ${formatShortcut(steerKey)}`
-          : 'Queue a message for when the turn ends'
+          ? t('prompt.placeholder.steer', { shortcut: formatShortcut(steerKey) })
+          : t('prompt.placeholder.queue')
         : reached?.resetsAt
-          ? `${reached.label} limit reached · resets ${resetTime(reached.resetsAt)}`
-          : `Ask ${agentName} to…`
+          ? t('prompt.placeholder.limitReached', {
+              limit: limitLabel(reached),
+              time: resetTime(reached.resetsAt),
+            })
+          : t('prompt.placeholder.ask', { agent: agentName })
 
   const compact = commands.some((c) => c.name === 'compact')
     ? () => {
@@ -208,7 +213,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 <InputGroupTextarea
                   ref={textarea}
                   rows={1}
-                  aria-label={`Message ${agentName}`}
+                  aria-label={t('prompt.label', { agent: agentName })}
                   placeholder={placeholder}
                   disabled={starting}
                   onKeyDown={onKeyDown}
@@ -235,7 +240,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                       key="queue"
                       size="round"
                       variant="secondary"
-                      aria-label="Queue"
+                      aria-label={t('prompt.queue')}
                       onClick={() => queue(false)}
                       className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
                     />
@@ -244,15 +249,15 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   <ListPlusIcon />
                 </TooltipTrigger>
                 <TooltipContent>
-                  Queue{' '}
-                  <span className="opacity-60">
-                    {formatShortcut(sendKey === 'enter' ? 'Enter' : 'Mod+Enter')}
-                  </span>
-                  {steering && (
-                    <>
-                      {' · '}Steer <span className="opacity-60">{formatShortcut(steerKey)}</span>
-                    </>
-                  )}
+                  <Trans
+                    t={t}
+                    i18nKey={steering ? 'prompt.queueSteerTooltip' : 'prompt.queueTooltip'}
+                    values={{
+                      queueShortcut: formatShortcut(sendKey === 'enter' ? 'Enter' : 'Mod+Enter'),
+                      steerShortcut: formatShortcut(steerKey),
+                    }}
+                    components={{ shortcut: <span className="opacity-60" /> }}
+                  />
                 </TooltipContent>
               </Tooltip>
             )}
@@ -264,7 +269,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                       key="stop"
                       size="round"
                       variant="default"
-                      aria-label="Stop"
+                      aria-label={t('prompt.stop')}
                       onClick={cancel}
                       className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
                     />
@@ -273,7 +278,12 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   <SquareIcon className="size-3 fill-current" />
                 </TooltipTrigger>
                 <TooltipContent>
-                  Stop <span className="opacity-60">Esc</span>
+                  <Trans
+                    t={t}
+                    i18nKey="prompt.stopTooltip"
+                    values={{ shortcut: 'Esc' }}
+                    components={{ shortcut: <span className="opacity-60" /> }}
+                  />
                 </TooltipContent>
               </Tooltip>
             ) : (
@@ -281,7 +291,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 key="send"
                 size="round"
                 variant={canSend ? 'default' : 'secondary'}
-                aria-label="Send"
+                aria-label={t('prompt.send')}
                 disabled={!canSend}
                 onClick={send}
                 className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"

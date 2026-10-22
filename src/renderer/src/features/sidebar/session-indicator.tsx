@@ -1,4 +1,5 @@
 import { CircleAlertIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { shortAgo } from '@renderer/lib/format'
@@ -17,11 +18,12 @@ export function SessionIndicator({
   permissionCount: number
   running: boolean
 }) {
+  const { t } = useTranslation('sidebar')
   const now = useNow()
   if (permissionCount > 0) {
     return (
       <span
-        aria-label={`Waiting for you, ${permissionCount} request${permissionCount > 1 ? 's' : ''}`}
+        aria-label={t('indicator.waiting', { count: permissionCount })}
         className="grid h-4 min-w-4 place-items-center rounded-full bg-attention px-1 text-[10px] font-semibold text-attention-foreground tabular"
       >
         {permissionCount}
@@ -34,7 +36,7 @@ export function SessionIndicator({
     mark = (
       <CircleAlertIcon
         role="img"
-        aria-label="Error"
+        aria-label={t('indicator.error')}
         strokeWidth={2}
         className="size-3.5 text-destructive"
       />
@@ -43,15 +45,19 @@ export function SessionIndicator({
     mark = (
       <span
         role="img"
-        aria-label="Running"
+        aria-label={t('indicator.running')}
         className="size-1.5 animate-pulse rounded-full bg-foreground"
       />
     )
   } else if (summary.status === 'starting') {
-    mark = <Spinner aria-label="Starting" className="size-3 text-muted-foreground" />
+    mark = <Spinner aria-label={t('indicator.starting')} className="size-3 text-muted-foreground" />
   } else if (summary.attention === 'unread') {
     mark = (
-      <span role="img" aria-label="Unread" className="size-1.5 rounded-full bg-muted-foreground" />
+      <span
+        role="img"
+        aria-label={t('indicator.unread')}
+        className="size-1.5 rounded-full bg-muted-foreground"
+      />
     )
   }
 

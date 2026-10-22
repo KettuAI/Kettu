@@ -1,5 +1,6 @@
 import { memo, useState, type ReactNode } from 'react'
 import { CornerDownRightIcon, GitForkIcon, SquareIcon, Volume2Icon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
@@ -21,6 +22,7 @@ const REVEAL =
   'opacity-0 transition-opacity duration-(--duration-fast) group-hover/actions:opacity-100 group-focus-within/actions:opacity-100'
 
 function Ago({ at }: { at: number }) {
+  useTranslation()
   const now = useNow()
   return <span className="tabular">{longAgo(at, now)}</span>
 }
@@ -77,17 +79,18 @@ export function UserActions({
   at?: number
   steered?: boolean
 }) {
+  const { t } = useTranslation('session')
   return (
     <div className="flex h-6 items-center gap-1 text-xs text-muted-foreground">
       {steered && (
         <span className="mr-1 inline-flex items-center gap-1">
           <CornerDownRightIcon className="size-3" />
-          Steered
+          {t('userActions.steered')}
         </span>
       )}
       <span className={cn('flex items-center gap-1', REVEAL)}>
         {at !== undefined && <Ago at={at} />}
-        <CopyButton text={() => userText(content)} label="Copy message" />
+        <CopyButton text={() => userText(content)} label={t('userActions.copyMessage')} />
       </span>
     </div>
   )
@@ -109,6 +112,7 @@ export const ReplyFooter = memo(
     endId: string | null
     latest: boolean
   }) {
+    const { t } = useTranslation('session')
     const lastId = agentIds.at(-1)!
     const end = useEntry(sessionId, endId ?? '', 'turn_end')
     const animation = useEntryAnimation(sessionId, endId ?? lastId)
@@ -156,10 +160,10 @@ export const ReplyFooter = memo(
         )}
       >
         <div className={cn('flex items-center gap-0.5', !latest && REVEAL)}>
-          <CopyButton text={text} label="Copy reply" />
+          <CopyButton text={text} label={t('replyFooter.copyReply')} />
           {canSpeak && (
             <ActionButton
-              label={speaking ? 'Stop reading' : 'Read aloud'}
+              label={speaking ? t('replyFooter.stopReading') : t('replyFooter.readAloud')}
               onClick={() => (speaking ? stopSpeaking() : speak(speechId, speakable(text())))}
             >
               {speaking ? <SquareIcon /> : <Volume2Icon />}
@@ -167,7 +171,7 @@ export const ReplyFooter = memo(
           )}
           {showFork && (
             <ActionButton
-              label="Fork into a new session"
+              label={t('replyFooter.fork')}
               disabled={forking || session.status !== 'ready'}
               onClick={() => void fork()}
             >

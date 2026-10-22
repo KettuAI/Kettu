@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { LogInIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AgentAuthMethod } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { emitAppEvent, onAppEvent } from '@renderer/app/events'
@@ -31,6 +32,7 @@ export function SignIn({
   projectPath: string | null
   onRetry: () => void
 }) {
+  const { t } = useTranslation(['session', 'common'])
   const methods = useAgentsStore((s) => s.byId[agentId]?.authMethods ?? NO_METHODS)
   const name = agentName(agentId)
   const [busy, setBusy] = useState<string | null>(null)
@@ -63,16 +65,12 @@ export function SignIn({
         <EmptyMedia>
           <AgentTile agent={agentId} />
         </EmptyMedia>
-        <EmptyTitle>Sign in to {name}</EmptyTitle>
-        <EmptyDescription>
-          {name} needs you to sign in before it can start. OverBench never sees your credentials.
-        </EmptyDescription>
+        <EmptyTitle>{t('signIn.title', { agent: name })}</EmptyTitle>
+        <EmptyDescription>{t('signIn.description', { agent: name })}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="max-w-[440px] gap-3">
         {methods.length === 0 && (
-          <p className="text-ui text-muted-foreground">
-            {name} did not say how to sign in. Sign in with its own command line, then retry.
-          </p>
+          <p className="text-ui text-muted-foreground">{t('signIn.noMethods', { agent: name })}</p>
         )}
         {methods.map((method) =>
           method.type === 'terminal' && method.command ? (
@@ -94,7 +92,7 @@ export function SignIn({
                 >
                   {method.command}
                 </code>
-                <CopyButton text={method.command} label="Copy command" />
+                <CopyButton text={method.command} label={t('signIn.copyCommand')} />
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {projectPath !== null && (
@@ -110,12 +108,12 @@ export function SignIn({
                     }
                   >
                     <SquareTerminalIcon data-icon="inline-start" />
-                    Sign in in terminal
+                    {t('signIn.inTerminal')}
                   </Button>
                 )}
                 <Button variant="outline" size="compact" onClick={onRetry}>
                   <RotateCwIcon data-icon="inline-start" />
-                  I've signed in, retry
+                  {t('signIn.signedIn')}
                 </Button>
               </div>
             </div>
@@ -139,7 +137,7 @@ export function SignIn({
         {methods.length === 0 && (
           <Button variant="outline" size="compact" onClick={onRetry}>
             <RotateCwIcon data-icon="inline-start" />
-            Retry
+            {t('common:actions.retry')}
           </Button>
         )}
         {error && <p className="text-xs text-destructive">{error}</p>}

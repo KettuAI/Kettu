@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from 'react'
+import type { TFunction } from 'i18next'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -8,6 +9,7 @@ import {
   GitCommitHorizontalIcon,
   TriangleAlertIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { GitStatus } from '@shared/git'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { cn } from '@renderer/lib/utils'
@@ -28,6 +30,7 @@ const segment =
 
 /** The project's repository at a glance: branch, sync, changes, operation, pull request. */
 export function GitStatusCluster({ projectPath }: { projectPath: string }) {
+  const { t } = useTranslation('git')
   const status = useGitStore((s) => s.status[projectPath])
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
   if (!status?.repo) return null
@@ -35,12 +38,12 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
   return (
     <div
       role="group"
-      aria-label="Repository"
+      aria-label={t('status.repository')}
       className="inline-flex items-center gap-px"
       onKeyDown={arrowFocus}
     >
       <Popover>
-        <PopoverTrigger className={segment} aria-label={branchLabel(status)}>
+        <PopoverTrigger className={segment} aria-label={branchLabel(status, t)}>
           <BranchSummary status={status} />
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={6} className="w-[372px] gap-0 overflow-hidden p-0">
@@ -53,7 +56,7 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
           target="_blank"
           rel="noreferrer"
           tabIndex={-1}
-          aria-label={`Pull request #${pr.number}`}
+          aria-label={t('status.pullRequest', { number: pr.number })}
           className={segment}
         >
           <PrIcon state={pr.state} size={14} />
@@ -65,13 +68,14 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
   )
 }
 
-function branchLabel(status: GitStatus): string {
+function branchLabel(status: GitStatus, t: TFunction<'git'>): string {
   return status.head.detached
-    ? `Detached at ${status.head.oid?.slice(0, 7) ?? 'HEAD'}`
-    : `Branch ${status.head.branch ?? ''}`
+    ? t('status.detachedAt', { ref: status.head.oid?.slice(0, 7) ?? 'HEAD' })
+    : t('status.branch', { name: status.head.branch ?? '' })
 }
 
 function BranchSummary({ status }: { status: GitStatus }) {
+  const { t } = useTranslation('git')
   const { head, upstream, changes, operation } = status
   const changed = changes.staged + changes.unstaged + changes.untracked
   const unborn = !head.oid
@@ -91,12 +95,12 @@ function BranchSummary({ status }: { status: GitStatus }) {
           ? (head.oid?.slice(0, 7) ?? 'HEAD')
           : middleTruncate(head.branch ?? 'HEAD', 28)}
       </span>
-      {head.detached && <span>detached</span>}
-      {unborn && !head.detached && <span>no commits</span>}
+      {head.detached && <span>{t('status.detached')}</span>}
+      {unborn && !head.detached && <span>{t('status.noCommits')}</span>}
       {!upstream && !head.detached && !unborn && (
         <span className="ml-1 inline-flex items-center gap-1">
           <CloudUploadIcon className="size-[13px]" />
-          <span className="@max-[520px]/top-bar:sr-only">Not published</span>
+          <span className="@max-[520px]/top-bar:sr-only">{t('status.notPublished')}</span>
         </span>
       )}
       {upstream && upstream.ahead > 0 && (
@@ -122,7 +126,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
       )}
       {operation && (
         <span className="ml-1 font-medium text-attention-text">
-          {OPERATION_TEXT[operation.kind]}
+          {t(OPERATION_KEY[operation.kind])}
           {operation.step && ` ${operation.step[0]}/${operation.step[1]}`}
         </span>
       )}
@@ -146,11 +150,11 @@ function BranchSummary({ status }: { status: GitStatus }) {
   )
 }
 
-const OPERATION_TEXT = {
-  merge: 'Merging',
-  rebase: 'Rebasing',
-  'cherry-pick': 'Cherry-picking',
-  revert: 'Reverting',
+const OPERATION_KEY = {
+  merge: 'status.operation.merge',
+  rebase: 'status.operation.rebase',
+  'cherry-pick': 'status.operation.cherryPick',
+  revert: 'status.operation.revert',
 } as const
 
 /** The cluster is one Tab stop; the arrow keys move between its parts. */

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { MessageSquareTextIcon, RotateCwIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { onAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -29,12 +30,14 @@ import {
 
 /** The agent of the session on screen, for "Ask Claude Code". */
 function useAskLabel(): string {
+  const { t } = useTranslation('terminal')
   const sessionId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
   const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : undefined))
-  return agentId ? `Ask ${agentName(agentId)}` : 'Ask the agent'
+  return agentId ? t('view.askAgent', { agent: agentName(agentId) }) : t('view.askGeneric')
 }
 
 export function TerminalView({ terminal }: { terminal: TerminalState }) {
+  const { t } = useTranslation(['terminal', 'common'])
   const container = useRef<HTMLDivElement>(null)
   const [instance, setInstance] = useState<Instance | null>(null)
   const [selection, setSelection] = useState<{ x: number; y: number } | null>(null)
@@ -144,15 +147,19 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
             disabled={!instance?.term.hasSelection()}
             onClick={() => instance && void copySelection(instance)}
           >
-            Copy
+            {t('common:actions.copy')}
             <ContextMenuShortcut>{isMac ? '⌘C' : 'Ctrl+Shift+C'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance && void pasteClipboard(instance)}>
-            Paste
+            {t('view.paste')}
             <ContextMenuShortcut>{isMac ? '⌘V' : 'Ctrl+Shift+V'}</ContextMenuShortcut>
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => instance?.term.selectAll()}>Select all</ContextMenuItem>
-          <ContextMenuItem onClick={() => instance?.term.clear()}>Clear</ContextMenuItem>
+          <ContextMenuItem onClick={() => instance?.term.selectAll()}>
+            {t('view.selectAll')}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => instance?.term.clear()}>
+            {t('view.clear')}
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
             disabled={!instance?.term.hasSelection()}
@@ -166,7 +173,7 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
       {(exited || stopped) && (
         <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-border-soft px-3 text-xs text-muted-foreground fade-in animation-duration-(--duration-base)">
           <span className={cn(stopped && 'text-destructive')}>
-            {stopped ? 'Terminal stopped unexpectedly' : `Exited with code ${terminal.exitCode}`}
+            {stopped ? t('view.stopped') : t('view.exited', { code: terminal.exitCode })}
           </span>
           <Button
             variant="quiet"
@@ -176,7 +183,7 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
             }
           >
             <RotateCwIcon data-icon="inline-start" />
-            Restart
+            {t('view.restart')}
           </Button>
         </div>
       )}

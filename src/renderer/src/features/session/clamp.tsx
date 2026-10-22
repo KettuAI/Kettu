@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { cn } from '@renderer/lib/utils'
 
@@ -39,18 +40,21 @@ function observer(): ResizeObserver {
 export function Clamp({
   maxHeight,
   more,
-  less = 'Show less',
+  less,
   children,
   className,
   buttonClassName,
 }: {
   maxHeight: number
-  more: string
+  /** The button's label while clamped; defaults to "Show more". */
+  more?: string
+  /** The button's label while open; defaults to "Show less". */
   less?: string
   children: ReactNode
   className?: string
   buttonClassName?: string
 }) {
+  const { t } = useTranslation('session')
   const ref = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState(0)
   const [open, setOpen] = useState(false)
@@ -96,7 +100,7 @@ export function Clamp({
           className={cn('self-start', buttonClassName)}
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? less : more}
+          {open ? (less ?? t('clamp.less')) : (more ?? t('clamp.more'))}
         </Button>
       )}
     </>

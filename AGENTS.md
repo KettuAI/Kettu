@@ -54,6 +54,7 @@ Approved for M0 and installed by the work package that first needs them: `@agent
 | Syntax highlighting         | Shiki (M0.3)                                                       |
 | Diffs                       | `@pierre/diffs` (M0.3)                                             |
 | Terminal                    | xterm.js in the renderer, `node-pty` in the terminal host (M0.5)   |
+| Localization                | i18next with react-i18next, catalogs in `src/shared/locales`       |
 
 Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
 

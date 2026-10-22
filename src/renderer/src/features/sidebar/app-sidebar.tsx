@@ -1,5 +1,6 @@
 import { useMemo, type KeyboardEvent } from 'react'
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon, SquarePenIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
 import { newSession, openProjectDialog } from '@renderer/app/actions'
@@ -28,6 +29,7 @@ import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
 
 export function AppSidebar() {
+  const { t } = useTranslation('sidebar')
   const projects = useProjectsStore((s) => s.projects)
   const projectsLoaded = useProjectsStore((s) => s.loaded)
   const sessionsLoaded = useSessionsStore((s) => s.loaded)
@@ -36,7 +38,7 @@ export function AppSidebar() {
   const drafting = useViewStore((s) => s.main.kind === 'new' && !s.settings.open)
 
   return (
-    <Sidebar collapsible="none" className="w-full" aria-label="Projects and sessions">
+    <Sidebar collapsible="none" className="w-full" aria-label={t('nav.label')}>
       <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-2 pr-2.5 pl-4">
         {isMac && <span aria-hidden className="w-[52px]" />}
         <span className="flex-1" />
@@ -45,7 +47,7 @@ export function AppSidebar() {
       <div className="shrink-0 px-2 pt-0.5 pb-2.5">
         <NavRow
           icon={<SquarePenIcon className="text-muted-foreground" />}
-          label="New session"
+          label={t('nav.newSession')}
           shortcut="Mod+N"
           current={drafting}
           onClick={() => newSession()}
@@ -55,7 +57,7 @@ export function AppSidebar() {
         <SidebarGroup className="gap-0.5 p-0">
           <div className="flex h-6 items-center pr-1 pl-2">
             <SidebarGroupLabel className="h-auto flex-1 p-0 text-xs font-medium text-muted-foreground">
-              Projects
+              {t('nav.projects')}
             </SidebarGroupLabel>
             <Tooltip>
               <TooltipTrigger
@@ -63,7 +65,7 @@ export function AppSidebar() {
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label="Open project"
+                    aria-label={t('nav.openProject')}
                     onClick={() => void openProjectDialog()}
                     className="size-5 rounded-md text-muted-foreground hover:text-foreground"
                   />
@@ -72,13 +74,13 @@ export function AppSidebar() {
                 <PlusIcon className="size-3.5" />
               </TooltipTrigger>
               <TooltipContent>
-                Open project <span className="opacity-60">{formatShortcut('Mod+O')}</span>
+                {t('nav.openProject')} <span className="opacity-60">{formatShortcut('Mod+O')}</span>
               </TooltipContent>
             </Tooltip>
           </div>
           {!loaded && loadError ? (
             <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
-              Projects are unavailable right now.
+              {t('nav.unavailable')}
             </p>
           ) : !loaded ? (
             <SidebarMenu className="gap-px">
@@ -92,7 +94,7 @@ export function AppSidebar() {
             <>
               {projects.length === 0 ? (
                 <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
-                  Projects you open appear here.
+                  {t('nav.empty')}
                 </p>
               ) : (
                 projects.map((project) => <ProjectGroup key={project.path} project={project} />)
@@ -145,7 +147,8 @@ export function NavRow({
 /** A project's sessions, or with a null project those started with No project, if any. */
 function ProjectGroup({ project }: { project: Project | null }) {
   const key = project?.path ?? NO_PROJECT_GROUP
-  const name = project?.name ?? 'No project'
+  const { t } = useTranslation('sidebar')
+  const name = project?.name ?? t('project.noProject')
   const open = useViewStore((s) => !s.collapsedProjects[key])
   const current = useViewStore(
     (s) =>
@@ -213,7 +216,9 @@ function ProjectGroup({ project }: { project: Project | null }) {
             </span>
             <span className="min-w-0 flex-1 truncate">{name}</span>
             {project?.missing && (
-              <span className="text-[11.5px] font-normal text-muted-foreground">Missing</span>
+              <span className="text-[11.5px] font-normal text-muted-foreground">
+                {t('project.missing')}
+              </span>
             )}
           </TooltipTrigger>
           {project ? (
@@ -221,7 +226,7 @@ function ProjectGroup({ project }: { project: Project | null }) {
               {project.path}
             </TooltipContent>
           ) : (
-            <TooltipContent side="right">Each runs in a scratch folder of its own</TooltipContent>
+            <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
           )}
         </Tooltip>
         {!project?.missing && (
@@ -230,7 +235,9 @@ function ProjectGroup({ project }: { project: Project | null }) {
               render={
                 <SidebarMenuAction
                   showOnHover
-                  aria-label={project ? `New session in ${name}` : 'New session with No project'}
+                  aria-label={
+                    project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')
+                  }
                   onClick={() => newSession(projectPath, !project)}
                   className="top-1 text-muted-foreground [&>svg]:size-3.5"
                 />
@@ -239,7 +246,7 @@ function ProjectGroup({ project }: { project: Project | null }) {
               <PlusIcon />
             </TooltipTrigger>
             <TooltipContent>
-              {project ? `New session in ${name}` : 'New session with No project'}
+              {project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')}
             </TooltipContent>
           </Tooltip>
         )}

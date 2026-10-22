@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { CircleAlertIcon, HistoryIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, Project } from '@shared/agent-host'
 import { createSession } from '@renderer/app/actions'
@@ -20,6 +21,7 @@ import { ImportSessionsDialog } from './import-sessions'
 
 /** Shown when a project is selected but no session is. */
 export function ProjectHome({ project }: { project: Project }) {
+  const { t } = useTranslation('home')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const [importing, setImporting] = useState(false)
   const header = rise(0)
@@ -46,18 +48,20 @@ export function ProjectHome({ project }: { project: Project }) {
             </div>
             <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
               <HistoryIcon data-icon="inline-start" />
-              Import sessions
+              {t('project.importSessions')}
             </Button>
           </div>
 
           {project.missing ? (
             <div className="flex items-center gap-2 rounded-xl bg-card px-3.5 py-3 text-ui shadow-card">
               <CircleAlertIcon className="size-4 text-destructive" />
-              This folder no longer exists. Its sessions stay listed until it comes back.
+              {t('project.missing')}
             </div>
           ) : (
-            <section aria-label="Start a session" className="flex flex-col gap-2.5">
-              <h2 className="w-fit text-xs font-medium text-muted-foreground">Start a session</h2>
+            <section aria-label={t('project.startSession')} className="flex flex-col gap-2.5">
+              <h2 className="w-fit text-xs font-medium text-muted-foreground">
+                {t('project.startSession')}
+              </h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
                 {agents.map((status, i) => (
                   <AgentCard key={status.id} status={status} project={project} index={i} />
@@ -83,6 +87,8 @@ function AgentCard({
   project: Project
   index: number
 }) {
+  // Re-renders on a language change: readiness() and agentSubline() translate when called.
+  useTranslation('agents')
   const r = readiness(status)
   const entry = rise(1 + index, 120)
   const missing = r.kind === 'missing'
@@ -130,6 +136,7 @@ function AgentCard({
 }
 
 function RecentSessions({ projectPath }: { projectPath: string }) {
+  const { t } = useTranslation('home')
   const now = useNow()
   const summaries = useSessionsStore(
     useShallow((s) =>
@@ -142,8 +149,8 @@ function RecentSessions({ projectPath }: { projectPath: string }) {
   )
   if (!recent.length) return null
   return (
-    <section aria-label="Recent sessions" className="flex flex-col gap-1.5">
-      <h2 className="text-xs font-medium text-muted-foreground">Recent sessions</h2>
+    <section aria-label={t('project.recentSessions')} className="flex flex-col gap-1.5">
+      <h2 className="text-xs font-medium text-muted-foreground">{t('project.recentSessions')}</h2>
       <ul className="-mx-2 flex flex-col gap-px">
         {recent.map((s) => (
           <li key={s.id}>
@@ -157,15 +164,15 @@ function RecentSessions({ projectPath }: { projectPath: string }) {
               {s.attention === 'permission' ? (
                 <span className="inline-flex items-center gap-1.5 text-xs text-attention-text">
                   <span aria-hidden className="size-1.5 rounded-full bg-attention" />
-                  Waiting for you
+                  {t('project.waitingForYou')}
                 </span>
               ) : s.attention === 'error' || s.status === 'failed' ? (
                 <span className="inline-flex items-center gap-1.5 text-xs text-destructive">
                   <CircleAlertIcon strokeWidth={2} className="size-[13px]" />
-                  Failed
+                  {t('project.failed')}
                 </span>
               ) : isActive(s) ? (
-                <span className="text-xs text-muted-foreground">Working</span>
+                <span className="text-xs text-muted-foreground">{t('project.working')}</span>
               ) : (
                 <span className="text-xs text-muted-foreground">{agentName(s.agentId)}</span>
               )}

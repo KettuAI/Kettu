@@ -44,6 +44,7 @@ import {
 import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
+import { t } from './i18n'
 import { formatCommand } from './quote'
 import { hasReports, runReport } from './reports'
 import { TextRing } from './ring'
@@ -174,10 +175,17 @@ class Slot {
   constructor(readonly def: AgentDefinition) {}
 }
 
+// For diagnostics, which stay in English.
 function describeExit(info: ExitInfo): string {
   if (info.error) return info.error
   if (info.signal) return `was stopped by ${info.signal}`
   return `exited with code ${info.code}`
+}
+
+function exitText(agent: string, info: ExitInfo): string {
+  if (info.error) return t('agent.exit.error', { agent, error: info.error })
+  if (info.signal) return t('agent.exit.signal', { agent, signal: info.signal })
+  return t('agent.exit.code', { agent, code: String(info.code) })
 }
 
 export class AgentManager {
@@ -269,8 +277,11 @@ export class AgentManager {
 
   /** Binary overrides changed: detect the affected agents again. */
   async settingsChanged(previous: HostSettings, next: HostSettings): Promise<void> {
+    // Detecting again rewrites each idle agent's guidance in the new language.
     const changed = [...this.slots.values()].filter(
-      (slot) => previous.agents[slot.def.id]?.binaryPath !== next.agents[slot.def.id]?.binaryPath,
+      (slot) =>
+        previous.locale !== next.locale ||
+        previous.agents[slot.def.id]?.binaryPath !== next.agents[slot.def.id]?.binaryPath,
     )
     await Promise.all(changed.map((slot) => this.detect(slot)))
   }
@@ -291,17 +302,18 @@ export class AgentManager {
     if (slot.runtime) return slot.runtime
     if (slot.starting) return slot.starting
     if (slot.state === 'failed') {
-      throw new HostError('agent_unavailable', slot.detail ?? `${slot.def.name} failed to start`, {
-        agentId,
-        state: 'failed',
-      })
+      throw new HostError(
+        'agent_unavailable',
+        slot.detail ?? t('agent.failedToStart', { agent: slot.def.name }),
+        { agentId, state: 'failed' },
+      )
     }
     if (slot.detection?.state !== 'available') await this.detect(slot)
     const detection = slot.detection
     if (detection?.state !== 'available') {
       throw new HostError(
         'agent_unavailable',
-        detection?.detail ?? `${slot.def.name} is not available`,
+        detection?.detail ?? t('agent.notAvailable', { agent: slot.def.name }),
         {
           agentId,
           state: detection?.state ?? 'not-installed',
@@ -336,7 +348,7 @@ export class AgentManager {
         slot.state = 'failed'
         slot.detail =
           tooMany && reason === 'restart'
-            ? `${message} It failed ${this.timings.maxFailures} times in five minutes, so OverBench stopped restarting it.`
+            ? t('agent.failedTooOften', { detail: message, count: this.timings.maxFailures })
             : message
       } else {
         slot.state = 'crashed'
@@ -382,15 +394,19 @@ export class AgentManager {
           timer = setTimeout(() => {
             abort.abort()
             reject(
-              new Error(`${slot.def.name} did not answer initialize within ${timeoutMs / 1000} s.`),
+              new Error(
+                t('agent.initializeTimeout', {
+                  agent: slot.def.name,
+                  seconds: String(timeoutMs / 1000),
+                }),
+              ),
             )
           }, timeoutMs)
         }),
         launched.exited.then((info): never => {
           const tail = slot.progress.lastLines(3).join(' ')
-          throw new Error(
-            `${slot.def.name} ${describeExit(info)} before it was ready.${tail ? ` ${tail}` : ''}`,
-          )
+          const exit = exitText(slot.def.name, info)
+          throw new Error(`${t('agent.exitedBeforeReady', { exit })}${tail ? ` ${tail}` : ''}`)
         }),
       ])
       if (init.protocolVersion !== 1) {
@@ -442,11 +458,14 @@ export class AgentManager {
     }
     launched.reap()
     slot.state = 'crashed'
-    slot.detail = `${slot.def.name} ${describeExit(info)}.`
+    slot.detail = t('agent.exited', { exit: exitText(slot.def.name, info) })
     this.hooks.agentExited(agentId, info)
     if (this.recordFailure(slot)) {
       slot.state = 'failed'
-      slot.detail = `${slot.detail} It stopped ${this.timings.maxFailures} times in five minutes, so OverBench stopped restarting it.`
+      slot.detail = t('agent.stoppedTooOften', {
+        detail: slot.detail,
+        count: this.timings.maxFailures,
+      })
     } else if (this.hooks.liveSessions(agentId) > 0) {
       this.scheduleRestart(slot)
     }
@@ -527,10 +546,16 @@ export class AgentManager {
       const message = (error as Error).message
       diagnostics.event(agentId, 'install failed', message)
       if (adapter.fallback && !abort.signal.aborted) {
-        slot.adapterNote = `Running ${adapter.fallback.version}: ${adapter.version} could not be installed. ${message}`
+        slot.adapterNote = t('agent.runningFallback', {
+          fallback: adapter.fallback.version,
+          version: adapter.version,
+          message,
+        })
         return adapter.fallback.spec
       }
-      throw new Error(`${slot.def.name} could not be installed. ${message}`, { cause: error })
+      throw new Error(t('agent.installFailed', { agent: slot.def.name, message }), {
+        cause: error,
+      })
     } finally {
       slot.installAbort = null
     }
@@ -568,10 +593,10 @@ export class AgentManager {
       throw invalidParams(`${slot.def.name} is not installed by OverBench`)
     }
     if (slot.installing || slot.starting) {
-      throw new HostError('busy', `${slot.def.name} is already being installed or started`)
+      throw new HostError('busy', t('agent.busyInstalling', { agent: slot.def.name }))
     }
     if (this.hooks.liveSessions(agentId) > 0) {
-      throw new HostError('busy', `Close the sessions that use ${slot.def.name} first`)
+      throw new HostError('busy', t('agent.closeSessionsFirst', { agent: slot.def.name }))
     }
     const run = (async () => {
       await this.detectAll()
@@ -585,7 +610,7 @@ export class AgentManager {
       if (slot.detection?.state !== 'available') {
         throw new HostError(
           'agent_unavailable',
-          slot.detection?.detail ?? `${slot.def.name} cannot be installed`,
+          slot.detection?.detail ?? t('agent.cannotInstall', { agent: slot.def.name }),
         )
       }
       try {
@@ -807,7 +832,7 @@ export class AgentManager {
   async logout(agentId: AgentId): Promise<void> {
     const runtime = await this.ensureReady(agentId)
     if (!runtime.init.capabilities.logout) {
-      throw new HostError('agent_unavailable', `${this.name(agentId)} does not support signing out`)
+      throw new HostError('agent_unavailable', t('agent.noLogout', { agent: this.name(agentId) }))
     }
     try {
       await runtime.connection.logout()
@@ -978,7 +1003,7 @@ export function agentError(error: unknown): HostError {
       case 'auth_required':
         return new HostError('auth_required', error.message, { code: error.code })
       case 'closed':
-        return new HostError('agent_unavailable', 'The agent stopped before it answered')
+        return new HostError('agent_unavailable', t('agent.stoppedBeforeAnswer'))
       default:
         return new HostError('agent_error', error.message, {
           code: error.code,

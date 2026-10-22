@@ -58,6 +58,7 @@ Main owns `settings.json`, because it needs the theme before the first window pa
 interface SettingsFile {
   version: 1
   general: {
+    language: 'system' | 'en' | 'zh-CN' // the interface language; see localization
     defaultAgent: AgentId | null // null: pick one on the New session screen each time
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
     restoreLastSession: boolean
@@ -86,11 +87,12 @@ interface SettingsFile {
 }
 ```
 
-- Defaults: no default agent, Enter sends, restore and confirm on, the system theme, the default text size, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, and updates downloaded and installed automatically.
+- Defaults: the system's language, no default agent, Enter sends, restore and confirm on, the system theme, the default text size, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, and updates downloaded and installed automatically.
 - The renderer reads them with `settings:get` and changes them with `settings:update`, which takes a partial object (`SettingsPatch`). Main validates it against the schema (`src/main/settings-schema.ts`), rejects unknown keys and values, writes the file and sends `settings:changed` to every window. A patch with any problem is rejected whole, with an error naming each bad key, and changes nothing. Sections merge key by key; `proxy` is replaced whole, and a custom proxy URL must be an `http`, `https` or `socks` URL with a host.
 - Executable paths, `agents.<id>.binaryPath` and `terminal.shellPath`, can only be cleared from the renderer, with `null`. Setting one goes through `dialog:choose-agent-binary` or `dialog:choose-shell`, which show a native file dialog in main and store the picked program.
 - The renderer applies appearance settings as attributes on `<html>` (`data-theme`, `data-text-size`, `data-reduce-motion`), so tokens switch in CSS without re-rendering components.
-- `agents`, `proxy` and `git` go to the agent host in `host:init` and `host:settings` ([agent host](./agent-host.md#main-and-host-messages)); `terminal` goes to the terminal host when it starts and when it changes. `updates` and `proxy` also configure the [updater](./updates.md) in main.
+- The language resolves against the system's preferred languages in main and in the renderer ([localization](./localization.md#languages-and-the-setting)).
+- `agents`, `proxy` and `git`, and the resolved language as `locale`, go to the agent host in `host:init` and `host:settings` ([agent host](./agent-host.md#main-and-host-messages)); `terminal` goes to the terminal host when it starts and when it changes. `updates` and `proxy` also configure the [updater](./updates.md) in main.
 - Terminals themselves are not stored: their output and processes end with the app in M0 ([terminal](./terminal.md#terminals-and-projects)).
 - Missing keys take their defaults, so adding a setting needs no migration.
 - Reading is lenient where writing is strict: a value that does not validate takes its default and the rest of the file is kept, and unknown keys are ignored. Any invalid value, or a file that is not JSON, is logged and the file is first moved aside as `settings.corrupt-<timestamp>.json` (the rule [below](#reading-and-recovering)), so the user's file is kept before the cleaned one is written.

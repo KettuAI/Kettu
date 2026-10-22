@@ -12,6 +12,7 @@ import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
+import { t } from './i18n'
 import { createLogger } from './log'
 import type { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
@@ -86,7 +87,7 @@ async function chooseProgram(window: BrowserWindow | null, title: string): Promi
     title,
     properties: ['openFile', 'dontAddToRecent'],
     ...(process.platform === 'win32'
-      ? { filters: [{ name: 'Programs', extensions: ['exe', 'cmd', 'bat', 'com'] }] }
+      ? { filters: [{ name: t('dialogs.programs'), extensions: ['exe', 'cmd', 'bat', 'com'] }] }
       : {}),
   }
   const result = window
@@ -136,7 +137,7 @@ export function registerIpcHandlers({
 
   handle('dialog:open-project', 0, async ({ window }) => {
     const options: Electron.OpenDialogOptions = {
-      title: 'Open Project',
+      title: t('dialogs.openProject'),
       properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
     }
     const result = window
@@ -147,13 +148,13 @@ export function registerIpcHandlers({
 
   handle('dialog:choose-agent-binary', 1, async ({ window }, id) => {
     const agent = agentId(id)
-    const path = await chooseProgram(window, 'Choose Agent Program')
+    const path = await chooseProgram(window, t('dialogs.chooseAgentProgram'))
     if (path) settings.setAgentBinary(agent, path)
     return path
   })
 
   handle('dialog:choose-shell', 0, async ({ window }) => {
-    const path = await chooseProgram(window, 'Choose Shell')
+    const path = await chooseProgram(window, t('dialogs.chooseShell'))
     if (path) settings.setShellPath(path)
     return path
   })

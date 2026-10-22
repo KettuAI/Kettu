@@ -1,5 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { CircleHelpIcon, FileDownIcon, FolderOpenIcon, TrashIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
 import type { SettingsFile } from '@shared/settings'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
@@ -34,13 +36,35 @@ const useSettings = () => useSettingsStore((s) => s.settings)
 
 // ---- General
 
+export function Language() {
+  const { t } = useTranslation('settings')
+  const value = useSettings().general.language
+  const [apply, error] = useApply()
+  const options: { value: LanguageSetting; label: string }[] = [
+    { value: 'system', label: t('general.language.system') },
+    ...LOCALES.map((locale) => ({ value: locale, label: LOCALE_NAMES[locale] })),
+  ]
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSelect
+        label={t('general.language.name')}
+        value={value}
+        options={options}
+        onChange={(v) => apply({ general: { language: v } })}
+      />
+    </>
+  )
+}
+
 export function DefaultAgent() {
+  const { t } = useTranslation('settings')
   const value = useSettings().general.defaultAgent
   const [apply, error] = useApply()
   const options = [
     {
       value: 'ask',
-      label: 'Ask each time',
+      label: t('general.defaultAgent.askEachTime'),
       icon: <CircleHelpIcon className="size-3.5 text-muted-foreground" />,
     },
     ...AGENT_IDS.filter((id) => id !== 'fake-agent').map((id) => ({
@@ -53,7 +77,7 @@ export function DefaultAgent() {
     <>
       <ControlError error={error} />
       <SettingSelect
-        label="Default agent"
+        label={t('general.defaultAgent.name')}
         value={value ?? 'ask'}
         options={options}
         onChange={(v) => apply({ general: { defaultAgent: v === 'ask' ? null : (v as AgentId) } })}
@@ -84,13 +108,14 @@ export function GeneralSwitch({
 }
 
 export function SendKey() {
+  const { t } = useTranslation('settings')
   const value = useSettings().general.sendKey
   const [apply, error] = useApply()
   return (
     <>
       <ControlError error={error} />
       <Segmented
-        label="Send with"
+        label={t('general.sendKey.name')}
         value={value}
         options={[
           { value: 'enter', label: 'Enter' },
@@ -105,18 +130,19 @@ export function SendKey() {
 // ---- Appearance
 
 export function ThemeTiles() {
+  const { t } = useTranslation('settings')
   const value = useSettings().appearance.theme
   const [apply, error] = useApply()
   const tiles: { value: SettingsFile['appearance']['theme']; label: string }[] = [
-    { value: 'system', label: 'System' },
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: t('appearance.theme.system') },
+    { value: 'light', label: t('appearance.theme.light') },
+    { value: 'dark', label: t('appearance.theme.dark') },
   ]
   return (
     <div className="flex items-center gap-3">
       <ControlError error={error} />
       <ToggleGroup
-        aria-label="Theme"
+        aria-label={t('appearance.theme.name')}
         variant="tile"
         size="tile"
         spacing={3}
@@ -185,18 +211,19 @@ export function ThemePreview({ kind }: { kind: 'system' | 'light' | 'dark' }) {
 }
 
 export function TextSize() {
+  const { t } = useTranslation('settings')
   const value = useSettings().appearance.textSize
   const [apply, error] = useApply()
   return (
     <>
       <ControlError error={error} />
       <Segmented
-        label="Text size"
+        label={t('appearance.textSize.name')}
         value={value}
         options={[
-          { value: 'small', label: 'Small' },
-          { value: 'default', label: 'Default' },
-          { value: 'large', label: 'Large' },
+          { value: 'small', label: t('appearance.textSize.small') },
+          { value: 'default', label: t('appearance.textSize.default') },
+          { value: 'large', label: t('appearance.textSize.large') },
         ]}
         onChange={(v) => apply({ appearance: { textSize: v } })}
       />
@@ -205,17 +232,18 @@ export function TextSize() {
 }
 
 export function ReduceMotion() {
+  const { t } = useTranslation('settings')
   const value = useSettings().appearance.reduceMotion
   const [apply, error] = useApply()
   return (
     <>
       <ControlError error={error} />
       <Segmented
-        label="Reduce motion"
+        label={t('appearance.reduceMotion.name')}
         value={value}
         options={[
-          { value: 'system', label: 'System' },
-          { value: 'always', label: 'Always' },
+          { value: 'system', label: t('appearance.reduceMotion.system') },
+          { value: 'always', label: t('appearance.reduceMotion.always') },
         ]}
         onChange={(v) => apply({ appearance: { reduceMotion: v } })}
       />
@@ -226,6 +254,7 @@ export function ReduceMotion() {
 // ---- Terminal
 
 export function ShellPicker() {
+  const { t } = useTranslation('settings')
   const shellPath = useSettings().terminal.shellPath
   const [apply, error] = useApply()
   const [pickError, setPickError] = useState<string | null>(null)
@@ -241,7 +270,11 @@ export function ShellPicker() {
     <div className="flex min-w-0 items-center gap-2">
       <ControlError error={error ?? pickError} />
       <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={shellPath}>
-        {shellPath ? basename(shellPath) : isWindows ? 'PowerShell' : 'Login shell'}
+        {shellPath
+          ? basename(shellPath)
+          : isWindows
+            ? 'PowerShell'
+            : t('terminal.shell.loginShell')}
       </span>
       {shellPath && (
         <Button
@@ -249,24 +282,25 @@ export function ShellPicker() {
           size="compact"
           onClick={() => apply({ terminal: { shellPath: null } })}
         >
-          Reset
+          {t('terminal.shell.reset')}
         </Button>
       )}
       <Button variant="outline" size="compact" onClick={() => void choose()}>
-        Choose…
+        {t('terminal.shell.choose')}
       </Button>
     </div>
   )
 }
 
 export function FontSize() {
+  const { t } = useTranslation('settings')
   const value = useSettings().terminal.fontSize
   const [apply, error] = useApply()
   return (
     <>
       <ControlError error={error} />
       <Segmented
-        label="Font size"
+        label={t('terminal.fontSize.name')}
         value={value}
         options={[
           { value: 12, label: '12' },
@@ -303,29 +337,32 @@ export function ToolState({
 }
 
 function ToolsPending() {
+  const { t } = useTranslation()
   const error = useGitStore((s) => s.toolsError)
   if (!error) return <Spinner className="size-3.5 text-muted-foreground" />
   return (
     <span className="flex items-center gap-2">
       <ControlError error={error} />
       <Button variant="outline" size="compact" onClick={() => void loadGitTools()}>
-        Retry
+        {t('actions.retry')}
       </Button>
     </span>
   )
 }
 
 export function GitTool() {
+  const { t } = useTranslation('settings')
   const tools = useGitStore((s) => s.tools)
   if (!tools) return <ToolsPending />
   return tools.git.found ? (
-    <ToolState found label="Found" detail={tools.git.version} />
+    <ToolState found label={t('git.git.found')} detail={tools.git.version} />
   ) : (
-    <ToolState found={false} label="Not found on PATH" detail={null} />
+    <ToolState found={false} label={t('git.git.notFound')} detail={null} />
   )
 }
 
 export function GhTool() {
+  const { t } = useTranslation('settings')
   const tools = useGitStore((s) => s.tools)
   if (!tools) return <ToolsPending />
   const { gh } = tools
@@ -337,38 +374,39 @@ export function GhTool() {
         rel="noreferrer"
         className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
       >
-        Install the GitHub CLI
+        {t('git.gh.install')}
       </a>
     )
   }
   if (gh.state === 'signed-out') {
     return (
       <span className="flex items-center gap-1.5">
-        <span className="text-xs text-attention-text">Signed out</span>
+        <span className="text-xs text-attention-text">{t('git.gh.signedOut')}</span>
         <code className="rounded-[5px] bg-muted px-1.5 py-0.5 font-mono text-[11.5px]">
           gh auth login
         </code>
-        <CopyButton text="gh auth login" label="Copy command" />
+        <CopyButton text="gh auth login" label={t('git.gh.copyCommand')} />
       </span>
     )
   }
   return (
     <ToolState
       found
-      label={gh.account ? `Signed in as ${gh.account}` : 'Signed in'}
+      label={gh.account ? t('git.gh.signedInAs', { account: gh.account }) : t('git.gh.signedIn')}
       detail={gh.version}
     />
   )
 }
 
 export function BackgroundFetch() {
+  const { t } = useTranslation('settings')
   const checked = useSettings().git.backgroundFetch
   const [apply, error] = useApply()
   return (
     <>
       <ControlError error={error} />
       <SettingSwitch
-        label="Fetch in the background"
+        label={t('git.fetch.name')}
         checked={checked}
         onChange={(v) => apply({ git: { backgroundFetch: v } })}
       />
@@ -402,11 +440,12 @@ export function NotificationSwitch({
 // ---- Advanced
 
 export function Proxy({ label }: { label: ReactNode }) {
+  const { t } = useTranslation('settings')
   const proxy = useSettings().proxy
   const [apply, error] = useApply()
   const [url, setUrl] = useState(proxy.mode === 'custom' ? proxy.url : '')
   const [noProxy, setNoProxy] = useState(proxy.mode === 'custom' ? proxy.noProxy : '')
-  const [invalid, setInvalid] = useState<string | null>(null)
+  const [invalid, setInvalid] = useState(false)
   // Custom shows its fields before any URL is saved; the setting changes once a valid URL is in.
   const [choosing, setChoosing] = useState(false)
   const custom = proxy.mode === 'custom' || choosing
@@ -415,10 +454,10 @@ export function Proxy({ label }: { label: ReactNode }) {
   const save = () => {
     const trimmed = url.trim()
     if (!/^(https?|socks5?):\/\/[^\s]+$/i.test(trimmed)) {
-      setInvalid('Enter a URL such as http://proxy.example.com:8080')
+      setInvalid(true)
       return
     }
-    setInvalid(null)
+    setInvalid(false)
     if (proxy.mode === 'custom' && proxy.url === trimmed && proxy.noProxy === noProxy.trim()) return
     apply({ proxy: { mode: 'custom', url: trimmed, noProxy: noProxy.trim() } })
   }
@@ -429,16 +468,16 @@ export function Proxy({ label }: { label: ReactNode }) {
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
         <Segmented
-          label="Proxy"
+          label={t('advanced.proxy.name')}
           value={custom ? 'custom' : 'environment'}
           options={[
-            { value: 'environment', label: 'Use the environment' },
-            { value: 'custom', label: 'Custom' },
+            { value: 'environment', label: t('advanced.proxy.useEnvironment') },
+            { value: 'custom', label: t('advanced.proxy.custom') },
           ]}
           onChange={(mode) => {
             if (mode === 'environment') {
               setChoosing(false)
-              setInvalid(null)
+              setInvalid(false)
               if (proxy.mode !== 'environment') apply({ proxy: { mode: 'environment' } })
             } else if (url.trim()) save()
             else {
@@ -451,21 +490,21 @@ export function Proxy({ label }: { label: ReactNode }) {
       {custom && (
         <div className="grid animate-in grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 fade-in animation-duration-(--duration-base)">
           <label htmlFor="proxy-url" className="text-xs text-muted-foreground">
-            URL
+            {t('advanced.proxy.url')}
           </label>
           <Input
             ref={urlInput}
             id="proxy-url"
             value={url}
             placeholder="http://proxy.example.com:8080"
-            aria-invalid={!!invalid}
+            aria-invalid={invalid}
             onChange={(e) => setUrl(e.target.value)}
             onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
             onKeyDown={(e) => e.key === 'Enter' && save()}
             className="h-control font-mono text-xs"
           />
           <label htmlFor="proxy-no" className="text-xs text-muted-foreground">
-            No proxy for
+            {t('advanced.proxy.noProxyFor')}
           </label>
           <Input
             id="proxy-no"
@@ -476,7 +515,9 @@ export function Proxy({ label }: { label: ReactNode }) {
             onKeyDown={(e) => e.key === 'Enter' && save()}
             className="h-control font-mono text-xs"
           />
-          {invalid && <p className="col-start-2 text-xs text-destructive">{invalid}</p>}
+          {invalid && (
+            <p className="col-start-2 text-xs text-destructive">{t('advanced.proxy.invalid')}</p>
+          )}
         </div>
       )}
     </div>
@@ -484,31 +525,34 @@ export function Proxy({ label }: { label: ReactNode }) {
 }
 
 export function Diagnostics() {
+  const { t } = useTranslation('settings')
   const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null)
+  const [note, setNote] = useState<{ path: string } | { error: string } | null>(null)
   const run = async () => {
     setBusy(true)
     setNote(null)
     try {
       const path = await exportDiagnostics()
-      if (path) setNote({ text: `Saved to ${path}`, error: false })
+      if (path) setNote({ path })
     } catch (e) {
-      setNote({ text: errorMessage(e), error: true })
+      setNote({ error: errorMessage(e) })
     } finally {
       setBusy(false)
     }
   }
+  const noteText =
+    note && ('error' in note ? note.error : t('advanced.diagnostics.saved', { path: note.path }))
   return (
     <div className="flex min-w-0 items-center gap-2">
       {note && (
         <span
           className={cn(
             'min-w-0 truncate text-xs',
-            note.error ? 'text-destructive' : 'text-muted-foreground',
+            'error' in note ? 'text-destructive' : 'text-muted-foreground',
           )}
-          title={note.text}
+          title={noteText ?? undefined}
         >
-          {note.text}
+          {noteText}
         </span>
       )}
       <Button variant="outline" size="compact" disabled={busy} onClick={() => void run()}>
@@ -517,13 +561,14 @@ export function Diagnostics() {
         ) : (
           <FileDownIcon data-icon="inline-start" />
         )}
-        Export diagnostics
+        {t('advanced.diagnostics.export')}
       </Button>
     </div>
   )
 }
 
 export function DataFolder() {
+  const { t } = useTranslation('settings')
   const [error, setError] = useState<string | null>(null)
   return (
     <>
@@ -536,13 +581,14 @@ export function DataFolder() {
         }
       >
         <FolderOpenIcon data-icon="inline-start" />
-        Show in {fileManagerName}
+        {t('advanced.dataFolder.show', { name: fileManagerName() })}
       </Button>
     </>
   )
 }
 
 export function RemoveAll() {
+  const { t } = useTranslation(['settings', 'common'])
   const count = useSessionsStore((s) => Object.keys(s.byId).length)
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -565,21 +611,22 @@ export function RemoveAll() {
         onClick={() => setOpen(true)}
       >
         <TrashIcon data-icon="inline-start" />
-        Remove all sessions
+        {t('advanced.removeSessions.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove all {count} sessions from OverBench?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t('advanced.removeSessions.dialogTitle', { count })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              The sidebar starts empty. The agents keep their transcripts, so you can import the
-              sessions again from a project's home.
+              {t('advanced.removeSessions.dialogDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => void remove()}>
-              Remove all
+              {t('advanced.removeSessions.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

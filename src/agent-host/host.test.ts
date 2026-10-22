@@ -157,6 +157,7 @@ describe('main messages', () => {
     const { t, port } = await setup()
     await port.request('agents.list', undefined)
     await t.host.updateSettings({
+      locale: 'en',
       agents: { opencode: { binaryPath: path.join(t.dir, 'no-opencode') } },
       proxy: { mode: 'custom', url: 'http://proxy.test:8080', noProxy: 'localhost' },
       git: { backgroundFetch: true },
@@ -164,6 +165,42 @@ describe('main messages', () => {
     const opencode = (await port.request('agents.list', undefined)).find((a) => a.id === 'opencode')
     expect(opencode?.binaryOverride).toBe(path.join(t.dir, 'no-opencode'))
     expect(t.host.env.agentEnv().HTTPS_PROXY).toBe('http://proxy.test:8080')
+  })
+
+  it('writes its text in the language main sends', async () => {
+    const { t, port } = await setup({
+      resolveEnv: async ({ baseEnv }) => ({
+        env: baseEnv,
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: { key: 'environment.inherited' },
+      }),
+    })
+    const settings = {
+      locale: 'en' as const,
+      agents: {},
+      proxy: { mode: 'environment' as const },
+      git: { backgroundFetch: false },
+    }
+    const warning = async () => (await port.request('agents.environment', undefined)).warning
+    await port.request('agents.list', undefined)
+    expect(await warning()).toMatch(/^Changes to PATH/)
+    try {
+      const before = port.events.length
+      await t.host.updateSettings({ ...settings, locale: 'zh-CN' })
+      expect(await warning()).toMatch(/^OverBench 启动后/)
+      const after = port.events.slice(before)
+      expect(after).toContainEqual(
+        expect.objectContaining({
+          type: 'environment.changed',
+          info: expect.objectContaining({ warning: expect.stringMatching(/^OverBench 启动后/) }),
+        }),
+      )
+    } finally {
+      await t.host.updateSettings(settings)
+    }
+    expect(await warning()).toMatch(/^Changes to PATH/)
   })
 })
 
@@ -362,6 +399,7 @@ describe('git', () => {
     expect(git.calls).toContain('releaseAll port-2')
 
     await t.host.updateSettings({
+      locale: 'en',
       agents: {},
       proxy: { mode: 'environment' },
       git: { backgroundFetch: true },

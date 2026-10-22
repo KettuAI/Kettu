@@ -1,0 +1,61 @@
+{
+  "prompt": {
+    "label": "给 {{agent}} 发消息",
+    "placeholder": {
+      "starting": "正在启动 {{agent}}…",
+      "awaiting": "等待你的授权",
+      "steer": "输入消息排队，或按 {{shortcut}} 立即插入当前对话",
+      "queue": "输入消息，本轮对话结束后发送",
+      "limitReached": "限额已用完（{{limit}}）· {{time}} 重置",
+      "ask": "让 {{agent}} 帮你…"
+    },
+    "queue": "加入队列",
+    "stop": "停止",
+    "send": "发送",
+    "queueTooltip": "加入队列 <shortcut>{{queueShortcut}}</shortcut>",
+    "queueSteerTooltip": "加入队列 <shortcut>{{queueShortcut}}</shortcut> · 立即插入 <shortcut>{{steerShortcut}}</shortcut>",
+    "stopTooltip": "停止 <shortcut>{{shortcut}}</shortcut>"
+  },
+  "controls": {
+    "ultracodeOn": "本会话已开启 Ultracode：对较大的任务使用动态工作流",
+    "ultracodeNext": "此消息将以 Ultracode 运行：对任务使用动态工作流",
+    "model": "模型",
+    "options": "选项",
+    "changesBetweenTurns": "仅在两轮对话之间可更改",
+    "useFallback": "使用 {{name}}",
+    "useDefault": "使用 Agent 的默认值"
+  },
+  "usage": {
+    "title": "用量",
+    "contextPercent": "上下文已使用 {{percent}}%",
+    "shortWindow": {
+      "five_hour": "5 小时",
+      "seven_day": "7 天",
+      "seven_day_opus": "7 天 Opus",
+      "seven_day_sonnet": "7 天 Sonnet"
+    },
+    "context": {
+      "title": "上下文",
+      "used": "已用上下文",
+      "tokens": "{{used}} / {{size}} token · 剩余 {{left}}",
+      "session": "本会话",
+      "input": "输入",
+      "output": "输出",
+      "reasoning": "推理",
+      "cacheRead": "缓存读取",
+      "cacheWrite": "写入",
+      "compact": "压缩上下文"
+    },
+    "breakdown": {
+      "loading": "正在读取上下文明细",
+      "error": "无法获取上下文明细：{{error}}"
+    },
+    "limits": {
+      "plan": "套餐",
+      "title": "套餐限额",
+      "used": "已使用：{{limit}}",
+      "resets": "重置时间：{{time}}",
+      "updated": "{{ago}}更新"
+    }
+  }
+}

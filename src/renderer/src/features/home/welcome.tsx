@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
 import { FolderOpenIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { openProjectDialog } from '@renderer/app/actions'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { rise } from '@renderer/lib/motion'
@@ -16,6 +17,7 @@ import { useShallow } from 'zustand/react/shallow'
 
 /** Shown when there are no projects. */
 export function Welcome() {
+  const { t } = useTranslation('home')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const loaded = useAgentsStore((s) => s.loaded)
   const title = rise(0)
@@ -37,19 +39,19 @@ export function Welcome() {
               OverBench
             </h1>
             <p className="text-sm leading-relaxed text-balance text-muted-foreground">
-              Open a project to start working with an agent.
+              {t('welcome.tagline')}
             </p>
           </div>
           <div className={action.className} style={action.style}>
             <Button size="lg" onClick={() => void openProjectDialog()} className="h-8 px-3 text-ui">
               <FolderOpenIcon data-icon="inline-start" />
-              Open project
+              {t('welcome.openProject')}
               <Kbd className="ml-0.5 bg-transparent p-0 text-[11px] text-primary-foreground/55">
                 {formatShortcut('Mod+O')}
               </Kbd>
             </Button>
           </div>
-          <section aria-label="Agents" className="flex w-full flex-col gap-2">
+          <section aria-label={t('welcome.agentsLabel')} className="flex w-full flex-col gap-2">
             <h2
               className={cn(
                 'w-fit px-0.5 text-xs font-medium text-muted-foreground',
@@ -57,7 +59,7 @@ export function Welcome() {
               )}
               style={heading.style}
             >
-              Agents on this computer
+              {t('welcome.agentsHeading')}
             </h2>
             <div className="overflow-hidden rounded-xl bg-card shadow-card">
               {!loaded

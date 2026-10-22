@@ -6,6 +6,7 @@ import {
   RefreshCwIcon,
   RotateCwIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AgentStatus } from '@shared/agent-host'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
@@ -48,6 +49,7 @@ export function Detail({ label, children }: { label: string; children: ReactNode
 }
 
 export function AgentCard({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation(['settings', 'common'])
   const environment = useAgentsStore((s) => s.environment)
   const override = useSettingsStore((s) => s.settings.agents[status.id]?.binaryPath)
   const [act, busy, error] = useAction()
@@ -101,7 +103,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
               ) : (
                 <RotateCwIcon data-icon="inline-start" />
               )}
-              Retry
+              {t('common:actions.retry')}
             </Button>
           )}
           {r.kind === 'missing' && r.url && (
@@ -123,7 +125,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
               onClick={() => act(() => host('agents.logout', { agentId: status.id }))}
             >
               <LogOutIcon data-icon="inline-start" />
-              Sign out
+              {t('agents.signOut')}
             </Button>
           )}
         </div>
@@ -149,7 +151,9 @@ export function AgentCard({ status }: { status: AgentStatus }) {
 
       {r.kind === 'sign-in' && status.authMethods.length > 0 && (
         <div className="ml-11 flex flex-col gap-2 rounded-lg bg-attention-tint px-3 py-2.5">
-          <span className="text-xs text-foreground">{status.name} needs you to sign in.</span>
+          <span className="text-xs text-foreground">
+            {t('agents.needsSignIn', { name: status.name })}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {status.authMethods.map((method) =>
               method.type === 'terminal' && method.command ? (
@@ -181,7 +185,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
       )}
 
       <dl className="ml-11 grid grid-cols-[--spacing(14)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
-        <Detail label="Launch">
+        <Detail label={t('agents.launch')}>
           <code
             className="min-w-0 truncate font-mono text-[11.5px]"
             title={status.launchCommand}
@@ -189,10 +193,10 @@ export function AgentCard({ status }: { status: AgentStatus }) {
           >
             {status.launchCommand}
           </code>
-          <CopyButton text={status.launchCommand} label="Copy launch command" />
+          <CopyButton text={status.launchCommand} label={t('agents.copyLaunch')} />
         </Detail>
         {status.package && (
-          <Detail label="Adapter">
+          <Detail label={t('agents.adapter')}>
             <span
               className="min-w-0 truncate font-mono text-[11.5px]"
               title={`${status.package.name}@${status.package.version}`}
@@ -212,11 +216,13 @@ export function AgentCard({ status }: { status: AgentStatus }) {
                 ) : (
                   <DownloadIcon data-icon="inline-start" />
                 )}
-                Reinstall
+                {t('agents.reinstall')}
               </Button>
             ) : (
               r.kind !== 'installing' && (
-                <span className="shrink-0 text-muted-foreground">Installs on first use</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {t('agents.installsOnFirstUse')}
+                </span>
               )
             )}
           </Detail>
@@ -227,7 +233,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
           </Detail>
         )}
         {status.account && (
-          <Detail label="Account">
+          <Detail label={t('agents.account')}>
             <span className="truncate">
               {status.account.label}
               {status.account.email && (
@@ -237,7 +243,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
           </Detail>
         )}
         {limitsReadable && !running && status.limits.length === 0 && (
-          <Detail label="Usage">
+          <Detail label={t('agents.usage')}>
             <Button
               variant="outline"
               size="xs"
@@ -245,17 +251,17 @@ export function AgentCard({ status }: { status: AgentStatus }) {
               onClick={() => act(() => refreshLimits(status.id))}
             >
               {busy && <Spinner data-icon="inline-start" className="size-3" />}
-              Check plan limits
+              {t('agents.checkLimits')}
             </Button>
           </Detail>
         )}
         {status.id === 'opencode' && (
-          <Detail label="Program">
+          <Detail label={t('agents.program')}>
             <span
               className="min-w-0 truncate font-mono text-[11.5px] text-muted-foreground"
               title={override}
             >
-              {override ?? 'opencode on PATH'}
+              {override ?? t('agents.programOnPath')}
             </span>
             {override && (
               <Button
@@ -269,7 +275,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
                   )
                 }
               >
-                Reset
+                {t('agents.reset')}
               </Button>
             )}
             <Button
@@ -277,7 +283,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
               size="xs"
               onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary('opencode'))}
             >
-              Choose binary…
+              {t('agents.chooseBinary')}
             </Button>
           </Detail>
         )}
@@ -294,20 +300,25 @@ export function AgentCard({ status }: { status: AgentStatus }) {
 }
 
 export function EnvironmentFooter() {
+  const { t } = useTranslation('settings')
   const environment = useAgentsStore((s) => s.environment)
   const now = useNow()
   const [act, busy, error] = useAction()
   const source = environment?.source
   const text =
     !environment || source === 'pending'
-      ? 'Reading your environment…'
+      ? t('agents.environment.pending')
       : source === 'login-shell'
-        ? `Read from your login shell${environment.shell ? ` (${environment.shell})` : ''}${
-            environment.resolvedAt ? ` ${longAgo(environment.resolvedAt, now)}` : ''
-          }${environment.durationMs ? ` in ${environment.durationMs} ms` : ''}.`
+        ? environment.shell && environment.resolvedAt && environment.durationMs !== null
+          ? t('agents.environment.loginShell', {
+              shell: environment.shell,
+              ago: longAgo(environment.resolvedAt, now),
+              ms: environment.durationMs,
+            })
+          : t('agents.environment.loginShellPlain')
         : source === 'inherited'
-          ? 'Inherited from how OverBench was started.'
-          : 'Using a fallback PATH.'
+          ? t('agents.environment.inherited')
+          : t('agents.environment.fallback')
   return (
     <div className="flex flex-col gap-1 px-1">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -323,7 +334,7 @@ export function EnvironmentFooter() {
           ) : (
             <RefreshCwIcon data-icon="inline-start" />
           )}
-          Reload environment
+          {t('agents.environment.reload')}
         </Button>
       </div>
       {environment?.warning && <p className="text-xs text-attention-text">{environment.warning}</p>}

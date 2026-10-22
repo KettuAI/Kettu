@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowUpIcon, ChevronDownIcon, FolderIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
@@ -55,6 +56,7 @@ export function NewSessionView({
   project: Project | null
   noProject?: boolean
 }) {
+  const { t } = useTranslation('session')
   const chosenId = useViewStore((s) => (s.main.kind === 'new' ? s.main.agentId : null))
   const installed = useAgentsStore((s) => {
     const status = chosenId ? s.byId[chosenId] : undefined
@@ -70,16 +72,16 @@ export function NewSessionView({
   }, [agentId])
 
   let line
-  if (!project && !noProject) line = 'Choose a project to work in'
-  else if (project?.missing) line = `${project.name} no longer exists`
-  else if (!name) line = 'Choose an agent for this session'
-  else line = `What should ${name} work on?`
+  if (!project && !noProject) line = t('newSession.chooseProject')
+  else if (project?.missing) line = t('newSession.projectMissing', { project: project.name })
+  else if (!name) line = t('newSession.chooseAgent')
+  else line = t('newSession.whatToWorkOn', { agent: name })
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TopBar>
         <NoDrag className="min-w-0">
-          <span className="truncate px-1.5 text-ui font-medium">New session</span>
+          <span className="truncate px-1.5 text-ui font-medium">{t('newSession.title')}</span>
         </NoDrag>
         <span className="flex-1" />
         {project && <HeaderTools projectPath={project.path} />}
@@ -118,6 +120,7 @@ function DraftComposer({
   /** null: No project. */
   projectPath: string | null
 }) {
+  const { t } = useTranslation('session')
   const [text, setText] = useState(() => readDraft(NEW_SESSION_DRAFT))
   const textarea = useRef<HTMLTextAreaElement>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
@@ -184,15 +187,19 @@ function DraftComposer({
         value={text}
         onChange={(event) => update(event.target.value)}
         onKeyDown={onKeyDown}
-        aria-label={agentName ? `Message ${agentName}` : 'Message'}
-        placeholder={agentName ? `Ask ${agentName} to…` : 'Describe a task…'}
+        aria-label={
+          agentName ? t('newSession.messageAgent', { agent: agentName }) : t('newSession.message')
+        }
+        placeholder={
+          agentName ? t('newSession.askAgent', { agent: agentName }) : t('newSession.describeTask')
+        }
         className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-[15px] pr-1 pl-4 text-prose leading-[22px] placeholder:text-muted-foreground md:text-prose"
       />
       <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
         <InputGroupButton
           size="round"
           variant={canSend ? 'default' : 'secondary'}
-          aria-label="Send"
+          aria-label={t('newSession.send')}
           disabled={!canSend}
           onClick={send}
         >
@@ -217,6 +224,7 @@ interface ProjectGroup {
  * them and Open project… last. The items are paths.
  */
 function ProjectMenu({ project, noProject }: { project: Project | null; noProject: boolean }) {
+  const { t } = useTranslation('session')
   const projects = useProjectsStore((s) => s.projects)
   const [error, setError] = useState<string | null>(null)
   const { contains } = useComboboxFilter()
@@ -231,7 +239,7 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
     [projects],
   )
   const label = (value: string) =>
-    value === NO_PROJECT ? 'No project' : (byPath.get(value)?.name ?? value)
+    value === NO_PROJECT ? t('newSession.noProject') : (byPath.get(value)?.name ?? value)
   const open = async () => {
     setError(null)
     try {
@@ -262,7 +270,7 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
             <Button
               variant="quiet"
               size="compact"
-              aria-label="Project"
+              aria-label={t('newSession.project')}
               title={project?.path}
               className="min-w-0 shrink gap-1 px-2"
             />
@@ -270,14 +278,16 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
         >
           <FolderIcon data-icon="inline-start" />
           <span className="truncate text-foreground">
-            {noProject ? 'No project' : (project?.name ?? 'Choose a project')}
+            {noProject
+              ? t('newSession.noProject')
+              : (project?.name ?? t('newSession.chooseProjectShort'))}
           </span>
         </ComboboxTrigger>
         <ComboboxContent side="top" sideOffset={6} className="max-w-80">
           <ComboboxInput
             showTrigger={false}
-            placeholder="Search projects…"
-            aria-label="Search projects"
+            placeholder={t('newSession.searchProjects')}
+            aria-label={t('newSession.searchProjectsLabel')}
             spellCheck={false}
           />
           <ComboboxList className="max-h-none overflow-y-visible">
@@ -287,7 +297,7 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
                   <ComboboxCollection>
                     {(value: string) => (
                       <ComboboxItem key={value} value={value}>
-                        No project
+                        {t('newSession.noProject')}
                       </ComboboxItem>
                     )}
                   </ComboboxCollection>
@@ -295,7 +305,7 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
               ) : group.value === 'recent' ? (
                 <ComboboxGroup key={group.value} items={group.items}>
                   {index > 0 && <ComboboxSeparator />}
-                  <ComboboxLabel>Recent</ComboboxLabel>
+                  <ComboboxLabel>{t('newSession.recent')}</ComboboxLabel>
                   {/* Only the projects scroll, leaving room for the search field and Open project… */}
                   <div className="relative -mx-1.5 max-h-[min(--spacing(72),calc(var(--available-height)---spacing(28)))] scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
                     <ComboboxCollection>
@@ -307,7 +317,7 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
                               <ProjectName name={p.name} hint={hints.get(path)} />
                               {p.missing && (
                                 <span className="ml-auto text-xs text-muted-foreground">
-                                  Missing
+                                  {t('newSession.missing')}
                                 </span>
                               )}
                             </ComboboxItem>
@@ -324,14 +334,14 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
                   ) : (
                     projects.length > 0 && (
                       <div className="flex min-h-row items-center px-2 text-ui text-muted-foreground">
-                        No matching projects
+                        {t('newSession.noMatchingProjects')}
                       </div>
                     )
                   )}
                   <ComboboxCollection>
                     {(value: string) => (
                       <ComboboxItem key={value} value={value}>
-                        Open project…
+                        {t('newSession.openProject')}
                       </ComboboxItem>
                     )}
                   </ComboboxCollection>
@@ -359,6 +369,7 @@ function ProjectMenu({ project, noProject }: { project: Project | null; noProjec
 }
 
 function AgentMenu({ agentId }: { agentId: AgentId | null }) {
+  const { t } = useTranslation('session')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const choose = (id: AgentId) =>
     useViewStore.setState((s) => (s.main.kind === 'new' ? { main: { ...s.main, agentId: id } } : s))
@@ -370,14 +381,14 @@ function AgentMenu({ agentId }: { agentId: AgentId | null }) {
           <Button
             variant="quiet"
             size="compact"
-            aria-label="Agent"
+            aria-label={t('newSession.agent')}
             className="min-w-0 shrink gap-1.5 px-2"
           />
         }
       >
         {agentId && <AgentMark agent={agentId} size={13} />}
         <span className="truncate text-foreground">
-          {agentId ? agentName(agentId) : 'Choose an agent'}
+          {agentId ? agentName(agentId) : t('newSession.chooseAgentShort')}
         </span>
         <ChevronDownIcon data-icon="inline-end" className="-ml-0.5 size-3 opacity-70" />
       </DropdownMenuTrigger>
@@ -396,7 +407,9 @@ function AgentMenu({ agentId }: { agentId: AgentId | null }) {
               <AgentMark agent={status.id} size={14} />
               <span className="min-w-0 flex-1 truncate">{agentName(status.id)}</span>
               {!isInstalled(status) && (
-                <span className="text-xs text-muted-foreground">Not installed</span>
+                <span className="text-xs text-muted-foreground">
+                  {t('newSession.notInstalled')}
+                </span>
               )}
             </DropdownMenuRadioItem>
           ))}

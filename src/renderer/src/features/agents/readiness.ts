@@ -1,4 +1,5 @@
 import type { AgentStatus } from '@shared/agent-host'
+import { i18n } from '@renderer/lib/i18n'
 
 export type AgentReadiness =
   | { kind: 'ready' }
@@ -14,16 +15,16 @@ export function readiness(status: AgentStatus): AgentReadiness {
     case 'not-installed':
       return {
         kind: 'missing',
-        message: status.detail ?? 'Not found on PATH.',
-        action: 'How to install',
+        message: status.detail ?? i18n.t('agents:readiness.notFound'),
+        action: i18n.t('agents:readiness.howToInstall'),
         url: status.installUrl,
       }
     case 'node-missing':
     case 'node-outdated':
       return {
         kind: 'missing',
-        message: status.detail ?? 'Needs Node.js 22 or later.',
-        action: 'Install Node.js',
+        message: status.detail ?? i18n.t('agents:readiness.needsNode'),
+        action: i18n.t('agents:readiness.installNode'),
         url: status.installUrl,
       }
     case 'installing':
@@ -33,7 +34,7 @@ export function readiness(status: AgentStatus): AgentReadiness {
     case 'crashed':
       return { kind: 'restarting' }
     case 'failed':
-      return { kind: 'failed', message: status.detail ?? 'Could not start.' }
+      return { kind: 'failed', message: status.detail ?? i18n.t('agents:readiness.couldNotStart') }
     default:
       return status.signIn === 'required' ? { kind: 'sign-in' } : { kind: 'ready' }
   }
@@ -43,6 +44,7 @@ export function readiness(status: AgentStatus): AgentReadiness {
 export function agentSubline(status: AgentStatus): string {
   if (status.version) return `v${status.version}`
   if (status.binaryOverride) return status.binaryOverride
-  if (status.package && !status.package.installed) return 'Installs on first use'
+  if (status.package && !status.package.installed)
+    return i18n.t('agents:readiness.installsOnFirstUse')
   return status.launchCommand
 }

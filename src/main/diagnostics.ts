@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { app, type BrowserWindow, dialog } from 'electron'
+import { t } from './i18n'
 import { recentLogRecords } from './log'
 import type { UtilityHostEvent, UtilityHostState } from './utility-host'
 
@@ -52,7 +53,7 @@ export async function saveDiagnostics(
   const text = JSON.stringify({ ...bundle, main }, null, 2)
   if (text.length > MAX_BUNDLE_CHARS) throw new Error('The diagnostics bundle is too large')
   const options: Electron.SaveDialogOptions = {
-    title: 'Export Diagnostics',
+    title: t('dialogs.exportDiagnostics'),
     defaultPath: join(
       app.getPath('downloads'),
       `overbench-diagnostics-${timestamp(new Date())}.json`,

@@ -1,0 +1,21 @@
+{
+  "headerTools": {
+    "files": "文件",
+    "terminal": "终端"
+  },
+  "hostBanner": {
+    "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",
+    "stopped": "Agent 后台进程已停止，且无法重启。",
+    "restart": "重启",
+    "exportDiagnostics": "导出诊断信息"
+  },
+  "launch": {
+    "loadFailed": "无法加载你的项目",
+    "starting": "正在启动 OverBench…"
+  },
+  "topBar": {
+    "showSidebar": "显示侧边栏",
+    "hideSidebar": "隐藏侧边栏",
+    "updateReady": "OverBench {{version}} 可以安装了"
+  }
+}

@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { BotIcon, ChevronRightIcon, CircleAlertIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -15,6 +16,7 @@ export const SubagentCard = memo(function SubagentCard({
   entryId,
   projectPath,
 }: EntryProps & { projectPath: string }) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'subagent')
   const animation = useEntryAnimation(sessionId, entryId)
   const child = useSessionsStore((s) => (entry ? s.byId[entry.sessionId] : undefined))
@@ -57,7 +59,9 @@ export const SubagentCard = memo(function SubagentCard({
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="truncate font-medium">{child ? sessionTitle(child) : 'Subagent'}</span>
+            <span className="truncate font-medium">
+              {child ? sessionTitle(child) : t('subagent.fallbackTitle')}
+            </span>
             {child?.description && (
               <span className="min-w-0 truncate text-muted-foreground">{child.description}</span>
             )}
@@ -78,17 +82,17 @@ export const SubagentCard = memo(function SubagentCard({
           {waiting ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-attention-text">
               <span aria-hidden className="size-1.5 rounded-full bg-attention" />
-              Needs approval
+              {t('status.needsApproval')}
             </span>
           ) : failed ? (
             <span className="inline-flex items-center gap-1 text-xs text-destructive">
               <CircleAlertIcon className="size-3.5" />
-              Failed
+              {t('status.failed')}
             </span>
           ) : running ? (
-            <Spinner aria-label="Running" className="size-3.5" />
+            <Spinner aria-label={t('status.running')} className="size-3.5" />
           ) : child ? (
-            <span className="text-xs">Done</span>
+            <span className="text-xs">{t('status.done')}</span>
           ) : null}
           <ChevronRightIcon className="size-3.5 opacity-0 transition-opacity duration-(--duration-fast) group-hover/subagent:opacity-100" />
         </span>

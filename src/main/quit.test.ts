@@ -10,6 +10,7 @@ const electron = vi.hoisted(() => {
     windows: [] as unknown[],
     focused: null as unknown,
     app: {
+      name: 'OverBench',
       isPackaged: false,
       on: (name: string, listener: (event: { preventDefault(): void }) => void) => {
         appEvents.set(name, listener)

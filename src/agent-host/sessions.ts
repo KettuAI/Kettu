@@ -51,6 +51,7 @@ import { parseContextReport } from './acp/claude-reports'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams, notFound } from './errors'
+import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
@@ -177,7 +178,7 @@ function withUltracode(record: SessionRecord, config: readonly ConfigOption[]): 
     {
       id: ULTRACODE_OPTION_ID,
       name: 'Ultracode',
-      description: 'Dynamic workflows for substantial tasks; restarts Claude Code',
+      description: t('session.ultracodeDescription'),
       category: 'other',
       type: 'boolean',
       value: record.ultracode === true,
@@ -927,7 +928,7 @@ export class SessionManager {
         live,
         new HostError(
           'agent_unavailable',
-          `${this.deps.agents.name(live.record.agentId)} can neither load nor resume sessions`,
+          t('session.cannotLoad', { agent: this.deps.agents.name(live.record.agentId) }),
         ),
         { action: mode },
       )
@@ -960,8 +961,10 @@ export class SessionManager {
                 kind: 'notice',
                 id: this.nextId(live),
                 severity: 'info',
-                title: 'Earlier history is not available',
-                description: `${this.deps.agents.name(live.record.agentId)} cannot replay sessions, so this one continues without its history.`,
+                title: t('notice.historyUnavailable.title'),
+                description: t('notice.historyUnavailable.description', {
+                  agent: this.deps.agents.name(live.record.agentId),
+                }),
               },
             },
           ])
@@ -1069,7 +1072,7 @@ export class SessionManager {
           live.id,
           'error',
           this.titleOf(live),
-          `${name} stopped unexpectedly`,
+          t('notice.stopped.title', { agent: name }),
         )
       }
     }
@@ -1139,7 +1142,7 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (!live) {
       this.recordOf(sessionId)
-      throw new HostError('busy', 'Open the session first')
+      throw new HostError('busy', t('session.openFirst'))
     }
     return live
   }
@@ -1166,7 +1169,7 @@ export class SessionManager {
     const { record } = live
     if (!hasReports(record.agentId) || record.origin === 'subagent') return null
     if (live.thread.session.status !== 'ready' || !live.connection) {
-      throw new HostError('busy', `The session is ${live.thread.session.status.replace('_', ' ')}`)
+      throw busyError(live.thread.session.status)
     }
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     if (!runtime.init.capabilities.forkSession) return null
@@ -1201,10 +1204,10 @@ export class SessionManager {
   async prompt(sessionId: string, content: UserContent[]): Promise<void> {
     const live = this.liveFor(sessionId)
     if (live.record.origin === 'subagent') {
-      throw new HostError('restricted', 'A subagent session takes its instructions from its parent')
+      throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
     if (live.thread.session.status !== 'ready' || !live.connection) {
-      throw new HostError('busy', `The session is ${live.thread.session.status.replace('_', ' ')}`)
+      throw busyError(live.thread.session.status)
     }
     this.sendPrompt(live, content)
   }
@@ -1233,7 +1236,7 @@ export class SessionManager {
   async queue(sessionId: string, content: UserContent[]): Promise<{ itemId: string | null }> {
     const live = this.liveFor(sessionId)
     if (live.record.origin === 'subagent') {
-      throw new HostError('restricted', 'A subagent session takes its instructions from its parent')
+      throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
     const { status, queue, queuePaused } = live.thread.session
     if (status === 'ready' && (queue.length === 0 || queuePaused)) {
@@ -1241,7 +1244,7 @@ export class SessionManager {
       return { itemId: null }
     }
     if (status !== 'ready' && status !== 'running' && status !== 'awaiting_permission') {
-      throw new HostError('busy', `The session is ${status.replace('_', ' ')}`)
+      throw busyError(status)
     }
     const item = { id: randomUUID(), content, at: this.now() }
     this.update(live, { queue: [...queue, item] })
@@ -1271,11 +1274,11 @@ export class SessionManager {
     if (!this.deps.agents.status(live.record.agentId).capabilities.steering) {
       throw new HostError(
         'restricted',
-        `${this.deps.agents.name(live.record.agentId)} cannot take messages during a turn`,
+        t('session.cannotSteer', { agent: this.deps.agents.name(live.record.agentId) }),
       )
     }
     if (!live.turn || live.turn.ended || !live.connection) {
-      throw new HostError('busy', 'No turn is running')
+      throw new HostError('busy', t('session.noTurn'))
     }
     let outcome
     try {
@@ -1352,19 +1355,16 @@ export class SessionManager {
   async fork(sessionId: string): Promise<SessionSummary> {
     const source = this.liveFor(sessionId)
     if (source.record.origin === 'subagent') {
-      throw new HostError('restricted', 'A subagent session cannot be forked')
+      throw new HostError('restricted', t('session.subagent.noFork'))
     }
     if (source.thread.session.status !== 'ready' || !source.connection) {
-      throw new HostError(
-        'busy',
-        `The session is ${source.thread.session.status.replace('_', ' ')}`,
-      )
+      throw busyError(source.thread.session.status)
     }
     const runtime = await this.deps.agents.ensureReady(source.record.agentId)
     if (!runtime.init.capabilities.forkSession) {
       throw new HostError(
         'agent_unavailable',
-        `${this.deps.agents.name(source.record.agentId)} cannot fork sessions`,
+        t('session.cannotFork', { agent: this.deps.agents.name(source.record.agentId) }),
       )
     }
     let setup
@@ -1529,12 +1529,14 @@ export class SessionManager {
           severity: 'error',
           ...(authRequired
             ? {
-                title: `${this.deps.agents.name(live.record.agentId)} needs you to sign in`,
+                title: t('notice.signInNeeded', {
+                  agent: this.deps.agents.name(live.record.agentId),
+                }),
                 description: mapped.message,
               }
             : closed
               ? stoppedNotice(this.deps.agents.name(live.record.agentId))
-              : { title: 'The turn failed', description: mapped.message }),
+              : { title: t('notice.turnFailed'), description: mapped.message }),
         },
       },
     ])
@@ -1562,7 +1564,7 @@ export class SessionManager {
     const live = this.liveFor(sessionId)
     if (live.record.origin === 'subagent') {
       if (!live.thread.session.subagent?.canCancel) {
-        throw new HostError('restricted', 'The agent does not allow cancelling this subagent')
+        throw new HostError('restricted', t('session.subagent.noCancel'))
       }
       this.clearPermissions(live, 'cancelled')
       await live.connection?.cancel(live.record.acpSessionId).catch((error: unknown) => {
@@ -1593,8 +1595,12 @@ export class SessionManager {
             kind: 'notice',
             id: this.nextId(live),
             severity: 'warning',
-            title: `${this.deps.agents.name(live.record.agentId)} did not confirm the cancellation`,
-            description: `OverBench ended the turn after ${Math.round(this.timings.cancelFallbackMs / 1000)} seconds. The agent may still be finishing work in the background.`,
+            title: t('notice.cancelUnconfirmed.title', {
+              agent: this.deps.agents.name(live.record.agentId),
+            }),
+            description: t('notice.cancelUnconfirmed.description', {
+              seconds: String(Math.round(this.timings.cancelFallbackMs / 1000)),
+            }),
           },
         },
       ])
@@ -1651,7 +1657,7 @@ export class SessionManager {
         live.id,
         'permission',
         this.titleOf(live),
-        tool?.kind === 'tool' ? tool.title : 'The agent asks for permission',
+        tool?.kind === 'tool' ? tool.title : t('attention.permission'),
       )
     })
   }
@@ -1709,10 +1715,9 @@ export class SessionManager {
   ): Promise<void> {
     const live = this.liveFor(sessionId)
     if (live.record.origin === 'subagent') {
-      throw new HostError('restricted', 'A subagent session cannot be configured')
+      throw new HostError('restricted', t('session.subagent.noConfig'))
     }
-    if (!live.connection)
-      throw new HostError('busy', `The session is ${live.thread.session.status}`)
+    if (!live.connection) throw busyError(live.thread.session.status)
     const option = live.thread.session.config.find((o) => o.id === optionId)
     if (!option) throw invalidParams(`No config option ${optionId}`)
     if (option.type === 'boolean' ? typeof value !== 'boolean' : typeof value !== 'string') {
@@ -1759,7 +1764,7 @@ export class SessionManager {
    */
   private async setUltracode(live: Live, on: boolean): Promise<void> {
     if (live.turn || live.thread.session.status !== 'ready' || !live.connection) {
-      throw new HostError('busy', 'Ultracode changes between turns')
+      throw new HostError('busy', t('session.ultracodeBetweenTurns'))
     }
     const before = live.record.ultracode
     live.record.ultracode = on
@@ -1792,7 +1797,7 @@ export class SessionManager {
   async close(sessionId: string): Promise<void> {
     const record = this.recordOf(sessionId)
     if (record.origin === 'subagent') {
-      throw new HostError('restricted', 'A subagent session closes with its parent')
+      throw new HostError('restricted', t('session.subagent.closesWithParent'))
     }
     await this.closeAll([...this.descendants(sessionId), record])
   }
@@ -1839,7 +1844,7 @@ export class SessionManager {
   async delete(sessionId: string): Promise<void> {
     const record = this.recordOf(sessionId)
     if (record.origin === 'subagent') {
-      throw new HostError('restricted', 'A subagent session is deleted with its parent')
+      throw new HostError('restricted', t('session.subagent.deletedWithParent'))
     }
     const all = [...this.descendants(sessionId), record]
     await this.closeAll(all)
@@ -1906,7 +1911,7 @@ export class SessionManager {
     if (!runtime.init.capabilities.listSessions) {
       throw new HostError(
         'agent_unavailable',
-        `${this.deps.agents.name(agentId)} cannot list its sessions`,
+        t('session.cannotList', { agent: this.deps.agents.name(agentId) }),
       )
     }
     let page
@@ -2016,25 +2021,17 @@ export class SessionManager {
 }
 
 function turnEndText(stopReason: StopReason): string {
-  switch (stopReason) {
-    case 'end_turn':
-      return 'Finished'
-    case 'cancelled':
-      return 'Cancelled'
-    case 'max_tokens':
-      return 'Stopped at the token limit'
-    case 'max_turn_requests':
-      return 'Stopped at the request limit'
-    case 'refusal':
-      return 'The agent refused'
-  }
+  return t(`attention.turnEnd.${stopReason}`)
+}
+
+function busyError(status: SessionStatus): HostError {
+  return new HostError('busy', t('session.busy', { status: t(`session.status.${status}`) }))
 }
 
 // The exit event and the failed prompt race, so both say the same thing.
 function stoppedNotice(name: string): { title: string; description: string } {
   return {
-    title: `${name} stopped unexpectedly`,
-    description:
-      'The turn ended without an answer. OverBench reconnects the session when the agent restarts.',
+    title: t('notice.stopped.title', { agent: name }),
+    description: t('notice.stopped.description'),
   }
 }

@@ -274,6 +274,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     electronPath: process.execPath,
     fakeAgentPath: FAKE_AGENT_MAIN,
     settings: options.settings ?? {
+      locale: 'en',
       agents: DEFAULT_SETTINGS.agents,
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,

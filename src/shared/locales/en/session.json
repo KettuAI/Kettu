@@ -1,0 +1,220 @@
+{
+  "clamp": {
+    "more": "Show more",
+    "less": "Show less"
+  },
+  "status": {
+    "needsApproval": "Needs approval",
+    "pending": "Pending",
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "summary": {
+    "separator": ", ",
+    "thought": "thought",
+    "thoughtFor": "thought for {{duration}}",
+    "execute_one": "ran a command",
+    "execute_other": "ran {{count}} commands",
+    "search_one": "searched once",
+    "search_other": "searched {{count}} times",
+    "fetch_one": "fetched a page",
+    "fetch_other": "fetched {{count}} pages",
+    "tool_one": "used a tool",
+    "tool_other": "used {{count}} tools",
+    "explored_one": "explored {{count}} file",
+    "explored_other": "explored {{count}} files",
+    "read_one": "read {{count}} file",
+    "read_other": "read {{count}} files",
+    "readNamed": "read {{name}}",
+    "edit_one": "edited {{count}} file",
+    "edit_other": "edited {{count}} files",
+    "editNamed": "edited {{name}}",
+    "delete_one": "deleted {{count}} file",
+    "delete_other": "deleted {{count}} files",
+    "deleteNamed": "deleted {{name}}",
+    "move_one": "moved {{count}} file",
+    "move_other": "moved {{count}} files",
+    "moveNamed": "moved {{name}}",
+    "failed": "{{failed}} failed"
+  },
+  "stopReason": {
+    "endTurn": "Worked for {{duration}}",
+    "cancelled": "Cancelled",
+    "maxTokens": "Stopped at the token limit",
+    "maxTurnRequests": "Stopped at the request limit",
+    "refusal": "Declined"
+  },
+  "tool": {
+    "verb": {
+      "read": "Read",
+      "edit": "Edit",
+      "delete": "Delete",
+      "move": "Move",
+      "run": "Run"
+    },
+    "runInTerminal": "Run in terminal",
+    "copyCommand": "Copy command",
+    "showAll": "Show all",
+    "showFullDiff": "Show full diff",
+    "image": "Image"
+  },
+  "permission": {
+    "ask": {
+      "read": "{{agent}} wants to read this file.",
+      "edit": "{{agent}} wants to make this change.",
+      "delete": "{{agent}} wants to delete this file.",
+      "move": "{{agent}} wants to move this file.",
+      "search": "{{agent}} wants to search the project.",
+      "execute": "{{agent}} wants to run this command.",
+      "fetch": "{{agent}} wants to fetch this page.",
+      "switchMode": "{{agent}} wants to switch modes.",
+      "other": "{{agent}} wants to use this tool."
+    },
+    "answerGroup": "Answer",
+    "answer": {
+      "allowOnce": "Allowed once",
+      "allowAlways": "Always allowed",
+      "rejectOnce": "Rejected",
+      "rejectAlways": "Always rejected",
+      "cancelled": "Cancelled",
+      "withdrawn": "No longer needed"
+    }
+  },
+  "subagent": {
+    "fallbackTitle": "Subagent"
+  },
+  "subagentBar": {
+    "runsFor": "{{agent}} runs this subagent for <parent/>",
+    "runsForParent": "{{agent}} runs this subagent for <parent>its parent session</parent>",
+    "stop": "Stop",
+    "back": "Back to {{title}}"
+  },
+  "thought": {
+    "live": "Thinking",
+    "done": "Thought",
+    "doneFor": "Thought for {{duration}}"
+  },
+  "sessionMessage": {
+    "from": "From {{title}}",
+    "fromParent": "From the parent session"
+  },
+  "compaction": {
+    "inProgress": "Compacting context…",
+    "completed": "Context compacted",
+    "failed": "Couldn't compact the context",
+    "cancelled": "Compaction cancelled"
+  },
+  "gitEvent": {
+    "committed": "Committed <id/> <subject/>",
+    "moreCommits_one": "and {{count}} more commit",
+    "moreCommits_other": "and {{count}} more commits",
+    "pushed_one": "Pushed {{count}} commit to <upstream/>",
+    "pushed_other": "Pushed {{count}} commits to <upstream/>",
+    "switchedTo": "Switched to <branch/>",
+    "openedPr": "Opened pull request",
+    "copyCommitId": "Copy commit id"
+  },
+  "plan": {
+    "inProgress": "In progress",
+    "todo": "To do"
+  },
+  "planBar": {
+    "progress": "Plan <count/>"
+  },
+  "userActions": {
+    "steered": "Steered",
+    "copyMessage": "Copy message"
+  },
+  "replyFooter": {
+    "copyReply": "Copy reply",
+    "readAloud": "Read aloud",
+    "stopReading": "Stop reading",
+    "fork": "Fork into a new session"
+  },
+  "queue": {
+    "label": "Queued messages",
+    "queued": "Queued {{total}}",
+    "paused": "Paused until you resume",
+    "waiting": "Sent when the turn ends",
+    "sending": "Sending…",
+    "resume": "Resume",
+    "attachment": "Attachment",
+    "steer": "Steer now: send into the running turn",
+    "edit": "Edit in the composer",
+    "remove": "Remove"
+  },
+  "agentStart": {
+    "installing": "Installing {{agent}}…",
+    "starting": "Starting {{agent}}…",
+    "loading": "Loading the conversation…"
+  },
+  "failed": {
+    "savedTo": "Saved to {{path}}",
+    "exportDiagnostics": "Export diagnostics"
+  },
+  "header": {
+    "newSubSession": "New sub-session",
+    "delete": "Delete…"
+  },
+  "pending": {
+    "back": "Back",
+    "newSubSessionOf": "New sub-session of {{title}}",
+    "notRunning": "{{agent}} is not running",
+    "couldntStart": "Couldn't start {{agent}}"
+  },
+  "newSession": {
+    "title": "New session",
+    "chooseProject": "Choose a project to work in",
+    "projectMissing": "{{project}} no longer exists",
+    "chooseAgent": "Choose an agent for this session",
+    "whatToWorkOn": "What should {{agent}} work on?",
+    "message": "Message",
+    "messageAgent": "Message {{agent}}",
+    "askAgent": "Ask {{agent}} to…",
+    "describeTask": "Describe a task…",
+    "send": "Send",
+    "project": "Project",
+    "chooseProjectShort": "Choose a project",
+    "missing": "Missing",
+    "openProject": "Open project…",
+    "agent": "Agent",
+    "chooseAgentShort": "Choose an agent",
+    "notInstalled": "Not installed",
+    "noProject": "No project",
+    "searchProjects": "Search projects…",
+    "searchProjectsLabel": "Search projects",
+    "recent": "Recent",
+    "noMatchingProjects": "No matching projects"
+  },
+  "signIn": {
+    "title": "Sign in to {{agent}}",
+    "description": "{{agent}} needs you to sign in before it can start. OverBench never sees your credentials.",
+    "noMethods": "{{agent}} did not say how to sign in. Sign in with its own command line, then retry.",
+    "copyCommand": "Copy command",
+    "inTerminal": "Sign in in terminal",
+    "signedIn": "I've signed in, retry"
+  },
+  "view": {
+    "couldntOpen": "Couldn't open this session",
+    "hostSilent": "The agent host did not answer.",
+    "stopped": "{{agent}} stopped",
+    "couldNotContinue": "{{agent}} could not continue this session.",
+    "signInToContinue": "Sign in to {{agent}} to continue",
+    "historyStays": "Your history stays here; the session picks up where it was.",
+    "signIn": "Sign in…",
+    "disconnected": "{{agent}} stopped unexpectedly. Reconnecting…",
+    "reconnect": "Reconnect",
+    "announceApproval": "{{agent}} needs your approval",
+    "announceFinished": "{{agent}} finished"
+  },
+  "thread": {
+    "label": "Thread",
+    "working": "Working…"
+  },
+  "link": {
+    "title": "Open this link?",
+    "open": "Open in browser"
+  }
+}

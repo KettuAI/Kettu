@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
@@ -43,6 +44,7 @@ export function StartingAgent({
   agentId: AgentId
   loading?: boolean
 }) {
+  const { t } = useTranslation('session')
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
   const state = useAgentsStore((s) => s.byId[agentId]?.state)
   const agentStarting = state !== 'ready'
@@ -52,8 +54,10 @@ export function StartingAgent({
         <Spinner className="size-3.5" />
         <span className="shimmer">
           {loading && !agentStarting
-            ? 'Loading the conversation…'
-            : `${state === 'installing' ? 'Installing' : 'Starting'} ${agentName(agentId)}…`}
+            ? t('agentStart.loading')
+            : t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
+                agent: agentName(agentId),
+              })}
         </span>
       </span>
       {progress.length > 0 && (
@@ -77,6 +81,7 @@ export function StartingAgent({
  * waits for under it, so a send shows at once.
  */
 export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string }) {
+  const { t } = useTranslation('session')
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
   const installing = useAgentsStore((s) => s.byId[agentId]?.state === 'installing')
   return (
@@ -92,7 +97,9 @@ export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string
         <div role="status" className="flex flex-col gap-0.5 pt-2.5">
           <p className="text-prose text-muted-foreground">
             <span className="shimmer">
-              {installing ? 'Installing' : 'Starting'} {agentName(agentId)}…
+              {t(installing ? 'agentStart.installing' : 'agentStart.starting', {
+                agent: agentName(agentId),
+              })}
             </span>
           </p>
           {progress.slice(-3).map((line, i) => (
@@ -121,6 +128,7 @@ export function FailedState({
   detail?: string
   onRetry: () => void
 }) {
+  const { t } = useTranslation(['session', 'common'])
   const [exporting, setExporting] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const save = async () => {
@@ -128,7 +136,7 @@ export function FailedState({
     setNote(null)
     try {
       const path = await exportDiagnostics()
-      if (path) setNote(`Saved to ${path}`)
+      if (path) setNote(t('failed.savedTo', { path }))
     } catch (e) {
       setNote(errorMessage(e))
     } finally {
@@ -160,7 +168,7 @@ export function FailedState({
       <div className="flex flex-wrap items-center gap-1.5 pl-6">
         <Button size="compact" onClick={onRetry}>
           <RotateCwIcon data-icon="inline-start" />
-          Retry
+          {t('common:actions.retry')}
         </Button>
         <Button variant="outline" size="compact" disabled={exporting} onClick={() => void save()}>
           {exporting ? (
@@ -168,7 +176,7 @@ export function FailedState({
           ) : (
             <FileDownIcon data-icon="inline-start" />
           )}
-          Export diagnostics
+          {t('failed.exportDiagnostics')}
         </Button>
         {note && <span className="min-w-0 truncate text-xs text-muted-foreground">{note}</span>}
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ImportableSession, Project } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -37,6 +38,7 @@ export function ImportSessionsDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation(['home', 'common'])
   const agents = useAgentsStore(
     useShallow((s) =>
       usableAgents(s.order, s.byId).filter(
@@ -129,15 +131,14 @@ export function ImportSessionsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[min(560px,80svh)] flex-col gap-4 sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Import sessions</DialogTitle>
+          <DialogTitle>{t('import.title')}</DialogTitle>
           <DialogDescription>
-            Sessions the agents already have for {project.name}, such as ones you started in a
-            terminal. Imported sessions open with their full history.
+            {t('import.description', { project: project.name })}
           </DialogDescription>
         </DialogHeader>
         <div className="-mx-1 flex min-h-0 flex-col gap-4 overflow-y-auto px-1">
           {agents.length === 0 && (
-            <p className="text-ui text-muted-foreground">No agent here can list its sessions.</p>
+            <p className="text-ui text-muted-foreground">{t('import.noAgents')}</p>
           )}
           {agents.map((agent) => {
             const list = lists[agent.id]
@@ -155,7 +156,7 @@ export function ImportSessionsDialog({
                     <Skeleton className="h-3 w-1/2" />
                   </div>
                 ) : list.sessions.length === 0 ? (
-                  <p className="text-ui text-muted-foreground">No sessions for this folder.</p>
+                  <p className="text-ui text-muted-foreground">{t('import.noSessions')}</p>
                 ) : (
                   <ul className="flex flex-col gap-px">
                     {list.sessions.map((s) => {
@@ -167,7 +168,7 @@ export function ImportSessionsDialog({
                           className="flex h-8 items-center gap-2.5 rounded-lg px-2 hover:bg-accent"
                         >
                           <span className="min-w-0 flex-1 truncate">
-                            {s.title ?? 'Untitled session'}
+                            {s.title ?? t('common:untitledSession')}
                           </span>
                           {failed && (
                             <span
@@ -185,7 +186,7 @@ export function ImportSessionsDialog({
                           {state === 'done' ? (
                             <span className="inline-flex w-[62px] items-center justify-end gap-1 text-xs text-muted-foreground">
                               <CheckIcon className="size-3.5" />
-                              Added
+                              {t('import.added')}
                             </span>
                           ) : (
                             <Button
@@ -195,7 +196,11 @@ export function ImportSessionsDialog({
                               disabled={state === 'busy'}
                               onClick={() => void importOne(agent.id, s.acpSessionId)}
                             >
-                              {state === 'busy' ? <Spinner className="size-3" /> : 'Import'}
+                              {state === 'busy' ? (
+                                <Spinner className="size-3" />
+                              ) : (
+                                t('import.import')
+                              )}
                             </Button>
                           )}
                         </li>
@@ -209,7 +214,7 @@ export function ImportSessionsDialog({
                         disabled={list.loading}
                         onClick={() => list.nextCursor && loadMore(agent.id, list.nextCursor)}
                       >
-                        Show more
+                        {t('import.showMore')}
                       </Button>
                     )}
                   </ul>

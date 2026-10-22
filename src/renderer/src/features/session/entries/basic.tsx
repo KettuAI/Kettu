@@ -12,6 +12,7 @@ import {
   LayersIcon,
   TriangleAlertIcon,
 } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
 import type { PlanItem } from '@shared/thread'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
@@ -24,7 +25,7 @@ import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marke
 import { Message } from '@renderer/components/ui/message'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PrChip } from '@renderer/features/git/pr-chip'
-import { duration, plural } from '@renderer/lib/format'
+import { duration } from '@renderer/lib/format'
 import { PANEL, stopReasonText } from './helpers'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -82,15 +83,16 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
 })
 
 export const ThoughtEntry = memo(function ThoughtEntry({ sessionId, entryId }: EntryProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'thought')
   const animation = useEntryAnimation(sessionId, entryId)
   const [open, setOpen] = useState(false)
   if (!entry) return null
   const label = entry.streaming
-    ? 'Thinking'
+    ? t('thought.live')
     : entry.durationMs !== undefined && entry.durationMs >= 1000
-      ? `Thought for ${duration(entry.durationMs)}`
-      : 'Thought'
+      ? t('thought.doneFor', { duration: duration(entry.durationMs) })
+      : t('thought.done')
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={animation}>
       <CollapsibleTrigger className="group/thought -mx-1 flex h-6 items-center gap-1 rounded-md px-1 text-ui text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
@@ -115,6 +117,7 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
   sessionId,
   entryId,
 }: EntryProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'session_message')
   const sender = useSessionsStore((s) => (entry?.senderId ? s.byId[entry.senderId] : undefined))
   const animation = useEntryAnimation(sessionId, entryId)
@@ -122,7 +125,9 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
   return (
     <figure className={cn('flex flex-col gap-1.5', animation)}>
       <figcaption className="text-xs text-muted-foreground">
-        From {sender ? sessionTitle(sender) : 'the parent session'}
+        {sender
+          ? t('sessionMessage.from', { title: sessionTitle(sender) })
+          : t('sessionMessage.fromParent')}
       </figcaption>
       <blockquote className="border-l-2 border-border-strong pl-3 text-prose">
         <UserContentView content={entry.content} />
@@ -160,19 +165,20 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
   )
 })
 
-const COMPACTION_TEXT = {
-  in_progress: 'Compacting context…',
-  completed: 'Context compacted',
-  failed: "Couldn't compact the context",
-  cancelled: 'Compaction cancelled',
-}
+const COMPACTION_KEY = {
+  in_progress: 'inProgress',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const
 
 export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryId }: EntryProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'compaction')
   const animation = useEntryAnimation(sessionId, entryId)
   const [open, setOpen] = useState(false)
   if (!entry) return null
-  const text = COMPACTION_TEXT[entry.status]
+  const text = t(`compaction.${COMPACTION_KEY[entry.status]}`)
   const icon =
     entry.status === 'in_progress' ? (
       <Spinner className="size-3.5" />
@@ -219,6 +225,7 @@ export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryI
 })
 
 export const TurnEndEntry = memo(function TurnEndEntry({ sessionId, entryId }: EntryProps) {
+  useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'turn_end')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
@@ -230,6 +237,7 @@ export const TurnEndEntry = memo(function TurnEndEntry({ sessionId, entryId }: E
 })
 
 export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }: EntryProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'git')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
@@ -242,13 +250,21 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
             <div key={c.oid} className={line}>
               <GitCommitHorizontalIcon className="size-3.5 shrink-0" />
               <span className="min-w-0 truncate">
-                Committed <CommitId oid={c.oid} />{' '}
-                <span className="text-foreground">{c.subject}</span>
+                <Trans
+                  t={t}
+                  i18nKey="gitEvent.committed"
+                  components={{
+                    id: <CommitId oid={c.oid} />,
+                    subject: <span className="text-foreground">{c.subject}</span>,
+                  }}
+                />
               </span>
             </div>
           ))}
           {entry.more > 0 && (
-            <div className={cn(line, 'pl-[22px]')}>and {plural(entry.more, 'more commit')}</div>
+            <div className={cn(line, 'pl-[22px]')}>
+              {t('gitEvent.moreCommits', { count: entry.more })}
+            </div>
           )}
         </div>
       )
@@ -257,8 +273,16 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
         <div className={cn(line, animation)}>
           <ArrowUpIcon className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">
-            Pushed {plural(entry.count, 'commit')} to{' '}
-            <span className="font-mono text-xs text-foreground">{entry.upstream}</span>
+            <Trans
+              t={t}
+              i18nKey="gitEvent.pushed"
+              count={entry.count}
+              components={{
+                upstream: (
+                  <span className="font-mono text-xs text-foreground">{entry.upstream}</span>
+                ),
+              }}
+            />
           </span>
         </div>
       )
@@ -267,7 +291,13 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
         <div className={cn(line, animation)}>
           <GitBranchIcon className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">
-            Switched to <span className="font-mono text-xs text-foreground">{entry.branch}</span>
+            <Trans
+              t={t}
+              i18nKey="gitEvent.switchedTo"
+              components={{
+                branch: <span className="font-mono text-xs text-foreground">{entry.branch}</span>,
+              }}
+            />
           </span>
         </div>
       )
@@ -275,7 +305,7 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
       return (
         <div className={cn(line, animation)}>
           <GitPullRequestArrowIcon className="size-3.5 shrink-0" />
-          <span>Opened pull request</span>
+          <span>{t('gitEvent.openedPr')}</span>
           <PrChip url={entry.url} />
         </div>
       )
@@ -283,11 +313,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
 })
 
 function CommitId({ oid }: { oid: string }) {
+  const { t } = useTranslation(['session', 'common'])
   const [copied, setCopied] = useState(false)
   return (
     <button
       type="button"
-      title={copied ? 'Copied' : 'Copy commit id'}
+      title={copied ? t('common:actions.copied') : t('gitEvent.copyCommitId')}
       onClick={() => {
         void navigator.clipboard.writeText(oid).then(() => {
           setCopied(true)
@@ -316,6 +347,7 @@ export const PlanEntry = memo(function PlanEntry({ sessionId, entryId }: EntryPr
 })
 
 export function PlanList({ items }: { items: PlanItem[] }) {
+  const { t } = useTranslation('session')
   return (
     <ul className="flex flex-col gap-0.5">
       {items.map((item, i) => (
@@ -324,13 +356,13 @@ export function PlanList({ items }: { items: PlanItem[] }) {
             {item.status === 'completed' ? (
               <CircleCheckIcon
                 role="img"
-                aria-label="Done"
+                aria-label={t('status.done')}
                 className="size-3.5 text-muted-foreground"
               />
             ) : item.status === 'in_progress' ? (
               <span
                 role="img"
-                aria-label="In progress"
+                aria-label={t('plan.inProgress')}
                 className="flex size-3.5 items-center justify-center"
               >
                 <span className="size-2 rounded-full bg-foreground" />
@@ -338,7 +370,7 @@ export function PlanList({ items }: { items: PlanItem[] }) {
             ) : (
               <CircleIcon
                 role="img"
-                aria-label="To do"
+                aria-label={t('plan.todo')}
                 className="size-3.5 text-muted-foreground/70"
               />
             )}

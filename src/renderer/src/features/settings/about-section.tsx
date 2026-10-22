@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { CircleCheckIcon, ExternalLinkIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
@@ -23,6 +24,7 @@ function useAppInfo(): AppInfo | null {
 }
 
 export function Version() {
+  const { t } = useTranslation('settings')
   const info = useAppInfo()
   if (!info) return <Spinner className="size-3.5 text-muted-foreground" />
   const text = `OverBench ${info.version} (${info.platform} ${info.arch})\nElectron ${info.versions.electron}\nChromium ${info.versions.chrome}\nNode.js ${info.versions.node}`
@@ -39,12 +41,13 @@ export function Version() {
         <dt className="text-muted-foreground">Node.js</dt>
         <dd className="font-mono text-[11.5px]">{info.versions.node}</dd>
       </dl>
-      <CopyButton text={text} label="Copy versions" />
+      <CopyButton text={text} label={t('about.version.copy')} />
     </div>
   )
 }
 
 export function UpdateRow({ status, label }: { status: UpdateStatus | null; label: ReactNode }) {
+  const { t } = useTranslation('settings')
   const justChecked = useUpdatesStore((s) => s.justChecked)
   const now = useNow()
   const [error, setError] = useState<string | null>(null)
@@ -68,7 +71,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
       rel="noreferrer"
       className={buttonVariants({ variant: 'quiet', size: 'compact' })}
     >
-      What's new
+      {t('about.updates.whatsNew')}
     </a>
   )
 
@@ -81,18 +84,18 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
         className="inline-flex animate-in items-center gap-1.5 fade-in animation-duration-(--duration-base)"
       >
         <CircleCheckIcon className="size-3.5 text-success" />
-        Up to date
+        {t('about.updates.upToDateShort')}
       </span>
     )
   } else {
     switch (state.kind) {
       case 'idle':
         text = state.checkedAt
-          ? `You're up to date · Checked ${longAgo(state.checkedAt, now)}`
-          : "You're up to date"
+          ? t('about.updates.upToDateChecked', { ago: longAgo(state.checkedAt, now) })
+          : t('about.updates.upToDate')
         action = (
           <Button variant="outline" size="compact" onClick={() => run(checkForUpdates)}>
-            Check for updates
+            {t('about.updates.check')}
           </Button>
         )
         break
@@ -100,7 +103,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
         text = (
           <span className="inline-flex items-center gap-1.5">
             <Spinner className="size-3" />
-            Checking for updates…
+            {t('about.updates.checking')}
           </span>
         )
         break
@@ -108,26 +111,26 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
         text = (
           <span className="flex w-56 flex-col gap-1.5">
             <span className="flex justify-between tabular">
-              Downloading {state.version}
+              {t('about.updates.downloading', { version: state.version })}
               <span className="text-muted-foreground">{Math.round(state.percent)}%</span>
             </span>
-            <Progress value={state.percent} aria-label="Download progress" />
+            <Progress value={state.percent} aria-label={t('about.updates.downloadProgress')} />
           </span>
         )
         break
       case 'ready':
-        text = `${state.version} is ready to install`
+        text = t('about.updates.ready', { version: state.version })
         action = (
           <>
             {whatsNew(state.version)}
             <Button size="compact" onClick={() => run(window.overbench.updates.restart)}>
-              Restart
+              {t('about.updates.restart')}
             </Button>
           </>
         )
         break
       case 'available':
-        text = `${state.version} is available`
+        text = t('about.updates.available', { version: state.version })
         action = (
           <>
             {whatsNew(state.version)}
@@ -138,12 +141,12 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
                 rel="noreferrer"
                 className={buttonVariants({ size: 'compact' })}
               >
-                Download
+                {t('about.updates.download')}
                 <ExternalLinkIcon data-icon="inline-end" />
               </a>
             ) : (
               <Button size="compact" onClick={() => run(window.overbench.updates.download)}>
-                Download
+                {t('about.updates.download')}
               </Button>
             )}
           </>
@@ -152,13 +155,13 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
       case 'error':
         text = (
           <span className="flex flex-col">
-            <span className="text-destructive">Couldn't check for updates</span>
+            <span className="text-destructive">{t('about.updates.failed')}</span>
             <span data-selectable="">{state.message}</span>
           </span>
         )
         action = (
           <Button variant="outline" size="compact" onClick={() => run(checkForUpdates)}>
-            Try again
+            {t('about.updates.tryAgain')}
           </Button>
         )
         break
@@ -166,8 +169,8 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
         text = (
           <span>
             {state.reason === 'development'
-              ? 'Updates are off in development builds'
-              : 'Updates are installed by your package manager'}
+              ? t('about.updates.offDevelopment')
+              : t('about.updates.offPackageManager')}
           </span>
         )
     }
@@ -186,18 +189,19 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
 }
 
 export function AutomaticUpdates() {
+  const { t } = useTranslation('settings')
   const value = useSettingsStore((s) => s.settings.updates.automatic)
   const [apply, error] = useApply()
   return (
     <>
       <ControlError error={error} />
       <SettingSelect
-        label="Automatic updates"
+        label={t('about.automatic.name')}
         value={value}
         options={[
-          { value: 'download', label: 'Download and install' },
-          { value: 'notify', label: 'Notify only' },
-          { value: 'off', label: 'Off' },
+          { value: 'download', label: t('about.automatic.download') },
+          { value: 'notify', label: t('about.automatic.notify') },
+          { value: 'off', label: t('about.automatic.off') },
         ]}
         onChange={(v) => apply({ updates: { automatic: v } })}
       />

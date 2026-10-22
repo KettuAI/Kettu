@@ -30,6 +30,7 @@ Each concern has exactly one library. Build with these instead of adding an alte
 | Syntax highlighting         | [Shiki](https://shiki.style) (from M0.3)                                                                              |
 | Diffs                       | [Diffs](https://diffs.com) (`@pierre/diffs`, from M0.3)                                                               |
 | Terminal                    | [xterm.js](https://xtermjs.org) (`@xterm/xterm`) in the renderer, `node-pty` in the terminal host (from M0.5)         |
+| Localization                | [i18next](https://www.i18next.com) with [react-i18next](https://react.i18next.com)                                    |
 
 - **Components**: add shadcn components with `pnpm shadcn add <component>` rather than writing them by hand; they land in `src/renderer/src/components/ui`. Reach for their variants before custom classes, and style with semantic tokens such as `bg-background` and `text-muted-foreground`, never raw colors, so the light and dark themes stay consistent. Radii, sizes and timings come from the [design system](./docs/design/design-system.md) tokens as well.
 - **Icons**: import Lucide icons as components, e.g. `import { SearchIcon } from 'lucide-react'`. Do not mix in other icon sets or inline SVGs for UI icons.
@@ -39,6 +40,7 @@ Each concern has exactly one library. Build with these instead of adding an alte
 - **Markdown**: render agent text with Streamdown, in `streaming` mode while it streams and `static` mode afterwards, with `skipHtml` on. Never render agent output with `dangerouslySetInnerHTML`.
 - **Code and diffs**: highlight only with Shiki, through the shadcn `code-block` component, Streamdown's code plugin and `@pierre/diffs`. Render diffs with `@pierre/diffs` and its worker pool.
 - **Terminal**: render terminals with xterm.js and its fit, webgl and web-links addons, imported with dynamic `import()` the first time a terminal opens. Pseudo-terminals live only in the terminal host, through `node-pty`; main and the renderer never spawn a shell ([terminal design](./docs/design/terminal.md)).
+- **Text**: every word the interface shows goes through i18next, in English and Simplified Chinese, with keys in `src/shared/locales/<locale>/<namespace>.json`; `pnpm test` fails when the two languages differ. Write whole sentences with placeholders, call `useTranslation()` in each component that shows text, and follow the [localization design](./docs/design/localization.md#writing-messages) and its Chinese glossary.
 - **State**: keep state in React when only one component or a small subtree needs it. State shared across the app lives in Zustand stores under `src/renderer/src/stores`, one store per domain. Read it through selectors such as `useSessionStore((s) => s.activeId)` so components re-render only when the values they use change.
 
 ## Dependencies

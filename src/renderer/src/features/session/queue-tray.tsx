@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { CornerDownRightIcon, PencilIcon, PlayIcon, XIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { QueuedPrompt, SessionView } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
@@ -49,6 +50,7 @@ function TrayButton({
  * turn where the agent allows it, moved back into the composer to edit, or removed.
  */
 export function QueueTray({ session }: { session: SessionView }) {
+  const { t } = useTranslation('session')
   const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
   const [error, setError] = useState<string | null>(null)
   const { queue, queuePaused, status } = session
@@ -70,17 +72,13 @@ export function QueueTray({ session }: { session: SessionView }) {
   return (
     <div
       className="mx-3 animate-in overflow-hidden rounded-t-xl bg-card/80 shadow-card fade-in animation-duration-(--duration-base)"
-      aria-label="Queued messages"
+      aria-label={t('queue.label')}
       role="group"
     >
       <div className="flex h-row items-center gap-2 px-3 text-xs">
-        <span className="font-medium tabular">Queued {queue.length}</span>
+        <span className="font-medium tabular">{t('queue.queued', { total: queue.length })}</span>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">
-          {queuePaused
-            ? 'Paused until you resume'
-            : running
-              ? 'Sent when the turn ends'
-              : 'Sending…'}
+          {queuePaused ? t('queue.paused') : running ? t('queue.waiting') : t('queue.sending')}
         </span>
         {error && (
           <span className="max-w-[40%] truncate text-destructive" title={error}>
@@ -94,7 +92,7 @@ export function QueueTray({ session }: { session: SessionView }) {
             onClick={() => run(host('sessions.resumeQueue', { sessionId }))}
           >
             <PlayIcon data-icon="inline-start" />
-            Resume
+            {t('queue.resume')}
           </Button>
         )}
       </div>
@@ -107,21 +105,23 @@ export function QueueTray({ session }: { session: SessionView }) {
               i > 0 && 'text-muted-foreground',
             )}
           >
-            <span className="min-w-0 flex-1 truncate">{promptText(item) || 'Attachment'}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {promptText(item) || t('queue.attachment')}
+            </span>
             <span className="flex shrink-0 items-center opacity-60 transition-opacity duration-(--duration-fast) group-hover/queued:opacity-100 group-focus-within/queued:opacity-100">
               {steering && running && (
                 <TrayButton
-                  label="Steer now: send into the running turn"
+                  label={t('queue.steer')}
                   onClick={() => run(host('sessions.steer', { sessionId, itemId: item.id }))}
                 >
                   <CornerDownRightIcon />
                 </TrayButton>
               )}
-              <TrayButton label="Edit in the composer" onClick={() => edit(item)}>
+              <TrayButton label={t('queue.edit')} onClick={() => edit(item)}>
                 <PencilIcon />
               </TrayButton>
               <TrayButton
-                label="Remove"
+                label={t('queue.remove')}
                 onClick={() => run(host('sessions.unqueue', { sessionId, itemId: item.id }))}
               >
                 <XIcon />

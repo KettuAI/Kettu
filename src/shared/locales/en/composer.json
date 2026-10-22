@@ -1,0 +1,61 @@
+{
+  "prompt": {
+    "label": "Message {{agent}}",
+    "placeholder": {
+      "starting": "Starting {{agent}}…",
+      "awaiting": "Waiting for your approval",
+      "steer": "Queue a message, or steer with {{shortcut}}",
+      "queue": "Queue a message for when the turn ends",
+      "limitReached": "{{limit}} limit reached · resets {{time}}",
+      "ask": "Ask {{agent}} to…"
+    },
+    "queue": "Queue",
+    "stop": "Stop",
+    "send": "Send",
+    "queueTooltip": "Queue <shortcut>{{queueShortcut}}</shortcut>",
+    "queueSteerTooltip": "Queue <shortcut>{{queueShortcut}}</shortcut> · Steer <shortcut>{{steerShortcut}}</shortcut>",
+    "stopTooltip": "Stop <shortcut>{{shortcut}}</shortcut>"
+  },
+  "controls": {
+    "ultracodeOn": "Ultracode is on for this session: dynamic workflows on substantial tasks",
+    "ultracodeNext": "This message runs with ultracode: dynamic workflows on the task",
+    "model": "Model",
+    "options": "Options",
+    "changesBetweenTurns": "Changes between turns",
+    "useFallback": "Use {{name}}",
+    "useDefault": "Use the agent's default"
+  },
+  "usage": {
+    "title": "Usage",
+    "contextPercent": "Context {{percent}}% used",
+    "shortWindow": {
+      "five_hour": "5h",
+      "seven_day": "7d",
+      "seven_day_opus": "7d Opus",
+      "seven_day_sonnet": "7d Sonnet"
+    },
+    "context": {
+      "title": "Context",
+      "used": "Context used",
+      "tokens": "{{used}} of {{size}} tokens · {{left}} left",
+      "session": "This session",
+      "input": "Input",
+      "output": "Output",
+      "reasoning": "Reasoning",
+      "cacheRead": "Cache read",
+      "cacheWrite": "write",
+      "compact": "Compact"
+    },
+    "breakdown": {
+      "loading": "Reading what fills the context",
+      "error": "Couldn't break the context down: {{error}}"
+    },
+    "limits": {
+      "plan": "Plan",
+      "title": "Plan limits",
+      "used": "{{limit}} used",
+      "resets": "Resets {{time}}",
+      "updated": "Updated {{ago}}"
+    }
+  }
+}

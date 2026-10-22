@@ -1,0 +1,25 @@
+{
+  "notice": {
+    "dismiss": "忽略",
+    "ready": "更新已就绪",
+    "available": "{{version}} 已发布",
+    "updatedTo": "已更新到",
+    "restart": "重启",
+    "download": "下载",
+    "whatsNew": "更新内容",
+    "readyTooltip": "OverBench {{version}} 已下载完成。重启即可完成更新，会话会自动恢复。",
+    "availableTooltip": "OverBench {{version}} 已发布，请从发布页面下载。"
+  },
+  "quit": {
+    "titleUpdate": "重启以完成更新？",
+    "titleQuit": "退出 OverBench？",
+    "stopsUpdate": "重启会停止以下正在运行的任务：",
+    "stopsQuit": "退出会停止以下正在运行的任务：",
+    "working": "运行中",
+    "terminal": "终端",
+    "comeBackUpdate": "重启后，会话和草稿都会恢复。",
+    "comeBackQuit": "再次打开 OverBench 时，会话和草稿都会恢复。",
+    "restart": "重启",
+    "quit": "退出"
+  }
+}

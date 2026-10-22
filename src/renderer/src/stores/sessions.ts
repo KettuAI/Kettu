@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { SessionSummary } from '@shared/agent-host'
 import { host } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 
 interface SessionsStore {
   byId: Record<string, SessionSummary>
@@ -102,5 +103,5 @@ export function flattenTree(nodes: SessionNode[], expanded: (id: string) => bool
 }
 
 export function sessionTitle(summary: Pick<SessionSummary, 'title'>): string {
-  return summary.title?.trim() || 'New session'
+  return summary.title?.trim() || i18n.t('app:newSession')
 }

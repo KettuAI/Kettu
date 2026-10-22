@@ -1,0 +1,19 @@
+{
+  "readiness": {
+    "notFound": "未在 PATH 中找到。",
+    "howToInstall": "安装方法",
+    "needsNode": "需要 Node.js 22 或更高版本。",
+    "installNode": "安装 Node.js",
+    "couldNotStart": "无法启动。",
+    "installsOnFirstUse": "首次使用时安装"
+  },
+  "state": {
+    "ready": "就绪",
+    "signIn": "登录后开始",
+    "installing": "正在安装…",
+    "starting": "正在启动…",
+    "restarting": "正在重启…",
+    "failed": "失败",
+    "notAvailable": "不可用"
+  }
+}

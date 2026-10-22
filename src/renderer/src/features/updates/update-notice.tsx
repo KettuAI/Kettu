@@ -1,4 +1,5 @@
 import { CircleArrowUpIcon, CircleCheckIcon, ExternalLinkIcon, XIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -23,6 +24,7 @@ function noticeFor(status: UpdateStatus | null, updatedSeen: boolean): Notice | 
 
 /** The update notice: a raised, neutral row in the sidebar footer, above Settings. */
 export function UpdateNotice() {
+  const { t } = useTranslation('updates')
   const status = useUpdatesStore((s) => s.status)
   const updatedDismissed = useUpdatesStore((s) => s.updatedDismissed)
   const notice = noticeFor(status, updatedDismissed)
@@ -37,7 +39,7 @@ export function UpdateNotice() {
     <Button
       variant="ghost"
       size="icon-xs"
-      aria-label="Dismiss"
+      aria-label={t('notice.dismiss')}
       onClick={dismiss}
       className="size-5 rounded-[5px] text-muted-foreground hover:text-foreground"
     >
@@ -62,16 +64,16 @@ export function UpdateNotice() {
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (
           <>
-            <span className="font-medium">Update ready</span>
+            <span className="font-medium">{t('notice.ready')}</span>
             {version}
           </>
         )}
         {notice.kind === 'link' && (
-          <span className="font-medium">{notice.version} is available</span>
+          <span className="font-medium">{t('notice.available', { version: notice.version })}</span>
         )}
         {notice.kind === 'updated' && (
           <>
-            <span className="font-medium">Updated to</span>
+            <span className="font-medium">{t('notice.updatedTo')}</span>
             {version}
           </>
         )}
@@ -83,7 +85,7 @@ export function UpdateNotice() {
             size="xs"
             onClick={() => void window.overbench.updates.restart()}
           >
-            Restart
+            {t('notice.restart')}
           </Button>
         )}
         {notice.kind === 'link' && (
@@ -94,7 +96,7 @@ export function UpdateNotice() {
             className={buttonVariants({ variant: 'outline', size: 'xs' })}
           >
             <ExternalLinkIcon data-icon="inline-start" />
-            Download
+            {t('notice.download')}
           </a>
         )}
         {notice.kind === 'updated' && (
@@ -104,7 +106,7 @@ export function UpdateNotice() {
             rel="noreferrer"
             className={buttonVariants({ variant: 'ghost', size: 'xs' })}
           >
-            What’s new
+            {t('notice.whatsNew')}
           </a>
         )}
         {notice.kind === 'updated' ? (
@@ -124,8 +126,8 @@ export function UpdateNotice() {
       <TooltipTrigger render={row} delay={500} />
       <TooltipContent side="top" align="start" className="max-w-64">
         {notice.kind === 'ready'
-          ? `OverBench ${notice.version} is downloaded. Restart to finish; your sessions come back.`
-          : `OverBench ${notice.version} is available. Download it from the release page.`}
+          ? t('notice.readyTooltip', { version: notice.version })
+          : t('notice.availableTooltip', { version: notice.version })}
       </TooltipContent>
     </Tooltip>
   )

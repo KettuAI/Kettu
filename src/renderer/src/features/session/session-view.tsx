@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CircleAlertIcon, RotateCwIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
@@ -32,6 +33,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
 }
 
 function SessionBody({ summary }: { summary: SessionSummary }) {
+  const { t } = useTranslation(['session', 'common'])
   const sessionId = summary.id
   const replicaStatus = useThreadsStore((s) => s.replicas[sessionId]?.status ?? 'loading')
   const replicaError = useThreadsStore((s) => s.replicas[sessionId]?.error ?? null)
@@ -67,8 +69,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       replicaStatus === 'error' ? (
         <div className="mx-auto w-full max-w-[760px] px-6 pt-6">
           <FailedState
-            title="Couldn't open this session"
-            message={replicaError ?? 'The agent host did not answer.'}
+            title={t('view.couldntOpen')}
+            message={replicaError ?? t('view.hostSilent')}
             onRetry={() => void reloadSession(sessionId)}
           />
         </div>
@@ -98,7 +100,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     body = (
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-16">
         <p className="animate-in text-[15px] text-muted-foreground fade-in animation-duration-(--duration-slow)">
-          What should {name} work on?
+          {t('newSession.whatToWorkOn', { agent: name })}
         </p>
       </div>
     )
@@ -130,8 +132,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         {session && status === 'disconnected' && <Disconnected sessionId={sessionId} name={name} />}
         {session && status === 'failed' && (
           <FailedState
-            title={`${name} stopped`}
-            message={session.error?.message ?? `${name} could not continue this session.`}
+            title={t('view.stopped', { agent: name })}
+            message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
             detail={session.error?.detail}
             onRetry={retry}
           />
@@ -139,16 +141,14 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         {session && status === 'auth_required' && !empty && (
           <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
             <CircleAlertIcon />
-            <AlertTitle>Sign in to {name} to continue</AlertTitle>
-            <AlertDescription>
-              Your history stays here; the session picks up where it was.
-            </AlertDescription>
+            <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
+            <AlertDescription>{t('view.historyStays')}</AlertDescription>
             <AlertAction className="flex gap-1.5">
               <Button size="xs" variant="outline" onClick={retry}>
-                Retry
+                {t('common:actions.retry')}
               </Button>
               <Button size="xs" onClick={() => openSettings('agents')}>
-                Sign in…
+                {t('view.signIn')}
               </Button>
             </AlertAction>
           </Alert>
@@ -181,6 +181,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
 }
 
 function Disconnected({ sessionId, name }: { sessionId: string; name: string }) {
+  const { t } = useTranslation('session')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const reconnect = async () => {
@@ -197,12 +198,12 @@ function Disconnected({ sessionId, name }: { sessionId: string; name: string }) 
   return (
     <Alert className="animate-in fade-in animation-duration-(--duration-base)">
       <Spinner className="size-4 text-muted-foreground" />
-      <AlertTitle>{name} stopped unexpectedly. Reconnecting…</AlertTitle>
+      <AlertTitle>{t('view.disconnected', { agent: name })}</AlertTitle>
       {error && <AlertDescription className="text-destructive">{error}</AlertDescription>}
       <AlertAction>
         <Button size="xs" variant="outline" disabled={busy} onClick={() => void reconnect()}>
           <RotateCwIcon data-icon="inline-start" />
-          Reconnect
+          {t('view.reconnect')}
         </Button>
       </AlertAction>
     </Alert>
@@ -211,23 +212,28 @@ function Disconnected({ sessionId, name }: { sessionId: string; name: string }) 
 
 /** An aria-live region for permission requests and turn ends, which happen out of view. */
 function Announcer({ summary, name }: { summary: SessionSummary; name: string }) {
-  const [message, setMessage] = useState('')
+  const { t } = useTranslation('session')
+  const [event, setEvent] = useState<'approval' | 'finished' | null>(null)
   const previous = useRef(summary)
   useEffect(() => {
     const before = previous.current
     previous.current = summary
     if (summary.permissionCount > before.permissionCount) {
-      setMessage(`${name} needs your approval`)
+      setEvent('approval')
     } else if (
       (before.status === 'running' || before.status === 'awaiting_permission') &&
       summary.status === 'ready'
     ) {
-      setMessage(`${name} finished`)
+      setEvent('finished')
     }
-  }, [summary, name])
+  }, [summary])
   return (
     <div aria-live="polite" className="sr-only">
-      {message}
+      {event === 'approval'
+        ? t('view.announceApproval', { agent: name })
+        : event === 'finished'
+          ? t('view.announceFinished', { agent: name })
+          : ''}
     </div>
   )
 }

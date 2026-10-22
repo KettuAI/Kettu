@@ -1,0 +1,42 @@
+{
+  "actions": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "copy": "Copy",
+    "copied": "Copied",
+    "done": "Done",
+    "retry": "Retry"
+  },
+  "untitledSession": "Untitled session",
+  "time": {
+    "now": "now",
+    "minutesShort": "{{count}}m",
+    "hoursShort": "{{count}}h",
+    "justNow": "just now",
+    "minutesAgo_one": "{{count}} minute ago",
+    "minutesAgo_other": "{{count}} minutes ago",
+    "hoursAgo_one": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "yesterday": "yesterday",
+    "onDate": "on {{date}}",
+    "seconds": "{{s}} s",
+    "minutesSeconds": "{{m}} m {{s}} s",
+    "hoursMinutes": "{{h}} h {{m}} m"
+  },
+  "errors": {
+    "hostRestarted": "A background process of OverBench restarted. Try again."
+  },
+  "planWindow": {
+    "five_hour": "5-hour",
+    "seven_day": "Weekly",
+    "seven_day_opus": "Weekly · Opus",
+    "seven_day_sonnet": "Weekly · Sonnet",
+    "overage": "Extra usage",
+    "weeklyOf": "Weekly · {{model}}"
+  },
+  "fileManager": {
+    "mac": "Finder",
+    "windows": "Explorer",
+    "linux": "the file manager"
+  }
+}

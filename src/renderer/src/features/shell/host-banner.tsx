@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -13,6 +14,7 @@ import { useConnectionStore } from '@renderer/stores/connection'
  * floats instead of pushing the window down, so the macOS traffic lights never sit on it.
  */
 export function HostBanner() {
+  const { t } = useTranslation('shell')
   const state = useConnectionStore((s) => s.agentHost)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,15 +50,13 @@ export function HostBanner() {
             {state === 'reconnecting' ? (
               <>
                 <Spinner className="size-3" />
-                <span className="pr-2">
-                  Restarting the agent host. Your sessions come back by themselves.
-                </span>
+                <span className="pr-2">{t('hostBanner.restarting')}</span>
               </>
             ) : (
               <>
                 <CircleAlertIcon className="size-3.5 text-destructive" />
                 <span className={error ? 'text-destructive' : undefined}>
-                  {error ?? 'The agent host stopped and could not be restarted.'}
+                  {error ?? t('hostBanner.stopped')}
                 </span>
                 <Button
                   variant="quiet"
@@ -70,11 +70,11 @@ export function HostBanner() {
                   ) : (
                     <RotateCwIcon data-icon="inline-start" />
                   )}
-                  Restart
+                  {t('hostBanner.restart')}
                 </Button>
                 <Button variant="quiet" size="xs" className="rounded-full" onClick={save}>
                   <FileDownIcon data-icon="inline-start" />
-                  Export diagnostics
+                  {t('hostBanner.exportDiagnostics')}
                 </Button>
               </>
             )}

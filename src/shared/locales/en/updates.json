@@ -1,0 +1,25 @@
+{
+  "notice": {
+    "dismiss": "Dismiss",
+    "ready": "Update ready",
+    "available": "{{version}} is available",
+    "updatedTo": "Updated to",
+    "restart": "Restart",
+    "download": "Download",
+    "whatsNew": "What’s new",
+    "readyTooltip": "OverBench {{version}} is downloaded. Restart to finish; your sessions come back.",
+    "availableTooltip": "OverBench {{version}} is available. Download it from the release page."
+  },
+  "quit": {
+    "titleUpdate": "Restart to update?",
+    "titleQuit": "Quit OverBench?",
+    "stopsUpdate": "Restarting stops what is running now:",
+    "stopsQuit": "Quitting stops what is running now:",
+    "working": "Working",
+    "terminal": "Terminal",
+    "comeBackUpdate": "Your sessions and drafts come back after the restart.",
+    "comeBackQuit": "Your sessions and drafts come back when you open OverBench again.",
+    "restart": "Restart",
+    "quit": "Quit"
+  }
+}

@@ -1,4 +1,5 @@
 import { ChevronRightIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
 import type { AgentId, SessionUsage } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -14,7 +15,7 @@ import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { fullTime, longAgo, money, resetTime, tokens } from '@renderer/lib/format'
+import { fullTime, limitLabel, longAgo, money, resetTime, tokens } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -28,12 +29,15 @@ import {
 /** From this share of the context the ring turns to --attention and shows the percentage. */
 const CONTEXT_WARNING = 0.8
 
-const SHORT_WINDOW: Record<string, string> = {
-  five_hour: '5h',
-  seven_day: '7d',
-  seven_day_opus: '7d Opus',
-  seven_day_sonnet: '7d Sonnet',
-}
+const SHORT_WINDOW = {
+  five_hour: 'usage.shortWindow.five_hour',
+  seven_day: 'usage.shortWindow.seven_day',
+  seven_day_opus: 'usage.shortWindow.seven_day_opus',
+  seven_day_sonnet: 'usage.shortWindow.seven_day_sonnet',
+} as const
+
+const isShortWindow = (name: string): name is keyof typeof SHORT_WINDOW =>
+  Object.hasOwn(SHORT_WINDOW, name)
 
 /** The limit to warn about in the control row: a reached one first, then the fullest warning. */
 function warningLimit(limits: PlanLimit[]): PlanLimit | null {
@@ -93,6 +97,7 @@ export function UsageButton({
   account: AgentAccount | null
   onCompact: (() => void) | null
 }) {
+  const { t } = useTranslation('composer')
   const warning = warningLimit(limits)
   if (!usage && !warning) return null
   const share = usage && usage.size > 0 ? usage.used / usage.size : 0
@@ -111,7 +116,11 @@ export function UsageButton({
           <Button
             variant="quiet"
             size="compact"
-            aria-label={usage ? `Context ${Math.round(share * 100)}% used` : 'Usage'}
+            aria-label={
+              usage
+                ? t('usage.contextPercent', { percent: Math.round(share * 100) })
+                : t('usage.title')
+            }
             className="gap-1.5 px-1.5 tabular"
           />
         }
@@ -124,7 +133,7 @@ export function UsageButton({
               warning.state === 'reached' ? 'text-destructive' : 'text-attention-text',
             )}
           >
-            {SHORT_WINDOW[warning.window] ?? warning.label}{' '}
+            {isShortWindow(warning.window) ? t(SHORT_WINDOW[warning.window]) : limitLabel(warning)}{' '}
             {warning.usedPercent !== null && `${Math.round(warning.usedPercent)}%`}
           </span>
         )}
@@ -168,12 +177,13 @@ function ContextPart({
   full: boolean
   onCompact: (() => void) | null
 }) {
+  const { t } = useTranslation('composer')
   const report = useUsageStore((s) => s.context[sessionId])
   const totals = usage.tokens
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
       <div className="flex items-baseline justify-between text-ui">
-        <span className="font-medium">Context</span>
+        <span className="font-medium">{t('usage.context.title')}</span>
         <span className={cn('tabular', full && 'text-attention-text')}>
           {Math.round(share * 100)}%
         </span>
@@ -181,26 +191,32 @@ function ContextPart({
       <Progress
         value={Math.min(100, share * 100)}
         tone={full ? 'attention' : 'default'}
-        aria-label="Context used"
+        aria-label={t('usage.context.used')}
       />
       <p className="text-xs text-muted-foreground tabular">
-        {tokens(usage.used)} of {tokens(usage.size)} tokens ·{' '}
-        {tokens(Math.max(0, usage.size - usage.used))} left
+        {t('usage.context.tokens', {
+          used: tokens(usage.used),
+          size: tokens(usage.size),
+          left: tokens(Math.max(0, usage.size - usage.used)),
+        })}
       </p>
       {report && <Breakdown report={report} />}
       {totals && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs tabular">
-          <dt className="text-muted-foreground">This session</dt>
+          <dt className="text-muted-foreground">{t('usage.context.session')}</dt>
           <dd className="flex flex-wrap gap-x-3">
             <span>
-              <span className="text-muted-foreground">Input</span> {tokens(totals.input)}
+              <span className="text-muted-foreground">{t('usage.context.input')}</span>{' '}
+              {tokens(totals.input)}
             </span>
             <span>
-              <span className="text-muted-foreground">Output</span> {tokens(totals.output)}
+              <span className="text-muted-foreground">{t('usage.context.output')}</span>{' '}
+              {tokens(totals.output)}
             </span>
             {totals.thought !== null && (
               <span>
-                <span className="text-muted-foreground">Reasoning</span> {tokens(totals.thought)}
+                <span className="text-muted-foreground">{t('usage.context.reasoning')}</span>{' '}
+                {tokens(totals.thought)}
               </span>
             )}
           </dd>
@@ -210,13 +226,14 @@ function ContextPart({
               <dd className="flex flex-wrap gap-x-3">
                 {totals.cacheRead !== null && (
                   <span>
-                    <span className="text-muted-foreground">Cache read</span>{' '}
+                    <span className="text-muted-foreground">{t('usage.context.cacheRead')}</span>{' '}
                     {tokens(totals.cacheRead)}
                   </span>
                 )}
                 {totals.cacheWrite !== null && (
                   <span>
-                    <span className="text-muted-foreground">write</span> {tokens(totals.cacheWrite)}
+                    <span className="text-muted-foreground">{t('usage.context.cacheWrite')}</span>{' '}
+                    {tokens(totals.cacheWrite)}
                   </span>
                 )}
               </dd>
@@ -231,7 +248,7 @@ function ContextPart({
           </span>
           {onCompact && (
             <Button variant="outline" size="xs" onClick={onCompact}>
-              Compact
+              {t('usage.context.compact')}
             </Button>
           )}
         </div>
@@ -242,11 +259,12 @@ function ContextPart({
 
 /** What fills the context, by source, as the agent's own report gives it. */
 function Breakdown({ report }: { report: ContextReport }) {
+  const { t } = useTranslation('composer')
   const { breakdown, loading, error } = report
   if (!breakdown) {
     if (loading) {
       return (
-        <div aria-label="Reading what fills the context" className="flex flex-col gap-1.5 py-0.5">
+        <div aria-label={t('usage.breakdown.loading')} className="flex flex-col gap-1.5 py-0.5">
           <Skeleton className="h-3 w-4/5" />
           <Skeleton className="h-3 w-3/5" />
           <Skeleton className="h-3 w-2/3" />
@@ -254,7 +272,7 @@ function Breakdown({ report }: { report: ContextReport }) {
       )
     }
     return error ? (
-      <p className="text-xs text-muted-foreground">Couldn't break the context down: {error}</p>
+      <p className="text-xs text-muted-foreground">{t('usage.breakdown.error', { error })}</p>
     ) : null
   }
   return (
@@ -318,6 +336,7 @@ export function LimitsPart({
   /** Names whose limits these are, where nothing around the popover does. */
   agent?: { id: AgentId; name: string }
 }) {
+  const { t } = useTranslation('composer')
   const now = useNow()
   const observed = limits.reduce((at, l) => Math.max(at, l.observedAt), 0)
   return (
@@ -331,15 +350,17 @@ export function LimitsPart({
               <span className="text-muted-foreground">·</span>
             </>
           )}
-          <span className="truncate">{account?.label ?? 'Plan'}</span>
+          <span className="truncate">{account?.label ?? t('usage.limits.plan')}</span>
         </span>
-        {limits.length > 0 && <span className="text-xs text-muted-foreground">Plan limits</span>}
+        {limits.length > 0 && (
+          <span className="text-xs text-muted-foreground">{t('usage.limits.title')}</span>
+        )}
       </div>
       {limits.length > 0 && (
         <ul className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2.5 gap-y-1.5 text-xs tabular">
           {limits.map((limit) => (
             <li key={limit.window} className="contents">
-              <span className="text-muted-foreground">{limit.label}</span>
+              <span className="text-muted-foreground">{limitLabel(limit)}</span>
               <Progress
                 value={limit.usedPercent ?? 0}
                 tone={
@@ -349,7 +370,7 @@ export function LimitsPart({
                       ? 'attention'
                       : 'default'
                 }
-                aria-label={`${limit.label} used`}
+                aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
               />
               <span
                 className={cn(
@@ -367,7 +388,9 @@ export function LimitsPart({
                   >
                     {resetTime(limit.resetsAt, now)}
                   </TooltipTrigger>
-                  <TooltipContent>Resets {fullTime(limit.resetsAt)}</TooltipContent>
+                  <TooltipContent>
+                    {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
+                  </TooltipContent>
                 </Tooltip>
               ) : (
                 <span />
@@ -377,7 +400,9 @@ export function LimitsPart({
         </ul>
       )}
       {observed > 0 && (
-        <p className="text-xs text-muted-foreground">Updated {longAgo(observed, now)}</p>
+        <p className="text-xs text-muted-foreground">
+          {t('usage.limits.updated', { ago: longAgo(observed, now) })}
+        </p>
       )}
     </div>
   )

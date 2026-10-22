@@ -6,6 +6,7 @@
 import type { AgentId } from '@shared/thread'
 import type { AgentConnection, AgentInit } from './acp/connection'
 import { HostError } from './errors'
+import { t } from './i18n'
 
 export const REPORT_TIMEOUT_MS = 60_000
 
@@ -34,7 +35,12 @@ export async function runReport(
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           void connection.cancel(acpSessionId).catch(() => {})
-          reject(new HostError('agent_error', `${command} did not finish in ${timeoutMs / 1000} s`))
+          reject(
+            new HostError(
+              'agent_error',
+              t('agent.reportTimeout', { command, seconds: String(timeoutMs / 1000) }),
+            ),
+          )
         }, timeoutMs)
       }),
     ])

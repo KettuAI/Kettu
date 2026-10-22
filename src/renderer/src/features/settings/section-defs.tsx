@@ -10,6 +10,7 @@ import {
   SquareTerminalIcon,
   WrenchIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { buttonVariants } from '@renderer/components/ui/button'
 import { Kbd } from '@renderer/components/ui/kbd'
@@ -18,7 +19,7 @@ import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { AutomaticUpdates, UpdateRow, Version } from './about-section'
 import { AgentCard, EnvironmentFooter } from './agents-section'
-import type { SectionDef } from './model'
+import { english, type SectionDef } from './model'
 import {
   BackgroundFetch,
   DataFolder,
@@ -26,6 +27,7 @@ import {
   Diagnostics,
   FontSize,
   GeneralSwitch,
+  Language,
   GhTool,
   GitTool,
   NotificationSwitch,
@@ -43,56 +45,66 @@ import {
 
 const SOURCE_URL = 'https://github.com/overbench/overbench'
 
-const SHORTCUTS: { keys: string; action: string }[] = [
-  { keys: 'Mod+O', action: 'Open project' },
-  { keys: 'Mod+N', action: 'New session in the current project' },
-  { keys: 'Mod+B', action: 'Toggle the sidebar' },
-  { keys: 'Mod+L', action: 'Focus the composer, or ask about the terminal selection' },
-  { keys: 'Mod+Shift+[', action: 'Previous session in the sidebar' },
-  { keys: 'Mod+Shift+]', action: 'Next session in the sidebar' },
-  { keys: 'Mod+,', action: 'Settings; Esc goes back' },
-  { keys: 'Ctrl+`', action: 'Show or hide the terminal' },
-  { keys: 'Ctrl+Shift+`', action: 'New terminal' },
-  { keys: 'Esc', action: 'Cancel the running turn' },
-  { keys: '1 – 4', action: 'Answer the pending permission request' },
-]
+const SHORTCUTS = [
+  { keys: 'Mod+O', action: 'openProject' },
+  { keys: 'Mod+N', action: 'newSession' },
+  { keys: 'Mod+B', action: 'toggleSidebar' },
+  { keys: 'Mod+L', action: 'focusComposer' },
+  { keys: 'Mod+Shift+[', action: 'previousSession' },
+  { keys: 'Mod+Shift+]', action: 'nextSession' },
+  { keys: 'Mod+,', action: 'settings' },
+  { keys: 'Ctrl+`', action: 'toggleTerminal' },
+  { keys: 'Ctrl+Shift+`', action: 'newTerminal' },
+  { keys: 'Esc', action: 'cancelTurn' },
+  { keys: '1 – 4', action: 'answerPermission' },
+] as const
 
 export function useGeneralSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   return {
     id: 'general',
-    title: 'General',
+    title: t('sections.general'),
     icon: SettingsIcon,
     rows: [
       {
+        id: 'language',
+        name: t('general.language.name'),
+        english: en('general.language.name'),
+        description: t('general.language.description'),
+        keywords: t('general.language.keywords'),
+        render: () => <Language />,
+      },
+      {
         id: 'default-agent',
-        name: 'Default agent',
-        description:
-          'The agent New session starts. With Ask each time, the project home lets you pick.',
+        name: t('general.defaultAgent.name'),
+        english: en('general.defaultAgent.name'),
+        description: t('general.defaultAgent.description'),
         render: () => <DefaultAgent />,
       },
       {
         id: 'send-key',
-        name: 'Send with',
-        description: 'The other key inserts a new line.',
-        keywords: 'enter newline composer',
+        name: t('general.sendKey.name'),
+        english: en('general.sendKey.name'),
+        description: t('general.sendKey.description'),
+        keywords: t('general.sendKey.keywords'),
         render: () => <SendKey />,
       },
       {
         id: 'restore',
-        name: 'Restore the last session on launch',
+        name: t('general.restore.name'),
+        english: en('general.restore.name'),
         render: () => (
-          <GeneralSwitch field="restoreLastSession" label="Restore the last session on launch" />
+          <GeneralSwitch field="restoreLastSession" label={t('general.restore.name')} />
         ),
       },
       {
         id: 'confirm-quit',
-        name: 'Ask before quitting while agents or terminal commands are running',
-        keywords: 'quit confirm',
+        name: t('general.confirmQuit.name'),
+        english: en('general.confirmQuit.name'),
+        keywords: t('general.confirmQuit.keywords'),
         render: () => (
-          <GeneralSwitch
-            field="confirmQuitWhileRunning"
-            label="Ask before quitting while agents or terminal commands are running"
-          />
+          <GeneralSwitch field="confirmQuitWhileRunning" label={t('general.confirmQuit.name')} />
         ),
       },
     ],
@@ -100,29 +112,34 @@ export function useGeneralSection(): SectionDef {
 }
 
 export function useAppearanceSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   return {
     id: 'appearance',
-    title: 'Appearance',
+    title: t('sections.appearance'),
     icon: PaletteIcon,
     rows: [
       {
         id: 'theme',
-        name: 'Theme',
-        keywords: 'dark light system color',
+        name: t('appearance.theme.name'),
+        english: en('appearance.theme.name'),
+        keywords: t('appearance.theme.keywords'),
         render: () => <ThemeTiles />,
       },
       {
         id: 'text-size',
-        name: 'Text size',
-        description: 'For the thread and the composer: 13, 14 or 15 px.',
-        keywords: 'font',
+        name: t('appearance.textSize.name'),
+        english: en('appearance.textSize.name'),
+        description: t('appearance.textSize.description'),
+        keywords: t('appearance.textSize.keywords'),
         render: () => <TextSize />,
       },
       {
         id: 'reduce-motion',
-        name: 'Reduce motion',
-        description: 'System follows your operating system; Always removes movement everywhere.',
-        keywords: 'animation accessibility',
+        name: t('appearance.reduceMotion.name'),
+        english: en('appearance.reduceMotion.name'),
+        description: t('appearance.reduceMotion.description'),
+        keywords: t('appearance.reduceMotion.keywords'),
         render: () => <ReduceMotion />,
       },
     ],
@@ -130,47 +147,61 @@ export function useAppearanceSection(): SectionDef {
 }
 
 export function useTerminalSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   return {
     id: 'terminal',
-    title: 'Terminal',
+    title: t('sections.terminal'),
     icon: SquareTerminalIcon,
     rows: [
       {
         id: 'shell',
-        name: 'Shell',
+        name: t('terminal.shell.name'),
+        english: en('terminal.shell.name'),
         description: isWindows
-          ? 'pwsh when it is installed, else Windows PowerShell; or a program you pick.'
-          : 'Your login shell ($SHELL), so the terminal sees the same tools; or a program you pick.',
+          ? t('terminal.shell.descriptionWindows')
+          : t('terminal.shell.description'),
         render: () => <ShellPicker />,
       },
-      { id: 'font-size', name: 'Font size', description: 'In pixels.', render: () => <FontSize /> },
+      {
+        id: 'font-size',
+        name: t('terminal.fontSize.name'),
+        english: en('terminal.fontSize.name'),
+        description: t('terminal.fontSize.description'),
+        render: () => <FontSize />,
+      },
     ],
   }
 }
 
 export function useGitSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   return {
     id: 'git',
-    title: 'Git',
+    title: t('sections.git'),
     icon: GitBranchIcon,
     rows: [
       {
         id: 'git',
-        name: 'Git',
-        description: 'Branch, changes and commits in the top bar.',
+        name: t('git.git.name'),
+        english: en('git.git.name'),
+        description: t('git.git.description'),
         render: () => <GitTool />,
       },
       {
         id: 'gh',
-        name: 'GitHub CLI',
-        description: 'Pull requests and their checks, through gh.',
-        keywords: 'gh github pull request',
+        name: t('git.gh.name'),
+        english: en('git.gh.name'),
+        description: t('git.gh.description'),
+        keywords: t('git.gh.keywords'),
         render: () => <GhTool />,
       },
       {
         id: 'fetch',
-        name: 'Fetch in the background',
-        description: 'Every 5 minutes, so ahead and behind stay current.',
+        name: t('git.fetch.name'),
+        english: en('git.fetch.name'),
+        description: t('git.fetch.description'),
         render: () => <BackgroundFetch />,
       },
     ],
@@ -178,64 +209,73 @@ export function useGitSection(): SectionDef {
 }
 
 export function useNotificationsSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   const rows: SectionDef['rows'] = [
     {
       id: 'permission',
-      name: 'Needs approval',
-      description: 'When an agent waits for you to allow something.',
-      keywords: 'permission',
-      render: () => <NotificationSwitch field="permission" label="Needs approval" />,
+      name: t('notifications.permission.name'),
+      english: en('notifications.permission.name'),
+      description: t('notifications.permission.description'),
+      keywords: t('notifications.permission.keywords'),
+      render: () => (
+        <NotificationSwitch field="permission" label={t('notifications.permission.name')} />
+      ),
     },
     {
       id: 'turn-ended',
-      name: 'Turn finished',
-      description: 'When an agent finishes what you asked.',
-      render: () => <NotificationSwitch field="turnEnded" label="Turn finished" />,
+      name: t('notifications.turnEnded.name'),
+      english: en('notifications.turnEnded.name'),
+      description: t('notifications.turnEnded.description'),
+      render: () => (
+        <NotificationSwitch field="turnEnded" label={t('notifications.turnEnded.name')} />
+      ),
     },
     {
       id: 'error',
-      name: 'Errors',
-      description: 'When a session fails or an agent stops unexpectedly.',
-      render: () => <NotificationSwitch field="error" label="Errors" />,
+      name: t('notifications.error.name'),
+      english: en('notifications.error.name'),
+      description: t('notifications.error.description'),
+      render: () => <NotificationSwitch field="error" label={t('notifications.error.name')} />,
     },
     {
       id: 'sound',
-      name: 'Play a sound',
-      description: 'The system notification sound.',
-      render: () => <NotificationSwitch field="sound" label="Play a sound" />,
+      name: t('notifications.sound.name'),
+      english: en('notifications.sound.name'),
+      description: t('notifications.sound.description'),
+      render: () => <NotificationSwitch field="sound" label={t('notifications.sound.name')} />,
     },
   ]
   if (platform !== 'linux') {
-    const name = isMac ? 'Show a count on the Dock icon' : 'Show a count on the taskbar button'
+    const name = isMac ? t('notifications.badge.nameDock') : t('notifications.badge.nameTaskbar')
     rows.push({
       id: 'badge',
       name,
-      description: 'How many sessions wait for your approval.',
-      keywords: 'badge',
+      description: t('notifications.badge.description'),
+      keywords: t('notifications.badge.keywords'),
       render: () => <NotificationSwitch field="badge" label={name} />,
     })
   }
   return {
     id: 'notifications',
-    title: 'Notifications',
+    title: t('sections.notifications'),
     icon: BellIcon,
     rows,
-    footer: (
-      <p className="px-1 text-xs text-muted-foreground">
-        Shown only while no OverBench window is focused.
-      </p>
-    ),
+    footer: <p className="px-1 text-xs text-muted-foreground">{t('notifications.footer')}</p>,
   }
 }
 
 export function useShortcutsSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   return {
     id: 'shortcuts',
-    title: 'Keyboard shortcuts',
+    title: t('sections.shortcuts'),
     icon: KeyboardIcon,
     rows: SHORTCUTS.map((s) => ({
       id: s.keys,
-      name: s.action,
+      name: t(`shortcuts.${s.action}`),
+      english: en(`shortcuts.${s.action}`),
       keywords: s.keys,
       render: () => (
         <Kbd className="font-sans">
@@ -247,38 +287,43 @@ export function useShortcutsSection(): SectionDef {
 }
 
 export function useAdvancedSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   return {
     id: 'advanced',
-    title: 'Advanced',
+    title: t('sections.advanced'),
     icon: WrenchIcon,
     rows: [
       {
         id: 'proxy',
-        name: 'Proxy',
-        description: 'For agents, npx and updates.',
-        keywords: 'http https network',
+        name: t('advanced.proxy.name'),
+        english: en('advanced.proxy.name'),
+        description: t('advanced.proxy.description'),
+        keywords: t('advanced.proxy.keywords'),
         layout: 'block',
         render: (text) => <Proxy label={text} />,
       },
       {
         id: 'diagnostics',
-        name: 'Diagnostics',
-        description:
-          'A file with recent agent messages, logs and paths, for a bug report. It can contain code and prompts, so share it only with people you trust.',
-        keywords: 'logs bug report',
+        name: t('advanced.diagnostics.name'),
+        english: en('advanced.diagnostics.name'),
+        description: t('advanced.diagnostics.description'),
+        keywords: t('advanced.diagnostics.keywords'),
         render: () => <Diagnostics />,
       },
       {
         id: 'data-folder',
-        name: 'Data folder',
-        description: 'Settings, the session index and logs.',
+        name: t('advanced.dataFolder.name'),
+        english: en('advanced.dataFolder.name'),
+        description: t('advanced.dataFolder.description'),
         render: () => <DataFolder />,
       },
       {
         id: 'remove-sessions',
-        name: 'Remove all sessions from OverBench',
-        description: "Clears OverBench's session list. The agents' transcripts stay.",
-        keywords: 'delete clear',
+        name: t('advanced.removeSessions.name'),
+        english: en('advanced.removeSessions.name'),
+        description: t('advanced.removeSessions.description'),
+        keywords: t('advanced.removeSessions.keywords'),
         render: () => <RemoveAll />,
       },
     ],
@@ -286,16 +331,17 @@ export function useAdvancedSection(): SectionDef {
 }
 
 export function useAgentsSection(): SectionDef {
+  const { t } = useTranslation('settings')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   return {
     id: 'agents',
-    title: 'Agents',
+    title: t('sections.agents'),
     icon: BotIcon,
     rows: agents.map((status) => ({
       id: status.id,
       name: status.name,
       description: status.account?.label ?? undefined,
-      keywords: 'sign in login install node binary plan limits',
+      keywords: t('agents.keywords'),
       layout: 'custom' as const,
       render: () => <AgentCard status={status} />,
     })),
@@ -304,24 +350,27 @@ export function useAgentsSection(): SectionDef {
 }
 
 export function useAboutSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
   const status = useUpdatesStore((s) => s.status)
   const updatesOff = status?.state.kind === 'off'
   return {
     id: 'about',
-    title: 'About',
+    title: t('sections.about'),
     icon: InfoIcon,
     rows: [
       {
         id: 'version',
         name: status ? `OverBench ${status.current}` : 'OverBench',
-        description: 'A desktop workbench for Claude Code, Codex and OpenCode.',
-        keywords: 'version electron chromium node',
+        description: t('about.version.description'),
+        keywords: t('about.version.keywords'),
         render: () => <Version />,
       },
       {
         id: 'update',
-        name: 'Updates',
-        keywords: 'update check download restart',
+        name: t('about.updates.name'),
+        english: en('about.updates.name'),
+        keywords: t('about.updates.keywords'),
         layout: 'block',
         render: (text) => <UpdateRow status={status} label={text} />,
       },
@@ -330,14 +379,16 @@ export function useAboutSection(): SectionDef {
         : [
             {
               id: 'automatic',
-              name: 'Automatic updates',
-              description: 'Download and install in the background, only tell you, or neither.',
+              name: t('about.automatic.name'),
+              english: en('about.automatic.name'),
+              description: t('about.automatic.description'),
               render: () => <AutomaticUpdates />,
             },
           ]),
       {
         id: 'source',
-        name: 'Source code',
+        name: t('about.source.name'),
+        english: en('about.source.name'),
         render: () => (
           <a
             href={SOURCE_URL}

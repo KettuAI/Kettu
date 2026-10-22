@@ -1,0 +1,12 @@
+{
+  "newSession": "新建会话",
+  "messageScroller": {
+    "toEnd": "滚动到底部",
+    "toStart": "滚动到顶部"
+  },
+  "sidebar": {
+    "title": "侧边栏",
+    "description": "显示移动端侧边栏。",
+    "toggle": "切换侧边栏"
+  }
+}

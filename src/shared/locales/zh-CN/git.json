@@ -1,0 +1,86 @@
+{
+  "status": {
+    "repository": "仓库",
+    "pullRequest": "Pull Request #{{number}}",
+    "detachedAt": "HEAD 已分离于 {{ref}}",
+    "branch": "分支 {{name}}",
+    "detached": "已分离",
+    "noCommits": "尚无提交",
+    "notPublished": "未发布",
+    "operation": {
+      "merge": "合并中",
+      "rebase": "变基中",
+      "cherryPick": "拣选中",
+      "revert": "还原中"
+    }
+  },
+  "pr": {
+    "state": {
+      "open": "已打开",
+      "draft": "草稿",
+      "merged": "已合并",
+      "closed": "已关闭"
+    },
+    "icon": {
+      "none": "Pull Request",
+      "open": "Pull Request 已打开",
+      "draft": "Pull Request 草稿",
+      "merged": "Pull Request 已合并",
+      "closed": "Pull Request 已关闭"
+    },
+    "checks": {
+      "passing": "检查通过",
+      "failing": "检查失败",
+      "pending": "检查进行中"
+    },
+    "checkCount": {
+      "passed": "{{count}} 项通过",
+      "failed": "{{count}} 项失败",
+      "pending": "{{count}} 项进行中"
+    },
+    "review": {
+      "approved": "已批准",
+      "changesRequested": "请求更改",
+      "reviewRequired": "需要审查"
+    },
+    "summary": "{{state}} · <head/> → <base/>",
+    "updated": "{{when}}更新",
+    "reviewUpdated": "{{review}} · {{when}}更新",
+    "openOnGitHub": "在 GitHub 上打开"
+  },
+  "lane": {
+    "label": {
+      "ahead_other": "领先 {{base}} {{count}} 个提交",
+      "notPushed": "{{count}} 个未推送",
+      "behind": "落后 {{count}} 个提交",
+      "uncommitted": "有未提交的更改",
+      "separator": "，"
+    },
+    "pushed": "{{count}} 个已推送",
+    "notPushed": "↑{{count}} 未推送",
+    "notPublished": "{{count}} 个未发布",
+    "changes": "更改"
+  },
+  "popover": {
+    "copyBranch": "复制分支名",
+    "copyCommand": "复制命令",
+    "from": "基于 <branch/>",
+    "tracking": "跟踪 <branch/>",
+    "notPublished": "未发布",
+    "notPushed": "未推送",
+    "moreCommits": "还有 {{count}} 个",
+    "filesChanged_other": "{{count}} 个文件已更改",
+    "staged": "{{count}} 个已暂存",
+    "newFiles": "{{count}} 个新文件",
+    "conflicts_other": "{{count}} 个冲突",
+    "noChanges": "工作区没有更改",
+    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看 Pull Request。",
+    "signInGh": "登录 GitHub CLI 后即可查看 Pull Request：",
+    "noPr": "此分支没有 Pull Request。",
+    "createPr": "创建 Pull Request",
+    "fetched": "{{when}}抓取",
+    "neverFetched": "从未抓取",
+    "noRemote": "没有远程仓库",
+    "fetch": "抓取"
+  }
+}

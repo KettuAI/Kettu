@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { FileIcon, FileWarningIcon, XIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { File, Virtualizer, WorkerPoolContext } from '@pierre/diffs/react'
 import type { FileContent } from '@shared/files'
 import {
@@ -20,6 +21,7 @@ import { folderOf, nameOf } from './paths'
 
 /** The open file, highlighted on the diffs worker pool, or what stands in for it. */
 export function FilePreview({ projectPath, file }: { projectPath: string; file: OpenFile | null }) {
+  const { t } = useTranslation('files')
   if (!file) {
     return (
       <Empty className="h-full">
@@ -27,10 +29,8 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
           <EmptyMedia variant="icon">
             <FileIcon />
           </EmptyMedia>
-          <EmptyTitle>Open files appear here</EmptyTitle>
-          <EmptyDescription>
-            Pick a file in the tree, or click a file path in the conversation.
-          </EmptyDescription>
+          <EmptyTitle>{t('preview.emptyTitle')}</EmptyTitle>
+          <EmptyDescription>{t('preview.emptyDescription')}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     )
@@ -43,8 +43,8 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
           <span className="shrink-0 font-medium">{nameOf(file.path)}</span>
           {folder && <span className="truncate text-muted-foreground">{folder}</span>}
         </span>
-        <CopyButton text={file.path} label="Copy path" />
-        <PanelButton label="Close file" onClick={() => closeFile(projectPath)}>
+        <CopyButton text={file.path} label={t('preview.copyPath')} />
+        <PanelButton label={t('preview.closeFile')} onClick={() => closeFile(projectPath)}>
           <XIcon />
         </PanelButton>
       </div>
@@ -56,8 +56,9 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
 }
 
 function Body({ file }: { file: OpenFile }) {
+  const { t } = useTranslation('files')
   const { content, error } = file
-  if (error && !content) return <Notice title="Couldn't open this file" description={error} />
+  if (error && !content) return <Notice title={t('preview.openFailed')} description={error} />
   if (!content) {
     return (
       <div className="flex flex-col gap-2 p-4">
@@ -68,13 +69,18 @@ function Body({ file }: { file: OpenFile }) {
     )
   }
   if (content.kind === 'binary') {
-    return <Notice title="Binary file" description={`${bytes(content.size)}, not shown.`} />
+    return (
+      <Notice
+        title={t('preview.binaryTitle')}
+        description={t('preview.binaryDescription', { size: bytes(content.size) })}
+      />
+    )
   }
   if (content.kind === 'too-large') {
     return (
       <Notice
-        title="Too large to preview"
-        description={`${bytes(content.size)}; the preview shows files up to 1 MB.`}
+        title={t('preview.tooLargeTitle')}
+        description={t('preview.tooLargeDescription', { size: bytes(content.size) })}
       />
     )
   }

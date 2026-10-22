@@ -55,7 +55,7 @@ What M0 delivers:
 - **Each agent's own controls** — mode, model and reasoning selectors, slash commands, context usage and, where the agent reports them, your plan limits, which the sidebar also shows at a glance.
 - **Git at a glance** — the branch, sync state and changes in the top bar, commits and pushes in the thread, and pull requests with their checks through the GitHub CLI.
 - **A built-in terminal** — one per project, in a side panel beside the session, with tabs and your login shell.
-- **Crafted details** — considered typography, light and dark themes, restrained motion that honors reduce motion, and shortcuts for the common actions.
+- **Crafted details** — considered typography, light and dark themes, an interface in English or Simplified Chinese, restrained motion that honors reduce motion, and shortcuts for the common actions.
 
 _Later_: a changes panel for reviewing diffs side by side, search across sessions, a command palette, `@` file mentions and images in the composer, and signed builds. The [M0 plan](./docs/milestones/m0.md#scope) lists what is in and out.
 

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 /** Commits drawn on the lane before the rest collapse into a gap with their count. */
 const MAX_DOTS = 8
 
@@ -21,6 +23,7 @@ export function BranchLane({
   dirty: boolean
   upstream: boolean
 }) {
+  const { t } = useTranslation('git')
   const total = pushed + unpushed
   const W = 336
   const fork = 34
@@ -51,13 +54,13 @@ export function BranchLane({
     (_, i) => W - 60 - (Math.min(behind, 4) - 1 - i) * 26,
   )
   const label = [
-    `${total} commit${total === 1 ? '' : 's'} ahead of ${base}`,
-    upstream && unpushed ? `${unpushed} not pushed` : null,
-    behind ? `${behind} behind` : null,
-    dirty ? 'uncommitted changes' : null,
+    t('lane.label.ahead', { count: total, base }),
+    upstream && unpushed ? t('lane.label.notPushed', { count: unpushed }) : null,
+    behind ? t('lane.label.behind', { count: behind }) : null,
+    dirty ? t('lane.label.uncommitted') : null,
   ]
     .filter(Boolean)
-    .join(', ')
+    .join(t('lane.label.separator'))
 
   return (
     <svg
@@ -175,17 +178,19 @@ export function BranchLane({
           y={ly + 19}
           className="fill-muted-foreground text-[11px]"
         >
-          {pushed} pushed
+          {t('lane.pushed', { count: pushed })}
         </text>
       )}
       {firstUnpushed !== null && (
         <text x={firstUnpushed} y={ly + 19} className="fill-foreground text-[11px] font-medium">
-          {upstream ? `↑${unpushed} not pushed` : `${unpushed} not published`}
+          {upstream
+            ? t('lane.notPushed', { count: unpushed })
+            : t('lane.notPublished', { count: unpushed })}
         </text>
       )}
       {dirty && (
         <text x={tip} y={ly - 13} textAnchor="middle" className="fill-muted-foreground text-[11px]">
-          changes
+          {t('lane.changes')}
         </text>
       )}
     </svg>

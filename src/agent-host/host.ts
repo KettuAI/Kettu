@@ -17,6 +17,7 @@ import {
 import { buildCatalog } from './catalog'
 import { Diagnostics } from './diagnostics'
 import { HostError } from './errors'
+import { setLocale, t } from './i18n'
 import { FilesService } from './files'
 import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
@@ -50,8 +51,6 @@ export interface HostOptions {
   mirrorTraffic?: boolean
 }
 
-const NO_GIT = 'Git is not available yet'
-
 export class AgentHost {
   readonly diagnostics: Diagnostics
   readonly env: EnvironmentService
@@ -75,6 +74,7 @@ export class AgentHost {
   private constructor(private readonly options: HostOptions) {
     const { platform } = options
     this.settings = options.settings
+    setLocale(options.settings.locale)
     this.diagnostics = new Diagnostics({ mirrorTraffic: options.mirrorTraffic ?? false })
     const log = this.diagnostics.log.bind(this.diagnostics)
     this.diagnostics.onLog((entry) =>
@@ -223,6 +223,8 @@ export class AgentHost {
   async updateSettings(next: HostSettings): Promise<void> {
     const previous = this.settings
     this.settings = next
+    if (setLocale(next.locale))
+      this.broadcast({ type: 'environment.changed', info: this.env.info() })
     if (JSON.stringify(previous.proxy) !== JSON.stringify(next.proxy)) {
       this.env.setProxy(next.proxy)
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
@@ -286,7 +288,7 @@ export class AgentHost {
   }
 
   private requireGit(): GitServiceApi {
-    if (!this.git) throw new HostError('git_error', NO_GIT)
+    if (!this.git) throw new HostError('git_error', t('git.notReady'))
     return this.git
   }
 

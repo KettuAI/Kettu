@@ -1,4 +1,5 @@
 import { ArrowRightIcon, SettingsIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { UpdateNotice } from '@renderer/features/updates/update-notice'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -7,6 +8,7 @@ import { NavRow } from './app-sidebar'
 import { PlanUsageStrip } from './plan-usage-strip'
 
 export function SidebarFooterContent() {
+  const { t } = useTranslation('sidebar')
   const settingsOpen = useViewStore((s) => s.settings.open)
   return (
     <>
@@ -15,7 +17,7 @@ export function SidebarFooterContent() {
       <PlanUsageStrip />
       <NavRow
         icon={<SettingsIcon className="text-muted-foreground" />}
-        label="Settings"
+        label={t('footer.settings')}
         shortcut="Mod+,"
         current={settingsOpen}
         onClick={() => openSettings()}
@@ -25,6 +27,7 @@ export function SidebarFooterContent() {
 }
 
 function SignInNotice() {
+  const { t } = useTranslation('sidebar')
   const names = useAgentsStore(
     useShallow((s) =>
       s.order.filter((id) => s.byId[id]?.signIn === 'required').map((id) => s.byId[id]!.name),
@@ -33,8 +36,8 @@ function SignInNotice() {
   if (!names.length) return null
   const text =
     names.length === 1
-      ? `${names[0]} needs you to sign in`
-      : `${names.length} agents need you to sign in`
+      ? t('footer.signInOne', { name: names[0] })
+      : t('footer.signInMany', { count: names.length })
   return (
     <button
       type="button"

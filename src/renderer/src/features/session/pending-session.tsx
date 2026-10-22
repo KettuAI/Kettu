@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { ArrowLeftIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   cancelPendingSession,
   retryPendingSession,
@@ -17,6 +18,7 @@ import { SignIn } from './sign-in'
 
 /** A session being created: the agent starts, asks you to sign in, or fails. */
 export function PendingSessionView({ pending }: { pending: PendingSession }) {
+  const { t } = useTranslation('session')
   const name = agentName(pending.agentId)
   const installing = useAgentsStore((s) => s.byId[pending.agentId]?.state === 'installing')
   const parent = useSessionsStore((s) => (pending.parentId ? s.byId[pending.parentId] : undefined))
@@ -33,7 +35,11 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   } else if (error) {
     body = (
       <div className="mx-auto w-full max-w-[760px] px-6 pt-6">
-        <FailedState title={`Couldn't start ${name}`} message={error.message} onRetry={retry} />
+        <FailedState
+          title={t('pending.couldntStart', { agent: name })}
+          message={error.message}
+          onRetry={retry}
+        />
       </div>
     )
   } else if (pending.prompt) {
@@ -55,14 +61,16 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
             <Button
               variant="quiet"
               size="icon-compact"
-              aria-label="Back"
+              aria-label={t('pending.back')}
               onClick={cancelPendingSession}
             >
               <ArrowLeftIcon />
             </Button>
           )}
           <span className="truncate px-1.5 text-ui font-medium">
-            {parent ? `New sub-session of ${sessionTitle(parent)}` : 'New session'}
+            {parent
+              ? t('pending.newSubSessionOf', { title: sessionTitle(parent) })
+              : t('newSession.title')}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <AgentMark agent={pending.agentId} size={13} />
@@ -78,11 +86,11 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
           <InputGroupTextarea
             rows={1}
             disabled
-            aria-label={`Message ${name}`}
+            aria-label={t('newSession.messageAgent', { agent: name })}
             placeholder={
               error
-                ? `${name} is not running`
-                : `${installing ? 'Installing' : 'Starting'} ${name}…`
+                ? t('pending.notRunning', { agent: name })
+                : t(installing ? 'agentStart.installing' : 'agentStart.starting', { agent: name })
             }
             className="min-h-(--composer-min) py-[15px] pl-4 text-prose leading-[22px] md:text-prose"
           />

@@ -23,6 +23,7 @@ import type {
   UserContent,
 } from '@shared/thread'
 import { ULTRACODE_OPTION_ID } from '@shared/thread'
+import { t } from '../i18n'
 
 /** Per-turn bookkeeping the mapper needs to find "current" entries. */
 export interface TurnScope {
@@ -122,13 +123,13 @@ export function contentRef(block: acp.ContentBlock): ContentRef {
     case 'resource_link':
       return { kind: 'link', uri: block.uri, name: block.title || block.name }
     case 'audio':
-      return { kind: 'unsupported', label: `Audio (${block.mimeType})` }
+      return { kind: 'unsupported', label: t('content.audio', { type: block.mimeType }) }
     case 'resource':
-      return { kind: 'unsupported', label: `Embedded resource ${block.resource.uri}` }
+      return { kind: 'unsupported', label: t('content.resource', { uri: block.resource.uri }) }
     case 'text':
-      return { kind: 'unsupported', label: 'Text' }
+      return { kind: 'unsupported', label: t('content.text') }
     default:
-      return { kind: 'unsupported', label: 'Unknown content' }
+      return { kind: 'unsupported', label: t('content.unknown') }
   }
 }
 
@@ -167,9 +168,12 @@ export function toolContent(item: acp.ToolCallContent): ToolContent {
       }
     case 'terminal':
       // Cannot occur while the terminal capability is off; shown rather than dropped.
-      return { type: 'ref', ref: { kind: 'unsupported', label: `Terminal ${item.terminalId}` } }
+      return {
+        type: 'ref',
+        ref: { kind: 'unsupported', label: t('content.terminal', { id: item.terminalId }) },
+      }
     default:
-      return { type: 'ref', ref: { kind: 'unsupported', label: 'Unknown tool content' } }
+      return { type: 'ref', ref: { kind: 'unsupported', label: t('content.unknownTool') } }
   }
 }
 
@@ -414,7 +418,7 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
   const entry: ToolEntry = {
     kind: 'tool',
     id,
-    title: changes.title ?? 'Tool call',
+    title: changes.title ?? t('content.toolCall'),
     toolKind: changes.toolKind ?? 'other',
     status: changes.status ?? 'pending',
     content: changes.content ?? [],
@@ -688,7 +692,7 @@ function mapSubagentState(state: acp.StateUpdate | null | undefined): SubagentSt
       const error =
         stopReason === 'error'
           ? {
-              message: idle.error?.message ?? 'The subagent failed',
+              message: idle.error?.message ?? t('session.subagent.failed'),
               ...(idle.error?.data !== undefined
                 ? { detail: JSON.stringify(idle.error.data) }
                 : {}),

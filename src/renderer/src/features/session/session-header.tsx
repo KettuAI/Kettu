@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BotIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
 import { closeSession, createSession } from '@renderer/app/actions'
@@ -25,6 +26,7 @@ import { openSession } from '@renderer/stores/view'
 
 /** The session's top bar: its title menu, the agent, and the project's git status. */
 export function SessionHeader({ summary }: { summary: SessionSummary }) {
+  const { t } = useTranslation(['session', 'common'])
   const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const [deleting, setDeleting] = useState(false)
@@ -65,7 +67,7 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
             <DropdownMenuGroup>
               {!subagent && (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>New sub-session</DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger>{t('header.newSubSession')}</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     {agents.map((agent) => (
                       <DropdownMenuItem
@@ -83,13 +85,13 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
                 </DropdownMenuSub>
               )}
               <DropdownMenuItem onClick={() => void closeSession(summary.id)}>
-                Close
+                {t('common:actions.close')}
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
-                Delete…
+                {t('header.delete')}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

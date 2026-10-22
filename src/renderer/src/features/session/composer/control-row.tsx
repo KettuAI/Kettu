@@ -1,5 +1,6 @@
 import { useCallback, useId, useState, type KeyboardEvent } from 'react'
 import { ChevronDownIcon, RotateCcwIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { ULTRACODE_OPTION_ID, type ConfigOption, type SessionView } from '@shared/thread'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
@@ -72,6 +73,7 @@ export function ControlRow({
   /** The draft turns on Claude Code's ultracode for its message. */
   ultracode?: boolean
 }) {
+  const { t } = useTranslation('composer')
   const agent = useAgentsStore((s) => s.byId[session.agentId])
   const [error, setError] = useState<string | null>(null)
   const config = session.config
@@ -130,9 +132,7 @@ export function ControlRow({
             <span className="text-effort-max">Ultracode</span>
           </TooltipTrigger>
           <TooltipContent>
-            {ultracodeOn
-              ? 'Ultracode is on for this session: dynamic workflows on substantial tasks'
-              : 'This message runs with ultracode: dynamic workflows on the task'}
+            {ultracodeOn ? t('controls.ultracodeOn') : t('controls.ultracodeNext')}
           </TooltipContent>
         </Tooltip>
       )}
@@ -255,6 +255,7 @@ function ModelMenu({
   running: boolean
   onSelect: Select
 }) {
+  const { t } = useTranslation('composer')
   const [open, setOpen] = useState(false)
   const [modelValue, pickModel] = usePick(model, onSelect)
   const [effortValue, pickEffort] = usePick(effort, onSelect)
@@ -298,7 +299,7 @@ function ModelMenu({
           <Button
             variant="quiet"
             size="compact"
-            aria-label="Model"
+            aria-label={t('controls.model')}
             title={model ? choiceName(model, modelValue) : undefined}
             className="min-w-0 shrink gap-1 px-2"
           />
@@ -314,7 +315,7 @@ function ModelMenu({
             {choiceName(effort, effortValue)}
           </span>
         )}
-        {!model && !effort && <span>Options</span>}
+        {!model && !effort && <span>{t('controls.options')}</span>}
         <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -372,7 +373,9 @@ function ModelMenu({
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="font-medium">{o.name}</span>
                       {o.idleOnly && running ? (
-                        <span className="text-xs text-muted-foreground">Changes between turns</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t('controls.changesBetweenTurns')}
+                        </span>
                       ) : (
                         o.description && (
                           <span className="text-xs text-muted-foreground">{o.description}</span>
@@ -411,6 +414,7 @@ function EffortSegments({
   value: string | undefined
   onPick: (value: string) => void
 }) {
+  const { t } = useTranslation('composer')
   const labelId = useId()
   const { levels, fallback, usesDefault, shown } = levelsOf(effort, value)
   const tier = tierOf(effort, shown)
@@ -437,14 +441,14 @@ function EffortSegments({
                   <Button
                     variant="quiet"
                     size="icon-xs"
-                    aria-label={`Use ${fallback.name.toLowerCase()}`}
+                    aria-label={t('controls.useFallback', { name: fallback.name.toLowerCase() })}
                     onClick={() => onPick(fallback.value)}
                   />
                 }
               >
                 <RotateCcwIcon />
               </TooltipTrigger>
-              <TooltipContent>Use the agent's default</TooltipContent>
+              <TooltipContent>{t('controls.useDefault')}</TooltipContent>
             </Tooltip>
           )
         )}
@@ -454,11 +458,15 @@ function EffortSegments({
           aria-labelledby={labelId}
           value={shown ?? ''}
           segments={levels.map((c) => {
-            const t = tierOf(effort, c.value)
+            const levelTier = tierOf(effort, c.value)
             return {
               value: c.value,
               label: (active: boolean) =>
-                active && t ? <span className={tierText[t]}>{c.name}</span> : c.name,
+                active && levelTier ? (
+                  <span className={tierText[levelTier]}>{c.name}</span>
+                ) : (
+                  c.name
+                ),
             }
           })}
           onChange={onPick}

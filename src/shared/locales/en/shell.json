@@ -1,0 +1,21 @@
+{
+  "headerTools": {
+    "files": "Files",
+    "terminal": "Terminal"
+  },
+  "hostBanner": {
+    "restarting": "Restarting the agent host. Your sessions come back by themselves.",
+    "stopped": "The agent host stopped and could not be restarted.",
+    "restart": "Restart",
+    "exportDiagnostics": "Export diagnostics"
+  },
+  "launch": {
+    "loadFailed": "Couldn't load your projects",
+    "starting": "Starting OverBench…"
+  },
+  "topBar": {
+    "showSidebar": "Show sidebar",
+    "hideSidebar": "Hide sidebar",
+    "updateReady": "OverBench {{version}} is ready to install"
+  }
+}

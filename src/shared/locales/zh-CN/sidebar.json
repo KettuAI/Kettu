@@ -1,0 +1,54 @@
+{
+  "nav": {
+    "label": "项目和会话",
+    "newSession": "新建会话",
+    "projects": "项目",
+    "openProject": "打开项目",
+    "unavailable": "暂时无法加载项目。",
+    "empty": "你打开的项目会显示在这里。"
+  },
+  "project": {
+    "missing": "未找到",
+    "newSessionIn": "在 {{name}} 中新建会话",
+    "noProject": "无项目",
+    "noProjectTooltip": "每个会话都在各自的临时文件夹中运行",
+    "newSessionNoProject": "新建无项目会话"
+  },
+  "row": {
+    "collapse": "收起子会话",
+    "expand": "展开子会话",
+    "subSessions_other": "{{count}} 个子会话",
+    "newSubSession": "新建子会话",
+    "delete": "删除",
+    "deleteMenu": "删除…",
+    "deleteTitle": "删除“{{title}}”？",
+    "deleteBody": "Agent 也会删除它的对话记录。",
+    "deleteBodyWithSub_other": "Agent 也会删除它的对话记录，它的 {{count}} 个子会话会一并删除。"
+  },
+  "indicator": {
+    "waiting_other": "等待你处理，{{count}} 个授权请求",
+    "error": "错误",
+    "running": "运行中",
+    "starting": "正在启动",
+    "unread": "未读"
+  },
+  "footer": {
+    "settings": "设置",
+    "signInOne": "{{name}} 需要登录",
+    "signInMany": "{{count}} 个 Agent 需要登录"
+  },
+  "planUsage": {
+    "group": "套餐用量",
+    "unknown": "未知",
+    "chip": "{{agent}} 套餐用量，{{limit}}：{{used}}",
+    "chipResets": "{{agent}} 套餐用量，{{limit}}：{{used}}，{{left}}后重置",
+    "chipNone": "{{agent}} 套餐用量：限额已重置，暂时未知"
+  },
+  "countdown": {
+    "minutes": "{{count}} 分钟",
+    "hours": "{{count}} 小时",
+    "hoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
+    "days": "{{count}} 天",
+    "daysHours": "{{days}} 天 {{hours}} 小时"
+  }
+}

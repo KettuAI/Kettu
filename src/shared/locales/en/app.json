@@ -1,0 +1,12 @@
+{
+  "newSession": "New session",
+  "messageScroller": {
+    "toEnd": "Scroll to end",
+    "toStart": "Scroll to start"
+  },
+  "sidebar": {
+    "title": "Sidebar",
+    "description": "Displays the mobile sidebar.",
+    "toggle": "Toggle Sidebar"
+  }
+}

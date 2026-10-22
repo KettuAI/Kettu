@@ -1,0 +1,19 @@
+{
+  "readiness": {
+    "notFound": "Not found on PATH.",
+    "howToInstall": "How to install",
+    "needsNode": "Needs Node.js 22 or later.",
+    "installNode": "Install Node.js",
+    "couldNotStart": "Could not start.",
+    "installsOnFirstUse": "Installs on first use"
+  },
+  "state": {
+    "ready": "Ready",
+    "signIn": "Sign in to start",
+    "installing": "Installing…",
+    "starting": "Starting…",
+    "restarting": "Restarting…",
+    "failed": "Failed",
+    "notAvailable": "Not available"
+  }
+}

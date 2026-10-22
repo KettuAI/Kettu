@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { HOST_METHODS, type AgentsApi, type HostEvent } from '@shared/agent-host'
 import type { AppCommand, OverbenchApi, QuitRequest } from '@shared/ipc'
+import { isLocale, type Locale } from '@shared/locale'
 import { TERMINAL_METHODS, type TerminalEvent, type TerminalsApi } from '@shared/terminal-host'
 import { hostTransport, invoke, send, subscribe } from './ipc'
 import { PortClient } from './port-client'
@@ -42,11 +43,18 @@ ipcRenderer.on('app:command', (_, command: AppCommand) => {
 })
 
 const onSettingsChanged = subscribe('settings:changed')
+
+function systemLocale(): Locale {
+  const prefix = '--overbench-system-locale='
+  const value = process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length)
+  return isLocale(value) ? value : 'en'
+}
 const onUpdateChanged = subscribe('update:changed')
 
 const api: OverbenchApi = {
   platform: process.platform,
   perf: process.argv.includes('--overbench-perf'),
+  systemLocale: systemLocale(),
   app: {
     getInfo: () => invoke('app:get-info'),
     respondQuit: (id, confirmed) => invoke('app:respond-quit', id, confirmed),

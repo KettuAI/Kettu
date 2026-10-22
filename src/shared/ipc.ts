@@ -1,5 +1,6 @@
 import type { AgentsApi, DiagnosticsBundle } from './agent-host'
 import type { BusySession, BusyTerminal } from './host-control'
+import type { Locale } from './locale'
 import type { Platform } from './platform'
 import type { SettingsFile, SettingsPatch } from './settings'
 import type { TerminalsApi } from './terminal-host'
@@ -102,6 +103,8 @@ export interface OverbenchApi {
   platform: Platform
   /** Whether the app runs with --overbench-perf, which turns on the renderer's frame counters. */
   perf: boolean
+  /** The interface language the system's preferred languages pick, for Language › System. */
+  systemLocale: Locale
   app: {
     getInfo(): Promise<AppInfo>
     respondQuit(id: number, confirmed: boolean): Promise<void>

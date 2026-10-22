@@ -1,9 +1,12 @@
 import { app, BrowserWindow, powerMonitor } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
+import type { SettingsFile } from '@shared/settings'
 import { AgentHost } from './agent-host'
 import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { broadcast } from './events'
+import { locale as currentLocale, setLocale } from './i18n'
 import { registerIpcHandlers } from './ipc'
 import { createLogger } from './log'
 import { installMenu } from './menu'
@@ -52,14 +55,19 @@ async function start(): Promise<void> {
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
   const [settings, windowState, appState] = await loading
 
+  // The system's languages are read once; macOS and Windows ask for a restart to change them.
+  const systemLocale = matchLocale(app.getPreferredSystemLanguages())
+  const localeOf = (file: SettingsFile): Locale =>
+    resolveLocale(file.general.language, systemLocale)
+  setLocale(localeOf(settings.get()))
   applyTheme(settings.get().appearance.theme)
   watchTheme()
-  configureWindows({ state: windowState, perf })
+  configureWindows({ state: windowState, perf, systemLocale })
   setBadgeEnabled(settings.get().notifications.badge)
 
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
   const agentHost = new AgentHost({
-    settings: () => hostSettings(settings.get()),
+    settings: () => hostSettings(settings.get(), systemLocale),
     onAttention: (message) => notifyAttention(message, settings.get()),
     onBadge: setBadgeCount,
     onProjects: (paths) => terminalHost.setProjects(paths),
@@ -83,10 +91,16 @@ async function start(): Promise<void> {
   })
   const quitFlow = quit
 
+  const menuDeps = { checkForUpdates: () => void updater.check() }
   settings.onChange((next, changed) => {
     broadcast('settings:changed', next)
-    if (changed.has('agents') || changed.has('proxy') || changed.has('git')) {
-      agentHost.pushSettings(hostSettings(next))
+    const localeChanged = localeOf(next) !== currentLocale()
+    if (localeChanged) {
+      setLocale(localeOf(next))
+      installMenu(menuDeps)
+    }
+    if (changed.has('agents') || changed.has('proxy') || changed.has('git') || localeChanged) {
+      agentHost.pushSettings(hostSettings(next, systemLocale))
     }
     if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))
     if (changed.has('appearance')) applyTheme(next.appearance.theme)
@@ -95,7 +109,7 @@ async function start(): Promise<void> {
   })
 
   registerIpcHandlers({ settings, agentHost, terminalHost, updater, quit: quitFlow, perf })
-  installMenu({ checkForUpdates: () => void updater.check() })
+  installMenu(menuDeps)
 
   app.on('browser-window-created', (_, window) => {
     // F12 toggles DevTools in development; reload shortcuts are disabled in production.

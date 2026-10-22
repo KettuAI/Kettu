@@ -1,0 +1,243 @@
+{
+  "sections": {
+    "general": "General",
+    "appearance": "Appearance",
+    "agents": "Agents",
+    "terminal": "Terminal",
+    "git": "Git",
+    "notifications": "Notifications",
+    "shortcuts": "Keyboard shortcuts",
+    "advanced": "Advanced",
+    "about": "About"
+  },
+  "page": {
+    "title": "Settings",
+    "search": "Search settings",
+    "clearSearch": "Clear search",
+    "sections": "Sections",
+    "back": "Back",
+    "waiting": "{{count}} waiting for approval",
+    "noMatch": "No settings match “{{query}}”",
+    "noMatchHint": "Try another word, such as theme, proxy or shell."
+  },
+  "general": {
+    "language": {
+      "name": "Language",
+      "description": "The language of menus, settings and OverBench's own messages. What agents write is not translated.",
+      "keywords": "language locale chinese english translation",
+      "system": "System"
+    },
+    "defaultAgent": {
+      "name": "Default agent",
+      "description": "The agent New session starts. With Ask each time, the project home lets you pick.",
+      "askEachTime": "Ask each time"
+    },
+    "sendKey": {
+      "name": "Send with",
+      "description": "The other key inserts a new line.",
+      "keywords": "enter newline composer"
+    },
+    "restore": {
+      "name": "Restore the last session on launch"
+    },
+    "confirmQuit": {
+      "name": "Ask before quitting while agents or terminal commands are running",
+      "keywords": "quit confirm"
+    }
+  },
+  "appearance": {
+    "theme": {
+      "name": "Theme",
+      "keywords": "dark light system color",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "textSize": {
+      "name": "Text size",
+      "description": "For the thread and the composer: 13, 14 or 15 px.",
+      "keywords": "font",
+      "small": "Small",
+      "default": "Default",
+      "large": "Large"
+    },
+    "reduceMotion": {
+      "name": "Reduce motion",
+      "description": "System follows your operating system; Always removes movement everywhere.",
+      "keywords": "animation accessibility",
+      "system": "System",
+      "always": "Always"
+    }
+  },
+  "terminal": {
+    "shell": {
+      "name": "Shell",
+      "description": "Your login shell ($SHELL), so the terminal sees the same tools; or a program you pick.",
+      "descriptionWindows": "pwsh when it is installed, else Windows PowerShell; or a program you pick.",
+      "loginShell": "Login shell",
+      "reset": "Reset",
+      "choose": "Choose…"
+    },
+    "fontSize": {
+      "name": "Font size",
+      "description": "In pixels."
+    }
+  },
+  "git": {
+    "git": {
+      "name": "Git",
+      "description": "Branch, changes and commits in the top bar.",
+      "found": "Found",
+      "notFound": "Not found on PATH"
+    },
+    "gh": {
+      "name": "GitHub CLI",
+      "description": "Pull requests and their checks, through gh.",
+      "keywords": "gh github pull request",
+      "install": "Install the GitHub CLI",
+      "signedOut": "Signed out",
+      "copyCommand": "Copy command",
+      "signedInAs": "Signed in as {{account}}",
+      "signedIn": "Signed in"
+    },
+    "fetch": {
+      "name": "Fetch in the background",
+      "description": "Every 5 minutes, so ahead and behind stay current."
+    }
+  },
+  "notifications": {
+    "permission": {
+      "name": "Needs approval",
+      "description": "When an agent waits for you to allow something.",
+      "keywords": "permission"
+    },
+    "turnEnded": {
+      "name": "Turn finished",
+      "description": "When an agent finishes what you asked."
+    },
+    "error": {
+      "name": "Errors",
+      "description": "When a session fails or an agent stops unexpectedly."
+    },
+    "sound": {
+      "name": "Play a sound",
+      "description": "The system notification sound."
+    },
+    "badge": {
+      "nameDock": "Show a count on the Dock icon",
+      "nameTaskbar": "Show a count on the taskbar button",
+      "description": "How many sessions wait for your approval.",
+      "keywords": "badge"
+    },
+    "footer": "Shown only while no OverBench window is focused."
+  },
+  "shortcuts": {
+    "openProject": "Open project",
+    "newSession": "New session in the current project",
+    "toggleSidebar": "Toggle the sidebar",
+    "focusComposer": "Focus the composer, or ask about the terminal selection",
+    "previousSession": "Previous session in the sidebar",
+    "nextSession": "Next session in the sidebar",
+    "settings": "Settings; Esc goes back",
+    "toggleTerminal": "Show or hide the terminal",
+    "newTerminal": "New terminal",
+    "cancelTurn": "Cancel the running turn",
+    "answerPermission": "Answer the pending permission request"
+  },
+  "advanced": {
+    "proxy": {
+      "name": "Proxy",
+      "description": "For agents, npx and updates.",
+      "keywords": "http https network",
+      "useEnvironment": "Use the environment",
+      "custom": "Custom",
+      "url": "URL",
+      "noProxyFor": "No proxy for",
+      "invalid": "Enter a URL such as http://proxy.example.com:8080"
+    },
+    "diagnostics": {
+      "name": "Diagnostics",
+      "description": "A file with recent agent messages, logs and paths, for a bug report. It can contain code and prompts, so share it only with people you trust.",
+      "keywords": "logs bug report",
+      "export": "Export diagnostics",
+      "saved": "Saved to {{path}}"
+    },
+    "dataFolder": {
+      "name": "Data folder",
+      "description": "Settings, the session index and logs.",
+      "show": "Show in {{name}}"
+    },
+    "removeSessions": {
+      "name": "Remove all sessions from OverBench",
+      "description": "Clears OverBench's session list. The agents' transcripts stay.",
+      "keywords": "delete clear",
+      "button": "Remove all sessions",
+      "dialogTitle_one": "Remove the only session from OverBench?",
+      "dialogTitle_other": "Remove all {{count}} sessions from OverBench?",
+      "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from a project's home.",
+      "confirm": "Remove all"
+    }
+  },
+  "agents": {
+    "keywords": "sign in login install node binary plan limits",
+    "signOut": "Sign out",
+    "needsSignIn": "{{name}} needs you to sign in.",
+    "launch": "Launch",
+    "copyLaunch": "Copy launch command",
+    "adapter": "Adapter",
+    "reinstall": "Reinstall",
+    "installsOnFirstUse": "Installs on first use",
+    "account": "Account",
+    "usage": "Usage",
+    "checkLimits": "Check plan limits",
+    "program": "Program",
+    "programOnPath": "opencode on PATH",
+    "reset": "Reset",
+    "chooseBinary": "Choose binary…",
+    "environment": {
+      "pending": "Reading your environment…",
+      "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}} ms.",
+      "loginShellPlain": "Read from your login shell.",
+      "inherited": "Inherited from how OverBench was started.",
+      "fallback": "Using a fallback PATH.",
+      "reload": "Reload environment"
+    }
+  },
+  "about": {
+    "version": {
+      "description": "A desktop workbench for Claude Code, Codex and OpenCode.",
+      "keywords": "version electron chromium node",
+      "copy": "Copy versions"
+    },
+    "updates": {
+      "name": "Updates",
+      "keywords": "update check download restart",
+      "upToDateShort": "Up to date",
+      "upToDate": "You're up to date",
+      "upToDateChecked": "You're up to date · Checked {{ago}}",
+      "checking": "Checking for updates…",
+      "downloading": "Downloading {{version}}",
+      "downloadProgress": "Download progress",
+      "ready": "{{version}} is ready to install",
+      "available": "{{version}} is available",
+      "failed": "Couldn't check for updates",
+      "offDevelopment": "Updates are off in development builds",
+      "offPackageManager": "Updates are installed by your package manager",
+      "check": "Check for updates",
+      "tryAgain": "Try again",
+      "restart": "Restart",
+      "download": "Download",
+      "whatsNew": "What's new"
+    },
+    "automatic": {
+      "name": "Automatic updates",
+      "description": "Download and install in the background, only tell you, or neither.",
+      "download": "Download and install",
+      "notify": "Notify only",
+      "off": "Off"
+    },
+    "source": {
+      "name": "Source code"
+    }
+  }
+}

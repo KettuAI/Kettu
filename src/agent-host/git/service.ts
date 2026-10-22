@@ -10,6 +10,7 @@ import {
 } from '@shared/git'
 import type { ToolKind } from '@shared/thread'
 import type { BranchPullRequest, GitEventDraft, GitServiceApi, GitServiceDeps } from './api'
+import { t } from '../i18n'
 import { createCoalescer } from './coalesce'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
 import { CommandError, createExec, describeFailure, FETCH_TIMEOUT_MS, type Exec } from './exec'
@@ -471,9 +472,9 @@ export function createGitService(
 
   async function loadPullRequest(url: string): Promise<PullRequest> {
     const tools = await getTools()
-    if (tools.gh.state === 'not-installed') throw new Error('The GitHub CLI (gh) is not installed')
+    if (tools.gh.state === 'not-installed') throw new Error(t('git.ghMissing'))
     if (tools.gh.state === 'signed-out') {
-      throw new Error('The GitHub CLI is not signed in; run "gh auth login" in a terminal')
+      throw new Error(t('git.ghSignedOut'))
     }
     const outcome = await viewPullRequestByUrl(exec, url, homedir())
     if (!outcome.ok) throw new Error(outcome.message)

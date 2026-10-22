@@ -6,6 +6,7 @@ import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import { listInstalled, type InstalledAdapter } from './adapter-install'
 import { findCommand, needsShell, type Env } from './find-command'
+import { t, type HostKey } from './i18n'
 import { satisfiesNode, type NodeProbe } from './shell-env'
 
 export type LaunchKind =
@@ -21,11 +22,11 @@ export interface AgentDefinition {
   registryId: string
   launch: LaunchKind
   requiresNode?: string
-  install: { hint: string; url: string }
+  install: { hint: HostKey; url: string }
 }
 
-const NODE_INSTALL = {
-  hint: 'Install Node.js 22 or later from nodejs.org, then reload the environment in Settings.',
+const NODE_INSTALL: AgentDefinition['install'] = {
+  hint: 'detect.hint.node',
   url: 'https://nodejs.org/en/download',
 }
 
@@ -53,7 +54,7 @@ export const OPENCODE: AgentDefinition = {
   registryId: 'opencode',
   launch: { kind: 'binary', command: 'opencode', args: ['acp'] },
   install: {
-    hint: 'Install OpenCode, or choose its binary in Settings › Agents.',
+    hint: 'detect.hint.opencode',
     url: 'https://opencode.ai/docs/',
   },
 }
@@ -65,7 +66,7 @@ export function fakeAgent(script: string): AgentDefinition {
     registryId: 'fake-agent',
     launch: { kind: 'node-script', script },
     install: {
-      hint: 'The fake agent runs tools/fake-agent/main.ts from the repository.',
+      hint: 'detect.hint.fakeAgent',
       url: 'https://agentclientprotocol.com',
     },
   }
@@ -183,13 +184,17 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       if (!nodePath || !nodeVersion) {
         return {
           state: 'node-missing',
-          detail: `${def.name} runs on Node.js 22 or later, and node was not found on PATH.`,
+          detail: t('detect.nodeMissing', { agent: def.name }),
         }
       }
       if (def.requiresNode && !satisfiesNode(nodeVersion, def.requiresNode)) {
         return {
           state: 'node-outdated',
-          detail: `${def.name} needs Node.js ${def.requiresNode.replace('>=', '')} or later; ${nodeVersion} is installed.`,
+          detail: t('detect.nodeOutdated', {
+            agent: def.name,
+            required: def.requiresNode.replace('>=', ''),
+            installed: nodeVersion,
+          }),
         }
       }
       const installed = await (
@@ -200,7 +205,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       if (!pinned && !npmPath && !other) {
         return {
           state: 'not-installed',
-          detail: `${def.name} is installed with npm on first use, and npm was not found on PATH. ${def.install.hint}`,
+          detail: t('detect.npmMissing', { agent: def.name, hint: t(def.install.hint) }),
         }
       }
       return {
@@ -229,8 +234,8 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         return {
           state: 'not-installed',
           detail: ctx.binaryOverride
-            ? `The program chosen for ${def.name} (${ctx.binaryOverride}) cannot be run.`
-            : `${launch.command} was not found on PATH. ${def.install.hint}`,
+            ? t('detect.programUnusable', { agent: def.name, path: ctx.binaryOverride })
+            : t('detect.commandMissing', { command: launch.command, hint: t(def.install.hint) }),
         }
       }
       return {
@@ -247,7 +252,10 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
     }
     case 'node-script': {
       if (!(await (ctx.isFile ?? isFile)(launch.script))) {
-        return { state: 'not-installed', detail: `${launch.script} does not exist.` }
+        return {
+          state: 'not-installed',
+          detail: t('detect.scriptMissing', { script: launch.script }),
+        }
       }
       return {
         state: 'available',

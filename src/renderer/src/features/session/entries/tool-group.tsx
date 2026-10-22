@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { ChevronRightIcon, TelescopeIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Card } from '@renderer/components/ui/card'
 import {
   Collapsible,
@@ -24,6 +25,7 @@ export const ToolGroup = memo(function ToolGroup({
   projectPath: string
   agentName: string
 }) {
+  useTranslation('session')
   const [open, setOpen] = useState(false)
   const animation = useEntryAnimation(sessionId, entryIds[0]!)
   const kinds = useThreadsStore(

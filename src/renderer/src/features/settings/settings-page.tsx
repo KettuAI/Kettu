@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowLeftIcon, SearchIcon, XIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@renderer/components/ui/empty'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
@@ -31,6 +32,7 @@ import {
  * as a page of its own on the right. While searching, the page gives way to grouped results.
  */
 export default function SettingsPage() {
+  const { t } = useTranslation('settings')
   const sections: SectionDef[] = [
     useGeneralSection(),
     useAppearanceSection(),
@@ -99,7 +101,7 @@ export default function SettingsPage() {
         </div>
         <div className="flex flex-col gap-3 px-3 pt-2 pb-3">
           <h1 className="px-1 text-[19px] leading-tight font-semibold tracking-[-0.01em]">
-            Settings
+            {t('page.title')}
           </h1>
           <InputGroup className="h-control bg-card shadow-outline">
             <InputGroupAddon>
@@ -108,8 +110,8 @@ export default function SettingsPage() {
             <InputGroupInput
               ref={search}
               value={query}
-              placeholder="Search settings"
-              aria-label="Search settings"
+              placeholder={t('page.search')}
+              aria-label={t('page.search')}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onSearchKey}
               className="text-ui"
@@ -118,7 +120,7 @@ export default function SettingsPage() {
               {query ? (
                 <button
                   type="button"
-                  aria-label="Clear search"
+                  aria-label={t('page.clearSearch')}
                   onClick={() => {
                     setQuery('')
                     search.current?.focus()
@@ -135,7 +137,10 @@ export default function SettingsPage() {
             </InputGroupAddon>
           </InputGroup>
         </div>
-        <nav aria-label="Sections" className="flex flex-col gap-px overflow-y-auto px-2 pb-4">
+        <nav
+          aria-label={t('page.sections')}
+          className="flex flex-col gap-px overflow-y-auto px-2 pb-4"
+        >
           {shown.map((section) => {
             const count = section.rows.length
             const disabled = searching && count === 0
@@ -209,10 +214,8 @@ export default function SettingsPage() {
                 {!anyMatch && (
                   <Empty className="pt-16">
                     <EmptyHeader>
-                      <EmptyTitle>No settings match “{query.trim()}”</EmptyTitle>
-                      <EmptyDescription>
-                        Try another word, such as theme, proxy or shell.
-                      </EmptyDescription>
+                      <EmptyTitle>{t('page.noMatch', { query: query.trim() })}</EmptyTitle>
+                      <EmptyDescription>{t('page.noMatchHint')}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 )}
@@ -283,6 +286,7 @@ function Row({ row, first }: { row: RowDef; first: boolean }) {
 }
 
 function BackButton() {
+  const { t } = useTranslation('settings')
   const waiting = useSessionsStore((s) =>
     Object.values(s.byId).reduce((sum, x) => sum + x.permissionCount, 0),
   )
@@ -294,10 +298,10 @@ function BackButton() {
       onClick={closeSettings}
     >
       <ArrowLeftIcon data-icon="inline-start" />
-      Back
+      {t('page.back')}
       {waiting > 0 && (
         <span
-          aria-label={`${waiting} waiting for approval`}
+          aria-label={t('page.waiting', { count: waiting })}
           className="ml-0.5 inline-flex h-[18px] min-w-[18px] animate-in items-center justify-center rounded-full bg-attention px-1.5 text-[11px] font-semibold text-attention-foreground tabular zoom-in-75 fade-in"
         >
           {waiting}

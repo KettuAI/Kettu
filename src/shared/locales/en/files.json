@@ -1,0 +1,34 @@
+{
+  "panel": {
+    "filterPlaceholder": "Filter, or ? to search in files",
+    "filterLabel": "Filter files",
+    "showTree": "Show as a tree",
+    "showList": "Show as a list",
+    "restore": "Restore",
+    "maximize": "Maximize"
+  },
+  "browser": {
+    "empty": "No files in this project.",
+    "noMatch": "No file matches “{{query}}”.",
+    "moreMatches": "{{count, number}} more; type more to narrow it down.",
+    "searchHint": "Type after ? to search inside the files.",
+    "searching": "Searching…",
+    "noLine": "No line contains “{{query}}”.",
+    "truncated_one": "Showing the first line.",
+    "truncated_other": "Showing the first {{count}} lines."
+  },
+  "preview": {
+    "emptyTitle": "Open files appear here",
+    "emptyDescription": "Pick a file in the tree, or click a file path in the conversation.",
+    "copyPath": "Copy path",
+    "closeFile": "Close file",
+    "openFailed": "Couldn't open this file",
+    "binaryTitle": "Binary file",
+    "binaryDescription": "{{size}}, not shown.",
+    "tooLargeTitle": "Too large to preview",
+    "tooLargeDescription": "{{size}}; the preview shows files up to 1 MB."
+  },
+  "link": {
+    "open": "Open {{target}}"
+  }
+}

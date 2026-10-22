@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
+import { applyLanguage } from '@renderer/lib/i18n'
 
 interface SettingsStore {
   settings: SettingsFile
@@ -28,17 +29,24 @@ function applyAppearance(settings: SettingsFile): void {
   root.dataset.reduceMotion = reduceMotion
 }
 
-/** Loads the settings, applies appearance as attributes on <html>, and follows every change. */
+/**
+ * Loads the settings, applies appearance as attributes on <html> and the language, and follows
+ * every change.
+ */
 export async function initSettings(): Promise<void> {
   applyAppearance(DEFAULT_SETTINGS)
   darkQuery.addEventListener('change', () => applyAppearance(useSettingsStore.getState().settings))
   useSettingsStore.subscribe((state, previous) => {
     if (state.settings.appearance !== previous.settings.appearance) applyAppearance(state.settings)
+    if (state.settings.general.language !== previous.settings.general.language) {
+      applyLanguage(state.settings.general.language)
+    }
   })
   window.overbench.settings.onChanged((settings) => useSettingsStore.setState({ settings }))
   const settings = await window.overbench.settings.get()
   useSettingsStore.setState({ settings, loaded: true })
   applyAppearance(settings)
+  applyLanguage(settings.general.language)
 }
 
 /** Whether motion is reduced right now, from the setting or the OS. */

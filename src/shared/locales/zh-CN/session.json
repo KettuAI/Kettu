@@ -1,0 +1,209 @@
+{
+  "clamp": {
+    "more": "展开",
+    "less": "收起"
+  },
+  "status": {
+    "needsApproval": "需要授权",
+    "pending": "等待中",
+    "running": "运行中",
+    "done": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消"
+  },
+  "summary": {
+    "separator": "，",
+    "thought": "思考",
+    "thoughtFor": "思考了 {{duration}}",
+    "execute_other": "运行了 {{count}} 条命令",
+    "search_other": "搜索了 {{count}} 次",
+    "fetch_other": "获取了 {{count}} 个网页",
+    "tool_other": "使用了 {{count}} 个工具",
+    "explored_other": "浏览了 {{count}} 个文件",
+    "read_other": "读取了 {{count}} 个文件",
+    "readNamed": "读取了 {{name}}",
+    "edit_other": "编辑了 {{count}} 个文件",
+    "editNamed": "编辑了 {{name}}",
+    "delete_other": "删除了 {{count}} 个文件",
+    "deleteNamed": "删除了 {{name}}",
+    "move_other": "移动了 {{count}} 个文件",
+    "moveNamed": "移动了 {{name}}",
+    "failed": "{{failed}} 项失败"
+  },
+  "stopReason": {
+    "endTurn": "用时 {{duration}}",
+    "cancelled": "已取消",
+    "maxTokens": "已达到 token 上限而停止",
+    "maxTurnRequests": "已达到请求次数上限而停止",
+    "refusal": "Agent 拒绝了请求"
+  },
+  "tool": {
+    "verb": {
+      "read": "读取",
+      "edit": "编辑",
+      "delete": "删除",
+      "move": "移动",
+      "run": "运行"
+    },
+    "runInTerminal": "在终端中运行",
+    "copyCommand": "复制命令",
+    "showAll": "显示全部",
+    "showFullDiff": "显示完整差异",
+    "image": "图片"
+  },
+  "permission": {
+    "ask": {
+      "read": "{{agent}} 想读取这个文件。",
+      "edit": "{{agent}} 想做出这项更改。",
+      "delete": "{{agent}} 想删除这个文件。",
+      "move": "{{agent}} 想移动这个文件。",
+      "search": "{{agent}} 想搜索这个项目。",
+      "execute": "{{agent}} 想运行这条命令。",
+      "fetch": "{{agent}} 想获取这个网页。",
+      "switchMode": "{{agent}} 想切换模式。",
+      "other": "{{agent}} 想使用这个工具。"
+    },
+    "answerGroup": "回应",
+    "answer": {
+      "allowOnce": "已允许一次",
+      "allowAlways": "已始终允许",
+      "rejectOnce": "已拒绝",
+      "rejectAlways": "已始终拒绝",
+      "cancelled": "已取消",
+      "withdrawn": "已不再需要"
+    }
+  },
+  "subagent": {
+    "fallbackTitle": "子 Agent"
+  },
+  "subagentBar": {
+    "runsFor": "{{agent}} 正在为 <parent/> 运行这个子 Agent",
+    "runsForParent": "{{agent}} 正在为<parent>父会话</parent>运行这个子 Agent",
+    "stop": "停止",
+    "back": "返回 {{title}}"
+  },
+  "thought": {
+    "live": "思考中",
+    "done": "已思考",
+    "doneFor": "已思考 {{duration}}"
+  },
+  "sessionMessage": {
+    "from": "来自 {{title}}",
+    "fromParent": "来自父会话"
+  },
+  "compaction": {
+    "inProgress": "正在压缩上下文…",
+    "completed": "上下文已压缩",
+    "failed": "无法压缩上下文",
+    "cancelled": "已取消压缩"
+  },
+  "gitEvent": {
+    "committed": "已提交 <id/> <subject/>",
+    "moreCommits_other": "另有 {{count}} 个提交",
+    "pushed_other": "已推送 {{count}} 个提交到 <upstream/>",
+    "switchedTo": "已切换到 <branch/>",
+    "openedPr": "已创建 Pull Request",
+    "copyCommitId": "复制提交 ID"
+  },
+  "plan": {
+    "inProgress": "进行中",
+    "todo": "待办"
+  },
+  "planBar": {
+    "progress": "计划 <count/>"
+  },
+  "userActions": {
+    "steered": "已插入当前对话",
+    "copyMessage": "复制消息"
+  },
+  "replyFooter": {
+    "copyReply": "复制回复",
+    "readAloud": "朗读",
+    "stopReading": "停止朗读",
+    "fork": "分叉为新会话"
+  },
+  "queue": {
+    "label": "排队中的消息",
+    "queued": "排队中 {{total}} 条",
+    "paused": "已暂停，恢复后继续发送",
+    "waiting": "本轮对话结束后发送",
+    "sending": "正在发送…",
+    "resume": "继续",
+    "attachment": "附件",
+    "steer": "立即插入当前对话",
+    "edit": "在输入框中编辑",
+    "remove": "移除"
+  },
+  "agentStart": {
+    "installing": "正在安装 {{agent}}…",
+    "starting": "正在启动 {{agent}}…",
+    "loading": "正在加载对话…"
+  },
+  "failed": {
+    "savedTo": "已保存到 {{path}}",
+    "exportDiagnostics": "导出诊断信息"
+  },
+  "header": {
+    "newSubSession": "新建子会话",
+    "delete": "删除…"
+  },
+  "pending": {
+    "back": "返回",
+    "newSubSessionOf": "新建 {{title}} 的子会话",
+    "notRunning": "{{agent}} 未运行",
+    "couldntStart": "无法启动 {{agent}}"
+  },
+  "newSession": {
+    "title": "新建会话",
+    "chooseProject": "选择要工作的项目",
+    "projectMissing": "{{project}} 已不存在",
+    "chooseAgent": "为这个会话选择 Agent",
+    "whatToWorkOn": "想让 {{agent}} 做什么？",
+    "message": "消息",
+    "messageAgent": "给 {{agent}} 发消息",
+    "askAgent": "让 {{agent}} 帮你…",
+    "describeTask": "描述一个任务…",
+    "send": "发送",
+    "project": "项目",
+    "chooseProjectShort": "选择项目",
+    "missing": "未找到",
+    "openProject": "打开项目…",
+    "agent": "Agent",
+    "chooseAgentShort": "选择 Agent",
+    "notInstalled": "未安装",
+    "noProject": "无项目",
+    "searchProjects": "搜索项目…",
+    "searchProjectsLabel": "搜索项目",
+    "recent": "最近",
+    "noMatchingProjects": "没有匹配的项目"
+  },
+  "signIn": {
+    "title": "登录 {{agent}}",
+    "description": "{{agent}} 需要先登录才能启动。OverBench 不会获取你的凭据。",
+    "noMethods": "{{agent}} 没有说明登录方式。请在它自己的命令行中登录，然后重试。",
+    "copyCommand": "复制命令",
+    "inTerminal": "在终端中登录",
+    "signedIn": "我已登录，重试"
+  },
+  "view": {
+    "couldntOpen": "无法打开此会话",
+    "hostSilent": "Agent 后台进程没有响应。",
+    "stopped": "{{agent}} 已停止",
+    "couldNotContinue": "{{agent}} 无法继续此会话。",
+    "signInToContinue": "登录 {{agent}} 以继续",
+    "historyStays": "历史记录会保留在这里，会话会从中断的地方继续。",
+    "signIn": "登录…",
+    "disconnected": "{{agent}} 意外停止，正在重新连接…",
+    "reconnect": "重新连接",
+    "announceApproval": "{{agent}} 需要你的授权",
+    "announceFinished": "{{agent}} 已完成"
+  },
+  "thread": {
+    "label": "对话",
+    "working": "处理中…"
+  },
+  "link": {
+    "title": "打开此链接？",
+    "open": "在浏览器中打开"
+  }
+}

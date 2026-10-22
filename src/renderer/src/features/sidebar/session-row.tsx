@@ -1,6 +1,7 @@
 import { useShallow } from 'zustand/react/shallow'
 import { memo, useEffect, useState } from 'react'
 import { BotIcon, ChevronDownIcon, ChevronRightIcon, CornerDownRightIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { createSession, deleteSession, descendantCount, closeSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -26,7 +27,7 @@ import {
 import { SidebarMenuButton, SidebarMenuItem } from '@renderer/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PrIcon } from '@renderer/features/git/pr-icon'
-import { PR_STATE_TEXT } from '@renderer/features/git/pr-text'
+import { prStateText } from '@renderer/features/git/pr-text'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle, type SessionNode } from '@renderer/stores/sessions'
@@ -43,6 +44,7 @@ export const SessionRow = memo(function SessionRow({
   node: SessionNode
   depth?: number
 }) {
+  const { t } = useTranslation('sidebar')
   const { summary, children } = node
   const current = useViewStore(
     (s) => s.main.kind === 'session' && s.main.sessionId === summary.id && !s.settings.open,
@@ -83,7 +85,7 @@ export const SessionRow = memo(function SessionRow({
         <span
           role="button"
           tabIndex={-1}
-          aria-label={expanded ? 'Collapse sub-sessions' : 'Expand sub-sessions'}
+          aria-label={expanded ? t('row.collapse') : t('row.expand')}
           onClick={(event) => {
             event.stopPropagation()
             setExpanded(!expanded)
@@ -133,7 +135,7 @@ export const SessionRow = memo(function SessionRow({
       {summary.pr && <PrIcon state={summary.pr.state} size={13} />}
       {hasChildren && !expanded && (
         <span
-          aria-label={`${children.length} sub-sessions`}
+          aria-label={t('row.subSessions', { count: children.length })}
           className="inline-flex items-center gap-0.5 text-[11.5px] text-muted-foreground tabular"
         >
           <CornerDownRightIcon strokeWidth={1.8} className="size-[11px]!" />
@@ -159,7 +161,7 @@ export const SessionRow = memo(function SessionRow({
               <span className="font-mono">{summary.branch}</span>
               {summary.pr && (
                 <span className="opacity-70">
-                  #{summary.pr.number} · {PR_STATE_TEXT[summary.pr.state]}
+                  #{summary.pr.number} · {prStateText(summary.pr.state)}
                 </span>
               )}
             </TooltipContent>
@@ -207,12 +209,13 @@ function SessionMenu({
   canCreateChild: boolean
   onDelete: () => void
 }) {
+  const { t } = useTranslation(['sidebar', 'common'])
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   return (
     <ContextMenuContent>
       {canCreateChild && (
         <ContextMenuSub>
-          <ContextMenuSubTrigger>New sub-session</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger>{t('row.newSubSession')}</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             {agents.map((agent) => (
               <ContextMenuItem
@@ -227,10 +230,12 @@ function SessionMenu({
           </ContextMenuSubContent>
         </ContextMenuSub>
       )}
-      <ContextMenuItem onClick={() => void closeSession(sessionId)}>Close</ContextMenuItem>
+      <ContextMenuItem onClick={() => void closeSession(sessionId)}>
+        {t('common:actions.close')}
+      </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onClick={onDelete}>
-        Delete…
+        {t('row.deleteMenu')}
       </ContextMenuItem>
     </ContextMenuContent>
   )
@@ -247,22 +252,21 @@ export function DeleteSessionDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation(['sidebar', 'common'])
   const count = open ? descendantCount(sessionId) : 0
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete “{title}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t('row.deleteTitle', { title })}</AlertDialogTitle>
           <AlertDialogDescription>
-            The agent deletes its transcript too.
-            {count > 0 &&
-              ` ${count === 1 ? 'Its sub-session is' : `Its ${count} sub-sessions are`} deleted with it.`}
+            {count > 0 ? t('row.deleteBodyWithSub', { count }) : t('row.deleteBody')}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => void deleteSession(sessionId)}>
-            Delete
+            {t('row.delete')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
