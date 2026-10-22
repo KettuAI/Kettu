@@ -242,6 +242,31 @@ async function run() {
   await press('Escape', 27)
   await sleep(300)
 
+  // The turns above are OverBench's own record, so the usage page has figures to show.
+  await click(
+    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('Usage'))`,
+    'the Usage row',
+  )
+  await waitFor(
+    `[...document.querySelectorAll('h2')].some((h) => h.textContent.startsWith('Tokens per'))`,
+    'the usage dashboard',
+  )
+  await sleep(600)
+  const recorded = await cdp.evaluate(
+    `window.overbench.agents.request('usage.total', { from: 0, to: Date.now() + 86400000 })`,
+  )
+  log(`usage recorded ${JSON.stringify(recorded)}`)
+  await shoot('usage')
+  await click(
+    `return document.querySelector('button[aria-label="Choose a time range"]')`,
+    'the range picker',
+  )
+  await waitFor(`document.querySelector('[data-slot=calendar]')`, 'the calendar')
+  await sleep(400)
+  await shoot('usage-range')
+  await press('Escape', 27)
+  await sleep(300)
+
   await click(
     `return [...document.querySelectorAll('button, a')].find((b) => b.textContent.trim().startsWith('Settings'))`,
     'Settings',
@@ -256,6 +281,7 @@ async function run() {
     'Notifications',
     'Keyboard shortcuts',
     'Agents',
+    'Usage',
     'Terminal',
     'Git',
     'Advanced',
