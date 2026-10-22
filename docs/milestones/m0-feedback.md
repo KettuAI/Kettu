@@ -36,6 +36,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 28  | The Ready label next to the status dot is redundant            | Settings       | Open         |
 | 29  | Agents that are not installed cannot be installed from here    | Settings       | Open         |
 | 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Open         |
+| 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -335,3 +336,14 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The rest of the reference's menu: **Fork** (already a message action, shown only when the agent advertises `session/fork`), **Mark as unread**, **Open in** (an editor or the file manager, which the main process would launch, and **New window**, which is out of M0), and **Move to** and **Move to project**, whose meaning needs the reference's submenus. A session's folder is its ACP `cwd`, so moving it to another project is not something ACP offers.
   - The menu's order and grouping, its destructive item last, and the same set in the top bar's title menu.
   - The rule changes in [Interface: sidebar](../design/ui.md#sidebar), [Interface: session](../design/ui.md#session) and the [session lifecycle](../design/session-model.md#session-lifecycle).
+
+## 31. Earlier replies show actions only on hover, and no Fork
+
+- **Reported**: 2026-10-22, with a screenshot of a thread with two red boxes and a close-up of an earlier reply and the latest one. Only recorded for now; the maintainer asked for no change yet.
+- **Observed**: the action row under a reply shows its icons only while the pointer is on that message, and no reply but the last has a Fork. The close-up shows an earlier reply with Copy and Read aloud (Copy highlighted under the pointer) and the latest reply with Copy, Read aloud and Fork. At rest an earlier reply shows an empty band where its row is (the first red box), and the latest reply's row is in view (the second).
+- **Expected**: not stated beyond the observation; the maintainer did not say what should change.
+- **Today**: this is the behavior [Interface: message actions](../design/ui.md#message-actions) specifies, from [problem 5](#5-messages-have-no-action-row): under the latest reply the buttons stay in view, under earlier ones they show on hover or focus "holding their place so the text does not move". In `src/renderer/src/features/session/entries/message-actions.tsx` an earlier reply's row takes `opacity-0` until hover or focus (`REVEAL`), and `showFork` is `latest && canFork && session.origin === 'user'`. Fork stays off the earlier replies because ACP's `session/fork` takes no message to fork at, so a Fork under an earlier reply would still copy the whole session.
+- **To settle when planning**: what the maintainer finds wrong, which could be either or both of:
+  - The held space: the empty band under each earlier reply reads as a hole. The row could take no space until hover, at the cost of the text moving, or sit in a smaller reserved height, or show at rest in a quieter state.
+  - The missing Fork: whether earlier replies should offer it. Without a partial `session/fork` it could only fork the whole session, or OverBench could build the new session from the history up to that reply, which needs a design of its own; rewinding to a message was left out of M0 with checkpoints ([problem 5](#5-messages-have-no-action-row)).
+  - Whether the latest reply's always-visible row against the hover-only rows above it is itself the inconsistency.
