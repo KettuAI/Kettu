@@ -1,7 +1,7 @@
 {
   "name": "overbench",
   "productName": "OverBench",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "A beautifully crafted desktop workbench for terminal coding agents.",
   "author": "Amigoer",
