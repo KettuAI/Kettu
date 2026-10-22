@@ -246,7 +246,10 @@ function Dashboard({ page }: { page: PageData }) {
   const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
   const facts = useMemo(() => figures(days, range), [days, range])
   const heat = heatmapRange(today, firstDay)
-  const heatDays = useMemo(() => days.filter((d) => d.day >= heat.from), [days, heat.from])
+  const heatDays = useMemo(
+    () => days.filter((d) => d.day >= heat.from && d.day < heat.to),
+    [days, heat.from, heat.to],
+  )
   const used = useMemo(
     () => new Set(allDays.filter((d) => d.total > 0).map((d) => d.day)),
     [allDays],
@@ -581,7 +584,7 @@ function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
     (day: number) => new Intl.DateTimeFormat(i18n.language, { weekday: 'narrow' }).format(day),
     [i18n.language],
   )
-  const outside = page.range.from > days[0]!.day
+  const outside = days.some((d) => d.day < page.range.from || d.day >= page.range.to)
   return (
     <Card>
       <CardHead

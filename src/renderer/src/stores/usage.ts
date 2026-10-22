@@ -137,7 +137,11 @@ export async function loadUsagePage(): Promise<void> {
     for (let pass = 0; pass < 2; pass++) {
       const range = rangeOf(filters.range, today, first)
       const heat = heatmapRange(today, firstDay)
-      const starts = dayStarts({ from: Math.min(range.from, heat.from), to: range.to })
+      // The heatmap always shows the last 53 weeks, whatever the range.
+      const starts = dayStarts({
+        from: Math.min(range.from, heat.from),
+        to: Math.max(range.to, heat.to),
+      })
       const summary = await host('usage.summary', {
         dayStarts: starts,
         from: range.from,
@@ -145,12 +149,8 @@ export async function loadUsagePage(): Promise<void> {
         scope: filters.scope,
       })
       if (id !== request) return
-      // All time starts at the first day with usage, known for certain only from the answer.
-      if (
-        filters.range.kind === 'all' &&
-        summary.first !== null &&
-        dayOf(summary.first) < starts[0]!
-      ) {
+      // All time starts at the first day with usage of this scope, known only from the answer.
+      if (pass === 0 && rangeOf(filters.range, today, summary.first).from !== range.from) {
         first = summary.first
         continue
       }
