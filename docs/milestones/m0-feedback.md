@@ -100,6 +100,10 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the relative time on each session row ("6m", "3h") leaves a wide empty gap before the row's right edge, which looks off, and a time on every row makes the list look busy.
 - **Expected**: whether rows show a time at all, and how, is decided by design first.
 - **Today**: [Interface: sidebar](../design/ui.md#sidebar) gives every row that is not running or starting a relative time. In `src/renderer/src/features/sidebar/session-indicator.tsx` the time is followed by a 16 px slot (`w-4`) for the status indicator, kept even when the row has no indicator, which is the gap after the time. To settle when planning: whether the time shows always, on hover only or not at all, and how it shares the row's end with the status indicators.
+- **Decided**: 2026-10-22, with a screenshot of the sidebar marking the time column: the time goes from every session row, since an always-visible time is not a real need. Only the status indicator stays at the row's end. What changes, when this is fixed:
+  - `SessionIndicator` stops rendering `shortAgo`, and the rule "running and starting rows show no time" in [Interface: sidebar](../design/ui.md#sidebar) goes with it, as does "in place of the time" for the attention pill.
+  - Titles gain the width the time took. To settle: whether the 16 px indicator slot stays reserved on rows with no status, so a status appearing never moves the title, or the title runs to the row's end and a status takes its place when it appears.
+  - The project home's recent sessions list keeps its time column; this decision covers the sidebar only. Whether the time should show somewhere in the sidebar, such as the row's tooltip, was not asked and is left open.
 
 ## 9. New session is tied to the selected project
 
