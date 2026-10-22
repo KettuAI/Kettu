@@ -61,7 +61,8 @@ import { RangePicker } from './range-picker'
 /** The usage page: a dashboard of the tokens the agents used, for a chosen agent and range. */
 export default function UsagePage() {
   const { t } = useTranslation('usage')
-  const status = useUsageStore((s) => s.status)
+  const unavailable = useUsageStore((s) => s.status?.unavailable ?? false)
+  const scanning = useUsageStore((s) => s.status?.scanning != null)
   const page = useUsageStore((s) => s.page)
   const error = useUsageStore((s) => s.error)
   // OverBench only can be empty while the logs are not; the filters must stay to switch back.
@@ -73,7 +74,7 @@ export default function UsagePage() {
   }, [])
 
   let body: ReactNode
-  if (status?.unavailable) {
+  if (unavailable) {
     body = <Unavailable />
   } else if (error && !page) {
     body = (
@@ -90,7 +91,7 @@ export default function UsagePage() {
     )
   } else if (!page) {
     body = <LoadingState />
-  } else if (page.summary.first === null && !status?.scanning && !narrowed) {
+  } else if (page.summary.first === null && !scanning && !narrowed) {
     body = <FirstRun />
   } else {
     body = <Dashboard page={page} />
@@ -154,20 +155,26 @@ function Unavailable() {
 /** When the logs were last read, and Sync now; or where the figures come from. */
 function SyncState() {
   const { t } = useTranslation('usage')
-  const status = useUsageStore((s) => s.status)
+  const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? null)
+  const synced = useUsageStore(
+    (s) =>
+      s.status?.logs.reduce<number | null>(
+        (latest, log) =>
+          log.syncedAt !== null && (latest === null || log.syncedAt > latest)
+            ? log.syncedAt
+            : latest,
+        null,
+      ) ?? null,
+  )
+  const reading = useUsageStore((s) => s.status?.scanning != null)
   const now = useNow()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
-  if (!status) return null
-  if (!status.fromComputer) {
+  if (fromComputer === null) return null
+  if (!fromComputer) {
     return <span className="text-xs text-muted-foreground">{t('page.record')}</span>
   }
-  const synced = status.logs.reduce<number | null>(
-    (latest, log) =>
-      log.syncedAt !== null && (latest === null || log.syncedAt > latest) ? log.syncedAt : latest,
-    null,
-  )
-  const scanning = busy || status.scanning !== null
+  const scanning = busy || reading
   return (
     <NoDrag className="gap-2">
       {failed && !scanning ? (

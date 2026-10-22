@@ -276,7 +276,11 @@ export function useUsageSection(): SectionDef {
   const { t } = useTranslation('usage')
   const en = i18n.getFixedT('en', 'usage')
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
-  const logs = useUsageStore(useShallow((s) => s.status?.logs ?? []))
+  // Strings only: the status is a new object at every step of a scan.
+  const logIds = useUsageStore(useShallow((s) => (s.status?.logs ?? []).map((log) => log.agentId)))
+  const logPlaces = useUsageStore(
+    useShallow((s) => (s.status?.logs ?? []).map((log) => log.locations.join(' '))),
+  )
   const sources = group('sources', t('settings.groups.sources'))
   const rows: RowDef[] = [
     {
@@ -291,18 +295,18 @@ export function useUsageSection(): SectionDef {
   ]
   if (fromComputer) {
     const logGroup = group('logs', t('settings.groups.logs'), {
-      count: logs.length,
+      count: logIds.length,
       actions: <SyncLogs />,
     })
     rows.push(
-      ...logs.map((log): RowDef => ({
-        id: `logs-${log.agentId}`,
-        name: agentName(log.agentId),
-        description: log.locations.join(' '),
+      ...logIds.map((agentId, i): RowDef => ({
+        id: `logs-${agentId}`,
+        name: agentName(agentId),
+        description: logPlaces[i] ?? '',
         keywords: t('settings.groups.logs'),
         group: logGroup,
         layout: 'block',
-        render: () => <LogRow log={log} />,
+        render: () => <LogRow agentId={agentId} />,
       })),
     )
   }
