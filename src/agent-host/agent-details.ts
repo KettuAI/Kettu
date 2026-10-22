@@ -139,6 +139,17 @@ async function readCliVersion(
   return null
 }
 
+type LogEntry = Parameters<LogFn>
+
+/** Runs `read` with a log that holds its entries, so concurrent reads can be logged in a fixed order. */
+async function withLogs<T>(read: (log: LogFn) => Promise<T>): Promise<[T, LogEntry[]]> {
+  const entries: LogEntry[] = []
+  const result = await read((...entry) => {
+    entries.push(entry)
+  })
+  return [result, entries]
+}
+
 export interface AgentDetailsContext {
   getEnv(name: string): string | undefined
   home: string
@@ -158,9 +169,13 @@ export async function readAgentDetails(
   const locations = configLocations(agentId, ctx.getEnv, ctx.home, ctx.platform)
   const installRoot =
     ctx.adapterVersion === null ? null : path.join(ctx.adaptersDir, agentId, ctx.adapterVersion)
-  const [config, cliVersion] = await Promise.all([
-    Promise.all(locations.map((location) => resolveItem(location, ctx.log))),
-    installRoot === null ? null : readCliVersion(agentId, installRoot, ctx.log),
+  const [items, version] = await Promise.all([
+    Promise.all(locations.map((location) => withLogs((log) => resolveItem(location, log)))),
+    withLogs(async (log) =>
+      installRoot === null ? null : readCliVersion(agentId, installRoot, log),
+    ),
   ])
-  return { cliVersion, config }
+  // The reads finish in any order; replay their logs in the order the page lists them.
+  for (const [, entries] of [...items, version]) for (const entry of entries) ctx.log(...entry)
+  return { cliVersion: version[0], config: items.map(([item]) => item) }
 }

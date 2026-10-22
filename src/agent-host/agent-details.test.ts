@@ -287,6 +287,7 @@ describe('readAgentDetails', () => {
       expect(config.map((item) => item.exists)).toEqual([true, false, false])
       expect(logs.map((entry) => entry.level)).toEqual(['warn', 'warn'])
       expect(logs[0]?.message).toContain(path.join(folder, 'settings.json'))
+      expect(logs[1]?.message).toContain(path.join(folder, 'CLAUDE.md'))
     } finally {
       await chmod(folder, 0o755)
     }
