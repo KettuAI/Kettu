@@ -380,7 +380,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
       <Group title={t('agents.usage')}>
         {status.limits.length > 0 ? (
           <div className="-mx-2.5">
-            <LimitsPart limits={status.limits} account={status.account} />
+            <LimitsPart limits={status.limits} account={status.account} heading={false} />
           </div>
         ) : reading && status.capabilities.reports ? (
           <p className="px-1 py-3 text-xs text-muted-foreground">{t('agents.readingUsage')}</p>

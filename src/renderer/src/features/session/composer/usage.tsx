@@ -332,32 +332,37 @@ export function LimitsPart({
   limits,
   account,
   agent,
+  heading = true,
 }: {
   limits: PlanLimit[]
   account: AgentAccount | null
   /** Names whose limits these are, where nothing around the popover does. */
   agent?: { id: AgentId; name: string }
+  /** The plan and the title above the windows, left out where the plan shows already. */
+  heading?: boolean
 }) {
   const { t } = useTranslation('composer')
   const now = useNow()
   const observed = limits.reduce((at, l) => Math.max(at, l.observedAt), 0)
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
-      <div className="flex items-baseline justify-between text-ui">
-        <span className="flex min-w-0 items-center gap-1.5 font-medium">
-          {agent && (
-            <>
-              <AgentMark agent={agent.id} size={13} />
-              <span>{agent.name}</span>
-              <span className="text-muted-foreground">·</span>
-            </>
+      {heading && (
+        <div className="flex items-baseline justify-between text-ui">
+          <span className="flex min-w-0 items-center gap-1.5 font-medium">
+            {agent && (
+              <>
+                <AgentMark agent={agent.id} size={13} />
+                <span>{agent.name}</span>
+                <span className="text-muted-foreground">·</span>
+              </>
+            )}
+            <span className="truncate">{account?.label ?? t('usage.limits.plan')}</span>
+          </span>
+          {limits.length > 0 && (
+            <span className="text-xs text-muted-foreground">{t('usage.limits.title')}</span>
           )}
-          <span className="truncate">{account?.label ?? t('usage.limits.plan')}</span>
-        </span>
-        {limits.length > 0 && (
-          <span className="text-xs text-muted-foreground">{t('usage.limits.title')}</span>
-        )}
-      </div>
+        </div>
+      )}
       {limits.length > 0 && (
         <ul className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2.5 gap-y-1.5 text-xs tabular">
           {limits.map((limit) => (
