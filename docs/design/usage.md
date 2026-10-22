@@ -186,7 +186,7 @@ Every state is designed with it: no data yet (with the offer to turn on **Usage 
 A **Usage** section in Settings:
 
 - **Usage on this computer**, off by default. Its description names the agents and the folders it reads. Turning it on starts the first import. While on, one row per agent shows its folder, the dates its history covers, when it last synced and how many requests it found, with **Sync now** and **Re-import**.
-- **Show in the sidebar**: what the sidebar's usage entry shows, plan limits or today's tokens. To be confirmed with the maintainer.
+- **Show in the sidebar**: what the end of the sidebar's **Usage** row shows: today's tokens (the default), the tightest plan limit, or nothing. Together with the plan limits on the page, this is how OverBench keeps the plan-limit checks the maintainer asked to keep (confirmed 2026-10-22).
 - **Clear OverBench's record**, after a confirmation.
 
 They are stored as `usage.fromComputer` and `usage.sidebar` in [settings](./persistence.md#settings).
