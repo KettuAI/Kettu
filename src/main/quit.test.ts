@@ -38,6 +38,7 @@ vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 const { describeWork, QuitFlow } = await import('./quit')
 
 class FakeContents extends EventEmitter {
+  id = 1
   sent: [string, unknown][] = []
   destroyed = false
   send(channel: string, payload: unknown): void {
@@ -66,6 +67,7 @@ class FakeWindow extends EventEmitter {
 
 const session = { sessionId: 's1', agentId: 'codex' as const, title: 'Fix the flaky test' }
 const terminal = { id: 't1', projectPath: '/p', title: 'node' }
+const unsaved = { projectPath: '/p', path: 'src/a.ts' }
 
 function setup(options: { busy?: boolean; confirm?: boolean; window?: boolean } = {}) {
   const settings: SettingsFile = structuredClone(DEFAULT_SETTINGS)
@@ -124,6 +126,7 @@ describe('QuitFlow', () => {
       reason: 'quit',
       sessions: [session],
       terminals: [terminal],
+      unsaved: [],
     })
     expect(calls).toEqual([])
     flow.respond(1, true)
@@ -225,6 +228,59 @@ describe('QuitFlow', () => {
     expect(calls).toEqual(['shutDown', 'installUpdate'])
     expect(electron.app.quit).not.toHaveBeenCalled()
   })
+
+  it('asks about unsaved files whatever the setting says, until the page goes away', async () => {
+    const { flow, window, calls, beforeQuit, question } = setup({ confirm: false })
+    flow.setUnsaved(window.webContents as never, [unsaved])
+    beforeQuit()
+    await settle()
+    expect(question()).toMatchObject({ reason: 'quit', sessions: [], unsaved: [unsaved] })
+    flow.respond(1, false)
+    await settle()
+    expect(calls).toEqual([])
+    window.webContents.emit('destroyed')
+    beforeQuit()
+    await settle()
+    expect(calls).toEqual(['shutDown'])
+  })
+
+  it('names unsaved files when it asks natively', async () => {
+    electron.dialog.showMessageBox.mockResolvedValue({ response: 1 })
+    const { flow, window, calls, beforeQuit } = setup()
+    flow.setUnsaved(window.webContents as never, [unsaved])
+    electron.windows = []
+    beforeQuit()
+    await settle()
+    await settle()
+    expect(electron.dialog.showMessageBox.mock.calls[0][0]).toMatchObject({
+      detail: '1 file has unsaved changes: a.ts.\nQuitting loses them.',
+      buttons: ['Cancel', 'Quit without saving'],
+    })
+    expect(calls).toEqual(['shutDown'])
+  })
+
+  // On macOS closing the window keeps the app running, but drops the page's unsaved edits.
+  it.runIf(process.platform === 'darwin')(
+    'asks before closing a window with unsaved files, and closes it once confirmed',
+    async () => {
+      const { flow, window, calls, question } = setup()
+      const close = vi.fn(() => window.emit('close', { preventDefault: () => {} }))
+      Object.assign(window, { close })
+      flow.watchWindow(window as never)
+      let prevented = false
+      window.emit('close', { preventDefault: () => (prevented = true) })
+      expect(prevented).toBe(false)
+      flow.setUnsaved(window.webContents as never, [unsaved])
+      window.emit('close', { preventDefault: () => (prevented = true) })
+      await settle()
+      expect(prevented).toBe(true)
+      expect(question()).toMatchObject({ reason: 'close', unsaved: [unsaved] })
+      flow.respond(1, true)
+      await settle()
+      expect(close).toHaveBeenCalledOnce()
+      expect(calls).toEqual([])
+    },
+  )
 
   // Closing the last window only closes it on macOS, where the app keeps running.
   it.skipIf(process.platform === 'darwin')(

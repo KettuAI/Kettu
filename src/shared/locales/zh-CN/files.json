@@ -33,9 +33,50 @@
     "tooLargeTitle": "文件过大，无法预览",
     "tooLargeDescription": "{{size}}；预览仅支持不超过 {{limit}} 的文件。",
     "imageFailedTitle": "无法显示此图片",
-    "imageFailedDescription": "{{size}}；图片数据无法解码。"
+    "imageFailedDescription": "{{size}}；图片数据无法解码。",
+    "unsaved": "有未保存的更改",
+    "save": "保存",
+    "changedOnDisk": "这个文件在磁盘上被改动了。",
+    "reload": "重新载入",
+    "keepMine": "保留我的",
+    "saveFailed": "无法保存：{{message}}",
+    "readOnly": "只读：这个文件不是有效的 UTF-8，保存可能改变它的字节。"
   },
   "link": {
     "open": "打开 {{target}}"
+  },
+  "unsaved": {
+    "title": "要保存对 {{name}} 的更改吗？",
+    "description": "不保存的话，你的更改会丢失。",
+    "dontSave": "不保存",
+    "save": "保存"
+  },
+  "editor": {
+    "find": "查找",
+    "replace": "替换",
+    "next": "下一个",
+    "previous": "上一个",
+    "all": "全部",
+    "matchCase": "区分大小写",
+    "regexp": "正则",
+    "byWord": "全词匹配",
+    "replaceOne": "替换",
+    "replaceAll": "全部替换",
+    "close": "关闭",
+    "currentMatch": "当前匹配",
+    "onLine": "位于行",
+    "replacedMatches": "已替换 $ 处",
+    "replacedMatchOnLine": "已替换第 $ 行的匹配",
+    "goToLine": "跳转到行",
+    "go": "跳转",
+    "foldLine": "折叠",
+    "unfoldLine": "展开",
+    "foldedLines": "已折叠",
+    "unfoldedLines": "已展开",
+    "to": "至",
+    "foldedCode": "折叠的代码",
+    "unfold": "展开",
+    "controlCharacter": "控制字符",
+    "completions": "补全"
   }
 }

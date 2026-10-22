@@ -20,6 +20,14 @@
     "comeBackUpdate": "Your sessions and drafts come back after the restart.",
     "comeBackQuit": "Your sessions and drafts come back when you open OverBench again.",
     "restart": "Restart",
-    "quit": "Quit"
+    "quit": "Quit",
+    "titleClose": "Close the window?",
+    "unsavedFiles": "These files have unsaved changes:",
+    "unsaved": "Unsaved",
+    "dontSave": "Don't save",
+    "saveAndQuit": "Save and quit",
+    "saveAndRestart": "Save and restart",
+    "saveAndClose": "Save and close",
+    "saveFailed": "Some files couldn't be saved; the Files pane shows why."
   }
 }

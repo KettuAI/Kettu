@@ -34,9 +34,50 @@
     "tooLargeTitle": "Too large to preview",
     "tooLargeDescription": "{{size}}; the preview shows files up to {{limit}}.",
     "imageFailedTitle": "Couldn't show this image",
-    "imageFailedDescription": "{{size}}; its data does not decode as a picture."
+    "imageFailedDescription": "{{size}}; its data does not decode as a picture.",
+    "unsaved": "Unsaved changes",
+    "save": "Save",
+    "changedOnDisk": "This file changed on disk.",
+    "reload": "Reload",
+    "keepMine": "Keep mine",
+    "saveFailed": "Couldn't save: {{message}}",
+    "readOnly": "Read-only: this file isn't valid UTF-8, so saving it could change its bytes."
   },
   "link": {
     "open": "Open {{target}}"
+  },
+  "unsaved": {
+    "title": "Save changes to {{name}}?",
+    "description": "Your changes are lost if you don't save them.",
+    "dontSave": "Don't save",
+    "save": "Save"
+  },
+  "editor": {
+    "find": "Find",
+    "replace": "Replace",
+    "next": "Next",
+    "previous": "Previous",
+    "all": "All",
+    "matchCase": "Match case",
+    "regexp": "Regex",
+    "byWord": "Whole word",
+    "replaceOne": "Replace",
+    "replaceAll": "Replace all",
+    "close": "Close",
+    "currentMatch": "current match",
+    "onLine": "on line",
+    "replacedMatches": "Replaced $ matches",
+    "replacedMatchOnLine": "Replaced the match on line $",
+    "goToLine": "Go to line",
+    "go": "Go",
+    "foldLine": "Fold line",
+    "unfoldLine": "Unfold line",
+    "foldedLines": "Folded lines",
+    "unfoldedLines": "Unfolded lines",
+    "to": "to",
+    "foldedCode": "folded code",
+    "unfold": "unfold",
+    "controlCharacter": "Control character",
+    "completions": "Completions"
   }
 }

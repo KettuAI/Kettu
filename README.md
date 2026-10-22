@@ -26,7 +26,7 @@ with readable threads, clear approvals, git and a terminal beside every session.
 - **Approvals at a glance** — permission requests are cards you answer with a click or a number key, and a system notification tells you when a session needs you.
 - **Each agent's own controls** — mode, model and reasoning, slash commands, context usage and, where the agent reports them, your plan limits.
 - **Sessions that last** — every session is kept with its project, reopens with its full history, survives an agent crash, and can be imported from the agent.
-- **Git, files and a terminal** — the branch, sync state and changes in the top bar, pull requests with their checks through the GitHub CLI, a files pane, and a terminal for each project.
+- **Git, files and a terminal** — the branch, sync state and changes in the top bar, pull requests with their checks through the GitHub CLI, a files pane to read and edit files, and a terminal for each project.
 - **Crafted details** — light and dark themes, English and Simplified Chinese, restrained motion that honors reduce motion, and shortcuts for the common actions.
 
 ## Install

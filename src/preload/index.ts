@@ -74,6 +74,7 @@ const api: OverbenchApi = {
       }
     },
     reportInteractive: () => send('perf:interactive'),
+    setUnsaved: (files) => send('app:set-unsaved', files),
     perfMetrics: () => invoke('perf:metrics'),
   },
   settings: {

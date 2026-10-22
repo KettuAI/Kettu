@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, type WebContents } from 'electron'
 import type { BusySession, BusyTerminal } from '@shared/host-control'
-import type { QuitRequest } from '@shared/ipc'
+import type { QuitRequest, UnsavedFile } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
 import { sendEvent } from './events'
 import { t } from './i18n'
@@ -23,6 +23,7 @@ export interface QuitDeps {
 }
 
 type Phase = 'idle' | 'asking' | 'stopping' | 'done'
+type QuitReason = Exclude<QuitRequest['reason'], 'close'>
 
 interface PendingAnswer {
   request: QuitRequest
@@ -32,13 +33,18 @@ interface PendingAnswer {
 
 /**
  * Every way out of the app, including a restart to update: ask when agents or terminal
- * commands are running, then stop the hosts cleanly and flush state before quitting.
+ * commands are running or files have unsaved edits, then stop the hosts cleanly and flush state
+ * before quitting. On macOS it also asks before a window with unsaved edits closes.
  */
 export class QuitFlow {
   private phase: Phase = 'idle'
   private nextId = 1
   private pending: PendingAnswer | null = null
   private systemShuttingDown = false
+  /** Each page's files with unsaved edits, as it last said. */
+  private readonly unsaved = new Map<number, UnsavedFile[]>()
+  /** A window the user agreed to close with its unsaved edits. */
+  private closing: BrowserWindow | null = null
 
   constructor(private readonly deps: QuitDeps) {
     app.on('before-quit', (event) => {
@@ -52,7 +58,7 @@ export class QuitFlow {
     return this.phase === 'done'
   }
 
-  request(reason: QuitRequest['reason']): void {
+  request(reason: QuitReason): void {
     if (this.phase !== 'idle') return
     void this.run(reason).catch((error: unknown) => {
       log.error('Quit failed; quitting anyway', error)
@@ -73,9 +79,21 @@ export class QuitFlow {
     void this.askNatively(this.pending)
   }
 
-  /** On Windows and Linux, closing the last window quits, so it goes through the flow first. */
+  /**
+   * On Windows and Linux, closing the last window quits, so it goes through the flow first. On
+   * macOS the app stays, but the page's unsaved edits would go, so that asks first.
+   */
   watchWindow(window: BrowserWindow): void {
-    if (process.platform === 'darwin') return
+    if (process.platform === 'darwin') {
+      window.on('close', (event) => {
+        if (this.phase === 'done' || this.closing === window) return
+        if (this.unsaved.get(window.webContents.id)?.length) {
+          event.preventDefault()
+          void this.confirmClose(window)
+        }
+      })
+      return
+    }
     window.on('close', (event) => {
       if (this.phase === 'done') return
       if (BrowserWindow.getAllWindows().filter((other) => !other.isDestroyed()).length > 1) return
@@ -84,20 +102,56 @@ export class QuitFlow {
     })
   }
 
+  /** A page's files with unsaved edits; they count until it changes them or goes away. */
+  setUnsaved(webContents: WebContents, files: UnsavedFile[]): void {
+    if (!this.unsaved.has(webContents.id)) {
+      webContents.once('destroyed', () => this.unsaved.delete(webContents.id))
+    }
+    this.unsaved.set(webContents.id, files)
+  }
+
+  private unsavedFiles(): UnsavedFile[] {
+    return [...this.unsaved.values()].flat()
+  }
+
   /** The system is going down: no question would get an answer in time. */
   systemShutdown(): void {
     this.systemShuttingDown = true
   }
 
-  private async run(reason: QuitRequest['reason']): Promise<void> {
+  private async confirmClose(window: BrowserWindow): Promise<void> {
+    if (this.phase !== 'idle') return
     this.phase = 'asking'
-    if (this.deps.settings().general.confirmQuitWhileRunning && !this.systemShuttingDown) {
-      const [sessions, terminals] = await Promise.all([
-        this.deps.busySessions(BUSY_TIMEOUT_MS),
-        this.deps.busyTerminals(BUSY_TIMEOUT_MS),
-      ])
-      if (sessions.length > 0 || terminals.length > 0) {
-        const confirmed = await this.ask({ id: this.nextId++, reason, sessions, terminals })
+    const unsaved = this.unsaved.get(window.webContents.id) ?? []
+    const confirmed = await this.ask(
+      { id: this.nextId++, reason: 'close', sessions: [], terminals: [], unsaved },
+      window,
+    )
+    this.phase = 'idle'
+    if (!confirmed || window.isDestroyed()) return
+    this.closing = window
+    window.close()
+  }
+
+  private async run(reason: QuitReason): Promise<void> {
+    this.phase = 'asking'
+    if (!this.systemShuttingDown) {
+      // Unsaved edits are lost on quitting, so they ask whatever the setting says.
+      const unsaved = this.unsavedFiles()
+      const [sessions, terminals] = this.deps.settings().general.confirmQuitWhileRunning
+        ? await Promise.all([
+            this.deps.busySessions(BUSY_TIMEOUT_MS),
+            this.deps.busyTerminals(BUSY_TIMEOUT_MS),
+          ])
+        : [[], []]
+      if (sessions.length > 0 || terminals.length > 0 || unsaved.length > 0) {
+        const confirmed = await this.ask({
+          id: this.nextId++,
+          reason,
+          sessions,
+          terminals,
+          unsaved,
+        })
         if (!confirmed) {
           log.info(`${reason === 'update' ? 'Restart' : 'Quit'} cancelled`)
           this.phase = 'idle'
@@ -118,9 +172,9 @@ export class QuitFlow {
     }
   }
 
-  private ask(request: QuitRequest): Promise<boolean> {
+  private ask(request: QuitRequest, target?: BrowserWindow): Promise<boolean> {
     return new Promise((resolve) => {
-      const window = currentWindow()
+      const window = target ?? currentWindow()
       const webContents = window && !window.webContents.isDestroyed() ? window.webContents : null
       // A page that goes away mid-question cannot answer; fall back to a native dialog.
       const fallBack = (): void => {
@@ -160,14 +214,18 @@ export class QuitFlow {
 
   private async askNatively(pending: PendingAnswer): Promise<void> {
     pending.webContents = null
-    const { reason, sessions, terminals } = pending.request
-    const update = reason === 'update'
+    const { reason, sessions, terminals, unsaved } = pending.request
     const window = currentWindow()
     const options: Electron.MessageBoxOptions = {
       type: 'warning',
-      message: update ? t('quit.titleUpdate') : t('quit.titleQuit', { name: app.name }),
-      detail: describeWork(sessions, terminals, update),
-      buttons: [t('quit.cancel'), update ? t('quit.restart') : t('quit.quit')],
+      message:
+        reason === 'update'
+          ? t('quit.titleUpdate')
+          : reason === 'close'
+            ? t('quit.titleClose')
+            : t('quit.titleQuit', { name: app.name }),
+      detail: describeWork(sessions, terminals, reason === 'update', unsaved, reason),
+      buttons: [t('quit.cancel'), confirmLabel(reason, unsaved.length > 0)],
       cancelId: 0,
       defaultId: 1,
       noLink: true,
@@ -179,10 +237,18 @@ export class QuitFlow {
   }
 }
 
+function confirmLabel(reason: QuitRequest['reason'], unsaved: boolean): string {
+  if (reason === 'close') return t('quit.closeWithoutSaving')
+  if (reason === 'update') return unsaved ? t('quit.restartWithoutSaving') : t('quit.restart')
+  return unsaved ? t('quit.quitWithoutSaving') : t('quit.quit')
+}
+
 export function describeWork(
   sessions: BusySession[],
   terminals: BusyTerminal[],
   update: boolean,
+  unsaved: UnsavedFile[] = [],
+  reason: QuitRequest['reason'] = update ? 'update' : 'quit',
 ): string {
   const lines: string[] = []
   const separator = t('quit.listSeparator')
@@ -196,6 +262,17 @@ export function describeWork(
       t('quit.terminalsRunning', { count: terminals.length, names: names.join(separator) }),
     )
   }
-  lines.push(update ? t('quit.stopsForUpdate') : t('quit.stops'))
+  if (lines.length > 0) lines.push(update ? t('quit.stopsForUpdate') : t('quit.stops'))
+  if (unsaved.length > 0) {
+    const names = unsaved.map((file) => file.path.slice(file.path.lastIndexOf('/') + 1))
+    lines.push(t('quit.filesUnsaved', { count: unsaved.length, names: names.join(separator) }))
+    lines.push(
+      reason === 'close'
+        ? t('quit.losesOnClose')
+        : reason === 'update'
+          ? t('quit.losesOnRestart')
+          : t('quit.losesOnQuit'),
+    )
+  }
   return lines.join('\n')
 }

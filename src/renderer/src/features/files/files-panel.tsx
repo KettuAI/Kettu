@@ -38,6 +38,7 @@ import { loadFiles, openFile, refreshFiles, useFilesStore } from '@renderer/stor
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { FilePreview } from './file-preview'
 import { FileTypeIcon } from './file-type-icon'
+import { UnsavedPrompt } from './unsaved-prompt'
 import {
   filterPaths,
   folderOf,
@@ -183,6 +184,7 @@ export default function FilesPanel({
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
+      <UnsavedPrompt projectPath={projectPath} />
     </div>
   )
 }

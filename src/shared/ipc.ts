@@ -17,12 +17,22 @@ export interface AppInfo {
   isPackaged: boolean
 }
 
-/** What main asks the focused window to confirm before it quits or restarts to update. */
+/** A file the Files pane holds unsaved edits for, by its project and its path in it. */
+export interface UnsavedFile {
+  projectPath: string
+  path: string
+}
+
+/**
+ * What main asks a window to confirm before it quits, restarts to update or, on macOS, closes
+ * with unsaved files.
+ */
 export interface QuitRequest {
   id: number
-  reason: 'quit' | 'update'
+  reason: 'quit' | 'update' | 'close'
   sessions: BusySession[]
   terminals: BusyTerminal[]
+  unsaved: UnsavedFile[]
 }
 
 /** What a perf run (--overbench-perf) reads from main; see docs/design/testing.md. */
@@ -83,6 +93,8 @@ export interface IpcSendContract {
   'perf:interactive': []
   /** The page has no `onConfirmQuit` listener, so main asks with a native dialog instead. */
   'app:confirm-quit-unhandled': [id: number]
+  /** Every file with unsaved edits, whenever that changes, so quitting can ask without a round trip. */
+  'app:set-unsaved': [files: UnsavedFile[]]
 }
 
 /** Payload of `agent-host:reset` and `terminal-host:reset`. */
@@ -110,6 +122,7 @@ export interface OverbenchApi {
     getInfo(): Promise<AppInfo>
     respondQuit(id: number, confirmed: boolean): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
+    setUnsaved(files: UnsavedFile[]): void
     onCommand(listener: (command: AppCommand) => void): () => void
     reportInteractive(): void
     /** Only answers in a perf run; rejects otherwise. */

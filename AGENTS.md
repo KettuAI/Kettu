@@ -53,6 +53,7 @@ Approved for M0 and installed by the work package that first needs them: `@agent
 | Markdown                    | Streamdown, with `@streamdown/code` and `@streamdown/cjk` (M0.3)   |
 | Syntax highlighting         | Shiki (M0.3)                                                       |
 | Diffs                       | `@pierre/diffs` (M0.3)                                             |
+| Code editing                | CodeMirror 6 (`codemirror`), the Files pane's editor               |
 | Terminal                    | xterm.js in the renderer, `node-pty` in the terminal host (M0.5)   |
 | Localization                | i18next with react-i18next, catalogs in `src/shared/locales`       |
 

@@ -8,7 +8,13 @@ import {
   type IpcMainInvokeEvent,
   shell,
 } from 'electron'
-import type { AppInfo, IpcInvokeChannel, IpcInvokeResult, IpcSendContract } from '@shared/ipc'
+import type {
+  AppInfo,
+  IpcInvokeChannel,
+  IpcInvokeResult,
+  IpcSendContract,
+  UnsavedFile,
+} from '@shared/ipc'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
@@ -93,6 +99,23 @@ function absolutePath(value: unknown): string {
   if (value.includes('\0')) throw new Error('A path must not contain a NUL character')
   if (!isAbsolute(value)) throw new Error('A path must be absolute')
   return value
+}
+
+// One open file per project, so more than this many is not what the renderer sends.
+const UNSAVED_MAX_FILES = 1_000
+
+/** The renderer's files with unsaved edits, or null when they are not that shape. */
+function unsavedFiles(value: unknown): UnsavedFile[] | null {
+  if (!Array.isArray(value) || value.length > UNSAVED_MAX_FILES) return null
+  const files: UnsavedFile[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) return null
+    const { projectPath, path } = item as Record<string, unknown>
+    if (typeof projectPath !== 'string' || projectPath.length > SHOW_ITEM_MAX_CHARS) return null
+    if (typeof path !== 'string' || path.length > SHOW_ITEM_MAX_CHARS) return null
+    files.push({ projectPath, path })
+  }
+  return files
 }
 
 async function chooseProgram(window: BrowserWindow | null, title: string): Promise<string | null> {
@@ -221,6 +244,12 @@ export function registerIpcHandlers({
 
   on('app:confirm-quit-unhandled', (event, id) => {
     if (Number.isSafeInteger(id)) quit.unhandled(id as number, event.sender)
+  })
+
+  on('app:set-unsaved', (event, files) => {
+    const valid = unsavedFiles(files)
+    if (valid) quit.setUnsaved(event.sender, valid)
+    else log.warn('Rejected "app:set-unsaved" with malformed files')
   })
 
   on('perf:interactive', () => {

@@ -20,6 +20,14 @@
     "comeBackUpdate": "重启后，会话和草稿都会恢复。",
     "comeBackQuit": "再次打开 OverBench 时，会话和草稿都会恢复。",
     "restart": "重启",
-    "quit": "退出"
+    "quit": "退出",
+    "titleClose": "要关闭窗口吗？",
+    "unsavedFiles": "以下文件有未保存的更改：",
+    "unsaved": "未保存",
+    "dontSave": "不保存",
+    "saveAndQuit": "保存并退出",
+    "saveAndRestart": "保存并重启",
+    "saveAndClose": "保存并关闭",
+    "saveFailed": "有文件没能保存，原因见文件面板。"
   }
 }

@@ -53,6 +53,14 @@
     "stopsForUpdate": "重启会停止它们，重启后会话和草稿都会恢复。",
     "stops": "退出会停止它们。",
     "untitledSession": "未命名会话",
-    "listSeparator": "、"
+    "listSeparator": "、",
+    "titleClose": "要关闭窗口吗？",
+    "quitWithoutSaving": "不保存并退出",
+    "restartWithoutSaving": "不保存并重启",
+    "closeWithoutSaving": "不保存并关闭",
+    "filesUnsaved_other": "{{count}} 个文件有未保存的更改：{{names}}。",
+    "losesOnQuit": "退出会丢失这些更改。",
+    "losesOnRestart": "重启会丢失这些更改。",
+    "losesOnClose": "关闭窗口会丢失这些更改。"
   }
 }

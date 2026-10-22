@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, XIcon } from 'lucide-react'
+import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react'
+import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, SaveIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { File, Virtualizer, WorkerPoolContext } from '@pierre/diffs/react'
 import type { FileContent } from '@shared/files'
+import { Button } from '@renderer/components/ui/button'
 import {
   Empty,
   EmptyDescription,
@@ -12,16 +12,26 @@ import {
 } from '@renderer/components/ui/empty'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { CopyButton } from '@renderer/features/git/branch-popover'
-import { codeTheme, diffsPool } from '@renderer/features/session/markdown/diff-pool'
 import { PanelButton } from '@renderer/features/shell/panel-button'
-import { useDark } from '@renderer/hooks/use-dark'
 import { bytes } from '@renderer/lib/format'
+import { formatShortcut, isMod } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { Markdown } from '@renderer/features/session/markdown'
-import { closeFile, useFilesStore, type OpenFile } from '@renderer/stores/files'
+import {
+  buffers,
+  closeFile,
+  discardEdits,
+  keepEdits,
+  saveFile,
+  useFilesStore,
+  type OpenFile,
+} from '@renderer/stores/files'
 import { FileTypeIcon } from './file-type-icon'
 import { folderOf, nameOf } from './paths'
 
-/** The open file, highlighted on the diffs worker pool, or what stands in for it. */
+const CodeEditor = lazy(() => import('./code-editor'))
+
+/** The open file, in the editor, or what stands in for it. */
 export function FilePreview({ projectPath, file }: { projectPath: string; file: OpenFile | null }) {
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
@@ -40,13 +50,39 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
   }
   const folder = folderOf(file.path)
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div
+      data-file-preview=""
+      className="flex h-full min-h-0 flex-col bg-background"
+      // Anywhere in the pane, so it still saves after a click on one of the bars' buttons.
+      onKeyDown={(event) => {
+        if (!isMod(event) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 's')
+          return
+        event.preventDefault()
+        void saveFile(projectPath)
+      }}
+    >
       <div className="flex h-row shrink-0 items-center gap-1 border-b border-border-soft pr-1 pl-3 text-xs">
         <FileTypeIcon path={file.path} className="mr-1 size-4" />
         <span className="flex min-w-0 flex-1 items-baseline gap-1.5" title={file.path}>
           <span className="shrink-0 font-medium">{nameOf(file.path)}</span>
+          {file.dirty && (
+            <span
+              role="img"
+              aria-label={t('preview.unsaved')}
+              className="size-1.5 shrink-0 self-center rounded-full bg-foreground"
+            />
+          )}
           {folder && <span className="truncate text-muted-foreground">{folder}</span>}
         </span>
+        {file.dirty && (
+          <PanelButton
+            label={t('preview.save')}
+            shortcut={formatShortcut('Mod+S')}
+            onClick={() => void saveFile(projectPath)}
+          >
+            <SaveIcon />
+          </PanelButton>
+        )}
         {isMarkdown(file.path) && file.content?.kind === 'text' && (
           <PanelButton
             label={rendered(file, source) ? t('preview.showSource') : t('preview.showRendered')}
@@ -69,8 +105,9 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
           <XIcon />
         </PanelButton>
       </div>
+      <Notes projectPath={projectPath} file={file} />
       <div className="relative min-h-0 flex-1">
-        <Body file={file} />
+        <Body projectPath={projectPath} file={file} />
       </div>
     </div>
   )
@@ -82,20 +119,88 @@ const isMarkdown = (path: string) => /\.(md|markdown|mdx)$/i.test(path)
 const rendered = (file: OpenFile, source: boolean) =>
   isMarkdown(file.path) && !source && file.line === null
 
-function Body({ file }: { file: OpenFile }) {
+/** The text with its unsaved edits, when it has any. */
+function editedText(projectPath: string, file: OpenFile): string | null {
+  const buffer = buffers.get(projectPath)
+  return file.dirty && buffer?.path === file.path ? buffer.state.sliceDoc() : null
+}
+
+/** Bars under the header for what the open file's edits need to know. */
+function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
+  const { t } = useTranslation('files')
+  if (file.changedOnDisk) {
+    return (
+      <Bar tone="attention">
+        <span className="min-w-0 flex-1">{t('preview.changedOnDisk')}</span>
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={(event) => {
+            backToEditor(event.currentTarget)
+            discardEdits(projectPath)
+          }}
+        >
+          {t('preview.reload')}
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={(event) => {
+            backToEditor(event.currentTarget)
+            keepEdits(projectPath)
+          }}
+        >
+          {t('preview.keepMine')}
+        </Button>
+      </Bar>
+    )
+  }
+  if (file.saveError) {
+    return (
+      <Bar tone="error">
+        <span className="min-w-0 flex-1">
+          {t('preview.saveFailed', { message: file.saveError })}
+        </span>
+      </Bar>
+    )
+  }
+  if (file.content?.kind === 'text' && !file.content.editable) {
+    return (
+      <Bar tone="muted">
+        <span className="min-w-0 flex-1">{t('preview.readOnly')}</span>
+      </Bar>
+    )
+  }
+  return null
+}
+
+/** The bar goes once answered, and its button with it, so the text takes the focus back. */
+function backToEditor(from: HTMLElement): void {
+  from.closest('[data-file-preview]')?.querySelector<HTMLElement>('.cm-content')?.focus()
+}
+
+function Bar({ tone, children }: { tone: 'attention' | 'error' | 'muted'; children: ReactNode }) {
+  return (
+    <div
+      role={tone === 'muted' ? undefined : 'status'}
+      className={cn(
+        'flex min-h-row shrink-0 items-center gap-1.5 border-b border-border-soft py-1 pr-1.5 pl-3 text-xs',
+        tone === 'attention' && 'bg-attention-tint text-attention-text',
+        tone === 'error' && 'bg-destructive-tint text-destructive',
+        tone === 'muted' && 'text-muted-foreground',
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+function Body({ projectPath, file }: { projectPath: string; file: OpenFile }) {
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
   const { content, error } = file
   if (error && !content) return <Notice title={t('preview.openFailed')} description={error} />
-  if (!content) {
-    return (
-      <div className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-3 w-3/5" />
-        <Skeleton className="h-3 w-4/5" />
-        <Skeleton className="h-3 w-2/5" />
-      </div>
-    )
-  }
+  if (!content) return <Lines />
   if (content.kind === 'binary') {
     return (
       <Notice
@@ -122,11 +227,28 @@ function Body({ file }: { file: OpenFile }) {
         className="absolute inset-0 overflow-y-auto overscroll-contain px-6 py-5"
         data-selectable=""
       >
-        <Markdown markdown={content.text} className="mx-auto max-w-[42em]" />
+        <Markdown
+          markdown={editedText(projectPath, file) ?? content.text}
+          className="mx-auto max-w-[42em]"
+        />
       </div>
     )
   }
-  return <Code content={content} line={file.line} />
+  return (
+    <Suspense fallback={<Lines />}>
+      <CodeEditor projectPath={projectPath} file={file} content={content} />
+    </Suspense>
+  )
+}
+
+function Lines() {
+  return (
+    <div className="flex flex-col gap-2 p-4">
+      <Skeleton className="h-3 w-3/5" />
+      <Skeleton className="h-3 w-4/5" />
+      <Skeleton className="h-3 w-2/5" />
+    </div>
+  )
 }
 
 /**
@@ -184,71 +306,3 @@ function Notice({ title, description }: { title: string; description: string }) 
     </Empty>
   )
 }
-
-function Code({
-  content,
-  line,
-}: {
-  content: Extract<FileContent, { kind: 'text' }>
-  line: number | null
-}) {
-  const dark = useDark()
-  const box = useRef<HTMLDivElement>(null)
-  const file = useMemo(
-    () => ({ name: content.path, contents: content.text }),
-    [content.path, content.text],
-  )
-  const options = useMemo(
-    () => ({
-      theme: codeTheme,
-      themeType: dark ? ('dark' as const) : ('light' as const),
-      overflow: 'wrap' as const,
-      disableFileHeader: true,
-      preferredHighlighter: 'shiki-js' as const,
-    }),
-    [dark],
-  )
-  const selected = useMemo(() => (line ? { start: line, end: line } : null), [line])
-
-  // Brings the line into view once it is rendered; the virtualizer renders it only near the view.
-  useEffect(() => {
-    const scroller = box.current?.firstElementChild
-    if (!line || !(scroller instanceof HTMLElement)) return
-    let frame = 0
-    let tries = 0
-    const find = () => {
-      const root = scroller.querySelector('diffs-container')?.shadowRoot
-      const row = root?.querySelector(`[data-line="${line}"]`)
-      if (row instanceof HTMLElement) {
-        row.scrollIntoView({ block: 'center' })
-        return
-      }
-      // Not rendered yet: move to where it should be, then, since wrapped lines differ in height,
-      // step toward it from the lines that are rendered.
-      const shown = Array.from(root?.querySelectorAll('[data-line]') ?? [], (el) =>
-        Number(el.getAttribute('data-line')),
-      )
-      if (tries === 0 || shown.length === 0) {
-        scroller.scrollTop = Math.max(0, (line - 1) * LINE_ESTIMATE - scroller.clientHeight / 2)
-      } else {
-        scroller.scrollTop += (line > Math.max(...shown) ? 1 : -1) * scroller.clientHeight
-      }
-      if (++tries < 60) frame = requestAnimationFrame(find)
-    }
-    frame = requestAnimationFrame(find)
-    return () => cancelAnimationFrame(frame)
-  }, [line, content.path])
-
-  return (
-    <div ref={box} className="absolute inset-0">
-      <WorkerPoolContext.Provider value={diffsPool}>
-        <Virtualizer className="h-full overflow-auto">
-          <File file={file} options={options} selectedLines={selected} className="file-preview" />
-        </Virtualizer>
-      </WorkerPoolContext.Provider>
-    </div>
-  )
-}
-
-// The diffs library's estimate for a row before it is measured.
-const LINE_ESTIMATE = 20

@@ -29,6 +29,7 @@ Each concern has exactly one library. Build with these instead of adding an alte
 | Markdown                    | [Streamdown](https://streamdown.ai), with `@streamdown/code` and `@streamdown/cjk` (from M0.3)                        |
 | Syntax highlighting         | [Shiki](https://shiki.style) (from M0.3)                                                                              |
 | Diffs                       | [Diffs](https://diffs.com) (`@pierre/diffs`, from M0.3)                                                               |
+| Code editing                | [CodeMirror 6](https://codemirror.net) (`codemirror`), in the Files pane                                              |
 | Terminal                    | [xterm.js](https://xtermjs.org) (`@xterm/xterm`) in the renderer, `node-pty` in the terminal host (from M0.5)         |
 | Localization                | [i18next](https://www.i18next.com) with [react-i18next](https://react.i18next.com)                                    |
 
@@ -38,7 +39,7 @@ Each concern has exactly one library. Build with these instead of adding an alte
 - **Layout**: build split and resizable layouts from `ResizablePanelGroup`, `ResizablePanel` and `ResizableHandle` in `components/ui/resizable.tsx`.
 - **Drag and drop**: use `@dnd-kit/react`, the current dnd-kit API, not the legacy `@dnd-kit/core` and `@dnd-kit/sortable` packages. It is still on 0.x, so read its changelog before bumping the minor version.
 - **Markdown**: render agent text with Streamdown, in `streaming` mode while it streams and `static` mode afterwards, with `skipHtml` on. Never render agent output with `dangerouslySetInnerHTML`.
-- **Code and diffs**: highlight only with Shiki, through the shadcn `code-block` component, Streamdown's code plugin and `@pierre/diffs`. Render diffs with `@pierre/diffs` and its worker pool.
+- **Code and diffs**: highlight only with Shiki, through the shadcn `code-block` component, Streamdown's code plugin and `@pierre/diffs`. Render diffs with `@pierre/diffs` and its worker pool. The one exception is the Files pane's editor, CodeMirror 6, which highlights with its own Lezer grammars in GitHub's colours (`@uiw/codemirror-theme-github`) and loads with dynamic `import()` the first time a file opens ([Files](./docs/design/ui.md#files)).
 - **Terminal**: render terminals with xterm.js and its fit, webgl and web-links addons, imported with dynamic `import()` the first time a terminal opens. Pseudo-terminals live only in the terminal host, through `node-pty`; main and the renderer never spawn a shell ([terminal design](./docs/design/terminal.md)).
 - **Text**: every word the interface shows goes through i18next, in English and Simplified Chinese, with keys in `src/shared/locales/<locale>/<namespace>.json`; `pnpm test` fails when the two languages differ. Write whole sentences with placeholders, call `useTranslation()` in each component that shows text, and follow the [localization design](./docs/design/localization.md#writing-messages) and its Chinese glossary.
 - **State**: keep state in React when only one component or a small subtree needs it. State shared across the app lives in Zustand stores under `src/renderer/src/stores`, one store per domain. Read it through selectors such as `useSessionStore((s) => s.activeId)` so components re-render only when the values they use change.

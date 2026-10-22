@@ -55,6 +55,15 @@
     "stopsForUpdate": "They stop for the restart. Your sessions and drafts come back after it.",
     "stops": "Quitting stops them.",
     "untitledSession": "Untitled session",
-    "listSeparator": ", "
+    "listSeparator": ", ",
+    "titleClose": "Close the window?",
+    "quitWithoutSaving": "Quit without saving",
+    "restartWithoutSaving": "Restart without saving",
+    "closeWithoutSaving": "Close without saving",
+    "filesUnsaved_one": "{{count}} file has unsaved changes: {{names}}.",
+    "filesUnsaved_other": "{{count}} files have unsaved changes: {{names}}.",
+    "losesOnQuit": "Quitting loses them.",
+    "losesOnRestart": "Restarting loses them.",
+    "losesOnClose": "Closing the window loses them."
   }
 }
