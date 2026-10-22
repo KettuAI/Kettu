@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   agentsFile,
   corruptName,
@@ -126,8 +126,11 @@ describe('JsonFile', () => {
     const file = path.join(dir, 'doc.json')
     const store = make(file, 10)
     store.save({ version: 1, value: 7 })
-    await new Promise((resolve) => setTimeout(resolve, 60))
-    expect(JSON.parse(await readFile(file, 'utf8')).value).toBe(7)
+    // The write syncs to disk, which a busy Windows runner can take well over 50 ms to finish.
+    await vi.waitFor(async () => expect(JSON.parse(await readFile(file, 'utf8')).value).toBe(7), {
+      timeout: 5_000,
+      interval: 20,
+    })
   })
 
   it('moves a corrupt file aside, logs it and starts empty', async () => {
