@@ -30,6 +30,12 @@ mac:
     - dmg
     - zip
   entitlementsInherit: build/entitlements.mac.plist
+  # No Developer ID yet. Left unsigned, a downloaded build is reported as damaged; an ad-hoc
+  # signature keeps the bundle valid, so Gatekeeper offers Open Anyway instead. The hardened
+  # runtime would refuse to load the ad-hoc signed Electron framework (no Team ID), so it stays
+  # off until a Developer ID signs the app.
+  identity: '-'
+  hardenedRuntime: false
   notarize: false
   files:
     - '!node_modules/node-pty/prebuilds/win32-*{,/**/*}'

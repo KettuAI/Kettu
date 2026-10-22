@@ -20,7 +20,7 @@ jobs:
         include:
           - os: macos-latest
             target: --mac
-            # Unsigned macOS builds cannot replace themselves; the update links to the release.
+            # Without a Developer ID, macOS builds cannot replace themselves; the update links to the release.
             update_mode: link
           - os: windows-latest
             target: --win

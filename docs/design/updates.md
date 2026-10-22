@@ -22,13 +22,13 @@ The updater lives in main (`src/main/updater.ts`), because installing means quit
 
 ## Platforms
 
-| Platform | Package                              | Mode    | How the update installs                                                                 |
-| -------- | ------------------------------------ | ------- | --------------------------------------------------------------------------------------- |
-| macOS    | `dmg` and `zip`, Developer ID signed | Install | Squirrel.Mac checks the new bundle's signature and swaps it in on restart               |
-| macOS    | Unsigned, as M0 builds are           | Link    | Squirrel.Mac refuses unsigned apps, so the update opens the release page to download it |
-| Windows  | NSIS, per user                       | Install | The new installer runs silently on restart and starts the app again                     |
-| Linux    | AppImage                             | Install | The AppImage file is replaced and started again                                         |
-| Linux    | Not started from an AppImage         | Off     | Settings › About says that updates come from the package manager                        |
+| Platform | Package                              | Mode    | How the update installs                                                                               |
+| -------- | ------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------- |
+| macOS    | `dmg` and `zip`, Developer ID signed | Install | Squirrel.Mac checks the new bundle's signature and swaps it in on restart                             |
+| macOS    | Ad-hoc signed, as M0 builds are      | Link    | Squirrel.Mac refuses apps without a Developer ID, so the update opens the release page to download it |
+| Windows  | NSIS, per user                       | Install | The new installer runs silently on restart and starts the app again                                   |
+| Linux    | AppImage                             | Install | The AppImage file is replaced and started again                                                       |
+| Linux    | Not started from an AppImage         | Off     | Settings › About says that updates come from the package manager                                      |
 
 - **Link** mode checks and tells you like Install mode, but the action opens the release page in the browser, because the app cannot replace itself. Code signing and notarization are planned after M0 ([scope](../milestones/m0.md#out-planned-for-later-milestones)); a signed build switches to Install with no other change.
 - The release workflow decides the mode at build time and electron-vite inlines it as a constant, so the app never has to inspect its own signature: `MAIN_VITE_UPDATE_MODE` is `install` or `link`. Without it, macOS builds link and the others install, so a local `pnpm package` behaves like a release; a signed macOS build sets `install`.
@@ -38,6 +38,7 @@ The updater lives in main (`src/main/updater.ts`), because installing means quit
 
 - CI builds every platform on a version tag and uploads the installers with `latest.yml`, `latest-mac.yml` and `latest-linux.yml` to a **draft** release. No client sees it until the maintainer publishes the draft.
 - `.github/workflows/release.yml` runs on `v*` tags on macOS, Windows and Linux. It fails unless the tag equals `v` plus the version in `package.json`, runs the tests, builds with `MAIN_VITE_UPDATE_MODE` set per platform (`link` on macOS), and runs `electron-builder --publish always` with the workflow's `GITHUB_TOKEN`. electron-builder's `publish` section (`provider: github`, `owner: overbench`, `repo: overbench`, `releaseType: draft`) names the release and writes `app-update.yml` into the app. Signing identities are not looked up yet (`CSC_IDENTITY_AUTO_DISCOVERY=false`).
+- Until a Developer ID signs them, macOS builds are ad-hoc signed without the hardened runtime (`identity: '-'` and `hardenedRuntime: false` in `electron-builder.yml`). A build left unsigned has an invalid bundle signature, which macOS reports as damaged with no way to open it; an ad-hoc signed one is valid, so Gatekeeper offers **Open Anyway** in System Settings › Privacy & Security. The hardened runtime refuses to load the ad-hoc signed Electron framework, whose signature has no Team ID, so it comes back together with the Developer ID.
 - Versions are semver. Releases marked as pre-release on GitHub are never offered (`allowPrerelease: false`) and an older version never replaces a newer one (`allowDowngrade: false`). A beta channel comes later.
 
 ## Checking and downloading
@@ -124,7 +125,7 @@ Calls from the renderer to main, added as described in [AGENTS.md](../../AGENTS.
 ## Alternatives considered
 
 - **Electron's built-in `autoUpdater`**, alone or with update.electronjs.org: it needs Squirrel.Windows instead of NSIS, has no Linux support and reports no download progress. Rejected.
-- **Checking the GitHub API and only linking to the download**: no dependency, and it works unsigned everywhere, but every update becomes a manual reinstall. It remains the Link mode for unsigned macOS builds only.
+- **Checking the GitHub API and only linking to the download**: no dependency, and it works unsigned everywhere, but every update becomes a manual reinstall. It remains the Link mode for macOS builds without a Developer ID only.
 - **A modal dialog or an OS notification when an update is ready**: interrupts work for something that can wait until the next pause. Rejected; the notice stays inside the window.
 - **Other places for the notice**: a control at the right end of the top bar, as in Zed; a badge on **Settings**, as in VS Code; a card that rises above the sidebar footer. The footer row won: it uses the place the sign-in notice already has, leaves the top bar to the project, and restarts in one click.
 - **Restarting by itself when idle**: an update should never change the app under the user without a choice. Rejected.
