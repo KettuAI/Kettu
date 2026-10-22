@@ -1,53 +1,44 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, ChevronDownIcon, FolderIcon } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { ArrowUpIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { Project } from '@shared/agent-host'
+import type { Project, SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { addProjectFromDialog, createSession, warmAgent } from '@renderer/app/actions'
+import { createSession, warmAgent } from '@renderer/app/actions'
 import { onAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Combobox,
-  ComboboxCollection,
-  ComboboxContent,
-  ComboboxGroup,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxLabel,
-  ComboboxList,
-  ComboboxSeparator,
-  ComboboxTrigger,
-  useComboboxFilter,
-} from '@renderer/components/ui/combobox'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from '@renderer/components/ui/input-group'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { OptionMenu } from '@renderer/features/session/composer/control-row'
+import type { SelectOption } from '@renderer/features/session/composer/levels'
+import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { errorMessage } from '@renderer/lib/host'
+import { basename, limitLabel, resetTime, shortAgo } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
-import { agentName, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { useNow } from '@renderer/lib/use-now'
+import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { agentName, isInstalled, useAgentsStore } from '@renderer/stores/agents'
+import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { isScratchFolder, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { chooseNewSessionProject, useViewStore } from '@renderer/stores/view'
+import { openSession, useViewStore } from '@renderer/stores/view'
 import { flushDraft, NEW_SESSION_DRAFT, readDraft, writeDraft } from './composer/drafts'
-import { nameHints } from './project-names'
+import { AgentMenu } from './new-session/agent-menu'
+import { ProjectMenu } from './new-session/project-menu'
+import { startValues } from './new-session/start-options'
+import { useStartConfig } from './new-session/use-start-config'
 
 /**
- * The New session screen: a composer with the project, or No project, and the agent to start in.
- * The session is created on the first send, which also sends the message.
+ * The New session screen: where to work, which agent and model, and the first message, all in one
+ * composer under a heading, with the sessions used last below it. The session is created on the
+ * first send, which also sends the message.
  */
 export function NewSessionView({
   project,
@@ -63,19 +54,11 @@ export function NewSessionView({
     return !!status && isInstalled(status)
   })
   const agentId = installed ? chosenId : null
-  const name = agentId ? agentName(agentId) : null
-  const usable = noProject || (!!project && !project.missing)
 
   // The agent starts while the message is written; the first send then waits for the session only.
   useEffect(() => {
     if (agentId) warmAgent(agentId)
   }, [agentId])
-
-  let line
-  if (!project && !noProject) line = t('newSession.chooseProject')
-  else if (project?.missing) line = t('newSession.projectMissing', { project: project.name })
-  else if (!name) line = t('newSession.chooseAgent')
-  else line = t('newSession.whatToWorkOn', { agent: name })
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -86,21 +69,14 @@ export function NewSessionView({
         <span className="flex-1" />
         {project && <HeaderTools projectPath={project.path} />}
       </TopBar>
-      <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-16">
-        <p className="animate-in text-[15px] text-muted-foreground fade-in animation-duration-(--duration-slow)">
-          {line}
-        </p>
-      </div>
-      <div className="mx-auto w-full max-w-[760px] px-6 pb-3">
-        <DraftComposer
-          agentId={agentId}
-          agentName={name}
-          ready={usable}
-          projectPath={noProject ? null : (project?.path ?? null)}
-        />
-        <div className="flex h-row items-center gap-0.5 px-1">
-          <ProjectMenu project={noProject ? null : project} noProject={noProject} />
-          <AgentMenu agentId={agentId} />
+      {/* Raised 28 px above centre, so the eye lands on the composer. */}
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-14">
+        <div className="my-auto flex w-full max-w-[760px] flex-col gap-7 pt-6">
+          <h1 className="animate-in text-center text-title font-semibold text-balance fade-in animation-duration-(--duration-slow)">
+            {t('newSession.heading')}
+          </h1>
+          <DraftComposer agentId={agentId} project={project} noProject={noProject} />
+          <RecentSessions />
         </div>
       </div>
     </div>
@@ -109,22 +85,27 @@ export function NewSessionView({
 
 function DraftComposer({
   agentId,
-  agentName,
-  ready,
-  projectPath,
+  project,
+  noProject,
 }: {
   agentId: AgentId | null
-  agentName: string | null
-  /** Whether a usable project, or No project, is chosen. */
-  ready: boolean
-  /** null: No project. */
-  projectPath: string | null
+  project: Project | null
+  noProject: boolean
 }) {
   const { t } = useTranslation('session')
+  const { t: tc } = useTranslation('composer')
   const [text, setText] = useState(() => readDraft(NEW_SESSION_DRAFT))
+  const [projectError, setProjectError] = useState<string | null>(null)
   const textarea = useRef<HTMLTextAreaElement>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
+  const limits = useAgentsStore((s) => (agentId ? s.byId[agentId]?.limits : undefined))
+  const now = useNow()
+  const name = agentId ? agentName(agentId) : null
+  const projectPath = noProject ? null : (project?.path ?? null)
+  const ready = noProject || (!!project && !project.missing)
   const canSend = !!agentId && ready && text.trim().length > 0
+  const tightest = limits ? tightestLimit(limits, now) : null
+  const reached = tightest?.state === 'reached' ? tightest : null
 
   useEffect(() => {
     textarea.current?.focus()
@@ -166,7 +147,11 @@ function DraftComposer({
 
   // The text stays in the draft until the session exists, so a failed start loses nothing.
   const send = () => {
-    if (canSend) void createSession(agentId, projectPath, null, text)
+    if (!canSend) return
+    const { byId, picks } = useAgentOptionsStore.getState()
+    const entry = byId[agentId]
+    const options = entry ? startValues(entry, picks[agentId]) : null
+    void createSession(agentId, projectPath, null, text, options)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -179,252 +164,187 @@ function DraftComposer({
     send()
   }
 
+  const choose = (id: AgentId, model: string | null) => {
+    useViewStore.setState((s) => (s.main.kind === 'new' ? { main: { ...s.main, agentId: id } } : s))
+    const modelOption = useAgentOptionsStore
+      .getState()
+      .byId[id]?.config.find((o) => o.category === 'model')
+    if (model !== null && modelOption) pickOption(id, modelOption.id, model)
+    requestAnimationFrame(() => textarea.current?.focus())
+  }
+
+  const blocked = !agentId
+    ? t('newSession.chooseAgentFirst')
+    : !noProject && !project
+      ? t('newSession.chooseProjectFirst')
+      : project?.missing && !noProject
+        ? t('newSession.missingLine')
+        : null
+
   return (
     <InputGroup variant="composer">
-      <InputGroupTextarea
-        ref={textarea}
-        rows={1}
-        value={text}
-        onChange={(event) => update(event.target.value)}
-        onKeyDown={onKeyDown}
-        aria-label={
-          agentName ? t('newSession.messageAgent', { agent: agentName }) : t('newSession.message')
-        }
-        placeholder={
-          agentName ? t('newSession.askAgent', { agent: agentName }) : t('newSession.describeTask')
-        }
-        className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-[15px] pr-1 pl-4 text-prose leading-[22px] placeholder:text-muted-foreground md:text-prose"
-      />
-      <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
-        <InputGroupButton
-          size="round"
-          variant={canSend ? 'default' : 'secondary'}
-          aria-label={t('newSession.send')}
-          disabled={!canSend}
-          onClick={send}
-        >
-          <ArrowUpIcon />
-        </InputGroupButton>
-      </InputGroupAddon>
+      <div className="flex w-full min-w-0 flex-col">
+        <div className="flex h-row min-w-0 items-center gap-0.5 px-1.5 pt-1.5">
+          <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
+          {!noProject && project && <BranchLabel projectPath={project.path} />}
+          <Slash />
+          <AgentMenu agentId={agentId} onChoose={choose} />
+          <span className="min-w-2 flex-1" />
+          <ModeMenu agentId={agentId} />
+        </div>
+        {(projectError || (project?.missing && !noProject)) && (
+          <p
+            className="truncate px-3.5 pt-1 text-xs text-destructive"
+            title={projectError ?? undefined}
+          >
+            {projectError ?? t('newSession.missingLine')}
+          </p>
+        )}
+        <div className="flex min-w-0 items-end">
+          <InputGroupTextarea
+            ref={textarea}
+            rows={1}
+            value={text}
+            onChange={(event) => update(event.target.value)}
+            onKeyDown={onKeyDown}
+            aria-label={
+              name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')
+            }
+            placeholder={
+              reached?.resetsAt
+                ? tc('prompt.placeholder.limitReached', {
+                    limit: limitLabel(reached),
+                    time: resetTime(reached.resetsAt),
+                  })
+                : name
+                  ? t('newSession.askAgent', { agent: name })
+                  : t('newSession.describeTask')
+            }
+            className="max-h-[min(40svh,24rem)] min-h-(--composer-min) pt-2 pr-1 pb-[15px] pl-3.5 text-prose leading-[22px] placeholder:text-muted-foreground md:text-prose"
+          />
+          <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
+            <Tooltip>
+              <TooltipTrigger render={<span />}>
+                <InputGroupButton
+                  size="round"
+                  variant={canSend ? 'default' : 'secondary'}
+                  aria-label={t('newSession.send')}
+                  disabled={!canSend}
+                  onClick={send}
+                >
+                  <ArrowUpIcon />
+                </InputGroupButton>
+              </TooltipTrigger>
+              <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
+            </Tooltip>
+          </InputGroupAddon>
+        </div>
+      </div>
     </InputGroup>
   )
 }
 
-// The values of the No project and Open project… items, which no project's path can take.
-const NO_PROJECT = '\0no-project'
-const OPEN_PROJECT = '\0open-project'
-
-interface ProjectGroup {
-  value: 'none' | 'recent' | 'open'
-  items: string[]
+function Slash() {
+  return (
+    <span aria-hidden className="shrink-0 text-xs text-muted-foreground">
+      /
+    </span>
+  )
 }
 
-/**
- * No project, then the projects by name, most recently opened first, with a search field over
- * them and Open project… last. The items are paths.
- */
-function ProjectMenu({ project, noProject }: { project: Project | null; noProject: boolean }) {
+/** The branch the session starts on, shown and not chosen: the top bar's git status owns it. */
+function BranchLabel({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('session')
-  const projects = useProjectsStore((s) => s.projects)
-  const [error, setError] = useState<string | null>(null)
-  const { contains } = useComboboxFilter()
-  const byPath = useMemo(() => new Map(projects.map((p) => [p.path, p])), [projects])
-  const hints = useMemo(() => nameHints(projects.map((p) => p.path)), [projects])
-  const groups = useMemo<ProjectGroup[]>(
-    () => [
-      { value: 'none', items: [NO_PROJECT] },
-      { value: 'recent', items: projects.map((p) => p.path) },
-      { value: 'open', items: [OPEN_PROJECT] },
-    ],
-    [projects],
-  )
-  const label = (value: string) =>
-    value === NO_PROJECT ? t('newSession.noProject') : (byPath.get(value)?.name ?? value)
-  const open = async () => {
-    setError(null)
-    try {
-      const path = await addProjectFromDialog()
-      if (path) chooseNewSessionProject(path)
-    } catch (e) {
-      setError(errorMessage(e))
-    }
-  }
-
+  const head = useGitStore((s) => {
+    const status = s.status[projectPath]
+    return status?.repo ? status.head : null
+  })
+  if (!head) return null
+  const name = head.branch ?? head.oid?.slice(0, 7)
+  if (!name) return null
   return (
     <>
-      <Combobox
-        items={groups}
-        value={noProject ? NO_PROJECT : (project?.path ?? null)}
-        onValueChange={(value: string | null) => {
-          if (value === OPEN_PROJECT) void open()
-          else if (value === NO_PROJECT) chooseNewSessionProject(null)
-          else if (value) chooseNewSessionProject(value)
-        }}
-        itemToStringLabel={label}
-        filter={(value: string, query: string) =>
-          value === OPEN_PROJECT || contains(`${label(value)} ${hints.get(value) ?? ''}`, query)
-        }
-      >
-        <ComboboxTrigger
+      <Slash />
+      <Tooltip>
+        <TooltipTrigger
           render={
-            <Button
-              variant="quiet"
-              size="compact"
-              aria-label={t('newSession.project')}
-              title={project?.path}
-              className="min-w-0 shrink gap-1 px-2"
-            />
+            <span className="flex h-control min-w-8 shrink-1000 items-center gap-1 overflow-hidden px-2 text-[12.5px] text-muted-foreground" />
           }
         >
-          <FolderIcon data-icon="inline-start" />
-          <span className="truncate text-foreground">
-            {noProject
-              ? t('newSession.noProject')
-              : (project?.name ?? t('newSession.chooseProjectShort'))}
-          </span>
-        </ComboboxTrigger>
-        <ComboboxContent side="top" sideOffset={6} className="max-w-80">
-          <ComboboxInput
-            showTrigger={false}
-            placeholder={t('newSession.searchProjects')}
-            aria-label={t('newSession.searchProjectsLabel')}
-            spellCheck={false}
-          />
-          <ComboboxList className="max-h-none overflow-y-visible">
-            {(group: ProjectGroup, index: number) =>
-              group.value === 'none' ? (
-                <ComboboxGroup key={group.value} items={group.items}>
-                  <ComboboxCollection>
-                    {(value: string) => (
-                      <ComboboxItem key={value} value={value}>
-                        {t('newSession.noProject')}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxCollection>
-                </ComboboxGroup>
-              ) : group.value === 'recent' ? (
-                <ComboboxGroup key={group.value} items={group.items}>
-                  {index > 0 && <ComboboxSeparator />}
-                  <ComboboxLabel>{t('newSession.recent')}</ComboboxLabel>
-                  {/* Only the projects scroll, leaving room for the search field and Open project… */}
-                  <div className="relative -mx-1.5 max-h-[min(--spacing(72),calc(var(--available-height)---spacing(28)))] scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
-                    <ComboboxCollection>
-                      {(path: string) => {
-                        const p = byPath.get(path)
-                        return (
-                          p && (
-                            <ComboboxItem key={path} value={path} disabled={p.missing} title={path}>
-                              <ProjectName name={p.name} hint={hints.get(path)} />
-                              {p.missing && (
-                                <span className="ml-auto text-xs text-muted-foreground">
-                                  {t('newSession.missing')}
-                                </span>
-                              )}
-                            </ComboboxItem>
-                          )
-                        )
-                      }}
-                    </ComboboxCollection>
-                  </div>
-                </ComboboxGroup>
-              ) : (
-                <ComboboxGroup key={group.value} items={group.items}>
-                  {index > 0 ? (
-                    <ComboboxSeparator />
-                  ) : (
-                    projects.length > 0 && (
-                      <div className="flex min-h-row items-center px-2 text-ui text-muted-foreground">
-                        {t('newSession.noMatchingProjects')}
-                      </div>
-                    )
-                  )}
-                  <ComboboxCollection>
-                    {(value: string) => (
-                      <ComboboxItem key={value} value={value}>
-                        {t('newSession.openProject')}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxCollection>
-                </ComboboxGroup>
-              )
-            }
-          </ComboboxList>
-          {/* Sized by every project, so the menu keeps its width while the list filters. */}
-          <div aria-hidden className="invisible h-0 overflow-hidden px-1.5">
-            {projects.map((p) => (
-              <div key={p.path} className="flex gap-2 pr-8 pl-2 text-ui whitespace-nowrap">
-                <ProjectName name={p.name} hint={hints.get(p.path)} />
-              </div>
-            ))}
-          </div>
-        </ComboboxContent>
-      </Combobox>
-      {error && (
-        <span className="min-w-0 truncate px-1.5 text-xs text-destructive" title={error}>
-          {error}
-        </span>
-      )}
+          <GitBranchIcon className="size-3.5 shrink-0" />
+          <span className="truncate font-mono text-meta">{name}</span>
+        </TooltipTrigger>
+        <TooltipContent>
+          {name} · {head.branch ? t('newSession.branchHint') : t('newSession.commitHint')}
+        </TooltipContent>
+      </Tooltip>
     </>
   )
 }
 
-function AgentMenu({ agentId }: { agentId: AgentId | null }) {
-  const { t } = useTranslation('session')
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const choose = (id: AgentId) =>
-    useViewStore.setState((s) => (s.main.kind === 'new' ? { main: { ...s.main, agentId: id } } : s))
-
+/** The agent's mode for the session to start in, once its options are known. */
+function ModeMenu({ agentId }: { agentId: AgentId | null }) {
+  const config = useStartConfig(agentId)
+  const mode = config?.find(
+    (o): o is SelectOption => o.category === 'mode' && o.type === 'select' && !!o.choices?.length,
+  )
+  if (!agentId || !mode) return null
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="quiet"
-            size="compact"
-            aria-label={t('newSession.agent')}
-            className="min-w-0 shrink gap-1.5 px-2"
-          />
-        }
-      >
-        {agentId && <AgentMark agent={agentId} size={13} />}
-        <span className="truncate text-foreground">
-          {agentId ? agentName(agentId) : t('newSession.chooseAgentShort')}
-        </span>
-        <ChevronDownIcon data-icon="inline-end" className="-ml-0.5 size-3 opacity-70" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" sideOffset={6}>
-        <DropdownMenuRadioGroup
-          value={agentId ?? undefined}
-          onValueChange={(value) => choose(value as AgentId)}
-        >
-          {agents.map((status) => (
-            <DropdownMenuRadioItem
-              key={status.id}
-              value={status.id}
-              disabled={!isInstalled(status)}
-              closeOnClick
-            >
-              <AgentMark agent={status.id} size={14} />
-              <span className="min-w-0 flex-1 truncate">{agentName(status.id)}</span>
-              {!isInstalled(status) && (
-                <span className="text-xs text-muted-foreground">
-                  {t('newSession.notInstalled')}
-                </span>
-              )}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <OptionMenu
+      option={mode}
+      side="bottom"
+      onSelect={(optionId, value) => {
+        pickOption(agentId, optionId, value)
+        return Promise.resolve(true)
+      }}
+    />
   )
 }
 
-/** A project's name, with the parent folders that tell it from another of the same name. */
-function ProjectName({ name, hint }: { name: string; hint: string | undefined }) {
+const RECENT = 3
+
+/** The sessions used last, in any project, to pick up where they left off. */
+function RecentSessions() {
+  const { t } = useTranslation('session')
+  const now = useNow()
+  const recent = useSessionsStore(
+    useShallow((s) =>
+      Object.values(s.byId)
+        .filter((summary) => summary.parentId === null && summary.origin === 'user')
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, RECENT),
+    ),
+  )
+  const byId = useSessionsStore((s) => s.byId)
+  const projects = useProjectsStore((s) => s.projects)
+  if (recent.length === 0) return null
+  const where = (summary: SessionSummary) =>
+    isScratchFolder(byId, summary.projectPath)
+      ? t('newSession.noProject')
+      : (projects.find((p) => p.path === summary.projectPath)?.name ??
+        basename(summary.projectPath))
   return (
-    <span className="flex min-w-0 flex-1 items-baseline gap-2">
-      <span className="truncate">{name}</span>
-      {hint && <span className="min-w-0 shrink-3 truncate text-muted-foreground">{hint}</span>}
-    </span>
+    <section aria-label={t('newSession.recentLabel')} className="flex flex-col px-1">
+      <h2 className="px-2 pb-1 text-xs font-medium text-muted-foreground">
+        {t('newSession.recent')}
+      </h2>
+      {recent.map((summary) => (
+        <button
+          key={summary.id}
+          type="button"
+          onClick={() => openSession(summary.id, summary.projectPath)}
+          className="flex min-h-row items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <AgentMark agent={summary.agentId} size={14} />
+          <span className="min-w-0 flex-1 truncate">{sessionTitle(summary)}</span>
+          <span className="max-w-40 shrink-0 truncate text-xs text-muted-foreground">
+            {where(summary)}
+          </span>
+          <span className="w-12 shrink-0 text-right font-mono text-meta text-muted-foreground tabular">
+            {shortAgo(summary.updatedAt, now)}
+          </span>
+        </button>
+      ))}
+    </section>
   )
 }

@@ -49,21 +49,30 @@ function warningLimit(limits: PlanLimit[]): PlanLimit | null {
   return warnings.sort((a, b) => (b.usedPercent ?? 0) - (a.usedPercent ?? 0))[0] ?? null
 }
 
+const RING_TONE = {
+  muted: ['stroke-track', 'stroke-muted-foreground'],
+  attention: ['stroke-attention/45', 'stroke-attention'],
+  success: ['stroke-success/45', 'stroke-success'],
+  destructive: ['stroke-destructive/45', 'stroke-destructive'],
+} as const
+
 /** A pie inside a ring: a filling wedge, which a short arc would not be, cannot read as a spinner. */
-function Ring({ share, tone }: { share: number; tone: 'muted' | 'attention' }) {
+export function Ring({
+  share,
+  tone,
+  className,
+}: {
+  share: number
+  tone: keyof typeof RING_TONE
+  /** Its size: 16 px unless given. */
+  className?: string
+}) {
   // A circle stroked as wide as its diameter paints the wedge that its dash covers.
   const r = 2.75
   const c = 2 * Math.PI * r
   return (
-    <svg aria-hidden viewBox="0 0 16 16" className="size-4 -rotate-90">
-      <circle
-        cx="8"
-        cy="8"
-        r="6.75"
-        fill="none"
-        strokeWidth="1.5"
-        className={tone === 'attention' ? 'stroke-attention/45' : 'stroke-track'}
-      />
+    <svg aria-hidden viewBox="0 0 16 16" className={cn('size-4 shrink-0 -rotate-90', className)}>
+      <circle cx="8" cy="8" r="6.75" fill="none" strokeWidth="1.5" className={RING_TONE[tone][0]} />
       <circle
         cx="8"
         cy="8"
@@ -74,7 +83,7 @@ function Ring({ share, tone }: { share: number; tone: 'muted' | 'attention' }) {
         strokeDashoffset={c * (1 - Math.min(1, Math.max(0, share)))}
         className={cn(
           'transition-[stroke-dashoffset] duration-(--duration-slow) ease-out-quint',
-          tone === 'attention' ? 'stroke-attention' : 'stroke-muted-foreground',
+          RING_TONE[tone][1],
         )}
       />
     </svg>

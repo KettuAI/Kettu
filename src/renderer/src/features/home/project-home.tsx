@@ -3,7 +3,6 @@ import { CircleAlertIcon, HistoryIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, Project } from '@shared/agent-host'
-import { createSession } from '@renderer/app/actions'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { rise } from '@renderer/lib/motion'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
@@ -16,7 +15,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { isActive, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import { openSession } from '@renderer/stores/view'
+import { openNewSession, openSession } from '@renderer/stores/view'
 import { ImportSessionsDialog } from './import-sessions'
 
 /** Shown when a project is selected but no session is. */
@@ -96,7 +95,7 @@ function AgentCard({
     <button
       type="button"
       disabled={missing}
-      onClick={() => void createSession(status.id, project.path)}
+      onClick={() => openNewSession(project.path, status.id)}
       style={entry.style}
       className={cn(
         // Card hover: rise 1 px, a strong ring, the sm shadow and a soft light from the bottom edge.

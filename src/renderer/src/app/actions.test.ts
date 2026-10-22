@@ -11,6 +11,7 @@ const { closeSession, createSession, newSession, retryPendingSession, usePending
   await import('./actions')
 const { NEW_SESSION_DRAFT, readDraft, writeDraft } =
   await import('@renderer/features/session/composer/drafts')
+const { pickOption, useAgentOptionsStore } = await import('@renderer/stores/agent-options')
 const { useSessionsStore } = await import('@renderer/stores/sessions')
 const { useSettingsStore } = await import('@renderer/stores/settings')
 const { useThreadsStore } = await import('@renderer/stores/threads')
@@ -243,5 +244,57 @@ describe('createSession with a first message', () => {
       expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' }),
     )
     expect(request).toHaveBeenCalledWith('sessions.prompt', expect.anything())
+  })
+})
+
+describe('createSession with start values', () => {
+  const created = { id: 'n1', projectPath: '/repo', agentId: 'codex', status: 'ready' }
+
+  beforeEach(() => {
+    request.mockReset()
+    usePendingSession.setState({ pending: null })
+    useAgentOptionsStore.setState({ picks: {} })
+  })
+
+  it('sends them with the request, then lets the host remember what carries over', async () => {
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created : undefined,
+    )
+    pickOption('codex', 'model', 'gpt-5.5')
+    await createSession('codex', '/repo', null, null, { model: 'gpt-5.5', mode: 'auto' })
+    expect(request).toHaveBeenCalledWith('sessions.create', {
+      agentId: 'codex',
+      projectPath: '/repo',
+      options: { model: 'gpt-5.5', mode: 'auto' },
+    })
+    expect(useAgentOptionsStore.getState().picks).toEqual({})
+  })
+
+  it('leaves them out when there are none, and keeps them for a retry', async () => {
+    request.mockRejectedValueOnce(new Error('spawn failed'))
+    pickOption('codex', 'model', 'gpt-5.5')
+    await createSession('codex', '/repo', null, null, { model: 'gpt-5.5' })
+    expect(usePendingSession.getState().pending?.options).toEqual({ model: 'gpt-5.5' })
+    expect(useAgentOptionsStore.getState().picks.codex).toEqual({ model: 'gpt-5.5' })
+
+    request.mockReset()
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created : undefined,
+    )
+    retryPendingSession()
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith('sessions.create', {
+        agentId: 'codex',
+        projectPath: '/repo',
+        options: { model: 'gpt-5.5' },
+      }),
+    )
+
+    request.mockClear()
+    await createSession('codex', '/repo', null, null, {})
+    expect(request).toHaveBeenCalledWith('sessions.create', {
+      agentId: 'codex',
+      projectPath: '/repo',
+    })
   })
 })

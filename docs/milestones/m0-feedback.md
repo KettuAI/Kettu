@@ -50,7 +50,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 42  | Long lines in the file preview run off the pane                | Side panel     | Fixed        |
 | 43  | The message body needs a typography pass to a given spec       | Thread         | Fixed        |
 | 44  | The space beside the window controls needs a design            | Sidebar        | Open         |
-| 45  | Sessions without a message stay in the list                    | Sidebar        | Open         |
+| 45  | Sessions without a message stay in the list                    | Sidebar        | Partly fixed |
 | 46  | A session's error mark stays after it has been seen            | Sidebar        | Fixed        |
 | 47  | A crowded top bar cuts the session title first                 | Top bar        | Fixed        |
 | 48  | The spinner's screen reader label is not translated            | Localization   | Fixed        |
@@ -687,6 +687,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Sub-sessions started from a menu, which have no message yet either.
   - The empty sessions already in users' indexes.
   - The rule written into [Session model](../design/session-model.md#session-lifecycle) and [Interface: sidebar](../design/ui.md#sidebar).
+- **Partly fixed**: 2026-10-22, decided while the maintainer was away; to be reviewed. The project home's agent cards open [New session](../design/ui.md#new-session) in the project with that agent chosen, so a session is created only with its first message. Sub-sessions started from a menu and the empty sessions already in users' indexes remain.
 
 ## 46. A session's error mark stays after it has been seen
 

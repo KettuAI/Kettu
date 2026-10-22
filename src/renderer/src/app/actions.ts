@@ -7,6 +7,7 @@ import {
 } from '@renderer/features/session/composer/drafts'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { clearPicks, type OptionValues } from '@renderer/stores/agent-options'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -21,6 +22,8 @@ export interface PendingSession {
   parentId: string | null
   /** The first message, from the New session screen, sent once the session exists. */
   prompt: string | null
+  /** The config values New session chose, set once the session exists. */
+  options: OptionValues | null
   error: { message: string; code: string | null } | null
 }
 
@@ -64,8 +67,11 @@ export async function createSession(
   projectPath: string | null,
   parentId: string | null = null,
   prompt: string | null = null,
+  options: OptionValues | null = null,
 ): Promise<void> {
-  usePendingSession.setState({ pending: { agentId, projectPath, parentId, prompt, error: null } })
+  usePendingSession.setState({
+    pending: { agentId, projectPath, parentId, prompt, options, error: null },
+  })
   useViewStore.setState((s) => ({
     projectPath: projectPath ?? s.projectPath,
     settings: { ...s.settings, open: false },
@@ -76,7 +82,10 @@ export async function createSession(
       agentId,
       projectPath,
       ...(parentId ? { parentId } : {}),
+      ...(options && Object.keys(options).length > 0 ? { options } : {}),
     })
+    // The host now remembers what carries over; the rest starts afresh next time.
+    if (options) clearPicks(agentId)
     useSessionsStore.getState().upsert(summary)
     if (prompt !== null) await sendFirstPrompt(summary, prompt)
     // The session shows with its thread and renderer ready, so no skeleton flashes in between.
@@ -93,6 +102,7 @@ export async function createSession(
         projectPath,
         parentId,
         prompt,
+        options,
         error: { message: errorMessage(error), code: errorCode(error) },
       },
     })
@@ -146,7 +156,13 @@ export function cancelPendingSession(): void {
 export function retryPendingSession(): void {
   const pending = usePendingSession.getState().pending
   if (pending) {
-    void createSession(pending.agentId, pending.projectPath, pending.parentId, pending.prompt)
+    void createSession(
+      pending.agentId,
+      pending.projectPath,
+      pending.parentId,
+      pending.prompt,
+      pending.options,
+    )
   }
 }
 

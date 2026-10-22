@@ -1,4 +1,4 @@
-import { useCallback, useId, useState, type KeyboardEvent } from 'react'
+import { useCallback, useId, useState, type ComponentProps, type KeyboardEvent } from 'react'
 import { ChevronDownIcon, RotateCcwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ULTRACODE_OPTION_ID, type ConfigOption, type SessionView } from '@shared/thread'
@@ -22,7 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
-import { levelsOf, splitName, tierOf, type EffortTier, type SelectOption } from './levels'
+import { levelsOf, splitName, tierOf, tierText, type SelectOption } from './levels'
 import { UsageButton } from './usage'
 
 /** Asks the agent to change an option; resolves to whether it did. */
@@ -159,7 +159,15 @@ export function ControlRow({
 }
 
 /** A menu for one option, which closes once a choice is made. */
-function OptionMenu({ option, onSelect }: { option: SelectOption; onSelect: Select }) {
+export function OptionMenu({
+  option,
+  onSelect,
+  side = 'top',
+}: {
+  option: SelectOption
+  onSelect: Select
+  side?: 'top' | 'bottom'
+}) {
   const [value, pick] = usePick(option, onSelect)
   return (
     <DropdownMenu>
@@ -171,7 +179,7 @@ function OptionMenu({ option, onSelect }: { option: SelectOption; onSelect: Sele
         {choiceName(option, value)}
         <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" sideOffset={6} className="w-64">
+      <DropdownMenuContent side={side} sideOffset={6} className="w-64">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{option.name}</DropdownMenuLabel>
           <Choices option={option} value={value} onPick={pick} closeOnClick />
@@ -219,7 +227,7 @@ function Choices({
   )
 }
 
-function ChoiceName({ name }: { name: string }) {
+export function ChoiceName({ name }: { name: string }) {
   const [prefix, rest] = splitName(name)
   return (
     <span className="font-medium break-words">
@@ -231,11 +239,6 @@ function ChoiceName({ name }: { name: string }) {
 
 // More levels than this do not fit as segments, so they are listed like models.
 const MAX_SEGMENTS = 6
-
-const tierText: Record<EffortTier, string> = {
-  high: 'text-effort-high',
-  max: 'text-effort-max',
-}
 
 /**
  * One button for the model, with the reasoning level after it, and one menu for both. Choosing a
@@ -400,19 +403,31 @@ function ModelMenu({
   )
 }
 
+/** A group label with the menus' look, for a menu that is not a Base UI menu. */
+export function PlainLabel({ className, ...props }: ComponentProps<'div'>) {
+  return (
+    <div
+      className={cn('px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground', className)}
+      {...props}
+    />
+  )
+}
+
 /**
  * The reasoning levels as segments. The top levels carry their gradient, and landing on the
  * highest sweeps a light across its thumb once. A level set by hand can be reset to the agent's
- * default when the agent offers one.
+ * default when the agent offers one. `plain` drops the menu parts, for a menu built otherwise.
  */
-function EffortSegments({
+export function EffortSegments({
   effort,
   value,
   onPick,
+  plain = false,
 }: {
   effort: SelectOption
   value: string | undefined
   onPick: (value: string) => void
+  plain?: boolean
 }) {
   const { t } = useTranslation('composer')
   const labelId = useId()
@@ -425,12 +440,14 @@ function EffortSegments({
     if (tier === 'max') setSweeps((n) => n + 1)
   }
 
+  const Group = plain ? 'div' : DropdownMenuGroup
+  const Label = plain ? PlainLabel : DropdownMenuLabel
   return (
-    <DropdownMenuGroup>
+    <Group>
       <div className="flex items-center gap-1 pr-1">
-        <DropdownMenuLabel id={labelId} className="flex-1">
+        <Label id={labelId} className="flex-1">
           {effort.name}
-        </DropdownMenuLabel>
+        </Label>
         {usesDefault && fallback ? (
           <span className="px-1 text-xs text-muted-foreground">{fallback.name}</span>
         ) : (
@@ -481,6 +498,6 @@ function EffortSegments({
           itemClassName="px-1.5"
         />
       </div>
-    </DropdownMenuGroup>
+    </Group>
   )
 }
