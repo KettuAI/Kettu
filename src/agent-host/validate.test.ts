@@ -127,6 +127,25 @@ describe('createValidators', () => {
     rejects(() => search({ projectPath: '/p', query: 'x'.repeat(4_097) }))
     rejects(() => search({ projectPath: '/p' }))
     rejects(() => search({ projectPath: 'p', query: 'x' }))
+
+    const write = posix['files.write']
+    expect(write({ projectPath: '/p', path: 'a.ts', text: 'x', version: 'v1', extra: 1 })).toEqual({
+      projectPath: '/p',
+      path: 'a.ts',
+      text: 'x',
+      version: 'v1',
+    })
+    expect(write({ projectPath: '/p', path: 'a.ts', text: '', version: null })).toMatchObject({
+      text: '',
+      version: null,
+    })
+    rejects(() => write({ projectPath: '/p', path: 'a.ts', text: 'x' }))
+    rejects(() => write({ projectPath: '/p', path: 'a.ts', text: 1, version: null }))
+    rejects(() => write({ projectPath: '/p', path: 'a.ts', text: 'x', version: '' }))
+    rejects(() => write({ projectPath: '/p', path: '/etc/hosts', text: 'x', version: null }))
+    rejects(() =>
+      write({ projectPath: '/p', path: 'a.ts', text: 'x'.repeat(1024 * 1024 + 1), version: null }),
+    )
   })
 })
 

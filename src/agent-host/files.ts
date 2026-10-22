@@ -1,7 +1,9 @@
 // A project's files for the Files pane: listed, read and searched through git when the project
 // is in a repository, and through a bounded walk of the folder when it is not.
 
-import { open, readdir, realpath, stat, type FileHandle } from 'node:fs/promises'
+import { createHash, randomBytes } from 'node:crypto'
+import type { Stats } from 'node:fs'
+import { open, readdir, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises'
 import path from 'node:path'
 import {
   FILE_IMAGE_LIMIT,
@@ -13,6 +15,7 @@ import {
   type FileList,
   type FileMatch,
   type FileSearch,
+  type FileWritten,
   type ImageType,
 } from '@shared/files'
 import type { Platform } from '@shared/platform'
@@ -77,6 +80,22 @@ function gitOutput(label: string, result: ExecResult): string | null {
     throw new HostError('git_error', `${label}: ${describeFailure(result)}`)
   return result.code === 0 ? result.stdout : null
 }
+
+const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+
+/** The text of `bytes`, and whether writing it back as UTF-8 gives the same bytes. */
+function decode(bytes: Buffer): { text: string; editable: boolean } {
+  try {
+    return { text: utf8.decode(bytes), editable: true }
+  } catch {
+    return { text: bytes.toString('utf8'), editable: false }
+  }
+}
+
+const versionOf = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex')
+
+// Windows refuses to replace a file another program holds open; a write in place still works.
+const RENAME_REFUSED: ReadonlySet<string> = new Set(['EPERM', 'EACCES', 'EBUSY'])
 
 function isBinary(bytes: Buffer): boolean {
   return bytes.subarray(0, BINARY_PROBE_BYTES).includes(0)
@@ -187,7 +206,37 @@ export class FilesService {
       return { kind: 'too-large', path: relative, size, limit: this.limits.read }
     }
     if (isBinary(bytes)) return { kind: 'binary', path: relative, size }
-    return { kind: 'text', path: relative, size, text: bytes.toString('utf8') }
+    return { kind: 'text', path: relative, size, ...decode(bytes), version: versionOf(bytes) }
+  }
+
+  /**
+   * Replaces the text of a file that exists. With a `version`, the file must still have it, or
+   * nothing is written and the answer is `conflict`; null writes regardless.
+   */
+  async write(
+    root: string,
+    relativePath: string,
+    text: string,
+    version: string | null,
+  ): Promise<FileWritten> {
+    const relative = this.normalize(relativePath)
+    if (relative.split('/').includes('.git')) throw invalidParams(`${relative} is inside .git`)
+    const bytes = Buffer.from(text, 'utf8')
+    if (bytes.length > this.limits.read) {
+      throw invalidParams(`The text is larger than ${this.limits.read} bytes`)
+    }
+    const real = await this.resolveInside(root, relative)
+    const info = await this.fileStat(real, relative)
+    if (version !== null) {
+      const current = info.size > this.limits.read ? null : await this.readFile(real, info.size)
+      if (current === null || versionOf(current) !== version) {
+        throw new HostError('conflict', `${relative} changed since it was read`)
+      }
+    }
+    // A rename would leave the other names of a hard-linked file with the old text.
+    if (info.nlink > 1) await this.writeInPlace(real, bytes)
+    else await this.replace(real, bytes, info.mode)
+    return { version: versionOf(bytes), size: bytes.length }
   }
 
   /** Lines that contain `query`, ignoring case. The query is literal text, not a pattern. */
@@ -352,7 +401,7 @@ export class FilesService {
     return real
   }
 
-  private async fileStat(real: string, relative: string): Promise<{ size: number }> {
+  private async fileStat(real: string, relative: string): Promise<Stats> {
     let info
     try {
       info = await stat(real)
@@ -367,6 +416,45 @@ export class FilesService {
     const handle = await open(real, 'r')
     try {
       return await readBytes(handle, size)
+    } finally {
+      await handle.close()
+    }
+  }
+
+  /** Writes beside the file and renames over it, so a crash leaves one whole file or the other. */
+  private async replace(real: string, bytes: Buffer, mode: number): Promise<void> {
+    const temp = this.paths.join(
+      this.paths.dirname(real),
+      `.${this.paths.basename(real)}.${randomBytes(4).toString('hex')}.overbench-tmp`,
+    )
+    const handle = await open(temp, 'wx', mode & 0o7777)
+    try {
+      await handle.writeFile(bytes)
+      // The mode given to open is reduced by the umask.
+      await handle.chmod(mode & 0o7777)
+      await handle.sync()
+    } catch (error) {
+      await handle.close()
+      await unlink(temp).catch(() => {})
+      throw error
+    }
+    await handle.close()
+    try {
+      await rename(temp, real)
+    } catch (error) {
+      await unlink(temp).catch(() => {})
+      const code = (error as NodeJS.ErrnoException | undefined)?.code ?? ''
+      if (this.deps.platform !== 'win32' || !RENAME_REFUSED.has(code)) throw error
+      await this.writeInPlace(real, bytes)
+    }
+  }
+
+  private async writeInPlace(real: string, bytes: Buffer): Promise<void> {
+    const handle = await open(real, 'r+')
+    try {
+      await handle.truncate(0)
+      await handle.write(bytes, 0, bytes.length, 0)
+      await handle.sync()
     } finally {
       await handle.close()
     }

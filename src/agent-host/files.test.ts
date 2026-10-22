@@ -1,4 +1,16 @@
-import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import {
+  chmod,
+  link,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { join } from 'node:path'
 import { FILE_IMAGE_LIMIT, FILE_MATCH_CHARS, FILE_READ_LIMIT } from '@shared/files'
 import type { Platform } from '@shared/platform'
@@ -44,6 +56,8 @@ function result(partial: Partial<ExecResult>): ExecResult {
 function fakeGit(answer: (args: readonly string[]) => Partial<ExecResult>): Exec {
   return async (_file, args) => result(answer(args))
 }
+
+const sha256 = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex')
 
 const bySite = (a: { path: string; line: number }, b: { path: string; line: number }): number =>
   a.path < b.path ? -1 : a.path > b.path ? 1 : a.line - b.line
@@ -164,12 +178,32 @@ describe('read', () => {
       path: 'src/a.txt',
       size: Buffer.byteLength('café 你好\n'),
       text: 'café 你好\n',
+      version: sha256('café 你好\n'),
+      editable: true,
     })
     expect(await service().read(dir, 'empty.txt')).toEqual({
       kind: 'text',
       path: 'empty.txt',
       size: 0,
       text: '',
+      version: sha256(''),
+      editable: true,
+    })
+  })
+
+  it('keeps a byte order mark and marks text that is not valid UTF-8 as not editable', async () => {
+    const dir = await plain()
+    await s.write(dir, 'bom.txt', '\uFEFFhello')
+    const latin = Buffer.from([0x63, 0x61, 0x66, 0xe9])
+    await writeFile(join(dir, 'latin1.txt'), latin)
+    expect(await service().read(dir, 'bom.txt')).toMatchObject({
+      text: '\uFEFFhello',
+      editable: true,
+    })
+    expect(await service().read(dir, 'latin1.txt')).toMatchObject({
+      kind: 'text',
+      editable: false,
+      version: sha256(latin),
     })
   })
 
@@ -448,5 +482,83 @@ describe('search without git', () => {
     const partial = await service({ scanFiles: 2 }).search(dir, 'needle')
     expect(partial.matches.map((m) => m.path)).toEqual(['a.txt', 'a.txt', 'a.txt', 'b.txt'])
     expect(partial.truncated).toBe(true)
+  })
+})
+
+describe('write', () => {
+  it("replaces a file's text exactly and answers its new version", async () => {
+    const dir = await plain()
+    await s.write(dir, 'src/a.txt', 'old\n')
+    const { version } = (await service().read(dir, 'src/a.txt')) as { version: string }
+    const text = 'new\r\nline 你好\n'
+    expect(await service().write(dir, 'src/a.txt', text, version)).toEqual({
+      version: sha256(text),
+      size: Buffer.byteLength(text),
+    })
+    expect(await readFile(join(dir, 'src/a.txt'), 'utf8')).toBe(text)
+    expect(await service().read(dir, 'src/a.txt')).toMatchObject({ version: sha256(text) })
+    expect(await readdir(join(dir, 'src'))).toEqual(['a.txt'])
+  })
+
+  it('refuses a version the file no longer has and writes nothing', async () => {
+    const dir = await plain()
+    await s.write(dir, 'a.txt', 'first')
+    const { version } = (await service().read(dir, 'a.txt')) as { version: string }
+    await s.write(dir, 'a.txt', 'changed by an agent')
+    await expect(service().write(dir, 'a.txt', 'mine', version)).rejects.toMatchObject({
+      code: 'conflict',
+    })
+    expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('changed by an agent')
+    expect(await service().write(dir, 'a.txt', 'mine', null)).toMatchObject({ size: 4 })
+    expect(await readFile(join(dir, 'a.txt'), 'utf8')).toBe('mine')
+  })
+
+  posixOnly("keeps the file's mode", async () => {
+    const dir = await plain()
+    await s.write(dir, 'run.sh', 'echo hi\n')
+    await chmod(join(dir, 'run.sh'), 0o754)
+    await service().write(dir, 'run.sh', 'echo bye\n', null)
+    expect((await stat(join(dir, 'run.sh'))).mode & 0o777).toBe(0o754)
+  })
+
+  posixOnly('writes a file with other hard links in place, so they keep sharing it', async () => {
+    const dir = await plain()
+    await s.write(dir, 'a.txt', 'shared')
+    await link(join(dir, 'a.txt'), join(dir, 'b.txt'))
+    const before = (await stat(join(dir, 'a.txt'))).ino
+    await service().write(dir, 'a.txt', 'still shared', null)
+    expect(await readFile(join(dir, 'b.txt'), 'utf8')).toBe('still shared')
+    expect((await stat(join(dir, 'a.txt'))).ino).toBe(before)
+  })
+
+  posixOnly('writes through a symbolic link inside the project and keeps the link', async () => {
+    const dir = await plain()
+    await s.write(dir, 'real/a.txt', 'inside')
+    await symlink(join(dir, 'real', 'a.txt'), join(dir, 'link.txt'))
+    await service().write(dir, 'link.txt', 'edited', null)
+    expect((await lstat(join(dir, 'link.txt'))).isSymbolicLink()).toBe(true)
+    expect(await readFile(join(dir, 'real', 'a.txt'), 'utf8')).toBe('edited')
+  })
+
+  it('refuses what it must not write', async () => {
+    const dir = await plain()
+    await s.write(dir, 'a.txt', 'x')
+    await s.write(dir, '.git/config', '[core]\n')
+    await s.write(dir, 'src/b.txt', 'x')
+    const outside = join(s.root, `outside-${counter++}.txt`)
+    await writeFile(outside, 'secret')
+    for (const path of ['../outside.txt', outside, '.git/config', 'sub/.git/x', 'src']) {
+      await expect(service().write(dir, path, 'y', null), path).rejects.toMatchObject({
+        code: 'invalid_params',
+      })
+    }
+    await expect(service().write(dir, 'missing.txt', 'y', null)).rejects.toMatchObject({
+      code: 'not_found',
+    })
+    await expect(service({ read: 4 }).write(dir, 'a.txt', '12345', null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    expect(await readFile(outside, 'utf8')).toBe('secret')
+    expect(await readFile(join(dir, '.git/config'), 'utf8')).toBe('[core]\n')
   })
 })

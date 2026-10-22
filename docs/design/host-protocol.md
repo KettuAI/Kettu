@@ -46,6 +46,7 @@ interface HostError {
     | 'auth_required'
     | 'agent_error'
     | 'git_error'
+    | 'conflict' // the file changed since the version given
     | 'host_restarted'
     | 'internal'
   message: string
@@ -105,8 +106,9 @@ interface HostError {
 | `diagnostics.collect`      | none                                     | `DiagnosticsBundle`                             | Main writes it to disk ([agent host](./agent-host.md#diagnostics))                                                                                                                                                             |
 | `git.*`                    |                                          |                                                 | Repository status and pull requests ([git](./git.md#host-protocol))                                                                                                                                                            |
 | `files.list`               | `{ projectPath }`                        | `FileList`                                      | Paths relative to the project, sorted; stops at 50,000 ([project files](./agent-host.md#project-files))                                                                                                                        |
-| `files.read`               | `{ projectPath, path }`                  | `FileContent`                                   | `text`; `image` with `mimeType` and base64 `data`, for a picture up to 10 MB; `binary`; or `too-large` with its `limit` (1 MiB, 10 MB for a picture); a path leading out of the project is `invalid_params`                    |
+| `files.read`               | `{ projectPath, path }`                  | `FileContent`                                   | `text` with `version` and `editable`; `image` with `mimeType` and base64 `data`, up to 10 MB; `binary`; or `too-large` with its `limit` (1 MiB, 10 MB for a picture); a path out of the project is `invalid_params`            |
 | `files.search`             | `{ projectPath, query }`                 | `FileSearch`                                    | Literal, case-insensitive; at most 500 matches of 300 characters, then `truncated`                                                                                                                                             |
+| `files.write`              | `{ projectPath, path, text, version }`   | `{ version, size }`                             | Replaces an existing file's text, up to 1 MiB; `conflict` when `version` no longer matches the file, unless it is null ([project files](./agent-host.md#project-files))                                                        |
 
 ```ts
 interface SessionSummary {

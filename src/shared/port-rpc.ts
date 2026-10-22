@@ -11,6 +11,7 @@ export type PortErrorCode =
   | 'auth_required'
   | 'agent_error'
   | 'git_error'
+  | 'conflict'
   | 'host_restarted'
   | 'internal'
 

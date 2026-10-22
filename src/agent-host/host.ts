@@ -450,6 +450,8 @@ export class AgentHost {
         this.filesCall(projectPath, (root) => this.files.read(root, path)),
       'files.search': ({ projectPath, query }) =>
         this.filesCall(projectPath, (root) => this.files.search(root, query)),
+      'files.write': ({ projectPath, path, text, version }) =>
+        this.filesCall(projectPath, (root) => this.files.write(root, path, text, version)),
     }
   }
 }

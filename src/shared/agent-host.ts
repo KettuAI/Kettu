@@ -1,6 +1,6 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
-import type { FileContent, FileList, FileSearch } from './files'
+import type { FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { GitStatus, GitTools, PullRequest, PullRequestState } from './git'
 import type { PortConnectionState } from './port-rpc'
 import type {
@@ -259,6 +259,11 @@ export interface HostContract {
   'files.list': { params: { projectPath: string }; result: FileList }
   'files.read': { params: { projectPath: string; path: string }; result: FileContent }
   'files.search': { params: { projectPath: string; query: string }; result: FileSearch }
+  // A null `version` overwrites whatever the file holds.
+  'files.write': {
+    params: { projectPath: string; path: string; text: string; version: string | null }
+    result: FileWritten
+  }
 }
 
 export type HostMethod = keyof HostContract
@@ -317,6 +322,7 @@ export const HOST_METHODS = [
   'files.list',
   'files.read',
   'files.search',
+  'files.write',
 ] as const satisfies readonly HostMethod[]
 
 export type HostEvent =

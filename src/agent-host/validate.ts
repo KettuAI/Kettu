@@ -2,6 +2,7 @@
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
 import type { HostMethod, HostParams } from '@shared/agent-host'
+import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { AGENT_IDS, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
@@ -291,6 +292,18 @@ export function createValidators(platform: Platform): Validators {
       return {
         projectPath: absolutePath(o, 'projectPath', platform),
         query: string(o, 'query', TEXT_CHARS),
+      }
+    },
+    'files.write': (params) => {
+      const o = fields(params)
+      // An empty file is text too, so `string` does not fit; the host checks the size in bytes.
+      if (typeof o.text !== 'string') throw invalidParams('text must be a string')
+      if (o.text.length > FILE_READ_LIMIT) throw invalidParams('text is larger than 1 MiB')
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        path: relativePath(o, 'path', platform),
+        text: o.text,
+        version: o.version === null ? null : string(o, 'version', ID_CHARS),
       }
     },
   }

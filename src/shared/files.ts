@@ -8,7 +8,8 @@ export interface FileList {
 }
 
 export type FileContent =
-  | { kind: 'text'; path: string; size: number; text: string }
+  // `version` is the SHA-256 of the bytes; `editable` is false when they are not valid UTF-8.
+  | { kind: 'text'; path: string; size: number; text: string; version: string; editable: boolean }
   // A picture named as one whose first bytes say which kind, read whole as base64.
   | { kind: 'image'; path: string; size: number; mimeType: ImageType; data: string }
   | { kind: 'binary'; path: string; size: number }
@@ -24,6 +25,12 @@ export type ImageType =
   | 'image/avif'
   | 'image/bmp'
   | 'image/x-icon'
+
+/** A saved file's new version and size in bytes. */
+export interface FileWritten {
+  version: string
+  size: number
+}
 
 export interface FileMatch {
   path: string
