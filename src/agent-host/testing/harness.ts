@@ -32,6 +32,7 @@ import type { GitServiceApi } from '../git/api'
 import { AgentHost, type HostOptions } from '../host'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
+import type { LogReader } from '../usage/model'
 import { inThreadWorker } from './thread-worker'
 import { inUsageWorker } from './usage-worker'
 
@@ -251,6 +252,8 @@ export interface TestHostOptions {
   launcher?: AgentLauncher
   projectDir?: string
   resolveEnv?: HostOptions['resolveEnv']
+  /** Log readers for Usage on this computer, read by both the manager and the worker. */
+  usageReaders?: readonly LogReader[]
 }
 
 export interface TestHost {
@@ -309,7 +312,8 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     sessionTimings: options.sessionTimings ?? {},
     ...(options.treeNoteMs !== undefined ? { treeNoteMs: options.treeNoteMs } : {}),
     threadWorker: inThreadWorker,
-    usageWorker: inUsageWorker,
+    usageWorker: (file) => inUsageWorker(file, options.usageReaders),
+    ...(options.usageReaders ? { usageReaders: options.usageReaders } : {}),
     homeDir: dir,
   })
   let stopped = false

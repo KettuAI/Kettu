@@ -129,7 +129,11 @@ export interface SessionManagerDeps {
   /** Each agent's options for New session, kept from its new sessions and the user's choices. */
   options?: AgentOptionsStore
   /** Where each turn's usage is recorded; without it nothing is. */
-  usage?: { record(rows: UsageRow[]): void }
+  usage?: {
+    record(rows: UsageRow[]): void
+    /** Reads what is new in these agents' logs, when Usage on this computer is on. */
+    syncAgents(agentIds: AgentId[]): Promise<void>
+  }
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -2596,22 +2600,37 @@ export class SessionManager {
     await this.settled(sessionId)
     const all = [...this.descendants(sessionId), record]
     await this.closeAll(all, false)
+    const deleting: { item: SessionRecord; acpSessionId: string; runtime: AgentRuntime }[] = []
     for (const item of all) {
       if (item.origin !== 'user' || !item.acpSessionId) continue
       try {
         const runtime = await this.deps.agents.ensureReady(item.agentId)
-        if (runtime.init.capabilities.deleteSession)
-          await runtime.connection.deleteSession(item.acpSessionId)
+        if (runtime.init.capabilities.deleteSession) {
+          deleting.push({ item, acpSessionId: item.acpSessionId, runtime })
+        }
       } catch (error) {
-        this.deps.diagnostics.log(
-          'warn',
-          `session/delete failed for ${item.id}: ${(error as Error).message}`,
-        )
+        this.deleteFailed(item, error)
+      }
+    }
+    // The agent deletes the session's log too, so what it holds is counted first.
+    await this.deps.usage?.syncAgents([...new Set(deleting.map(({ item }) => item.agentId))])
+    for (const { item, acpSessionId, runtime } of deleting) {
+      try {
+        await runtime.connection.deleteSession(acpSessionId)
+      } catch (error) {
+        this.deleteFailed(item, error)
       }
     }
     for (const item of all) this.forget(item.id)
     this.saveIndex()
     this.removeThreads(all.map((item) => item.id))
+  }
+
+  private deleteFailed(item: SessionRecord, error: unknown): void {
+    this.deps.diagnostics.log(
+      'warn',
+      `session/delete failed for ${item.id}: ${(error as Error).message}`,
+    )
   }
 
   private removeThreads(sessionIds: string[]): void {

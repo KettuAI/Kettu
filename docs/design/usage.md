@@ -145,7 +145,7 @@ CREATE INDEX cursors_by_agent ON cursors (agent_id);
 
 ## Scanning
 
-- **When**: with **Usage on this computer** on, 8 s after launch, so startup settles first, then every 10 minutes, at once when the usage page opens or the setting is turned on, and on **Sync now**. Scans run one at a time in the worker, which answers the page's reads between files; a scan asked for while one runs joins it, and a re-import waits for it. A session that OverBench deletes has its transcript removed by the agent (`session/delete`), so its files are scanned first.
+- **When**: with **Usage on this computer** on, 8 s after launch, so startup settles first, then every 10 minutes, at once when the usage page opens or the setting is turned on, and on **Sync now**. Scans run one at a time in the worker, which answers the page's reads between files; a scan asked for while one runs joins it, and a re-import waits for it. A session that OverBench deletes has its transcript removed by the agent (`session/delete`), so the deletion first waits for a scan of that agent's logs, after any scan that runs.
 - **Which files**: one whose size and modification time both match its cursor is skipped (cc-switch looks at the time alone, which misses an append within the same tick).
 - **Reading**: from the cursor's offset, complete lines only; a last line without its newline is left for the next scan. When the 4 KB before the offset no longer hash to `tail`, or the file is shorter than the offset, the file was rewritten: it is read again from the start, which the keys make safe.
 - **Writing**: a file's new rows, their buckets and its cursor commit in one transaction. If reading fails halfway, the cursor keeps its old modification time so the file is tried again.

@@ -135,6 +135,12 @@ export class UsageManager {
     return this.scan()
   }
 
+  /** Reads what is new in these agents' logs, after any scan that runs. */
+  syncAgents(agentIds: AgentId[]): Promise<void> {
+    const agents = agentIds.filter((id) => this.deps.readers.some((r) => r.agentId === id))
+    return agents.length > 0 ? this.scan(agents) : Promise.resolve()
+  }
+
   private scan(agents?: AgentId[]): Promise<void> {
     const { store } = this.deps
     if (!store || !this.fromComputer || this.stopped || this.unavailable) {

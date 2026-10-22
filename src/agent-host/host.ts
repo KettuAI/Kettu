@@ -44,6 +44,7 @@ import {
 } from './storage'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { UsageManager, type UsageTimings } from './usage/manager'
+import type { LogReader } from './usage/model'
 import { LOG_READERS } from './usage/readers'
 import { UsageStore, type UsageWorkerFactory } from './usage/store'
 import { createValidators } from './validate'
@@ -73,6 +74,8 @@ export interface HostOptions {
   /** Starts the worker that owns the usage database; without it no usage is kept. */
   usageWorker?: UsageWorkerFactory
   usageTimings?: Partial<UsageTimings>
+  /** The agents' log readers, for the manager; the worker has its own. */
+  usageReaders?: readonly LogReader[]
   /** Where the agents' logs are looked for; the user's home by default. */
   homeDir?: string
 }
@@ -161,7 +164,7 @@ export class AgentHost {
       : null
     this.usage = new UsageManager({
       store: usageStore,
-      readers: LOG_READERS,
+      readers: options.usageReaders ?? LOG_READERS,
       fromComputer: options.settings.usage.fromComputer,
       platform,
       home: options.homeDir ?? os.homedir(),

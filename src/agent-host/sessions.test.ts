@@ -5,8 +5,10 @@ import { writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { ToolEntry } from '@shared/thread'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
+import type { LogReader } from './usage/model'
 
 let current: TestHost | null = null
 
@@ -385,6 +387,42 @@ describe('a prompt turn', () => {
     const status = await port.request('usage.status', undefined)
     expect(status).toMatchObject({ fromComputer: false, scanning: null, unavailable: false })
     expect(status.recordSince).not.toBeNull()
+  })
+
+  it("reads the agent's logs before the agent deletes a session", async () => {
+    let read: () => Promise<number> = async () => 0
+    const listedAtScan: number[] = []
+    const reader: LogReader = {
+      agentId: 'fake-agent',
+      locations: () => [],
+      scan: async () => {
+        listedAtScan.push(await read())
+        return true
+      },
+    }
+    const { t, port } = await setup({
+      usageReaders: [reader],
+      settings: {
+        locale: 'en',
+        agents: DEFAULT_SETTINGS.agents,
+        proxy: DEFAULT_SETTINGS.proxy,
+        git: DEFAULT_SETTINGS.git,
+        usage: { fromComputer: true },
+      },
+    })
+    read = async () =>
+      (
+        await port.request('agents.listSessions', { agentId: 'fake-agent', projectPath: t.project })
+      ).sessions.filter((session) => session.imported).length
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilStatus(sessionId, 'ready')
+    expect(await read()).toBe(1)
+
+    await port.request('sessions.delete', { sessionId })
+    // The scan ran while the agent still had the session and its log.
+    expect(listedAtScan).toEqual([1])
+    expect(await read()).toBe(0)
   })
 
   it('streams a whole turn into the watching port', async () => {
