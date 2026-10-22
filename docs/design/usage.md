@@ -15,23 +15,23 @@ The data design below is settled enough to build, and so is the interface: a das
 
 ## OverBench's own record
 
-Each agent reports a turn's tokens when `session/prompt` returns, in the response's `usage` (still unstable in ACP), and a subagent's in the `usage` of its `idle` state. The ACP schema calls the fields totals "across session", but every adapter sends the turn's own counts (read in their source on 2026-10-22):
+Each agent reports a turn's tokens when `session/prompt` returns, in the response's `usage` (still unstable in ACP) and, for Claude Code and Codex, split by model in `_meta.quota.model_usage`. The ACP schema calls the fields totals "across session", but every adapter sends the turn's own counts (read in their source on 2026-10-22):
 
-| Agent       | `usage` in the prompt response                                                                                                                                  | Split by model                                                | Input                   |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------- |
-| Claude Code | The turn's tally, reset when a turn starts. Model cycles that Claude Code starts on its own, such as when a background task finishes, are left out of the tally | `_meta.quota.model_usage`, the turn's increment per model     | Without cache           |
-| Codex       | The prompt's usage, the difference of Codex's running totals over the prompt; `thoughtTokens` is the reasoning part, which `outputTokens` already includes      | `_meta.quota.model_usage`, one entry with the session's model | Cache taken out already |
-| OpenCode    | The turn's usage (`usage.turn`); cache and reasoning fields only when above zero                                                                                | None; the session's `model` config option at the turn's end   | Without cache           |
+| Agent       | `usage` in the prompt response                                                                                                                                                                      | Split by model                                                                                                                                                           | Input                   |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Claude Code | The main thread's tally, reset when a turn starts; its subagents' requests are left out. Model cycles that Claude Code starts on its own, such as when a background task finishes, are left out too | `_meta.quota.model_usage`, the turn's increment per model, subagents included                                                                                            | Without cache           |
+| Codex       | The prompt's usage, the difference of Codex's running totals over the prompt; `thoughtTokens` is the reasoning part, which `outputTokens` already includes                                          | `_meta.quota.model_usage`, one entry with the session's model and the same counts; its cache write is `cacheWriteInputTokens` where Claude Code's is `cachedWriteTokens` | Cache taken out already |
+| OpenCode    | The turn's usage (`usage.turn`); cache and reasoning fields only when above zero                                                                                                                    | None; the session's `model` config option at the turn's end                                                                                                              | Without cache           |
 
-So the record keeps one row per turn and model, written by the agent host when the turn ends ([storage](#storage)):
+So the record keeps one row per turn and model, written by the agent host when the turn ends ([storage](#storage)). The rows come from `model_usage` when the agent sends it, which is the only place Claude Code counts its subagents, and otherwise from `usage` with the session's model. A subagent's own `usage` in its `idle` state is never added: for Claude Code it is in `model_usage` already, and no adapter sends it today.
 
-- **Tokens**: input without cache, output, cache read, cache write, and reasoning where an agent reports it apart from output. The turn's **total** is input + output + cache read + cache write, plus reasoning only for an agent whose output leaves it out (OpenCode, to be checked).
+- **Tokens**: input without cache, output, cache read, cache write, and reasoning where an agent reports it apart from output. The turn's **total** is input + output + cache read + cache write, plus reasoning only for an agent whose output leaves it out: OpenCode, whose `outputTokens` is the visible output alone and whose own total and prices add the reasoning (its source at v2.0.32).
 - **Who and where**: the agent, OverBench's session id and the agent's own session id, the project, and the turn's end time.
 - A turn that fails or is cancelled without a response reports nothing, and records nothing.
 
 Cost is not recorded: for a subscription it is not what the user pays ([plan limits](./session-model.md#plan-limits)), and only some agents report it.
 
-The session's own totals, which the usage popover shows, are summed the same way ([prompt turns](./session-model.md#prompt-turns)).
+The session's own totals, which the usage popover shows, are summed from the same counts ([prompt turns](./session-model.md#prompt-turns)), so they include the subagents too.
 
 ## Usage on this computer
 
@@ -220,9 +220,11 @@ From cc-switch, OverBench leaves out the routing proxy and its request log, pric
 
 Other references: the reference app's profile page, which puts lifetime tokens, the peak day, the longest task and both streaks over a 53-week heatmap with daily, weekly and cumulative views (the dashboard keeps the totals, the peak day and the heatmap, and leaves out the streaks and the longest task); and Claude Code's `/stats`, which keeps its own daily tokens per model in `~/.claude/stats-cache.json`.
 
-## Open questions
+## Measurements
 
-- Does a Claude Code turn's `usage` include its subagents'? If it does, the record must not add the subagents' own `idle` usage on top. To be measured with a live session before the record is built.
-- Claude Code's own model cycles between turns are missing from the record; the logs have them. How much that is, to be measured.
-- Does OpenCode count reasoning inside its output? cc-switch adds the two.
-- `~/.claude/stats-cache.json` holds daily tokens per model from before Claude Code pruned its transcripts (on the development Mac, from 2026-06-16, while the transcripts start on 2026-08-27). It could fill those older days, but it is an internal file, at version 5, updated only when the user runs `/stats`. Left out for now.
+The questions the first draft left open, answered on 2026-10-22 on the development Mac:
+
+- **Subagents in a Claude Code turn** (claude-agent-acp 0.94.0): a turn that sent one subagent reported `usage` of 89,289 tokens, exactly the main transcript's requests, while the subagent's transcript held 76,846 more. `model_usage` reported 166,135, the sum of both. Hence the record reads `model_usage`.
+- **Claude Code's own cycles between turns**: the cycles that follow a background task's notification hold 1.81 billion of the 41.8 billion Claude Code tokens in the logs, 4.3% (6.1% in the 222 sessions that have any). The record leaves them out, since the adapter adds them to no turn; **Usage on this computer** counts them.
+- **OpenCode's reasoning**: kept apart from its output (`visibleOutputTokens` and `reasoningTokens` in its source at v2.0.32), so its total adds the two, as cc-switch does.
+- `~/.claude/stats-cache.json` holds daily tokens per model from before Claude Code pruned its transcripts (on the development Mac, from 2026-06-16, while the transcripts start on 2026-08-27). It is an internal file, at version 5, updated only when the user runs `/stats`, so it is left out.
