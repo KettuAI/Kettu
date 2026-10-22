@@ -314,6 +314,66 @@ export function presets(today: number, firstDay: number, first: number | null): 
   ]
 }
 
+/** Why typed dates make no range: not a date, after today, or a start after the end. */
+export type DateError = 'format' | 'future' | 'order'
+
+/** A range being chosen: the start, then the end once a second day is picked. */
+export interface RangeDraft {
+  from: number | null
+  to: number | null
+}
+
+const TYPED_DAY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * A date typed as YYYY-MM-DD as a local day, why it is none, or null while it may still be
+ * incomplete: a field validates once it holds ten characters or is left.
+ */
+export function typedDay(
+  text: string,
+  today: number,
+  complete: boolean,
+): number | Exclude<DateError, 'order'> | null {
+  const value = text.trim()
+  const match = TYPED_DAY.exec(value)
+  if (!match) return complete || value.length >= 10 ? 'format' : null
+  const [year, month, date] = [Number(match[1]), Number(match[2]) - 1, Number(match[3])]
+  const day = new Date(year, month, date)
+  if (day.getFullYear() !== year || day.getMonth() !== month || day.getDate() !== date) {
+    return 'format'
+  }
+  return day.getTime() > today ? 'future' : day.getTime()
+}
+
+/**
+ * The range the picker's fields make: a typed end stands in for the draft's, and an end alone is
+ * that one day. Null while a typed end is unfinished or wrong, with the reason once it is known.
+ */
+export function typedRange(
+  draft: RangeDraft,
+  typed: { from: string | null; to: string | null },
+  complete: { from: boolean; to: boolean },
+  today: number,
+): { range: RangeDraft | null; error: DateError | null } {
+  let error: DateError | null = null
+  let pending = false
+  const end = (which: 'from' | 'to'): number | null => {
+    const text = typed[which]
+    if (text === null) return draft[which]
+    if (text.trim() === '') return null
+    const day = typedDay(text, today, complete[which])
+    if (typeof day === 'number') return day
+    if (day === null) pending = true
+    else error ??= day
+    return null
+  }
+  const from = end('from')
+  const to = end('to')
+  if (error === null && from !== null && to !== null && from > to) error = 'order'
+  if (error !== null || pending) return { range: null, error }
+  return { range: from === null ? { from: to, to } : { from, to }, error: null }
+}
+
 /** Each agent's series color, from its mark. */
 export const AGENT_FILL: Record<AgentId, string> = {
   'claude-code': 'bg-agent-claude-code',

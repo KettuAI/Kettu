@@ -108,7 +108,11 @@
     "start": "开始",
     "end": "结束",
     "days_other": "共 {{count}} 天",
-    "invalid": "请按 YYYY-MM-DD 输入日期",
+    "errors": {
+      "format": "请按 YYYY-MM-DD 输入日期",
+      "future": "不能晚于今天",
+      "order": "开始日期晚于结束日期"
+    },
     "cancel": "取消",
     "apply": "应用"
   },

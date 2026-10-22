@@ -14,6 +14,8 @@ import {
   projectRows,
   rangeOf,
   trend,
+  typedDay,
+  typedRange,
   weekStartOf,
 } from './model'
 
@@ -158,5 +160,64 @@ describe('breakdowns', () => {
       [null, 5],
       ['kite', 4],
     ])
+  })
+})
+
+describe('typed dates', () => {
+  const none = { from: null, to: null }
+  const done = { from: true, to: true }
+  const typing = { from: false, to: false }
+
+  it('reads YYYY-MM-DD once complete, and nothing else', () => {
+    expect(typedDay('2026-10-05', TODAY, false)).toBe(day(2026, 10, 5))
+    expect(typedDay(' 2026-10-05 ', TODAY, false)).toBe(day(2026, 10, 5))
+    expect(typedDay('2026-10-0', TODAY, false)).toBeNull()
+    expect(typedDay('2026-10-0', TODAY, true)).toBe('format')
+    expect(typedDay('2026-1-5', TODAY, true)).toBe('format')
+    expect(typedDay('2026-02-30', TODAY, false)).toBe('format')
+    expect(typedDay('20261005xx', TODAY, false)).toBe('format')
+    expect(typedDay('2026-10-23', TODAY, false)).toBe('future')
+    expect(typedDay('2026-10-22', TODAY, false)).toBe(TODAY)
+  })
+
+  it('keeps the end when a later start is typed, and says the order is wrong', () => {
+    const draft = { from: day(2026, 10, 1), to: day(2026, 10, 10) }
+    expect(typedRange(draft, { from: '2026-10-15', to: null }, typing, TODAY)).toEqual({
+      range: null,
+      error: 'order',
+    })
+    expect(typedRange(draft, { from: '2026-10-05', to: null }, typing, TODAY)).toEqual({
+      range: { from: day(2026, 10, 5), to: day(2026, 10, 10) },
+      error: null,
+    })
+  })
+
+  it('does not take a day after today', () => {
+    const draft = { from: day(2026, 10, 1), to: day(2026, 10, 10) }
+    expect(typedRange(draft, { from: null, to: '2026-11-01' }, typing, TODAY)).toEqual({
+      range: null,
+      error: 'future',
+    })
+  })
+
+  it('waits for a date being typed, and marks it once the field is left', () => {
+    const draft = { from: day(2026, 10, 1), to: null }
+    expect(typedRange(draft, { from: null, to: '2026-10-1' }, typing, TODAY)).toEqual({
+      range: null,
+      error: null,
+    })
+    expect(typedRange(draft, { from: null, to: '2026-10-1' }, done, TODAY).error).toBe('format')
+  })
+
+  it('reads an end alone as that one day, and clearing both as no range', () => {
+    expect(typedRange(none, { from: null, to: '2026-10-07' }, typing, TODAY)).toEqual({
+      range: { from: day(2026, 10, 7), to: day(2026, 10, 7) },
+      error: null,
+    })
+    const draft = { from: day(2026, 10, 1), to: day(2026, 10, 10) }
+    expect(typedRange(draft, { from: '', to: '' }, typing, TODAY)).toEqual({
+      range: none,
+      error: null,
+    })
   })
 })

@@ -111,7 +111,11 @@
     "end": "End",
     "days_one": "{{count}} day",
     "days_other": "{{count}} days",
-    "invalid": "Enter a date as YYYY-MM-DD",
+    "errors": {
+      "format": "Enter a date as YYYY-MM-DD",
+      "future": "Choose a day up to today",
+      "order": "The start is after the end"
+    },
     "cancel": "Cancel",
     "apply": "Apply"
   },
