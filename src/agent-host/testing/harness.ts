@@ -89,6 +89,7 @@ export function inProcessLauncher(module: FakeAgentModule, env: Env = {}): InPro
       const transport = inProcessTransport(app)
       return {
         pid: null,
+        startedAt: Date.now(),
         transport,
         exited,
         get hasExited() {
@@ -98,7 +99,6 @@ export function inProcessLauncher(module: FakeAgentModule, env: Env = {}): InPro
           finish({ code: 0, signal: null })
           return exited
         },
-        reap: () => {},
       }
     },
   }

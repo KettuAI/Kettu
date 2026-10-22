@@ -6,9 +6,10 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
-import { spawnArguments, taskkill } from './agent-process'
+import { spawnArguments } from './agent-process'
 import { needsShell, type Env } from './find-command'
 import { t } from './i18n'
+import { processControl } from './process-tree'
 import { TextRing } from './ring'
 
 export const INSTALLED_FILE = 'installed.json'
@@ -185,7 +186,7 @@ export interface NpmOptions {
 /** Ends npm and whatever it started: its process group on macOS and Linux, its tree on Windows. */
 function stopTree(pid: number, platform: Platform, exited: Promise<unknown>): void {
   if (platform === 'win32') {
-    void taskkill(pid)
+    void processControl(platform).taskkill([pid])
     return
   }
   const signal = (name: NodeJS.Signals): void => {

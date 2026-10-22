@@ -8,18 +8,19 @@ OverBench stores as little as it can. Agents already keep transcripts and creden
 
 All files live in `app.getPath('userData')` ([per platform](./agent-host.md#platform-differences)).
 
-| File                  | Owner      | Contents                                                                                                                                           |
-| --------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state/projects.json` | Agent host | Recent project folders                                                                                                                             |
-| `state/sessions.json` | Agent host | The session index                                                                                                                                  |
-| `state/agents.json`   | Agent host | The account and plan limits each agent last reported, shown after a restart until it reports again ([sign-in](./agent-host.md#sign-in))            |
-| `state/threads.db`    | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                             |
-| `settings.json`       | Main       | [Settings](#settings)                                                                                                                              |
-| `window-state.json`   | Main       | Window size, position and maximized state                                                                                                          |
-| `app-state.json`      | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
-| `agents/`             | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and version                                                     |
-| `scratch/`            | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
-| `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
+| File                         | Owner      | Contents                                                                                                                                           |
+| ---------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state/projects.json`        | Agent host | Recent project folders                                                                                                                             |
+| `state/sessions.json`        | Agent host | The session index                                                                                                                                  |
+| `state/agent-processes.json` | Agent host | The agent processes running and what they left, until seen gone, for the next host to stop ([process trees](./agent-host.md#process-trees))        |
+| `state/agents.json`          | Agent host | The account and plan limits each agent last reported, shown after a restart until it reports again ([sign-in](./agent-host.md#sign-in))            |
+| `state/threads.db`           | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                             |
+| `settings.json`              | Main       | [Settings](#settings)                                                                                                                              |
+| `window-state.json`          | Main       | Window size, position and maximized state                                                                                                          |
+| `app-state.json`             | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
+| `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and version                                                     |
+| `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
+| `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts
 interface ProjectsFile {

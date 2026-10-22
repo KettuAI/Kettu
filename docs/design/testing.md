@@ -26,7 +26,7 @@ React components have no automated tests in M0; they are checked by running the 
 - Integration tests connect the host's session layer to the fake agent in-process: the agent's `AgentApp` and the host's client talk through an in-memory stream pair (`inProcessTransport` in `src/agent-host/acp/connection.ts`), so they need no subprocess and stay fast. The host's connection code therefore accepts either a process's stdio or an in-process agent.
 - `src/agent-host/testing/harness.ts` holds what they share. `startTestHost()` runs a whole host, as `index.ts` builds it, on a temporary data directory, with an in-process launcher for the fake agent, a stubbed shell environment and no other agent found. `TestPort` stands in for a renderer port: it structured-clones every message both ways, as a real `MessagePort` does, so a payload that would not survive the port fails the test, and it keeps a replica of each watched thread by applying the batches with `applyPatches`, failing on any `seq` gap. Tests compare that replica with `sessions.snapshot`.
 - Timings that matter to a test are options rather than constants: the 16 ms flush, the 10 s cancel fallback, the `initialize` timeouts and the idle stop, so tests run them in milliseconds instead of with fake timers.
-- Process tests spawn `tools/fake-agent/main.ts` with `process.execPath`, never a shell, so they run the same on every platform. They cover framing and a clean EOF stop, a forced stop of a process tree, `SIGKILL` escalation (skipped on Windows, which has no `SIGTERM` to ignore; `taskkill /F` always ends the tree), and a whole host whose agent crashes mid-turn, closing the session, and starts again for the next prompt.
+- Process tests spawn `tools/fake-agent/main.ts` with `process.execPath`, never a shell, so they run the same on every platform. They cover framing and a clean EOF stop, a forced stop of a process tree, `SIGKILL` escalation (skipped on Windows, which has no `SIGTERM` to ignore; `taskkill /F` always ends the tree), a whole host whose agent crashes mid-turn, closing the session, and starts again for the next prompt, what an agent leaves in groups of its own after a stop and a crash, and the leftovers a host stops at start, without touching a process that took one of their pids.
 - The [adapter install](./agent-host.md#installing-adapters) is tested with the real npm, offline: a fixture package packed with `npm pack` is installed from its tarball, which the installer accepts as the dependency spec in place of a registry version. The tests cover the atomic rename, a failed and a timed-out install, leftover `.partial-*` directories, resolving `bin`, the fallback to an older version and the cleanup after an update. CI runs them on all three platforms, which covers `npm.cmd` on Windows.
 - Tests that touch the file system use a fresh temporary directory.
 
@@ -65,21 +65,23 @@ Without a scenario it plays `basic-turn`. `/compact` streams a compaction with i
 
 Environment variables, read when the agent starts:
 
-| Variable                             | Effect                                                                                     |
-| ------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `FAKE_AGENT_SCENARIO`                | The scenario for prompts that name none; `slow-start` also delays `initialize`             |
-| `FAKE_AGENT_RATE`, `_SIZE`, `_COUNT` | Defaults for `--rate`, `--size` (such as `200k`) and `--count`                             |
-| `FAKE_AGENT_DELAY_SCALE`             | Multiplies every delay; `0` runs scenarios as fast as possible, which the tests use        |
-| `FAKE_AGENT_SLOW_START_MS`           | Delays `initialize` by this long, printing progress                                        |
-| `FAKE_AGENT_AUTH=required`           | Starts signed out                                                                          |
-| `FAKE_AGENT_LEGACY_MODES=1`          | Reports modes through the legacy `modes` field instead of a mode config option             |
-| `FAKE_AGENT_HISTORY_ENTRIES`         | The size of the synthesized `large-history` replay (default 1,000)                         |
-| `FAKE_AGENT_LIST_PAGE`               | The `session/list` page size (default 50), to exercise `nextCursor`                        |
-| `FAKE_AGENT_RESUME_UNKNOWN=fail`     | `session/resume` of a session it does not know fails, as Claude Code's does                |
-| `FAKE_AGENT_IGNORE_EOF=1`            | Keeps running after stdin closes, for the forced-stop process test                         |
-| `FAKE_AGENT_IGNORE_SIGTERM=1`        | Ignores `SIGTERM`, so a stop has to escalate to `SIGKILL`                                  |
-| `FAKE_AGENT_SPAWN_CHILD=1`           | Starts a long-running child process and prints its pid to stderr, for process-tree cleanup |
-| `FAKE_AGENT_LOGIN_MARKER`            | Where `main.ts --login` writes its sign-in marker (default: the temp directory)            |
+| Variable                             | Effect                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `FAKE_AGENT_SCENARIO`                | The scenario for prompts that name none; `slow-start` also delays `initialize`                         |
+| `FAKE_AGENT_RATE`, `_SIZE`, `_COUNT` | Defaults for `--rate`, `--size` (such as `200k`) and `--count`                                         |
+| `FAKE_AGENT_DELAY_SCALE`             | Multiplies every delay; `0` runs scenarios as fast as possible, which the tests use                    |
+| `FAKE_AGENT_SLOW_START_MS`           | Delays `initialize` by this long, printing progress                                                    |
+| `FAKE_AGENT_AUTH=required`           | Starts signed out                                                                                      |
+| `FAKE_AGENT_LEGACY_MODES=1`          | Reports modes through the legacy `modes` field instead of a mode config option                         |
+| `FAKE_AGENT_HISTORY_ENTRIES`         | The size of the synthesized `large-history` replay (default 1,000)                                     |
+| `FAKE_AGENT_LIST_PAGE`               | The `session/list` page size (default 50), to exercise `nextCursor`                                    |
+| `FAKE_AGENT_RESUME_UNKNOWN=fail`     | `session/resume` of a session it does not know fails, as Claude Code's does                            |
+| `FAKE_AGENT_IGNORE_EOF=1`            | Keeps running after stdin closes, for the forced-stop process test                                     |
+| `FAKE_AGENT_IGNORE_SIGTERM=1`        | Ignores `SIGTERM`, so a stop has to escalate to `SIGKILL`                                              |
+| `FAKE_AGENT_SPAWN_CHILD=1`           | Starts a long-running child process and prints its pid to stderr, for process-tree cleanup             |
+| `FAKE_AGENT_SPAWN_CHILD=detached`    | The same child in a process group of its own, as Claude Code runs a command                            |
+| `FAKE_AGENT_SPAWN_CHILD=nested`      | A child in the agent's group that starts a grandchild in a group of its own, as Claude Code's CLI does |
+| `FAKE_AGENT_LOGIN_MARKER`            | Where `main.ts --login` writes its sign-in marker (default: the temp directory)                        |
 
 The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
 

@@ -12,6 +12,7 @@ import type {
   AgentStatus,
   PlanLimit,
 } from '@shared/agent-host'
+import type { AgentProcess } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
@@ -32,6 +33,7 @@ import {
 } from './adapter-install'
 import { readAgentDetails } from './agent-details'
 import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
+import type { AgentTrees } from './agent-trees'
 import {
   detectAgent,
   displayCommand,
@@ -54,10 +56,11 @@ import type { AgentsFile } from './storage'
 
 export interface LaunchedAgent {
   readonly pid: number | null
+  readonly startedAt: number
   readonly transport: AcpTransport
   readonly exited: Promise<ExitInfo>
+  readonly hasExited: boolean
   stop(): Promise<ExitInfo>
-  reap(): void
 }
 
 export interface LaunchOutput {
@@ -136,7 +139,9 @@ export interface AgentManagerDeps {
   install?(options: InstallOptions): Promise<InstalledAdapter>
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
-  processes(processes: { agentId: AgentId; pid: number }[]): void
+  processes(processes: AgentProcess[]): void
+  /** Notes each launch, and stops what an agent's process leaves behind once it exits. */
+  trees?: AgentTrees
   authCommands(commands: string[]): void
   /** Keeps what the agents last reported about their accounts and plans, for the next run. */
   remember?(file: AgentsFile): void
@@ -369,6 +374,9 @@ export class AgentManager {
       event: (event, detail) => diagnostics.event(agentId, event, detail),
     })
     slot.launched = launched
+    if (launched.pid !== null) {
+      this.deps.trees?.launched({ pid: launched.pid, startedAt: launched.startedAt })
+    }
     this.emitProcesses()
     const connection = AgentConnection.connect(launched.transport, this.connectionHooks(slot))
     void launched.exited.then((info) => this.onExit(slot, launched, connection, info))
@@ -431,6 +439,7 @@ export class AgentManager {
   ): void {
     const agentId = slot.def.id
     this.deps.diagnostics.event(agentId, 'exit', describeExit(info))
+    void this.reapTree(slot, launched)
     connection.close()
     if (slot.launched !== launched) return
     slot.launched = null
@@ -446,7 +455,6 @@ export class AgentManager {
       return
     }
     // Nothing restarts it: its sessions go back to closed, and the next one used starts it.
-    launched.reap()
     this.hooks.agentExited(agentId, info)
     if (this.recordFailure(slot)) {
       slot.state = 'failed'
@@ -652,12 +660,27 @@ export class AgentManager {
     slot.intentionalStop = true
     slot.state = 'stopping'
     this.emit(slot)
-    slot.stopping = launched.stop().then(() => {})
+    slot.stopping = this.noteTree(launched)
+      .then(() => launched.stop())
+      .then(() => this.reapTree(slot, launched))
     try {
       await slot.stopping
     } finally {
       slot.stopping = null
     }
+  }
+
+  private noteTree(launched: LaunchedAgent): Promise<void> {
+    const { trees } = this.deps
+    if (!trees || launched.pid === null || launched.hasExited) return Promise.resolve()
+    return trees.note({ pid: launched.pid, startedAt: launched.startedAt })
+  }
+
+  /** What the agent's process left behind once it exited: CLIs, servers, commands it ran. */
+  private reapTree(slot: Slot, launched: LaunchedAgent): Promise<void> {
+    const { trees } = this.deps
+    if (!trees || launched.pid === null) return Promise.resolve()
+    return trees.reap({ pid: launched.pid, startedAt: launched.startedAt }, slot.def.name)
   }
 
   /** Stops every agent in parallel, with the documented sequence. */
@@ -671,7 +694,13 @@ export class AgentManager {
     const { diagnostics } = this.deps
     const agentId = slot.def.id
     return {
-      traffic: (direction, message) => diagnostics.traffic(agentId, direction, message),
+      traffic: (direction, message) => {
+        diagnostics.traffic(agentId, direction, message)
+        const { launched } = slot
+        if (launched?.pid != null) {
+          this.deps.trees?.active({ pid: launched.pid, startedAt: launched.startedAt })
+        }
+      },
       account: (account) => this.setAccount(slot, account),
       ignored: (sessionId, what) =>
         diagnostics.event(agentId, 'ignored', sessionId ? `${what} (session ${sessionId})` : what),
@@ -1019,9 +1048,11 @@ export class AgentManager {
     this.deps.processes(this.processes())
   }
 
-  processes(): { agentId: AgentId; pid: number }[] {
-    return [...this.slots.values()].flatMap((slot) =>
-      slot.launched?.pid != null ? [{ agentId: slot.def.id, pid: slot.launched.pid }] : [],
+  processes(): AgentProcess[] {
+    return [...this.slots.values()].flatMap(({ def, launched }) =>
+      launched?.pid != null
+        ? [{ agentId: def.id, pid: launched.pid, startedAt: launched.startedAt }]
+        : [],
     )
   }
 }

@@ -1,5 +1,9 @@
 // Process tests: the real spawn and stop code against the fake agent on stdio.
 
+import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyPatches, threadFromSnapshot, type ThreadState } from '@shared/thread'
@@ -175,6 +179,106 @@ describe('spawnAgent', () => {
       expect(await until(() => !alive(childPid), 3_000)).toBe(true)
     },
   )
+})
+
+describe('what an agent leaves behind', () => {
+  async function hostWith(child: 'detached' | 'nested') {
+    const t = await startTestHost({
+      launcher: processLauncher(process.platform),
+      agentEnv: { FAKE_AGENT_DELAY_SCALE: '0', FAKE_AGENT_SPAWN_CHILD: child },
+    })
+    const port = t.connect()
+    const created = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    const stderr = () => t.host.diagnostics.agentRecords('fake-agent').stderr
+    const pattern = child === 'nested' ? /grandchild pid (\d+)/ : /child pid (\d+)/
+    expect(await until(() => pattern.test(stderr()), 10_000)).toBe(true)
+    const pids = [...stderr().matchAll(/child pid (\d+)/g)].map((match) => Number(match[1]))
+    expect(pids.every(alive)).toBe(true)
+    const cleanUp = async () => {
+      for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL')
+      await t.stop()
+    }
+    return { t, port, sessionId: created.id, pids, cleanUp }
+  }
+
+  it('stops a child in a process group of its own when the agent stops', async () => {
+    const { t, pids, cleanUp } = await hostWith('detached')
+    try {
+      await t.host.agents.stop('fake-agent')
+      expect(await until(() => !pids.some(alive), 5_000)).toBe(true)
+    } finally {
+      await cleanUp()
+    }
+  })
+
+  it('stops what is left under its group when the agent crashes', async () => {
+    const { port, sessionId, pids, cleanUp } = await hostWith('nested')
+    try {
+      expect(pids).toHaveLength(2)
+      await port.request('sessions.prompt', {
+        sessionId,
+        content: [{ type: 'text', text: '/crash' }],
+      })
+      await port.untilStatus(sessionId, 'closed')
+      expect(await until(() => !pids.some(alive), 5_000)).toBe(true)
+    } finally {
+      await cleanUp()
+    }
+  })
+})
+
+describe('leftovers of the last run', () => {
+  it('stops the agent trees a host left running, and not a process that took a pid', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-leftovers-'))
+    const keep = (script: string) =>
+      spawn(process.execPath, ['-e', script], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      })
+    // An agent left running, with a command it started in a group of its own.
+    const agent = keep(
+      "const c = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' }); process.stdout.write(String(c.pid)); setInterval(() => {}, 1000)",
+    )
+    const agentStartedAt = Date.now()
+    const command = await new Promise<number>((resolve) =>
+      agent.stdout.once('data', (data: Buffer) => resolve(Number(String(data)))),
+    )
+    // Its pid is in the file with another start time: someone else's process now.
+    const other = keep('setInterval(() => {}, 1000)')
+    const pids = [agent.pid!, command, other.pid!]
+    try {
+      await mkdir(path.join(dir, 'state'), { recursive: true })
+      await writeFile(
+        path.join(dir, 'state', 'agent-processes.json'),
+        JSON.stringify({
+          version: 1,
+          processes: [
+            { pid: agent.pid, startedAt: agentStartedAt },
+            { pid: other.pid, startedAt: agentStartedAt - 3_600_000 },
+          ],
+        }),
+      )
+      const file = path.join(dir, 'state', 'agent-processes.json')
+      const t = await startTestHost({ userDataPath: dir })
+      try {
+        expect(await until(() => !alive(agent.pid!) && !alive(command), 8_000)).toBe(true)
+        expect(alive(other.pid!)).toBe(true)
+        // Forgotten once the grace for what ignored SIGTERM is over.
+        expect(
+          await until(() => JSON.parse(readFileSync(file, 'utf8')).processes.length === 0, 8_000),
+        ).toBe(true)
+      } finally {
+        await t.stop()
+      }
+    } finally {
+      for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL')
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('spawnArguments', () => {

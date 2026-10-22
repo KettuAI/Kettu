@@ -1,0 +1,212 @@
+import { spawn } from 'node:child_process'
+import { describe, expect, it } from 'vitest'
+import {
+  parseCim,
+  parsePs,
+  processControl,
+  signalTargets,
+  stopTrees,
+  treeOf,
+  type ProcessControl,
+  type ProcessRow,
+} from './process-tree'
+
+const T = 1_800_000_000_000
+const row = (pid: number, ppid: number, pgid: number, startedAt = T + pid): ProcessRow => ({
+  pid,
+  ppid,
+  pgid,
+  startedAt,
+})
+const pids = (rows: ProcessRow[]) => rows.map((r) => r.pid).sort((a, b) => a - b)
+
+describe('parsePs', () => {
+  it('reads pid, parent, group and the start time from the elapsed time', () => {
+    const text = [
+      '    1     0     1 13-00:26:03',
+      '  556     1   556    01:02:03',
+      ' 9000   556  9000       00:07',
+      'garbage',
+    ].join('\n')
+    expect(parsePs(text, T)).toEqual([
+      { pid: 1, ppid: 0, pgid: 1, startedAt: T - (13 * 86_400 + 26 * 60 + 3) * 1000 },
+      { pid: 556, ppid: 1, pgid: 556, startedAt: T - 3723 * 1000 },
+      { pid: 9000, ppid: 556, pgid: 9000, startedAt: T - 7000 },
+    ])
+  })
+})
+
+describe('parseCim', () => {
+  it('reads pid, parent and the creation file time; a process has no group but itself', () => {
+    // 2026-10-22T00:00:00Z as a Windows file time.
+    const fileTime = (Date.UTC(2026, 9, 22) + 11_644_473_600_000) * 10_000
+    expect(parseCim(`4 0 0\r\n1234 4 ${fileTime}\r\n\r\n`)).toEqual([
+      { pid: 4, ppid: 0, pgid: 4, startedAt: 0 },
+      { pid: 1234, ppid: 4, pgid: 1234, startedAt: Date.UTC(2026, 9, 22) },
+    ])
+  })
+})
+
+describe('treeOf', () => {
+  const root = { pid: 100, startedAt: T + 100 }
+
+  it('takes the group and every descendant, in other groups too, while the root runs', () => {
+    const rows = [
+      row(1, 0, 1),
+      row(100, 50, 100),
+      row(101, 100, 100), // a CLI in the agent's group
+      row(102, 101, 102), // a command it runs in a group of its own
+      row(103, 102, 102),
+      row(200, 1, 200), // unrelated
+    ]
+    expect(pids(treeOf(rows, root, 'darwin'))).toEqual([100, 101, 102, 103])
+  })
+
+  it('finds what is left through the group after the root exits', () => {
+    const rows = [row(101, 1, 100), row(102, 101, 102), row(300, 1, 300)]
+    expect(pids(treeOf(rows, { ...root, seenAt: T + 5_000 }, 'linux'))).toEqual([101, 102])
+  })
+
+  it('after the root exits, takes only what started while it was seen running', () => {
+    // 150 joined a group 100 that a later process with pid 100 led, after the root was gone.
+    const rows = [row(101, 1, 100), row(150, 1, 100, T + 60_000)]
+    expect(pids(treeOf(rows, { ...root, seenAt: T + 5_000 }, 'linux'))).toEqual([101])
+    expect(treeOf(rows, root, 'linux')).toEqual([])
+  })
+
+  it('leaves the group alone once another process holds the root pid', () => {
+    const rows = [row(100, 1, 100, T + 99_000), row(101, 100, 100, T + 99_500)]
+    expect(treeOf(rows, root, 'linux')).toEqual([])
+  })
+
+  it('skips a child that started before its parent, so a reused pid is not followed', () => {
+    const rows = [row(100, 50, 100), row(150, 100, 150, T - 60_000)]
+    expect(pids(treeOf(rows, root, 'darwin'))).toEqual([100])
+  })
+
+  it('follows the parent links a dead root leaves on Windows', () => {
+    const rows = [row(101, 100, 101), row(102, 101, 102), row(103, 100, 103, T - 60_000)]
+    expect(pids(treeOf(rows, { ...root, seenAt: T + 5_000 }, 'win32'))).toEqual([101, 102])
+  })
+
+  it('does not take the children of a later process with the root pid on Windows', () => {
+    const rows = [
+      row(100, 4, 100, T + 50_000),
+      row(101, 100, 101, T + 1_000), // left by the root
+      row(102, 100, 102, T + 60_000), // the new process's own child
+    ]
+    expect(pids(treeOf(rows, { ...root, seenAt: T + 70_000 }, 'win32'))).toEqual([101])
+  })
+})
+
+describe('signalTargets', () => {
+  it('addresses each group the tree leads, and a stray member alone', () => {
+    const tree = [row(101, 1, 100), row(102, 101, 102), row(103, 102, 102), row(104, 101, 999)]
+    const leaders = new Set([100, ...tree.map((r) => r.pid)])
+    expect(signalTargets(tree, leaders).sort((a, b) => a - b)).toEqual([-102, -100, 104])
+  })
+})
+
+function fakeControl(platform: ProcessControl['platform'], rows: ProcessRow[]) {
+  const calls: string[] = []
+  const gone = new Set<number>()
+  const control: ProcessControl = {
+    platform,
+    list: async () => rows,
+    kill(target, signal) {
+      calls.push(`kill ${target} ${signal}`)
+      if (signal === 0 && gone.has(target)) {
+        throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' })
+      }
+    },
+    async taskkill(list) {
+      calls.push(`taskkill ${list.join(' ')}`)
+    },
+    async delay(ms) {
+      calls.push(`wait ${ms}`)
+    },
+  }
+  return { control, calls, gone }
+}
+
+describe('stopTrees', () => {
+  const rows = [row(100, 1, 100), row(101, 100, 100), row(102, 101, 102)]
+  const root = { pid: 100, startedAt: T + 100 }
+
+  it('sends SIGTERM to each group, then SIGKILL to what outlives the grace', async () => {
+    const { control, calls, gone } = fakeControl('darwin', rows)
+    gone.add(100).add(101)
+    await stopTrees(control, [root], 2000)
+    expect(calls).toEqual([
+      'kill -100 SIGTERM',
+      'kill -102 SIGTERM',
+      'wait 2000',
+      'kill 100 0',
+      'kill 101 0',
+      'kill 102 0',
+      'kill -102 SIGKILL',
+    ])
+  })
+
+  it('treats a group already gone as stopped', async () => {
+    const { control } = fakeControl('linux', rows)
+    control.kill = () => {
+      throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' })
+    }
+    expect((await stopTrees(control, [root], 2000)).failures).toEqual([])
+  })
+
+  it('waits for nothing when the tree is gone', async () => {
+    const { control, calls } = fakeControl('linux', [])
+    await stopTrees(control, [root], 2000)
+    expect(calls).toEqual([])
+  })
+
+  it('ends the whole tree with taskkill on Windows', async () => {
+    const { control, calls } = fakeControl('win32', [row(100, 4, 100), row(101, 100, 101)])
+    await stopTrees(control, [root], 2000)
+    expect(calls).toEqual(['taskkill 100 101'])
+  })
+})
+
+describe('a real process tree', () => {
+  it.skipIf(process.platform === 'win32')(
+    'stops a detached tree and a command in a group of its own',
+    async () => {
+      // The shell leads a group; its child starts a command in a group of its own.
+      const script =
+        "const c = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' }); process.stdout.write(String(c.pid)); setInterval(() => {}, 1000)"
+      const child = spawn(process.execPath, ['-e', script], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      })
+      const startedAt = Date.now()
+      const grandchild = await new Promise<number>((resolve) =>
+        child.stdout.once('data', (data: Buffer) => resolve(Number(String(data)))),
+      )
+      const alive = (pid: number) => {
+        try {
+          process.kill(pid, 0)
+          return true
+        } catch {
+          return false
+        }
+      }
+      try {
+        expect(alive(grandchild)).toBe(true)
+        const { failures } = await stopTrees(
+          processControl(process.platform),
+          [{ pid: child.pid!, startedAt }],
+          1000,
+        )
+        expect(failures).toEqual([])
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        expect(alive(child.pid!)).toBe(false)
+        expect(alive(grandchild)).toBe(false)
+      } finally {
+        for (const pid of [child.pid!, grandchild]) if (alive(pid)) process.kill(pid, 'SIGKILL')
+      }
+    },
+  )
+})

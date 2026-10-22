@@ -5,8 +5,8 @@ import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
+import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from './log'
-import { killProcessTrees } from './process-tree'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
 
 const log = createLogger('agent-host')
@@ -21,6 +21,8 @@ export interface AgentHostDeps {
 
 const MAX_LIST = 10_000
 const MAX_STRING = 8192
+/** How long an agent's tree gets between SIGTERM and SIGKILL after its host died. */
+const GRACE_MS = 2_000
 
 function isStringList(value: unknown): value is string[] {
   return (
@@ -43,7 +45,7 @@ function isBusySession(value: unknown): value is BusySession {
 /** Main's side of the agent host: supervision, ports, and what the host asks main to do. */
 export class AgentHost {
   private readonly host: UtilityHost<MainToHost, HostToMain>
-  private agentPids: number[] = []
+  private agentProcesses: ProcessId[] = []
   private readonly busyRequests = new Map<number, (sessions: BusySession[]) => void>()
   private nextBusyId = 1
 
@@ -128,9 +130,11 @@ export class AgentHost {
     switch (message.type) {
       case 'host:agent-processes':
         if (Array.isArray(message.processes)) {
-          this.agentPids = message.processes
-            .map((entry) => entry?.pid)
-            .filter((pid): pid is number => Number.isInteger(pid) && pid > 0)
+          this.agentProcesses = message.processes.flatMap((entry) =>
+            Number.isSafeInteger(entry?.pid) && entry.pid > 1 && Number.isFinite(entry.startedAt)
+              ? [{ pid: entry.pid, startedAt: entry.startedAt }]
+              : [],
+          )
         }
         break
       case 'host:projects':
@@ -168,13 +172,19 @@ export class AgentHost {
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
     this.deps.onBadge(0)
-    const pids = this.agentPids
-    this.agentPids = []
+    const roots = this.agentProcesses
+    this.agentProcesses = []
     // After a clean stop the host has already stopped every agent itself.
-    if (clean || pids.length === 0) return
-    log.warn(`Stopping ${pids.length} agent process tree(s) left by the host`)
-    void killProcessTrees(pids).then((failures) => {
-      for (const { pid, error } of failures) log.warn(`Could not stop agent ${pid}: ${error}`)
-    })
+    if (clean || roots.length === 0) return
+    log.warn(`Stopping ${roots.length} agent process tree(s) left by the host`)
+    // They ran until the host died a moment ago.
+    const seenAt = Date.now()
+    const trees = roots.map((root) => ({ ...root, seenAt }))
+    stopTrees(processControl(process.platform), trees, GRACE_MS).then(
+      ({ failures }) => {
+        for (const { target, error } of failures) log.warn(`Could not stop ${target}: ${error}`)
+      },
+      (error: unknown) => log.warn(`Could not stop the agents: ${(error as Error).message}`),
+    )
   }
 }

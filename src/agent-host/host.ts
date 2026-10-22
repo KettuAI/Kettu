@@ -3,10 +3,11 @@
 
 import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
-import type { HostToMain } from '@shared/host-control'
+import type { AgentProcess, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
-import type { AgentId } from '@shared/thread'
+import { STOP_TIMINGS } from './agent-process'
+import { AgentTrees } from './agent-trees'
 import {
   AgentManager,
   processLauncher,
@@ -23,12 +24,20 @@ import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
 import { pathKey } from './paths'
+import { processControl } from './process-tree'
 import { Projects } from './projects'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
 import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
-import { agentsFile, projectsFile, sessionsFile, type AgentsFile, type JsonFile } from './storage'
+import {
+  agentProcessesFile,
+  agentsFile,
+  projectsFile,
+  sessionsFile,
+  type AgentsFile,
+  type JsonFile,
+} from './storage'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { createValidators } from './validate'
 
@@ -62,6 +71,8 @@ export class AgentHost {
   readonly agents: AgentManager
   /** What the agents last reported about their accounts and plans, kept across runs. */
   private readonly remembered: JsonFile<AgentsFile>
+  /** The agent processes and what they leave behind, until seen gone. */
+  private readonly trees: AgentTrees
   readonly sessions: SessionManager
   /** Every session's thread, read a page at a time, in a worker of its own. */
   readonly threads: ThreadStore | null
@@ -100,6 +111,12 @@ export class AgentHost {
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
+    this.trees = new AgentTrees({
+      file: agentProcessesFile(options.userDataPath, log),
+      control: processControl(platform),
+      graceMs: STOP_TIMINGS.termMs,
+      log,
+    })
     this.threads = options.threadWorker
       ? new ThreadStore({
           file: path.join(options.userDataPath, 'state', 'threads.db'),
@@ -122,6 +139,7 @@ export class AgentHost {
       ...(options.agentTimings ? { timings: options.agentTimings } : {}),
       status: (status) => this.hub.broadcast({ type: 'agent.status', status }),
       processes: (processes) => this.reportProcesses(processes),
+      trees: this.trees,
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
       remember: (file) => this.remembered.save(file),
     })
@@ -182,10 +200,12 @@ export class AgentHost {
       host.projects.load(),
       host.sessions.load(),
       host.remembered.load(),
+      host.trees.load(),
     ])
     host.agents.restore(remembered)
     host.sendFolders()
     options.send({ type: 'host:ready' })
+    void host.trees.stopLeftovers()
     void host.agents.detectAll()
     return host
   }
@@ -223,7 +243,7 @@ export class AgentHost {
     if (retained) this.hub.send(retained.ports, event)
   }
 
-  private reportProcesses(processes: { agentId: AgentId; pid: number }[]): void {
+  private reportProcesses(processes: AgentProcess[]): void {
     const json = JSON.stringify(processes)
     if (json === this.lastProcesses) return
     this.lastProcesses = json
@@ -281,6 +301,7 @@ export class AgentHost {
         this.projects.flush(),
         this.sessions.flush(),
         this.remembered.flush(),
+        this.trees.flush(),
         this.threads?.close(),
       ])
       this.hub.closeAll()

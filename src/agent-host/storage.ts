@@ -233,13 +233,22 @@ export interface AgentsFile {
   agents: Partial<Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[] }>>
 }
 
+/** Agent processes, and what they left behind, not yet seen gone; the next host stops them. */
+export interface AgentProcessesFile {
+  version: 1
+  /** `seenAt`: when each was last known to run. */
+  processes: { pid: number; startedAt: number; seenAt?: number }[]
+}
+
 export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
 export const AGENTS_VERSION = 1
+export const AGENT_PROCESSES_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
 export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const AGENT_PROCESSES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -392,6 +401,26 @@ export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | str
   return { version: 1, agents }
 }
 
+const MAX_AGENT_PROCESSES = 10_000
+
+export function parseAgentProcessesFile(
+  data: Record<string, unknown>,
+): AgentProcessesFile | string {
+  if (!Array.isArray(data.processes)) return 'processes is not a list'
+  const processes: AgentProcessesFile['processes'] = []
+  for (const entry of data.processes.slice(0, MAX_AGENT_PROCESSES)) {
+    if (!isRecord(entry) || !Number.isSafeInteger(entry.pid) || (entry.pid as number) <= 1) continue
+    if (typeof entry.startedAt !== 'number' || !Number.isFinite(entry.startedAt)) continue
+    const { pid, startedAt, seenAt } = entry as { pid: number; startedAt: number; seenAt?: unknown }
+    processes.push(
+      typeof seenAt === 'number' && Number.isFinite(seenAt)
+        ? { pid, startedAt, seenAt }
+        : { pid, startedAt },
+    )
+  }
+  return { version: 1, processes }
+}
+
 export function projectsFile(userDataPath: string, log: LogFn): JsonFile<ProjectsFile> {
   return new JsonFile<ProjectsFile>({
     file: path.join(userDataPath, 'state', 'projects.json'),
@@ -422,5 +451,18 @@ export function agentsFile(userDataPath: string, log: LogFn): JsonFile<AgentsFil
     parse: parseAgentsFile,
     empty: () => ({ version: 1, agents: {} }),
     log,
+  })
+}
+
+export function agentProcessesFile(userDataPath: string, log: LogFn): JsonFile<AgentProcessesFile> {
+  return new JsonFile<AgentProcessesFile>({
+    file: path.join(userDataPath, 'state', 'agent-processes.json'),
+    version: AGENT_PROCESSES_VERSION,
+    migrations: AGENT_PROCESSES_MIGRATIONS,
+    parse: parseAgentProcessesFile,
+    empty: () => ({ version: 1, processes: [] }),
+    log,
+    // Written at once: a launch the file misses is a process no later host can stop.
+    debounceMs: 0,
   })
 }

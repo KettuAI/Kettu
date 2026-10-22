@@ -33,9 +33,16 @@ export type MainToHost =
   | { type: 'host:busy-request'; requestId: number }
   | { type: 'host:shutdown' }
 
+/** An agent process the host runs; its start time tells it apart from a later one with its pid. */
+export interface AgentProcess {
+  agentId: AgentId
+  pid: number
+  startedAt: number
+}
+
 export type HostToMain =
   | { type: 'host:ready' }
-  | { type: 'host:agent-processes'; processes: { agentId: AgentId; pid: number }[] }
+  | { type: 'host:agent-processes'; processes: AgentProcess[] }
   | { type: 'host:projects'; paths: string[] }
   | { type: 'host:auth-commands'; commands: string[] } // terminal sign-in commands it built
   | {

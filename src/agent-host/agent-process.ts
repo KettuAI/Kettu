@@ -1,10 +1,11 @@
 // Spawning and stopping one agent process, by each platform's rules.
 
-import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import type { Platform } from '@shared/platform'
 import { processTransport, type AcpTransport } from './acp/connection'
 import type { LaunchSpec } from './catalog'
 import type { Env } from './find-command'
+import { killSurvivors, processControl, terminateTrees, type ProcessControl } from './process-tree'
 import { quoteCmd } from './quote'
 
 export interface ExitInfo {
@@ -25,13 +26,16 @@ export const STOP_TIMINGS: StopTimings = { eofMs: 2_000, termMs: 3_000 }
 
 export interface SpawnedAgent {
   readonly pid: number | null
+  /** When it was spawned, which names it apart from a later process with its pid. */
+  readonly startedAt: number
   readonly transport: AcpTransport
   readonly exited: Promise<ExitInfo>
   readonly hasExited: boolean
-  /** EOF, then SIGTERM to the process group or `taskkill /T /F`, then SIGKILL. */
+  /**
+   * EOF; then, if it still runs, SIGTERM to its whole process tree and SIGKILL to what is left,
+   * or `taskkill /T /F` on Windows. What it leaves behind once it exits is `AgentTrees`' to stop.
+   */
   stop(): Promise<ExitInfo>
-  /** After an unexpected exit: terminates what is left of the process group. */
-  reap(): void
 }
 
 export interface SpawnOptions {
@@ -41,6 +45,7 @@ export interface SpawnOptions {
   onStderr(text: string): void
   onEvent?(event: string, detail?: string): void
   timings?: StopTimings
+  control?: ProcessControl
 }
 
 /**
@@ -63,31 +68,11 @@ function waitForExit(exited: Promise<ExitInfo>, ms: number): Promise<boolean> {
   })
 }
 
-function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (!child.pid) return
-  try {
-    // A negative pid addresses the process group the detached child leads.
-    process.kill(-child.pid, signal)
-  } catch {
-    try {
-      child.kill(signal)
-    } catch {
-      // Already gone.
-    }
-  }
-}
-
-/** Kills a process tree on Windows, which has no process groups. */
-export function taskkill(pid: number): Promise<void> {
-  return new Promise((resolve) => {
-    execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => resolve())
-  })
-}
-
 export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgent {
   const { platform } = options
   const timings = options.timings ?? STOP_TIMINGS
   const { file, args, shell } = spawnArguments(spec)
+  const control = options.control ?? processControl(platform)
   const child = spawn(file, args, {
     cwd: options.cwd,
     env: { ...options.env, ...spec.env } as NodeJS.ProcessEnv,
@@ -97,6 +82,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
     windowsHide: true,
     shell,
   })
+  const startedAt = Date.now()
   let hasExited = false
   const exited = new Promise<ExitInfo>((resolve) => {
     child.once('error', (error) => {
@@ -117,47 +103,59 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   child.stdin.on('error', (error) => options.onEvent?.('stdin error', error.message))
   child.stderr.setEncoding('utf8').on('data', (text: string) => options.onStderr(text))
 
+  // It still runs after EOF, so its tree goes as a whole, found while the links to it hold.
+  const endTree = async (pid: number): Promise<void> => {
+    if (platform === 'win32') {
+      options.onEvent?.('taskkill')
+      await control.taskkill([pid])
+      await waitForExit(exited, timings.termMs)
+      return
+    }
+    options.onEvent?.('SIGTERM')
+    const terminated = await terminateTrees(control, [{ pid, startedAt }]).catch(
+      (error: unknown) => {
+        options.onEvent?.('process listing failed', (error as Error).message)
+        return null
+      },
+    )
+    // Without a listing, its own process group still goes.
+    if (!terminated) signalGroup(control, pid, 'SIGTERM')
+    if (await waitForExit(exited, timings.termMs)) return
+    options.onEvent?.('SIGKILL')
+    if (terminated) killSurvivors(control, terminated)
+    else signalGroup(control, pid, 'SIGKILL')
+    await waitForExit(exited, timings.termMs)
+  }
+
   let stopping: Promise<ExitInfo> | null = null
   const stop = (): Promise<ExitInfo> => {
     stopping ??= (async () => {
       if (!hasExited) {
         child.stdin.end()
-        if (!(await waitForExit(exited, timings.eofMs))) {
-          if (platform === 'win32') {
-            options.onEvent?.('taskkill')
-            if (child.pid) await taskkill(child.pid)
-            await waitForExit(exited, timings.termMs)
-          } else {
-            options.onEvent?.('SIGTERM')
-            signalGroup(child, 'SIGTERM')
-            if (!(await waitForExit(exited, timings.termMs))) {
-              options.onEvent?.('SIGKILL')
-              signalGroup(child, 'SIGKILL')
-              await waitForExit(exited, timings.termMs)
-            }
-          }
-        }
+        if (!(await waitForExit(exited, timings.eofMs)) && child.pid) await endTree(child.pid)
       }
-      reapGroup()
       return hasExited ? exited : { code: null, signal: null, error: 'did not exit after SIGKILL' }
     })()
     return stopping
   }
 
-  // Children the agent left behind in its group go too; Windows cannot find them once the
-  // parent is gone.
-  const reapGroup = (): void => {
-    if (platform !== 'win32') signalGroup(child, 'SIGTERM')
-  }
-
   return {
     pid: child.pid ?? null,
+    startedAt,
     transport: processTransport(child.stdin, child.stdout),
     exited,
     get hasExited() {
       return hasExited
     },
     stop,
-    reap: reapGroup,
+  }
+}
+
+function signalGroup(control: ProcessControl, pid: number, signal: NodeJS.Signals): void {
+  try {
+    // A negative pid addresses the process group the detached child leads.
+    control.kill(-pid, signal)
+  } catch {
+    // Already gone.
   }
 }

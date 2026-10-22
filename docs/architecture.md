@@ -220,6 +220,8 @@ src/
 │   ├── catalog.ts         Built-in agent definitions
 │   ├── agents.ts          Supervision: detection, lazy start, crash counting, sign-in state
 │   ├── agent-process.ts   Spawning, stopping, stderr capture
+│   ├── process-tree.ts    Listing and stopping process trees; main uses it too
+│   ├── agent-trees.ts     The agent processes and what they leave, recorded until gone
 │   ├── acp/               SDK connection and the v1 mapper; the only place ACP types live
 │   ├── sessions.ts        Live session state, prompts, permissions
 │   ├── projects.ts        Recent project folders

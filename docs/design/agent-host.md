@@ -28,7 +28,7 @@ Electron itself is cross-platform, but this process is where OverBench meets the
 
 - When the host exits unexpectedly, main tells every window `agent-host:reset` with `{ failed: false }` at once, restarts the host with backoff (0.5 s, 1 s, 2 s, then doubling up to 30 s; the delay resets after 60 s of healthy running) and sends `host:init` again. Each preload drops its port, rejects what was in flight with `host_restarted`, reports `reconnecting`, and requests a new port, which arrives once the new host is ready; then it reports `connected` and the renderer refetches snapshots for the sessions it shows.
 - After five crashes within two minutes, main stops restarting and sends `agent-host:reset` with `{ failed: true }`; the preload reports `failed` and rejects requests until the host runs again. The UI shows the failure with **Restart agent host**, which calls `window.overbench.agents.restart()` (`agent-host:restart`), and **Export diagnostics**. A restart clears the crash count; in any other state it does nothing.
-- The host reports the process ID of every agent it starts (`host:agent-processes`). If the host dies without `host:stopped`, main terminates those process trees itself, as in [stopping an agent](#stopping-an-agent): `SIGTERM` to each process group and `SIGKILL` 2 s later if it is still there, or `taskkill /PID <pid> /T /F` on Windows. A crash never leaves orphaned agents behind; after a clean stop the host has stopped them already.
+- The host reports the process ID and start time of every agent it starts (`host:agent-processes`). If the host dies without `host:stopped`, main stops those [process trees](#process-trees) itself: one listing, `SIGTERM` to every group in them and `SIGKILL` 2 s later to what is still there, or `taskkill /T /F` on Windows. What it cannot reach, the next host stops from its record. After a clean stop the host has stopped them already.
 - Main keeps the last 100 supervision events (start, ready, crash with exit code, scheduled restart, failure, user restart) of both hosts for [diagnostics](#diagnostics).
 
 ### Shutdown
@@ -52,7 +52,7 @@ Typed in `src/shared/host-control.ts`.
 | main → host | `host:busy-request`    | `requestId`, before quitting                                                                                                              |
 | main → host | `host:shutdown`        | none                                                                                                                                      |
 | host → main | `host:ready`           | none                                                                                                                                      |
-| host → main | `host:agent-processes` | `{ agentId, pid }[]` for every running agent, whenever that set changes                                                                   |
+| host → main | `host:agent-processes` | `{ agentId, pid, startedAt }[]` for every running agent, whenever that set changes                                                        |
 | host → main | `host:projects`        | The project paths, whenever the list changes; main relays them to the [terminal host](./terminal.md#shells)                               |
 | host → main | `host:auth-commands`   | The terminal sign-in commands it built; main relays them to the terminal host, which runs only these ([terminal](./terminal.md#security)) |
 | host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body`                                                                |
@@ -201,7 +201,7 @@ spawn(command, args, {
 
 - **Package agents** run `<node> <entry>`, both absolute paths ([installing adapters](#installing-adapters)).
 - **Working directory**: the process runs in the home directory. Each session's project folder reaches the agent as `cwd` in `session/new`, `session/load` and `session/resume`.
-- **Process groups**: on macOS and Linux, `detached: true` puts the agent and everything it spawns (Node.js, the agent CLI and the commands it runs) in its own process group, so the whole tree can be stopped together.
+- **Process groups**: on macOS and Linux, `detached: true` puts the agent in a process group of its own, which the processes it spawns join unless they start their own; Claude Code's CLIs stay in it, but the commands they run do not ([process trees](#process-trees)).
 - **Windows `.cmd` shims**: Node.js refuses to spawn `.cmd` and `.bat` files without a shell (CVE-2024-27980), so `needsShell` is true only for a resolved `.cmd` file, such as `npm.cmd` during an install or an `opencode.cmd` shim. That is safe because every argument comes from the catalog; nothing the user or an agent typed ever reaches the command line.
 - **stderr** goes into a 64 KB ring buffer per agent. While an agent is `installing` or `starting`, the latest lines of npm's output or of the agent's stderr are shown as progress.
 
@@ -239,9 +239,24 @@ const init = await connection.agent.request(methods.agent.initialize, {
 
 The same sequence runs on idle stop, restart and quit, for every agent in parallel:
 
-1. Close the agent's stdin. ACP agents exit when their input ends.
-2. After 2 s, if it is still running: on macOS and Linux, send `SIGTERM` to its process group (`process.kill(-pid, 'SIGTERM')`); on Windows, run `taskkill /PID <pid> /T /F`.
-3. After 3 more seconds on macOS and Linux, send `SIGKILL` to the group.
+1. On macOS and Linux, list its [process tree](#process-trees) while it still runs.
+2. Close the agent's stdin. ACP agents exit when their input ends.
+3. After 2 s, if it is still running: on macOS and Linux, send `SIGTERM` to every group in its tree; on Windows, run `taskkill /PID <pid> /T /F`.
+4. After 3 more seconds on macOS and Linux, send `SIGKILL` to what is left of the tree.
+5. Once it has exited, stop what is left of its tree: `SIGTERM`, and `SIGKILL` 3 s later in the background, or `taskkill /T /F` on Windows.
+
+The same last step runs after an agent [crashes](#agent-process-lifecycle).
+
+### Process trees
+
+An agent's own process group is not enough, measured on 2026-10-22 with claude-agent-acp 0.94.0, codex-acp 2.2.2 and opencode 2.0.32 on macOS. Claude Code runs each command, a `run_in_background` one included, in a process group of its own under its CLI; Codex runs each MCP server, and its code-mode host, in a group of its own; `opencode acp` runs `opencode serve` in one. All of these exit within 0.5 s of their agent ending, even by `SIGKILL` to its group, because they read from it, and Claude Code's CLI stops the commands it ran when its input ends or it gets `SIGTERM`. A background command outlived only a `SIGKILL` to the group, which a hung agent, a host that died and an app killed outright all end in; it then ran on with no parent.
+
+- **Finding a tree**: one listing of the system's processes, `ps -A -o pid=,ppid=,pgid=,etime=` (10 to 20 ms on macOS), or `Get-CimInstance Win32_Process` through PowerShell on Windows. On macOS and Linux the tree is the agent's group, whose members keep it after the agent exits, and everything descended from the group; signals go to each group the tree leads, so they reach processes started since the listing. Windows has no groups but reparents nothing: the tree is everything descended from the agent, whose children keep its pid as their parent after it exits.
+- **Listing while it runs**: on macOS and Linux a process the agent started directly in a group of its own is reparented when the agent exits, so only a listing taken before finds it. The host lists an agent's tree before it stops it, and 10 s after the agent talks over ACP, at most once every 10 s, so an idle agent costs nothing.
+- **Identity**: a process is named by its pid and start time, so a reused pid is never taken for it. After a root has exited, only what started while it was last seen running is followed, since a process that took its pid later may lead a group or have children of its own.
+- **The record**: `state/agent-processes.json` holds each running agent, its tree as last listed, and what is being stopped until its grace ends, each with its start time and when it was last seen running, written at once on every change. A host stops what the last one left there as soon as it starts, so a crash of the host or of the whole app, or a quit that ended before a grace did, leaves nothing running for long.
+- **Windows**: each listing starts PowerShell, so the host lists only what an agent left once it has exited, in the background; a quit that ends first leaves that to the next host, which follows the same parent links.
+- **Not followed**: a process that left the tree before a listing saw it: one an agent starts directly in a group of its own less than 10 s before it crashes or the app is killed, and a daemon whose parent had already exited.
 
 ## Sign-in
 
@@ -295,17 +310,17 @@ Settings › Agents shows, in its list and on each agent's page, which CLI versi
 
 ## Platform differences
 
-| Concern                   | macOS                                                                   | Linux                          | Windows                                                       |
-| ------------------------- | ----------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------- |
-| Environment at launch     | Minimal `PATH`; resolve the login shell                                 | Same as macOS                  | Inherited user and system environment                         |
-| Finding commands          | `PATH`                                                                  | `PATH`                         | `PATH` with `PATHEXT` (`node.exe`, `npm.cmd`, `opencode.exe`) |
-| Spawning                  | Direct                                                                  | Direct                         | `.cmd` shims through a shell, with catalog-only arguments     |
-| Process tree              | Own process group (`detached`)                                          | Own process group (`detached`) | No groups; `taskkill /T`                                      |
-| Stopping                  | EOF, `SIGTERM`, `SIGKILL` to the group                                  | Same as macOS                  | EOF, then `taskkill /T /F`                                    |
-| Path comparison           | Canonicalize with `fs.realpath.native`; volumes may be case-insensitive | Canonicalize; case-sensitive   | Canonicalize; case-insensitive, drive letters and UNC paths   |
-| Line endings from tools   | LF                                                                      | LF                             | Often CRLF; normalized before rendering                       |
-| Data directory            | `~/Library/Application Support/OverBench`                               | `~/.config/OverBench`          | `%APPDATA%\OverBench`                                         |
-| Shell quoting for display | POSIX single quotes                                                     | POSIX single quotes            | `cmd.exe` double quotes                                       |
+| Concern                   | macOS                                                                   | Linux                        | Windows                                                       |
+| ------------------------- | ----------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------- |
+| Environment at launch     | Minimal `PATH`; resolve the login shell                                 | Same as macOS                | Inherited user and system environment                         |
+| Finding commands          | `PATH`                                                                  | `PATH`                       | `PATH` with `PATHEXT` (`node.exe`, `npm.cmd`, `opencode.exe`) |
+| Spawning                  | Direct                                                                  | Direct                       | `.cmd` shims through a shell, with catalog-only arguments     |
+| Process tree              | Own process group (`detached`); trees listed with `ps`                  | Same as macOS                | No groups; parent links listed through CIM, `taskkill /T`     |
+| Stopping                  | EOF, `SIGTERM`, `SIGKILL` to every group in the tree                    | Same as macOS                | EOF, then `taskkill /T /F`                                    |
+| Path comparison           | Canonicalize with `fs.realpath.native`; volumes may be case-insensitive | Canonicalize; case-sensitive | Canonicalize; case-insensitive, drive letters and UNC paths   |
+| Line endings from tools   | LF                                                                      | LF                           | Often CRLF; normalized before rendering                       |
+| Data directory            | `~/Library/Application Support/OverBench`                               | `~/.config/OverBench`        | `%APPDATA%\OverBench`                                         |
+| Shell quoting for display | POSIX single quotes                                                     | POSIX single quotes          | `cmd.exe` double quotes                                       |
 
 Paths are always compared after canonicalizing with `path.resolve` and `fs.realpath.native`, never as raw strings. On Windows only drive paths (`C:\…`) and UNC paths count as absolute; a path such as `\src` depends on the host's current drive and is refused.
 
@@ -315,3 +330,7 @@ Paths are always compared after canonicalizing with `path.resolve` and `fs.realp
 - **Running the adapters on Electron's Node.js** (`ELECTRON_RUN_AS_NODE`): rejected on 2026-10-21. It would remove the Node.js requirement, but the variable reaches every command the agent runs, so an Electron app the agent starts, such as `pnpm dev` in an Electron project, runs as plain Node.js instead (a child `electron --version` printed `v24.22.0`). Removing it for the adapter's children breaks codex-acp, which starts Codex through `process.execPath`. A wrapper around `process.execPath` that restores it is fragile, and on Windows a `.cmd` wrapper cannot be spawned without a shell. The user's Node.js starts the adapters as fast (211 ms against 213 ms for Claude Code's `initialize`).
 - **Keeping `npx`**: `npx --prefer-offline` skips the registry check but still took 557 ms (Claude Code) and 476 ms (Codex) to `initialize`, and its cache is npm's to evict, which turns a launch into a silent download.
 - **Bundling adapters in the installer**: rejected; `claude-agent-acp` is proprietary and adapters update faster than OverBench releases.
+- **Walking a tree with `pgrep -P`**, as VS Code's `terminateProcess.sh` and the `tree-kill` package do: one process per level of the tree, and blind to a process whose parent has exited. One listing walked in memory costs one `ps` and also finds the agent's group.
+- **Marking agents with an environment variable** and stopping every process that carries it, as Jenkins' ProcessTreeKiller does: it would also stop what an agent detached on purpose, Windows offers no way to read another process's environment without native code, and Codex starts its MCP servers with a filtered environment.
+- **Listing trees on a timer**: catches what a crash leaves even without traffic, but costs a `ps` for every interval while agents sit idle. Listing after traffic covers the processes agents start, which they start while they talk.
+- **`@vscode/windows-process-tree`** for the Windows listing: faster than PowerShell, but a native dependency for a listing the host needs only when an agent exits.
