@@ -31,6 +31,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 23  | The project chevron sits before the name and always shows      | Sidebar        | Open         |
 | 24  | The Projects header row can go; each project gets a +          | Sidebar        | Open         |
 | 25  | The sidebar footer needs a design of its own                   | Sidebar        | Open         |
+| 26  | Account details cannot be hidden                               | Settings       | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -259,3 +260,16 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - How the footer's parts relate as a whole: the notices, the plan usage chips and the Settings row, in their order and spacing. The arrow at the chips is read as putting them in scope; the maintainer's words named only the hint.
   - Whether the **New session** row's `⌘N` goes as well, for consistency. The shortcuts stay findable in Settings › Keyboard shortcuts and in the app menu.
   - The rule written into [Interface: sidebar](../design/ui.md#sidebar), and into the shortcut table if the hints leave the rows.
+
+## 26. Account details cannot be hidden
+
+- **Reported**: 2026-10-22, with a screenshot of Settings › Agents (arrows at the Claude Code and Codex emails) and two of a reference's account card: "Authenticated as" with the email blurred in one and readable in the other.
+- **Observed**: Settings › Agents prints each agent's email in full, so a screenshot or a shared screen leaks it.
+- **Expected**: account details can be hidden, as a mask over the text, like the blurred email in the reference.
+- **Today**: the email shows in two places in `src/renderer/src/features/settings/agents-section.tsx`: the account line of each agent's row in the list (the email "in a stronger color" after the plan) and the **Email** fact in the Account group of an agent's page ([Interface: Settings › Agents](../design/ui.md#settings--agents)). Nothing hides it, and Settings search matches an agent's row by its account, email included.
+- **To settle when planning**:
+  - How it is turned on: a setting such as **Hide account details** (where), a toggle beside the values, or both; whether it is remembered and its default.
+  - How a hidden value is revealed: not at all, on hover, or on click, and whether it copies while hidden.
+  - What counts as account details: the email for sure; the plan label, and paths that carry the user name (OpenCode's config folder in the list), were not named.
+  - The mask itself: a blur that stays illegible in screenshots, with the value withheld from the accessibility tree and from search while hidden, not only painted over. It must work in both themes and keep the row's layout.
+  - Where else an email may appear later (the usage popover shows the plan only today), so the mask is one shared piece, not a per-screen patch.
