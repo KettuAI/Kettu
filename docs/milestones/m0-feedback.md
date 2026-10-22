@@ -39,6 +39,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Open         |
 | 32  | No message outline beside the thread, expanding on hover       | Thread         | Open         |
 | 33  | Title menu needs polish; agent mark goes before the title      | Top bar        | Open         |
+| 34  | The slash command popover looks crude                          | Composer       | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -402,3 +403,21 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - How it sits with the `Bot` icon of a sub-agent's session and with the parent link of a sub-session: which comes first, and whether a sub-agent keeps both marks.
   - Whether the title button's hit area and hover fill include the mark, so it reads as one control.
   - The rule changes in [Interface: session](../design/ui.md#session).
+
+## 34. The slash command popover looks crude
+
+- **Reported**: 2026-10-22, with a screenshot of OverBench's popover (the fake agent's commands, in development) and one of the reference's (Claude Desktop). The maintainer finds it too rough to want to use.
+- **Observed**: typing `/` opens a wide list. Each row is the command as `/name` in mono, followed by its description in muted text, and most descriptions are cut off with an ellipsis mid-sentence ("A short answer with markdown and one edit …", "Signs the agent out; requests fail until yo…"). It reads as a log rather than a menu.
+- **Expected**: the popover reaches the reference's polish.
+- **Reference**: a narrow popover of one-line rows. Each row is the command's name alone, in the interface font, with no slash and no description. The row under the pointer or the keyboard takes a fill, and its description shows in a dark tooltip beside the list ("Rewind the session to an earlier message"). The list scrolls behind a fade at its bottom, and the composer shows "Type to filter" after the typed `/`.
+- **Today**: `src/renderer/src/features/session/composer/composer.tsx` builds it from Base UI's `Autocomplete`: a popup at most 420 px wide and 320 px high, `rounded-xl` with 4 px padding, so not the refined [menus'](../design/design-system.md#menus-and-dialogs) radius and padding, and rows of `/name` in `font-mono text-xs` over a truncated description. Matching is a substring test on the name, in the agent's order, and the popup stays closed when nothing matches. [Interface: composer](../design/ui.md#composer) specifies it in one line ("a `Command` popover with the agent's `available_commands_update` list, filtered as you type"). The commands in the screenshot are the fake agent's test scenarios; a real agent's list, with its skills, differs in content but not in layout.
+- **To settle when planning**:
+  - What a row holds: the name alone with the description in a tooltip, as the reference, or the name with a short description kept. Descriptions come from the agent and can be long, so cutting them mid-sentence is what reads badly.
+  - Whether the name keeps its `/` and the mono face, and how the typed text shows in the matches.
+  - The width: fitted to the longest name, as the menus are, instead of a fixed 420 px.
+  - The shared menu tokens: radius, padding, row height, and the fill of the highlighted row, so this popover matches the other menus in both themes.
+  - Ranking and grouping: the agent's order is kept today; whether names that start with the query come before those that only contain it, and whether built-in commands and skills are told apart. ACP's list carries no grouping.
+  - The empty state when nothing matches, the "Type to filter" hint in the composer, and the input hint a chosen command shows, which exists.
+  - A list of hundreds of commands from an agent with many skills, and whether it needs more than scrolling behind the fades.
+  - The tooltip's delay and placement, keyboard use (arrows, `Enter`, `Tab`, `Esc` as now), and reduce motion.
+  - The rule rewritten in [Interface: composer](../design/ui.md#composer).
