@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowUpIcon, ChevronDownIcon, FolderIcon } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
@@ -8,14 +8,23 @@ import { onAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxSeparator,
+  ComboboxTrigger,
+  useComboboxFilter,
+} from '@renderer/components/ui/combobox'
+import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import {
@@ -33,6 +42,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useViewStore } from '@renderer/stores/view'
 import { flushDraft, NEW_SESSION_DRAFT, readDraft, writeDraft } from './composer/drafts'
+import { nameHints } from './project-names'
 
 /**
  * The New session screen: a composer with the project and the agent to start in. The session is
@@ -182,9 +192,31 @@ function DraftComposer({
   )
 }
 
+// The value of the Open project… item, which no project's path can take.
+const OPEN_PROJECT = '\0open-project'
+
+interface ProjectGroup {
+  value: 'recent' | 'open'
+  items: string[]
+}
+
+/**
+ * The projects by name, most recently opened first, with a search field over them and Open
+ * project… last. The items are paths.
+ */
 function ProjectMenu({ project }: { project: Project | null }) {
   const projects = useProjectsStore((s) => s.projects)
   const [error, setError] = useState<string | null>(null)
+  const { contains } = useComboboxFilter()
+  const byPath = useMemo(() => new Map(projects.map((p) => [p.path, p])), [projects])
+  const hints = useMemo(() => nameHints(projects.map((p) => p.path)), [projects])
+  const groups = useMemo<ProjectGroup[]>(
+    () => [
+      { value: 'recent', items: projects.map((p) => p.path) },
+      { value: 'open', items: [OPEN_PROJECT] },
+    ],
+    [projects],
+  )
   const choose = (projectPath: string) => useViewStore.setState({ projectPath })
   const open = async () => {
     setError(null)
@@ -198,8 +230,20 @@ function ProjectMenu({ project }: { project: Project | null }) {
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
+      <Combobox
+        items={groups}
+        value={project?.path ?? null}
+        onValueChange={(value: string | null) => {
+          if (value === OPEN_PROJECT) void open()
+          else if (value) choose(value)
+        }}
+        itemToStringLabel={(path: string) => byPath.get(path)?.name ?? path}
+        filter={(path: string, query: string) =>
+          path === OPEN_PROJECT ||
+          contains(`${byPath.get(path)?.name ?? path} ${hints.get(path) ?? ''}`, query)
+        }
+      >
+        <ComboboxTrigger
           render={
             <Button
               variant="quiet"
@@ -212,43 +256,72 @@ function ProjectMenu({ project }: { project: Project | null }) {
         >
           <FolderIcon data-icon="inline-start" />
           <span className="truncate text-foreground">{project?.name ?? 'Choose a project'}</span>
-          <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" sideOffset={6} className="w-72">
-          {projects.length > 0 && (
-            <>
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Project</DropdownMenuLabel>
-                <div className="relative -mx-1 max-h-72 scroll-fade-y overflow-y-auto overscroll-contain px-1">
-                  <DropdownMenuRadioGroup
-                    value={project?.path}
-                    onValueChange={(value) => choose(String(value))}
-                  >
-                    {projects.map((p) => (
-                      <DropdownMenuRadioItem
-                        key={p.path}
-                        value={p.path}
-                        disabled={p.missing}
-                        closeOnClick
-                        className="items-start"
-                      >
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate">{p.name}</span>
-                          <span className="truncate font-mono text-[11.5px] text-muted-foreground">
-                            {p.missing ? 'Missing' : p.path}
-                          </span>
-                        </span>
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </div>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-            </>
-          )}
-          <DropdownMenuItem onClick={() => void open()}>Open project…</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </ComboboxTrigger>
+        <ComboboxContent side="top" sideOffset={6} className="max-w-80">
+          <ComboboxInput
+            showTrigger={false}
+            placeholder="Search projects…"
+            aria-label="Search projects"
+            spellCheck={false}
+          />
+          <ComboboxList className="max-h-none overflow-y-visible">
+            {(group: ProjectGroup, index: number) =>
+              group.value === 'recent' ? (
+                <ComboboxGroup key={group.value} items={group.items}>
+                  <ComboboxLabel>Recent</ComboboxLabel>
+                  {/* Only the projects scroll, leaving room for the search field and Open project… */}
+                  <div className="relative -mx-1.5 max-h-[min(--spacing(72),calc(var(--available-height)---spacing(28)))] scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
+                    <ComboboxCollection>
+                      {(path: string) => {
+                        const p = byPath.get(path)
+                        return (
+                          p && (
+                            <ComboboxItem key={path} value={path} disabled={p.missing} title={path}>
+                              <ProjectName name={p.name} hint={hints.get(path)} />
+                              {p.missing && (
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  Missing
+                                </span>
+                              )}
+                            </ComboboxItem>
+                          )
+                        )
+                      }}
+                    </ComboboxCollection>
+                  </div>
+                </ComboboxGroup>
+              ) : (
+                <ComboboxGroup key={group.value} items={group.items}>
+                  {index > 0 ? (
+                    <ComboboxSeparator />
+                  ) : (
+                    projects.length > 0 && (
+                      <div className="flex min-h-row items-center px-2 text-ui text-muted-foreground">
+                        No matching projects
+                      </div>
+                    )
+                  )}
+                  <ComboboxCollection>
+                    {(value: string) => (
+                      <ComboboxItem key={value} value={value}>
+                        Open project…
+                      </ComboboxItem>
+                    )}
+                  </ComboboxCollection>
+                </ComboboxGroup>
+              )
+            }
+          </ComboboxList>
+          {/* Sized by every project, so the menu keeps its width while the list filters. */}
+          <div aria-hidden className="invisible h-0 overflow-hidden px-1.5">
+            {projects.map((p) => (
+              <div key={p.path} className="flex gap-2 pr-8 pl-2 text-ui whitespace-nowrap">
+                <ProjectName name={p.name} hint={hints.get(p.path)} />
+              </div>
+            ))}
+          </div>
+        </ComboboxContent>
+      </Combobox>
       {error && (
         <span className="min-w-0 truncate px-1.5 text-xs text-destructive" title={error}>
           {error}
@@ -281,30 +354,37 @@ function AgentMenu({ agentId }: { agentId: AgentId | null }) {
         </span>
         <ChevronDownIcon data-icon="inline-end" className="-ml-0.5 size-3 opacity-70" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" sideOffset={6} className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Agent</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={agentId ?? undefined}
-            onValueChange={(value) => choose(value as AgentId)}
-          >
-            {agents.map((status) => (
-              <DropdownMenuRadioItem
-                key={status.id}
-                value={status.id}
-                disabled={!isInstalled(status)}
-                closeOnClick
-              >
-                <AgentMark agent={status.id} size={14} />
-                <span className="min-w-0 flex-1 truncate">{agentName(status.id)}</span>
-                {!isInstalled(status) && (
-                  <span className="text-xs text-muted-foreground">Not installed</span>
-                )}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
+      <DropdownMenuContent side="top" align="start" sideOffset={6}>
+        <DropdownMenuRadioGroup
+          value={agentId ?? undefined}
+          onValueChange={(value) => choose(value as AgentId)}
+        >
+          {agents.map((status) => (
+            <DropdownMenuRadioItem
+              key={status.id}
+              value={status.id}
+              disabled={!isInstalled(status)}
+              closeOnClick
+            >
+              <AgentMark agent={status.id} size={14} />
+              <span className="min-w-0 flex-1 truncate">{agentName(status.id)}</span>
+              {!isInstalled(status) && (
+                <span className="text-xs text-muted-foreground">Not installed</span>
+              )}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** A project's name, with the parent folders that tell it from another of the same name. */
+function ProjectName({ name, hint }: { name: string; hint: string | undefined }) {
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline gap-2">
+      <span className="truncate">{name}</span>
+      {hint && <span className="min-w-0 shrink-3 truncate text-muted-foreground">{hint}</span>}
+    </span>
   )
 }
