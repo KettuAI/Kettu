@@ -60,6 +60,8 @@ export class UsageManager {
   private firstTimer: ReturnType<typeof setTimeout> | null = null
   private interval: ReturnType<typeof setInterval> | null = null
   private scanning: Promise<void> | null = null
+  /** Turning the setting off cancelled `scanning`, so a full scan follows it instead of joining. */
+  private scanCancelled = false
   private stopped = false
   /** The environment the locations are shown with; the readers see the same one. */
   private env: Record<string, string | undefined> = {}
@@ -115,7 +117,10 @@ export class UsageManager {
     if (on === this.fromComputer) return
     this.fromComputer = on
     if (on) void this.scan()
-    else void this.deps.store?.cancel().catch(() => {})
+    else {
+      if (this.scanning) this.scanCancelled = true
+      void this.deps.store?.cancel().catch(() => {})
+    }
     this.publish()
     this.deps.changed()
   }
@@ -147,9 +152,12 @@ export class UsageManager {
       return this.scanning ?? Promise.resolve()
     }
     // A full scan asked for while one runs joins it; a scan of chosen agents follows it.
-    if (this.scanning && !agents) return this.scanning
+    if (this.scanning && !agents && !this.scanCancelled) return this.scanning
+    this.scanCancelled = false
     const run = (this.scanning ?? Promise.resolve())
       .then(async () => {
+        // The setting may have been turned off while this scan waited for the one before.
+        if (!this.fromComputer || this.stopped) return
         const env = await this.deps.env()
         this.env = env
         const outcome = await store.scan({
@@ -165,7 +173,9 @@ export class UsageManager {
         this.deps.log('warn', `The usage scan failed: ${(error as Error).message}`)
       })
     const tracked: Promise<void> = run.finally(() => {
-      if (this.scanning === tracked) this.scanning = null
+      if (this.scanning !== tracked) return
+      this.scanning = null
+      this.scanCancelled = false
     })
     this.scanning = tracked
     return tracked
