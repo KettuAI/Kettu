@@ -63,12 +63,24 @@ function capitalize(text: string): string {
 export type RunStep =
   | { kind: 'thought'; durationMs?: number; streaming?: boolean }
   | { kind: 'tool'; toolKind: ToolKind; status: ToolEntry['status']; path?: string }
+  | { kind: 'plan' }
+  | { kind: 'compaction'; running: boolean }
 
 type RunPart =
-  'thought' | 'execute' | 'read' | 'edit' | 'delete' | 'move' | 'search' | 'fetch' | 'other'
+  | 'thought'
+  | 'plan'
+  | 'compaction'
+  | 'execute'
+  | 'read'
+  | 'edit'
+  | 'delete'
+  | 'move'
+  | 'search'
+  | 'fetch'
+  | 'other'
 
 function partOf(step: RunStep): RunPart {
-  if (step.kind === 'thought') return 'thought'
+  if (step.kind !== 'tool') return step.kind
   switch (step.toolKind) {
     case 'execute':
     case 'read':
@@ -110,6 +122,10 @@ export function runSummary(steps: RunStep[]): {
           ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
           : i18n.t('session:summary.thought')
       }
+      case 'plan':
+        return i18n.t('session:summary.plan')
+      case 'compaction':
+        return i18n.t('session:summary.compaction')
       case 'execute':
         return i18n.t('session:summary.execute', { count: n })
       case 'search':
@@ -135,9 +151,12 @@ export function runSummary(steps: RunStep[]): {
     parts,
     editAt: [...byPart.keys()].indexOf('edit'),
     failed: steps.filter((s) => s.kind === 'tool' && s.status === 'failed').length,
-    running: steps.some((s) =>
-      s.kind === 'thought' ? !!s.streaming : s.status === 'pending' || s.status === 'in_progress',
-    ),
+    running: steps.some((s) => {
+      if (s.kind === 'thought') return !!s.streaming
+      if (s.kind === 'compaction') return s.running
+      if (s.kind === 'plan') return false
+      return s.status === 'pending' || s.status === 'in_progress'
+    }),
   }
 }
 

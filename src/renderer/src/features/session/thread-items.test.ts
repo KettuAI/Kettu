@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView, ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { buildItems, runParts, signatureOf, stepItems } from './thread-items'
+import { buildItems, signatureOf, stepItems } from './thread-items'
 
 const session = { id: 's1' } as SessionView
 
@@ -51,6 +51,13 @@ const thought = (id: string): ThreadEntry => ({
   streaming: false,
 })
 const plan = (id: string): ThreadEntry => ({ kind: 'plan', id, items: [] })
+const compaction = (id: string): ThreadEntry => ({
+  kind: 'compaction',
+  id,
+  status: 'completed',
+  summary: '',
+})
+const notice = (id: string): ThreadEntry => ({ kind: 'notice', id, severity: 'error', title: id })
 
 describe('signatureOf', () => {
   it('marks users, thoughts, groupable lookups, other tools and agent messages', () => {
@@ -71,6 +78,10 @@ describe('signatureOf', () => {
       permission: { requestId: 'p', options: [] },
     }
     expect(signatureOf(state([tool('r1', 'read', 'in_progress'), waiting]))).toBe('tt')
+  })
+
+  it('marks plans and compactions as work', () => {
+    expect(signatureOf(state([plan('p1'), compaction('c1'), notice('n1')]))).toBe('ppo')
   })
 
   it('is empty without a state', () => {
@@ -96,15 +107,40 @@ describe('buildItems', () => {
     expect(result.map((i) => i.type)).toEqual(['entry', 'entry', 'entry', 'entry', 'reply'])
   })
 
-  it('breaks a run at a plan, a subagent or a notice', () => {
+  it('never folds an agent message', () => {
+    const result = items([
+      user('u1'),
+      thought('h1'),
+      tool('x1', 'execute'),
+      agent('a1'),
+      tool('x2', 'execute'),
+      tool('x3', 'execute'),
+      agent('a2'),
+    ])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a1', 'run:x2', 'a2', 'reply:u1'])
+  })
+
+  it('keeps plans and compactions inside a run', () => {
+    const result = items([
+      tool('x1', 'execute'),
+      plan('p1'),
+      tool('x2', 'execute'),
+      compaction('c1'),
+      tool('x3', 'execute'),
+    ])
+    expect(result.map((i) => i.key)).toEqual(['run:x1'])
+    expect(result[0]).toMatchObject({ signature: 'tptpt' })
+  })
+
+  it('breaks a run at a notice', () => {
     const result = items([
       tool('x1', 'execute'),
       tool('x2', 'execute'),
-      plan('p1'),
+      notice('n1'),
       tool('x3', 'execute'),
       tool('x4', 'execute'),
     ])
-    expect(result.map((i) => i.key)).toEqual(['run:x1', 'p1', 'run:x3'])
+    expect(result.map((i) => i.key)).toEqual(['run:x1', 'n1', 'run:x3'])
   })
 
   it('shows the run still growing in a live turn step by step', () => {
@@ -155,122 +191,6 @@ describe('buildItems', () => {
   })
 })
 
-describe("a finished turn's work", () => {
-  const end = (id: string): ThreadEntry => ({
-    kind: 'turn_end',
-    id,
-    stopReason: 'end_turn',
-    durationMs: 1000,
-  })
-  const turn = [
-    user('u1'),
-    thought('h1'),
-    agent('a1'),
-    tool('x1', 'execute'),
-    tool('x2', 'execute'),
-    agent('a2'),
-    thought('h2'),
-    tool('r1', 'read'),
-    plan('p1'),
-    tool('x3', 'execute'),
-    agent('a3'),
-    end('t1'),
-  ]
-
-  it('folds everything before the answer into one run', () => {
-    const s = state(turn)
-    const result = buildItems(s.order, signatureOf(s))
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a3', 'reply:u1'])
-    expect(result[1]).toMatchObject({
-      type: 'run',
-      ids: ['h1', 'a1', 'x1', 'x2', 'a2', 'h2', 'r1', 'p1', 'x3'],
-      signature: 'hattahgot',
-    })
-  })
-
-  it('shows the running turn as it goes, and folds it when it ends', () => {
-    const s = state(turn.slice(0, -1))
-    const live = buildItems(s.order, signatureOf(s), true)
-    expect(live.map((i) => i.key)).toEqual([
-      'u1',
-      'h1',
-      'a1',
-      'run:x1',
-      'a2',
-      'run:h2',
-      'p1',
-      'x3',
-      'a3',
-    ])
-    const done = buildItems(s.order, signatureOf(s), false)
-    expect(done.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a3', 'reply:u1'])
-  })
-
-  it('keeps an answer in several messages together', () => {
-    const s = state([user('u1'), tool('x1', 'execute'), agent('a1'), agent('a2')])
-    expect(buildItems(s.order, signatureOf(s)).map((i) => i.key)).toEqual([
-      'u1',
-      'x1',
-      'a1',
-      'a2',
-      'reply:u1',
-    ])
-  })
-
-  it('folds nothing without a step', () => {
-    const s = state([user('u1'), agent('a1'), plan('p1'), agent('a2')])
-    expect(buildItems(s.order, signatureOf(s)).map((i) => i.key)).toEqual([
-      'u1',
-      'a1',
-      'p1',
-      'a2',
-      'reply:u1',
-    ])
-  })
-
-  it('stops at a steered message', () => {
-    const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
-    const s = state([
-      user('u1'),
-      agent('a1'),
-      agent('a2'),
-      tool('x1', 'execute'),
-      steered,
-      thought('h1'),
-      agent('a3'),
-      tool('x2', 'execute'),
-      agent('a4'),
-    ])
-    expect(buildItems(s.order, signatureOf(s)).map((i) => i.key)).toEqual([
-      'u1',
-      'run:a1',
-      's1',
-      'run:h1',
-      'a4',
-      'reply:u1',
-    ])
-  })
-})
-
-describe('runParts', () => {
-  it('lists the steps of a run of steps, with lookups grouped', () => {
-    const parts = runParts(['x1', 'r1', 'r2'], 'tgg')
-    expect(parts.map((p) => p.key)).toEqual(['x1', 'group:r1'])
-  })
-
-  it("folds again the steps between a turn's earlier messages", () => {
-    const parts = runParts(['h1', 'a1', 'x1', 'x2', 'a2', 'x3'], 'hattat')
-    expect(parts.map((p) => p.key)).toEqual(['h1', 'a1', 'run:x1', 'a2', 'x3'])
-    expect(parts.map((p) => p.type === 'entry' && !p.step)).toEqual([
-      false,
-      true,
-      false,
-      true,
-      false,
-    ])
-  })
-})
-
 describe('reply footers', () => {
   const end = (id: string): ThreadEntry => ({
     kind: 'turn_end',
@@ -286,7 +206,7 @@ describe('reply footers', () => {
   it("take the place of a turn's end, after its messages", () => {
     const s = state([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2'), end('t1')])
     const result = buildItems(s.order, signatureOf(s))
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:a1', 'a2', 'reply:u1'])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'x1', 'a2', 'reply:u1'])
     expect(result.at(-1)).toMatchObject({
       type: 'reply',
       agentIds: ['a1', 'a2'],

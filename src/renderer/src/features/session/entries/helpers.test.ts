@@ -110,6 +110,21 @@ describe('runSummary', () => {
       running: true,
     })
   })
+
+  it('names plan updates and compactions once', () => {
+    const summary = runSummary([
+      { kind: 'plan' },
+      run('execute'),
+      { kind: 'plan' },
+      { kind: 'compaction', running: true },
+    ])
+    expect(summary).toEqual({
+      parts: ['Updated the plan', 'ran a command', 'compacted the context'],
+      editAt: -1,
+      failed: 0,
+      running: true,
+    })
+  })
 })
 
 describe('stopReasonText', () => {

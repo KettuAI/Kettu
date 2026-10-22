@@ -15,6 +15,8 @@
     "separator": ", ",
     "thought": "thought",
     "thoughtFor": "thought for {{duration}}",
+    "plan": "updated the plan",
+    "compaction": "compacted the context",
     "execute_one": "ran a command",
     "execute_other": "ran {{count}} commands",
     "search_one": "searched once",
