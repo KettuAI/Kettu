@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import {
   BotIcon,
   ChevronDownIcon,
@@ -26,7 +26,8 @@ import { cn } from '@renderer/lib/utils'
 import { sessionTitle, type SessionNode } from '@renderer/stores/sessions'
 import { openSession, useViewStore } from '@renderer/stores/view'
 import { SessionIndicator } from './session-indicator'
-import { SessionDialogs, SessionMenuItems, type SessionDialog } from './session-menu'
+import { DeleteSessionDialog, SessionMenuItems, SessionTitleField } from './session-menu'
+import { useRenaming } from './use-renaming'
 
 /** The sidebar indents two levels at most and lists deeper sub-sessions at the second level. */
 const MAX_DEPTH = 2
@@ -62,8 +63,10 @@ export const SessionRow = memo(function SessionRow({
       expandedParents: { ...s.expandedParents, [summary.id]: value },
     }))
 
-  const [dialog, setDialog] = useState<SessionDialog>(null)
+  const [deleting, setDeleting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const row = useRef<HTMLDivElement>(null)
+  const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
   const pad = 26 + Math.min(depth, MAX_DEPTH) * 16
   const subagent = summary.origin === 'subagent'
 
@@ -107,6 +110,7 @@ export const SessionRow = memo(function SessionRow({
       aria-current={current ? 'page' : undefined}
       aria-expanded={hasChildren ? expanded : undefined}
       onClick={() => openSession(summary.id, summary.projectPath)}
+      onDoubleClick={rename.start}
       onKeyDown={(event) => {
         // The context menu key opens the More menu, the row's menu for the keyboard.
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
@@ -155,48 +159,80 @@ export const SessionRow = memo(function SessionRow({
     </SidebarMenuButton>
   )
 
+  const menuItems = (
+    <SessionMenuItems
+      summary={summary}
+      onRename={rename.menu.onRename}
+      onDelete={() => setDeleting(true)}
+    />
+  )
+
   return (
     <SidebarMenuItem>
-      <div className="group/session relative">
-        <ContextMenu>
-          {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
-          {summary.branch ? (
-            <Tooltip>
-              <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
-              <TooltipContent side="right" className="flex-col items-start gap-0.5">
-                <span className="font-mono">{summary.branch}</span>
-                {summary.pr && (
-                  <span className="opacity-70">
-                    #{summary.pr.number} · {prStateText(summary.pr.state)}
-                  </span>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <ContextMenuTrigger render={button} />
-          )}
-          <ContextMenuContent>
-            <SessionMenuItems summary={summary} onDialog={setDialog} />
-          </ContextMenuContent>
-        </ContextMenu>
-        {/* Sits over the status slot at the row's end, so the title keeps its width. */}
-        <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-label={t('row.more')}
-                className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-foreground data-popup-open:opacity-100 [&_svg]:size-3.5"
-              />
-            }
+      <div ref={row} className="group/session relative">
+        {rename.renaming ? (
+          // A field cannot sit inside the row's button, so the row is a plain box while renaming.
+          <SidebarMenuButton
+            render={<div />}
+            size="row"
+            isActive={current}
+            style={{ paddingLeft: pad }}
+            className="bg-sidebar-accent pr-2 text-sidebar-accent-foreground data-active:font-medium"
           >
-            <EllipsisIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <SessionMenuItems summary={summary} onDialog={setDialog} />
-          </DropdownMenuContent>
-        </DropdownMenu>
+            {lead}
+            <SessionTitleField
+              summary={summary}
+              onDone={rename.finish}
+              className="h-full flex-1 bg-transparent aria-invalid:text-destructive"
+            />
+          </SidebarMenuButton>
+        ) : (
+          <>
+            <ContextMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
+              {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
+              {summary.branch ? (
+                <Tooltip>
+                  <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
+                  <TooltipContent side="right" className="flex-col items-start gap-0.5">
+                    <span className="font-mono">{summary.branch}</span>
+                    {summary.pr && (
+                      <span className="opacity-70">
+                        #{summary.pr.number} · {prStateText(summary.pr.state)}
+                      </span>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <ContextMenuTrigger render={button} />
+              )}
+              <ContextMenuContent finalFocus={rename.menu.finalFocus}>
+                {menuItems}
+              </ContextMenuContent>
+            </ContextMenu>
+            {/* Sits over the status slot at the row's end, so the title keeps its width. */}
+            <DropdownMenu
+              open={moreOpen}
+              onOpenChange={setMoreOpen}
+              onOpenChangeComplete={rename.menu.onOpenChangeComplete}
+            >
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label={t('row.more')}
+                    className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-foreground data-popup-open:opacity-100 [&_svg]:size-3.5"
+                  />
+                }
+              >
+                <EllipsisIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" finalFocus={rename.menu.finalFocus}>
+                {menuItems}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )}
       </div>
       {expanded && (
         <ul className="relative flex flex-col gap-px pt-px">
@@ -210,7 +246,12 @@ export const SessionRow = memo(function SessionRow({
           ))}
         </ul>
       )}
-      <SessionDialogs summary={summary} dialog={dialog} onDialog={setDialog} />
+      <DeleteSessionDialog
+        sessionId={summary.id}
+        title={sessionTitle(summary)}
+        open={deleting}
+        onOpenChange={setDeleting}
+      />
     </SidebarMenuItem>
   )
 })

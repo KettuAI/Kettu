@@ -246,6 +246,8 @@ function ProjectGroup({ project }: { project: Project | null }) {
 
 /** The list is one Tab stop; the arrow keys move between rows. */
 function moveRowFocus(event: KeyboardEvent<HTMLDivElement>): void {
+  // A row being renamed is a text field, which keeps its own Home and End.
+  if (event.target instanceof HTMLInputElement) return
   if (
     event.key !== 'ArrowDown' &&
     event.key !== 'ArrowUp' &&

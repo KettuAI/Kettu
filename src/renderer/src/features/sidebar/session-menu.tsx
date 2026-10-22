@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
@@ -20,16 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@renderer/components/ui/dialog'
 import {
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -38,12 +28,10 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { Input } from '@renderer/components/ui/input'
 import { errorMessage } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle } from '@renderer/stores/sessions'
-
-export type SessionDialog = 'rename' | 'delete' | null
 
 /**
  * A session's actions. A context menu is a Base UI menu, so the same items serve the row's
@@ -51,17 +39,19 @@ export type SessionDialog = 'rename' | 'delete' | null
  */
 export function SessionMenuItems({
   summary,
-  onDialog,
+  onRename,
+  onDelete,
 }: {
   summary: SessionSummary
-  onDialog: (dialog: SessionDialog) => void
+  onRename: () => void
+  onDelete: () => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   return (
     <>
       <DropdownMenuGroup>
-        <DropdownMenuItem onClick={() => onDialog('rename')}>{t('row.rename')}</DropdownMenuItem>
+        <DropdownMenuItem onClick={onRename}>{t('row.rename')}</DropdownMenuItem>
         {summary.origin !== 'subagent' && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>{t('row.newSubSession')}</DropdownMenuSubTrigger>
@@ -85,7 +75,7 @@ export function SessionMenuItems({
       </DropdownMenuGroup>
       <DropdownMenuSeparator />
       <DropdownMenuGroup>
-        <DropdownMenuItem variant="destructive" onClick={() => onDialog('delete')}>
+        <DropdownMenuItem variant="destructive" onClick={onDelete}>
           {t('row.deleteMenu')}
         </DropdownMenuItem>
       </DropdownMenuGroup>
@@ -93,92 +83,69 @@ export function SessionMenuItems({
   )
 }
 
-/** The dialogs the menu's Rename and Delete open. */
-export function SessionDialogs({
+/**
+ * The session's title as a text field. Enter or a blur saves, Esc cancels, and an empty title
+ * returns to the agent's. The field stays until the host has the new title, so the old one never
+ * flashes back.
+ */
+export function SessionTitleField({
   summary,
-  dialog,
-  onDialog,
+  onDone,
+  className,
 }: {
   summary: SessionSummary
-  dialog: SessionDialog
-  onDialog: (dialog: SessionDialog) => void
+  onDone: (restoreFocus: boolean) => void
+  className?: string
 }) {
-  const close = (open: boolean) => {
-    if (!open) onDialog(null)
-  }
-  return (
-    <>
-      <Dialog open={dialog === 'rename'} onOpenChange={close}>
-        <DialogContent showCloseButton={false}>
-          {/* Mounted per opening, so the field starts from the current title. */}
-          <RenameForm summary={summary} onDone={() => onDialog(null)} />
-        </DialogContent>
-      </Dialog>
-      <DeleteSessionDialog
-        sessionId={summary.id}
-        title={sessionTitle(summary)}
-        open={dialog === 'delete'}
-        onOpenChange={close}
-      />
-    </>
-  )
-}
-
-function RenameForm({ summary, onDone }: { summary: SessionSummary; onDone: () => void }) {
-  const { t } = useTranslation(['sidebar', 'common'])
+  const { t } = useTranslation('sidebar')
   const current = sessionTitle(summary)
-  const [value, setValue] = useState(current)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const field = useRef<HTMLInputElement>(null)
+  // Enter, Esc and the blur that follows can all land on one edit; only the first counts.
+  const settled = useRef(false)
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (value.trim() === current) return onDone()
-    setSaving(true)
+  const finish = async (value: string | null, restoreFocus: boolean) => {
+    if (settled.current) return
+    settled.current = true
+    const title = value?.trim() ?? null
+    if (title === null || title === current) return onDone(restoreFocus)
     try {
-      await renameSession(summary.id, value.trim() || null)
-      onDone()
+      await renameSession(summary.id, title || null)
+      onDone(restoreFocus)
     } catch (err) {
+      settled.current = false
       setError(errorMessage(err))
-      setSaving(false)
+      field.current?.focus()
     }
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)} className="grid gap-4">
-      <DialogHeader>
-        <DialogTitle>{t('row.renameTitle')}</DialogTitle>
-        <DialogDescription>{t('row.renameHint')}</DialogDescription>
-      </DialogHeader>
-      <div className="grid gap-1.5">
-        <Input
-          autoFocus
-          value={value}
-          maxLength={200}
-          aria-label={t('row.renameTitle')}
-          aria-invalid={error !== null}
-          onFocus={(event) => event.currentTarget.select()}
-          onChange={(event) => {
-            setValue(event.target.value)
-            setError(null)
-          }}
-          onKeyDown={(event) => {
-            // Enter that ends an IME composition must not submit half-typed text.
-            if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229))
-              event.preventDefault()
-          }}
-        />
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </div>
-      <DialogFooter>
-        <DialogClose render={<Button variant="outline" />}>
-          {t('common:actions.cancel')}
-        </DialogClose>
-        <Button type="submit" disabled={saving}>
-          {t('row.renameSave')}
-        </Button>
-      </DialogFooter>
-    </form>
+    <input
+      ref={field}
+      autoFocus
+      aria-label={t('row.renameTitle')}
+      aria-invalid={error !== null}
+      title={error ?? undefined}
+      defaultValue={current}
+      maxLength={200}
+      autoComplete="off"
+      spellCheck={false}
+      className={cn('min-w-0 outline-none', className)}
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={() => setError(null)}
+      // Leaving a field that failed to save gives up instead of trying again.
+      onBlur={(event) => void finish(error ? null : event.currentTarget.value, false)}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          void finish(event.currentTarget.value, true)
+        } else if (event.key === 'Escape') {
+          event.preventDefault()
+          void finish(null, true)
+        }
+      }}
+    />
   )
 }
 
