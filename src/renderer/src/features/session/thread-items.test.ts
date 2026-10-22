@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView, ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { buildItems, replyKeys, signatureOf, stepItems } from './thread-items'
+import { buildItems, lastSent, replyKeys, signatureOf, stepItems } from './thread-items'
 
 const session = { id: 's1' } as SessionView
 
@@ -182,12 +182,16 @@ describe('buildItems', () => {
     const result = items([user('u1'), agent('a1'), user('u2')]).filter((i) => i.type === 'entry')
     expect(result.map((i) => i.turnStart)).toEqual([true, false, true])
   })
+})
 
-  it("anchors the scroll to the latest turn's start only", () => {
-    const result = items([user('u1'), agent('a1'), user('u2'), agent('a2')]).filter(
-      (i) => i.type === 'entry',
-    )
-    expect(result.map((i) => i.scrollAnchor)).toEqual([false, false, true, false])
+describe('lastSent', () => {
+  it('names the latest message you sent, steered ones included', () => {
+    const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
+    const s = state([user('u1'), agent('a1'), steered, tool('x1', 'execute')])
+    expect(lastSent(s.order, signatureOf(s))).toBe('s1')
+    const plain = state([user('u1'), agent('a1')])
+    expect(lastSent(plain.order, signatureOf(plain))).toBe('u1')
+    expect(lastSent([], '')).toBeNull()
   })
 })
 
@@ -299,7 +303,7 @@ describe('reply footers', () => {
     const s = state([user('u1'), agent('a1'), steered, agent('a2'), end('t1')])
     const result = buildItems(s.order, signatureOf(s))
     expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 's1', 'a2', 'reply:u1'])
-    expect(result[2]).toMatchObject({ turnStart: false, scrollAnchor: false })
+    expect(result[2]).toMatchObject({ turnStart: false })
   })
 
   it('leave a turn without a message to its end marker', () => {

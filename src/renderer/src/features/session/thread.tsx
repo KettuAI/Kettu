@@ -1,4 +1,4 @@
-import { memo, startTransition, useEffect, useMemo, useState } from 'react'
+import { memo, startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   MessageScroller,
@@ -6,6 +6,7 @@ import {
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
+  useMessageScroller,
   MessageScrollerViewport,
 } from '@renderer/components/ui/message-scroller'
 import { cn } from '@renderer/lib/utils'
@@ -15,7 +16,7 @@ import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
 import { hoverReply } from './reply-hover'
-import { buildItems, replyKeys, signatureOf, type Item } from './thread-items'
+import { buildItems, lastSent, replyKeys, signatureOf, type Item } from './thread-items'
 
 // A long history renders from its end: the first frame shows the last items, and older ones
 // follow in transitions after it, which MessageScroller keeps in place as they are prepended.
@@ -44,6 +45,22 @@ function stepIds(order: string[], signature: string): Set<string> {
 
 const isStep = (item: Item, steps: Set<string>): boolean =>
   item.type === 'group' || item.type === 'run' || (item.type === 'entry' && steps.has(item.id))
+
+/**
+ * Brings a message you send into view, even while you read further up; the thread then follows
+ * its end. No message is a scroll anchor: MessageScroller pads the end with a spacer so an anchor
+ * can sit at the top, and after a short reply that padding stayed as room to scroll into.
+ */
+function ScrollOnSend({ sent }: { sent: string | null }) {
+  const { scrollToEnd } = useMessageScroller()
+  const seen = useRef(sent)
+  useEffect(() => {
+    if (sent === seen.current) return
+    seen.current = sent
+    if (sent) scrollToEnd({ behavior: 'auto' })
+  }, [sent, scrollToEnd])
+  return null
+}
 
 /** 32 px between turns, 4 px between steps, 16 px between anything else. */
 function spacing(item: Item, previous: Item, steps: Set<string>): string {
@@ -80,10 +97,12 @@ export const Thread = memo(function Thread({
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
   useEffect(() => () => hoverReply(null), [sessionId])
   const awaitingReply = working && signature.endsWith('u')
+  const sent = lastSent(order ?? [], signature)
   const shownFrom = useShownFrom(items.length)
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
+      <ScrollOnSend sent={sent} />
       {/* The viewport's bottom fade would mask a focus ring of its own, so the scroller draws it on
           top, inset, for keyboard focus only. */}
       <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay after:pointer-events-none after:absolute after:inset-0 after:opacity-0 after:ring-2 after:ring-ring/50 after:ring-inset has-[>[data-slot=message-scroller-viewport]:focus-visible]:after:opacity-100">
@@ -101,7 +120,6 @@ export const Thread = memo(function Thread({
                 <MessageScrollerItem
                   key={item.key}
                   messageId={item.key}
-                  scrollAnchor={item.type === 'entry' && item.scrollAnchor}
                   onPointerEnter={() => hoverReply(replies[index] ?? null)}
                   className={cn(
                     index > 0 && spacing(item, items[index - 1]!, steps),

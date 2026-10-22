@@ -60,6 +60,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 52  | The file list cannot be hidden while reading a file            | Side panel     | Fixed        |
 | 53  | No line where the sidebar meets the thread                     | Layout         | Fixed        |
 | 54  | Opening a session starts its agent and keeps it running        | Performance    | Open         |
+| 55  | A short thread still scrolls into empty space                  | Thread         | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -781,3 +782,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Codex starts the MCP servers of `~/.codex/config.toml` per thread, here ChatGPT's `computer-use` and `node_repl`, each in a process group of its own, which the stop sequence's signal to the agent's group does not reach.
 - **Decided**: 2026-10-22, by the maintainer. OverBench keeps its own copy of each thread in SQLite through `node:sqlite`, in a worker thread of the host, read a page at a time from the latest turn, 60 entries back to the start of their turn and at most 500, with images over 32 KB stored apart ([Persistence: threads](../design/persistence.md#threads)). Then: open from the copy without an agent, connect an agent with `session/resume` only to continue, release an idle session's agent with `session/close`, and stop agent process trees whole.
 - **In progress**: the thread database, its worker and the host's store are built and tested, and the worker runs in the production build and the packaged app; nothing reads or writes threads yet.
+
+## 55. A short thread still scrolls into empty space
+
+- **Reported**: 2026-10-22, with a screenshot of a thread whose content does not fill the view, which still scrolls down into blank space.
+- **Cause**: the user message that started the latest turn was `MessageScroller`'s `scrollAnchor`, so a new turn opened with the prompt at the top. To let an anchor reach the top, the scroller pads the thread's end with a spacer; after a short reply the spacer stayed, and the thread scrolled into it.
+- **Fixed**: no message is an anchor. A thread shorter than the view does not scroll, sending a message scrolls to the end even from further up, and the thread follows the reply. Measured in the app, the room past the last entry is 0 after a long turn, a short first turn and a short turn after a long one ([Interface: thread](../design/ui.md#thread)). The trade-off: while a long reply streams, the prompt no longer stays at the top; the view follows the reply, and scrolling up stops following it.

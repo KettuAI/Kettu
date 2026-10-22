@@ -64,10 +64,6 @@ export type Item =
       type: 'entry'
       id: string
       turnStart: boolean
-      // Only the latest turn's start: when an update keeps the item count, MessageScroller
-      // scrolls to the first anchor it has not handled, which any anchor from history or a
-      // remounted item is, so an older one would throw the view back to it.
-      scrollAnchor: boolean
     }
   | { key: string; type: 'group'; ids: string[] }
   // Two or more steps between messages, folded into one summary line.
@@ -83,7 +79,6 @@ export type Item =
 export function buildItems(order: string[], shape: string, live = false, notes = false): Item[] {
   const signature = notes ? markNotes(shape, live) : shape
   const items: Item[] = []
-  const latestTurn = signature.lastIndexOf('u')
   const { replacing, after } = replyFooters(order, signature, live)
   for (let i = 0; i < order.length; i++) {
     const footer = replacing.get(i)
@@ -105,9 +100,7 @@ export function buildItems(order: string[], shape: string, live = false, notes =
         })
       } else {
         for (const step of stepItems(ids, signature.slice(i, end + 1))) {
-          items.push(
-            step.type === 'group' ? step : { ...step, turnStart: false, scrollAnchor: false },
-          )
+          items.push(step.type === 'group' ? step : { ...step, turnStart: false })
         }
       }
       i = end
@@ -121,12 +114,17 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       type: 'entry',
       id,
       turnStart: signature[i] === 'u',
-      scrollAnchor: i === latestTurn,
     })
     const closing = after.get(i)
     if (closing) items.push(closing)
   }
   return items
+}
+
+/** The latest message you sent, steered into a running turn or not; null before the first. */
+export function lastSent(order: string[], signature: string): string | null {
+  const at = Math.max(signature.lastIndexOf('u'), signature.lastIndexOf('s'))
+  return at < 0 ? null : (order[at] ?? null)
 }
 
 /**
