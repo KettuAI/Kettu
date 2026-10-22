@@ -49,6 +49,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 41  | The plan usage strip is unclear and needs a better place       | Sidebar        | Open         |
 | 42  | Long lines in the file preview run off the pane                | Side panel     | Open         |
 | 43  | The message body needs a typography pass to a given spec       | Thread         | Open         |
+| 44  | The space beside the window controls needs a design            | Sidebar        | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -609,3 +610,14 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The mockup and the text differ in small things (2 px before a chip against 4 px, list markers lighter than `--muted-foreground`), and the mockup shows a muted lead paragraph and a boxed conclusion that a renderer cannot tell apart from other paragraphs. The written spec is taken where they differ, and the lead and conclusion are left out unless asked for.
   - The rules rewritten in [Interface: markdown](../design/ui.md#markdown), [tool calls](../design/ui.md#tool-calls) and [Design system: typography](../design/design-system.md#typography), with the before and after screenshots the spec asks for.
 - **Amended**: 2026-10-22, with a screenshot of a reply whose file references (`README.zh-CN.md`, `docs/development-plan.md`, `docs/architecture.md`) render as underlined text, the same as a web link. A file reference renders as its Material file-type icon followed by the file name, so a file and a link can be told apart at a glance. The icon replaces the spec's generic 10 px file icon and comes from the file icon set chosen in [problem 38](#38-files-pane-no-markdown-preview-file-type-icons-or-editing), Material Icon Theme with lowered saturation, through the same mapping, so a file looks the same in the thread as in the Files pane. To settle: the icon's size inside the 20 px chip, since Material's icons lose detail below about 12 px; whether a reference with a line (`commands.go:12`) shows its line after the name; and a folder icon for a reference to a directory.
+
+## 44. The space beside the window controls needs a design
+
+- **Reported**: 2026-10-22, with a screenshot marking the empty stretch of the sidebar's header between the traffic lights and the sidebar toggle.
+- **Observed**: the stretch holds nothing.
+- **Expected**: what goes there is designed. Nothing is chosen yet; for now it stays empty.
+- **Today**: the header in `AppSidebar` (`src/renderer/src/features/sidebar/app-sidebar.tsx`) is a window drag region: a 52 px spacer for the traffic lights on macOS, an empty stretch, and the sidebar toggle at its end.
+- **To settle when planning**:
+  - Candidates talked through: a search icon once session search or a command palette exists (on the roadmap, not built); **New session** as an icon here, which frees a row of the sidebar but is easier to miss. Back and forward buttons were considered and set aside, since the sidebar, Settings' **Back**, a sub-session's parent link and `Mod+Shift+[` / `Mod+Shift+]` already cover the moves.
+  - The stretch is where the window is dragged, so part of it stays empty, and any control in it is `app-region-no-drag` ([problem 14](#14-the-terminal-panels-own-buttons-do-nothing)).
+  - On Windows and Linux there are no traffic lights on the left and the window controls sit on the right, so the stretch is wider there.
