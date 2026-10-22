@@ -1,5 +1,11 @@
 import { create } from 'zustand'
-import type { AgentDetails, AgentStatus, EnvironmentInfo } from '@shared/agent-host'
+import type {
+  AgentDetails,
+  AgentInstallMethod,
+  AgentStatus,
+  AgentTask,
+  EnvironmentInfo,
+} from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
 
@@ -14,6 +20,11 @@ interface AgentsStore {
   updateCheck: { running: boolean; finishedAt: number | null; error: string | null }
   /** Agents updated in this run, so their row can say so until the app restarts. */
   updated: Partial<Record<AgentId, true>>
+  /**
+   * Why an install or update the user asked for did not run, when no failed task says why: a retry
+   * that no longer applies, another task running, npm missing.
+   */
+  taskErrors: Partial<Record<AgentId, { kind: AgentTask['kind']; message: string }>>
   setAll(statuses: AgentStatus[]): void
   setOne(status: AgentStatus): void
   refresh(): Promise<void>
@@ -21,7 +32,11 @@ interface AgentsStore {
   reloadEnvironment(): Promise<void>
   loadDetails(agentId: AgentId): Promise<void>
   checkUpdates(): Promise<void>
+  /** These three never reject: a failure shows as the agent's failed task or in `taskErrors`. */
   update(agentId: AgentId): Promise<void>
+  install(agentId: AgentId, method?: AgentInstallMethod['id']): Promise<void>
+  /** Stops a running install or update, or dismisses one that failed. */
+  cancelTask(agentId: AgentId): Promise<void>
 }
 
 /** A reply can land after a newer `environment.changed` event, so the later reading wins. */
@@ -38,6 +53,7 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
   loaded: false,
   updateCheck: { running: false, finishedAt: null, error: null },
   updated: {},
+  taskErrors: {},
   setAll(statuses) {
     set({
       byId: Object.fromEntries(statuses.map((s) => [s.id, s])),
@@ -49,6 +65,8 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
     set((state) => ({
       byId: { ...state.byId, [status.id]: status },
       order: state.order.includes(status.id) ? state.order : [...state.order, status.id],
+      // A task the host reports says more than a request's error.
+      taskErrors: status.task ? without(state.taskErrors, status.id) : state.taskErrors,
     }))
   },
   async refresh() {
@@ -82,15 +100,56 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
     }
   },
   async update(agentId) {
-    await host('agents.update', { agentId })
+    const done = await taskRequest(agentId, 'update', () => host('agents.update', { agentId }))
     // The request also resolves when cancelled; then the update is still on offer.
     const status = get().byId[agentId]
-    if (status && !status.task && !status.update) {
+    if (done && status && !status.task && !status.update) {
       set((state) => ({ updated: { ...state.updated, [agentId]: true } }))
     }
-    await get().loadDetails(agentId)
+    await get()
+      .loadDetails(agentId)
+      .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
+  },
+  async install(agentId, method) {
+    await taskRequest(agentId, 'install', () =>
+      host('agents.install', method ? { agentId, method } : { agentId }),
+    )
+  },
+  async cancelTask(agentId) {
+    set((state) => ({ taskErrors: without(state.taskErrors, agentId) }))
+    await host('agents.cancelTask', { agentId }).catch((e: unknown) =>
+      console.warn(`Could not cancel the task: ${errorMessage(e)}`),
+    )
   },
 }))
+
+function without<T>(
+  record: Partial<Record<AgentId, T>>,
+  agentId: AgentId,
+): Partial<Record<AgentId, T>> {
+  if (!(agentId in record)) return record
+  return Object.fromEntries(Object.entries(record).filter(([id]) => id !== agentId))
+}
+
+/** Runs an install or update request; true when it finished, false when it failed. */
+async function taskRequest(
+  agentId: AgentId,
+  kind: AgentTask['kind'],
+  request: () => Promise<unknown>,
+): Promise<boolean> {
+  const { setState, getState } = useAgentsStore
+  setState((state) => ({ taskErrors: without(state.taskErrors, agentId) }))
+  try {
+    await request()
+    return true
+  } catch (e) {
+    if (getState().byId[agentId]?.task?.state !== 'failed') {
+      const message = errorMessage(e)
+      setState((state) => ({ taskErrors: { ...state.taskErrors, [agentId]: { kind, message } } }))
+    }
+    return false
+  }
+}
 
 export function agentName(agentId: AgentId): string {
   return useAgentsStore.getState().byId[agentId]?.name ?? AGENT_NAMES[agentId]

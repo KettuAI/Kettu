@@ -323,6 +323,9 @@
       "doneTitle": "{{name}} 已更新",
       "doneBody": "{{name}} 下次启动时使用新版本。"
     },
+    "task": {
+      "dismiss": "关闭"
+    },
     "install": {
       "button": "安装",
       "through": "通过 {{method}} 安装",

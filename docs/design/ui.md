@@ -201,17 +201,19 @@ The page scales to many agents: a list first, and a page of its own for each age
   - A row takes the `--accent` fill on hover. Settings search finds an agent's row by name or account.
 - **The pill** says what the row offers and keeps every state of it in place, so the row never changes its layout:
 
-  | State            | Pill                                                                                                                       |
-  | ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
-  | Update available | `info`, `CircleArrowUp` "Update" and the new CLI version in mono; a click updates, the tooltip names the adapter's version |
-  | Updating         | `info`, `Spinner` "Updating…" and an × that cancels                                                                        |
-  | Update failed    | `error`, `RotateCw` "Update failed, retry", with the reason as its tooltip                                                 |
-  | Updated          | `success`, `CircleCheck` "Updated", until the app restarts                                                                 |
-  | Installable      | `info`, `Download` "Install"; a click installs the way the agent's page has chosen, the tooltip names it                   |
-  | Installing       | `info`, `Spinner` "Installing…" and an × that cancels                                                                      |
-  | Install failed   | `error`, `RotateCw` "Install failed, retry"                                                                                |
+  | State            | Pill                                                                                                                                          |
+  | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Update available | `info`, `CircleArrowUp` "Update" and the new CLI version in mono; a click updates, the tooltip names the adapter's version                    |
+  | Updating         | `info`, `Spinner` "Updating…" and an × that cancels                                                                                           |
+  | Update failed    | `error`, `RotateCw` "Update failed, retry" with the reason as its tooltip, and an × that dismisses it                                         |
+  | Updated          | `success`, `CircleCheck` "Updated", until the app restarts                                                                                    |
+  | Installable      | `info`, `Download` "Install"; a click installs the way the agent's page has chosen, the tooltip names it                                      |
+  | Installing       | `info`, `Spinner` "Installing…" and an × that cancels                                                                                         |
+  | Install failed   | `error`, `RotateCw` "Install failed, retry", by the route the failed install took, with the reason as its tooltip, and an × that dismisses it |
 
   npm reports no percentage, so the pill never shows one; the latest line of its output stands on the row's second line instead.
+
+  A failure whose retry no longer applies, because the agent was installed another way or the update is no longer offered, goes by itself. A request the host refuses outright, such as one while another task runs, shows as `error` "Install failed" or "Update failed" with its reason on the second line and an ×; nothing fails silently. An agent's page shows the same failures as notices, with **Retry**, **Copy log** and **Dismiss**.
 
 - **The Installed label** ends with what applies to the whole list: when it last checked ("Checked 5 minutes ago", "Checked just now · 1 update", "Checked just now · all up to date", "Couldn't check for updates"), **Check for updates** (`RefreshCw`, a `Spinner` while it runs, the label kept), shown while any adapter agent is listed, and **Hide accounts** (`EyeOff`; **Show accounts** with `Eye` while hidden). Updates are also checked [by themselves](./agent-host.md#checking-for-updates), so the button is for when you want to know now.
 - **Hide accounts** ([problem 26](../milestones/m0-feedback.md#26-account-details-cannot-be-hidden)) is a toggle button, `aria-pressed`, kept as `privacy.hideAccount` ([settings](./persistence.md#settings)) and off by default. While on, every email and account name in Settings, here and on Git's GitHub CLI row, is a run of dots behind a blur: illegible in a screenshot, withheld from copying, read out as "Hidden", and left out of search, so a match cannot reveal it. The rows keep their layout. One component (`Masked`) draws it, so a later screen that shows an account takes the same mask.

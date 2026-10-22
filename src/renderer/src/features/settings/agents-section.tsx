@@ -113,22 +113,47 @@ function canInstall(status: AgentStatus): boolean {
   return status.state === 'not-installed' && installMethod(status) !== null
 }
 
-function startInstall(agentId: AgentId, method?: AgentInstallMethod['id']): void {
-  host('agents.install', method ? { agentId, method } : { agentId }).catch((e: unknown) =>
-    console.warn(`Install failed: ${errorMessage(e)}`),
-  )
+function startInstall(agentId: AgentId, method?: AgentInstallMethod['id'] | null): void {
+  void useAgentsStore.getState().install(agentId, method ?? undefined)
 }
 
 function startUpdate(agentId: AgentId): void {
-  useAgentsStore
-    .getState()
-    .update(agentId)
-    .catch((e: unknown) => console.warn(`Update failed: ${errorMessage(e)}`))
+  void useAgentsStore.getState().update(agentId)
 }
 
 function cancelTask(agentId: AgentId): void {
-  host('agents.cancelTask', { agentId }).catch((e: unknown) =>
-    console.warn(`Could not cancel: ${errorMessage(e)}`),
+  void useAgentsStore.getState().cancelTask(agentId)
+}
+
+/** Runs a failed task again, by the route it took. */
+function retryTask(agentId: AgentId, task: AgentTask): void {
+  if (task.kind === 'update') startUpdate(agentId)
+  else startInstall(agentId, task.method)
+}
+
+/** The small x inside a pill that cancels its task or dismisses its failure. */
+function PillClose({
+  label,
+  tone,
+  onClick,
+}: {
+  label: string
+  tone: 'info' | 'error'
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cn(
+        'grid size-4 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        tone === 'info' ? 'hover:bg-checked-tint-hover' : 'hover:bg-destructive-tint-hover',
+      )}
+    >
+      <XIcon className="size-2.5" />
+    </button>
   )
 }
 
@@ -187,6 +212,7 @@ function percent(limit: PlanLimit): string {
 function AgentPill({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
   const updated = useAgentsStore((s) => s.updated[status.id])
+  const taskError = useAgentsStore((s) => s.taskErrors[status.id])
   const version = useAgentVersion(status)
   const task: AgentTask | null = status.task
   if (task?.state === 'running' || status.state === 'installing') {
@@ -197,15 +223,11 @@ function AgentPill({ status }: { status: AgentStatus }) {
         {t(updating ? 'agents.update.updating' : 'agents.install.installing')}
         {/* The host also stops a first-use install, which runs with no task of its own. */}
         {(task || status.package) && (
-          <button
-            type="button"
-            aria-label={t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
-            title={t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
+          <PillClose
+            label={t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
+            tone="info"
             onClick={() => cancelTask(status.id)}
-            className="grid size-4 place-items-center rounded-full outline-none hover:bg-checked-tint-hover focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <XIcon className="size-2.5" />
-          </button>
+          />
         )}
       </Badge>
     )
@@ -213,18 +235,37 @@ function AgentPill({ status }: { status: AgentStatus }) {
   if (task?.state === 'failed') {
     const updating = task.kind === 'update'
     return (
-      <Badge
-        variant="error"
-        render={
-          <button
-            type="button"
-            title={task.error ?? undefined}
-            onClick={() => (updating ? startUpdate(status.id) : startInstall(status.id))}
-          />
-        }
-      >
-        <RotateCwIcon data-icon="inline-start" />
-        {t(updating ? 'agents.update.failed' : 'agents.install.failed')}
+      <Badge variant="error" className="pr-1 has-[[data-retry]:hover]:bg-destructive-tint-hover">
+        <button
+          type="button"
+          data-retry=""
+          title={task.error ?? undefined}
+          onClick={() => retryTask(status.id, task)}
+          className="inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <RotateCwIcon className="size-3" />
+          {t(updating ? 'agents.update.failed' : 'agents.install.failed')}
+        </button>
+        <PillClose
+          label={t('agents.task.dismiss')}
+          tone="error"
+          onClick={() => cancelTask(status.id)}
+        />
+      </Badge>
+    )
+  }
+  if (taskError) {
+    return (
+      <Badge variant="error" className="pr-1" title={taskError.message}>
+        <CircleAlertIcon data-icon="inline-start" />
+        {t(
+          taskError.kind === 'update' ? 'agents.update.failedTitle' : 'agents.install.failedTitle',
+        )}
+        <PillClose
+          label={t('agents.task.dismiss')}
+          tone="error"
+          onClick={() => cancelTask(status.id)}
+        />
       </Badge>
     )
   }
@@ -292,6 +333,7 @@ function methodName(t: SettingsT, method: AgentInstallMethod): string {
 export function AgentListItem({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
   const details = useAgentsStore((s) => s.details[status.id])
+  const taskError = useAgentsStore((s) => s.taskErrors[status.id])
   const now = useNow()
   const r = readiness(status)
   const reading = useAgentReads(status)
@@ -309,6 +351,8 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
       (status.progress.at(-1) ?? t('agents.install.installing'))
     ) : status.task?.state === 'failed' ? (
       <span className="text-destructive">{status.task.error}</span>
+    ) : taskError ? (
+      <span className="text-destructive">{taskError.message}</span>
     ) : !installed && canInstall(status) ? (
       status.package ? (
         t('agents.install.missingLineAdapter')
@@ -632,7 +676,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         )}
         {error && <p className="-mt-4 px-1 text-xs text-destructive">{error}</p>}
 
-        <TaskNotice status={status} version={version} />
+        <TaskNotice status={status} version={version} installed={installed} />
         {!installed && <InstallNotice status={status} />}
 
         {installed && <VersionGroup status={status} version={version} />}
@@ -791,21 +835,36 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
 }
 
 /** An update on offer, under way, failed or just done, in one notice under the page's title. */
-function TaskNotice({ status, version }: { status: AgentStatus; version: string | null }) {
+function TaskNotice({
+  status,
+  version,
+  installed,
+}: {
+  status: AgentStatus
+  version: string | null
+  installed: boolean
+}) {
   const { t } = useTranslation(['settings', 'common'])
   const updated = useAgentsStore((s) => s.updated[status.id])
-  const task = status.task?.kind === 'update' ? status.task : null
+  const taskError = useAgentsStore((s) => s.taskErrors[status.id])
+  // An install of an agent that is not installed shows in its install notice instead.
+  const task = status.task && (status.task.kind === 'update' || installed) ? status.task : null
+  const updating = task?.kind === 'update'
   if (task?.state === 'running') {
     return (
       <Alert variant="info">
         <Spinner />
-        <AlertTitle>{t('agents.update.progressTitle', { name: status.name })}</AlertTitle>
+        <AlertTitle>
+          {t(updating ? 'agents.update.progressTitle' : 'agents.install.progressTitle', {
+            name: status.name,
+          })}
+        </AlertTitle>
         <AlertDescription className="flex flex-col gap-2.5">
           <span className="truncate">{task.progress.at(-1) ?? task.command}</span>
           <TaskLog task={task} />
           <span>
             <Button variant="outline" size="compact" onClick={() => cancelTask(status.id)}>
-              {t('agents.update.cancel')}
+              {t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
             </Button>
           </span>
         </AlertDescription>
@@ -813,19 +872,25 @@ function TaskNotice({ status, version }: { status: AgentStatus; version: string 
     )
   }
   if (task?.state === 'failed') {
+    return <FailedTaskNotice status={status} task={task} />
+  }
+  if (taskError && !status.task) {
     return (
       <Alert variant="error">
         <CircleAlertIcon />
-        <AlertTitle>{t('agents.update.failedTitle')}</AlertTitle>
+        <AlertTitle>
+          {t(
+            taskError.kind === 'update'
+              ? 'agents.update.failedTitle'
+              : 'agents.install.failedTitle',
+          )}
+        </AlertTitle>
         <AlertDescription className="flex flex-col gap-2.5">
-          <span>{t('agents.update.failedBody')}</span>
-          <TaskLog task={task} />
-          <span className="flex gap-1.5">
-            <Button size="compact" onClick={() => startUpdate(status.id)}>
-              <RotateCwIcon data-icon="inline-start" />
-              {t('common:actions.retry')}
+          <span data-selectable="">{taskError.message}</span>
+          <span>
+            <Button variant="quiet" size="compact" onClick={() => cancelTask(status.id)}>
+              {t('agents.task.dismiss')}
             </Button>
-            <LogCopyButton task={task} />
           </span>
         </AlertDescription>
       </Alert>
@@ -870,11 +935,43 @@ function TaskNotice({ status, version }: { status: AgentStatus; version: string 
   return null
 }
 
+/** A failed install or update: why, its log, and retry, copy or dismiss. */
+function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTask }) {
+  const { t } = useTranslation(['settings', 'common'])
+  const updating = task.kind === 'update'
+  return (
+    <Alert variant="error">
+      <CircleAlertIcon />
+      <AlertTitle>
+        {t(updating ? 'agents.update.failedTitle' : 'agents.install.failedTitle')}
+      </AlertTitle>
+      <AlertDescription className="flex flex-col gap-2.5">
+        {updating ? (
+          <span>{t('agents.update.failedBody')}</span>
+        ) : (
+          task.error && <span data-selectable="">{task.error}</span>
+        )}
+        <TaskLog task={task} />
+        <span className="flex flex-wrap gap-1.5">
+          <Button size="compact" onClick={() => retryTask(status.id, task)}>
+            <RotateCwIcon data-icon="inline-start" />
+            {t('common:actions.retry')}
+          </Button>
+          <LogCopyButton task={task} />
+          <Button variant="quiet" size="compact" onClick={() => cancelTask(status.id)}>
+            {t('agents.task.dismiss')}
+          </Button>
+        </span>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 /** Installing an agent that is not installed: how, then its progress, then why it failed. */
 function InstallNotice({ status }: { status: AgentStatus }) {
   const { t } = useTranslation(['settings', 'common'])
-  const [picked, setPicked] = useState<string | undefined>(undefined)
   const task = status.task?.kind === 'install' ? status.task : null
+  const [picked, setPicked] = useState<string | undefined>(task?.method ?? undefined)
   const method = installMethod(status, picked)
   if (task?.state === 'running' || status.state === 'installing') {
     const lines = task ? task.progress : status.progress
@@ -896,25 +993,7 @@ function InstallNotice({ status }: { status: AgentStatus }) {
       </Alert>
     )
   }
-  if (task?.state === 'failed') {
-    return (
-      <Alert variant="error">
-        <CircleAlertIcon />
-        <AlertTitle>{t('agents.install.failedTitle')}</AlertTitle>
-        <AlertDescription className="flex flex-col gap-2.5">
-          {task.error && <span data-selectable="">{task.error}</span>}
-          <TaskLog task={task} />
-          <span className="flex gap-1.5">
-            <Button size="compact" onClick={() => startInstall(status.id, method?.id)}>
-              <RotateCwIcon data-icon="inline-start" />
-              {t('common:actions.retry')}
-            </Button>
-            <LogCopyButton task={task} />
-          </span>
-        </AlertDescription>
-      </Alert>
-    )
-  }
+  if (task?.state === 'failed') return <FailedTaskNotice status={status} task={task} />
   if (!canInstall(status)) return null
   return (
     <Alert variant="info">

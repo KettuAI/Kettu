@@ -68,6 +68,42 @@ describe('agents store', () => {
     expect(useAgentsStore.getState().updated).toEqual({})
   })
 
+  it('says why an update did not run when no failed task says it', async () => {
+    const codex = { id: 'codex', update: null, task: null } as unknown as AgentStatus
+    request.mockImplementation((method: string) =>
+      method === 'agents.update'
+        ? Promise.reject(new Error('Codex has no update to install'))
+        : Promise.resolve(undefined),
+    )
+    useAgentsStore.setState({ byId: { codex }, updated: {}, taskErrors: {} })
+    await expect(useAgentsStore.getState().update('codex')).resolves.toBeUndefined()
+    expect(useAgentsStore.getState().taskErrors).toEqual({
+      codex: { kind: 'update', message: 'Codex has no update to install' },
+    })
+    expect(useAgentsStore.getState().updated).toEqual({})
+  })
+
+  it('leaves the reason to a failed task when the host reports one', async () => {
+    const task = { kind: 'install', state: 'failed', method: 'npm', error: 'EACCES' }
+    const opencode = { id: 'opencode', task } as unknown as AgentStatus
+    request.mockRejectedValue(new Error('EACCES'))
+    useAgentsStore.setState({ byId: { opencode }, taskErrors: {} })
+    await useAgentsStore.getState().install('opencode', 'npm')
+    expect(request).toHaveBeenCalledWith('agents.install', { agentId: 'opencode', method: 'npm' })
+    expect(useAgentsStore.getState().taskErrors).toEqual({})
+  })
+
+  it('clears a reason once dismissed, or once the host reports a task', async () => {
+    request.mockResolvedValue(undefined)
+    const error = { kind: 'install' as const, message: 'busy' }
+    useAgentsStore.setState({ taskErrors: { codex: error, opencode: error } })
+    await useAgentsStore.getState().cancelTask('codex')
+    expect(request).toHaveBeenCalledWith('agents.cancelTask', { agentId: 'codex' })
+    const running = { kind: 'install', state: 'running' }
+    useAgentsStore.getState().setOne({ id: 'opencode', task: running } as unknown as AgentStatus)
+    expect(useAgentsStore.getState().taskErrors).toEqual({})
+  })
+
   it('keeps a failed update check as an error, not as checked', async () => {
     request.mockRejectedValue(new Error('offline'))
     useAgentsStore.setState({ updateCheck: { running: false, finishedAt: null, error: null } })

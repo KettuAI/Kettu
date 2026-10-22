@@ -326,6 +326,9 @@
       "doneTitle": "{{name}} is updated",
       "doneBody": "{{name}} uses the new version from its next start."
     },
+    "task": {
+      "dismiss": "Dismiss"
+    },
     "install": {
       "button": "Install",
       "through": "Install through {{method}}",
