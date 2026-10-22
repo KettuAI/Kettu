@@ -34,6 +34,8 @@ const SHORT_WINDOW = {
   seven_day: 'usage.shortWindow.seven_day',
   seven_day_opus: 'usage.shortWindow.seven_day_opus',
   seven_day_sonnet: 'usage.shortWindow.seven_day_sonnet',
+  monthly: 'usage.shortWindow.monthly',
+  annual: 'usage.shortWindow.annual',
 } as const
 
 const isShortWindow = (name: string): name is keyof typeof SHORT_WINDOW =>

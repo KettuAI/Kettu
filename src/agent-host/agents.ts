@@ -22,7 +22,6 @@ import {
   type AgentInit,
   type ConnectionHooks,
 } from './acp/connection'
-import { parseUsageReport } from './acp/claude-reports'
 import {
   installAdapter,
   removeOtherVersions,
@@ -48,7 +47,7 @@ import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
 import { formatCommand } from './quote'
-import { hasReports, runReport } from './reports'
+import { limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile } from './storage'
@@ -757,26 +756,27 @@ export class AgentManager {
   }
 
   /**
-   * Reads the current use of every plan limit from the agent's `/usage` report, at most once a
-   * minute, starting the agent if needed; the windows arrive in its status. Rate-limit events
-   * report a window only when it changes, so without this most windows would stay unknown.
+   * Reads the current use of every plan limit from the agent's report (`/usage`, `/status`), at
+   * most once a minute, starting the agent if needed; the windows arrive in its status. Rate-limit
+   * events report a window only when it changes, so without this most windows would stay unknown.
    */
   async refreshLimits(agentId: AgentId): Promise<void> {
     const slot = this.slot(agentId)
-    if (!hasReports(agentId)) return
+    const report = limitsReport(agentId)
+    if (!report) return
     await this.detectAll()
     if (slot.signIn === 'required' || (!slot.runtime && slot.detection?.state !== 'available')) {
       return
     }
     if (slot.limitsRun) return slot.limitsRun
     if (Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
-    slot.limitsRun = this.readLimits(slot).finally(() => {
+    slot.limitsRun = this.readLimits(slot, report).finally(() => {
       slot.limitsRun = null
     })
     return slot.limitsRun
   }
 
-  private async readLimits(slot: Slot): Promise<void> {
+  private async readLimits(slot: Slot, report: LimitsReport): Promise<void> {
     const runtime = await this.ensureReady(slot.def.id)
     const dir = this.deps.reportsDir
     await mkdir(dir, { recursive: true })
@@ -786,7 +786,7 @@ export class AgentManager {
       messages = await runReport(
         runtime,
         async () => (await runtime.connection.newSession(dir)).acpSessionId,
-        '/usage',
+        report,
         log,
       )
     } catch (error) {
@@ -798,10 +798,10 @@ export class AgentManager {
     const now = Date.now()
     slot.limitsReadAt = now
     const limits = messages
-      .map((text) => parseUsageReport(text, now))
-      .findLast((report) => report !== null)
+      .map((text) => report.parse(text, now))
+      .findLast((parsed) => parsed !== null)
     if (!limits) {
-      log(`${slot.def.name}: /usage gave no report OverBench can read`)
+      log(`${slot.def.name}: ${report.command} gave no report OverBench can read`)
       return
     }
     for (const limit of limits) {
@@ -857,7 +857,7 @@ export class AgentManager {
     await this.detectAll()
     if (slot.signIn === 'required') return
     if (!slot.runtime && (slot.detection?.state !== 'available' || !slot.detection.spec)) return
-    if (hasReports(agentId)) await this.refreshLimits(agentId)
+    if (limitsReport(agentId)) await this.refreshLimits(agentId)
     else await this.ensureReady(agentId)
   }
 
@@ -989,7 +989,7 @@ export class AgentManager {
         // codex-acp 2.2.2 ignores `idleBehavior` and starts a turn of its own when none is
         // running (its PR #593 would fix it), which OverBench would not know about.
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
-        reports: hasReports(slot.def.id),
+        reports: limitsReport(slot.def.id) !== null,
         account: slot.def.reportsAccount ?? false,
       },
     }

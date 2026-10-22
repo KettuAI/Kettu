@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { duration, limitLabel, longAgo, shortAgo } from './format'
+import { duration, limitLabel, longAgo, resetTime, shortAgo } from './format'
 import { i18n } from './i18n'
 
 const NOW = Date.UTC(2026, 9, 21, 12)
@@ -22,11 +22,22 @@ describe('format in the interface language', () => {
     expect(duration(133_000)).toBe('2 分 13 秒')
   })
 
+  it('writes a reset as the time today, the weekday this week, and the date beyond', () => {
+    // Local times, since the reset shows in the machine's zone. 2026-10-21 is a Wednesday.
+    const now = new Date(2026, 9, 21, 9, 0).getTime()
+    expect(resetTime(new Date(2026, 9, 21, 14, 30).getTime(), now)).toBe('2:30 PM')
+    expect(resetTime(new Date(2026, 9, 27, 9, 0).getTime(), now)).toBe('Tue')
+    // A week on is the same weekday as today, and a monthly window resets weeks away.
+    expect(resetTime(new Date(2026, 9, 28, 8, 0).getTime(), now)).toBe('Oct 28')
+    expect(resetTime(new Date(2026, 10, 18, 22, 14).getTime(), now)).toBe('Nov 18')
+  })
+
   it('names the plan windows it knows, and keeps an agent name it does not', async () => {
     expect(limitLabel({ window: 'five_hour', label: '5-hour' })).toBe('5-hour')
     await i18n.changeLanguage('zh-CN')
     expect(limitLabel({ window: 'five_hour', label: '5-hour' })).toBe('5 小时')
     expect(limitLabel({ window: 'seven_day_fable', label: 'Weekly · Fable' })).toBe('每周 · Fable')
-    expect(limitLabel({ window: 'monthly', label: 'Monthly' })).toBe('Monthly')
+    expect(limitLabel({ window: 'monthly', label: 'Monthly' })).toBe('每月')
+    expect(limitLabel({ window: '2_day', label: '2-day' })).toBe('2-day')
   })
 })

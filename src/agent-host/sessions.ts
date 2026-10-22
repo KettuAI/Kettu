@@ -55,7 +55,7 @@ import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
-import { hasReports, runReport } from './reports'
+import { CONTEXT_REPORT, hasContextReport, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
 
@@ -1167,7 +1167,7 @@ export class SessionManager {
   private async readContext(sessionId: string): Promise<ContextBreakdown | null> {
     const live = this.liveFor(sessionId)
     const { record } = live
-    if (!hasReports(record.agentId) || record.origin === 'subagent') return null
+    if (!hasContextReport(record.agentId) || record.origin === 'subagent') return null
     if (live.thread.session.status !== 'ready' || !live.connection) {
       throw busyError(live.thread.session.status)
     }
@@ -1186,7 +1186,7 @@ export class SessionManager {
               sessionMeta(record),
             )
           ).acpSessionId,
-        '/context',
+        CONTEXT_REPORT,
         log,
       )
     } catch (error) {

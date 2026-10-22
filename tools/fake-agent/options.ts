@@ -16,6 +16,7 @@ export const SCENARIOS = [
   'plan',
   'thinking',
   'usage',
+  'status',
   'context',
 ] as const
 
@@ -48,6 +49,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   plan: { description: 'A plan whose items progress while the agent works' },
   thinking: { description: 'A long thought, then an answer' },
   usage: { description: "The plan limits, as Claude Code's /usage reports them" },
+  status: { description: "The plan limits, as Codex's /status reports them" },
   context: { description: "What fills the context, as Claude Code's /context reports it" },
 }
 

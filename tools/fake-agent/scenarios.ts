@@ -774,6 +774,37 @@ const usage: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/** A reset as codex-acp's `formatResetTime` writes it, in this machine's locale. */
+function statusReset(at: number): string {
+  const date = new Date(at)
+  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  if (date.toDateString() === new Date().toDateString()) return ` (resets ${time})`
+  return ` (resets ${time} on ${date.toLocaleDateString([], { day: 'numeric', month: 'short' })})`
+}
+
+/** `/status` as codex-acp 2.2.2 formats it (`buildStatusMessage`), with the windows of /usage. */
+const status: Scenario = async (turn) => {
+  const { fiveHour, weekly } = planWindows(turn.session.turns)
+  const now = Date.now()
+  const left = (share: number): number => Math.round(100 - share * 100)
+  const report = [
+    '**Model:** fake-model',
+    `**Directory:** ${turn.session.cwd}`,
+    '**Approval:** on-request',
+    '**Sandbox:** workspace-write',
+    '**Account:** ChatGPT plus (fake@example.com)',
+    `**Session:** \`${turn.session.id}\``,
+    '',
+    '**Token usage:** data not available yet',
+    '**Context window:** data not available yet',
+    `**codex 5h limit:** ${left(fiveHour)}% left${statusReset(now + 2 * 3600_000 + 840_000)}`,
+    `**codex Weekly limit:** ${left(weekly)}% left${statusReset(now + 3 * 86_400_000)}`,
+    '**codex Credits:** 120',
+  ].join('  \n')
+  await stream(turn, report, { chunks: [report], delayMs: 0 })
+  return 'end_turn'
+}
+
 /** `/context` as Claude Code 2.1 reports it, for the fake session's tokens. */
 const context: Scenario = async (turn) => {
   const size = 200_000
@@ -842,6 +873,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   plan,
   thinking,
   usage,
+  status,
   context,
 }
 

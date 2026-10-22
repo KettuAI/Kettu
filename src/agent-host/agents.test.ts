@@ -217,6 +217,21 @@ describe('AgentManager', () => {
     m.agents.setLimit('fake-agent', window(null, 1_800_018_000_000))
     expect(used()).toBeNull()
   })
+
+  it("reads Codex's plan limits from /status", async () => {
+    const m = manager(
+      {},
+      {},
+      { catalog: [{ ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }] },
+    )
+    expect(m.agents.status('codex').capabilities.reports).toBe(true)
+    await m.agents.refreshLimits('codex')
+    expect(m.agents.status('codex').limits).toEqual([
+      expect.objectContaining({ window: 'five_hour', label: '5-hour', usedPercent: 19 }),
+      expect.objectContaining({ window: 'seven_day', label: 'Weekly', usedPercent: 32 }),
+    ])
+    await m.agents.stopAll()
+  })
 })
 
 /** The fake agent as a package agent, with installs that only record what they were asked. */

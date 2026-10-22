@@ -369,11 +369,11 @@ The subagents RFD ([agent-client-protocol#1992](https://github.com/agentclientpr
 
 Subscription plans cap usage in rolling windows, such as five hours and a week. These limits belong to the agent's account, not to a session, so they live on `AgentStatus` ([host protocol](./host-protocol.md#requests)), next to the account the agent reports. Neither is part of ACP yet; both come from extensions the adapters define, and only the mapper reads them.
 
-| Source                                                          | Claude Code (`claude-agent-acp` 0.94)                                                                            | Codex (`codex-acp` 2.2.2)                                       | OpenCode |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------- |
-| The `_auth/status_update` notification: kind, plan label, email | Yes                                                                                                              | Yes                                                             | No       |
-| Plan limits                                                     | `usage_update._meta["_claude/rateLimit"]`, one window per update, whenever Claude Code's rate limit info changes | Not sent; the adapter keeps them for its `/status` command only | No       |
-| Current use of every limit                                      | The `/usage` report, on request ([below](#reading-the-limits-from-usage))                                        | No                                                              | No       |
+| Source                                                          | Claude Code (`claude-agent-acp` 0.94)                                                                            | Codex (`codex-acp` 2.2.2)                                                      | OpenCode |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------- |
+| The `_auth/status_update` notification: kind, plan label, email | Yes                                                                                                              | Yes                                                                            | No       |
+| Plan limits                                                     | `usage_update._meta["_claude/rateLimit"]`, one window per update, whenever Claude Code's rate limit info changes | Not sent; the adapter keeps them for its `/status` command only                | No       |
+| Current use of every limit                                      | The `/usage` report, on request ([below](#reading-the-limits-from-usage))                                        | The `/status` report, on request ([below](#reading-codexs-limits-from-status)) | No       |
 
 ```ts
 interface AgentAccount {
@@ -398,22 +398,31 @@ interface PlanLimit {
 - Limits are kept in memory for the life of the host. After a restart they appear again with the first update.
 - An account with `kind: 'none'` sets the agent's `signIn` to `required`; any other kind sets `signed-in`.
 - Cost is shown only when the account is not a subscription, because for a plan it is not what the user pays.
-- For Codex, the adapter already receives `account/rateLimits/updated` from Codex; forwarding it in `usage_update._meta` the way the Claude adapter does is a small upstream change, and the plan limits appear once it lands.
+- For Codex, the adapter already receives `account/rateLimits/updated` from Codex; forwarding it in `usage_update._meta` the way the Claude adapter does is a small upstream change. Until it lands, Codex's limits come only from `/status`.
 
 ### Reading the limits from `/usage`
 
-Rate-limit events arrive only when a window changes, so a window can stay unknown for days, and one may come without `utilization`. Claude Code's `/usage` command reads the current use of every window; it runs in Claude Code itself, with no model call. The adapter formats it as the markdown of an agent message (`formatUsageResponse` in claude-agent-acp 0.94's `usage-markdown.js`), and nothing else exposes it, so the host reads that markdown ([reports](#reports-from-claude-codes-own-commands)).
+Rate-limit events arrive only when a window changes, so a window can stay unknown for days, and one may come without `utilization`. Claude Code's `/usage` command reads the current use of every window; it runs in Claude Code itself, with no model call. The adapter formats it as the markdown of an agent message (`formatUsageResponse` in claude-agent-acp 0.94's `usage-markdown.js`), and nothing else exposes it, so the host reads that markdown ([reports](#reports-from-the-agents-own-commands)).
 
-- `agents.refreshLimits` runs it for Claude Code (and the fake agent, which imitates the format), at most once a minute; other agents have no report and the request does nothing. The usage popover and the sidebar's plan chips ask for it when they open, only while the agent runs. Settings › Agents asks through `agents.refreshAccount` whenever its list or an agent's page shows, which starts a stopped agent that can run without an install; an agent's page also offers **Check plan limits**, which starts it and installs its adapter first when needed.
+- `agents.refreshLimits` runs it for Claude Code (and the fake agent, which imitates the format), and Codex's [`/status`](#reading-codexs-limits-from-status) for Codex, at most once a minute; OpenCode has no report and the request does nothing. The usage popover and the sidebar's plan chips ask for it when they open, only while the agent runs. Settings › Agents asks through `agents.refreshAccount` whenever its list or an agent's page shows, which starts a stopped agent that can run without an install; an agent's page also offers **Check plan limits**, which starts it and installs its adapter first when needed.
 - It runs in a session the host creates for it in `<userData>/agent-reports`, an empty folder, so no project's settings, hooks or memory files load.
 - Each `**<label>** — **<n>%** · Resets <time>` line under `### Limits` becomes a window: "5-hour limit" is `five_hour`, "Weekly · all models" `seven_day`, and "Weekly · <model>" `seven_day_<model>`, so Opus and Sonnet merge with the windows the events name. `usedPercent` is `n` as printed (already a percentage), and a window at 100% is `reached`.
 - The reset is printed in English without a year, in the zone of the machine (`Oct 24, 6:00 AM PDT`). A `GMT+8` or `UTC` zone is applied as written; a named zone such as `PDT` is the local one it came from. The year is this one, or the next for a reset that would otherwise lie in the past.
 - A window read this way replaces the one in memory, except that a `warning` or `reached` state an event set holds until that window's reset passes, since the report has no state of its own.
 - Text that is not the structured report, such as Claude Code's own output when the adapter falls back to it, changes nothing and is logged.
 
+### Reading Codex's limits from `/status`
+
+codex-acp 2.2.2 sends Codex's limits nowhere but its own `/status` command, which asks Codex's app server for them (`account/rateLimits/read`) and needs no model call. It writes them into the markdown of one agent message (`buildStatusMessage`), lines joined by two spaces and a line break, and the host reads that, in a hidden session as for `/usage`.
+
+- The report is the message with an `**Account:**` line. Each `**<pool> <window>:** <n>% left (resets <time>)` line becomes a window with `usedPercent = 100 − n`, `reached` at 100%. Credits, spend limits and "data not available yet" are not windows; a report with no window gives none, and keeps what the host had.
+- The window is the adapter's label: `5h limit` is `five_hour`, `Weekly limit` `seven_day`, and other lengths their own (`2d limit` is `2_day`, "2-day"). The pool is Codex's limit name, `codex` for the plan's own; another pool, such as a model's, gets windows of its own (`gpt_5_3_codex_spark_five_hour`, "5-hour · GPT-5.3-Codex-Spark").
+- The adapter labels every window of a week or longer `Weekly limit`; a ChatGPT Free account's only window lasts 30 days (`windowDurationMins` 43200, checked on 2026-10-21 against a live account). So the reset tells them apart, in the tiers of Codex's own status line: a reset more than a week and an hour away is `monthly` ("Monthly"), more than 31 days away `annual` ("Annual").
+- The reset is printed in the adapter's locale and the machine's zone: the 24-hour time alone for today (`14:30`), else with the day and short month (`09:12 on Nov 18`, `18 Nov`, `18. Nov.`, `11月18日`). The host reads the time and the day of the month in any locale, and the month where it is a number or an English abbreviation; then the reset is that date this year or next. Without a readable month it is the next such day within 31 days, which no Codex window outlasts. A reset in digits other than ASCII, such as Arabic-Indic, is left unknown.
+
 ## Context breakdown
 
-`usage_update` gives only the context's `used` and `size`. Claude Code works out what fills it for its own `/context` command, which also runs without a model call: by category (system prompt, system tools, MCP tools, MCP server instructions, deferred tools, memory files, skills, messages, free space, the autocompact buffer), then lists of the MCP tools, memory files and skills with their tokens. The adapter passes it through as an agent message, so the host reads that markdown too ([reports](#reports-from-claude-codes-own-commands)).
+`usage_update` gives only the context's `used` and `size`. Claude Code works out what fills it for its own `/context` command, which also runs without a model call: by category (system prompt, system tools, MCP tools, MCP server instructions, deferred tools, memory files, skills, messages, free space, the autocompact buffer), then lists of the MCP tools, memory files and skills with their tokens. The adapter passes it through as an agent message, so the host reads that markdown too ([reports](#reports-from-the-agents-own-commands)).
 
 ```ts
 interface ContextBreakdown {
@@ -431,11 +440,11 @@ interface ContextBreakdown {
 - Claude Code sends the report twice, under two message ids; the host takes the last message that parses. Token counts such as `32.1k` become numbers; list items keep the text the report shows (`~310`, `< 20`).
 - The renderer asks when the usage popover opens and keeps the result for that session until its `used / size` changes.
 
-## Reports from Claude Code's own commands
+## Reports from the agents' own commands
 
-`/usage` and `/context` run in a session no thread shows. The connection prompts it and collects its agent messages; its other updates are dropped, and updates that arrive after are ignored like those of a closed session.
+`/usage`, `/context` and Codex's `/status` run in a session no thread shows. The connection prompts it and collects its agent messages; its other updates are dropped, and updates that arrive after are ignored like those of a closed session.
 
-- Afterwards the host deletes the session with `session/delete`, which removes its transcript, so it shows in no session list. claude-agent-acp 0.94 deletes without waiting for Claude Code to exit, and Claude Code writes the session's title and costs back as it exits, which lists it again; the host deletes it once more one and five seconds later. An agent without `session/delete` gets `session/close`.
+- Afterwards the host deletes the session with `session/delete`, which removes its transcript, so it shows in no session list. claude-agent-acp 0.94 deletes without waiting for Claude Code to exit, and Claude Code writes the session's title and costs back as it exits, which lists it again; the host deletes a Claude Code report once more one and five seconds later. codex-acp fails a delete of a session it no longer has, so a Codex report is deleted once. An agent without `session/delete` gets `session/close`.
 - A report that has not finished after 60 seconds is cancelled and fails.
 
 ## Config options

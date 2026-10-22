@@ -31,6 +31,8 @@
     "seven_day": "Weekly",
     "seven_day_opus": "Weekly · Opus",
     "seven_day_sonnet": "Weekly · Sonnet",
+    "monthly": "Monthly",
+    "annual": "Annual",
     "overage": "Extra usage",
     "weeklyOf": "Weekly · {{model}}"
   },

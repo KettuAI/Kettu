@@ -32,7 +32,9 @@
       "five_hour": "5 小时",
       "seven_day": "7 天",
       "seven_day_opus": "7 天 Opus",
-      "seven_day_sonnet": "7 天 Sonnet"
+      "seven_day_sonnet": "7 天 Sonnet",
+      "monthly": "30 天",
+      "annual": "1 年"
     },
     "context": {
       "title": "上下文",

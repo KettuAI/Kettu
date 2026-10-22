@@ -29,6 +29,8 @@
     "seven_day": "每周",
     "seven_day_opus": "每周 · Opus",
     "seven_day_sonnet": "每周 · Sonnet",
+    "monthly": "每月",
+    "annual": "每年",
     "overage": "额外用量",
     "weeklyOf": "每周 · {{model}}"
   },

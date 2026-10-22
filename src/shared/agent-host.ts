@@ -81,7 +81,7 @@ export interface AgentStatus {
     deleteSession: boolean
     forkSession: boolean
     steering: boolean // `_session/steering` into a running turn
-    reports: boolean // plan limits and context breakdowns from its own `/usage` and `/context`
+    reports: boolean // plan limits from its own report (`/usage`, `/status`)
     account: boolean // names its account through `_auth/status_update` as it starts
   }
 }

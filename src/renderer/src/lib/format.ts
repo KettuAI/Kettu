@@ -45,10 +45,13 @@ export function longAgo(at: number, now = Date.now()): string {
   return i18n.t('time.onDate', { date: format().monthDay.format(at) })
 }
 
-/** When a limit resets: the clock time today, the weekday later. */
+/** When a limit resets: the clock time today, the weekday within six days, the date beyond. */
 export function resetTime(at: number, now = Date.now()): string {
-  const sameDay = new Date(at).toDateString() === new Date(now).toDateString()
-  return sameDay ? format().clock.format(at) : format().weekday.format(at)
+  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
+  // Rounded, since a day across a DST change is not 24 hours.
+  const days = Math.round((day(at) - day(now)) / DAY)
+  if (days === 0) return format().clock.format(at)
+  return days <= 6 ? format().weekday.format(at) : format().monthDay.format(at)
 }
 
 export function fullTime(at: number): string {
