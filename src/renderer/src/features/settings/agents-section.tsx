@@ -370,7 +370,10 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         <Fact name={t('agents.version')} mono>
           {version}
         </Fact>
-        <Fact name={t('agents.loginMethod')}>{status.account?.label}</Fact>
+        {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
+        <Fact name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}>
+          {status.account?.label}
+        </Fact>
         {status.account?.email && <Fact name={t('agents.email')}>{status.account.email}</Fact>}
       </Group>
 

@@ -209,6 +209,7 @@
     "search": "Search agents",
     "noMatch": "No matching agents",
     "version": "Version",
+    "plan": "Plan",
     "loginMethod": "Login method",
     "email": "Email",
     "notReported": "Not reported",

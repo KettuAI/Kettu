@@ -208,6 +208,7 @@
     "search": "搜索 Agent",
     "noMatch": "没有匹配的 Agent",
     "version": "版本",
+    "plan": "套餐",
     "loginMethod": "登录方式",
     "email": "邮箱",
     "notReported": "未提供",
