@@ -104,12 +104,13 @@ async function resolveItem(location: ConfigLocation, log: LogFn): Promise<AgentC
 }
 
 /** The package whose `package.json` names the CLI an adapter runs, and the field that holds it. */
-const CLI_VERSION_SOURCES: Partial<Record<AgentId, { package: string; field: string }>> = {
+export const CLI_VERSION_SOURCES: Partial<Record<AgentId, { package: string; field: string }>> = {
   'claude-code': { package: '@anthropic-ai/claude-agent-sdk', field: 'claudeCodeVersion' },
   codex: { package: '@openai/codex', field: 'version' },
 }
 
-async function readCliVersion(
+/** The CLI version an installed adapter carries, from the install in `installRoot`. */
+export async function readCliVersion(
   agentId: AgentId,
   installRoot: string,
   log: LogFn,
@@ -154,10 +155,8 @@ export interface AgentDetailsContext {
   getEnv(name: string): string | undefined
   home: string
   platform: Platform
-  /** `<userData>/agents`, where package agents are installed. */
-  adaptersDir: string
-  /** The pinned adapter version of a package agent; null for the others. */
-  adapterVersion: string | null
+  /** The directory of the adapter install a package agent runs; null for the others. */
+  adapterDir: string | null
   log: LogFn
 }
 
@@ -167,8 +166,7 @@ export async function readAgentDetails(
   ctx: AgentDetailsContext,
 ): Promise<AgentDetails> {
   const locations = configLocations(agentId, ctx.getEnv, ctx.home, ctx.platform)
-  const installRoot =
-    ctx.adapterVersion === null ? null : path.join(ctx.adaptersDir, agentId, ctx.adapterVersion)
+  const installRoot = ctx.adapterDir
   const [items, version] = await Promise.all([
     Promise.all(locations.map((location) => withLogs((log) => resolveItem(location, log)))),
     withLogs(async (log) =>

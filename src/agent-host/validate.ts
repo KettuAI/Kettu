@@ -1,7 +1,7 @@
 // Hand-written guards for every request on the agent host port. A validator returns a fresh
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
-import type { HostMethod, HostParams } from '@shared/agent-host'
+import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
 import type { Platform } from '@shared/platform'
@@ -17,6 +17,11 @@ const PATH_CHARS = 32_767
 const TEXT_CHARS = 4_096
 const URL_CHARS = 2_048
 const PROMPT_ITEMS = 1_000
+const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
+  'brew',
+  'script',
+  'npm',
+])
 
 type Fields = Record<string, unknown>
 
@@ -190,6 +195,20 @@ export function createValidators(platform: Platform): Validators {
     'agents.logout': agent,
     'agents.retry': agent,
     'agents.reinstall': agent,
+    'agents.checkUpdates': none,
+    'agents.update': agent,
+    'agents.install': (params) => {
+      const o = fields(params)
+      const method = o.method
+      if (method !== undefined && !INSTALL_METHODS.has(method)) {
+        throw invalidParams('method must be brew, script or npm')
+      }
+      return {
+        agentId: agentId(o),
+        ...(method !== undefined ? { method: method as AgentInstallMethod['id'] } : {}),
+      }
+    },
+    'agents.cancelTask': agent,
     'agents.start': agent,
     'agents.refreshLimits': agent,
     'agents.details': agent,

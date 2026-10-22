@@ -34,9 +34,11 @@ import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
 import {
   agentProcessesFile,
   agentsFile,
+  agentUpdatesFile,
   projectsFile,
   sessionsFile,
   type AgentsFile,
+  type AgentUpdatesFile,
   type JsonFile,
 } from './storage'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
@@ -74,6 +76,8 @@ export class AgentHost {
   readonly agents: AgentManager
   /** What the agents last reported about their accounts and plans, kept across runs. */
   private readonly remembered: JsonFile<AgentsFile>
+  /** What the last update check found, so a found update shows after a restart. */
+  private readonly updates: JsonFile<AgentUpdatesFile>
   /** Each agent's config options from its last new session, for New session. */
   private readonly agentOptions: AgentOptionsStore
   /** The agent processes and what they leave behind, until seen gone. */
@@ -116,6 +120,7 @@ export class AgentHost {
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
+    this.updates = agentUpdatesFile(options.userDataPath, log)
     this.agentOptions = new AgentOptionsStore({
       file: agentOptionsFile(options.userDataPath, log),
       changed: (changed) => this.hub.broadcast({ type: 'agent.options', options: changed }),
@@ -152,6 +157,7 @@ export class AgentHost {
       trees: this.trees,
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
       remember: (file) => this.remembered.save(file),
+      rememberUpdates: (file) => this.updates.save(file),
     })
     this.sessions = new SessionManager({
       platform,
@@ -206,19 +212,21 @@ export class AgentHost {
   /** Loads the state, answers `host:ready`, and resolves the environment in the background. */
   static async start(options: HostOptions): Promise<AgentHost> {
     const host = new AgentHost(options)
-    const [, , , remembered] = await Promise.all([
+    const [, , , remembered, updates] = await Promise.all([
       host.scratch.ready(),
       host.projects.load(),
       host.sessions.load(),
       host.remembered.load(),
+      host.updates.load(),
       host.trees.load(),
       host.agentOptions.load(),
     ])
     host.agents.restore(remembered)
+    host.agents.restoreUpdates(updates)
     host.sendFolders()
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
-    void host.agents.detectAll()
+    void host.agents.detectAll().then(() => host.agents.scheduleUpdateChecks())
     return host
   }
 
@@ -313,6 +321,7 @@ export class AgentHost {
         this.projects.flush(),
         this.sessions.flush(),
         this.remembered.flush(),
+        this.updates.flush(),
         this.trees.flush(),
         this.agentOptions.flush(),
         this.threads?.close(),
@@ -393,6 +402,10 @@ export class AgentHost {
       'agents.logout': ({ agentId }) => agents.logout(agentId),
       'agents.retry': ({ agentId }) => agents.retry(agentId),
       'agents.reinstall': ({ agentId }) => agents.reinstall(agentId),
+      'agents.checkUpdates': () => agents.checkUpdates(),
+      'agents.update': ({ agentId }) => agents.update(agentId),
+      'agents.install': ({ agentId, method }) => agents.install(agentId, method),
+      'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
       'agents.start': async ({ agentId }) => {
         await agents.ensureReady(agentId)
       },

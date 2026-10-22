@@ -64,12 +64,34 @@ export interface AgentAuthMethod {
   command?: string // for terminal methods: the full command, quoted for the platform
 }
 
+/** A newer adapter or CLI than the installed one, found by `agents.checkUpdates`. */
+export interface AgentUpdate {
+  adapterVersion: string // the adapter version a fresh install takes
+  cliVersion: string | null // the CLI that install carries, such as Claude Code or Codex
+}
+
+/** An install or update OverBench runs for an agent at the user's request. */
+export interface AgentTask {
+  kind: 'install' | 'update'
+  state: 'running' | 'failed'
+  command: string // what runs, quoted for the platform
+  progress: string[] // the latest output lines
+  error: string | null // why it failed, in the user's terms
+}
+
+/** A way OverBench can install a binary agent such as OpenCode, in the order it prefers them. */
+export interface AgentInstallMethod {
+  id: 'brew' | 'npm' | 'script'
+  command: string // quoted for the platform, as the page shows it
+  available: boolean // the tool it needs was found on the agent environment's PATH
+}
+
 export interface AgentStatus {
   id: AgentId
   name: string
   state: AgentState
   version: string | null // from agentInfo, once initialized
-  package: { name: string; version: string; installed: boolean } | null // a package agent's pinned adapter
+  package: { name: string; version: string; installed: boolean } | null // the adapter a start runs; the pin until one is installed
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: AgentAuthMethod[]
   canLogout: boolean
@@ -80,6 +102,10 @@ export interface AgentStatus {
   progress: string[] // latest npm output or stderr lines while installing or starting
   launchCommand: string // as shown in Settings › Agents, quoted for the platform
   binaryOverride: string | null // the program picked in Settings, if any
+  update: AgentUpdate | null // from the last update check; null when up to date or unchecked
+  updateCheckedAt: number | null // when that check finished; always null for binary agents
+  task: AgentTask | null
+  installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
   capabilities: {
     loadSession: boolean
     listSessions: boolean
@@ -206,6 +232,16 @@ export interface HostContract {
   'agents.logout': { params: { agentId: AgentId }; result: void }
   'agents.retry': { params: { agentId: AgentId }; result: void }
   'agents.reinstall': { params: { agentId: AgentId }; result: void }
+  // Asks npm for each package agent's latest adapter and the CLI it carries.
+  'agents.checkUpdates': { params: void; result: AgentStatus[] }
+  // Both resolve once the task is done or cancelled, and reject with its error.
+  'agents.update': { params: { agentId: AgentId }; result: void }
+  'agents.install': {
+    params: { agentId: AgentId; method?: AgentInstallMethod['id'] }
+    result: void
+  }
+  // Stops a running task, or clears a failed one.
+  'agents.cancelTask': { params: { agentId: AgentId }; result: void }
   'agents.start': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
@@ -298,6 +334,10 @@ export const HOST_METHODS = [
   'agents.logout',
   'agents.retry',
   'agents.reinstall',
+  'agents.checkUpdates',
+  'agents.update',
+  'agents.install',
+  'agents.cancelTask',
   'agents.start',
   'agents.refreshLimits',
   'agents.details',

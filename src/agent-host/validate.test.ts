@@ -102,6 +102,22 @@ describe('createValidators', () => {
     rejects(() => v({ sessionId: 's', optionId: 'model', value: '' }))
   })
 
+  it('takes an install method by name, or none', () => {
+    expect(posix['agents.install']({ agentId: 'opencode' })).toEqual({ agentId: 'opencode' })
+    expect(posix['agents.install']({ agentId: 'opencode', method: 'script', x: 1 })).toEqual({
+      agentId: 'opencode',
+      method: 'script',
+    })
+    rejects(() => posix['agents.install']({ agentId: 'opencode', method: 'choco' }))
+    rejects(() => posix['agents.install']({ agentId: 'opencode', method: null }))
+    rejects(() => posix['agents.install']({ method: 'brew' }))
+    expect(posix['agents.update']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
+    expect(posix['agents.cancelTask']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
+    rejects(() => posix['agents.update']({ agentId: 'gemini' }))
+    expect(posix['agents.checkUpdates'](undefined)).toBeUndefined()
+    rejects(() => posix['agents.checkUpdates']({ agentId: 'codex' }))
+  })
+
   it('takes only GitHub pull request URLs', () => {
     const v = posix['git.pullRequest']
     expect(v({ url: 'https://github.com/a/b/pull/12' })).toEqual({

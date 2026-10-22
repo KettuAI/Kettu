@@ -8,8 +8,11 @@ import type {
   AgentAccount,
   AgentAuthMethod,
   AgentDetails,
+  AgentInstallMethod,
   AgentState,
   AgentStatus,
+  AgentTask,
+  AgentUpdate,
   PlanLimit,
 } from '@shared/agent-host'
 import type { AgentProcess } from '@shared/host-control'
@@ -25,19 +28,25 @@ import {
 } from './acp/connection'
 import {
   installAdapter,
-  removeOtherVersions,
+  NPM_INSTALL_ARGS,
+  programFailure,
   readInstallFiles,
-  removeVersion,
+  removeInstall,
+  removeOlderInstalls,
+  runProgram,
   type InstalledAdapter,
   type InstallOptions,
+  type ProgramOptions,
+  type ProgramRun,
 } from './adapter-install'
-import { readAgentDetails } from './agent-details'
+import { CLI_VERSION_SOURCES, readAgentDetails, readCliVersion } from './agent-details'
 import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
 import type { AgentTrees } from './agent-trees'
+import { decideUpdate, fetchLatest, type LatestOptions } from './agent-updates'
+import { installedFolder, installPlans, type InstallPlan } from './binary-install'
 import {
   detectAgent,
   displayCommand,
-  installedSpec,
   type AgentDefinition,
   type CommandWords,
   type DetectContext,
@@ -52,7 +61,7 @@ import { formatCommand } from './quote'
 import { limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
-import type { AgentsFile } from './storage'
+import type { AgentsFile, AgentUpdatesFile } from './storage'
 
 export interface LaunchedAgent {
   readonly pid: number | null
@@ -97,6 +106,12 @@ export interface AgentTimings {
   progressMs: number
   /** The shortest gap between two `/usage` reports. */
   limitsMs: number
+  /** How long one `npm view` of the update check may take. */
+  updateViewMs: number
+  /** How long after the host starts a due update check waits, so it stays out of startup. */
+  updateDelayMs: number
+  /** How often updates are checked while the host runs. */
+  updateIntervalMs: number
 }
 
 export const AGENT_TIMINGS: AgentTimings = {
@@ -107,6 +122,9 @@ export const AGENT_TIMINGS: AgentTimings = {
   maxFailures: 5,
   progressMs: 250,
   limitsMs: 60_000,
+  updateViewMs: 20_000,
+  updateDelayMs: 60_000,
+  updateIntervalMs: 24 * 60 * 60_000,
 }
 
 export interface AgentRuntime {
@@ -137,6 +155,10 @@ export interface AgentManagerDeps {
   adaptersDir: string
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
   install?(options: InstallOptions): Promise<InstalledAdapter>
+  /** Asks npm for an adapter's newest version and the CLI it carries. */
+  fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
+  /** Runs a binary agent's install route, and `npm prefix -g` after one. */
+  runProgram?(options: ProgramOptions): Promise<ProgramRun>
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
   processes(processes: AgentProcess[]): void
@@ -145,6 +167,17 @@ export interface AgentManagerDeps {
   authCommands(commands: string[]): void
   /** Keeps what the agents last reported about their accounts and plans, for the next run. */
   remember?(file: AgentsFile): void
+  /** Keeps what the last update check found, for the next run. */
+  rememberUpdates?(file: AgentUpdatesFile): void
+}
+
+/** An install that was stopped on purpose, which leaves the agent as it was rather than failed. */
+class InstallCancelled extends Error {}
+
+interface UpdateCheck {
+  checked: number
+  /** Why each agent's check failed, in the user's terms. */
+  failures: string[]
 }
 
 class Slot {
@@ -163,8 +196,21 @@ class Slot {
   adapterNote: string | null = null
   /** What the running launch ran, which is the command shown while it runs. */
   launchSpec: LaunchSpec | null = null
-  /** Older versions are deleted once per host, after the pinned one first initializes. */
-  versionsCleaned = false
+  /** The install whose older siblings were last deleted, once it first initialized. */
+  cleanedDir: string | null = null
+  /** What the last update check found, and when it finished. */
+  latest: AgentUpdate | null = null
+  checkedAt: number | null = null
+  rememberedUpdate = 'null'
+  /** The CLI version of the install a start runs, read at detection. */
+  installedCli: string | null = null
+  /** A binary agent's install routes, found at detection. */
+  installPlans: InstallPlan[] = []
+  /** An install or update the user asked for, which runs beside the agent's own lifecycle. */
+  task: Omit<AgentTask, 'progress'> | null = null
+  taskRun: Promise<void> | null = null
+  taskAbort: AbortController | null = null
+  taskOutput = new TextRing(8 * 1024)
   intentionalStop = false
   failures: number[] = []
   signIn: AgentStatus['signIn'] = 'unknown'
@@ -206,11 +252,19 @@ function rememberedJson(slot: Slot): string {
   return JSON.stringify(rememberedEntry(slot))
 }
 
+function updateJson(slot: Slot): string {
+  return JSON.stringify(slot.latest && { checkedAt: slot.checkedAt, latest: slot.latest })
+}
+
 export class AgentManager {
   private readonly slots = new Map<AgentId, Slot>()
   private readonly timings: AgentTimings
   private detected: Promise<void> | null = null
   private lastAuthCommands = '[]'
+  private updateCheck: Promise<UpdateCheck> | null = null
+  private updateAbort: AbortController | null = null
+  private updateTimer: ReturnType<typeof setTimeout> | null = null
+  private stopped = false
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
     agentExited: () => {},
@@ -250,16 +304,30 @@ export class AgentManager {
   private async detect(slot: Slot): Promise<void> {
     const platform = this.deps.platform
     const override = this.deps.settings().agents[slot.def.id]?.binaryPath ?? null
+    const env = this.deps.env.agentEnv()
+    const node = this.deps.env.nodeProbe()
+    const isExecutable = (file: string): Promise<boolean> => isExecutableFile(file, platform)
     const detection = await (this.deps.detect ?? detectAgent)(slot.def, {
       platform,
-      env: this.deps.env.agentEnv(),
+      env,
       electronPath: this.deps.electronPath,
       binaryOverride: override,
-      node: this.deps.env.nodeProbe(),
+      node,
       adaptersDir: this.deps.adaptersDir,
-      isExecutable: (file) => isExecutableFile(file, platform),
+      isExecutable,
     })
+    const current = detection.state === 'available' ? detection.adapter?.current : null
+    const log = (level: 'info' | 'warn' | 'error', message: string): void =>
+      this.deps.diagnostics.log(level, message)
+    const [installedCli, plans] = await Promise.all([
+      current ? readCliVersion(slot.def.id, current.dir, log) : null,
+      slot.def.installs
+        ? installPlans(slot.def.installs, { platform, env, npm: node.npmPath, isExecutable })
+        : [],
+    ])
     slot.detection = detection
+    slot.installedCli = installedCli
+    slot.installPlans = plans
     // A running, installing, failed or recovering agent keeps its lifecycle state.
     const idle = !slot.launched && !slot.starting && !slot.installing && slot.state !== 'failed'
     if (idle) {
@@ -337,7 +405,7 @@ export class AgentManager {
 
   /** Launches `spec`, or installs the pinned adapter first when it is null. */
   private async start(slot: Slot, spec: LaunchSpec | null): Promise<AgentRuntime> {
-    const run = (async () => this.launch(slot, spec ?? (await this.install(slot))))()
+    const run = (async () => this.launch(slot, spec ?? (await this.installPackage(slot))))()
     slot.starting = run
     try {
       const runtime = await run
@@ -346,6 +414,15 @@ export class AgentManager {
       return runtime
     } catch (error) {
       const message = (error as Error).message
+      if (error instanceof InstallCancelled) {
+        slot.state = slot.detection?.state ?? 'available'
+        slot.detail = null
+        this.emit(slot)
+        throw new HostError('agent_unavailable', message, {
+          agentId: slot.def.id,
+          state: slot.state,
+        })
+      }
       this.recordFailure(slot)
       slot.state = 'failed'
       slot.detail = message
@@ -479,10 +556,14 @@ export class AgentManager {
   // Adapter installs.
 
   /**
-   * Installs the pinned adapter and returns how to run it. When that fails and another version is
-   * installed, returns that one instead and says so in the status.
+   * Installs the pinned adapter, or the version asked for, and returns how to run the install a
+   * start now picks. When the pinned one fails and an older version is installed, returns that one
+   * instead and says so in the status.
    */
-  private async install(slot: Slot): Promise<LaunchSpec> {
+  private async installPackage(
+    slot: Slot,
+    request: { version?: string; alongside?: boolean; fallback?: boolean } = {},
+  ): Promise<LaunchSpec> {
     const detection = slot.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     if (!detection || detection.state !== 'available' || !adapter) {
@@ -490,6 +571,7 @@ export class AgentManager {
     }
     const { diagnostics, platform } = this.deps
     const agentId = slot.def.id
+    const version = request.version ?? adapter.version
     slot.state = 'installing'
     slot.detail = null
     slot.progress.clear()
@@ -497,14 +579,14 @@ export class AgentManager {
     const abort = new AbortController()
     slot.installAbort = abort
     const started = Date.now()
-    diagnostics.event(agentId, 'install', `${adapter.package}@${adapter.version}`)
+    diagnostics.event(agentId, 'install', `${adapter.package}@${version}`)
     try {
       if (!adapter.npm) throw new Error('npm was not found on PATH.')
-      const installed = await (this.deps.install ?? installAdapter)({
+      await (this.deps.install ?? installAdapter)({
         root: this.deps.adaptersDir,
         agentId,
         package: adapter.package,
-        version: adapter.version,
+        version,
         npm: adapter.npm,
         nodeVersion: adapter.nodeVersion,
         platform,
@@ -512,44 +594,47 @@ export class AgentManager {
         timeoutMs: this.timings.installMs,
         signal: abort.signal,
         onOutput: (text) => this.onProgress(slot, text),
+        ...(request.alongside ? { alongside: true } : {}),
       })
-      diagnostics.event(agentId, 'installed', `${adapter.version} in ${Date.now() - started} ms`)
-      const spec = await installedSpec(slot.def, adapter.node, installed, {
-        platform,
-        env: this.deps.env.agentEnv(),
-      })
-      slot.detection = { ...detection, spec, adapter: { ...adapter, installed: true } }
+      diagnostics.event(agentId, 'installed', `${version} in ${Date.now() - started} ms`)
       slot.adapterNote = null
+      await this.detect(slot)
+      const spec = slot.detection?.state === 'available' ? slot.detection.spec : null
+      if (!spec) throw new Error(`${adapter.package} ${version} is incomplete on disk.`)
       return spec
     } catch (error) {
       const message = (error as Error).message
       diagnostics.event(agentId, 'install failed', message)
-      if (adapter.fallback && !abort.signal.aborted) {
+      const text = t('agent.installFailed', { agent: slot.def.name, message })
+      if (abort.signal.aborted) throw new InstallCancelled(text, { cause: error })
+      if (adapter.fallback && request.fallback !== false) {
         slot.adapterNote = t('agent.runningFallback', {
           fallback: adapter.fallback.version,
-          version: adapter.version,
+          version,
           message,
         })
         return adapter.fallback.spec
       }
-      throw new Error(t('agent.installFailed', { agent: slot.def.name, message }), {
-        cause: error,
-      })
+      throw new Error(text, { cause: error })
     } finally {
       slot.installAbort = null
     }
   }
 
-  /** Once the pinned version runs, the versions it replaced go. */
+  /**
+   * Once the install a start picks runs, the older installs go. A newer one, such as an update
+   * that finished meanwhile, stays, and so does the install this process runs from.
+   */
   private cleanUpVersions(slot: Slot): void {
     const detection = slot.detection
-    if (slot.versionsCleaned || detection?.state !== 'available' || !detection.adapter?.installed) {
-      return
-    }
-    if (!detection.spec || slot.launchSpec !== detection.spec) return
-    slot.versionsCleaned = true
+    const { launch } = slot.def
+    if (detection?.state !== 'available' || launch.kind !== 'package') return
+    const current = detection.adapter?.current
+    if (!current || !detection.spec || slot.launchSpec !== detection.spec) return
+    if (slot.cleanedDir === current.dir) return
+    slot.cleanedDir = current.dir
     const agentId = slot.def.id
-    removeOtherVersions(this.deps.adaptersDir, agentId, detection.adapter.version).then(
+    removeOlderInstalls(this.deps.adaptersDir, agentId, launch.package, current).then(
       (removed) => {
         if (removed.length > 0) this.deps.diagnostics.event(agentId, 'removed', removed.join(', '))
       },
@@ -559,6 +644,13 @@ export class AgentManager {
           `${slot.def.name}: could not remove older versions: ${(error as Error).message}`,
         ),
     )
+  }
+
+  /** Refuses a second install or update while one runs. */
+  private assertNoInstall(slot: Slot): void {
+    if (slot.task?.state === 'running' || slot.installing || slot.state === 'installing') {
+      throw new HostError('busy', t('agent.busyTask', { agent: slot.def.name }))
+    }
   }
 
   /**
@@ -574,15 +666,21 @@ export class AgentManager {
     if (slot.installing || slot.starting) {
       throw new HostError('busy', t('agent.busyInstalling', { agent: slot.def.name }))
     }
+    if (slot.task?.state === 'running') {
+      throw new HostError('busy', t('agent.busyTask', { agent: slot.def.name }))
+    }
     if (this.hooks.liveSessions(agentId) > 0) {
       throw new HostError('busy', t('agent.closeSessionsFirst', { agent: slot.def.name }))
     }
     const run = (async () => {
       await this.detectAll()
       await this.stopProcess(slot)
-      await removeVersion(this.deps.adaptersDir, agentId, launch.version)
+      // The install a start runs goes, and the same version comes back.
+      const detected = slot.detection?.state === 'available' ? slot.detection.adapter : null
+      const removed = detected?.current ?? null
+      if (removed) await removeInstall(removed.dir)
       slot.failures = []
-      slot.versionsCleaned = false
+      slot.cleanedDir = null
       slot.state = 'available'
       slot.detail = null
       await this.detect(slot)
@@ -593,9 +691,17 @@ export class AgentManager {
         )
       }
       try {
-        await this.install(slot)
+        await this.installPackage(slot, {
+          version: removed?.version ?? launch.version,
+          alongside: true,
+        })
         slot.state = 'available'
       } catch (error) {
+        if (error instanceof InstallCancelled) {
+          slot.state = slot.detection?.state ?? 'available'
+          slot.detail = null
+          return
+        }
         slot.state = 'failed'
         slot.detail = (error as Error).message
         throw new HostError('agent_unavailable', slot.detail, { agentId, state: 'failed' })
@@ -609,6 +715,394 @@ export class AgentManager {
     } finally {
       slot.installing = null
     }
+  }
+
+  // Updates and installs the user asks for.
+
+  /** The update to offer: what the last check found, against the install a start runs. */
+  private updateOf(slot: Slot): AgentUpdate | null {
+    const detection = slot.detection
+    const current = detection?.state === 'available' ? detection.adapter?.current : null
+    return decideUpdate(
+      slot.latest,
+      current ? { version: current.version, cliVersion: slot.installedCli } : null,
+    )
+  }
+
+  /** What an earlier run's update check found, so an update shows without the network. */
+  restoreUpdates(file: AgentUpdatesFile): void {
+    for (const [agentId, entry] of Object.entries(file.agents) as [
+      AgentId,
+      AgentUpdatesFile['agents'][AgentId],
+    ][]) {
+      const slot = this.slots.get(agentId)
+      if (!slot || !entry || slot.def.launch.kind !== 'package') continue
+      slot.latest = entry.latest
+      slot.checkedAt = entry.checkedAt
+      slot.rememberedUpdate = updateJson(slot)
+      this.emit(slot)
+    }
+  }
+
+  /**
+   * Checks once the oldest check is a day old, but no sooner than a minute after start, then once a
+   * day while the host runs. Called once the first detection is done.
+   */
+  scheduleUpdateChecks(): void {
+    if (this.updateTimer || this.stopped) return
+    const slots = [...this.slots.values()].filter((slot) => slot.def.launch.kind === 'package')
+    if (slots.length === 0) return
+    const last = Math.min(...slots.map((slot) => slot.checkedAt ?? 0))
+    const due = last + this.timings.updateIntervalMs - Date.now()
+    this.armUpdateCheck(Math.max(this.timings.updateDelayMs, due))
+  }
+
+  private armUpdateCheck(delayMs: number): void {
+    this.updateTimer = setTimeout(() => {
+      this.updateTimer = null
+      void this.runUpdateCheck().then(() => {
+        if (!this.stopped) this.armUpdateCheck(this.timings.updateIntervalMs)
+      })
+    }, delayMs)
+    this.updateTimer.unref?.()
+  }
+
+  /** Every package agent whose npm was found; never rejects, and a failure keeps the last one. */
+  private runUpdateCheck(): Promise<UpdateCheck> {
+    this.updateCheck ??= (async () => {
+      await this.detectAll()
+      const abort = new AbortController()
+      this.updateAbort = abort
+      const slots = [...this.slots.values()].filter(
+        (slot) =>
+          slot.def.launch.kind === 'package' &&
+          slot.detection?.state === 'available' &&
+          slot.detection.adapter?.npm,
+      )
+      const results = await Promise.all(slots.map((slot) => this.checkSlot(slot, abort.signal)))
+      return { checked: slots.length, failures: results.filter((r) => r !== null) }
+    })().finally(() => {
+      this.updateCheck = null
+      this.updateAbort = null
+    })
+    return this.updateCheck
+  }
+
+  private async checkSlot(slot: Slot, signal: AbortSignal): Promise<string | null> {
+    const { launch } = slot.def
+    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+    if (launch.kind !== 'package' || !adapter?.npm) return null
+    try {
+      const latest = await (this.deps.fetchLatest ?? fetchLatest)({
+        npm: adapter.npm,
+        package: launch.package,
+        cli: CLI_VERSION_SOURCES[slot.def.id] ?? null,
+        env: this.deps.env.agentEnv(),
+        platform: this.deps.platform,
+        cwd: os.homedir(),
+        timeoutMs: this.timings.updateViewMs,
+        signal,
+      })
+      slot.latest = latest
+      slot.checkedAt = Date.now()
+      const cli = latest.cliVersion ? `, CLI ${latest.cliVersion}` : ''
+      this.deps.diagnostics.event(slot.def.id, 'update check', `${latest.adapterVersion}${cli}`)
+      this.emit(slot)
+      return null
+    } catch (error) {
+      const message = (error as Error).message
+      this.deps.diagnostics.log('warn', `${slot.def.name}: the update check failed: ${message}`)
+      return message
+    }
+  }
+
+  /** The user's check: resolves with the statuses, or rejects when no agent could be checked. */
+  async checkUpdates(): Promise<AgentStatus[]> {
+    const { checked, failures } = await this.runUpdateCheck()
+    if (checked === 0) throw new HostError('agent_unavailable', t('agent.update.noNpm'))
+    if (failures.length === checked) {
+      throw new HostError('agent_error', t('agent.update.checkFailed', { reason: failures[0] }))
+    }
+    return this.statuses()
+  }
+
+  /**
+   * Installs the update beside the install that runs now, which keeps running; a start after it
+   * runs the new one. Resolves when done or cancelled; a failure leaves the old install as it was.
+   */
+  async update(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    const { launch } = slot.def
+    if (launch.kind !== 'package') {
+      throw invalidParams(`${slot.def.name} is not installed by OverBench`)
+    }
+    await this.detectAll()
+    const update = this.updateOf(slot)
+    if (!update) throw invalidParams(t('agent.update.none', { agent: slot.def.name }))
+    this.assertNoInstall(slot)
+    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+    const npm = adapter?.npm
+    if (!adapter || !npm) {
+      throw new HostError(
+        'agent_unavailable',
+        t('detect.npmMissing', { agent: slot.def.name, hint: t(slot.def.install.hint) }),
+      )
+    }
+    const { platform, diagnostics } = this.deps
+    const version = update.adapterVersion
+    const [, ...flags] = NPM_INSTALL_ARGS
+    const command = formatCommand(
+      { command: npm, args: ['install', `${launch.package}@${version}`, ...flags] },
+      platform,
+    )
+    await this.runTask(
+      slot,
+      'update',
+      command,
+      async (signal, onOutput) => {
+        const started = Date.now()
+        diagnostics.event(agentId, 'update', `${launch.package}@${version}`)
+        const installed = await (this.deps.install ?? installAdapter)({
+          root: this.deps.adaptersDir,
+          agentId,
+          package: launch.package,
+          version,
+          npm,
+          nodeVersion: adapter.nodeVersion,
+          platform,
+          env: this.deps.env.agentEnv(),
+          timeoutMs: this.timings.installMs,
+          signal,
+          onOutput,
+          alongside: true,
+        })
+        diagnostics.event(agentId, 'updated', `${installed.version} in ${Date.now() - started} ms`)
+        await this.detect(slot)
+        // A fresh install can take another CLI than the check foresaw; what it took is the latest.
+        if (this.updateOf(slot)) {
+          slot.latest = { adapterVersion: installed.version, cliVersion: slot.installedCli }
+        }
+      },
+      (message) => t('agent.updateFailed', { agent: slot.def.name, message }),
+    )
+  }
+
+  /**
+   * Installs an agent that is missing: a package agent's pinned adapter now, without starting it,
+   * or a binary agent by one of its routes. Resolves when done or cancelled.
+   */
+  async install(agentId: AgentId, method?: AgentInstallMethod['id']): Promise<void> {
+    const slot = this.slot(agentId)
+    await this.detectAll()
+    switch (slot.def.launch.kind) {
+      case 'package':
+        return this.installNow(slot)
+      case 'binary':
+        return this.installBinary(slot, method)
+      case 'node-script':
+        throw invalidParams(`${slot.def.name} is not installed by OverBench`)
+    }
+  }
+
+  /** The first-use install, shared with any start that waits for it. */
+  private async installNow(slot: Slot): Promise<void> {
+    const agentId = slot.def.id
+    if (slot.installing) {
+      await slot.installing
+      return
+    }
+    if (!slot.starting && slot.detection?.state !== 'available') await this.detect(slot)
+    const detection = slot.detection
+    if (detection?.state !== 'available') {
+      throw new HostError(
+        'agent_unavailable',
+        detection?.detail ?? t('agent.cannotInstall', { agent: slot.def.name }),
+        { agentId, state: detection?.state ?? 'not-installed' },
+      )
+    }
+    if (detection.adapter?.installed) return
+    // A start that installs first.
+    if (slot.starting) {
+      await slot.starting
+      return
+    }
+    this.assertNoInstall(slot)
+    const run = (async () => {
+      try {
+        await this.installPackage(slot, { fallback: false })
+        slot.state = 'available'
+      } catch (error) {
+        if (error instanceof InstallCancelled) {
+          slot.state = slot.detection?.state ?? 'available'
+          slot.detail = null
+          return
+        }
+        slot.state = 'failed'
+        slot.detail = (error as Error).message
+        throw new HostError('agent_unavailable', slot.detail, { agentId, state: 'failed' })
+      } finally {
+        this.emit(slot)
+      }
+    })()
+    slot.installing = run
+    try {
+      await run
+    } finally {
+      slot.installing = null
+    }
+  }
+
+  private async installBinary(
+    slot: Slot,
+    methodId: AgentInstallMethod['id'] | undefined,
+  ): Promise<void> {
+    const installs = slot.def.installs
+    const agent = slot.def.name
+    if (!installs) throw invalidParams(`${agent} is not installed by OverBench`)
+    if (slot.detection?.state === 'available') {
+      throw invalidParams(t('agent.alreadyInstalled', { agent }))
+    }
+    const plan = methodId
+      ? slot.installPlans.find((candidate) => candidate.id === methodId)
+      : slot.installPlans.find((candidate) => candidate.available)
+    if (!plan) {
+      throw invalidParams(
+        methodId
+          ? `${agent} has no ${methodId} install on this platform`
+          : t('agent.binaryInstall.noMethod', { agent }),
+      )
+    }
+    const run = plan.run
+    if (!plan.available || !run) {
+      throw invalidParams(t('agent.binaryInstall.unavailable', { command: plan.command }))
+    }
+    this.assertNoInstall(slot)
+    const { platform, diagnostics } = this.deps
+    const home = os.homedir()
+    const timeoutMs = this.timings.installMs
+    await this.runTask(
+      slot,
+      'install',
+      plan.command,
+      async (signal, onOutput) => {
+        diagnostics.event(slot.def.id, 'install', plan.command)
+        const result = await (this.deps.runProgram ?? runProgram)({
+          program: run.program,
+          args: run.args,
+          cwd: home,
+          env: this.deps.env.agentEnv(),
+          platform,
+          timeoutMs,
+          signal,
+          onOutput,
+        })
+        const name = path.basename(run.program).replace(/\.(?:cmd|exe)$/i, '')
+        const failure = programFailure(name, result, timeoutMs)
+        if (failure) throw new Error(failure)
+        // The script adds its folder to PATH in shell startup files, which a new login shell reads.
+        await this.deps.env.reload()
+        await Promise.all([...this.slots.values()].map((other) => this.detect(other)))
+        if (slot.detection?.state === 'available') return
+        const folder = await installedFolder(plan, installs, {
+          platform,
+          home,
+          npmPrefix: () => this.npmPrefix(plan.tool),
+        })
+        const command = slot.def.launch.kind === 'binary' ? slot.def.launch.command : agent
+        throw new Error(
+          folder
+            ? t('agent.binaryInstall.notOnPath', { agent, command, folder })
+            : t('agent.binaryInstall.notFound', { agent, command }),
+        )
+      },
+      (message) => t('agent.installFailed', { agent, message }),
+    )
+  }
+
+  /** `npm prefix -g`, the folder global installs go to; null when npm does not say. */
+  private async npmPrefix(npm: string | null): Promise<string | null> {
+    if (!npm) return null
+    const run = await (this.deps.runProgram ?? runProgram)({
+      program: npm,
+      args: ['prefix', '-g'],
+      cwd: os.homedir(),
+      env: this.deps.env.agentEnv(),
+      platform: this.deps.platform,
+      timeoutMs: this.timings.updateViewMs,
+    })
+    const prefix = run.code === 0 ? run.stdout.trim() : ''
+    return prefix === '' ? null : prefix
+  }
+
+  /** Runs an install or update as the agent's task, with its progress, failure and cancel. */
+  private async runTask(
+    slot: Slot,
+    kind: AgentTask['kind'],
+    command: string,
+    work: (signal: AbortSignal, onOutput: (text: string) => void) => Promise<void>,
+    failure: (message: string) => string,
+  ): Promise<void> {
+    const abort = new AbortController()
+    slot.taskOutput.clear()
+    slot.task = { kind, state: 'running', command, error: null }
+    slot.taskAbort = abort
+    this.emit(slot)
+    const run = (async () => {
+      try {
+        await work(abort.signal, (text) => this.onTaskOutput(slot, text))
+        slot.task = null
+      } catch (error) {
+        if (abort.signal.aborted) {
+          slot.task = null
+          return
+        }
+        const message = failure((error as Error).message)
+        this.deps.diagnostics.event(slot.def.id, `${kind} failed`, message)
+        slot.task = { kind, state: 'failed', command, error: message }
+        throw new HostError('agent_error', message, { agentId: slot.def.id })
+      } finally {
+        slot.taskAbort = null
+        this.emit(slot)
+      }
+    })()
+    slot.taskRun = run
+    try {
+      await run
+    } finally {
+      if (slot.taskRun === run) slot.taskRun = null
+    }
+  }
+
+  /**
+   * Stops a running install or update, its process tree and its partial directory included, or
+   * clears one that failed. Resolves once it has stopped.
+   */
+  async cancelTask(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    if (slot.task?.state === 'failed') {
+      slot.task = null
+      this.emit(slot)
+      return
+    }
+    if (slot.task?.state === 'running') {
+      slot.taskAbort?.abort()
+      await slot.taskRun?.catch(() => {})
+      return
+    }
+    // A package agent's first-use install, whether a start or Install asked for it.
+    if (slot.installAbort) {
+      slot.installAbort.abort()
+      await Promise.all([slot.installing?.catch(() => {}), slot.starting?.catch(() => {})])
+    }
+  }
+
+  private onTaskOutput(slot: Slot, text: string): void {
+    this.deps.diagnostics.stderr(slot.def.id, text)
+    slot.taskOutput.push(text)
+    slot.progressTimer ??= setTimeout(() => {
+      slot.progressTimer = null
+      this.emit(slot)
+    }, this.timings.progressMs)
   }
 
   /** Clears `failed` and starts the agent again when live sessions need it. */
@@ -686,9 +1180,19 @@ export class AgentManager {
     return trees.reap({ pid: launched.pid, startedAt: launched.startedAt }, slot.def.name)
   }
 
-  /** Stops every agent in parallel, with the documented sequence. */
+  /** Stops every agent in parallel, with the documented sequence, and every task and check. */
   async stopAll(): Promise<void> {
-    await Promise.all([...this.slots.keys()].map((agentId) => this.stop(agentId)))
+    this.stopped = true
+    if (this.updateTimer) clearTimeout(this.updateTimer)
+    this.updateTimer = null
+    this.updateAbort?.abort()
+    const slots = [...this.slots.values()]
+    for (const slot of slots) slot.taskAbort?.abort()
+    await Promise.all([
+      this.updateCheck,
+      ...slots.map((slot) => slot.taskRun?.catch(() => {})),
+      ...slots.map((slot) => this.stop(slot.def.id)),
+    ])
   }
 
   // Sign-in, account and limits.
@@ -799,14 +1303,16 @@ export class AgentManager {
     await this.detectAll()
     const { launch } = slot.def
     const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
-    // The version in use, as for diagnostics: the pinned one, or the fallback until it installs.
-    const inUse = adapter && !adapter.installed ? adapter.fallback?.version : undefined
+    // The install in use, as for diagnostics: the one a start picks, or the fallback until then.
+    const inUse = adapter?.current?.dir ?? adapter?.fallback?.dir
     return readAgentDetails(agentId, {
       getEnv: (name) => this.deps.env.get(name),
       home: os.homedir(),
       platform: this.deps.platform,
-      adaptersDir: this.deps.adaptersDir,
-      adapterVersion: launch.kind === 'package' ? (inUse ?? launch.version) : null,
+      adapterDir:
+        launch.kind === 'package'
+          ? (inUse ?? path.join(this.deps.adaptersDir, agentId, launch.version))
+          : null,
       log: (level, message) => this.deps.diagnostics.log(level, message),
     })
   }
@@ -938,7 +1444,7 @@ export class AgentManager {
         launch.kind === 'package'
           ? {
               name: launch.package,
-              version: launch.version,
+              version: adapter?.current?.version ?? launch.version,
               installed: adapter?.installed ?? false,
             }
           : null,
@@ -958,6 +1464,14 @@ export class AgentManager {
         slot.state === 'starting' || slot.state === 'installing' ? slot.progress.lastLines(5) : [],
       launchCommand: formatCommand(display, platform),
       binaryOverride: this.deps.settings().agents[slot.def.id]?.binaryPath ?? null,
+      update: this.updateOf(slot),
+      updateCheckedAt: launch.kind === 'package' ? slot.checkedAt : null,
+      task: slot.task ? { ...slot.task, progress: slot.taskOutput.lastLines(5) } : null,
+      installMethods: slot.installPlans.map(({ id, command, available }) => ({
+        id,
+        command,
+        available,
+      })),
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
         listSessions: capabilities?.listSessions ?? false,
@@ -985,9 +1499,8 @@ export class AgentManager {
     const detection = slot?.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     if (!slot || !adapter) return null
-    const version = adapter.installed ? adapter.version : adapter.fallback?.version
-    if (!version) return null
-    return readInstallFiles(path.join(this.deps.adaptersDir, agentId, version))
+    const dir = adapter.current?.dir ?? adapter.fallback?.dir
+    return dir ? readInstallFiles(dir) : null
   }
 
   /** The raw capabilities of each agent's last `initialize`, for diagnostics. */
@@ -1027,6 +1540,11 @@ export class AgentManager {
       slot.remembered = remembered
       this.remember()
     }
+    const update = updateJson(slot)
+    if (update !== slot.rememberedUpdate) {
+      slot.rememberedUpdate = update
+      this.rememberUpdates()
+    }
     const commands = this.statuses().flatMap((s) =>
       s.authMethods.flatMap((method) => (method.command ? [method.command] : [])),
     )
@@ -1045,6 +1563,17 @@ export class AgentManager {
       if (entry) agents[agentId] = entry
     }
     this.deps.remember({ version: 1, agents })
+  }
+
+  private rememberUpdates(): void {
+    if (!this.deps.rememberUpdates) return
+    const agents: AgentUpdatesFile['agents'] = {}
+    for (const [agentId, slot] of this.slots) {
+      if (slot.latest && slot.checkedAt !== null) {
+        agents[agentId] = { checkedAt: slot.checkedAt, latest: slot.latest }
+      }
+    }
+    this.deps.rememberUpdates({ version: 1, agents })
   }
 
   private emitProcesses(): void {

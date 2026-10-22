@@ -4,11 +4,13 @@ import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
-import { listInstalled, type InstalledAdapter } from './adapter-install'
+import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
+import type { BinaryInstalls } from './binary-install'
 import { codexLaunchEnv, type AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
 import { t, type HostKey } from './i18n'
 import { satisfiesNode, type NodeProbe } from './shell-env'
+import { compareVersions } from './versions'
 
 export type LaunchKind =
   // Installed from npm into the data directory and run on the user's Node.js.
@@ -34,6 +36,8 @@ export interface AgentDefinition {
   progressNotes?: boolean
   /** Variables a package agent's launch adds, from what its install holds. */
   launchEnv?(lookup: AdapterLookup): Promise<Record<string, string>>
+  /** How OverBench can install a binary agent for the user. */
+  installs?: BinaryInstalls
 }
 
 const NODE_INSTALL: AgentDefinition['install'] = {
@@ -71,6 +75,13 @@ export const OPENCODE: AgentDefinition = {
   install: {
     hint: 'detect.hint.opencode',
     url: 'https://opencode.ai/docs/',
+  },
+  // The routes https://opencode.ai/docs lists for OpenCode 1, checked on 2026-10-22.
+  installs: {
+    brew: 'anomalyco/tap/opencode',
+    script: 'https://opencode.ai/install',
+    scriptBin: ['.opencode', 'bin'],
+    npm: 'opencode-ai',
   },
 }
 
@@ -113,7 +124,7 @@ export interface LaunchSpec {
   display: CommandWords
 }
 
-/** Where a package agent's pinned version lives once installed. */
+/** Where a package agent's pinned version lives once installed, before detection says more. */
 export function packageDir(adaptersDir: string, def: AgentDefinition): string | null {
   const { launch } = def
   if (launch.kind !== 'package') return null
@@ -144,17 +155,21 @@ export function displayCommand(
 /** What a package agent has installed, and what it needs to install the pinned version. */
 export interface AdapterPlan {
   package: string
+  /** The pinned version, the oldest that runs; the first start installs it. */
   version: string
+  /** Whether an install of the pinned version or a newer one exists. */
   installed: boolean
+  /** The install a start runs: the newest version from the pin up, the latest install on a tie. */
+  current: InstalledAdapter | null
   node: string
   nodeVersion: string
   npm: string | null
-  /** The newest other installed version, run when the pinned one cannot be installed. */
-  fallback: { version: string; spec: LaunchSpec } | null
+  /** The newest install below the pin, run when the pinned one cannot be installed. */
+  fallback: { version: string; dir: string; spec: LaunchSpec } | null
 }
 
 export type Detection =
-  // `spec` is null for a package agent until its pinned version is installed.
+  // `spec` is null for a package agent until its pinned version, or a newer one, is installed.
   | { state: 'available'; spec: LaunchSpec | null; adapter: AdapterPlan | null }
   | { state: 'not-installed' | 'node-missing' | 'node-outdated'; detail: string }
 
@@ -231,12 +246,17 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           }),
         }
       }
-      const installed = await (
-        ctx.installed ?? ((id, name) => listInstalled(ctx.adaptersDir, id, name))
-      )(def.id, launch.package)
-      const pinned = installed.find((adapter) => adapter.version === launch.version)
-      const other = installed.find((adapter) => adapter.version !== launch.version)
-      if (!pinned && !npmPath && !other) {
+      const installed = (
+        await (ctx.installed ?? ((id, name) => listInstalled(ctx.adaptersDir, id, name)))(
+          def.id,
+          launch.package,
+        )
+      ).toSorted((a, b) => compareInstalls(b, a))
+      const fromPin = (adapter: InstalledAdapter): number =>
+        compareVersions(adapter.version, launch.version)
+      const current = installed.find((adapter) => fromPin(adapter) >= 0)
+      const other = installed.find((adapter) => fromPin(adapter) < 0)
+      if (!current && !npmPath && !other) {
         return {
           state: 'not-installed',
           detail: t('detect.npmMissing', { agent: def.name, hint: t(def.install.hint) }),
@@ -250,16 +270,21 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       }
       return {
         state: 'available',
-        spec: pinned ? await installedSpec(def, nodePath, pinned, lookup) : null,
+        spec: current ? await installedSpec(def, nodePath, current, lookup) : null,
         adapter: {
           package: launch.package,
           version: launch.version,
-          installed: !!pinned,
+          installed: !!current,
+          current: current ?? null,
           node: nodePath,
           nodeVersion,
           npm: npmPath,
           fallback: other
-            ? { version: other.version, spec: await installedSpec(def, nodePath, other, lookup) }
+            ? {
+                version: other.version,
+                dir: other.dir,
+                spec: await installedSpec(def, nodePath, other, lookup),
+              }
             : null,
         },
       }

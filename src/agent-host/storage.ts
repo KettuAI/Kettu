@@ -2,8 +2,9 @@
 
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
-import type { AgentAccount, PlanLimit } from '@shared/agent-host'
+import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
 import { AGENT_IDS, type AgentId, type QueuedPrompt } from '@shared/thread'
+import { isVersion } from './versions'
 
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void
 
@@ -233,6 +234,15 @@ export interface AgentsFile {
   agents: Partial<Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[] }>>
 }
 
+/**
+ * What the last update check found for each package agent: the newest adapter and the CLI it
+ * carries. Whether that is an update follows from what is installed, so it is not stored.
+ */
+export interface AgentUpdatesFile {
+  version: 1
+  agents: Partial<Record<AgentId, { checkedAt: number; latest: AgentUpdate }>>
+}
+
 /** Agent processes, and what they left behind, not yet seen gone; the next host stops them. */
 export interface AgentProcessesFile {
   version: 1
@@ -244,11 +254,13 @@ export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
 export const AGENTS_VERSION = 1
 export const AGENT_PROCESSES_VERSION = 1
+export const AGENT_UPDATES_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
 export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_PROCESSES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const AGENT_UPDATES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -401,6 +413,21 @@ export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | str
   return { version: 1, agents }
 }
 
+// A cache of the registry's answers: an entry that does not parse is dropped, not the file. Only
+// versions pass, since an update's version names its install directory.
+export function parseAgentUpdatesFile(data: Record<string, unknown>): AgentUpdatesFile | string {
+  if (!isRecord(data.agents)) return 'agents is not an object'
+  const agents: AgentUpdatesFile['agents'] = {}
+  for (const id of AGENT_IDS) {
+    const entry = data.agents[id]
+    if (!isRecord(entry) || !isTime(entry.checkedAt) || !isRecord(entry.latest)) continue
+    const { adapterVersion, cliVersion } = entry.latest
+    if (!isVersion(adapterVersion) || !(cliVersion === null || isVersion(cliVersion))) continue
+    agents[id] = { checkedAt: entry.checkedAt, latest: { adapterVersion, cliVersion } }
+  }
+  return { version: 1, agents }
+}
+
 const MAX_AGENT_PROCESSES = 10_000
 
 export function parseAgentProcessesFile(
@@ -464,5 +491,16 @@ export function agentProcessesFile(userDataPath: string, log: LogFn): JsonFile<A
     log,
     // Written at once: a launch the file misses is a process no later host can stop.
     debounceMs: 0,
+  })
+}
+
+export function agentUpdatesFile(userDataPath: string, log: LogFn): JsonFile<AgentUpdatesFile> {
+  return new JsonFile<AgentUpdatesFile>({
+    file: path.join(userDataPath, 'state', 'agent-updates.json'),
+    version: AGENT_UPDATES_VERSION,
+    migrations: AGENT_UPDATES_MIGRATIONS,
+    parse: parseAgentUpdatesFile,
+    empty: () => ({ version: 1, agents: {} }),
+    log,
   })
 }

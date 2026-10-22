@@ -15,11 +15,12 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | `state/agent-processes.json` | Agent host | The agent processes running and what they left, until seen gone, for the next host to stop ([process trees](./agent-host.md#process-trees))        |
 | `state/agents.json`          | Agent host | The account and plan limits each agent last reported, shown after a restart until it reports again ([sign-in](./agent-host.md#sign-in))            |
 | `state/agent-options.json`   | Agent host | Each agent's config options from its last new session, and the values last chosen, for [New session](./session-model.md#config-options)            |
+| `state/agent-updates.json`   | Agent host | What the last [update check](./agent-host.md#checking-for-updates) found for each package agent, shown after a restart                             |
 | `state/threads.db`           | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                             |
 | `settings.json`              | Main       | [Settings](#settings)                                                                                                                              |
 | `window-state.json`          | Main       | Window size, position and maximized state                                                                                                          |
 | `app-state.json`             | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
-| `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and version                                                     |
+| `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and install                                                     |
 | `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
 | `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
@@ -32,6 +33,17 @@ interface ProjectsFile {
 interface AgentsFile {
   version: 1
   agents: Partial<Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[] }>> // no signed-out accounts
+}
+
+interface AgentUpdatesFile {
+  version: 1
+  // Whether that is an update follows from what is installed, so it is not stored.
+  agents: Partial<
+    Record<
+      AgentId,
+      { checkedAt: number; latest: { adapterVersion: string; cliVersion: string | null } }
+    >
+  >
 }
 
 interface SessionsFile {

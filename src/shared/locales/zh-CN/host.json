@@ -74,6 +74,24 @@
     "installFailed": "无法安装 {{agent}}。{{message}}",
     "runningFallback": "正在使用 {{fallback}}：{{version}} 安装失败。{{message}}",
     "installStopped": "安装已停止。",
+    "busyTask": "{{agent}} 正在安装或更新",
+    "alreadyInstalled": "{{agent}} 已安装",
+    "updateFailed": "无法更新 {{agent}}。{{message}}",
+    "update": {
+      "none": "{{agent}} 没有可安装的更新",
+      "noNpm": "检查更新需要 npm，但在 PATH 中找不到 npm。",
+      "checkFailed": "无法检查更新。{{reason}}",
+      "offline": "无法连接 npm 仓库。",
+      "timeout": "npm 没有在 {{seconds}} 秒内响应。",
+      "noVersion": "npm 没有给出 {{package}} 的版本。",
+      "stopped": "检查已停止。"
+    },
+    "binaryInstall": {
+      "noMethod": "找不到安装 {{agent}} 的方式：PATH 中没有 Homebrew、curl 和 bash，也没有 npm。",
+      "unavailable": "{{command}} 需要的程序在 PATH 中找不到。",
+      "notOnPath": "{{agent}} 已安装到 {{folder}}，但在 PATH 中仍然找不到 {{command}}。请把该文件夹加入 PATH 后重新加载环境，或在「设置 › Agent」中选择它的程序。",
+      "notFound": "{{agent}} 已安装，但在 PATH 中仍然找不到 {{command}}。请重新加载环境，或在「设置 › Agent」中选择它的程序。"
+    },
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成"
   },
   "detect": {

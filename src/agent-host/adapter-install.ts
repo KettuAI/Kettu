@@ -1,4 +1,4 @@
-// Installs the pinned ACP adapters from npm into the data directory, once per version, so a
+// Installs the ACP adapters from npm into the data directory, once per version or update, so a
 // launch runs `node <entry>` with no registry round trip.
 
 import { spawn } from 'node:child_process'
@@ -11,6 +11,7 @@ import { needsShell, type Env } from './find-command'
 import { t } from './i18n'
 import { processControl } from './process-tree'
 import { TextRing } from './ring'
+import { compareVersions } from './versions'
 
 export const INSTALLED_FILE = 'installed.json'
 const PARTIAL_PREFIX = '.partial-'
@@ -34,11 +35,13 @@ export interface InstalledRecord {
   installedAt: number
 }
 
+/** An install is named by its `installed.json`, not its directory, so one version can have two. */
 export interface InstalledAdapter {
   version: string
   dir: string
   /** The absolute path to the package's bin entry. */
   entry: string
+  installedAt: number
 }
 
 function isRecord(value: unknown): value is InstalledRecord {
@@ -88,20 +91,29 @@ export async function binEntry(dir: string, packageName: string): Promise<string
   return (await isFile(entry)) ? entry : null
 }
 
-/** The installed version, if its directory is complete and holds this package. */
-export async function findInstalled(
-  root: string,
-  agentId: string,
+/** The install in `dir`, if it is complete and holds this package. */
+export async function readInstall(
+  dir: string,
   packageName: string,
-  version: string,
 ): Promise<InstalledAdapter | null> {
-  const dir = path.join(root, agentId, version)
   const record = await readJson(path.join(dir, INSTALLED_FILE))
-  if (!isRecord(record) || record.package !== packageName || record.version !== version) {
-    return null
-  }
+  if (!isRecord(record) || record.package !== packageName) return null
   const entry = await binEntry(dir, packageName)
-  return entry ? { version, dir, entry } : null
+  return entry ? { version: record.version, dir, entry, installedAt: record.installedAt } : null
+}
+
+/** Older first: by version, then by install time, so a later install of one version wins. */
+export function compareInstalls(a: InstalledAdapter, b: InstalledAdapter): number {
+  return compareVersions(a.version, b.version) || a.installedAt - b.installedAt
+}
+
+async function installDirs(root: string, agentId: string): Promise<string[]> {
+  try {
+    const names = await readdir(path.join(root, agentId))
+    return names.filter((name) => !name.startsWith(PARTIAL_PREFIX))
+  } catch {
+    return []
+  }
 }
 
 /** Installed versions of the package, newest first. */
@@ -110,39 +122,37 @@ export async function listInstalled(
   agentId: string,
   packageName: string,
 ): Promise<InstalledAdapter[]> {
-  let names: string[]
-  try {
-    names = await readdir(path.join(root, agentId))
-  } catch {
-    return []
-  }
+  const names = await installDirs(root, agentId)
   const found = await Promise.all(
-    names
-      .filter((name) => !name.startsWith(PARTIAL_PREFIX))
-      .map((name) => findInstalled(root, agentId, packageName, name)),
+    names.map((name) => readInstall(path.join(root, agentId, name), packageName)),
   )
-  return found
-    .filter((adapter) => adapter !== null)
-    .sort((a, b) => b.version.localeCompare(a.version, 'en', { numeric: true }))
+  return found.filter((adapter) => adapter !== null).sort((a, b) => compareInstalls(b, a))
 }
 
-/** Deletes every version directory but `keep`; returns the versions removed. */
-export async function removeOtherVersions(
+/**
+ * Deletes the installs older than `keep`, and directories that hold no complete install; returns
+ * the directory names removed. A newer install, such as an update that finished meanwhile, stays.
+ */
+export async function removeOlderInstalls(
   root: string,
   agentId: string,
-  keep: string,
+  packageName: string,
+  keep: InstalledAdapter,
 ): Promise<string[]> {
-  let names: string[]
-  try {
-    names = await readdir(path.join(root, agentId))
-  } catch {
-    return []
-  }
-  const others = names.filter((name) => name !== keep && !name.startsWith(PARTIAL_PREFIX))
-  await Promise.all(
-    others.map((name) => rm(path.join(root, agentId, name), { recursive: true, force: true })),
+  const names = (await installDirs(root, agentId)).filter(
+    (name) => path.join(root, agentId, name) !== keep.dir,
   )
-  return others
+  const older = await Promise.all(
+    names.map(async (name) => {
+      const install = await readInstall(path.join(root, agentId, name), packageName)
+      return !install || compareInstalls(install, keep) < 0 ? name : null
+    }),
+  )
+  const removed = older.filter((name) => name !== null)
+  await Promise.all(
+    removed.map((name) => rm(path.join(root, agentId, name), { recursive: true, force: true })),
+  )
+  return removed
 }
 
 /** What an install recorded, for diagnostics. */
@@ -156,12 +166,12 @@ export async function readInstallFiles(
   return { installed, lock }
 }
 
-/** Deletes one installed version, for a reinstall. */
-export async function removeVersion(root: string, agentId: string, version: string): Promise<void> {
-  await rm(path.join(root, agentId, version), { recursive: true, force: true })
+/** Deletes one install, for a reinstall. */
+export async function removeInstall(dir: string): Promise<void> {
+  await rm(dir, { recursive: true, force: true })
 }
 
-export interface NpmRun {
+export interface ProgramRun {
   code: number | null
   signal: string | null
   /** Set when the process could not be started at all. */
@@ -172,8 +182,11 @@ export interface NpmRun {
   stdout: string
 }
 
-export interface NpmOptions {
-  npm: string
+export type NpmRun = ProgramRun
+
+export interface ProgramOptions {
+  /** An absolute path; its arguments are constants, so a `.cmd` may run through cmd.exe. */
+  program: string
   args: readonly string[]
   cwd: string
   env: Env
@@ -183,7 +196,11 @@ export interface NpmOptions {
   onOutput?(text: string): void
 }
 
-/** Ends npm and whatever it started: its process group on macOS and Linux, its tree on Windows. */
+export interface NpmOptions extends Omit<ProgramOptions, 'program'> {
+  npm: string
+}
+
+/** Ends a program and what it started: its group on macOS and Linux, its tree on Windows. */
 function stopTree(pid: number, platform: Platform, exited: Promise<unknown>): void {
   if (platform === 'win32') {
     void processControl(platform).taskkill([pid])
@@ -201,14 +218,15 @@ function stopTree(pid: number, platform: Platform, exited: Promise<unknown>): vo
   void exited.then(() => clearTimeout(timer))
 }
 
-export function runNpm(options: NpmOptions): Promise<NpmRun> {
+/** Runs a tool such as npm or brew to its end, its time limit, or the signal's abort. */
+export function runProgram(options: ProgramOptions): Promise<ProgramRun> {
   const { platform } = options
   const { file, args, shell } = spawnArguments({
-    command: options.npm,
+    command: options.program,
     args: [...options.args],
     env: {},
-    shell: needsShell(options.npm, platform),
-    display: { command: options.npm, args: [...options.args], env: {} },
+    shell: needsShell(options.program, platform),
+    display: { command: options.program, args: [...options.args], env: {} },
   })
   const output = new TextRing(16 * 1024)
   let stdout = ''
@@ -249,7 +267,7 @@ export function runNpm(options: NpmOptions): Promise<NpmRun> {
       stop()
     }
     options.signal?.addEventListener('abort', onAbort, { once: true })
-    const finish = (run: Omit<NpmRun, 'timedOut' | 'aborted' | 'output' | 'stdout'>): void => {
+    const finish = (run: Omit<ProgramRun, 'timedOut' | 'aborted' | 'output' | 'stdout'>): void => {
       clearTimeout(timer)
       options.signal?.removeEventListener('abort', onAbort)
       resolve({ ...run, timedOut, aborted, output, stdout })
@@ -261,11 +279,30 @@ export function runNpm(options: NpmOptions): Promise<NpmRun> {
   })
 }
 
-/** npm's own error lines, else its last lines. */
+export function runNpm(options: NpmOptions): Promise<NpmRun> {
+  const { npm, ...rest } = options
+  return runProgram({ ...rest, program: npm })
+}
+
+/** npm's own error lines, else the last lines of any tool's output. */
 export function npmFailure(output: TextRing): string {
   const lines = output.lastLines(40)
   const errors = lines.filter((line) => /^npm (error|ERR!)/.test(line))
   return (errors.length > 0 ? errors.slice(-3) : lines.slice(-3)).join(' ')
+}
+
+/** Why a run did not succeed, or null when it exited with 0; the tool's part stays in English. */
+export function programFailure(name: string, run: ProgramRun, timeoutMs: number): string | null {
+  if (run.aborted) return t('agent.installStopped')
+  if (run.timedOut) {
+    const limit =
+      timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${timeoutMs / 1000} s`
+    return `${name} did not finish within ${limit}.`
+  }
+  if (run.error) return `${name} could not be started: ${run.error}`
+  if (run.code === 0) return null
+  const how = run.signal ? `was stopped by ${run.signal}` : `exited with code ${run.code}`
+  return `${name} ${how}. ${npmFailure(run.output)}`.trim()
 }
 
 const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY'])
@@ -315,11 +352,16 @@ export interface InstallOptions {
   timeoutMs: number
   signal?: AbortSignal
   onOutput?(text: string): void
+  /**
+   * Installs beside an existing install of the same version, in `<version>~<installedAt>`, as an
+   * update does when a fresh install of the version brings a newer CLI.
+   */
+  alongside?: boolean
 }
 
 /**
- * Installs one version in a partial directory and renames it into place once complete, so a
- * version directory is either whole or absent.
+ * Installs one version in a partial directory and renames it into place once complete, so an
+ * install directory is either whole or absent.
  */
 export async function installAdapter(options: InstallOptions): Promise<InstalledAdapter> {
   const { root, agentId, platform } = options
@@ -357,19 +399,8 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
       )}\n`,
     )
     const result = await run(NPM_INSTALL_ARGS, options.timeoutMs, true)
-    if (result.aborted) throw new Error(t('agent.installStopped'))
-    if (result.timedOut) {
-      const ms = options.timeoutMs
-      const limit = ms >= 60_000 ? `${Math.round(ms / 60_000)} minutes` : `${ms / 1000} s`
-      throw new Error(`npm did not finish within ${limit}.`)
-    }
-    if (result.error) throw new Error(`npm could not be started: ${result.error}`)
-    if (result.code !== 0) {
-      const how = result.signal
-        ? `was stopped by ${result.signal}`
-        : `exited with code ${result.code}`
-      throw new Error(`npm ${how}. ${npmFailure(result.output)}`.trim())
-    }
+    const failure = programFailure('npm', result, options.timeoutMs)
+    if (failure) throw new Error(failure)
     if (!(await binEntry(partial, options.package))) {
       throw new Error(`${options.package} was installed without a program to run.`)
     }
@@ -381,22 +412,29 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
       installedAt: Date.now(),
     }
     await writeFile(path.join(partial, INSTALLED_FILE), `${JSON.stringify(record, null, 2)}\n`)
-    const target = path.join(agentDir, options.version)
-    try {
+    let target = path.join(agentDir, options.version)
+    if (options.alongside && (await stat(target).catch(() => null))) {
+      target = path.join(agentDir, `${options.version}~${record.installedAt}`)
       await renameWithRetry(partial, target, platform)
-    } catch (error) {
-      // Another instance finished the same version first; an incomplete one is replaced.
-      const existing = await findInstalled(root, agentId, options.package, options.version)
-      if (existing) {
-        await rm(partial, { recursive: true, force: true })
-        return existing
+    } else {
+      try {
+        await renameWithRetry(partial, target, platform)
+      } catch (error) {
+        // Another instance finished the same version first; an incomplete one is replaced.
+        const existing = await readInstall(target, options.package)
+        if (existing?.version === options.version) {
+          await rm(partial, { recursive: true, force: true })
+          return existing
+        }
+        if (!(await stat(target).catch(() => null))) throw error
+        await rm(target, { recursive: true, force: true })
+        await renameWithRetry(partial, target, platform)
       }
-      if (!(await stat(target).catch(() => null))) throw error
-      await rm(target, { recursive: true, force: true })
-      await renameWithRetry(partial, target, platform)
     }
-    const installed = await findInstalled(root, agentId, options.package, options.version)
-    if (!installed) throw new Error(`${options.package} ${options.version} is incomplete on disk.`)
+    const installed = await readInstall(target, options.package)
+    if (installed?.version !== options.version) {
+      throw new Error(`${options.package} ${options.version} is incomplete on disk.`)
+    }
     return installed
   } catch (error) {
     await rm(partial, { recursive: true, force: true }).catch(() => {})

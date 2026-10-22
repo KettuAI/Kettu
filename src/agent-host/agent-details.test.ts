@@ -166,8 +166,9 @@ describe('readAgentDetails', () => {
       getEnv: (name) => options.vars?.[name],
       home,
       platform,
-      adaptersDir,
-      adapterVersion: options.adapterVersion ?? null,
+      adapterDir: options.adapterVersion
+        ? path.join(adaptersDir, agentId, options.adapterVersion)
+        : null,
       log: (level, message) => logs.push({ level, message }),
     })
     return { details, logs }

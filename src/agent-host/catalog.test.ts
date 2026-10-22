@@ -40,14 +40,19 @@ describe('buildCatalog', () => {
 describe('detectAgent', () => {
   const entry = (agentId: string, name: string, version: string): string =>
     `/data/agents/${agentId}/${version}/node_modules/${name}/dist/index.js`
+  // A version may carry `~<installedAt>`, as an install beside one of the same version does.
   const installed =
     (...versions: string[]): DetectContext['installed'] =>
     async (agentId, name) =>
-      versions.map((version) => ({
-        version,
-        dir: `/data/agents/${agentId}/${version}`,
-        entry: entry(agentId, name, version),
-      }))
+      versions.map((dirName) => {
+        const [version = dirName, at = '1'] = dirName.split('~')
+        return {
+          version,
+          dir: `/data/agents/${agentId}/${dirName}`,
+          entry: entry(agentId, name, dirName),
+          installedAt: Number(at),
+        }
+      })
   const CLAUDE = '@agentclientprotocol/claude-agent-acp'
 
   it('runs an installed adapter with node and its entry', async () => {
@@ -65,6 +70,12 @@ describe('detectAgent', () => {
         package: CLAUDE,
         version: '0.94.0',
         installed: true,
+        current: {
+          version: '0.94.0',
+          dir: '/data/agents/claude-code/0.94.0',
+          entry: claudeEntry,
+          installedAt: 1,
+        },
         node: '/usr/local/bin/node',
         nodeVersion: 'v24.1.0',
         npm: '/usr/local/bin/npm',
@@ -82,6 +93,23 @@ describe('detectAgent', () => {
       adapter: {
         installed: false,
         fallback: { version: '0.93.0', spec: { args: [entry('claude-code', CLAUDE, '0.93.0')] } },
+      },
+    })
+  })
+
+  it('runs the newest install from the pin up, and the latest install of one version', async () => {
+    const detection = await detectAgent(
+      CLAUDE_CODE,
+      context({ installed: installed('0.93.0', '0.95.0', '0.95.0~5', '0.94.0') }),
+    )
+    expect(detection).toMatchObject({
+      state: 'available',
+      spec: { args: [entry('claude-code', CLAUDE, '0.95.0~5')] },
+      adapter: {
+        version: '0.94.0',
+        installed: true,
+        current: { version: '0.95.0', dir: '/data/agents/claude-code/0.95.0~5', installedAt: 5 },
+        fallback: { version: '0.93.0', dir: '/data/agents/claude-code/0.93.0' },
       },
     })
   })

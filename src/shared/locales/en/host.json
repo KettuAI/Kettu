@@ -75,6 +75,24 @@
     "installFailed": "{{agent}} could not be installed. {{message}}",
     "runningFallback": "Running {{fallback}}: {{version}} could not be installed. {{message}}",
     "installStopped": "The install was stopped.",
+    "busyTask": "{{agent}} is already being installed or updated",
+    "alreadyInstalled": "{{agent}} is already installed",
+    "updateFailed": "{{agent}} could not be updated. {{message}}",
+    "update": {
+      "none": "{{agent}} has no update to install",
+      "noNpm": "Updates are checked with npm, and npm was not found on PATH.",
+      "checkFailed": "Could not check for updates. {{reason}}",
+      "offline": "The npm registry could not be reached.",
+      "timeout": "npm did not answer within {{seconds}} s.",
+      "noVersion": "npm named no version of {{package}}.",
+      "stopped": "The check was stopped."
+    },
+    "binaryInstall": {
+      "noMethod": "No way to install {{agent}} was found: Homebrew, curl and bash, and npm are all missing from PATH.",
+      "unavailable": "{{command}} needs a program that was not found on PATH.",
+      "notOnPath": "{{agent}} was installed in {{folder}}, but {{command}} is still not found on PATH. Add that folder to PATH and reload the environment, or choose the program in Settings › Agents.",
+      "notFound": "{{agent}} was installed, but {{command}} is still not found on PATH. Reload the environment, or choose the program in Settings › Agents."
+    },
     "reportTimeout": "{{command}} did not finish in {{seconds}} s"
   },
   "detect": {

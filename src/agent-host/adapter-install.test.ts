@@ -7,10 +7,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Platform } from '@shared/platform'
 import {
   binEntry,
-  findInstalled,
   installAdapter,
   listInstalled,
-  removeOtherVersions,
+  readInstall,
+  removeOlderInstalls,
   runNpm,
   type InstallOptions,
 } from './adapter-install'
@@ -91,7 +91,9 @@ describe('installAdapter', () => {
     expect(record.npm).toMatch(/^\d+\.\d+\.\d+/)
     expect(output.join('')).not.toBe('')
     expect(await readdir(path.join(root, 'fake'))).toEqual(['1.0.0'])
-    expect(await findInstalled(root, 'fake', PACKAGE, '1.0.0')).toEqual(installed)
+    expect(installed.installedAt).toBe(record.installedAt)
+    expect(await readInstall(installed.dir, PACKAGE)).toEqual(installed)
+    expect(await readInstall(installed.dir, 'other-package')).toBeNull()
   }, 60_000)
 
   it('leaves nothing behind and reports npm when the install fails', async () => {
@@ -114,17 +116,37 @@ describe('installAdapter', () => {
     expect((await readdir(path.join(root, 'fake'))).sort()).toEqual(['.partial-fresh', '1.0.0'])
   }, 60_000)
 
-  it('lists installed versions newest first and removes all but one', async () => {
+  it('lists installs newest first and removes the older ones and broken directories', async () => {
     const root = await mkdtemp(path.join(tmp, 'root-'))
     await installAdapter(options(root, '1.0.0'))
-    await installAdapter(options(root, '2.0.0'))
+    const two = await installAdapter(options(root, '2.0.0'))
     await mkdir(path.join(root, 'fake', '3.0.0')) // never completed: no installed.json
     expect((await listInstalled(root, 'fake', PACKAGE)).map((a) => a.version)).toEqual([
       '2.0.0',
       '1.0.0',
     ])
-    expect((await removeOtherVersions(root, 'fake', '2.0.0')).sort()).toEqual(['1.0.0', '3.0.0'])
+    expect((await removeOlderInstalls(root, 'fake', PACKAGE, two)).sort()).toEqual([
+      '1.0.0',
+      '3.0.0',
+    ])
     expect(await readdir(path.join(root, 'fake'))).toEqual(['2.0.0'])
+  }, 60_000)
+
+  it('installs beside one of the same version, which the newer install then outranks', async () => {
+    const root = await mkdtemp(path.join(tmp, 'root-'))
+    const first = await installAdapter(options(root, '1.0.0'))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = await installAdapter(options(root, '1.0.0', { alongside: true }))
+    expect(second.dir).toBe(path.join(root, 'fake', `1.0.0~${second.installedAt}`))
+    expect(second.installedAt).toBeGreaterThan(first.installedAt)
+    expect((await listInstalled(root, 'fake', PACKAGE)).map((a) => a.dir)).toEqual([
+      second.dir,
+      first.dir,
+    ])
+    // Removing older installs keeps a newer one, such as an update that finished meanwhile.
+    expect(await removeOlderInstalls(root, 'fake', PACKAGE, first)).toEqual([])
+    expect(await removeOlderInstalls(root, 'fake', PACKAGE, second)).toEqual(['1.0.0'])
+    expect(await readdir(path.join(root, 'fake'))).toEqual([path.basename(second.dir)])
   }, 60_000)
 
   describe('with an npm that never finishes', () => {

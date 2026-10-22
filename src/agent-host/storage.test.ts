@@ -4,10 +4,12 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   agentsFile,
+  agentUpdatesFile,
   corruptName,
   JsonFile,
   migrate,
   parseAgentsFile,
+  parseAgentUpdatesFile,
   parseProjectsFile,
   parseSessionsFile,
   projectsFile,
@@ -248,5 +250,25 @@ describe('the host files', () => {
     ).toEqual({ version: 1, agents: { 'claude-code': { account, limits: [limit] } } })
     expect(parseAgentsFile({ agents: [] })).toBe('agents is not an object')
     expect(agentsFile(dir, log).file).toBe(path.join(dir, 'state', 'agents.json'))
+  })
+
+  it('keeps what each update check found and drops what does not parse, entry by entry', () => {
+    const latest = { adapterVersion: '2.2.2', cliVersion: '0.160.3' }
+    expect(
+      parseAgentUpdatesFile({
+        agents: {
+          codex: { checkedAt: 1_000, latest },
+          'claude-code': { checkedAt: -1, latest },
+          opencode: { checkedAt: 1_000, latest: { adapterVersion: 2, cliVersion: null } },
+          'fake-agent': {
+            checkedAt: 1_000,
+            latest: { adapterVersion: '../../x', cliVersion: null },
+          },
+          gemini: { checkedAt: 1_000, latest },
+        },
+      }),
+    ).toEqual({ version: 1, agents: { codex: { checkedAt: 1_000, latest } } })
+    expect(parseAgentUpdatesFile({ agents: null })).toBe('agents is not an object')
+    expect(agentUpdatesFile(dir, log).file).toBe(path.join(dir, 'state', 'agent-updates.json'))
   })
 })

@@ -69,7 +69,11 @@ interface HostError {
 | `agents.authenticate`      | `{ agentId, methodId }`                  | none                                            | `agent`-type methods only                                                                                                                                                                                                      |
 | `agents.logout`            | `{ agentId }`                            | none                                            | Only when the agent advertises logout                                                                                                                                                                                          |
 | `agents.retry`             | `{ agentId }`                            | none                                            | Clears `failed`; starts the agent if live sessions need it                                                                                                                                                                     |
-| `agents.reinstall`         | `{ agentId }`                            | none                                            | Stops the agent, deletes the installed adapter and installs it again; `busy` while a session uses the agent ([installing adapters](./agent-host.md#installing-adapters))                                                       |
+| `agents.reinstall`         | `{ agentId }`                            | none                                            | Stops the agent, deletes the install a start runs and installs that version again; `busy` while a session uses the agent or an install or update runs ([installing adapters](./agent-host.md#installing-adapters))             |
+| `agents.checkUpdates`      | none                                     | `AgentStatus[]`                                 | Asks npm for each package agent's latest adapter and the CLI it carries; rejects only when every check failed, with the reason, or no agent has npm ([checking for updates](./agent-host.md#checking-for-updates))             |
+| `agents.update`            | `{ agentId }`                            | none                                            | Installs `update` beside the current install, as `task`; resolves when done or cancelled, rejects with the failure; `invalid_params` without an update, `busy` while an install or update runs                                 |
+| `agents.install`           | `{ agentId, method? }`                   | none                                            | A package agent's first-use install, without starting it; a binary agent's by `method` or the first available route, as `task` ([installing binary agents](./agent-host.md#installing-binary-agents))                          |
+| `agents.cancelTask`        | `{ agentId }`                            | none                                            | Stops a running install or update and resolves once it has stopped, or clears a failed `task`                                                                                                                                  |
 | `agents.start`             | `{ agentId }`                            | none                                            | Starts the agent ahead of a session; rejects with `agent_unavailable` when it cannot run                                                                                                                                       |
 | `agents.refreshLimits`     | `{ agentId }`                            | none                                            | Reads the plan limits from the agent's report (Claude Code's `/usage`, Codex's `/status`), at most once a minute ([plan limits](./session-model.md#plan-limits))                                                               |
 | `agents.details`           | `{ agentId }`                            | `AgentDetails`                                  | The agent's own CLI version and where it reads its configuration, for its page in Settings › Agents ([agent configuration](./agent-host.md#agent-configuration))                                                               |
@@ -144,7 +148,7 @@ interface AgentStatus {
     | 'stopping'
     | 'failed'
   version: string | null // from agentInfo, once initialized
-  package: { name: string; version: string; installed: boolean } | null // a package agent's pinned adapter
+  package: { name: string; version: string; installed: boolean } | null // a package agent's adapter: the version a start runs, else the pinned one
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: {
     id: string
@@ -158,6 +162,18 @@ interface AgentStatus {
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   progress: string[] // latest npm output or stderr lines while installing or starting
+  update: { adapterVersion: string; cliVersion: string | null } | null // from the last update check; null when up to date or unchecked
+  updateCheckedAt: number | null // when that check finished; always null for binary agents
+  task: AgentTask | null // an install or update the user asked for
+  installMethods: { id: 'brew' | 'npm' | 'script'; command: string; available: boolean }[] // a binary agent's routes; empty for the others
+}
+
+interface AgentTask {
+  kind: 'install' | 'update'
+  state: 'running' | 'failed'
+  command: string // what runs, quoted for the platform
+  progress: string[] // the latest output lines
+  error: string | null // why it failed, in the user's terms
 }
 
 interface AgentDetails {
@@ -190,6 +206,8 @@ interface ImportableSession {
 - `state` follows the [agent process lifecycle](./agent-host.md#agent-process-lifecycle), plus the detection results that come before it.
 - Stable ACP v1 has no way to ask whether an agent is signed in, so `signIn` starts as `unknown`. It becomes `required` when a request fails with `auth_required`, and `signed-in` after `authenticate` or any session request succeeds. Agents that push `_auth/status_update` (Claude Code and Codex) set it directly, before any session exists ([plan limits](./session-model.md#plan-limits)).
 - For `terminal` methods, `command` is the full command to show, already quoted for the user's platform.
+- `update` is decided against what is installed whenever the status is built, from the last check's result, so it shows after a restart without the network and clears once the update is installed. While an update runs, the agent's `state` is unchanged: a running agent keeps running, and `task` carries the progress. A package agent's first-use install shows as `state: 'installing'` with `progress`, not as a `task`, since a start waiting on it shares it ([installing adapters](./agent-host.md#installing-adapters)).
+- `agents.update` and `agents.install` resolve once their work is done or cancelled, and reject with its failure; `agents.install` ignores `method` for a package agent. A failed `task` stays until `agents.cancelTask` clears it or the request runs again, and never changes `state`. A cancelled task leaves no `task`.
 - `agents.details` is read when the Agents list or an agent's page shows, and is not pushed: the host looks at the disk for each request and answers without starting the agent. It never returns the contents of the configuration files. Unknown agents are `invalid_params`; the fake agent has no configuration, so its `config` is empty.
 
 ## Events
