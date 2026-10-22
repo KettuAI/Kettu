@@ -41,6 +41,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 33  | Title menu needs polish; agent mark goes before the title      | Top bar        | Open         |
 | 34  | The slash command popover looks crude                          | Composer       | Open         |
 | 35  | The palette is black and grey and reads as cheap               | Design system  | Open         |
+| 36  | The composer has no + menu, file or image attachments          | Composer       | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -436,3 +437,19 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the surfaces take a slight tint. The reference's sidebar differs from a pure grey by a few levels; one screenshot is too little to decide, so measure more before changing a surface.
   - Where the cheap feel comes from. Colour is one part; weights, borders, shadows, radii, icon strokes and spacing are others. A side-by-side audit of the main screens against the reference, in both themes, belongs before the tokens change, in the way of the [menus pass](../design/design-system.md#menus-and-dialogs), with before and after screenshots.
   - The rule rewritten in [Design system](../design/design-system.md) and the tokens in `globals.css`, including whether the "neutral palette, no accent" statement stands as written.
+
+## 36. The composer has no + menu, file or image attachments
+
+- **Reported**: 2026-10-22, with a screenshot of OverBench's composer and one of the reference's (Claude Desktop) with its **+** menu open.
+- **Observed**: the composer is a bare text field: the placeholder ("Ask Fake agent to…"), the send button, and a row below with the mode and the model. Nothing in it adds a file, a photo or a folder.
+- **Expected**: the composer supports file upload and the like, as the reference's does.
+- **Reference**: a **+** button at the left of the input opens a menu: **Add files or photos** (`Mod+U`), **Add folder**, **Slash commands**, **Connectors** ▸ and **Plugins** ▸. The placeholder reads "Type / for commands".
+- **Today**: [M0](./m0.md#out-planned-for-later-milestones) leaves out "`@` file mentions and image attachments in the composer", and the README's roadmap lists "`@` file mentions and images in the composer". The protocol allows it: all three agents advertised prompt `image` and `embeddedContext`, and `additionalDirectories` ([Architecture: capabilities](../architecture.md#agents)). The composer ([Interface: composer](../design/ui.md#composer)) holds text only, with `/` for the agent's commands.
+- **To settle when planning**:
+  - What the **+** menu holds, by what OverBench can back: files and photos (ACP prompt `image`, and `embeddedContext` or a resource link for a file), a folder (`additionalDirectories`, which is given when a session starts, so whether one can be added to a running session is not known), and **Slash commands** (the `/` popover of [problem 34](#34-the-slash-command-popover-looks-crude), which exists). **Connectors** and **Plugins** need MCP configuration and plugins, which are out of M0 and were not asked for.
+  - Other ways in, beyond the menu: dragging onto the composer, pasting an image or a file, and `@` file mentions from the project's file list, which the [Files pane](../design/ui.md#files) already reads.
+  - How an attachment is sent: an image as an `image` block, a text file embedded or sent as a link to its path, a binary refused, and a size limit, all gated on what the agent advertised, with the control disabled or explained when it did not.
+  - How it shows: thumbnails or chips above the input with a remove button, the same in the sent message and in a replayed one (`session/load`), which needs the thread model's user entries to carry attachments.
+  - How it reaches the host safely: the file is read in the main process or the agent host after the path is validated, never by loosening the sandbox; its size and kind are checked there, and nothing is embedded without the user having added it.
+  - What it touches in the composer: [drafts](../design/persistence.md#composer-drafts) keep attachments, a queued or steering message carries them, and the placeholder teaches `/` as the reference's does.
+  - The rule written into [Interface: composer](../design/ui.md#composer), and M0 and the README's roadmap updated if it comes in.
