@@ -37,6 +37,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 29  | Agents that are not installed cannot be installed from here    | Settings       | Open         |
 | 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Open         |
 | 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Open         |
+| 32  | No message outline beside the thread, expanding on hover       | Thread         | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -357,3 +358,19 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The held space: the empty band under each earlier reply reads as a hole. The row could take no space until hover, at the cost of the text moving, or sit in a smaller reserved height, or show at rest in a quieter state.
   - The missing Fork: whether earlier replies should offer it. Without a partial `session/fork` it could only fork the whole session, or OverBench could build the new session from the history up to that reply, which needs a design of its own; rewinding to a message was left out of M0 with checkpoints ([problem 5](#5-messages-have-no-action-row)).
   - Whether the latest reply's always-visible row against the hover-only rows above it is itself the inconsistency.
+
+## 32. No message outline beside the thread, expanding on hover
+
+- **Reported**: 2026-10-22, with two screenshots of the reference (Claude Desktop): the open list and its collapsed state.
+- **Observed**: OverBench has no way to see a session's messages at a glance or to jump between them. In a long thread the only help is the button that jumps to the latest message.
+- **Expected**: a message list beside the thread, collapsed by default and expanding when the pointer is on it.
+- **Reference**: collapsed, a small rail of short horizontal dashes sits at the thread's left edge, one per message, with the one at the reading position darker and wider than the rest. Hovering it opens a floating list on a menu-like surface: a **Session start** row, then a row per message with a short title ("参考菜单设计确认", "消息操作行组件确认") after its dash, the row under the pointer filled, the title at the reading position darkest and the others lighter. The titles read as short summaries of the turns, not the user's own words; that is a reading of one screenshot.
+- **Today**: nothing like it. The thread is `MessageScroller` in a 760 px centred column ([Interface: thread](../design/ui.md#thread)), with the jump-to-latest button as its only navigation.
+- **To settle when planning**:
+  - What an entry stands for: each user message and its turn, the **Session start** row that returns to the top, and whether plans or sub-sessions get any.
+  - Where the titles come from. ACP gives a turn no title. The first line of the user's message, cut short, is what a session title falls back to ([session model: titles](../design/session-model.md#titles)) and costs nothing; a written summary like the reference's would need a model call, which OverBench has avoided elsewhere.
+  - What a click does in a long thread: scroll to the turn and keep it there, including turns of a history that is mounted in chunks and so may not exist in the DOM yet, within the performance budget at several thousand entries ([M0 performance](../perf/m0.md)).
+  - How the reading position is followed without re-rendering the thread on every scroll, and animation that only moves `transform` and `opacity`, with reduce motion honoured.
+  - Room: it needs margin beside the 760 px column, so what happens in a narrow window or with the side panel open, and how it sits against the sidebar and the scroll-edge fades.
+  - Opening on hover: the delay before it opens and closes, no shift of the thread, the menu surface and its tokens from the [design system](../design/design-system.md#menus-and-dialogs), a list that scrolls when the turns are many, and keyboard reach (focus opens it, arrow keys move, Enter jumps) with an accessible name.
+  - Where the rule is written: [Interface: thread](../design/ui.md#thread).
