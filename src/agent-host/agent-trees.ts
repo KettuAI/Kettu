@@ -58,12 +58,13 @@ export class AgentTrees {
   }
 
   /**
-   * The agent talked: whatever it started meanwhile is listed a while later. On macOS and Linux a
-   * process it started in a group of its own is reparented once it exits, so only a listing taken
-   * while it runs finds that process after a crash. Windows keeps the links, so it lists nothing.
+   * The agent talked: whatever it started meanwhile is listed a while later. Only a listing taken
+   * while it runs finds, after a crash, a process it started in a group of its own on macOS and
+   * Linux, which is reparented once it exits, or on Windows a process that a child of it started
+   * detached: Node puts a child it starts without `detached` in a job object that ends with it, so
+   * that child ends with the agent and nothing links the agent to what the child started.
    */
   active(root: ProcessId): void {
-    if (this.options.control.platform === 'win32') return
     const running = this.running.get(keyOf(root))
     if (!running || running.timer) return
     running.timer = setTimeout(() => {
@@ -76,7 +77,7 @@ export class AgentTrees {
   /** Lists the agent's tree now: after it talked, and before it is stopped. */
   async note(root: ProcessId): Promise<void> {
     const { control, log } = this.options
-    if (control.platform === 'win32' || !this.running.has(keyOf(root))) return
+    if (!this.running.has(keyOf(root))) return
     let rows
     try {
       rows = await control.list()
@@ -106,8 +107,8 @@ export class AgentTrees {
    * Stops what is left of an agent's tree once its process has exited: `SIGTERM` now, and
    * `SIGKILL` after the grace in the background. Resolves when what is left has been asked to
    * stop and noted, so a host that exits then leaves the rest to the next. On Windows each
-   * listing starts PowerShell, and the root's children keep its pid as their parent, so the next
-   * host can still find them: it resolves at once.
+   * listing starts PowerShell, and the record already holds what the next host needs to find the
+   * rest, the root and what was noted: it resolves at once.
    */
   reap(root: ProcessId, name: string): Promise<void> {
     const key = keyOf(root)

@@ -90,17 +90,20 @@ describe('AgentTrees', () => {
     expect(await stored()).toEqual([])
   })
 
-  it('lists the tree a while after the agent talks, once for a burst', async () => {
-    const running = [row(100, 1, 100), row(102, 100, 102)]
-    const { trees, stored, listed } = await setup('linux', [running])
-    await trees.load()
-    trees.launched(root)
-    for (let i = 0; i < 50; i++) trees.active(root)
-    expect(listed()).toBe(0)
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(listed()).toBe(1)
-    expect(await stored()).toEqual([root, { pid: 102, startedAt: T + 102 }])
-  })
+  it.each(['linux', 'win32'] as const)(
+    'lists the tree a while after the agent talks, once for a burst, on %s',
+    async (platform) => {
+      const running = [row(100, 1, 100), row(102, 100, 102)]
+      const { trees, stored, listed } = await setup(platform, [running])
+      await trees.load()
+      trees.launched(root)
+      for (let i = 0; i < 50; i++) trees.active(root)
+      expect(listed()).toBe(0)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(listed()).toBe(1)
+      expect(await stored()).toEqual([root, { pid: 102, startedAt: T + 102 }])
+    },
+  )
 
   it('forgets an agent that left nothing behind', async () => {
     const { trees, calls, stored } = await setup('linux', [[]])
@@ -135,14 +138,18 @@ describe('AgentTrees', () => {
     expect(await stored()).toEqual([])
   })
 
-  it('on Windows, ends the tree with taskkill and leaves no grace', async () => {
-    const { trees, calls, stored } = await setup('win32', [[row(101, 100, 101)]])
+  it('on Windows, ends with taskkill what it noted while the agent ran', async () => {
+    // The agent, a CLI in its job object, and a command the CLI started detached.
+    const running = [row(100, 1, 100), row(101, 100, 101), row(102, 101, 102)]
+    // The job ended the CLI with the agent, so no parent link leads to the command any more.
+    const after = [row(102, 101, 102)]
+    const { trees, calls, stored } = await setup('win32', [running, after])
     await trees.load()
     trees.launched(root)
     await trees.note(root)
     await trees.reap(root, 'Fake agent')
     await settle()
-    expect(calls).toEqual(['taskkill 101'])
+    expect(calls).toEqual(['taskkill 102'])
     expect(await stored()).toEqual([])
   })
 })

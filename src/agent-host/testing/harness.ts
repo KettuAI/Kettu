@@ -246,6 +246,7 @@ export interface TestHostOptions {
   git?: GitServiceApi | null
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
+  treeNoteMs?: number
   launcher?: AgentLauncher
   projectDir?: string
   resolveEnv?: HostOptions['resolveEnv']
@@ -304,6 +305,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     },
     agentTimings: options.agentTimings ?? {},
     sessionTimings: options.sessionTimings ?? {},
+    ...(options.treeNoteMs !== undefined ? { treeNoteMs: options.treeNoteMs } : {}),
     threadWorker: inThreadWorker,
   })
   let stopped = false

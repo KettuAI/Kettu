@@ -186,6 +186,7 @@ describe('what an agent leaves behind', () => {
     const t = await startTestHost({
       launcher: processLauncher(process.platform),
       agentEnv: { FAKE_AGENT_DELAY_SCALE: '0', FAKE_AGENT_SPAWN_CHILD: child },
+      treeNoteMs: 100,
     })
     const port = t.connect()
     const created = await port.request('sessions.create', {
@@ -215,9 +216,22 @@ describe('what an agent leaves behind', () => {
   })
 
   it('stops what is left under its group when the agent crashes', async () => {
-    const { port, sessionId, pids, cleanUp } = await hostWith('nested')
+    const { t, port, sessionId, pids, cleanUp } = await hostWith('nested')
+    const file = path.join(t.dir, 'state', 'agent-processes.json')
+    const recorded = (): number[] =>
+      (JSON.parse(readFileSync(file, 'utf8')) as { processes: { pid: number }[] }).processes.map(
+        (entry) => entry.pid,
+      )
     try {
       expect(pids).toHaveLength(2)
+      // On Windows the child ends with the agent, so only a listing taken while the agent ran
+      // leads to the grandchild; the turn's traffic brings one.
+      await port.request('sessions.prompt', {
+        sessionId,
+        content: [{ type: 'text', text: 'hello' }],
+      })
+      await port.untilStatus(sessionId, 'ready')
+      expect(await until(() => pids.every((pid) => recorded().includes(pid)), 10_000)).toBe(true)
       await port.request('sessions.prompt', {
         sessionId,
         content: [{ type: 'text', text: '/crash' }],

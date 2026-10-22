@@ -58,6 +58,8 @@ export interface HostOptions {
   detect?: AgentManagerDeps['detect']
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
+  /** How long after an agent's traffic its process tree is listed again. */
+  treeNoteMs?: number
   mirrorTraffic?: boolean
   /** Starts the worker that owns the thread database; without it no thread is stored. */
   threadWorker?: ThreadWorkerFactory
@@ -115,6 +117,7 @@ export class AgentHost {
       file: agentProcessesFile(options.userDataPath, log),
       control: processControl(platform),
       graceMs: STOP_TIMINGS.termMs,
+      ...(options.treeNoteMs !== undefined ? { noteMs: options.treeNoteMs } : {}),
       log,
     })
     this.threads = options.threadWorker
