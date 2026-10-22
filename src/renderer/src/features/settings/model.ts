@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import type { SettingsSection } from '@renderer/stores/view'
 
 /** One row of a settings section: its name and description are what search matches. */
@@ -19,6 +20,7 @@ export interface RowDef {
 export interface SectionDef {
   id: SettingsSection
   title: string
+  icon: LucideIcon
   rows: RowDef[]
   /** Shown under the rows, outside search, such as where the environment was read. */
   footer?: ReactNode

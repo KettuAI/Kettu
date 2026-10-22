@@ -140,6 +140,7 @@ export default function SettingsPage() {
             const count = section.rows.length
             const disabled = searching && count === 0
             const selected = !searching && section.id === active
+            const Icon = section.icon
             return (
               <button
                 key={section.id}
@@ -148,13 +149,21 @@ export default function SettingsPage() {
                 aria-current={selected ? 'page' : undefined}
                 onClick={() => choose(section.id)}
                 className={cn(
-                  'flex h-row items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50',
+                  'group flex h-8 items-center gap-2.5 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50',
                   selected
                     ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                     : 'text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground',
                   disabled && 'pointer-events-none opacity-40',
                 )}
               >
+                <Icon
+                  className={cn(
+                    'size-4 shrink-0 transition-colors duration-(--duration-fast)',
+                    selected
+                      ? 'text-sidebar-accent-foreground'
+                      : 'text-muted-foreground group-hover:text-sidebar-foreground',
+                  )}
+                />
                 <span className="min-w-0 flex-1 truncate">{section.title}</span>
                 {searching && count > 0 && (
                   <span
@@ -172,10 +181,13 @@ export default function SettingsPage() {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="app-region-drag h-top-bar shrink-0" />
-        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <div
+          ref={scroller}
+          className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable]"
+        >
           <div
             key={searching ? 'results' : page.id}
-            className="mx-auto flex max-w-[700px] animate-in flex-col gap-9 px-8 pt-1 pb-24 fade-in animation-duration-(--duration-fast)"
+            className="flex max-w-3xl animate-in flex-col gap-9 pt-1 pb-24 fade-in animation-duration-(--duration-fast)"
           >
             {searching ? (
               <>

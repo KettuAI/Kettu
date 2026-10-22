@@ -1,4 +1,15 @@
-import { ExternalLinkIcon } from 'lucide-react'
+import {
+  BellIcon,
+  BotIcon,
+  ExternalLinkIcon,
+  GitBranchIcon,
+  InfoIcon,
+  KeyboardIcon,
+  PaletteIcon,
+  SettingsIcon,
+  SquareTerminalIcon,
+  WrenchIcon,
+} from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { buttonVariants } from '@renderer/components/ui/button'
 import { Kbd } from '@renderer/components/ui/kbd'
@@ -50,6 +61,7 @@ export function useGeneralSection(): SectionDef {
   return {
     id: 'general',
     title: 'General',
+    icon: SettingsIcon,
     rows: [
       {
         id: 'default-agent',
@@ -91,6 +103,7 @@ export function useAppearanceSection(): SectionDef {
   return {
     id: 'appearance',
     title: 'Appearance',
+    icon: PaletteIcon,
     rows: [
       {
         id: 'theme',
@@ -120,6 +133,7 @@ export function useTerminalSection(): SectionDef {
   return {
     id: 'terminal',
     title: 'Terminal',
+    icon: SquareTerminalIcon,
     rows: [
       {
         id: 'shell',
@@ -138,6 +152,7 @@ export function useGitSection(): SectionDef {
   return {
     id: 'git',
     title: 'Git',
+    icon: GitBranchIcon,
     rows: [
       {
         id: 'git',
@@ -203,6 +218,7 @@ export function useNotificationsSection(): SectionDef {
   return {
     id: 'notifications',
     title: 'Notifications',
+    icon: BellIcon,
     rows,
     footer: (
       <p className="px-1 text-xs text-muted-foreground">
@@ -216,6 +232,7 @@ export function useShortcutsSection(): SectionDef {
   return {
     id: 'shortcuts',
     title: 'Keyboard shortcuts',
+    icon: KeyboardIcon,
     rows: SHORTCUTS.map((s) => ({
       id: s.keys,
       name: s.action,
@@ -233,6 +250,7 @@ export function useAdvancedSection(): SectionDef {
   return {
     id: 'advanced',
     title: 'Advanced',
+    icon: WrenchIcon,
     rows: [
       {
         id: 'proxy',
@@ -272,6 +290,7 @@ export function useAgentsSection(): SectionDef {
   return {
     id: 'agents',
     title: 'Agents',
+    icon: BotIcon,
     rows: agents.map((status) => ({
       id: status.id,
       name: status.name,
@@ -290,6 +309,7 @@ export function useAboutSection(): SectionDef {
   return {
     id: 'about',
     title: 'About',
+    icon: InfoIcon,
     rows: [
       {
         id: 'version',
