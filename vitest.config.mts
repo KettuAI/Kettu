@@ -3,10 +3,11 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: {
-    alias: {
-      '@shared': resolve('src/shared'),
-      '@renderer': resolve('src/renderer/src'),
-    },
+    alias: [
+      { find: '@shared', replacement: resolve('src/shared') },
+      { find: '@renderer', replacement: resolve('src/renderer/src') },
+      { find: /^cn$/, replacement: resolve('src/renderer/src/lib/utils.ts') },
+    ],
   },
   test: {
     environment: 'node',

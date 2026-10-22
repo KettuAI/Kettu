@@ -7,7 +7,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig([
-  globalIgnores(['out', 'dist', '.worktrees']),
+  globalIgnores(['out', 'dist', '.worktrees', 'src/renderer/src/lib/cn-tables.ts']),
   {
     files: ['**/*.{ts,tsx,mjs}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
