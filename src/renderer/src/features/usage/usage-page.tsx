@@ -633,7 +633,7 @@ function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
     [i18n.language],
   )
   const weekdayLabel = useCallback(
-    (day: number) => new Intl.DateTimeFormat(i18n.language, { weekday: 'narrow' }).format(day),
+    (day: number) => new Intl.DateTimeFormat(i18n.language, { weekday: 'short' }).format(day),
     [i18n.language],
   )
   const outside = days.some((d) => d.day < page.range.from || d.day >= page.range.to)

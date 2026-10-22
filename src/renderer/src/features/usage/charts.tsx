@@ -139,6 +139,9 @@ const Cells = memo(function Cells({
  * quartile among the days with usage. One pointer listener and the arrow keys pick a day; only
  * the outline moves, so the 371 cells never re-render on hover.
  */
+/** Monday, Wednesday and Friday, as GitHub labels its contribution graph, whatever the week's start. */
+const LABELLED_WEEKDAYS = new Set([1, 3, 5])
+
 export function Heatmap({
   days,
   range,
@@ -219,11 +222,14 @@ export function Heatmap({
         ))}
       </div>
       <div className="grid grid-rows-7 text-xs tabular-nums text-muted-foreground" aria-hidden>
-        {[0, 1, 2, 3, 4, 5, 6].map((row) => (
-          <span key={row} className="flex items-center leading-none">
-            {row % 2 === 1 ? '' : weekdayLabel(addDays(weekStart, row))}
-          </span>
-        ))}
+        {[0, 1, 2, 3, 4, 5, 6].map((row) => {
+          const day = addDays(weekStart, row)
+          return (
+            <span key={row} className="flex items-center leading-none">
+              {LABELLED_WEEKDAYS.has(new Date(day).getDay()) ? weekdayLabel(day) : ''}
+            </span>
+          )
+        })}
       </div>
       <div
         ref={grid}
