@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PlanLimit } from '@shared/agent-host'
-import { countdown, tightestLimit } from './plan-usage'
+import { countdown, tightestLimit, usageTone } from './plan-usage'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -17,6 +17,16 @@ const limit = (window: string, usedPercent: number | null, over: Partial<PlanLim
     observedAt: NOW - MINUTE,
     ...over,
   }) satisfies PlanLimit
+
+describe('usageTone', () => {
+  it('reads plenty below 60%, close from 60% and nearly gone from 90% or once reached', () => {
+    expect(usageTone(limit('five_hour', 59.9))).toBe('success')
+    expect(usageTone(limit('five_hour', 60))).toBe('attention')
+    expect(usageTone(limit('five_hour', 90))).toBe('destructive')
+    expect(usageTone(limit('five_hour', 12, { state: 'reached' }))).toBe('destructive')
+    expect(usageTone(limit('five_hour', null))).toBe('success')
+  })
+})
 
 describe('tightestLimit', () => {
   it('picks the fullest window', () => {

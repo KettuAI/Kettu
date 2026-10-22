@@ -18,6 +18,19 @@ export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLi
   return fullest ?? current[0] ?? null
 }
 
+export type UsageTone = 'success' | 'attention' | 'destructive'
+
+/**
+ * A window's usage level, as the design system's usage levels give it: plenty below 60% used,
+ * getting close from 60%, nearly gone from 90% or once the limit is reached.
+ */
+export function usageTone(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): UsageTone {
+  const used = limit.usedPercent ?? 0
+  if (limit.state === 'reached' || used >= 90) return 'destructive'
+  if (used >= 60) return 'attention'
+  return 'success'
+}
+
 /** Time left in its two largest units: "42m", "5h 12m", "1d 5h"; null once it has passed. */
 export function countdown(ms: number): string | null {
   if (ms <= 0) return null
