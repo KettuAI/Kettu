@@ -35,8 +35,11 @@ export function splitName(name: string): [prefix: string, rest: string] {
 const isDefaultChoice = (c: { value: string; name: string }): boolean =>
   /^default$/i.test(c.value) || /^default\b/i.test(c.name)
 
+// RegExp.escape needs Node 24, and the tests run on Node 22.
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 const mentions = (text: string, name: string): boolean =>
-  new RegExp(`\\b${RegExp.escape(name.toLowerCase())}\\b`).test(text)
+  new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`).test(text)
 
 /**
  * The option's levels without the choice that leaves the level to the agent. That choice is one
