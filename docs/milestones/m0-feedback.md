@@ -30,6 +30,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 22  | The New session project and agent menus look crude             | New session    | Fixed        |
 | 23  | The project chevron sits before the name and always shows      | Sidebar        | Open         |
 | 24  | The Projects header row can go; each project gets a +          | Sidebar        | Open         |
+| 25  | The sidebar footer needs a design of its own                   | Sidebar        | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -246,3 +247,15 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the **No project** group keeps its **+**, since "real projects" were named, and New session's project menu already offers **No project**.
   - Whether New session should still start at the selected project, or at no project chosen, as [problem 9](#9-new-session-is-tied-to-the-selected-project) first asked ("assumes no project").
   - Where the list's empty text, loading skeleton and load error go without the header above them.
+
+## 25. The sidebar footer needs a design of its own
+
+- **Reported**: 2026-10-22, with a screenshot of the sidebar's footer and two arrows: one at the plan usage chips, one at the **Settings** row's shortcut hint (`⌘,`).
+- **Observed**: the **Settings** row ends with its shortcut as plain text, which the maintainer does not want there.
+- **Expected**: the hint is removed. What takes its place is open: icons for functions, or nothing at all. The footer is a block that needs a design of its own, apart from the sidebar's other rows.
+- **Today**: `SidebarFooterContent` in `src/renderer/src/features/sidebar/sidebar-footer.tsx` stacks the sign-in notice, the [update notice](../design/ui.md#updates), the plan usage chips (`PlanUsageStrip`) and a `NavRow` for **Settings** with `shortcut="Mod+,"`. `NavRow` (in `app-sidebar.tsx`) shows the shortcut as a muted `Kbd` unless its `extra` prop replaces it, and the **New session** row at the top uses it the same way (`⌘N`). [Interface: sidebar](../design/ui.md#sidebar) describes the footer as these parts and gives **Settings** `Mod+,`.
+- **To settle when planning**:
+  - Which functions earn an icon at the row's end, and what each does, or whether the row simply ends after its label. Settings has no other function in the sidebar today.
+  - How the footer's parts relate as a whole: the notices, the plan usage chips and the Settings row, in their order and spacing. The arrow at the chips is read as putting them in scope; the maintainer's words named only the hint.
+  - Whether the **New session** row's `⌘N` goes as well, for consistency. The shortcuts stay findable in Settings › Keyboard shortcuts and in the app menu.
+  - The rule written into [Interface: sidebar](../design/ui.md#sidebar), and into the shortcut table if the hints leave the rows.
