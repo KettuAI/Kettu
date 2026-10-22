@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from 'react'
-import { CornerDownRightIcon, GitForkIcon, SquareIcon, Volume2Icon } from 'lucide-react'
+import { CornerDownRightIcon, GitForkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
@@ -8,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { CopyButton } from '@renderer/features/git/branch-popover'
 import { longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { canSpeak, speak, speakable, stopSpeaking, useSpeaking } from '@renderer/lib/speech'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -97,8 +96,8 @@ export function UserActions({
 }
 
 /**
- * Under a turn's reply: Copy and Read aloud for the turn's messages, Fork under the latest one,
- * then how the turn ended and when the reply came. It shows while the pointer is over the reply.
+ * Under a turn's reply: Copy for the turn's messages, Fork under the latest one, then how the
+ * turn ended and when the reply came. It shows while the pointer is over the reply.
  */
 export const ReplyFooter = memo(
   function ReplyFooter({
@@ -126,8 +125,6 @@ export const ReplyFooter = memo(
     const canFork = useAgentsStore(
       (s) => !!session && !!s.byId[session.agentId]?.capabilities.forkSession,
     )
-    const speechId = `${sessionId}:${lastId}`
-    const speaking = useSpeaking(speechId)
     const [forking, setForking] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const hovered = useReplyHover((s) => s.key === replyKey)
@@ -164,14 +161,6 @@ export const ReplyFooter = memo(
       >
         <div className={cn('flex min-w-0 items-center gap-0.5', REVEAL, hovered && 'opacity-100')}>
           <CopyButton text={text} label={t('replyFooter.copyReply')} />
-          {canSpeak && (
-            <ActionButton
-              label={speaking ? t('replyFooter.stopReading') : t('replyFooter.readAloud')}
-              onClick={() => (speaking ? stopSpeaking() : speak(speechId, speakable(text())))}
-            >
-              {speaking ? <SquareIcon /> : <Volume2Icon />}
-            </ActionButton>
-          )}
           {showFork && (
             <ActionButton
               label={t('replyFooter.fork')}

@@ -63,6 +63,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 55  | A short thread still scrolls into empty space                  | Thread         | Fixed        |
 | 56  | The empty Files pane's hint is not centred                     | Side panel     | Fixed        |
 | 57  | A finished session leaves no mark, and the running dot is loud | Sidebar        | Fixed        |
+| 58  | Read aloud under replies is not wanted                         | Thread         | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -119,7 +120,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Agent reply, aligned with its start: copy, a fork-style arrow, pin, a speaker icon, then the relative time ("just now").
   - User message, aligned with its end: the relative time, a double check, copy, a counter-clockwise arrow, then the fork-style arrow.
 - **Today**: neither [Interface: thread entries](../design/ui.md#thread) nor the code has message actions. Thread entries carry no time of their own, so the relative time needs one in the thread model. To settle when planning, after reading the reference: what each icon does, whether the row is always shown or only on hover, and which actions M0 can back, since session fork and checkpoints with undo are [out of M0](./m0.md#out-planned-for-later-milestones) and ACP's `session/fork` is still unstable.
-- **Fixed**: user messages get a time and **Copy** on hover; each reply gets a row with **Copy**, **Read aloud**, **Fork into a new session** under the latest reply, the turn-end text and the time ([Interface: message actions](../design/ui.md#message-actions)). Messages carry the time they were sent or began, for live messages only. Fork goes through `session/fork` when the agent advertises it; the reference's pin, double check and rewind are left out, since M0 has no pins and no checkpoints.
+- **Fixed**: user messages get a time and **Copy** on hover; each reply gets a row with **Copy**, **Read aloud**, **Fork into a new session** under the latest reply, the turn-end text and the time ([Interface: message actions](../design/ui.md#message-actions)). Messages carry the time they were sent or began, for live messages only. Fork goes through `session/fork` when the agent advertises it; the reference's pin, double check and rewind are left out, since M0 has no pins and no checkpoints. Read aloud went later, under [problem 58](#58-read-aloud-under-replies-is-not-wanted).
 
 ## 6. Markdown looks plain and file references do not stand out
 
@@ -803,3 +804,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Reported**: 2026-10-22, after the running dot became an 8 px `--checked` blue dot with a halo. The blue is too bright: the maintainer wants a quieter colour that is still not grey. And once a turn ends the dot simply goes, so a session working in the background gives no sign of when it finished; they want a mark that stays until the session is read.
 - **Cause**: the host has an unread mark, but it counted a session as seen while any port watched it, and the renderer keeps its four most recent sessions watched so that switching back is instant. A turn that ended in one of them, behind another session, was taken as seen. The mark itself was a 6 px `--muted-foreground` dot, easy to miss.
 - **Fixed**: the renderer tells the host which session it shows in front with `sessions.show`, `null` on the project home, New session and Settings, and only that one counts as seen ([Session model](../design/session-model.md#how-the-host-keeps-sessions)). A turn that ends out of view leaves a solid `--checked` blue dot until the session is shown, and the running dot takes `--running`, a quieter slate blue, so a turn still working stays calm and one that finished stands out ([Interface: sidebar](../design/ui.md#sidebar)).
+
+## 58. Read aloud under replies is not wanted
+
+- **Reported**: 2026-10-22, with a screenshot of a reply's action row pointing at the speaker icon.
+- **Expected**: the maintainer finds it of no use and asks for it to go.
+- **Fixed**: a reply's row holds **Copy** and, under the latest reply, **Fork** ([Interface: message actions](../design/ui.md#message-actions)). The macOS Edit › Speech menu, which the system provides, stays.

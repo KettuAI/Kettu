@@ -131,8 +131,6 @@
   },
   "replyFooter": {
     "copyReply": "Copy reply",
-    "readAloud": "Read aloud",
-    "stopReading": "Stop reading",
     "fork": "Fork into a new session"
   },
   "queue": {
