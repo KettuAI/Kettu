@@ -23,18 +23,18 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 15  | Settings selects show names only and keep the default look     | Settings       | Fixed        |
 | 16  | Switches keep shadcn's default look                            | Settings       | Fixed        |
 | 17  | Settings › Agents leaves out what matters                      | Settings       | Partly fixed |
-| 18  | The About page needs redoing                                   | Settings       | Open         |
-| 19  | Settings leave too much empty space                            | Settings       | Partly fixed |
+| 18  | The About page needs redoing                                   | Settings       | Partly fixed |
+| 19  | Settings leave too much empty space                            | Settings       | Fixed        |
 | 20  | Collapsing the sidebar is abrupt                               | Sidebar        | Fixed        |
 | 21  | No file browser or preview                                     | Side panel     | Fixed        |
 | 22  | The New session project and agent menus look crude             | New session    | Fixed        |
 | 23  | The project chevron sits before the name and always shows      | Sidebar        | Fixed        |
 | 24  | The Projects header row can go; each project gets a +          | Sidebar        | Fixed        |
 | 25  | The sidebar footer needs a design of its own                   | Sidebar        | Partly fixed |
-| 26  | Account details cannot be hidden                               | Settings       | Open         |
-| 27  | Agent adapters have no update check or one-click update        | Agents         | Open         |
+| 26  | Account details cannot be hidden                               | Settings       | Fixed        |
+| 27  | Agent adapters have no update check or one-click update        | Agents         | Partly fixed |
 | 28  | The Ready label next to the status dot is redundant            | Settings       | Fixed        |
-| 29  | Agents that are not installed cannot be installed from here    | Settings       | Open         |
+| 29  | Agents that are not installed cannot be installed from here    | Settings       | Partly fixed |
 | 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Partly fixed |
 | 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Partly fixed |
 | 32  | No message outline beside the thread, expanding on hover       | Thread         | Open         |
@@ -45,7 +45,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 37  | Icons look heavy; use thin line icons from a library           | Design system  | Fixed        |
 | 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Fixed        |
 | 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Partly fixed |
-| 40  | The Settings pages look crude and their colours are untuned    | Settings       | Partly fixed |
+| 40  | The Settings pages look crude and their colours are untuned    | Settings       | Fixed        |
 | 41  | The plan usage strip is unclear and needs a better place       | Sidebar        | Open         |
 | 42  | Long lines in the file preview run off the pane                | Side panel     | Fixed        |
 | 43  | The message body needs a typography pass to a given spec       | Thread         | Fixed        |
@@ -255,6 +255,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: About is one plain card: "OverBench 0.1.0" with a one-line description and the Electron, Chromium and Node.js versions, an Updates row, and a GitHub link for the source code.
 - **Expected**: the page redone, with the app's logo, GitHub, a way to send feedback, and the other things an About page usually holds.
 - **Today**: built in `src/renderer/src/features/settings/about-section.tsx` and the `about` section of `section-defs.tsx` beside it. [Interface: settings](../design/ui.md#settings) also lists a link to the third-party notices, which the page does not show yet. OverBench has no logo or app icon so far: `build/` holds only the macOS entitlements, `electron-builder.yml` names no icon, and the welcome screen shows a text wordmark. To settle when planning: the logo and app icon, which the packaged app needs too; what the page holds (where feedback goes, such as GitHub issues, the license once it is decided, the notices); and its design.
+- **Partly fixed**: 2026-10-22, from the Settings canvas. About opens with "OverBench" in the title role, its description and the version, platform and architecture in mono, then three groups: **Updates**, **Runtime** (Electron, Chromium, Node.js and the system, with **Copy versions**) and **Links** (**Source code**, and **Report an issue**, which opens GitHub issues for feedback) ([Interface: settings](../design/ui.md#settings)). Still open: the logo and app icon, and the license and third-party notices, which wait for the license decision.
 
 ## 19. Settings leave too much empty space
 
@@ -272,6 +273,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - Doing it together with the other Settings problems, as above.
   - **Decided**: 2026-10-22, the direction of [problem 40](#40-the-settings-pages-look-crude-and-their-colours-are-untuned): the content column is centred in the page area, at most about 560 px wide, instead of aligned to its start.
 - **Partly fixed**: the content column is centred in the page area at most 560 px wide, as decided ([Interface: settings](../design/ui.md#settings)). The rest of the Settings redesign is [problem 40](#40-the-settings-pages-look-crude-and-their-colours-are-untuned).
+- **Fixed**: with [problem 40](#40-the-settings-pages-look-crude-and-their-colours-are-untuned): every page opens with its title and a line saying what it is for, its rows sit in labelled groups, and the previews (theme tiles, text size, notification banner, terminal) give the short pages their substance.
 
 ## 20. Collapsing the sidebar is abrupt
 
@@ -354,6 +356,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The mask itself: a blur that stays illegible in screenshots, with the value withheld from the accessibility tree and from search while hidden, not only painted over. It must work in both themes and keep the row's layout.
   - Where else an email may appear later (the usage popover shows the plan only today), so the mask is one shared piece, not a per-screen patch.
 - **Amended**: 2026-10-22, from a review of the app that the maintainer asked for, added here at their request. Settings › Git shows the GitHub CLI account in full, "Signed in as" and the account name (`git.gh.signedInAs` in the settings catalog, rendered in `src/renderer/src/features/settings/sections.tsx`). It is an account detail within this problem and takes the same mask.
+- **Decided**: 2026-10-22, on the Settings canvas: a **Hide accounts** toggle at the end of the Installed group's label in Settings › Agents, remembered (`privacy.hideAccount`, off by default). While on, emails and account names are a run of dots behind a blur, with no reveal on hover, nothing to copy, "Hidden" for screen readers, and no match in search. The plan label and the paths stay readable.
+- **Fixed**: `Masked` in `src/renderer/src/features/settings/controls.tsx` draws the mask wherever Settings shows an account: the agents' rows, each agent's Account group and Git's GitHub CLI row; search leaves the hidden emails out ([Interface: Settings › Agents](../design/ui.md#settings--agents), [persistence](../design/persistence.md#settings)). A later screen that shows an account uses the same component.
 
 ## 27. Agent adapters have no update check or one-click update
 
@@ -369,6 +373,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Where the notice shows: Settings › Agents (the list row and the agent's page, with an **Update** button and its progress) and the home screens, the [project home](../design/ui.md#project-home)'s agent cards and the [Welcome](../design/ui.md#welcome) screen. Whether the sidebar footer, which already holds the update and sign-in notices, needs one too. It should be quiet and neutral like the app's update notice, with a way to dismiss a version.
   - What OpenCode gets: nothing, or a notice that a newer release exists with a pointer to how the user installed it.
   - The rule changes in [Agent host: installing adapters](../design/agent-host.md#installing-adapters), where pins are "bumped deliberately", and in [Interface: settings](../design/ui.md#settings--agents).
+- **Decided**: 2026-10-22, on the Settings canvas, at the maintainer's request ("列表里有新版本的 Agent 直接点更新，带进度，和安装一样"). The agent host asks the npm registry through the user's npm, by itself every 24 hours and when **Check for updates** is pressed; the latest adapter is offered, and also the same adapter version when it would carry a newer CLI, with the CLI's version as the one shown. The pinned version becomes the minimum. Updating installs beside the running version, and the agent uses it from its next start, so running sessions keep going and a failed update leaves the agent as it was. In the list the **Update** pill next to the name is the action, with its progress, cancel, failure and result inside it; a separate **Update** button at the row's end was rejected. An agent's page adds a Version group and a notice with the log.
+- **Partly fixed**: the check, the pill and the notice in Settings › Agents, a dot on the Agents section while an update is on offer, and the host's side ([Interface: Settings › Agents](../design/ui.md#settings--agents), [Agent host: checking for updates](../design/agent-host.md#checking-for-updates)). Still open: the notice on the project home's agent cards and the Welcome screen, dismissing a version, and anything for OpenCode.
 
 ## 28. The Ready label next to the status dot is redundant
 
@@ -394,6 +400,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether "mainstream agents" means only the three the catalog knows, or more from the ACP Registry, which brings back browsing the registry and custom agents, both left out of M0. If more, which come first.
   - How the two kinds look apart: a muted mark exists for the missing ones today, and the maintainer asks for a clear difference. The group, the mark, the state word or dot ([problem 28](#28-the-ready-label-next-to-the-status-dot-is-redundant)) and the button are the parts to design together.
   - The same split in the places that offer agents, the [project home](../design/ui.md#project-home) cards, the [Welcome](../design/ui.md#welcome) screen and the New session agent menu, and its link with the adapter updates of [problem 27](#27-agent-adapters-have-no-update-check-or-one-click-update).
+- **Decided**: 2026-10-22, on the Settings canvas: OverBench installs the agents itself with one click, because a link to instructions leaves the job unfinished. An adapter agent whose adapter is not installed yet counts as not installed and installs on demand; OpenCode installs through Homebrew, the official script or npm, picked on its page with the command shown. The install shows its progress and log, can be cancelled and retried, and the row moves to Installed when it is done. The action is the same pill as an update, next to the name; an outlined **Install** button at the row's end was rejected.
+- **Partly fixed**: in Settings › Agents ([Interface: Settings › Agents](../design/ui.md#settings--agents), [Agent host: installing binary agents](../design/agent-host.md#installing-binary-agents)). Still open: the same split on the project home, the Welcome screen and the New session agent menu.
 
 ## 30. The session context menu lacks rename, pin and archive
 
@@ -524,7 +532,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the no-hand-drawing rule covers the existing inline SVGs. The branch lane and the usage pie are data graphics and the agent marks are brand marks from a library, so they are not UI icons in the sense of Contributing, but that is for the maintainer to confirm.
   - The rule written into [Design system](../design/design-system.md), beside the icon size, and into Contributing.
 - **Decided**: 2026-10-22, from a page that rendered 20 of the app's icons in five libraries (Lucide, Phosphor, Hugeicons, Tabler, Iconoir) with their facts. Lucide stays. All its icons take one stroke width, 1.5, set in one place through `LucideProvider` (present in the installed `lucide-react`), and the 24 call sites that set their own `strokeWidth` lose it. No dependency changes, and shadcn keeps generating Lucide icons (`"iconLibrary": "lucide"`). The other libraries were not taken.
-- **Fixed**: `LucideProvider` in `main.tsx` sets a stroke width of 1.5 for every Lucide icon, and no call site sets its own. The branch lane and the usage pie, data graphics, keep their own strokes ([Design system: density and sizing](../design/design-system.md#density-and-sizing), [Contributing](../../CONTRIBUTING.md)).
+- **Amended**: 2026-10-22, on the Settings canvas: 1.5 still read heavy, and being relative it drew 14 and 12 px icons thinner than 16 px ones. After 0.65, 0.8 and 1 px side by side, the stroke is 1 screen pixel at every size, and the plainest Lucide shapes are taken (`Folder`, not `FolderOpen`; `SunMoon`, not `Palette`).
+- **Fixed**: `LucideProvider` in `main.tsx` sets a stroke width of 1 with `nonScalingStroke` for every Lucide icon, and no call site sets its own. The branch lane and the usage pie, data graphics, keep their own strokes ([Design system: density and sizing](../design/design-system.md#density-and-sizing), [Contributing](../../CONTRIBUTING.md)).
 
 ## 38. Files pane: no markdown preview, file-type icons or editing
 
@@ -591,6 +600,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The proof: each of the nine pages in both themes and at several widths, next to the reference, as in the other polish passes.
 - **Decided**: 2026-10-22, from three mockups of the Git page (flat hairlines, grouped cards, a centred settings window). The direction is the flat hairline look, refined: no cards and no shadows on the page, rows divided by hairlines and grouped under small section labels, states shown as tinted pills, and the content column centred in the page area at most about 560 px wide ([problem 19](#19-settings-leave-too-much-empty-space)). The colours follow the palette decision of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap). Grouped cards and the centred window were not taken.
 - **Partly fixed**: the centred 560 px column of [problem 19](#19-settings-leave-too-much-empty-space). The rows' grouping, tinted state pills and colours wait for the palette of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap).
+- **Fixed**: 2026-10-22, from the hi-fi [Settings canvas](https://claude.ai/artifact/4JfFPPaeUpjCpRBYdbyU16) the maintainer reviewed: the sections in three clusters, a title and a line on every page, rows in labelled groups, quiet borderless selects, status pills and notices in four tints, plan usage colored by level, paths shown as places, keycaps per key, search results that jump to their row, and the previews and test notification. The tints and `--mark` are Settings' own colours; the palette as a whole stays with problem 35 ([Interface: settings](../design/ui.md#settings), [Design system: status pills](../design/design-system.md#status-pills)).
 
 ## 41. The plan usage strip is unclear and needs a better place
 

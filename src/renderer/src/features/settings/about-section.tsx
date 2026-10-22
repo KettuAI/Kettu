@@ -1,12 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { CircleCheckIcon, ExternalLinkIcon } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { CheckIcon, CircleCheckIcon, CopyIcon, ExternalLinkIcon, RefreshCwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { CopyButton } from '@renderer/features/git/branch-popover'
 import { longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -15,34 +15,25 @@ import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
 import { ControlError, SettingSelect } from './controls'
 import { useApply } from './use-apply'
 
-function useAppInfo(): AppInfo | null {
-  const [info, setInfo] = useState<AppInfo | null>(null)
-  useEffect(() => {
-    void window.overbench.app.getInfo().then(setInfo)
-  }, [])
-  return info
-}
-
-export function Version() {
+/** The top of the About page, in place of the page title. */
+export function AboutHero({ info }: { info: AppInfo | null }) {
   const { t } = useTranslation('settings')
-  const info = useAppInfo()
-  if (!info) return <Spinner className="size-3.5 text-muted-foreground" />
-  const text = `OverBench ${info.version} (${info.platform} ${info.arch})\nElectron ${info.versions.electron}\nChromium ${info.versions.chrome}\nNode.js ${info.versions.node}`
   return (
-    <div className="flex items-start gap-2">
-      <dl
-        className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-right text-xs tabular"
-        data-selectable=""
-      >
-        <dt className="text-muted-foreground">Electron</dt>
-        <dd className="font-mono text-[11.5px]">{info.versions.electron}</dd>
-        <dt className="text-muted-foreground">Chromium</dt>
-        <dd className="font-mono text-[11.5px]">{info.versions.chrome}</dd>
-        <dt className="text-muted-foreground">Node.js</dt>
-        <dd className="font-mono text-[11.5px]">{info.versions.node}</dd>
-      </dl>
-      <CopyButton text={text} label={t('about.version.copy')} />
-    </div>
+    <header className="flex flex-col gap-1.5 px-1 pb-7">
+      <h2 id="settings-about" className="text-title font-semibold">
+        OverBench
+      </h2>
+      <p className="text-small text-pretty text-muted-foreground">
+        {t('about.version.description')}
+      </p>
+      {info ? (
+        <p data-selectable="" className="font-mono text-meta text-muted-foreground">
+          {`${info.version} · ${info.platform} ${info.arch}`}
+        </p>
+      ) : (
+        <Skeleton className="h-4 w-44" />
+      )}
+    </header>
   )
 }
 
@@ -57,7 +48,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
   }
   if (!status) {
     return (
-      <div className="flex min-h-[28px] items-center gap-6">
+      <div className="flex min-h-7 items-center gap-6">
         <div className="min-w-0 flex-1">{label}</div>
         <Spinner className="size-3.5 text-muted-foreground" />
       </div>
@@ -74,6 +65,17 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
       {t('about.updates.whatsNew')}
     </a>
   )
+  // While a check runs the button stays, busy, so the row does not change shape.
+  const check = (busy: boolean) => (
+    <Button variant="outline" size="compact" disabled={busy} onClick={() => run(checkForUpdates)}>
+      {busy ? (
+        <Spinner data-icon="inline-start" className="size-3.5" />
+      ) : (
+        <RefreshCwIcon data-icon="inline-start" />
+      )}
+      {t('about.updates.check')}
+    </Button>
+  )
 
   let text: ReactNode
   let action: ReactNode = null
@@ -83,38 +85,35 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
         key="checked"
         className="inline-flex animate-in items-center gap-1.5 fade-in animation-duration-(--duration-base)"
       >
-        <CircleCheckIcon className="size-3.5 text-success" />
+        <CircleCheckIcon className="size-3 text-success" />
         {t('about.updates.upToDateShort')}
       </span>
     )
+    action = check(false)
   } else {
     switch (state.kind) {
       case 'idle':
         text = state.checkedAt
           ? t('about.updates.upToDateChecked', { ago: longAgo(state.checkedAt, now) })
           : t('about.updates.upToDate')
-        action = (
-          <Button variant="outline" size="compact" onClick={() => run(checkForUpdates)}>
-            {t('about.updates.check')}
-          </Button>
-        )
+        action = check(false)
         break
       case 'checking':
-        text = (
-          <span className="inline-flex items-center gap-1.5">
-            <Spinner className="size-3" />
-            {t('about.updates.checking')}
-          </span>
-        )
+        text = t('about.updates.checking')
+        action = check(true)
         break
       case 'downloading':
         text = (
           <span className="flex w-56 flex-col gap-1.5">
             <span className="flex justify-between tabular">
               {t('about.updates.downloading', { version: state.version })}
-              <span className="text-muted-foreground">{Math.round(state.percent)}%</span>
+              <span>{Math.round(state.percent)}%</span>
             </span>
-            <Progress value={state.percent} aria-label={t('about.updates.downloadProgress')} />
+            <Progress
+              value={state.percent}
+              tone="checked"
+              aria-label={t('about.updates.downloadProgress')}
+            />
           </span>
         )
         break
@@ -177,7 +176,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
   }
   // The status reads as the row's description, so the action sits beside it like any other row's.
   return (
-    <div className="flex min-h-[28px] items-center gap-6">
+    <div className="flex min-h-7 items-center gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {label}
         <span className="text-xs leading-normal text-muted-foreground">{text}</span>
@@ -206,5 +205,65 @@ export function AutomaticUpdates() {
         onChange={(v) => apply({ updates: { automatic: v } })}
       />
     </>
+  )
+}
+
+const versionsText = (info: AppInfo) =>
+  `OverBench ${info.version} (${info.platform} ${info.arch})\nElectron ${info.versions.electron}\nChromium ${info.versions.chrome}\nNode.js ${info.versions.node}`
+
+/** Copies the version block; the icon and label turn into a check for a moment. */
+export function CopyVersions({ info }: { info: AppInfo }) {
+  const { t } = useTranslation('settings')
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const copy = () => {
+    void navigator.clipboard.writeText(versionsText(info)).then(() => {
+      setCopied(true)
+      clearTimeout(timer.current)
+      timer.current = setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <Button variant="quiet" size="xs" onClick={copy} className="-mr-2">
+      {copied ? (
+        <CheckIcon
+          data-icon="inline-start"
+          className="animate-in text-success animation-duration-(--duration-fast) fade-in zoom-in-75"
+        />
+      ) : (
+        <CopyIcon data-icon="inline-start" />
+      )}
+      {copied ? t('about.runtime.copied') : t('about.runtime.copy')}
+    </Button>
+  )
+}
+
+export function RuntimeFact({ value }: { value: string | undefined }) {
+  if (value === undefined) return <Skeleton className="h-4 w-24" />
+  return (
+    <span data-selectable="" className="font-mono text-meta text-muted-foreground">
+      {value}
+    </span>
+  )
+}
+
+/** A link row: the whole row opens the page, which main sends to the system browser. */
+export function LinkRow({ name, url }: { name: string; url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="group -mx-2 flex items-center gap-3 rounded-lg px-3 py-3 outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-ui font-medium">{name}</span>
+        <span className="truncate text-xs text-muted-foreground">
+          {url.replace(/^https?:\/\//, '')}
+        </span>
+      </span>
+      <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-(--duration-fast) group-hover:text-foreground" />
+    </a>
   )
 }

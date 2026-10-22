@@ -94,6 +94,9 @@ const api: OverbenchApi = {
     showDataFolder: () => invoke('shell:show-data-folder'),
     showItem: (path) => invoke('shell:show-item', path),
   },
+  notifications: {
+    test: () => invoke('notifications:test'),
+  },
   updates: {
     getStatus: () => invoke('update:get-status'),
     check: () => invoke('update:check'),

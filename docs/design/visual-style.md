@@ -32,7 +32,7 @@ Claude Desktop is the benchmark for measurements and behavior, never for brand (
 
 - Take the plainest shape that names the meaning: `Folder` over `FolderOpen`, `SunMoon` over `Palette`, `Trash` over `Trash2`. Perspective, extra strokes and filled parts read heavier than their neighbours.
 - Outlines only. The one filled shape is the stop square of a running turn (`Square` with `fill-current`), the convention every media control shares. Status dots are shapes drawn with CSS, not icons.
-- One meaning, one icon, across the app ([vocabulary](#vocabulary)); one icon never stands for two meanings.
+- One meaning, one icon, across the app ([vocabulary](#vocabulary)); one icon never stands for two meanings. The one exception is `Plus`, which also increases a stepped value, but only as a pair with `Minus` on either side of the value, where it cannot read as Add.
 - When no Lucide shape fits, use a word. A near-miss icon is worse than a label.
 
 ### Weight
@@ -66,45 +66,50 @@ Three sizes, chosen by context:
 
 What each common meaning is drawn with. Tool call kinds and git states keep their own tables, in [tool calls](./ui.md#tool-calls) and [repository state](./design-system.md#repository-state). A new meaning adds its row here before it ships.
 
-| Meaning                                            | Icon                     | Not                               |
-| -------------------------------------------------- | ------------------------ | --------------------------------- |
-| Close, dismiss, remove from a list                 | `X`                      |                                   |
-| Add, new session, new terminal                     | `Plus`                   | `SquarePen`, `CirclePlus`         |
-| More actions                                       | `Ellipsis`               | `EllipsisVertical`                |
-| Folded group, submenu                              | `ChevronRight`           |                                   |
-| Open group, menu trigger, select                   | `ChevronDown`            | `ChevronsUpDown`                  |
-| Back                                               | `ArrowLeft`              | `ChevronLeft`                     |
-| Send                                               | `ArrowUp`                | `Send`                            |
-| Stop a turn                                        | `Square`, filled         | `CircleStop`                      |
-| Retry or restart what failed or stopped            | `RotateCw`               |                                   |
-| Read fresh data: reload the environment, fetch     | `RefreshCw`              |                                   |
-| Reset to the default                               | `RotateCcw`              |                                   |
-| Copy, then copied                                  | `Copy`, then `Check`     | `Clipboard`                       |
-| The chosen item of a list                          | `Check`                  | `CircleCheck`                     |
-| Completed, passing                                 | `CircleCheck`            |                                   |
-| Error, failed                                      | `CircleAlert`            | `CircleX`, except a failing check |
-| Warning, conflict                                  | `TriangleAlert`          |                                   |
-| Information                                        | `Info`                   |                                   |
-| Help, an unknown value                             | `CircleHelp`             |                                   |
-| Delete                                             | `Trash`                  | `Trash2`                          |
-| Rename, edit                                       | `Pencil`                 | `SquarePen`                       |
-| A web link, open outside the app                   | `ExternalLink`           |                                   |
-| A folder, show in the file manager, the Files pane | `Folder`                 | `FolderOpen`                      |
-| A file                                             | `File`                   |                                   |
-| Save a file; save a report to disk                 | `Save`; `FileDown`       |                                   |
-| Terminal                                           | `SquareTerminal`         | `Terminal`                        |
-| Search, filter                                     | `Search`                 | `Filter`                          |
-| Settings                                           | `Settings`               | `Cog`, `SlidersHorizontal`        |
-| Appearance                                         | `SunMoon`                | `Palette`                         |
-| Sidebar                                            | `PanelLeft`              |                                   |
-| Maximize, restore                                  | `Maximize2`, `Minimize2` |                                   |
-| Fork                                               | `GitFork`                |                                   |
-| Branch                                             | `GitBranch`              |                                   |
-| Subagent                                           | `Bot`                    |                                   |
-| Sign in, sign out                                  | `LogIn`, `LogOut`        |                                   |
-| Install                                            | `Download`               | `CloudDownload`                   |
-| An app update                                      | `CircleArrowUp`          |                                   |
-| Toggle markdown preview and source                 | `BookOpen`, `Code`       |                                   |
+| Meaning                                                           | Icon                     | Not                               |
+| ----------------------------------------------------------------- | ------------------------ | --------------------------------- |
+| Close, dismiss, remove from a list                                | `X`                      |                                   |
+| Add, new session, new terminal                                    | `Plus`                   | `SquarePen`, `CirclePlus`         |
+| More actions                                                      | `Ellipsis`               | `EllipsisVertical`                |
+| Folded group, submenu                                             | `ChevronRight`           |                                   |
+| Open group, menu trigger, select                                  | `ChevronDown`            | `ChevronsUpDown`                  |
+| Back                                                              | `ArrowLeft`              | `ChevronLeft`                     |
+| Send                                                              | `ArrowUp`                | `Send`                            |
+| Stop a turn                                                       | `Square`, filled         | `CircleStop`                      |
+| Retry or restart what failed or stopped                           | `RotateCw`               |                                   |
+| Read fresh data: reload the environment, fetch, check for updates | `RefreshCw`              |                                   |
+| Reset to the default                                              | `RotateCcw`              |                                   |
+| Copy, then copied                                                 | `Copy`, then `Check`     | `Clipboard`                       |
+| The chosen item of a list                                         | `Check`                  | `CircleCheck`                     |
+| Completed, passing                                                | `CircleCheck`            |                                   |
+| Error, failed                                                     | `CircleAlert`            | `CircleX`, except a failing check |
+| Warning, conflict                                                 | `TriangleAlert`          |                                   |
+| Information                                                       | `Info`                   |                                   |
+| Help, an unknown value                                            | `CircleHelp`             |                                   |
+| Delete                                                            | `Trash`                  | `Trash2`                          |
+| Rename, edit                                                      | `Pencil`                 | `SquarePen`                       |
+| A web link, open outside the app                                  | `ExternalLink`           |                                   |
+| A folder, show in the file manager, the Files pane                | `Folder`                 | `FolderOpen`                      |
+| A file                                                            | `File`                   |                                   |
+| Save a file; save a report to disk                                | `Save`; `FileDown`       |                                   |
+| Terminal                                                          | `SquareTerminal`         | `Terminal`                        |
+| Search, filter                                                    | `Search`                 | `Filter`                          |
+| Settings                                                          | `Settings`               | `Cog`, `SlidersHorizontal`        |
+| Appearance                                                        | `SunMoon`                | `Palette`                         |
+| Sidebar                                                           | `PanelLeft`              |                                   |
+| Maximize, restore                                                 | `Maximize2`, `Minimize2` |                                   |
+| Fork                                                              | `GitFork`                |                                   |
+| Branch                                                            | `GitBranch`              |                                   |
+| Subagent; the agents, as in Settings › Agents                     | `Bot`                    |                                   |
+| Notifications, send a test notification                           | `Bell`                   |                                   |
+| Keyboard shortcuts                                                | `Keyboard`               |                                   |
+| Advanced settings                                                 | `Wrench`                 |                                   |
+| Sign in, sign out                                                 | `LogIn`, `LogOut`        |                                   |
+| Install                                                           | `Download`               | `CloudDownload`                   |
+| An update on offer, the app's or an agent's                       | `CircleArrowUp`          |                                   |
+| Hide, show account details                                        | `EyeOff`, `Eye`          |                                   |
+| Decrease, increase a stepped value, such as zoom                  | `Minus`, `Plus`          | `ZoomOut`, `ZoomIn`               |
+| Toggle markdown preview and source                                | `BookOpen`, `Code`       |                                   |
 
 ## Typography
 
@@ -194,6 +199,7 @@ A row is the unit of every list: the sidebar, menus, Settings, the Files tree, t
 - **Anatomy**: a leading slot (an icon or mark in one column for the whole list), the label (truncating first), then a trailing slot (a status, a count, a hover action). The trailing slot keeps its width on every row, so a status or an action appearing never moves the label ([problem 8](../milestones/m0-feedback.md#8-session-rows-show-their-time-badly)).
 - **Height** is `--row-height`; a row with a second line grows by the line, never by extra padding.
 - **Fill**: a row has no fill at rest; hover and selection fill the whole row at its radius, never the label alone.
+- **A row that opens something and also offers an action**, such as an agent in Settings › Agents, puts the action in a [status pill](./design-system.md#status-pills) next to the label, never as a button in the trailing slot, which keeps the state and the chevron. The row opens through a button laid under its content, since buttons cannot nest, and the pill stays a button of its own.
 - **Text inside a row** is one line. What does not fit truncates; a second line is a description at the secondary role, never a path or a raw command.
 
 ### Pages and columns

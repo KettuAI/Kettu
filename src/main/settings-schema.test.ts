@@ -27,6 +27,7 @@ describe('validateSettingsPatch', () => {
       terminal: { fontSize: 14, shellPath: null },
       git: { backgroundFetch: true },
       updates: { automatic: 'notify' },
+      privacy: { hideAccount: true },
     }
     expect(validateSettingsPatch(patch)).toEqual(patch)
   })
@@ -60,6 +61,8 @@ describe('validateSettingsPatch', () => {
     [{ proxy: { mode: 'custom', url: 'http://p:1' } }, '"proxy.noProxy" must be a string'],
     [{ proxy: { mode: 'environment', url: 'http://p:1' } }, 'Unknown setting "proxy.url"'],
     [{ updates: { automatic: 'always' } }, '"updates.automatic" must be one of'],
+    [{ privacy: { hideAccount: 'yes' } }, '"privacy.hideAccount" must be a boolean'],
+    [{ privacy: { hideEmail: true } }, 'Unknown setting "privacy.hideEmail"'],
   ])('rejects %j', (patch, message) => {
     expect(() => validateSettingsPatch(patch)).toThrow(SettingsError)
     expect(() => validateSettingsPatch(patch)).toThrow(message)

@@ -18,7 +18,10 @@
     "back": "Back",
     "waiting": "{{count}} waiting for approval",
     "noMatch": "No settings match “{{query}}”",
-    "noMatchHint": "Try another word, such as theme, proxy or shell."
+    "noMatchHint": "Try another word, such as theme, proxy or shell.",
+    "results": "Search results",
+    "resultsLine_one": "{{count}} setting matches “{{query}}”. Esc clears the search.",
+    "resultsLine_other": "{{count}} settings match “{{query}}”. Esc clears the search."
   },
   "general": {
     "language": {
@@ -43,6 +46,10 @@
     "confirmQuit": {
       "name": "Ask before quitting while agents or terminal commands are running",
       "keywords": "quit confirm"
+    },
+    "groups": {
+      "input": "Language and input",
+      "sessions": "Sessions"
     }
   },
   "appearance": {
@@ -59,7 +66,9 @@
       "keywords": "font",
       "small": "Small",
       "default": "Default",
-      "large": "Large"
+      "large": "Large",
+      "previewUser": "Make the settings page high fidelity, in light and dark.",
+      "previewAgent": "Sure. I'll read <code>settings-page.tsx</code> and the design doc first, then go page by page."
     },
     "reduceMotion": {
       "name": "Reduce motion",
@@ -67,6 +76,19 @@
       "keywords": "animation accessibility",
       "system": "System",
       "always": "Always"
+    },
+    "groups": {
+      "theme": "Theme",
+      "scale": "Zoom and text",
+      "motion": "Motion"
+    },
+    "zoom": {
+      "name": "Zoom",
+      "description": "How large the whole window draws. {{zoomIn}} and {{zoomOut}} change it too.",
+      "keywords": "zoom scale size bigger smaller",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset"
     }
   },
   "terminal": {
@@ -81,6 +103,10 @@
     "fontSize": {
       "name": "Font size",
       "description": "In pixels."
+    },
+    "groups": {
+      "shell": "Shell",
+      "display": "Display"
     }
   },
   "git": {
@@ -95,7 +121,7 @@
       "description": "Pull requests and their checks, through gh.",
       "keywords": "gh github pull request",
       "install": "Install the GitHub CLI",
-      "signedOut": "Signed out",
+      "signedOut": "Not signed in",
       "copyCommand": "Copy command",
       "signedInAs": "Signed in as {{account}}",
       "signedIn": "Signed in"
@@ -103,6 +129,10 @@
     "fetch": {
       "name": "Fetch in the background",
       "description": "Every 5 minutes, so ahead and behind stay current."
+    },
+    "groups": {
+      "tools": "Tools",
+      "sync": "Sync"
     }
   },
   "notifications": {
@@ -129,7 +159,17 @@
       "description": "How many sessions wait for your approval.",
       "keywords": "badge"
     },
-    "footer": "Shown only while no OverBench window is focused."
+    "footer": "Shown only while no OverBench window is focused.",
+    "groups": {
+      "preview": "Preview",
+      "when": "Notify me",
+      "how": "How"
+    },
+    "test": "Send a test notification",
+    "testUnsupported": "This system does not show notifications",
+    "previewTitle": "Claude Code needs your approval",
+    "previewBody": "overbench · run {{command}}",
+    "previewTime": "now"
   },
   "shortcuts": {
     "openProject": "Open project",
@@ -145,7 +185,12 @@
     "toggleTerminal": "Show or hide the terminal",
     "newTerminal": "New terminal",
     "cancelTurn": "Cancel the running turn",
-    "answerPermission": "Answer the pending permission request"
+    "answerPermission": "Answer the pending permission request",
+    "groups": {
+      "sessions": "Sessions",
+      "window": "Window",
+      "terminal": "Terminal"
+    }
   },
   "advanced": {
     "proxy": {
@@ -163,22 +208,29 @@
       "description": "A file with recent agent messages, logs and paths, for a bug report. It can contain code and prompts, so share it only with people you trust.",
       "keywords": "logs bug report",
       "export": "Export diagnostics",
-      "saved": "Saved to {{path}}"
+      "saved": "Saved to {{path}}",
+      "exportShort": "Export…"
     },
     "dataFolder": {
       "name": "Data folder",
       "description": "Settings, the session index and logs.",
-      "show": "Show in {{name}}"
+      "show": "Show in {{name}}",
+      "copy": "Copy path"
     },
     "removeSessions": {
       "name": "Remove all sessions from OverBench",
       "description": "Clears OverBench's session list. The agents' transcripts stay.",
       "keywords": "delete clear",
-      "button": "Remove all sessions",
+      "button": "Remove all sessions…",
       "dialogTitle_one": "Remove the only session from OverBench?",
       "dialogTitle_other": "Remove all {{count}} sessions from OverBench?",
       "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from a project's home.",
       "confirm": "Remove all"
+    },
+    "groups": {
+      "network": "Network",
+      "data": "Diagnostics and data",
+      "danger": "Danger zone"
     }
   },
   "agents": {
@@ -232,7 +284,71 @@
     "readingAccount": "Reading the account…",
     "readingUsage": "Reading plan usage…",
     "noUsage": "No plan usage reported",
-    "usageOnceRunning": "Plan usage shows once it runs"
+    "usageOnceRunning": "Plan usage shows once it runs",
+    "hidden": "Hidden",
+    "hideAccounts": "Hide accounts",
+    "showAccounts": "Show accounts",
+    "hideAccountsHint": "Blur emails and account names, for screenshots and shared screens",
+    "via": "{{vendor}} · through {{adapter}}",
+    "direct": "{{vendor}} · runs in ACP mode itself",
+    "usageUpdated": "Read {{ago}}",
+    "refreshUsage": "Read plan usage again",
+    "resetsIn": "Resets in {{time}}",
+    "resetsAt": "Resets {{time}}",
+    "versionGroup": "Version",
+    "currentVersion": "Current version",
+    "update": {
+      "mark": "Update available: {{names}}",
+      "check": "Check for updates",
+      "checking": "Checking…",
+      "checkedAgo": "Checked {{ago}}",
+      "justChecked_one": "Checked just now · {{count}} update",
+      "justChecked_other": "Checked just now · {{count}} updates",
+      "allCurrent": "Checked just now · all up to date",
+      "checkFailed": "Couldn't check for updates",
+      "notChecked": "Not checked yet",
+      "available": "Update",
+      "availableTo": "Update to {{version}}",
+      "adapterVersion": "Adapter {{name}} {{version}}",
+      "updating": "Updating…",
+      "cancel": "Cancel update",
+      "failed": "Update failed, retry",
+      "done": "Updated",
+      "upToDate": "Up to date",
+      "released": "{{version}} is out",
+      "noticeTitle": "{{name}} {{version}} is available",
+      "noticeTitleAdapter": "A new version of {{name}} is available",
+      "noticeBody": "You have {{current}}. The new version installs next to it: running sessions keep going, and {{name}} uses it from its next start. If it cannot install, the current version stays.",
+      "button": "Update",
+      "progressTitle": "Updating {{name}}",
+      "failedTitle": "Update failed",
+      "failedBody": "The current version still works. Check Advanced › Proxy if the network is the problem, then retry.",
+      "doneTitle": "{{name}} is updated",
+      "doneBody": "{{name}} uses the new version from its next start."
+    },
+    "install": {
+      "button": "Install",
+      "through": "Install through {{method}}",
+      "installing": "Installing…",
+      "cancel": "Cancel install",
+      "failed": "Install failed, retry",
+      "missingLine": "Not installed. Install sets it up through {{method}}.",
+      "missingLineAdapter": "Not installed yet. Install puts its adapter in OverBench's data folder.",
+      "title": "Install {{name}}",
+      "body": "OverBench installs it in the background; when it is done, this page shows it as installed.",
+      "adapterBody": "OverBench installs {{package}} into its own data folder and runs it on your Node.js.",
+      "method": "Install with",
+      "methods": {
+        "brew": "Homebrew",
+        "npm": "npm",
+        "script": "Official script"
+      },
+      "notFound": "not found",
+      "progressTitle": "Installing {{name}}",
+      "failedTitle": "Install failed",
+      "elsewhere": "Installed somewhere else? Choose the program…",
+      "copyLog": "Copy log"
+    }
   },
   "about": {
     "version": {
@@ -269,6 +385,37 @@
     },
     "source": {
       "name": "Source code"
+    },
+    "groups": {
+      "updates": "Updates",
+      "runtime": "Runtime",
+      "links": "Links"
+    },
+    "runtime": {
+      "system": "System",
+      "copy": "Copy versions",
+      "copied": "Copied"
+    },
+    "issues": {
+      "name": "Report an issue"
     }
+  },
+  "pages": {
+    "general": "The interface language, how you type, and what new sessions and launches do.",
+    "appearance": "Theme, zoom and text size. Changes apply at once.",
+    "notifications": "They show only while no OverBench window is in front, so they never interrupt what you are reading.",
+    "shortcuts": "Shortcuts for sessions, the window and the terminal. They cannot be changed yet.",
+    "agents": "OverBench drives these coding agents over ACP. Their accounts, plan usage and installs are here.",
+    "terminal": "Which shell the side panel's terminal runs, and its font size.",
+    "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
+    "advanced": "Network proxy, diagnostics and the data OverBench keeps on this computer.",
+    "about": "OverBench and the versions it runs on."
+  },
+  "footer": {
+    "about": "About OverBench",
+    "upToDate": "Up to date",
+    "available": "{{version}} available",
+    "downloading": "Downloading {{percent}}%",
+    "restartToUpdate": "Restart to update"
   }
 }

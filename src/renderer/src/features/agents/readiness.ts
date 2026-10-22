@@ -45,3 +45,11 @@ export function agentSubline(status: AgentStatus): string {
     return i18n.t('agents:readiness.installsOnFirstUse')
   return status.launchCommand
 }
+
+/**
+ * Listed under Installed: it can run now. A package agent whose adapter is not installed yet is
+ * listed with the agents to install, since installing is one click away.
+ */
+export function listedInstalled(status: AgentStatus): boolean {
+  return readiness(status).kind !== 'missing' && !(status.package && !status.package.installed)
+}

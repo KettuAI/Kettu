@@ -1,8 +1,15 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { CircleHelpIcon, FileDownIcon, FolderOpenIcon, TrashIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { BellIcon, CircleHelpIcon, FileDownIcon, MinusIcon, PlusIcon } from 'lucide-react'
+import { Trans, useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
 import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
-import type { SettingsFile } from '@shared/settings'
+import {
+  DEFAULT_SETTINGS,
+  ZOOM_LEVELS,
+  stepZoom,
+  type SettingsFile,
+  type ZoomStep,
+} from '@shared/settings'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -16,23 +23,42 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { Kbd, KbdGroup } from '@renderer/components/ui/kbd'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
-import { CopyButton } from '@renderer/features/git/branch-popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
 import { basename } from '@renderer/lib/format'
-import { fileManagerName, formatShortcut, isWindows } from '@renderer/lib/platform'
+import { formatShortcut, isWindows } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import { AGENT_NAMES } from '@renderer/stores/agents'
+import { AGENT_NAMES, isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { loadGitTools, useGitStore } from '@renderer/stores/git'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { ControlError, Segmented, SettingSelect, SettingSwitch } from './controls'
+import { useAppInfo } from './use-app-info'
+import {
+  ControlError,
+  CopyAction,
+  Masked,
+  PathText,
+  RevealAction,
+  Segmented,
+  SettingSelect,
+  SettingSwitch,
+} from './controls'
 import { useApply } from './use-apply'
 
 const useSettings = () => useSettingsStore((s) => s.settings)
+
+// The recessed panel behind a live preview: text size, terminal font, notification banner.
+const PREVIEW_BOX = 'rounded-xl bg-sidebar shadow-[inset_0_0_0_var(--hairline)_var(--border-soft)]'
+
+// A block row's first line: the row's text on the left, its control on the right.
+const BLOCK_LINE = 'flex min-h-7 items-center gap-6'
 
 // ---- General
 
@@ -60,6 +86,14 @@ export function Language() {
 export function DefaultAgent() {
   const { t } = useTranslation('settings')
   const value = useSettings().general.defaultAgent
+  const missing = useAgentsStore(
+    useShallow((s) =>
+      AGENT_IDS.filter((id) => {
+        const status = s.byId[id]
+        return !!status && !isInstalled(status)
+      }),
+    ),
+  )
   const [apply, error] = useApply()
   const options = [
     {
@@ -67,11 +101,16 @@ export function DefaultAgent() {
       label: t('general.defaultAgent.askEachTime'),
       icon: <CircleHelpIcon className="size-3.5 text-muted-foreground" />,
     },
-    ...AGENT_IDS.filter((id) => id !== 'fake-agent').map((id) => ({
-      value: id,
-      label: AGENT_NAMES[id],
-      icon: <AgentMark agent={id} className="size-3.5" />,
-    })),
+    ...AGENT_IDS.filter((id) => id !== 'fake-agent').map((id) => {
+      const absent = missing.includes(id)
+      return {
+        value: id as string,
+        label: AGENT_NAMES[id],
+        icon: <AgentMark agent={id} className="size-3.5" />,
+        disabled: absent,
+        hint: absent ? t('agents.groups.notInstalled') : undefined,
+      }
+    }),
   ]
   return (
     <>
@@ -129,105 +168,221 @@ export function SendKey() {
 
 // ---- Appearance
 
+type Theme = SettingsFile['appearance']['theme']
+
+const THEMES: readonly Theme[] = ['system', 'light', 'dark']
+
 export function ThemeTiles() {
   const { t } = useTranslation('settings')
   const value = useSettings().appearance.theme
   const [apply, error] = useApply()
-  const tiles: { value: SettingsFile['appearance']['theme']; label: string }[] = [
-    { value: 'system', label: t('appearance.theme.system') },
-    { value: 'light', label: t('appearance.theme.light') },
-    { value: 'dark', label: t('appearance.theme.dark') },
-  ]
   return (
-    <div className="flex items-center gap-3">
-      <ControlError error={error} />
+    <>
       <ToggleGroup
         aria-label={t('appearance.theme.name')}
         variant="tile"
         size="tile"
-        spacing={3}
+        spacing={3.5}
         value={[value]}
         onValueChange={(next) => {
-          const picked = next[0] as SettingsFile['appearance']['theme'] | undefined
+          const picked = next[0] as Theme | undefined
           if (picked && picked !== value) apply({ appearance: { theme: picked } })
         }}
+        className="grid w-full grid-cols-3 items-stretch"
       >
-        {tiles.map((tile) => (
-          <ToggleGroupItem key={tile.value} value={tile.value}>
-            <ThemePreview kind={tile.value} />
-            {tile.label}
+        {THEMES.map((theme) => (
+          <ToggleGroupItem
+            key={theme}
+            value={theme}
+            className="items-stretch gap-2 hover:[&>[data-tile]]:ring-border-strong aria-pressed:[&>[data-tile]]:ring-checked"
+          >
+            <ThemePreview kind={theme} />
+            <span className="flex items-center gap-2 pl-0.5 text-small text-foreground">
+              <RadioDot />
+              {t(`appearance.theme.${theme}`)}
+            </span>
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-    </div>
+      <ControlError error={error} />
+    </>
   )
 }
 
-/** A miniature window in the theme's own surface steps; System shows both halves. */
-export function ThemePreview({ kind }: { kind: 'system' | 'light' | 'dark' }) {
-  const half = (dark: boolean) => (
+// Reads the toggle it sits in: filled with a dot while that toggle is pressed.
+function RadioDot() {
+  return (
+    <span
+      aria-hidden
+      className="grid size-3.5 shrink-0 place-items-center rounded-full ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-checked group-aria-pressed/toggle:ring-0"
+    >
+      <span className="size-1.5 scale-0 rounded-full bg-background transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100 dark:bg-foreground" />
+    </span>
+  )
+}
+
+/** A miniature window in the theme's own surfaces; System shows both, split on a diagonal. */
+function ThemePreview({ kind }: { kind: Theme }) {
+  return (
+    <span
+      data-tile=""
+      aria-hidden
+      className="relative block h-26 w-full overflow-hidden rounded-xl"
+    >
+      {kind !== 'dark' && <MiniWindow dark={false} />}
+      {kind !== 'light' && <MiniWindow dark cut={kind === 'system'} />}
+    </span>
+  )
+}
+
+function MiniLine({ className }: { className?: string }) {
+  return <span className={cn('block h-1.25 rounded-full bg-muted-foreground/20', className)} />
+}
+
+// The wrapper's class makes the tokens inside resolve for that theme, whatever the app shows.
+function MiniWindow({ dark, cut }: { dark: boolean; cut?: boolean }) {
+  return (
     <span
       className={cn(
-        'flex h-full flex-1 gap-1 p-1.5',
-        dark ? 'bg-[oklch(0.205_0_0)]' : 'bg-[oklch(0.982_0_0)]',
+        dark ? 'dark' : 'light',
+        'absolute inset-0 flex bg-background',
+        cut && '[clip-path:polygon(62%_0,100%_0,100%_100%,38%_100%)]',
       )}
     >
-      <span
-        className={cn('w-3 rounded-[2px]', dark ? 'bg-[oklch(0.27_0_0)]' : 'bg-[oklch(0.93_0_0)]')}
-      />
-      <span className="flex flex-1 flex-col gap-1">
-        <span
-          className={cn(
-            'h-1.5 w-3/4 rounded-full',
-            dark ? 'bg-[oklch(0.4_0_0)]' : 'bg-[oklch(0.86_0_0)]',
-          )}
-        />
-        <span
-          className={cn(
-            'h-1.5 w-1/2 rounded-full',
-            dark ? 'bg-[oklch(0.33_0_0)]' : 'bg-[oklch(0.9_0_0)]',
-          )}
-        />
-        <span
-          className={cn('mt-auto h-2.5 rounded-[3px]', dark ? 'bg-[oklch(0.27_0_0)]' : 'bg-white')}
-        />
+      <span className="flex w-1/3 flex-col gap-1.5 border-r border-border-soft bg-sidebar px-2 py-3">
+        <span className="block h-2 rounded-sm bg-sidebar-accent" />
+        <MiniLine />
+        <MiniLine className="w-3/4" />
+        <MiniLine className="w-5/6" />
+      </span>
+      <span className="flex flex-1 flex-col gap-1.5 px-3 pt-3.5 pb-2.5">
+        <MiniLine className="w-2/5 bg-muted-foreground/40" />
+        <span className="block h-3 w-1/2 self-end rounded-md bg-muted-foreground/20" />
+        <MiniLine className="w-11/12" />
+        <MiniLine className="w-2/3" />
+        <span className="mt-auto block h-5 rounded-md bg-card shadow-card" />
       </span>
     </span>
   )
+}
+
+function StepButton({
+  label,
+  shortcut,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string
+  shortcut: string
+  disabled: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
   return (
-    <span data-tile="" aria-hidden className="flex h-[54px] w-[86px] overflow-hidden rounded-lg">
-      {kind === 'light' ? (
-        half(false)
-      ) : kind === 'dark' ? (
-        half(true)
-      ) : (
-        <>
-          {half(false)}
-          {half(true)}
-        </>
-      )}
-    </span>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="quiet"
+            size="icon-xs"
+            aria-label={label}
+            disabled={disabled}
+            onClick={onClick}
+            className="hover:bg-segment-thumb hover:shadow-segment"
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>
+        {label}
+        <Kbd>{formatShortcut(shortcut)}</Kbd>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
-export function TextSize() {
+export function Zoom() {
+  const { t } = useTranslation('settings')
+  const zoom = useSettings().appearance.zoom
+  const [apply, error] = useApply()
+  const step = (by: ZoomStep) => apply({ appearance: { zoom: stepZoom(zoom, by) } })
+  return (
+    <>
+      <ControlError error={error} />
+      {zoom !== DEFAULT_SETTINGS.appearance.zoom && (
+        <Button variant="quiet" size="compact" onClick={() => step(0)}>
+          {t('appearance.zoom.reset')}
+        </Button>
+      )}
+      <div
+        role="group"
+        aria-label={t('appearance.zoom.name')}
+        className="inline-flex items-center rounded-lg bg-segment-track p-0.5"
+      >
+        <StepButton
+          label={t('appearance.zoom.zoomOut')}
+          shortcut="Mod+-"
+          disabled={zoom === ZOOM_LEVELS[0]}
+          onClick={() => step(-1)}
+        >
+          <MinusIcon />
+        </StepButton>
+        <span
+          aria-live="polite"
+          className="min-w-12 text-center text-control tabular-nums"
+        >{`${Math.round(zoom * 100)}%`}</span>
+        <StepButton
+          label={t('appearance.zoom.zoomIn')}
+          shortcut="Mod+="
+          disabled={zoom === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+          onClick={() => step(1)}
+        >
+          <PlusIcon />
+        </StepButton>
+      </div>
+    </>
+  )
+}
+
+export function TextSize({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
   const value = useSettings().appearance.textSize
   const [apply, error] = useApply()
   return (
-    <>
-      <ControlError error={error} />
-      <Segmented
-        label={t('appearance.textSize.name')}
-        value={value}
-        options={[
-          { value: 'small', label: t('appearance.textSize.small') },
-          { value: 'default', label: t('appearance.textSize.default') },
-          { value: 'large', label: t('appearance.textSize.large') },
-        ]}
-        onChange={(v) => apply({ appearance: { textSize: v } })}
-      />
-    </>
+    <div className="flex w-full flex-col gap-3">
+      <div className={BLOCK_LINE}>
+        <div className="min-w-0 flex-1">{label}</div>
+        <ControlError error={error} />
+        <Segmented
+          label={t('appearance.textSize.name')}
+          value={value}
+          options={[
+            { value: 'small', label: t('appearance.textSize.small') },
+            { value: 'default', label: t('appearance.textSize.default') },
+            { value: 'large', label: t('appearance.textSize.large') },
+          ]}
+          onChange={(v) => apply({ appearance: { textSize: v } })}
+        />
+      </div>
+      <div aria-hidden className={cn(PREVIEW_BOX, 'flex flex-col gap-3 px-4 py-4 text-prose')}>
+        <div className="max-w-4/5 self-end rounded-xl bg-muted px-3 py-1.5 leading-relaxed">
+          {t('appearance.textSize.previewUser')}
+        </div>
+        <p className="text-foreground/90">
+          <Trans
+            t={t}
+            i18nKey="appearance.textSize.previewAgent"
+            components={{
+              code: (
+                <code className="rounded-sm bg-muted px-[0.35em] py-[0.1em] font-mono text-[0.85em]" />
+              ),
+            }}
+          />
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -266,16 +421,23 @@ export function ShellPicker() {
       setPickError(errorMessage(e))
     }
   }
+  // A program's name is mono; "Login shell" is a label and stays in the interface font.
+  const isProgram = !!shellPath || isWindows
+  const program = shellPath
+    ? basename(shellPath)
+    : isWindows
+      ? 'PowerShell'
+      : t('terminal.shell.loginShell')
   return (
     <div className="flex min-w-0 items-center gap-2">
       <ControlError error={error ?? pickError} />
-      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={shellPath}>
-        {shellPath
-          ? basename(shellPath)
-          : isWindows
-            ? 'PowerShell'
-            : t('terminal.shell.loginShell')}
-      </span>
+      <Badge
+        variant="neutral"
+        title={shellPath ?? undefined}
+        className={cn('max-w-48 min-w-0 shrink', isProgram && 'font-mono text-meta')}
+      >
+        <span className="truncate">{program}</span>
+      </Badge>
       {shellPath && (
         <Button
           variant="quiet"
@@ -292,47 +454,97 @@ export function ShellPicker() {
   )
 }
 
-export function FontSize() {
+const ANSI_COLOR = {
+  green: 'text-(color:--ansi-green)',
+  blue: 'text-(color:--ansi-blue)',
+  cyan: 'text-(color:--ansi-cyan)',
+  magenta: 'text-(color:--ansi-magenta)',
+}
+
+function Ansi({ color, children }: { color: keyof typeof ANSI_COLOR; children: ReactNode }) {
+  return <span className={ANSI_COLOR[color]}>{children}</span>
+}
+
+function PromptLine({ children }: { children?: ReactNode }) {
+  return (
+    <div className="whitespace-pre">
+      <Ansi color="blue">~/projects/overbench</Ansi> <Ansi color="magenta">main</Ansi>{' '}
+      <Ansi color="green">{'\u276F'}</Ansi> {children}
+    </div>
+  )
+}
+
+function TestFile({ name, detail }: { name: string; detail: string }) {
+  return (
+    <div className="whitespace-pre">
+      {' '}
+      <Ansi color="green">{'\u2713'}</Ansi> {name}{' '}
+      <span className="text-muted-foreground">{detail}</span>
+    </div>
+  )
+}
+
+function TestTotal({ name, count }: { name: string; count: number }) {
+  return (
+    <div className="whitespace-pre">
+      <Ansi color="cyan">{name}</Ansi>
+      {'  '}
+      <Ansi color="green">{count} passed</Ansi>{' '}
+      <span className="text-muted-foreground">({count})</span>
+    </div>
+  )
+}
+
+export function FontSize({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
   const value = useSettings().terminal.fontSize
   const [apply, error] = useApply()
   return (
-    <>
-      <ControlError error={error} />
-      <Segmented
-        label={t('terminal.fontSize.name')}
-        value={value}
-        options={[
-          { value: 12, label: '12' },
-          { value: 13, label: '13' },
-          { value: 14, label: '14' },
-        ]}
-        onChange={(v) => apply({ terminal: { fontSize: v } })}
-      />
-    </>
+    <div className="flex w-full flex-col gap-3">
+      <div className={BLOCK_LINE}>
+        <div className="min-w-0 flex-1">{label}</div>
+        <ControlError error={error} />
+        <Segmented
+          label={t('terminal.fontSize.name')}
+          value={value}
+          options={[
+            { value: 12, label: '12' },
+            { value: 13, label: '13' },
+            { value: 14, label: '14' },
+          ]}
+          onChange={(v) => apply({ terminal: { fontSize: v } })}
+        />
+      </div>
+      <div
+        aria-hidden
+        className={cn(PREVIEW_BOX, 'overflow-hidden px-3.5 py-3 font-mono leading-normal')}
+        style={{ fontSize: value }}
+      >
+        <PromptLine>pnpm test</PromptLine>
+        <TestFile name="src/shared/settings.test.ts" detail="(12 tests) 8ms" />
+        <TestFile name="src/main/menu.test.ts" detail="(9 tests) 14ms" />
+        <div className="whitespace-pre"> </div>
+        <TestTotal name=" Test Files" count={2} />
+        <TestTotal name="      Tests" count={21} />
+        <PromptLine>
+          <span className="inline-block h-[1.2em] w-[0.6em] bg-foreground/75 align-[-0.2em]" />
+        </PromptLine>
+      </div>
+    </div>
   )
 }
 
 // ---- Git
 
-export function ToolState({
-  found,
-  label,
-  detail,
-}: {
-  found: boolean
-  label: string
-  detail: string | null
-}) {
+function StatusDot({ tone }: { tone: 'success' | 'attention' }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span
-        aria-hidden
-        className={cn('size-1.5 rounded-full', found ? 'bg-success' : 'bg-muted-foreground/50')}
-      />
-      {label}
-      {detail && <span className="font-mono text-[11.5px]">{detail}</span>}
-    </span>
+    <span
+      aria-hidden
+      className={cn(
+        'size-1.5 shrink-0 rounded-full',
+        tone === 'success' ? 'bg-success' : 'bg-attention',
+      )}
+    />
   )
 }
 
@@ -354,10 +566,20 @@ export function GitTool() {
   const { t } = useTranslation('settings')
   const tools = useGitStore((s) => s.tools)
   if (!tools) return <ToolsPending />
-  return tools.git.found ? (
-    <ToolState found label={t('git.git.found')} detail={tools.git.version} />
-  ) : (
-    <ToolState found={false} label={t('git.git.notFound')} detail={null} />
+  const { found, version } = tools.git
+  if (!found) return <Badge variant="neutral">{t('git.git.notFound')}</Badge>
+  return (
+    <Badge variant="success" className="gap-1.5">
+      <StatusDot tone="success" />
+      {version ? (
+        <>
+          <span className="sr-only">{t('git.git.found')}</span>
+          <span className="font-mono text-meta font-normal">{version}</span>
+        </>
+      ) : (
+        t('git.git.found')
+      )}
+    </Badge>
   )
 }
 
@@ -381,20 +603,29 @@ export function GhTool() {
   if (gh.state === 'signed-out') {
     return (
       <span className="flex items-center gap-1.5">
-        <span className="text-xs text-attention-text">{t('git.gh.signedOut')}</span>
-        <code className="rounded-[5px] bg-muted px-1.5 py-0.5 font-mono text-[11.5px]">
-          gh auth login
-        </code>
-        <CopyButton text="gh auth login" label={t('git.gh.copyCommand')} />
+        <Badge variant="warning" className="gap-1.5">
+          <StatusDot tone="attention" />
+          {t('git.gh.signedOut')}
+        </Badge>
+        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-meta">gh auth login</code>
+        <CopyAction text="gh auth login" label={t('git.gh.copyCommand')} />
       </span>
     )
   }
   return (
-    <ToolState
-      found
-      label={gh.account ? t('git.gh.signedInAs', { account: gh.account }) : t('git.gh.signedIn')}
-      detail={gh.version}
-    />
+    <Badge
+      variant="success"
+      title={gh.version ? `gh ${gh.version}` : undefined}
+      className="gap-1.5 overflow-visible"
+    >
+      <StatusDot tone="success" />
+      {t('git.gh.signedIn')}
+      {gh.account && (
+        <span className="font-normal">
+          <Masked>{gh.account}</Masked>
+        </span>
+      )}
+    </Badge>
   )
 }
 
@@ -437,6 +668,114 @@ export function NotificationSwitch({
   )
 }
 
+// i18next fills {{command}} with this, so the command can be set in mono around it.
+const COMMAND_MARK = '\uE000'
+
+export function NotificationPreview() {
+  const { t } = useTranslation('settings')
+  const [before = '', after = ''] = t('notifications.previewBody', {
+    command: COMMAND_MARK,
+  }).split(COMMAND_MARK)
+  return (
+    <div className="px-1 py-3">
+      <div aria-hidden className={cn(PREVIEW_BOX, 'flex h-29 items-center justify-center px-4')}>
+        <div className="flex w-86 max-w-full items-center gap-3 rounded-2xl bg-popover px-3 py-2.5 shadow-menu">
+          <span className="size-8 shrink-0 rounded-lg bg-primary" />
+          <div className="flex min-w-0 flex-1 flex-col gap-px text-control">
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 truncate font-semibold">
+                {t('notifications.previewTitle')}
+              </span>
+              <span className="shrink-0 text-meta text-muted-foreground">
+                {t('notifications.previewTime')}
+              </span>
+            </div>
+            <span className="truncate">
+              {before}
+              <code className="font-mono text-meta">pnpm test</code>
+              {after}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function TestNotification() {
+  const { t } = useTranslation('settings')
+  const [busy, setBusy] = useState(false)
+  const [unsupported, setUnsupported] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const run = async () => {
+    setBusy(true)
+    setUnsupported(false)
+    setError(null)
+    try {
+      setUnsupported(!(await window.overbench.notifications.test()))
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      {unsupported && (
+        <span role="status" className="text-xs text-muted-foreground">
+          {t('notifications.testUnsupported')}
+        </span>
+      )}
+      <ControlError error={error} />
+      <Button
+        variant="quiet"
+        size="xs"
+        disabled={busy}
+        title={unsupported ? t('notifications.testUnsupported') : undefined}
+        onClick={() => void run()}
+        className="-mr-2"
+      >
+        {busy ? (
+          <Spinner data-icon="inline-start" className="size-3" />
+        ) : (
+          <BellIcon data-icon="inline-start" />
+        )}
+        {t('notifications.test')}
+      </Button>
+    </>
+  )
+}
+
+// ---- Keyboard shortcuts
+
+// "1-4" is a range of keys, not a chord.
+const KEY_RANGE = /^(\d)-(\d)$/
+
+const KEYCAP = 'h-5.5 min-w-5.5 rounded-md bg-card px-1.5 text-foreground shadow-outline'
+
+export function ShortcutKeys({ keys }: { keys: string }) {
+  const range = KEY_RANGE.exec(keys)
+  return (
+    <KbdGroup className="gap-1">
+      {range ? (
+        <>
+          <Kbd className={KEYCAP}>{range[1]}</Kbd>
+          <span aria-hidden className="self-center text-xs text-muted-foreground">
+            {'–'}
+          </span>
+          <Kbd className={KEYCAP}>{range[2]}</Kbd>
+        </>
+      ) : (
+        keys.split(/\+(?=.)/).map((key, i) => (
+          <Kbd key={i} className={KEYCAP}>
+            {formatShortcut(key)}
+          </Kbd>
+        ))
+      )}
+    </KbdGroup>
+  )
+}
+
 // ---- Advanced
 
 export function Proxy({ label }: { label: ReactNode }) {
@@ -453,7 +792,7 @@ export function Proxy({ label }: { label: ReactNode }) {
 
   const save = () => {
     const trimmed = url.trim()
-    if (!/^(https?|socks5?):\/\/[^\s]+$/i.test(trimmed)) {
+    if (!/^(https?|socks[45]?):\/\/[^\s]+$/i.test(trimmed)) {
       setInvalid(true)
       return
     }
@@ -464,7 +803,7 @@ export function Proxy({ label }: { label: ReactNode }) {
 
   return (
     <div className="flex w-full flex-col gap-3">
-      <div className="flex min-h-[28px] items-center gap-6">
+      <div className={BLOCK_LINE}>
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
         <Segmented
@@ -547,7 +886,7 @@ export function Diagnostics() {
       {note && (
         <span
           className={cn(
-            'min-w-0 truncate text-xs',
+            'max-w-56 min-w-0 truncate text-xs',
             'error' in note ? 'text-destructive' : 'text-muted-foreground',
           )}
           title={noteText ?? undefined}
@@ -555,35 +894,40 @@ export function Diagnostics() {
           {noteText}
         </span>
       )}
-      <Button variant="outline" size="compact" disabled={busy} onClick={() => void run()}>
+      <Button
+        variant="outline"
+        size="compact"
+        disabled={busy}
+        aria-label={t('advanced.diagnostics.export')}
+        onClick={() => void run()}
+      >
         {busy ? (
-          <Spinner data-icon="inline-start" className="size-3" />
+          <Spinner data-icon="inline-start" className="size-3.5" />
         ) : (
           <FileDownIcon data-icon="inline-start" />
         )}
-        {t('advanced.diagnostics.export')}
+        {t('advanced.diagnostics.exportShort')}
       </Button>
     </div>
   )
 }
 
-export function DataFolder() {
+export function DataFolder({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
-  const [error, setError] = useState<string | null>(null)
+  const path = useAppInfo()?.userDataPath
   return (
-    <>
-      <ControlError error={error} />
-      <Button
-        variant="outline"
-        size="compact"
-        onClick={() =>
-          window.overbench.shell.showDataFolder().catch((e: unknown) => setError(errorMessage(e)))
-        }
-      >
-        <FolderOpenIcon data-icon="inline-start" />
-        {t('advanced.dataFolder.show', { name: fileManagerName() })}
-      </Button>
-    </>
+    <div className="flex w-full flex-col gap-1.5">
+      <div className={BLOCK_LINE}>
+        <div className="min-w-0 flex-1">{label}</div>
+        {path && (
+          <span className="flex shrink-0 items-center gap-0.5">
+            <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
+            <RevealAction path={path} />
+          </span>
+        )}
+      </div>
+      {path ? <PathText path={path} /> : <Skeleton className="h-4 w-64" />}
+    </div>
   )
 }
 
@@ -610,7 +954,6 @@ export function RemoveAll() {
         disabled={count === 0}
         onClick={() => setOpen(true)}
       >
-        <TrashIcon data-icon="inline-start" />
         {t('advanced.removeSessions.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>

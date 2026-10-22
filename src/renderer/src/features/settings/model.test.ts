@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matches, type RowDef } from './model'
+import { highlight, matches, type RowDef } from './model'
 
 const row: RowDef = {
   id: 'theme',
@@ -29,5 +29,25 @@ describe('matches', () => {
   it('needs every word to match', () => {
     expect(matches(row, 'dark theme')).toBe(true)
     expect(matches(row, 'dark proxy')).toBe(false)
+  })
+})
+
+describe('highlight', () => {
+  const marked = (text: string, query: string) =>
+    highlight(text, query)
+      .map((p) => (p.match ? `[${p.text}]` : p.text))
+      .join('')
+
+  it('marks every place each word occurs, ignoring case', () => {
+    expect(marked('Check for updates', 'UP')).toBe('Check for [up]dates')
+    expect(marked('Proxy for npm and updates', 'pro up')).toBe('[Pro]xy for npm and [up]dates')
+  })
+
+  it('joins overlapping matches into one mark', () => {
+    expect(marked('Theme', 'the hem')).toBe('[Them]e')
+  })
+
+  it('leaves the text whole without a query', () => {
+    expect(highlight('Theme', '  ')).toEqual([{ text: 'Theme', match: false }])
   })
 })

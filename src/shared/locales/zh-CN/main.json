@@ -65,5 +65,9 @@
     "losesOnQuit": "退出会丢失这些更改。",
     "losesOnRestart": "重启会丢失这些更改。",
     "losesOnClose": "关闭窗口会丢失这些更改。"
+  },
+  "notifications": {
+    "testTitle": "OverBench",
+    "testBody": "通知已开启。Agent 需要你时，会这样提醒你。"
   }
 }

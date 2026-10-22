@@ -50,4 +50,32 @@ describe('agents store', () => {
     await useAgentsStore.getState().reloadEnvironment()
     expect(useAgentsStore.getState().environment).toEqual(reloaded)
   })
+
+  it('marks an agent updated only once its update is gone', async () => {
+    const codex = { id: 'codex', update: null, task: null } as unknown as AgentStatus
+    request.mockResolvedValue(undefined)
+    useAgentsStore.setState({ byId: { codex }, updated: {} })
+    await useAgentsStore.getState().update('codex')
+    expect(useAgentsStore.getState().updated).toEqual({ codex: true })
+  })
+
+  it('does not mark a cancelled update as done', async () => {
+    const offered = { adapterVersion: '2.3.0', cliVersion: '0.161.0' }
+    const codex = { id: 'codex', update: offered, task: null } as unknown as AgentStatus
+    request.mockResolvedValue(undefined)
+    useAgentsStore.setState({ byId: { codex }, updated: {} })
+    await useAgentsStore.getState().update('codex')
+    expect(useAgentsStore.getState().updated).toEqual({})
+  })
+
+  it('keeps a failed update check as an error, not as checked', async () => {
+    request.mockRejectedValue(new Error('offline'))
+    useAgentsStore.setState({ updateCheck: { running: false, finishedAt: null, error: null } })
+    await useAgentsStore.getState().checkUpdates()
+    expect(useAgentsStore.getState().updateCheck).toEqual({
+      running: false,
+      finishedAt: null,
+      error: 'offline',
+    })
+  })
 })

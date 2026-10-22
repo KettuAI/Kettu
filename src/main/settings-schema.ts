@@ -56,6 +56,7 @@ const SECTION_FIELDS = {
   },
   git: { backgroundFetch: isBoolean },
   updates: { automatic: oneOf('download', 'notify', 'off') },
+  privacy: { hideAccount: isBoolean },
 } as const satisfies Record<string, Record<string, Check>>
 
 type FieldSection = keyof typeof SECTION_FIELDS

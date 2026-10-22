@@ -31,6 +31,7 @@ export interface SettingsFile {
   }
   git: { backgroundFetch: boolean }
   updates: { automatic: 'download' | 'notify' | 'off' }
+  privacy: { hideAccount: boolean } // masks emails and account names on screen
 }
 
 /** Chrome's page zoom steps from 80% to 150%. */
@@ -57,6 +58,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   terminal: { fontSize: 13 },
   git: { backgroundFetch: false },
   updates: { automatic: 'download' },
+  privacy: { hideAccount: false },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -80,6 +82,7 @@ export interface SettingsPatch {
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>
   updates?: Partial<SettingsFile['updates']>
+  privacy?: Partial<SettingsFile['privacy']>
 }
 
 /** The part of the settings the agent host receives. */

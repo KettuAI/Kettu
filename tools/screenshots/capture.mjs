@@ -217,14 +217,52 @@ async function run() {
     `[...document.querySelectorAll('nav button, aside button')].some((b) => b.textContent.trim() === 'General')`,
     'the Settings sections',
   )
-  for (const section of ['General', 'Appearance', 'Agents', 'Terminal', 'About']) {
+  const sections = [
+    'General',
+    'Appearance',
+    'Notifications',
+    'Keyboard shortcuts',
+    'Agents',
+    'Terminal',
+    'Git',
+    'Advanced',
+    'About',
+  ]
+  for (const section of sections) {
     await click(
       `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === ${JSON.stringify(section)})`,
       `Settings › ${section}`,
     )
     await sleep(600)
-    await shoot(`settings-${section.toLowerCase()}`)
+    await shoot(`settings-${section.toLowerCase().replaceAll(' ', '-')}`)
   }
+
+  // An agent's own page, opened from its row in the list.
+  await click(
+    `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'Agents')`,
+    'Settings › Agents',
+  )
+  await click(
+    `return document.querySelector('button[aria-label="Fake agent"]')`,
+    'the fake agent row',
+  )
+  await waitFor(
+    `[...document.querySelectorAll('main h2')].some((h) => h.textContent.includes('Fake agent'))`,
+    'the fake agent page',
+  )
+  await sleep(600)
+  await shoot('settings-agent')
+
+  await click(`return document.querySelector('aside input')`, 'the Settings search')
+  await cdp.send('Input.insertText', { text: 'proxy' })
+  await waitFor(
+    `[...document.querySelectorAll('main h2')].some((h) => h.textContent === 'Search results')`,
+    'the search results',
+  )
+  await sleep(400)
+  await shoot('settings-search')
+  await press('Escape', 27)
+  await sleep(300)
 
   await click(
     `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'General')`,

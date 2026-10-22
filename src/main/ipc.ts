@@ -21,6 +21,7 @@ import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
 import { createLogger } from './log'
+import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
@@ -212,6 +213,8 @@ export function registerIpcHandlers({
   handle('shell:show-item', 1, (_, target) => {
     shell.showItemInFolder(absolutePath(target))
   })
+
+  handle('notifications:test', 0, () => notifyTest(settings.get()))
 
   handle('update:get-status', 0, () => updater.getStatus())
   handle('update:check', 0, () => updater.check())

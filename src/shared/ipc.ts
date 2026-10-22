@@ -62,6 +62,7 @@ export interface IpcInvokeContract {
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
+  'notifications:test': { args: []; result: boolean }
   'update:get-status': { args: []; result: UpdateStatus }
   'update:check': { args: []; result: UpdateStatus }
   'update:download': { args: []; result: void }
@@ -146,6 +147,10 @@ export interface OverbenchApi {
     showDataFolder(): Promise<void>
     /** Shows a file or folder in the system file manager; the path must be absolute. */
     showItem(path: string): Promise<void>
+  }
+  notifications: {
+    /** Shows a sample notification at once; false when the system does not support them. */
+    test(): Promise<boolean>
   }
   updates: {
     getStatus(): Promise<UpdateStatus>

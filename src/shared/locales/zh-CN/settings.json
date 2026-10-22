@@ -18,7 +18,9 @@
     "back": "返回",
     "waiting": "{{count}} 个会话等待授权",
     "noMatch": "没有与“{{query}}”相符的设置",
-    "noMatchHint": "试试其他关键词，例如“主题”“代理”或 Shell。"
+    "noMatchHint": "试试其他关键词，例如“主题”“代理”或 Shell。",
+    "results": "搜索结果",
+    "resultsLine_other": "“{{query}}”匹配 {{count}} 项设置。按 Esc 清除搜索。"
   },
   "general": {
     "language": {
@@ -43,6 +45,10 @@
     "confirmQuit": {
       "name": "Agent 或终端命令正在运行时，退出前先询问",
       "keywords": "退出 确认 quit confirm"
+    },
+    "groups": {
+      "input": "语言与输入",
+      "sessions": "会话"
     }
   },
   "appearance": {
@@ -59,7 +65,9 @@
       "keywords": "字体 字号 font",
       "small": "小",
       "default": "默认",
-      "large": "大"
+      "large": "大",
+      "previewUser": "把设置页做成高保真，浅色和深色都要看。",
+      "previewAgent": "好的。我先读一下 <code>settings-page.tsx</code> 和设计文档，再逐页给出方案。"
     },
     "reduceMotion": {
       "name": "减弱动态效果",
@@ -67,6 +75,19 @@
       "keywords": "动画 无障碍 animation accessibility",
       "system": "跟随系统",
       "always": "始终"
+    },
+    "groups": {
+      "theme": "主题",
+      "scale": "缩放与文字",
+      "motion": "动态效果"
+    },
+    "zoom": {
+      "name": "界面缩放",
+      "description": "整个窗口的缩放比例，也可以用 {{zoomIn}} 和 {{zoomOut}} 调整。",
+      "keywords": "缩放 放大 缩小 zoom scale",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "reset": "重置"
     }
   },
   "terminal": {
@@ -81,6 +102,10 @@
     "fontSize": {
       "name": "字号",
       "description": "单位：像素。"
+    },
+    "groups": {
+      "shell": "Shell",
+      "display": "显示"
     }
   },
   "git": {
@@ -103,6 +128,10 @@
     "fetch": {
       "name": "在后台抓取",
       "description": "每 5 分钟一次，让领先和落后的提交数保持最新。"
+    },
+    "groups": {
+      "tools": "工具",
+      "sync": "同步"
     }
   },
   "notifications": {
@@ -129,7 +158,17 @@
       "description": "有多少个会话在等待你授权。",
       "keywords": "角标 数字 badge"
     },
-    "footer": "仅在 OverBench 的所有窗口都不在前台时显示。"
+    "footer": "仅在 OverBench 的所有窗口都不在前台时显示。",
+    "groups": {
+      "preview": "预览",
+      "when": "提醒我",
+      "how": "提醒方式"
+    },
+    "test": "发送测试通知",
+    "testUnsupported": "这个系统不显示通知",
+    "previewTitle": "Claude Code 需要授权",
+    "previewBody": "overbench · 运行 {{command}}",
+    "previewTime": "现在"
   },
   "shortcuts": {
     "openProject": "打开项目",
@@ -145,7 +184,12 @@
     "toggleTerminal": "显示或隐藏终端",
     "newTerminal": "新建终端",
     "cancelTurn": "停止本轮对话",
-    "answerPermission": "回应待处理的授权请求"
+    "answerPermission": "回应待处理的授权请求",
+    "groups": {
+      "sessions": "会话",
+      "window": "窗口",
+      "terminal": "终端"
+    }
   },
   "advanced": {
     "proxy": {
@@ -163,21 +207,28 @@
       "description": "包含近期 Agent 消息、日志和路径的文件，用于提交问题报告。其中可能含有代码和消息内容，请只分享给你信任的人。",
       "keywords": "日志 问题 反馈 报告 logs bug report",
       "export": "导出诊断信息",
-      "saved": "已保存到 {{path}}"
+      "saved": "已保存到 {{path}}",
+      "exportShort": "导出…"
     },
     "dataFolder": {
       "name": "数据文件夹",
       "description": "设置、会话索引和日志。",
-      "show": "在{{name}}中显示"
+      "show": "在{{name}}中显示",
+      "copy": "复制路径"
     },
     "removeSessions": {
       "name": "从 OverBench 中移除所有会话",
       "description": "清空 OverBench 的会话列表。Agent 的对话记录会保留。",
       "keywords": "删除 清除 清空 delete clear",
-      "button": "移除所有会话",
+      "button": "移除所有会话…",
       "dialogTitle_other": "从 OverBench 中移除全部 {{count}} 个会话？",
       "dialogDescription": "侧边栏将变为空白。Agent 会保留各自的对话记录，之后可以在项目主页重新导入这些会话。",
       "confirm": "全部移除"
+    },
+    "groups": {
+      "network": "网络",
+      "data": "诊断与数据",
+      "danger": "危险操作"
     }
   },
   "agents": {
@@ -231,7 +282,70 @@
     "readingAccount": "正在读取账号…",
     "readingUsage": "正在读取套餐用量…",
     "noUsage": "不提供套餐用量",
-    "usageOnceRunning": "运行后显示套餐用量"
+    "usageOnceRunning": "运行后显示套餐用量",
+    "hidden": "已隐藏",
+    "hideAccounts": "隐藏账号",
+    "showAccounts": "显示账号",
+    "hideAccountsHint": "模糊显示邮箱和账号名，方便截图和共享屏幕",
+    "via": "{{vendor}} · 经 {{adapter}} 连接",
+    "direct": "{{vendor}} · 直接以 ACP 模式运行",
+    "usageUpdated": "{{ago}}读取",
+    "refreshUsage": "重新读取套餐用量",
+    "resetsIn": "{{time}}后重置",
+    "resetsAt": "{{time}} 重置",
+    "versionGroup": "版本",
+    "currentVersion": "当前版本",
+    "update": {
+      "mark": "{{names}} 有可用更新",
+      "check": "检查更新",
+      "checking": "正在检查…",
+      "checkedAgo": "{{ago}}检查过",
+      "justChecked_other": "刚刚检查 · {{count}} 个可更新",
+      "allCurrent": "刚刚检查 · 都是最新",
+      "checkFailed": "无法检查更新",
+      "notChecked": "还没有检查过",
+      "available": "可更新",
+      "availableTo": "更新到 {{version}}",
+      "adapterVersion": "适配器 {{name}} {{version}}",
+      "updating": "正在更新…",
+      "cancel": "取消更新",
+      "failed": "更新失败，重试",
+      "done": "已更新",
+      "upToDate": "已是最新",
+      "released": "{{version}} 已发布",
+      "noticeTitle": "{{name}} {{version}} 已发布",
+      "noticeTitleAdapter": "{{name}} 有新版本",
+      "noticeBody": "当前是 {{current}}。新版本装在当前版本旁边：正在运行的会话不受影响，{{name}} 下次启动时使用新版本；装不上也不影响现在的版本。",
+      "button": "更新",
+      "progressTitle": "正在更新 {{name}}",
+      "failedTitle": "更新失败",
+      "failedBody": "现在的版本照常可用。如果是网络问题，可以先看看 高级 › 代理，再重试。",
+      "doneTitle": "{{name}} 已更新",
+      "doneBody": "{{name}} 下次启动时使用新版本。"
+    },
+    "install": {
+      "button": "安装",
+      "through": "通过 {{method}} 安装",
+      "installing": "正在安装…",
+      "cancel": "取消安装",
+      "failed": "安装失败，重试",
+      "missingLine": "未安装。点“安装”，OverBench 会通过 {{method}} 装好它。",
+      "missingLineAdapter": "尚未安装。点“安装”，OverBench 会把它的适配器装进自己的数据目录。",
+      "title": "安装 {{name}}",
+      "body": "OverBench 在后台装好它，装完这一页会直接变成已安装的状态。",
+      "adapterBody": "OverBench 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行。",
+      "method": "安装方式",
+      "methods": {
+        "brew": "Homebrew",
+        "npm": "npm",
+        "script": "官方脚本"
+      },
+      "notFound": "未找到",
+      "progressTitle": "正在安装 {{name}}",
+      "failedTitle": "安装失败",
+      "elsewhere": "已经装在别处？选择可执行文件…",
+      "copyLog": "复制日志"
+    }
   },
   "about": {
     "version": {
@@ -268,6 +382,37 @@
     },
     "source": {
       "name": "源代码"
+    },
+    "groups": {
+      "updates": "更新",
+      "runtime": "运行环境",
+      "links": "链接"
+    },
+    "runtime": {
+      "system": "系统",
+      "copy": "复制版本信息",
+      "copied": "已复制"
+    },
+    "issues": {
+      "name": "反馈问题"
     }
+  },
+  "pages": {
+    "general": "界面语言、输入方式，以及新会话和启动时的行为。",
+    "appearance": "主题、缩放和文字大小。改动立即生效。",
+    "notifications": "只在 OverBench 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
+    "shortcuts": "会话、窗口和终端的快捷键。目前还不能修改。",
+    "agents": "OverBench 通过 ACP 驱动这些编程 Agent。在这里查看账号、套餐用量和安装状态。",
+    "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
+    "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
+    "advanced": "网络代理、诊断信息，以及 OverBench 保存在这台电脑上的数据。",
+    "about": "OverBench 和它所依赖的运行环境。"
+  },
+  "footer": {
+    "about": "关于 OverBench",
+    "upToDate": "已是最新",
+    "available": "{{version}} 可更新",
+    "downloading": "正在下载 {{percent}}%",
+    "restartToUpdate": "重启以更新"
   }
 }

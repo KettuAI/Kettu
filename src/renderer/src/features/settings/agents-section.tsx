@@ -1,20 +1,35 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  ChevronLeftIcon,
+  ArrowLeftIcon,
+  CheckIcon,
   ChevronRightIcon,
+  CircleAlertIcon,
+  CircleArrowUpIcon,
+  CircleCheckIcon,
+  CopyIcon,
   DownloadIcon,
   ExternalLinkIcon,
-  FolderOpenIcon,
+  EyeIcon,
+  EyeOffIcon,
   LogOutIcon,
   RefreshCwIcon,
   RotateCwIcon,
+  XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentConfigItem, AgentDetails, AgentStatus, PlanLimit } from '@shared/agent-host'
+import type {
+  AgentConfigItem,
+  AgentInstallMethod,
+  AgentStatus,
+  AgentTask,
+  PlanLimit,
+} from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
+import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import { Badge } from '@renderer/components/ui/badge'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import {
   Collapsible,
@@ -32,16 +47,15 @@ import {
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
 import { Progress } from '@renderer/components/ui/progress'
+import { Separator } from '@renderer/components/ui/separator'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
-import { readiness } from '@renderer/features/agents/readiness'
-import { CopyButton } from '@renderer/features/git/branch-popover'
-import { LimitsPart } from '@renderer/features/session/composer/usage'
+import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { countdown } from '@renderer/features/sidebar/plan-usage'
-import { limitLabel, longAgo } from '@renderer/lib/format'
+import { countdown, usageTone } from '@renderer/features/sidebar/plan-usage'
+import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { fileManagerName } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
@@ -54,8 +68,26 @@ import {
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
-import { ControlError } from './controls'
-import { RowFrame, RowText } from './rows'
+import {
+  ControlError,
+  CopyAction,
+  IconAction,
+  Masked,
+  PathText,
+  RevealAction,
+  SettingSelect,
+} from './controls'
+import { GroupLabel, RowFrame, RowShell, RowText } from './rows'
+import { useApply } from './use-apply'
+
+const VENDORS: Partial<Record<AgentId, string>> = {
+  'claude-code': 'Anthropic',
+  codex: 'OpenAI',
+  opencode: 'SST',
+}
+
+/** A check the user started counts as just done for this long, then it reads as "checked ago". */
+const JUST_CHECKED_MS = 60_000
 
 function useAction(): [(run: () => Promise<unknown>) => void, boolean, string | null] {
   const [busy, setBusy] = useState(false)
@@ -68,6 +100,36 @@ function useAction(): [(run: () => Promise<unknown>) => void, boolean, string | 
       .finally(() => setBusy(false))
   }
   return [act, busy, error]
+}
+
+/** The way OverBench would install it now, or null when it cannot. */
+function installMethod(status: AgentStatus, picked?: string): AgentInstallMethod | null {
+  const available = status.installMethods.filter((m) => m.available)
+  return available.find((m) => m.id === picked) ?? available[0] ?? null
+}
+
+function canInstall(status: AgentStatus): boolean {
+  if (status.package) return !status.package.installed && status.state === 'available'
+  return status.state === 'not-installed' && installMethod(status) !== null
+}
+
+function startInstall(agentId: AgentId, method?: AgentInstallMethod['id']): void {
+  host('agents.install', method ? { agentId, method } : { agentId }).catch((e: unknown) =>
+    console.warn(`Install failed: ${errorMessage(e)}`),
+  )
+}
+
+function startUpdate(agentId: AgentId): void {
+  useAgentsStore
+    .getState()
+    .update(agentId)
+    .catch((e: unknown) => console.warn(`Update failed: ${errorMessage(e)}`))
+}
+
+function cancelTask(agentId: AgentId): void {
+  host('agents.cancelTask', { agentId }).catch((e: unknown) =>
+    console.warn(`Could not cancel: ${errorMessage(e)}`),
+  )
 }
 
 function limitsReadable(status: AgentStatus): boolean {
@@ -93,13 +155,14 @@ function useAgentReads(status: AgentStatus): boolean {
       current = false
     }
   }, [status.id])
-  // Again on each state change, so an adapter installed meanwhile shows its CLI version.
+  // Again on each state or task change, so an adapter installed or updated shows its CLI version.
+  const task = status.task?.state ?? null
   useEffect(() => {
     useAgentsStore
       .getState()
       .loadDetails(status.id)
       .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
-  }, [status.id, status.state])
+  }, [status.id, status.state, task])
   return reading
 }
 
@@ -109,8 +172,120 @@ function currentLimits(limits: PlanLimit[], now: number): PlanLimit[] {
 }
 
 /** The agent's own version: for a package agent the CLI its adapter runs, never the adapter's. */
-function agentVersion(status: AgentStatus, details: AgentDetails | undefined): string | null {
+function useAgentVersion(status: AgentStatus): string | null {
+  const details = useAgentsStore((s) => s.details[status.id])
   return details?.cliVersion ?? (status.package ? null : status.version)
+}
+
+const TONE_TEXT = { success: '', attention: 'text-attention-text', destructive: 'text-destructive' }
+
+function percent(limit: PlanLimit): string {
+  return limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`
+}
+
+/** What an agent's row offers next to its name: install, update, or how either is going. */
+function AgentPill({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation('settings')
+  const updated = useAgentsStore((s) => s.updated[status.id])
+  const version = useAgentVersion(status)
+  const task: AgentTask | null = status.task
+  if (task?.state === 'running' || status.state === 'installing') {
+    const updating = task?.kind === 'update'
+    return (
+      <Badge variant="info" className="pr-1">
+        <Spinner data-icon="inline-start" />
+        {t(updating ? 'agents.update.updating' : 'agents.install.installing')}
+        {/* The host also stops a first-use install, which runs with no task of its own. */}
+        {(task || status.package) && (
+          <button
+            type="button"
+            aria-label={t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
+            title={t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
+            onClick={() => cancelTask(status.id)}
+            className="grid size-4 place-items-center rounded-full outline-none hover:bg-checked-tint-hover focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <XIcon className="size-2.5" />
+          </button>
+        )}
+      </Badge>
+    )
+  }
+  if (task?.state === 'failed') {
+    const updating = task.kind === 'update'
+    return (
+      <Badge
+        variant="error"
+        render={
+          <button
+            type="button"
+            title={task.error ?? undefined}
+            onClick={() => (updating ? startUpdate(status.id) : startInstall(status.id))}
+          />
+        }
+      >
+        <RotateCwIcon data-icon="inline-start" />
+        {t(updating ? 'agents.update.failed' : 'agents.install.failed')}
+      </Badge>
+    )
+  }
+  if (status.update) {
+    const next = status.update.cliVersion
+    const shown = next && next !== version ? next : null
+    return (
+      <Badge
+        variant="info"
+        render={
+          <button
+            type="button"
+            title={t('agents.update.adapterVersion', {
+              name: status.package?.name ?? status.name,
+              version: status.update.adapterVersion,
+            })}
+            onClick={() => startUpdate(status.id)}
+          />
+        }
+      >
+        <CircleArrowUpIcon data-icon="inline-start" />
+        {t('agents.update.available')}
+        {shown && <span className="font-mono text-meta font-normal">{shown}</span>}
+      </Badge>
+    )
+  }
+  if (updated) {
+    return (
+      <Badge variant="success">
+        <CircleCheckIcon data-icon="inline-start" />
+        {t('agents.update.done')}
+      </Badge>
+    )
+  }
+  if (canInstall(status)) {
+    const method = installMethod(status)
+    return (
+      <Badge
+        variant="info"
+        render={
+          <button
+            type="button"
+            title={
+              method ? t('agents.install.through', { method: methodName(t, method) }) : undefined
+            }
+            onClick={() => startInstall(status.id)}
+          />
+        }
+      >
+        <DownloadIcon data-icon="inline-start" />
+        {t('agents.install.button')}
+      </Badge>
+    )
+  }
+  return null
+}
+
+type SettingsT = ReturnType<typeof useTranslation<'settings'>>['t']
+
+function methodName(t: SettingsT, method: AgentInstallMethod): string {
+  return t(`agents.install.methods.${method.id}`)
 }
 
 /** One agent in the list on the Agents page: what it is, who it is signed in as, its usage. */
@@ -120,12 +295,27 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
   const now = useNow()
   const r = readiness(status)
   const reading = useAgentReads(status)
-  const version = agentVersion(status, details)
+  const version = useAgentVersion(status)
+  const installed = listedInstalled(status)
   const account = status.account?.kind === 'none' ? null : status.account
   const limits = currentLimits(status.limits, now)
+  const method = installMethod(status)
+  const folder = details?.config.find((item) => item.id === 'folder')?.path
   // What it needs first; then who it is signed in as; else how it runs or where it is set up.
   const summary: ReactNode =
-    r.kind === 'missing' || r.kind === 'failed' ? (
+    status.task?.state === 'running' ? (
+      (status.task.progress.at(-1) ?? null)
+    ) : status.state === 'installing' ? (
+      (status.progress.at(-1) ?? t('agents.install.installing'))
+    ) : status.task?.state === 'failed' ? (
+      <span className="text-destructive">{status.task.error}</span>
+    ) : !installed && canInstall(status) ? (
+      status.package ? (
+        t('agents.install.missingLineAdapter')
+      ) : (
+        method && t('agents.install.missingLine', { method: methodName(t, method) })
+      )
+    ) : r.kind === 'missing' || r.kind === 'failed' ? (
       r.message
     ) : r.kind === 'sign-in' ? (
       t('agents.needsSignIn', { name: status.name })
@@ -135,87 +325,86 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
         {account.email && (
           <>
             {' · '}
-            <span className="text-foreground/80">{account.email}</span>
+            <span className="text-foreground">
+              <Masked>{account.email}</Masked>
+            </span>
           </>
         )}
       </>
     ) : reading && status.capabilities.account ? (
       t('agents.readingAccount')
-    ) : status.package && !status.package.installed ? (
-      t('agents.installsOnFirstUse')
-    ) : (
-      (details?.config.find((item) => item.id === 'folder')?.path ?? null)
-    )
-  const usage =
-    limits.length > 0 ? (
-      <UsageMeters limits={limits} />
-    ) : r.kind === 'missing' ? null : status.capabilities.reports ? (
-      <span className="text-xs text-muted-foreground">
-        {t(reading ? 'agents.readingUsage' : 'agents.usageOnceRunning')}
-      </span>
-    ) : (
-      <span className="text-xs text-muted-foreground">{t('agents.noUsage')}</span>
-    )
+    ) : folder ? (
+      <PathText path={folder} />
+    ) : null
+  const usage = !installed ? null : limits.length > 0 ? (
+    <UsageMeters limits={limits} />
+  ) : status.capabilities.reports ? (
+    <span className="text-xs text-muted-foreground">
+      {t(reading ? 'agents.readingUsage' : 'agents.usageOnceRunning')}
+    </span>
+  ) : (
+    <span className="text-xs text-muted-foreground">{t('agents.noUsage')}</span>
+  )
   return (
-    <button
-      type="button"
-      onClick={() => openAgentSettings(status.id)}
-      className="group/agent flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50"
-    >
-      <AgentTile agent={status.id} mono={r.kind === 'missing'} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="truncate text-ui font-medium">{status.name}</span>
-          {version && (
-            <span className="shrink-0 font-mono text-[11.5px] text-muted-foreground">
-              {version}
+    <div className="relative -mx-2 rounded-lg px-3 py-3 transition-colors duration-(--duration-fast) has-[>[data-row-hit]:hover]:bg-accent">
+      {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
+      <button
+        type="button"
+        data-row-hit=""
+        aria-label={status.name}
+        onClick={() => openAgentSettings(status.id)}
+        className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      />
+      <div className="pointer-events-none relative flex items-start gap-3">
+        <AgentTile agent={status.id} mono={!installed} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex h-5 min-w-0 items-center gap-2">
+            <span className="truncate text-ui font-medium">{status.name}</span>
+            {version && (
+              <span className="shrink-0 font-mono text-meta text-muted-foreground">{version}</span>
+            )}
+            <span className="pointer-events-auto flex shrink-0">
+              <AgentPill status={status} />
             </span>
+          </div>
+          {summary && (
+            <span className="truncate text-xs leading-normal text-muted-foreground">{summary}</span>
           )}
+          {usage}
         </div>
-        {summary && <span className="truncate text-xs text-muted-foreground">{summary}</span>}
-        {usage}
+        <div className="flex h-8 shrink-0 items-center gap-2">
+          {installed && <AgentStateLine status={status} />}
+          <ChevronRightIcon className="size-4 text-muted-foreground" />
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2 self-center">
-        <AgentStateLine status={status} />
-        <ChevronRightIcon className="size-4 text-muted-foreground transition-transform duration-(--duration-fast) group-hover/agent:translate-x-0.5" />
-      </div>
-    </button>
+    </div>
   )
 }
 
 /** Up to two current windows, each a label, its percentage, the time left and a bar. */
 function UsageMeters({ limits }: { limits: PlanLimit[] }) {
-  const { t } = useTranslation('composer')
+  const { t } = useTranslation(['settings', 'composer'])
   const now = useNow()
-  const shown = limits.slice(0, 2)
   return (
-    <div className="mt-1.5 grid max-w-md grid-cols-2 gap-x-6">
-      {shown.map((limit) => {
+    <div className="mt-2 grid grid-cols-2 gap-x-5">
+      {limits.slice(0, 2).map((limit) => {
         const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
+        const tone = usageTone(limit)
         return (
-          <div key={limit.window} className="flex min-w-0 flex-col gap-1 text-xs tabular">
+          <div key={limit.window} className="flex min-w-0 flex-col gap-1.5 text-xs tabular">
             <div className="flex items-baseline gap-1.5">
               <span className="text-muted-foreground">{limitLabel(limit)}</span>
-              <span
-                className={cn(
-                  limit.state === 'warning' && 'text-attention-text',
-                  limit.state === 'reached' && 'text-destructive',
-                )}
-              >
-                {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
-              </span>
-              {left && <span className="ml-auto truncate text-muted-foreground">{left}</span>}
+              <span className={cn('font-medium', TONE_TEXT[tone])}>{percent(limit)}</span>
+              {left && (
+                <span className="ml-auto truncate text-muted-foreground">
+                  {t('agents.resetsIn', { time: left })}
+                </span>
+              )}
             </div>
             <Progress
               value={limit.usedPercent ?? 0}
-              tone={
-                limit.state === 'reached'
-                  ? 'destructive'
-                  : limit.state === 'warning'
-                    ? 'attention'
-                    : 'default'
-              }
-              aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
+              tone={tone}
+              aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
             />
           </div>
         )
@@ -224,7 +413,71 @@ function UsageMeters({ limits }: { limits: PlanLimit[] }) {
   )
 }
 
-/** An agent's own page: its account, usage, configuration and how it launches. */
+/** The Installed group's own actions: check for updates, and hide the account details. */
+export function AgentsGroupActions() {
+  const { t } = useTranslation('settings')
+  const check = useAgentsStore((s) => s.updateCheck)
+  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
+  const [apply, error] = useApply()
+  const now = useNow()
+  const checkable = agents.some((a) => a.package)
+  const lastAt = Math.max(0, ...agents.map((a) => a.updateCheckedAt ?? 0)) || null
+  const pending = agents.filter((a) => a.update).length
+  const meta: ReactNode = check.running ? null : check.error ? (
+    <span className="text-destructive" title={check.error}>
+      {t('agents.update.checkFailed')}
+    </span>
+  ) : check.finishedAt && now - check.finishedAt < JUST_CHECKED_MS ? (
+    pending > 0 ? (
+      t('agents.update.justChecked', { count: pending })
+    ) : (
+      t('agents.update.allCurrent')
+    )
+  ) : lastAt ? (
+    t('agents.update.checkedAgo', { ago: longAgo(lastAt, now) })
+  ) : null
+  return (
+    <>
+      {meta && <span className="mr-1 text-muted-foreground">{meta}</span>}
+      {checkable && (
+        <Button
+          variant="quiet"
+          size="xs"
+          disabled={check.running}
+          onClick={() => void useAgentsStore.getState().checkUpdates()}
+        >
+          {check.running ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <RefreshCwIcon data-icon="inline-start" />
+          )}
+          {t('agents.update.check')}
+        </Button>
+      )}
+      {checkable && <Separator orientation="vertical" className="mx-0.5 h-3 self-center" />}
+      <ControlError error={error} />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="xs"
+              aria-pressed={hidden}
+              onClick={() => apply({ privacy: { hideAccount: !hidden } })}
+            />
+          }
+        >
+          {hidden ? <EyeIcon data-icon="inline-start" /> : <EyeOffIcon data-icon="inline-start" />}
+          {t(hidden ? 'agents.showAccounts' : 'agents.hideAccounts')}
+        </TooltipTrigger>
+        <TooltipContent>{t('agents.hideAccountsHint')}</TooltipContent>
+      </Tooltip>
+    </>
+  )
+}
+
+/** An agent's own page: its version, account, usage, configuration and how it launches. */
 export function AgentPage({ agentId }: { agentId: AgentId }) {
   const status = useAgentsStore((s) => s.byId[agentId])
   if (!status) return <BackToAgents />
@@ -237,10 +490,10 @@ function BackToAgents() {
     <Button
       variant="quiet"
       size="compact"
-      className="-ml-1 w-max gap-1 px-1.5 text-muted-foreground"
+      className="-ml-1.5 mb-3 w-max px-1.5"
       onClick={() => openAgentSettings(null)}
     >
-      <ChevronLeftIcon data-icon="inline-start" />
+      <ArrowLeftIcon data-icon="inline-start" />
       {t('sections.agents')}
     </Button>
   )
@@ -249,13 +502,20 @@ function BackToAgents() {
 function AgentPageBody({ status }: { status: AgentStatus }) {
   const { t } = useTranslation(['settings', 'common'])
   const environment = useAgentsStore((s) => s.environment)
-  const details = useAgentsStore((s) => s.details[status.id])
   const override = useSettingsStore((s) => s.settings.agents[status.id]?.binaryPath)
   const [act, busy, error] = useAction()
   const r = readiness(status)
   const reading = useAgentReads(status)
-  const version = agentVersion(status, details)
+  const version = useAgentVersion(status)
+  const installed = listedInstalled(status)
   const running = status.state === 'ready'
+  const adapter = status.package?.name.split('/').at(-1)
+  const vendor = VENDORS[status.id]
+  const connection = vendor
+    ? adapter
+      ? t('agents.via', { vendor, adapter })
+      : t('agents.direct', { vendor })
+    : null
 
   const signInTerminal = (command: string) => {
     const view = useViewStore.getState()
@@ -267,61 +527,70 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-2">
-        <BackToAgents />
-        <div className="flex items-center gap-3">
-          <AgentPicker status={status} />
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            {r.kind === 'failed' && (
-              <Button
-                size="compact"
-                variant="outline"
-                disabled={busy}
-                onClick={() => act(() => host('agents.retry', { agentId: status.id }))}
-              >
-                {busy ? (
-                  <Spinner data-icon="inline-start" className="size-3" />
-                ) : (
-                  <RotateCwIcon data-icon="inline-start" />
-                )}
-                {t('common:actions.retry')}
-              </Button>
-            )}
-            {r.kind === 'missing' && r.url && (
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noreferrer"
-                className={buttonVariants({ variant: 'outline', size: 'compact' })}
-              >
-                {r.action}
-                <ExternalLinkIcon data-icon="inline-end" />
-              </a>
-            )}
-            {status.canLogout && status.signIn === 'signed-in' && (
-              <Button
-                size="compact"
-                variant="quiet"
-                disabled={busy}
-                onClick={() => act(() => host('agents.logout', { agentId: status.id }))}
-              >
-                <LogOutIcon data-icon="inline-start" />
-                {t('agents.signOut')}
-              </Button>
-            )}
-          </div>
+    <div className="flex flex-col">
+      <BackToAgents />
+      <header className="flex items-center gap-3 px-1 pb-7">
+        <AgentTile agent={status.id} mono={!installed} size={40} glyph={21} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h2 className="flex min-w-0 text-title font-semibold">
+            <AgentPicker status={status} />
+          </h2>
+          <p className="flex items-center gap-2 text-small text-muted-foreground">
+            {installed && <AgentStateLine status={status} />}
+            {connection}
+          </p>
         </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {r.kind === 'failed' && (
+            <Button
+              size="compact"
+              variant="outline"
+              disabled={busy}
+              onClick={() => act(() => host('agents.retry', { agentId: status.id }))}
+            >
+              {busy ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <RotateCwIcon data-icon="inline-start" />
+              )}
+              {t('common:actions.retry')}
+            </Button>
+          )}
+          {r.kind === 'missing' && !canInstall(status) && r.url && (
+            <a
+              href={r.url}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: 'outline', size: 'compact' })}
+            >
+              {r.action}
+              <ExternalLinkIcon data-icon="inline-end" />
+            </a>
+          )}
+          {status.canLogout && status.signIn === 'signed-in' && (
+            <Button
+              size="compact"
+              variant="quiet"
+              disabled={busy}
+              onClick={() => act(() => host('agents.logout', { agentId: status.id }))}
+            >
+              <LogOutIcon data-icon="inline-start" />
+              {t('agents.signOut')}
+            </Button>
+          )}
+        </div>
+      </header>
 
+      <div className="flex flex-col gap-7">
         {r.kind !== 'failed' && r.kind !== 'missing' && status.detail && (
-          <p className="px-1 text-xs text-attention-text" data-selectable="">
+          <p className="-mt-4 px-1 text-xs text-attention-text" data-selectable="">
             {status.detail}
           </p>
         )}
-        {(r.kind === 'failed' || r.kind === 'missing') && (
+        {(r.kind === 'failed' || (r.kind === 'missing' && !canInstall(status))) && (
           <p
             className={cn(
-              'px-1 text-xs',
+              '-mt-4 px-1 text-xs',
               r.kind === 'failed' ? 'text-destructive' : 'text-muted-foreground',
             )}
             data-selectable=""
@@ -330,11 +599,9 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </p>
         )}
         {r.kind === 'sign-in' && status.authMethods.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-lg bg-attention-tint px-3 py-2.5">
-            <span className="text-xs text-foreground">
-              {t('agents.needsSignIn', { name: status.name })}
-            </span>
-            <div className="flex flex-wrap gap-1.5">
+          <Alert variant="warning">
+            <AlertTitle>{t('agents.needsSignIn', { name: status.name })}</AlertTitle>
+            <AlertDescription className="mt-2 flex flex-wrap gap-1.5">
               {status.authMethods.map((method) =>
                 method.type === 'terminal' && method.command ? (
                   <Button
@@ -360,172 +627,489 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                   </Button>
                 ),
               )}
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
-        {error && <p className="px-1 text-xs text-destructive">{error}</p>}
-      </div>
+        {error && <p className="-mt-4 px-1 text-xs text-destructive">{error}</p>}
 
-      <Group title={t('agents.account')}>
-        <Fact name={t('agents.version')} mono>
-          {version}
-        </Fact>
-        {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
-        <Fact name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}>
-          {status.account?.label}
-        </Fact>
-        {status.account?.email && <Fact name={t('agents.email')}>{status.account.email}</Fact>}
-      </Group>
+        <TaskNotice status={status} version={version} />
+        {!installed && <InstallNotice status={status} />}
 
-      <Group title={t('agents.usage')}>
-        {status.limits.length > 0 ? (
-          <div className="-mx-2.5">
-            <LimitsPart limits={status.limits} account={status.account} heading={false} />
-          </div>
-        ) : reading && status.capabilities.reports ? (
-          <p className="px-1 py-3 text-xs text-muted-foreground">{t('agents.readingUsage')}</p>
-        ) : limitsReadable(status) && !running ? (
-          <RowFrame first text={<RowText name={t('agents.planLimits')} />}>
-            <Button
-              variant="outline"
-              size="compact"
-              disabled={busy}
-              onClick={() => act(() => refreshLimits(status.id))}
+        {installed && <VersionGroup status={status} version={version} />}
+
+        {installed && (
+          <section className="flex flex-col">
+            <GroupLabel group={{ id: 'account', label: t('agents.account') }} />
+            {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
+            <Fact
+              name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}
             >
-              {busy && <Spinner data-icon="inline-start" className="size-3" />}
-              {t('agents.checkLimits')}
-            </Button>
-          </RowFrame>
-        ) : (
-          <p className="px-1 py-3 text-xs text-muted-foreground">
-            {t('agents.usageNotReported', { name: status.name })}
-          </p>
-        )}
-      </Group>
-
-      <Group title={t('agents.configuration')}>
-        {details?.config.map((item) => (
-          <ConfigRow key={item.id} item={item} />
-        ))}
-        {status.id === 'opencode' && (
-          <RowFrame
-            first
-            text={
-              <RowText
-                name={t('agents.program')}
-                description={
-                  <code className="font-mono text-[11.5px] break-all" data-selectable="">
-                    {override ?? t('agents.programOnPath')}
-                  </code>
-                }
-              />
-            }
-          >
-            {override && (
-              <Button
-                variant="quiet"
-                size="compact"
-                onClick={() =>
-                  act(() =>
-                    useSettingsStore
-                      .getState()
-                      .update({ agents: { opencode: { binaryPath: null } } }),
-                  )
-                }
-              >
-                {t('agents.reset')}
-              </Button>
+              {status.account?.label}
+            </Fact>
+            {status.account?.email && (
+              <Fact name={t('agents.email')}>
+                <Masked>{status.account.email}</Masked>
+              </Fact>
             )}
-            <Button
-              variant="outline"
-              size="compact"
-              onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary('opencode'))}
-            >
-              {t('agents.chooseBinary')}
-            </Button>
-          </RowFrame>
+          </section>
         )}
-        {details && details.config.length === 0 && status.id !== 'opencode' && (
-          <p className="px-1 py-3 text-xs text-muted-foreground">{t('agents.noConfig')}</p>
-        )}
-      </Group>
 
-      <Collapsible>
-        <CollapsibleTrigger className="group/advanced -ml-1 flex w-max items-center gap-1 rounded-md px-1 text-ui font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-          <ChevronRightIcon className="size-3.5 text-muted-foreground transition-transform duration-(--duration-fast) group-data-panel-open/advanced:rotate-90" />
-          {t('agents.advanced')}
-        </CollapsibleTrigger>
-        <CollapsibleContent className={PANEL}>
-          <div className="flex flex-col pt-1 [&>*+*]:border-t [&>*+*]:border-border-soft">
-            <RowFrame
-              first
-              text={
-                <RowText
-                  name={t('agents.launch')}
-                  description={
-                    <code className="font-mono text-[11.5px] break-all" data-selectable="">
-                      {status.launchCommand}
-                    </code>
-                  }
-                />
-              }
-            >
-              <CopyButton text={status.launchCommand} label={t('agents.copyLaunch')} />
-            </RowFrame>
-            {status.package && (
+        {installed && <UsageGroup status={status} reading={reading} running={running} />}
+
+        <section className="flex flex-col">
+          <GroupLabel group={{ id: 'configuration', label: t('agents.configuration') }} />
+          <ConfigRows status={status} override={override ?? null} />
+        </section>
+
+        {installed && (
+          <Collapsible>
+            <CollapsibleTrigger className="group/advanced flex h-7.5 w-full items-center gap-1 px-1 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+              <ChevronRightIcon className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/advanced:rotate-90" />
+              {t('agents.advanced')}
+            </CollapsibleTrigger>
+            <CollapsibleContent className={PANEL}>
               <RowFrame
-                first
                 text={
                   <RowText
-                    name={t('agents.adapter')}
+                    name={t('agents.launch')}
                     description={
-                      <span className="flex flex-wrap gap-x-1.5">
-                        <code className="font-mono text-[11.5px] break-all" data-selectable="">
-                          {status.package.name}@{status.package.version}
-                        </code>
-                        {!status.package.installed && r.kind !== 'installing' && (
-                          <span>{t('agents.installsOnFirstUse')}</span>
-                        )}
-                      </span>
+                      <code className="font-mono text-meta break-all" data-selectable="">
+                        {status.launchCommand}
+                      </code>
                     }
                   />
                 }
               >
-                {status.package.installed && (
-                  <Button
-                    variant="quiet"
-                    size="compact"
-                    disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
-                    onClick={() => act(() => host('agents.reinstall', { agentId: status.id }))}
-                  >
-                    {busy ? (
-                      <Spinner data-icon="inline-start" className="size-3" />
-                    ) : (
-                      <DownloadIcon data-icon="inline-start" />
-                    )}
-                    {t('agents.reinstall')}
-                  </Button>
-                )}
+                <CopyAction text={status.launchCommand} label={t('agents.copyLaunch')} />
               </RowFrame>
-            )}
-            {status.id !== 'opencode' && environment?.nodeVersion && (
-              <Fact name="Node.js" mono>
-                {environment.nodeVersion}
-              </Fact>
-            )}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+              {status.package && (
+                <RowFrame
+                  text={
+                    <RowText
+                      name={t('agents.adapter')}
+                      description={
+                        <code className="font-mono text-meta break-all" data-selectable="">
+                          {status.package.name}@{status.package.version}
+                        </code>
+                      }
+                    />
+                  }
+                >
+                  {status.package.installed && (
+                    <Button
+                      variant="outline"
+                      size="compact"
+                      disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
+                      onClick={() => act(() => host('agents.reinstall', { agentId: status.id }))}
+                    >
+                      {busy && <Spinner data-icon="inline-start" />}
+                      {t('agents.reinstall')}
+                    </Button>
+                  )}
+                </RowFrame>
+              )}
+              {status.package && environment?.nodeVersion && (
+                <Fact name="Node.js" mono>
+                  {environment.nodeVersion}
+                </Fact>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </div>
     </div>
   )
 }
 
-/** A titled run of rows on an agent's page, a hairline between each. */
-function Group({ title, children }: { title: string; children: ReactNode }) {
+/** The agent's version, whether a newer one exists, and the check for it. */
+function VersionGroup({ status, version }: { status: AgentStatus; version: string | null }) {
+  const { t } = useTranslation('settings')
+  const check = useAgentsStore((s) => s.updateCheck)
+  const now = useNow()
+  const checkedAt = status.updateCheckedAt
+  const updating = status.task?.kind === 'update' && status.task.state === 'running'
+  const line: ReactNode = !status.package ? null : check.running ? (
+    t('agents.update.checking')
+  ) : updating ? (
+    t('agents.update.updating')
+  ) : (
+    <>
+      <span
+        aria-hidden
+        className={cn(
+          'mr-1.5 inline-block size-1.5 rounded-full align-[0.1em]',
+          status.update ? 'bg-checked' : 'bg-success',
+        )}
+      />
+      {status.update
+        ? t('agents.update.released', {
+            version: status.update.cliVersion ?? status.update.adapterVersion,
+          })
+        : t('agents.update.upToDate')}
+      {' · '}
+      {checkedAt
+        ? t('agents.update.checkedAgo', { ago: longAgo(checkedAt, now) })
+        : t('agents.update.notChecked')}
+    </>
+  )
   return (
-    <section className="flex flex-col gap-1">
-      <h3 className="px-1 text-ui font-semibold">{title}</h3>
-      <div className="flex flex-col [&>*+*]:border-t [&>*+*]:border-border-soft">{children}</div>
+    <section className="flex flex-col">
+      <GroupLabel group={{ id: 'version', label: t('agents.versionGroup') }} />
+      <RowFrame
+        text={
+          <RowText
+            name={
+              <span className="flex items-baseline gap-2">
+                {t('agents.currentVersion')}
+                <span className="font-mono text-meta font-normal text-muted-foreground">
+                  {version ?? t('agents.notReported')}
+                </span>
+              </span>
+            }
+            description={line}
+          />
+        }
+      >
+        {status.package && (
+          <Button
+            variant="outline"
+            size="compact"
+            disabled={check.running || updating}
+            onClick={() => void useAgentsStore.getState().checkUpdates()}
+          >
+            {check.running ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <RefreshCwIcon data-icon="inline-start" />
+            )}
+            {t('agents.update.check')}
+          </Button>
+        )}
+      </RowFrame>
+    </section>
+  )
+}
+
+/** An update on offer, under way, failed or just done, in one notice under the page's title. */
+function TaskNotice({ status, version }: { status: AgentStatus; version: string | null }) {
+  const { t } = useTranslation(['settings', 'common'])
+  const updated = useAgentsStore((s) => s.updated[status.id])
+  const task = status.task?.kind === 'update' ? status.task : null
+  if (task?.state === 'running') {
+    return (
+      <Alert variant="info">
+        <Spinner />
+        <AlertTitle>{t('agents.update.progressTitle', { name: status.name })}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-2.5">
+          <span className="truncate">{task.progress.at(-1) ?? task.command}</span>
+          <TaskLog task={task} />
+          <span>
+            <Button variant="outline" size="compact" onClick={() => cancelTask(status.id)}>
+              {t('agents.update.cancel')}
+            </Button>
+          </span>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  if (task?.state === 'failed') {
+    return (
+      <Alert variant="error">
+        <CircleAlertIcon />
+        <AlertTitle>{t('agents.update.failedTitle')}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-2.5">
+          <span>{t('agents.update.failedBody')}</span>
+          <TaskLog task={task} />
+          <span className="flex gap-1.5">
+            <Button size="compact" onClick={() => startUpdate(status.id)}>
+              <RotateCwIcon data-icon="inline-start" />
+              {t('common:actions.retry')}
+            </Button>
+            <LogCopyButton task={task} />
+          </span>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  if (status.update) {
+    const next = status.update.cliVersion
+    return (
+      <Alert variant="info">
+        <CircleArrowUpIcon />
+        <AlertTitle>
+          {next && next !== version
+            ? t('agents.update.noticeTitle', { name: status.name, version: next })
+            : t('agents.update.noticeTitleAdapter', { name: status.name })}
+        </AlertTitle>
+        <AlertDescription className="flex flex-col gap-2.5">
+          <span>
+            {t('agents.update.noticeBody', {
+              current: version ?? status.package?.version ?? '',
+              name: status.name,
+            })}
+          </span>
+          <span>
+            <Button size="compact" onClick={() => startUpdate(status.id)}>
+              <DownloadIcon data-icon="inline-start" />
+              {t('agents.update.button')}
+            </Button>
+          </span>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  if (updated) {
+    return (
+      <Alert variant="success">
+        <CircleCheckIcon />
+        <AlertTitle>{t('agents.update.doneTitle', { name: status.name })}</AlertTitle>
+        <AlertDescription>{t('agents.update.doneBody', { name: status.name })}</AlertDescription>
+      </Alert>
+    )
+  }
+  return null
+}
+
+/** Installing an agent that is not installed: how, then its progress, then why it failed. */
+function InstallNotice({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation(['settings', 'common'])
+  const [picked, setPicked] = useState<string | undefined>(undefined)
+  const task = status.task?.kind === 'install' ? status.task : null
+  const method = installMethod(status, picked)
+  if (task?.state === 'running' || status.state === 'installing') {
+    const lines = task ? task.progress : status.progress
+    return (
+      <Alert variant="info">
+        <Spinner />
+        <AlertTitle>{t('agents.install.progressTitle', { name: status.name })}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-2.5">
+          <span className="truncate">{lines.at(-1) ?? task?.command}</span>
+          {lines.length > 0 && <Log lines={lines} />}
+          {(task || status.package) && (
+            <span>
+              <Button variant="outline" size="compact" onClick={() => cancelTask(status.id)}>
+                {t('agents.install.cancel')}
+              </Button>
+            </span>
+          )}
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  if (task?.state === 'failed') {
+    return (
+      <Alert variant="error">
+        <CircleAlertIcon />
+        <AlertTitle>{t('agents.install.failedTitle')}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-2.5">
+          {task.error && <span data-selectable="">{task.error}</span>}
+          <TaskLog task={task} />
+          <span className="flex gap-1.5">
+            <Button size="compact" onClick={() => startInstall(status.id, method?.id)}>
+              <RotateCwIcon data-icon="inline-start" />
+              {t('common:actions.retry')}
+            </Button>
+            <LogCopyButton task={task} />
+          </span>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  if (!canInstall(status)) return null
+  return (
+    <Alert variant="info">
+      <DownloadIcon />
+      <AlertTitle>{t('agents.install.title', { name: status.name })}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-2.5">
+        <span>
+          {status.package
+            ? t('agents.install.adapterBody', { package: status.package.name })
+            : t('agents.install.body')}
+        </span>
+        {!status.package && (
+          <span className="flex items-center gap-3">
+            <span>{t('agents.install.method')}</span>
+            <SettingSelect
+              label={t('agents.install.method')}
+              value={method?.id ?? ''}
+              options={status.installMethods.map((m) => ({
+                value: m.id,
+                label: methodName(t, m),
+                hint: m.available ? undefined : t('agents.install.notFound'),
+                disabled: !m.available,
+              }))}
+              onChange={(id) => setPicked(id)}
+            />
+          </span>
+        )}
+        {method && (
+          <code
+            className="block truncate rounded-lg bg-card px-3 py-2 font-mono text-code text-foreground"
+            data-selectable=""
+            title={method.command}
+          >
+            {method.command}
+          </code>
+        )}
+        <span className="flex flex-wrap gap-1.5">
+          <Button size="compact" onClick={() => startInstall(status.id, method?.id)}>
+            <DownloadIcon data-icon="inline-start" />
+            {t('agents.install.button')}
+          </Button>
+          {!status.package && (
+            <Button
+              variant="quiet"
+              size="compact"
+              onClick={() =>
+                void window.overbench.dialogs
+                  .chooseAgentBinary(status.id)
+                  .catch((e: unknown) => console.warn(errorMessage(e)))
+              }
+            >
+              {t('agents.install.elsewhere')}
+            </Button>
+          )}
+        </span>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function TaskLog({ task }: { task: AgentTask }) {
+  const lines = task.progress.length > 0 ? task.progress : [task.command]
+  return <Log lines={lines} error={task.state === 'failed'} />
+}
+
+function Log({ lines, error }: { lines: string[]; error?: boolean }) {
+  return (
+    <pre
+      data-selectable=""
+      className={cn(
+        'max-h-40 overflow-auto rounded-lg bg-card px-3 py-2 font-mono text-meta whitespace-pre-wrap',
+        error ? 'text-destructive' : 'text-muted-foreground',
+      )}
+    >
+      {lines.join('\n')}
+    </pre>
+  )
+}
+
+function LogCopyButton({ task }: { task: AgentTask }) {
+  const { t } = useTranslation('settings')
+  const [copied, setCopied] = useState(false)
+  return (
+    <Button
+      variant="quiet"
+      size="compact"
+      onClick={() => {
+        const text = [`$ ${task.command}`, ...task.progress, task.error ?? ''].join('\n')
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        })
+      }}
+    >
+      {copied ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
+      {t('agents.install.copyLog')}
+    </Button>
+  )
+}
+
+/** Plan usage, one row per window, read afresh while the page shows. */
+function UsageGroup({
+  status,
+  reading,
+  running,
+}: {
+  status: AgentStatus
+  reading: boolean
+  running: boolean
+}) {
+  const { t } = useTranslation(['settings', 'composer'])
+  const now = useNow()
+  const [act, busy, error] = useAction()
+  const observed = Math.max(0, ...status.limits.map((l) => l.observedAt)) || null
+  const actions =
+    status.limits.length > 0 && limitsReadable(status) ? (
+      <>
+        {observed && (
+          <span className="text-muted-foreground">
+            {t('agents.usageUpdated', { ago: longAgo(observed, now) })}
+          </span>
+        )}
+        <IconAction
+          label={t('agents.refreshUsage')}
+          disabled={busy}
+          onClick={() => act(() => refreshLimits(status.id))}
+        >
+          {busy ? <Spinner /> : <RefreshCwIcon />}
+        </IconAction>
+      </>
+    ) : null
+  return (
+    <section className="flex flex-col">
+      <GroupLabel group={{ id: 'usage', label: t('agents.usage'), actions }} />
+      {status.limits.length > 0 ? (
+        status.limits.map((limit) => {
+          const tone = usageTone(limit)
+          const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
+          return (
+            <RowFrame
+              key={limit.window}
+              text={
+                <RowText
+                  name={limitLabel(limit)}
+                  description={
+                    limit.resetsAt
+                      ? left
+                        ? t('agents.resetsIn', { time: left })
+                        : t('agents.resetsAt', { time: resetTime(limit.resetsAt, now) })
+                      : undefined
+                  }
+                />
+              }
+            >
+              <Progress
+                value={limit.usedPercent ?? 0}
+                tone={tone}
+                className="w-40"
+                aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+              />
+              <span
+                className={cn('w-10 text-right text-small font-medium tabular', TONE_TEXT[tone])}
+              >
+                {percent(limit)}
+              </span>
+            </RowFrame>
+          )
+        })
+      ) : reading && status.capabilities.reports ? (
+        <RowShell>
+          <p className="py-3 text-xs text-muted-foreground">{t('agents.readingUsage')}</p>
+        </RowShell>
+      ) : limitsReadable(status) && !running ? (
+        <RowFrame text={<RowText name={t('agents.planLimits')} />}>
+          <ControlError error={error} />
+          <Button
+            variant="outline"
+            size="compact"
+            disabled={busy}
+            onClick={() => act(() => refreshLimits(status.id))}
+          >
+            {busy && <Spinner data-icon="inline-start" />}
+            {t('agents.checkLimits')}
+          </Button>
+        </RowFrame>
+      ) : (
+        <RowShell>
+          <p className="py-3 text-xs text-muted-foreground">
+            {t('agents.usageNotReported', { name: status.name })}
+          </p>
+        </RowShell>
+      )}
+      {error && status.limits.length > 0 && (
+        <p className="px-1 pt-1 text-xs text-destructive">{error}</p>
+      )}
     </section>
   )
 }
@@ -534,9 +1118,9 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 function Fact({ name, mono, children }: { name: string; mono?: boolean; children: ReactNode }) {
   const { t } = useTranslation('settings')
   return (
-    <RowFrame first text={<RowText name={name} />}>
+    <RowFrame text={<RowText name={name} />}>
       {children ? (
-        <span className={cn('text-ui', mono && 'font-mono text-[12.5px]')} data-selectable="">
+        <span className={cn('text-ui', mono && 'font-mono text-meta')} data-selectable="">
           {children}
         </span>
       ) : (
@@ -546,40 +1130,79 @@ function Fact({ name, mono, children }: { name: string; mono?: boolean; children
   )
 }
 
-function ConfigRow({ item }: { item: AgentConfigItem }) {
+function ConfigRows({ status, override }: { status: AgentStatus; override: string | null }) {
   const { t } = useTranslation('settings')
-  const [error, setError] = useState<string | null>(null)
+  const details = useAgentsStore((s) => s.details[status.id])
+  const [act, , error] = useAction()
   return (
-    <RowFrame
-      first
-      text={
-        <RowText
-          name={t(`agents.config.${item.id}`)}
-          description={
-            <span className="flex flex-wrap gap-x-1.5">
-              <code className="font-mono text-[11.5px] break-all" data-selectable="">
-                {item.path}
-              </code>
-              {item.env && <span>{t('agents.setBy', { env: item.env })}</span>}
-            </span>
-          }
-        />
-      }
-    >
-      <ControlError error={error} />
-      {item.exists ? (
-        <Button
-          variant="quiet"
-          size="compact"
-          onClick={() =>
-            window.overbench.shell
-              .showItem(item.path)
-              .catch((e: unknown) => setError(errorMessage(e)))
+    <>
+      {status.id === 'opencode' && (
+        <RowFrame
+          text={
+            <RowText
+              name={t('agents.program')}
+              description={override ? <PathText path={override} /> : t('agents.programOnPath')}
+            />
           }
         >
-          <FolderOpenIcon data-icon="inline-start" />
-          {t('agents.showIn', { name: fileManagerName() })}
-        </Button>
+          <ControlError error={error} />
+          {override && (
+            <Button
+              variant="quiet"
+              size="compact"
+              onClick={() =>
+                act(() =>
+                  useSettingsStore
+                    .getState()
+                    .update({ agents: { opencode: { binaryPath: null } } }),
+                )
+              }
+            >
+              {t('agents.reset')}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="compact"
+            onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary('opencode'))}
+          >
+            {t('agents.chooseBinary')}
+          </Button>
+        </RowFrame>
+      )}
+      {details?.config.map((item) => (
+        <ConfigRow key={item.id} item={item} />
+      ))}
+      {details && details.config.length === 0 && status.id !== 'opencode' && (
+        <RowShell>
+          <p className="py-3 text-xs text-muted-foreground">{t('agents.noConfig')}</p>
+        </RowShell>
+      )}
+    </>
+  )
+}
+
+function ConfigRow({ item }: { item: AgentConfigItem }) {
+  const { t } = useTranslation('settings')
+  return (
+    <RowFrame
+      text={
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-ui font-medium">{t(`agents.config.${item.id}`)}</span>
+          <PathText path={item.path} missing={!item.exists} />
+          {item.env && (
+            <span className="text-xs text-muted-foreground">
+              {t('agents.setBy', { env: item.env })}
+            </span>
+          )}
+        </div>
+      }
+    >
+      {item.exists ? (
+        <>
+          <CopyAction text={item.path} label={t('advanced.dataFolder.copy')} />
+          <RevealAction path={item.path} />
+        </>
       ) : (
         <span className="text-xs text-muted-foreground">{t('agents.notCreated')}</span>
       )}
@@ -587,7 +1210,7 @@ function ConfigRow({ item }: { item: AgentConfigItem }) {
   )
 }
 
-/** The agent's mark and name as the page's title, opening a searchable list of the agents. */
+/** The agent's name as the page's title, opening a searchable list of the agents. */
 function AgentPicker({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
@@ -603,14 +1226,9 @@ function AgentPicker({ status }: { status: AgentStatus }) {
       itemToStringLabel={name}
       filter={(id: AgentId, query: string) => contains(name(id), query)}
     >
-      <h2 className="flex min-w-0">
-        <ComboboxTrigger className="-ml-1 flex min-w-0 items-center gap-3 rounded-lg py-1 pr-2.5 pl-1 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 data-popup-open:bg-muted/60">
-          <AgentTile agent={status.id} mono={!isInstalled(status)} />
-          <span className="truncate text-[22px] font-semibold tracking-[-0.015em]">
-            {status.name}
-          </span>
-        </ComboboxTrigger>
-      </h2>
+      <ComboboxTrigger className="-ml-1.5 flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-popup-open:bg-accent">
+        <span className="truncate">{status.name}</span>
+      </ComboboxTrigger>
       <ComboboxContent className="w-72">
         <ComboboxInput
           showTrigger={false}
@@ -659,8 +1277,15 @@ export function EnvironmentFooter() {
           ? t('agents.environment.inherited')
           : t('agents.environment.fallback')
   return (
-    <div className="flex flex-col gap-1 px-1">
+    <div className="flex flex-col gap-1 px-1 pt-5">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span
+          aria-hidden
+          className={cn(
+            'size-1.5 shrink-0 rounded-full',
+            source === 'login-shell' ? 'bg-success' : 'bg-muted-foreground',
+          )}
+        />
         <span className="min-w-0 flex-1">{text}</span>
         <Button
           variant="quiet"
@@ -668,11 +1293,7 @@ export function EnvironmentFooter() {
           disabled={busy}
           onClick={() => act(() => useAgentsStore.getState().reloadEnvironment())}
         >
-          {busy ? (
-            <Spinner data-icon="inline-start" className="size-3" />
-          ) : (
-            <RefreshCwIcon data-icon="inline-start" />
-          )}
+          {busy ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}
           {t('agents.environment.reload')}
         </Button>
       </div>

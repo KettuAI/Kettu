@@ -68,5 +68,9 @@
     "losesOnQuit": "Quitting loses them.",
     "losesOnRestart": "Restarting loses them.",
     "losesOnClose": "Closing the window loses them."
+  },
+  "notifications": {
+    "testTitle": "OverBench",
+    "testBody": "Notifications are on. This is how an agent that needs you will reach you."
   }
 }

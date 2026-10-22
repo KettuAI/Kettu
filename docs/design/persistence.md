@@ -106,10 +106,11 @@ interface SettingsFile {
   }
   git: { backgroundFetch: boolean }
   updates: { automatic: 'download' | 'notify' | 'off' }
+  privacy: { hideAccount: boolean } // Settings › Agents' Hide accounts
 }
 ```
 
-- Defaults: the system's language, no default agent, Enter sends, restore and confirm on, the system theme, the default text size, 100% zoom, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, and updates downloaded and installed automatically.
+- Defaults: the system's language, no default agent, Enter sends, restore and confirm on, the system theme, the default text size, 100% zoom, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, updates downloaded and installed automatically, and accounts shown.
 - The renderer reads them with `settings:get` and changes them with `settings:update`, which takes a partial object (`SettingsPatch`). Main validates it against the schema (`src/main/settings-schema.ts`), rejects unknown keys and values, writes the file and sends `settings:changed` to every window. A patch with any problem is rejected whole, with an error naming each bad key, and changes nothing. Sections merge key by key; `proxy` is replaced whole, and a custom proxy URL must be an `http`, `https` or `socks` URL with a host.
 - Executable paths, `agents.<id>.binaryPath` and `terminal.shellPath`, can only be cleared from the renderer, with `null`. Setting one goes through `dialog:choose-agent-binary` or `dialog:choose-shell`, which show a native file dialog in main and store the picked program.
 - The renderer applies appearance settings as attributes on `<html>` (`data-theme`, `data-text-size`, `data-reduce-motion`) and the zoom as `--zoom`, so tokens switch in CSS without re-rendering components. Main applies the zoom to every window ([Interface: zoom](./ui.md#zoom)).

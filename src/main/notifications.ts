@@ -2,6 +2,7 @@ import { BrowserWindow, Notification } from 'electron'
 import type { HostToMain } from '@shared/host-control'
 import type { SettingsFile } from '@shared/settings'
 import { sendCommand } from './events'
+import { t } from './i18n'
 import { createLogger } from './log'
 
 const log = createLogger('notifications')
@@ -66,4 +67,17 @@ export function notifyAttention(message: Attention, settings: SettingsFile): voi
   })
   shown.set(message.sessionId, notification)
   notification.show()
+}
+
+/** A sample from Settings › Notifications, shown even while a window is focused. */
+export function notifyTest(settings: SettingsFile): boolean {
+  if (!Notification.isSupported()) return false
+  const notification = new Notification({
+    title: t('notifications.testTitle'),
+    body: t('notifications.testBody'),
+    silent: !settings.notifications.sound,
+  })
+  notification.on('failed', (_, error) => log.warn(`Test notification failed: ${error}`))
+  notification.show()
+  return true
 }
