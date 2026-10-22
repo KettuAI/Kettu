@@ -11,6 +11,7 @@ import {
   tailHash,
   TAIL_BYTES,
   unchanged,
+  zstdSource,
 } from './lines'
 import { normalizeModel } from './model'
 
@@ -62,12 +63,72 @@ describe('eachLine', () => {
 
   it('reads a zstd log inflated, with its compressed size', async () => {
     const file = path.join(dir, 'd.jsonl.zst')
-    writeFileSync(file, zstdCompressSync(Buffer.from('one\ntwo\n')))
+    const compressed = zstdCompressSync(Buffer.from('one\ntwo\n'))
+    writeFileSync(file, compressed)
     const log = await openLog(file)
-    expect(log.source.length).toBe(8)
+    expect(log.size).toBe(compressed.length)
+    expect((await log.source.read(0, 3)).toString()).toBe('one')
     const lines: string[] = []
     await eachLine(log.source, 0, (text) => lines.push(text))
     expect(lines).toEqual(['one', 'two'])
+    expect(log.source.length).toBe(8)
+    // The tail comes from the last pass alone.
+    expect(await tailHash(log.source, 8)).toBe(
+      await tailHash(bufferSource(Buffer.from('one\ntwo\n')), 8),
+    )
+  })
+})
+
+describe('zstd logs', () => {
+  /** A compressed log of `count` numbered lines, and its inflated bytes. */
+  function zstdLog(name: string, count: number) {
+    const text = Array.from({ length: count }, (_, i) => `line ${i} ${'x'.repeat(80)}`).join('\n')
+    const plain = Buffer.from(`${text}\n`)
+    const file = path.join(dir, name)
+    writeFileSync(file, zstdCompressSync(plain))
+    return { file, plain }
+  }
+
+  it('inflates as it reads, a chunk at a time, and learns the length at the end', async () => {
+    const { file, plain } = zstdLog('big.jsonl.zst', 20_000)
+    const { source } = await openLog(file)
+    expect(source.length).toBeNull()
+    let chunks = 0
+    for await (const chunk of source.chunks(0)) chunks += chunk.length > 0 ? 1 : 0
+    expect(chunks).toBeGreaterThan(2)
+    expect(source.length).toBe(plain.length)
+    const lines: string[] = []
+    const end = await eachLine(source, 0, (text) => lines.push(text))
+    expect(end).toBe(plain.length)
+    expect(lines).toHaveLength(20_000)
+    expect(lines.at(-1)).toBe(`line 19999 ${'x'.repeat(80)}`)
+  })
+
+  it('resumes from a cursor written while the log was plain', async () => {
+    const { file, plain } = zstdLog('moved.jsonl.zst', 5_000)
+    const offset = plain.lastIndexOf('\n', plain.length - 2) + 1
+    const tail = await tailHash(bufferSource(plain), offset)
+    const { source } = await openLog(file)
+    expect(await resumeOffset(source, { offset, tail })).toBe(offset)
+    const lines: string[] = []
+    expect(await eachLine(source, offset, (text) => lines.push(text))).toBe(plain.length)
+    expect(lines).toEqual([`line 4999 ${'x'.repeat(80)}`])
+    expect(await tailHash(source, plain.length)).toBe(
+      await tailHash(bufferSource(plain), plain.length),
+    )
+    expect(await resumeOffset(source, { offset: plain.length + 10, tail })).toBe(0)
+  })
+
+  it('stops at the size limit and when aborted', async () => {
+    const { file } = zstdLog('bomb.jsonl.zst', 1_000)
+    await expect(eachLine(zstdSource(file, 10_000), 0, () => {})).rejects.toThrow(
+      'inflates to more than 10000 bytes',
+    )
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      eachLine(zstdSource(file), 0, () => {}, { signal: controller.signal }),
+    ).rejects.toThrow()
   })
 })
 

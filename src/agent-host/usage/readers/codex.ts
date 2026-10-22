@@ -744,8 +744,9 @@ async function loadTimeline(file: string, signal: AbortSignal): Promise<Timeline
   const timeline: Timeline = { events: [], maxAt: null, untimed: false, highWater: null }
   const end = await eachLine(source, 0, (text) => addToTimeline(timeline, text, false), { signal })
   // A complete last record without its newline counts here, as in cc-switch.
-  if (end < source.length) {
-    addToTimeline(timeline, (await source.read(end, source.length - end)).toString('utf8'), true)
+  const length = source.length ?? end
+  if (end < length) {
+    addToTimeline(timeline, (await source.read(end, length - end)).toString('utf8'), true)
   }
   return timeline
 }
