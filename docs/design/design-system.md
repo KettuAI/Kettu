@@ -143,6 +143,23 @@ Files and folders show their type's icon from [Material Icon Theme](https://gith
 - Sizes: 16 px in the Files pane's rows and preview header, 12 px in a file chip in the thread.
 - The manifest and the icons load on first use, in a chunk of their own; each icon is a file of its own, never inlined, so only those on screen are read. A plain line icon stands in until they load.
 
+### Data graphics
+
+The [usage page](./usage.md#interface) draws amounts. Its colors carry two meanings, kept apart so one chart never mixes them:
+
+| Token                                  | Light                                                                | Dark                            | Used for                                                                |
+| -------------------------------------- | -------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
+| `--agent-claude-code`, `--agent-codex` | `--brand-claude`, `--brand-codex-2` (the middle of Codex's gradient) | the same                        | An agent's series: its bars in the trend and its key in the legend      |
+| `--agent-opencode`                     | `oklch(0.6 0 0)`                                                     | `oklch(0.72 0 0)`               | OpenCode's series; its mark is black and white, so a mid grey stands in |
+| `--agent-other`                        | `oklch(0.78 0 0)`                                                    | `oklch(0.45 0 0)`               | An agent without a mark                                                 |
+| `--heat-0`                             | `oklch(0 0 0 / 5.5%)`                                                | `oklch(1 0 0 / 6.5%)`           | A day without usage in the activity heatmap                             |
+| `--heat-1`, `--heat-2`, `--heat-3`     | `--checked` mixed at 26%, 48% and 74% with transparent               | the same, over the dark surface | The heatmap's quartiles of the days with usage, lowest first            |
+| `--heat-4`                             | `--checked`                                                          | `--checked`                     | The top quartile                                                        |
+
+- **Series** take the agents' own colors, like their [marks](#agent-marks), so a bar is recognized without the legend.
+- **Amount** is one hue that deepens, never a rainbow: more reads as more without a key of colors. The tokens-by-type table keys its rows with the same steps, and output with `--foreground` at 80%.
+- Bars have a 2 px top radius (`rounded-t-xs`) and a 1 px gap; heatmap cells are `rounded-xs` squares with a 2 px gap. Days outside the chosen range are dimmed to 35% opacity rather than recolored, and the hovered or focused cell takes a 1 px `--foreground` ring.
+
 ## Borders and elevation
 
 ### One line per surface

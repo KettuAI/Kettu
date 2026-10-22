@@ -46,7 +46,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Fixed        |
 | 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Partly fixed |
 | 40  | The Settings pages look crude and their colours are untuned    | Settings       | Fixed        |
-| 41  | The plan usage strip is unclear and needs a better place       | Sidebar        | Open         |
+| 41  | The plan usage strip is unclear and needs a better place       | Sidebar        | Fixed        |
 | 42  | Long lines in the file preview run off the pane                | Side panel     | Fixed        |
 | 43  | The message body needs a typography pass to a given spec       | Thread         | Fixed        |
 | 44  | The space beside the window controls needs a design            | Sidebar        | Open         |
@@ -616,6 +616,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The popover it opens, and the context and plan parts of the composer's usage popover ([problem 7](#7-the-usage-popover-shows-too-little-and-needs-a-full-redesign)), so the same figures are not drawn twice in two styles.
   - The colour and the form (chips, a bar, a ring), following [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) and [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library).
   - The rule rewritten in [Interface: sidebar](../design/ui.md#sidebar) and [Interface: usage popover](../design/ui.md#usage-popover).
+- **Fixed**: the strip is gone from the footer. Each agent's plan limits are a block on the [usage page](../design/usage.md#interface), read afresh when it opens, with the window's name, the share used and when it resets; the sidebar's **Usage** row can end in the tightest limit across the agents, with its window and "used" on screen ("5-hour 62% used") and colored by usage level, or in today's tokens, as Settings › Usage chooses ([Interface: sidebar](../design/ui.md#sidebar)). The composer's usage popover keeps the session's agent's limits.
 
 ## 42. Long lines in the file preview run off the pane
 

@@ -1,6 +1,6 @@
 # Usage statistics
 
-> Status: Draft · Part of the [architecture](../architecture.md) · Not in M0 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, cc-switch at `7da2553`
+> Status: Implemented · Part of the [architecture](../architecture.md) · Not in M0 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, cc-switch at `7da2553`
 
 How much have I used my agents? The usage page answers that across every agent and for any time range: the tokens in total and per day or week, the busiest day, which agents, models and projects took the most, and, next to that, each plan's limits as they stand now.
 
@@ -11,7 +11,7 @@ The numbers come from two sources:
 
 ## Where it stands
 
-The data design below is settled enough to build, and so is the interface: a dashboard screen of its own with a free choice of time range, which the maintainer chose from three mockups on 2026-10-22 ([interface](#interface)).
+Built on 2026-10-22 as designed here, with the dashboard the maintainer chose from three mockups that day ([interface](#interface)). What is left is listed under [testing](#testing).
 
 ## OverBench's own record
 
@@ -60,28 +60,34 @@ Electron 44's Node.js (24.22) decompresses zstd with `zlib` and opens SQLite wit
 - **Lines**: `type: "assistant"` with `message.id` and `message.usage`. From each: the model, `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, the line's `timestamp`, `sessionId` and `cwd` (read per line; cc-switch takes the file's first `sessionId`).
 - **One row per message**: Claude Code writes a line per content block, all with the same `message.id`. The line with a `stop_reason` wins, else the one with the most output. A message counts when any of its four counters is above zero, which includes subagent and workflow requests that end without a `stop_reason` (cc-switch measured 4.1% missing under a stricter rule).
 - **Key**: `claude:<message.id>`, across all files, so a resumed or forked session that copies earlier lines into a new file adds nothing. A message imported half-written is updated when a later scan finds more output.
-- Measured on a heavily used development Mac (2026-10-22, macOS arm64, Node.js 22): 838 files, 5.4 GB, 831,530 lines, 113,807 messages after removing 157,056 repeated lines, 98.6% of the tokens cache reads. One pass on one thread took 18.2 s.
+- **Time and place**: a line without a `timestamp` takes the file's modification time. The project is the line's `cwd` as written.
+- Measured on a heavily used development Mac (2026-10-22, macOS arm64, Node.js 22): 838 files, 5.4 GB, 831,530 lines, 113,807 messages after removing 157,056 repeated lines, 98.6% of the tokens cache reads. One pass on one thread took 18.2 s with a first prototype; inside the app, the whole first import, these logs with Codex's and OpenCode's, takes about 10 s ([performance](#performance)).
 
 ### Codex
 
-Codex writes running totals, so the reader has to work out each request's own usage. It ports cc-switch's `session_usage_codex.rs` rules and the edge cases its tests pin down:
+Codex writes running totals, so the reader has to work out each request's own usage. It ports cc-switch's `session_usage_codex.rs` rules and the edge cases its tests pin down, which are ported with it:
 
-- **Per request**: `event_msg` lines of type `token_count` carry `info.last_token_usage`, the request's own usage, and `info.total_token_usage`, the running total. `last` is used when present; otherwise the increase of the total over its highest value so far, field by field. A file can interleave several running totals (one per `rate_limits.limit_id`), which made a plain difference count 6 to 8 times too much.
-- **Repeats**: an event whose total and last both equal the previous event of the same `limit_id`, or the event just before it, adds nothing.
-- **Compaction**: a `token_usage_record` (Codex 0.153 and later) followed by a `token_count` whose `last` is all zero counts as a request of its own.
-- **Forks and subagents**: a forked or subagent rollout starts by replaying its parent's events up to its `session_meta` time. Those are matched against the parent's events in order and skipped; when the parent cannot be read yet, the child waits for the next scan instead of being guessed at. Pages that continue a thread (`<thread>_<page>.jsonl`) are not forks.
-- **Input**: Codex's input includes the cached part, which is taken out, so input means the same for every agent; output already includes reasoning.
-- **Model**: from `turn_context`, `thread_settings_applied` and the event itself, lower-cased, without a provider prefix or a date suffix.
-- **Key**: `codex:<rollout id>:<n>`, the n-th counted event of that file, and `codex:usage:<response id>` for compaction.
-- **Files that move**: a rollout that Codex compresses or archives keeps its cursor by its file name, so it is not read again.
+- **Per request**: `event_msg` lines of type `token_count` carry `info.last_token_usage`, the request's own usage, and `info.total_token_usage`, the running total. `last` is used when present; otherwise the increase of the total over its highest value so far, field by field. A file can interleave several running totals (one per `rate_limits.limit_id`), which made a plain difference count 6 to 8 times too much; preferring `last` is what fixes that, so, as in cc-switch, there is one highest value per file, not one per `limit_id`.
+- **Repeats**: an event whose full snapshot equals the latest one of its `limit_id`, or the event just before it, adds nothing. Older snapshots of other `limit_id`s are not compared, so a real counter reset still counts.
+- **Compaction**: a `token_usage_record` (Codex 0.153 and later) is held until the next `token_count`; when that count's `last` is all zero, the record is a request of its own. A record held at the end of a scan waits in the cursor's state.
+- **Forks and subagents**: a forked or subagent rollout starts by replaying its parent's events up to its `session_meta` time, compared in nanoseconds. Those are matched against the parent's events in order, gaps allowed, until the first child event that does not match, and skipped. A parent's pages are joined in file-name order, and copies of a parent must agree up to that time. When the parent cannot be read yet, or its ids conflict, the child waits for a later scan instead of being guessed at, and is not read again until it or the files it waits on change. One rule is new: a parent whose files were all last written before the fork already holds everything up to it, so the fork is read at once. cc-switch keeps waiting for such a parent, so a fork of a thread that was archived soon after never counted (one rollout on the development Mac).
+- **Continuation pages** (`<thread>_<page>.jsonl`) are not forks. A page whose counts carry only totals starts from the previous page's highest values, and waits while there is no previous page.
+- **Input**: Codex's input includes cache reads and cache writes, which are taken out, so input means the same for every agent; output already includes reasoning.
+- **Model**: from `turn_context`, `thread_settings_applied` and the event itself, lower-cased, without a provider prefix or a date suffix (`-20261001` or `-2026-10-01`).
+- **Time**: a count without a timestamp takes the latest earlier time in the file, else the file's modification time.
+- **Key**: `codex:<rollout id>:<n>`, the n-th counted event of that file, replayed ones included, as cc-switch numbers them. A compaction is `codex:usage:<response id>`, without the rollout, so a fork that replays its parent's record counts it once; without a response id it is `codex:usage:<rollout id>:<byte offset>`.
+- **Resuming**: the reader's running state (the highest values, each `limit_id`'s last snapshot, the held record, `n`, the model, the parent and how far its replay matched) is kept as versioned JSON in the cursor, so a scan reads only what was appended, also of a rollout that Codex has since compressed. State it cannot read back starts the file over, which the keys make safe.
+- **Files that move**: a rollout's cursor is its file name without `.zst`, so compressing or archiving it reads nothing again. Copies with the same name, in `sessions/` and `archived_sessions/` or plain beside compressed, share that cursor, and a scan reads one of them: the plain one, else the newest.
+- **Reading**: the type of a line is read from its first fields, before `"payload"`, so tool output is never parsed; a line laid out otherwise falls back to a search for the five types the reader uses.
+- Measured on the development Mac: 258 rollouts (216 compressed), 232 MB on disk and 614 MB inflated, 13,821 requests in 1.9 to 2.0 s; a second pass with nothing new takes 3 to 4 ms. For each of the 183 rollouts that are not forks, its rows add up exactly to Codex's own last `total_token_usage`.
 
 ### OpenCode
 
 - Opened read-only, with a busy timeout, while OpenCode may be writing; a busy database is retried at the next scan.
-- OpenCode 2 keeps messages in `session_message` (`type` `assistant` or `compaction`); the 1.x tables `session` and `message` are read when the 2.x ones are missing, since a migrated 1.x database is frozen.
+- OpenCode 2 keeps sessions in `session_v2` and messages in `session_message` (`type` `assistant` or `compaction`); the 1.x tables `session` and `message` are read when the 2.x ones are missing, since a migrated 1.x database is frozen. A relative `OPENCODE_DB` is taken from OpenCode's data folder, as OpenCode does.
 - A message counts once it is complete (`time.completed`, or a compaction that `completed` or `failed`), with `tokens.input`, `.output`, `.reasoning`, `.cache.read` and `.cache.write`, the model and `time.created`. An incomplete one holds its session's cursor, so it is read again when done.
 - **Key**: `opencode:<session id>:<message id>`; migrated messages keep their ids.
-- A change shows in the database file or its `-wal` file, whichever was written last.
+- A change shows in the database file or its `-wal` file, whichever was written last; an empty `-wal` is left out, since SQLite leaves one after every checkpoint.
 
 ## Storage
 
@@ -102,24 +108,25 @@ CREATE TABLE usage (
   cache_read  INTEGER NOT NULL,
   cache_write INTEGER NOT NULL
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX usage_by_time ON usage (at);
+CREATE INDEX usage_by_agent ON usage (source, agent_id);  -- re-import and clearing the record
 
 CREATE TABLE buckets (
   quarter     INTEGER NOT NULL,  -- floor(at / 900000): a quarter hour, UTC
   source      TEXT NOT NULL,
   agent_id    TEXT NOT NULL,
   model       TEXT NOT NULL,
+  project     TEXT NOT NULL,     -- '' when unknown
   rows        INTEGER NOT NULL,
   input       INTEGER NOT NULL,
   output      INTEGER NOT NULL,
   reasoning   INTEGER NOT NULL,
   cache_read  INTEGER NOT NULL,
   cache_write INTEGER NOT NULL,
-  PRIMARY KEY (quarter, source, agent_id, model)
+  PRIMARY KEY (quarter, source, agent_id, model, project)
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE cursors (
-  path      TEXT PRIMARY KEY,
+  id        TEXT PRIMARY KEY,    -- the file's path; a Codex rollout's file name
   agent_id  TEXT NOT NULL,
   size      INTEGER NOT NULL,
   mtime_ns  INTEGER NOT NULL,
@@ -128,21 +135,36 @@ CREATE TABLE cursors (
   state     TEXT,                -- a reader's own state, such as Codex's running totals
   seen_at   INTEGER NOT NULL
 ) STRICT;
+CREATE INDEX cursors_by_agent ON cursors (agent_id);
 ```
 
-- **Rows are kept**: cc-switch deletes detail rows after 30 days and keeps daily sums, after which a message copied into a new file, or a log folder that moved, imports again and counts twice. The key of every row ever imported is what makes an import safe to repeat, so rows are never pruned. The development Mac's 114,000 Claude Code messages are an estimated 10 to 15 MB; to be measured with the first build.
-- **Buckets** hold the sums per quarter hour, written in the same transaction as the rows they sum, and every chart and total reads them, never the rows. Every time zone's offset is a multiple of 15 minutes, so a local day is an exact range of quarters in whatever zone the user is in today; cc-switch's daily sums keep the zone they were made in.
-- **The project and the session** come from the rows, for the breakdowns that need them.
+- **Rows are kept**: cc-switch deletes detail rows after 30 days and keeps daily sums, after which a message copied into a new file, or a log folder that moved, imports again and counts twice. The key of every row ever imported is what makes an import safe to repeat, so rows are never pruned. On the development Mac, 130,153 rows (116,262 from Claude Code, 13,821 from Codex, 70 from OpenCode) take a 35 MB file.
+- **Buckets** hold the sums per quarter hour, agent, model and project, written in the same transaction as the rows they sum, and every chart, total and breakdown reads them, never the rows. Summing the rows per project took 90 to 180 ms on the development Mac; the buckets answer in a few. Every time zone's offset is a multiple of 15 minutes, so a local day is an exact range of quarters in whatever zone the user is in today; cc-switch's daily sums keep the zone they were made in.
+- **The session** stays in the rows, which no breakdown reads yet.
 - A row whose counts grow (a half-written Claude Code message) changes its buckets by the difference.
 
 ## Scanning
 
-- **When**: with **Usage on this computer** on, once after launch when startup has settled, then every 10 minutes, at once when the usage page opens, and on **Sync now**. One scan runs at a time; asking while one runs waits for it. A session that OverBench deletes has its transcript removed by the agent (`session/delete`), so its files are scanned first.
+- **When**: with **Usage on this computer** on, 8 s after launch, so startup settles first, then every 10 minutes, at once when the usage page opens or the setting is turned on, and on **Sync now**. Scans run one at a time in the worker, which answers the page's reads between files; a scan asked for while one runs joins it, and a re-import waits for it. A session that OverBench deletes has its transcript removed by the agent (`session/delete`), so its files are scanned first.
 - **Which files**: one whose size and modification time both match its cursor is skipped (cc-switch looks at the time alone, which misses an append within the same tick).
 - **Reading**: from the cursor's offset, complete lines only; a last line without its newline is left for the next scan. When the 4 KB before the offset no longer hash to `tail`, or the file is shorter than the offset, the file was rewritten: it is read again from the start, which the keys make safe.
 - **Writing**: a file's new rows, their buckets and its cursor commit in one transaction. If reading fails halfway, the cursor keeps its old modification time so the file is tried again.
-- **Progress**: the first import reports files and bytes done, and the page shows it. When a scan adds rows, the host sends one `usage:changed` event, at most every 200 ms, and the open page reads again.
-- **Re-import**, per agent in Settings: deletes that agent's log rows, their share of the buckets and its cursors, then scans again. History whose files the agent has since deleted cannot come back, and the confirmation says so.
+- **Progress**: a scan reports files and bytes planned and done at most every 200 ms, which the page shows while a scan has more than 50 MB to read, and Settings always. A scan that adds rows sends a change at most once a second: each change has an open page read its figures again, and more often made the worker spend more time answering the page than reading the logs (30 s instead of 11 s for the development Mac's first import). Before passing a change on, the host reads each source's first day and row count again, so the page's **All time** and the record's start are current when it reads. The page reads once at a time: changes that arrive meanwhile make one more read after it.
+- **Re-import**, per agent in Settings: deletes that agent's log rows, their share of the buckets and its cursors, then scans it again. History whose files the agent has since deleted cannot come back, and the confirmation says so.
+
+## Host protocol
+
+| Method              | Params                           | Result         | Notes                                                                                   |
+| ------------------- | -------------------------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `usage.summary`     | `{ dayStarts, from, to, scope }` | `UsageSummary` | Sums per day (an index into `dayStarts`) and agent, per model and per project in range  |
+| `usage.total`       | `{ from, to }`                   | `UsageTotal`   | The tokens in a range from the counted sources, for the sidebar's today                 |
+| `usage.status`      | none                             | `UsageStatus`  | Whether the logs are read, the scan running, the record's start and each reader's state |
+| `usage.sync`        | none                             | none           | Scans now and resolves when the scan ends; nothing while the logs are off               |
+| `usage.reimport`    | `{ agentId }`                    | none           | Forgets the agent's imported rows and cursors, then scans it                            |
+| `usage.clearRecord` | none                             | none           | Deletes OverBench's own record                                                          |
+
+- `dayStarts` are the local midnights the renderer works out, ascending, at most 50 years of them, so days stay right across daylight saving time; `scope` is `computer` or `overbench`. The host validates both like every request.
+- `usage.changed` (no payload) says the figures changed; `usage.status` carries the new `UsageStatus` whenever the setting, a scan's progress or a reader's state changes. Both go to all ports.
 
 ## What the page shows
 
@@ -152,7 +174,7 @@ The figures, for the agent, time range and source chosen (all agents, all time a
 - **Days**: the active days in the range (a local day with any usage), the daily average over them, and the peak day with its tokens.
 - **Trend**: the tokens per day, or per week for a range longer than 92 days, split by agent.
 - **Breakdowns** by model and by project, with each one's tokens and share of the range; by agent through the agent filter and the trend.
-- **Activity**: the last 53 weeks as a heatmap, a column per week, whatever the range; the days outside it are dimmed. A day's shade is its quartile among the days with usage (cc-switch), so a few peak days do not wash out the rest. The week starts on the locale's first day. One pointer listener on the grid drives the tooltip (the date, total and parts), so hovering re-renders one tooltip and not 371 cells; the grid is one Tab stop with arrow keys between days.
+- **Activity**: the last 53 weeks as a heatmap, a column per week, whatever the range; the days outside it are dimmed. A day's shade is its quartile among the days with usage (cc-switch), so a few peak days do not wash out the rest. The week starts on the locale's first day. One pointer listener on the grid names the day under the pointer, its date and tokens, in the panel's header, and only an outline moves, so hovering re-renders no cell of the 371; the grid is one Tab stop with arrow keys between days (left and right a week, up and down a day). Without a chosen day, the header names the busiest one.
 - **Plan limits**: each agent's windows as they stand, from the existing [plan limits](./session-model.md#plan-limits), with nothing new to read.
 - Numbers use one formatter everywhere ("41.7B", "274.5M", "1.2K"; 万 and 亿 in Chinese), with the exact value in a tooltip; the tables show exact values.
 
@@ -160,36 +182,38 @@ The figures, for the agent, time range and source chosen (all agents, all time a
 
 A **Usage** screen of its own, laid out as a dashboard. Of the three mockups (a Settings › Usage page, a profile-like page, a dashboard) the maintainer chose the dashboard on 2026-10-22, with the time range free to choose.
 
-- **Opening it**: a **Usage** row in the sidebar (`ChartNoAxesColumn`), after **Artifacts**. The row's end shows today's tokens or the plan limits ([settings](#settings)).
-- **Header**: the title, when the logs last synced (or "OverBench's record" while the logs are off), and **Sync now**.
-- **Filters**, one row that every panel follows:
-  - the agent: **All**, or one agent, each with its color;
+- **Opening it**: a **Usage** row in the sidebar (`ChartNoAxesColumn`), after **Artifacts**. The row's end shows today's tokens or the tightest plan limit ([interface](./ui.md#sidebar), [settings](#settings)).
+- **Header**: the title, when the logs last synced ("Reading the logs…" during a scan, "OverBench's record" while the logs are off), and **Sync now**.
+- **Filters**, one row that every panel follows, wrapping on a narrow window:
+  - the agent: **All**, or one agent, each with its mark; shown once two agents have usage, since with one, **All** is the only choice;
   - the range: **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied;
   - the source: **This computer** or **OverBench only**, shown only while **Usage on this computer** is on.
-- **Figures**: four cards in a row: total tokens with the range's dates and length, the daily average with how many of the range's days were active, the peak day, and the cache share.
-- **Trend** and **Plan limits** side by side. The trend is a bar chart, stacked by agent when all are shown; hovering a bar puts its date (or week) and tokens in the panel's header. Plan limits give one block per agent with its plan, the [plan limits](./session-model.md#plan-limits) rows and when they were read, which is the better place [problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place) asks for.
-- **Activity** and **Tokens by type** side by side: the heatmap, and a table of the four parts and their sum with exact counts and shares.
-- **By model** and **By project** side by side: the six largest in the range, with exact counts and shares.
-- The filters are kept in the usage store while the app runs, and reset to the defaults on launch.
+- **Figures**: four cards, total tokens with the range's dates and length, the daily average with how many of the range's days were active, the busiest day, and the cache share. Each number is compact with the exact value in a tooltip.
+- **Trend** and **Plan limits** side by side. The trend is a bar chart, stacked by agent with a legend when all are shown; the busiest bar, or the one under the pointer or chosen with the arrow keys, puts its date (or week) and tokens in the panel's header, and its date labels name the year when the bars cross one. Plan limits give one block per agent with its plan, the [plan limits](./session-model.md#plan-limits) rows and when they were read, which is the better place [problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place) asks for; the page reads them afresh when it opens.
+- **Activity** and **Tokens by type** side by side: the heatmap, and a table of the parts (reasoning only when an agent reported it) and their sum with exact counts and shares.
+- **By model** and **By project** side by side: the six largest in the range, with exact counts and shares; a model in the mono face, a project by its folder name with the path in a tooltip. Sessions without a project count as one row, "No project".
+- **Layout**: a centred column of at most 960 px. Container queries put the figures four in a row and the panels side by side from 48 rem, and stack them below it.
+- The filters are kept in the usage store while the app runs, and reset to the defaults on launch. The page and its calendar load with dynamic `import()` the first time it opens.
 
 **Custom** opens a `Popover` holding the range picker:
 
 - **Presets** in a column on the left: Today, Yesterday, This week, Last week, This month, Last month, Last 7, 30 and 90 days, This year, All time. A preset fills the calendar; it applies only with **Apply**.
-- **Two months** side by side, with previous and next buttons, from the month of the first day with usage to the current month. The first click picks the start, the second the end (in either order); between them, hovering previews the range. Days after today are disabled, today has a ring, and a dot marks the days with usage for the chosen agent.
-- **A footer** with the start and end as text fields in the locale's date format, which accept typing and move the calendar to the typed date; the number of days; **Cancel** and **Apply**. A start without an end applies as that one day.
-- It is the shadcn/ui `Calendar` in range mode, inside the `Popover`. Its dependency, react-day-picker, was approved on 2026-10-22 and comes in with `pnpm shadcn add calendar` when the page is built, in `devDependencies`. The CLI also adds date-fns, which the component does not import; it stays out of `package.json`, since react-day-picker brings its own and the page formats dates with `Intl`. The CLI installs react-day-picker's latest, 10.x on 2026-10-22, while shadcn builds the component against `^9.7.0`: pin the major shadcn builds against at the time.
+- **Two months** side by side, with previous and next buttons, from the month of the first day with usage to the current month. The first click picks the start, the second the end (in either order); between them, hovering previews the range. Days after today are disabled, today is marked as the `Calendar` marks it, and a dot marks the days with usage. The week starts on the locale's first day, as in the heatmap.
+- **A footer** with the start and end as text fields in ISO form (`2026-10-22`), which accept typing and move the calendar to the typed date, and say so when a date does not read; the number of days; **Cancel** and **Apply**. A start without an end applies as that one day.
+- It is the shadcn/ui `Calendar` in range mode, inside the `Popover`, with react-day-picker 9 (approved on 2026-10-22, in `devDependencies` at `^9.14.0`, the major shadcn builds the component against; the CLI would install 10). date-fns, which the CLI also adds, stays out of `package.json`: the component does not import it, react-day-picker brings its own, and the page formats dates with `Intl`.
 
-Every state is designed with it: no data yet (with the offer to turn on **Usage on this computer**), the first import in progress, a reader that failed, an agent whose logs were not found, and a range with no usage, where the figures show "—" and the tables say so.
+Every state is designed with it: loading (`Skeleton`), no data yet (`Empty`, with the offer to turn on **Usage on this computer**), the first import in progress, the database unavailable or a read that failed (an `Alert`, with **Retry** for the latter), a reader that failed or an agent whose logs were not found (in Settings), and a range with no usage, where the figures show "—" and the tables say so. **OverBench only** with an empty record keeps the dashboard, so the filters stay to switch back.
 
 ## Settings
 
-A **Usage** section in Settings:
+A **Usage** section in Settings, after Agents, in four groups:
 
-- **Usage on this computer**, off by default. Its description names the agents and the folders it reads. Turning it on starts the first import. While on, one row per agent shows its folder, the dates its history covers, when it last synced and how many requests it found, with **Sync now** and **Re-import**.
-- **Show in the sidebar**: what the end of the sidebar's **Usage** row shows: today's tokens (the default), the tightest plan limit, or nothing. Together with the plan limits on the page, this is how OverBench keeps the plan-limit checks the maintainer asked to keep (confirmed 2026-10-22).
-- **Clear OverBench's record**, after a confirmation.
+- **Count from**: **Usage on this computer**, off by default. Its description names the agents and says that only counts, models and times are read and nothing leaves the computer. Turning it on starts the first import.
+- **Logs**, while that is on, with the number of agents and **Sync now** at the label's end, and the scan's progress beside it while one runs: one row per agent with its mark, what its history covers ("Since Jun 16, 2026 · 116,262 requests · synced just now"; "Reading the logs…", "Not read yet" or "No logs found"; or the reader's error), the folders or file it reads, and **Re-import…**, which asks first.
+- **Sidebar**: **Show in the sidebar**, what the end of the sidebar's **Usage** row shows: today's tokens (the default), the tightest plan limit, or nothing. Together with the plan limits on the page, this is how OverBench keeps the plan-limit checks the maintainer asked to keep (confirmed 2026-10-22).
+- **Danger zone**: **Clear OverBench's record…**, after a confirmation; disabled while the record is empty.
 
-They are stored as `usage.fromComputer` and `usage.sidebar` in [settings](./persistence.md#settings).
+They are stored as `usage.fromComputer` and `usage.sidebar` in [settings](./persistence.md#settings); main sends `usage.fromComputer` to the agent host.
 
 ## Privacy
 
@@ -197,15 +221,18 @@ The readers take token counts, model names, times, session ids and working folde
 
 ## Performance
 
-- The first import runs in the usage worker: about 18 s for 5.4 GB of Claude Code logs on the development Mac ([Claude Code](#claude-code)). Later scans read only what was appended.
-- The page reads only buckets: a year is at most 35,000 quarters per agent and model, and far fewer in practice. Target: the page's data in under 20 ms, measured with the first build.
-- The page and its chart load with dynamic `import()`, so startup does not pay for them.
+Measured on the development Mac (2026-10-22, macOS arm64, production build), with 5.5 GB of logs:
+
+- **First import**: about 10 s with the page closed and 11 s with it open and reading as rows arrive, for 130,153 rows. Later scans read only what was appended; one with nothing new takes 19 to 27 ms.
+- **The page's data**: a summary for all time (13 months) takes 17 ms from the renderer and one for 30 days 13 ms, under the 20 ms target; today's total and the status take 1 ms.
+- **Size**: `usage.db` is 35 MB; the page and its calendar are a 100 kB chunk that loads on first use.
 
 ## Testing
 
 - Each reader is tested against fixture logs that cover the cases cc-switch's tests pin down: for Claude Code, repeated lines per message, half-written messages, resumed files, workflow subagents and rewritten files; for Codex, interleaved running totals, repeats, compaction records, forks with missing or conflicting parents, continuation pages, `.zst` files and archived files; for OpenCode, incomplete messages, compactions and both database layouts.
-- The record is tested through the fake agent, which reports usage per turn.
-- The performance script gains a generated log corpus to time a first import and a scan with nothing new.
+- The database (buckets, grown rows, local days, cursors, damage, a newer schema), line reading and resuming, the record's rows, the page's model (ranges, weeks, trend, heat levels, breakdowns, presets), the token formatter and the store's coalesced reads have unit tests.
+- The record is tested through the fake agent, which reports usage per turn with `model_usage`, from the turn to `usage.summary` and `usage.status`.
+- **Not built yet**: the performance script's generated log corpus, to time a first import and a scan with nothing new in CI. The figures above were measured by hand.
 
 ## What we do differently
 
@@ -216,7 +243,8 @@ From cc-switch, OverBench leaves out the routing proxy and its request log, pric
 - the agents' own environment variables find the logs;
 - reading the logs waits for the user's choice;
 - a scan skips a file only when both its size and time are unchanged;
-- one token formatter, not three, and a heatmap that re-renders one tooltip on hover.
+- Codex: a rollout resumes where the last scan stopped instead of being parsed again from its first line, a fork of a parent that was finished before it counts at once, a compaction replayed by a fork counts once, and copies of a rollout share one cursor ([Codex](#codex));
+- one token formatter, not three, and a heatmap whose cells never re-render on hover.
 
 Other references: the reference app's profile page, which puts lifetime tokens, the peak day, the longest task and both streaks over a 53-week heatmap with daily, weekly and cumulative views (the dashboard keeps the totals, the peak day and the heatmap, and leaves out the streaks and the longest task); and Claude Code's `/stats`, which keeps its own daily tokens per model in `~/.claude/stats-cache.json`.
 

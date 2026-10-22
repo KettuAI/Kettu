@@ -180,7 +180,7 @@ The agent host is the source of truth for every live session. Its mapper turns A
 
 ### Persistence
 
-The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. The host also keeps its own copy of every session's thread in a SQLite database, owned by a worker thread and read a page at a time, so a session opens without its agent; the agents keep their transcripts and the context a session continues from. Credentials and diagnostics are never written. See [persistence](./design/persistence.md).
+The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. The host also keeps its own copy of every session's thread in a SQLite database, owned by a worker thread and read a page at a time, so a session opens without its agent; the agents keep their transcripts and the context a session continues from. Token usage has a database and worker of its own, which also reads the agents' logs when the user allows it ([usage statistics](./design/usage.md)). Credentials and diagnostics are never written. See [persistence](./design/persistence.md).
 
 ## Security
 
@@ -228,13 +228,14 @@ src/
 │   ├── git/               Repository status, watchers, pull requests through gh
 │   ├── storage.ts         JSON persistence
 │   ├── threads/           The thread database: its worker, SQLite pages, and the host's store
+│   ├── usage/             Token usage: the record, the agents' log readers, its database and worker
 │   ├── diagnostics.ts     Traffic and stderr ring buffers
 │   └── i18n.ts            The text the host writes for the user, in the chosen language
 ├── terminal-host/         Utility process owning node-pty terminals
 ├── preload/               window.overbench, with its agents and terminals ports
 ├── renderer/src/
 │   ├── app/               Bootstrap, actions, shortcuts, menu commands
-│   ├── features/          agents, home, session (thread, composer, tool calls, permissions), sidebar, git, terminal, settings, updates
+│   ├── features/          agents, home, session (thread, composer, tool calls, permissions), sidebar, git, terminal, settings, updates, usage
 │   └── stores/            Zustand stores
 └── shared/
     ├── ipc.ts             Renderer to main contract
