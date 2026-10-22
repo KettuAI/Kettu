@@ -243,6 +243,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - How the space is balanced: a centred column, a wider one, rows grouped into cards, or a second column beside the rows for help or related state. Left alone, a page of three rows will always look sparse, so the rows' own content, such as descriptions and grouping, counts as much as the layout.
     - How the page grows and shrinks with the window, in both themes.
     - Doing it together with the other Settings problems, as above.
+  - **Decided**: 2026-10-22, the direction of [problem 40](#40-the-settings-pages-look-crude-and-their-colours-are-untuned): the content column is centred in the page area, at most about 560 px wide, instead of aligned to its start.
 
 ## 20. Collapsing the sidebar is abrupt
 
@@ -485,6 +486,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The solid shapes (stop squares, status dots): whether they stay.
   - Whether the no-hand-drawing rule covers the existing inline SVGs. The branch lane and the usage pie are data graphics and the agent marks are brand marks from a library, so they are not UI icons in the sense of Contributing, but that is for the maintainer to confirm.
   - The rule written into [Design system](../design/design-system.md), beside the icon size, and into Contributing.
+- **Decided**: 2026-10-22, from a page that rendered 20 of the app's icons in five libraries (Lucide, Phosphor, Hugeicons, Tabler, Iconoir) with their facts. Lucide stays. All its icons take one stroke width, 1.5, set in one place through `LucideProvider` (present in the installed `lucide-react`), and the 24 call sites that set their own `strokeWidth` lose it. No dependency changes, and shadcn keeps generating Lucide icons (`"iconLibrary": "lucide"`). The other libraries were not taken.
 
 ## 38. Files pane: no markdown preview, file-type icons or editing
 
@@ -516,6 +518,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - Conflicts: the open file reloads from disk today, which must not discard unsaved edits, and an agent may edit the same file meanwhile.
     - Whether the agent should be told about a user's edits, and how far editing goes: plain text with highlighting and save, or an editor with search and more.
   - **Where the rule goes**: [Interface: files](../design/ui.md#files) and the [host's project files](../design/agent-host.md#project-files), which both say read-only today.
+- **Decided** for the file icons: 2026-10-22, from a page that rendered one file tree in Material Icon Theme, Catppuccin Icons, vscode-icons and a desaturated Material, in both themes. The choice is Material Icon Theme with its saturation lowered through the theme's own option, so the colours sit with the restrained palette of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap). It brings in `material-icon-theme` (MIT, 5.39.0 on 2026-10-22) as a dependency, whose `dist/material-icons.json` is the mapping in VS Code's icon theme format: 2,148 file names, 1,381 extensions and 4,659 folder names over 1,251 icons. The Markdown preview and editing parts stay open.
 
 ## 39. Terminal tabs cannot be renamed or reordered and look crude
 
@@ -542,6 +545,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The colour: surfaces, hover and selected fills, status colours, links and destructive actions designed on purpose, following the palette decision of problem 35.
   - Where other problems meet in Settings, so one redesign covers them: the empty space of problem 19, the icons of [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library), Agents ([17](#17-settings--agents-leaves-out-what-matters), [27](#27-agent-adapters-have-no-update-check-or-one-click-update), [29](#29-agents-that-are-not-installed-cannot-be-installed-from-here), [26](#26-account-details-cannot-be-hidden), [28](#28-the-ready-label-next-to-the-status-dot-is-redundant)) and About ([18](#18-the-about-page-needs-redoing)).
   - The proof: each of the nine pages in both themes and at several widths, next to the reference, as in the other polish passes.
+- **Decided**: 2026-10-22, from three mockups of the Git page (flat hairlines, grouped cards, a centred settings window). The direction is the flat hairline look, refined: no cards and no shadows on the page, rows divided by hairlines and grouped under small section labels, states shown as tinted pills, and the content column centred in the page area at most about 560 px wide ([problem 19](#19-settings-leave-too-much-empty-space)). The colours follow the palette decision of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap). Grouped cards and the centred window were not taken.
 
 ## 41. The plan usage strip is unclear and needs a better place
 
