@@ -17,7 +17,7 @@ _颜值也是生产力。_
 </div>
 
 > [!NOTE]
-> OverBench 目前处于早期开发阶段，还没有发布任何版本。第一个里程碑 M0 已在 `main` 分支上实现，正在验收，现在就可以从源码运行。下文标为「_之后_」的内容还在计划中，尚未实现。
+> OverBench 目前处于早期开发阶段。v0.0.1 是它的第一个预览版，由仍在验收中的第一个里程碑 M0 构建而来，难免还有粗糙之处，欢迎通过 [Issue](https://github.com/overbench/overbench/issues) 反馈。下文标为「_之后_」的内容还在计划中，尚未实现。
 
 ## 为什么是 OverBench
 
@@ -81,9 +81,23 @@ _之后_：用于并排审阅 diff 的改动面板、跨会话搜索、命令面
 - [ ] 在改动面板中审阅 diff
 - [ ] 跨会话搜索
 
-## 快速开始
+## 安装
 
-目前还没有可以安装的版本，欢迎 Star 或 Watch 本仓库关注进展。如果想从源码运行 OverBench，需要 Node.js 22.12 及以上版本和 pnpm 10：
+从 [Releases](https://github.com/overbench/overbench/releases/latest) 下载对应系统的安装包。预览版还没有经过 Apple 和 Microsoft 的签名，所以首次启动前系统会询问一次。
+
+| 系统                | 下载                               | 首次启动                                                                                                  |
+| ------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| macOS（Apple 芯片） | `OverBench-<版本>-arm64.dmg`       | macOS 提示无法验证该应用时，打开「系统设置 › 隐私与安全性」，点击「仍要打开」                             |
+| Windows x64         | `OverBench-<版本>-setup.exe`       | SmartScreen 提示「Windows 已保护你的电脑」时，点击「更多信息」，再点击「仍要运行」                        |
+| Linux x64           | `OverBench-<版本>-x86_64.AppImage` | 用 `chmod +x` 加上执行权限后运行；AppImage 需要 FUSE 2（`libfuse2`，Ubuntu 24.04 及以上为 `libfuse2t64`） |
+
+暂时还没有 Intel 芯片 Mac 的版本。OverBench 运行的是你已经在用的 Agent CLI，所以请先安装并登录其中至少一个；Claude Code 和 Codex 的适配器还需要 Node.js 22 及以上版本和 npm，详见[支持的 Agent](#支持的-agent)。
+
+在 Windows 和 Linux 上，OverBench 会在后台下载新版本，并在重启时安装。在 macOS 上，它会在有新版本时提示你并给出下载链接，直到安装包完成签名。
+
+## 从源码运行
+
+如果想从源码运行 OverBench，需要 Node.js 22.12 及以上版本和 pnpm 10：
 
 ```bash
 pnpm install

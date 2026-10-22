@@ -1,6 +1,6 @@
 # Contributing to OverBench
 
-Thanks for helping shape OverBench. For setup and the available scripts, see [Getting started](./README.md#getting-started).
+Thanks for helping shape OverBench. For setup and the available scripts, see [Run from source](./README.md#run-from-source).
 
 ## Before you open a pull request
 

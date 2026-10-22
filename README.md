@@ -17,7 +17,7 @@ _Beauty is productivity._
 </div>
 
 > [!NOTE]
-> OverBench is in early development and has no release yet. Its first milestone, M0, is implemented on `main` and in acceptance, so you can run it from source today. What is marked _later_ below is planned, not built.
+> OverBench is in early development. v0.0.1 is its first preview build, made from the first milestone, M0, while it is still in acceptance, so expect rough edges and please report them as [issues](https://github.com/overbench/overbench/issues). What is marked _later_ below is planned, not built.
 
 ## Why OverBench
 
@@ -81,9 +81,23 @@ The first milestone, M0, connects all three agents over ACP; it is implemented a
 - [ ] Diff review in a changes panel
 - [ ] Search across sessions
 
-## Getting started
+## Install
 
-There is no release to install yet; star or watch the repository to follow along. To run OverBench from source you need Node.js 22.12 or later and pnpm 10:
+Download the installer for your system from [Releases](https://github.com/overbench/overbench/releases/latest). Preview builds are not signed by Apple or Microsoft yet, so your system asks once before the first launch.
+
+| System                 | Download                              | First launch                                                                                                                    |
+| ---------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| macOS on Apple silicon | `OverBench-<version>-arm64.dmg`       | When macOS says it cannot verify the app, open System Settings › Privacy & Security and choose **Open Anyway**                  |
+| Windows x64            | `OverBench-<version>-setup.exe`       | When SmartScreen says it protected your PC, choose **More info**, then **Run anyway**                                           |
+| Linux x64              | `OverBench-<version>-x86_64.AppImage` | Make it executable with `chmod +x`, then run it; AppImages need FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later) |
+
+Builds for Intel Macs are not available yet. OverBench runs the agent CLIs you already use, so install and sign in to at least one of them first; the Claude Code and Codex adapters also need Node.js 22 or later with npm, as described under [Supported agents](#supported-agents).
+
+On Windows and Linux, OverBench downloads new versions in the background and installs them when it restarts. On macOS it tells you when a new version is out and links to its download, until its builds are signed.
+
+## Run from source
+
+To run OverBench from source you need Node.js 22.12 or later and pnpm 10:
 
 ```bash
 pnpm install
