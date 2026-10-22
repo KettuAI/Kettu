@@ -322,11 +322,16 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Reported**: 2026-10-22, with a screenshot of the context menu on a session row.
 - **Observed**: the menu holds **New sub-session** (with a submenu of agents), **Close** and **Delete…**, and nothing else. Common operations are missing, among them archive, rename and pin.
 - **Expected**: the menu worked out further, with the operations people expect on a session: at least archive, rename and pin, and others of the same kind.
+- **Reference**: the session menu of Claude Desktop, sent as a screenshot the same day. Four groups divided by hairlines, with a one-key accelerator at the right of most rows:
+  - **Open in** ▸ with **New window** (`1`), then after a hairline **Cursor** (`2`), **VS Code** (`3`), **Zed** (`4`) and **Finder** (`5`).
+  - **Pin** (`P`), **Mark as unread** (`U`), **Rename** (`R`), **Fork** (`F`).
+  - **Move to** ▸ and **Move to project** ▸, whose submenus the screenshot does not show.
+  - **Archive** (`A`) and **Delete** (`D`), the last in the destructive color.
 - **Today**: `SessionMenu` in `src/renderer/src/features/sidebar/session-row.tsx` renders those three items, and the session title menu in the top bar holds the same ones ([Interface: session](../design/ui.md#session)), so the two change together. In the [session lifecycle](../design/session-model.md#session-lifecycle) **Close** drops the live state and keeps the row in the list, and **Delete** removes the session after a confirmation; there is no archive. A [title](../design/session-model.md#titles) comes from the agent's `session_info_update`, else the first line of the first message, and the user cannot change it. Pinned sessions are [out of M0](./m0.md#out-planned-for-later-milestones), together with drag reordering. **Fork** exists, as a message action in the thread, not in this menu.
 - **To settle when planning**:
   - **Rename**: where the user's title is kept, and that it wins over later titles from the agent, which keep arriving through `session_info_update`. ACP has no rename call, so the title would live in OverBench's index only.
   - **Pin**: a pinned section above the projects, or pinned rows inside their project, and the pinned sessions' own order. This brings pinned sessions into the work and leaves drag reordering for later.
   - **Archive**: what it means next to **Close**, which already leaves the row listed. Archive would take the session off the list without deleting it; how an archived one is found and restored, whether it ends the live session, and what it does to a running one.
-  - Other candidates, none asked for yet: **Fork** (already a message action), mark as read or unread, copy the session id or its transcript path, and reveal the project folder.
+  - The rest of the reference's menu: **Fork** (already a message action, shown only when the agent advertises `session/fork`), **Mark as unread**, **Open in** (an editor or the file manager, which the main process would launch, and **New window**, which is out of M0), and **Move to** and **Move to project**, whose meaning needs the reference's submenus. A session's folder is its ACP `cwd`, so moving it to another project is not something ACP offers.
   - The menu's order and grouping, its destructive item last, and the same set in the top bar's title menu.
   - The rule changes in [Interface: sidebar](../design/ui.md#sidebar), [Interface: session](../design/ui.md#session) and the [session lifecycle](../design/session-model.md#session-lifecycle).
