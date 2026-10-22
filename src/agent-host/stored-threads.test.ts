@@ -8,7 +8,9 @@ import { startTestHost, type TestHost, type TestPort } from './testing/harness'
 let hosts: TestHost[] = []
 
 afterEach(async () => {
-  for (const host of hosts) await host.stop()
+  // A restarted host goes first: the first one removes the folder, whose database Windows
+  // will not delete while the other has it open.
+  for (const host of hosts.reverse()) await host.stop()
   hosts = []
 })
 
