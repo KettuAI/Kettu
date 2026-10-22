@@ -23,16 +23,21 @@ import { basename, limitLabel, resetTime, shortAgo } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
-import { agentName, isInstalled, useAgentsStore } from '@renderer/stores/agents'
+import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { isScratchFolder, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import {
+  isScratchFolder,
+  recentSessions,
+  sessionTitle,
+  useSessionsStore,
+} from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openSession, useViewStore } from '@renderer/stores/view'
 import { flushDraft, NEW_SESSION_DRAFT, readDraft, writeDraft } from './composer/drafts'
 import { AgentMenu } from './new-session/agent-menu'
 import { ProjectMenu } from './new-session/project-menu'
-import { startValues } from './new-session/start-options'
+import { canStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 
 /**
@@ -51,7 +56,7 @@ export function NewSessionView({
   const chosenId = useViewStore((s) => (s.main.kind === 'new' ? s.main.agentId : null))
   const installed = useAgentsStore((s) => {
     const status = chosenId ? s.byId[chosenId] : undefined
-    return !!status && isInstalled(status)
+    return !!status && canStart(status)
   })
   const agentId = installed ? chosenId : null
 
@@ -307,19 +312,15 @@ const RECENT = 3
 function RecentSessions() {
   const { t } = useTranslation('session')
   const now = useNow()
-  const recent = useSessionsStore(
-    useShallow((s) =>
-      Object.values(s.byId)
-        .filter((summary) => summary.parentId === null && summary.origin === 'user')
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, RECENT),
-    ),
+  const recent = useSessionsStore(useShallow((s) => recentSessions(s.byId, RECENT)))
+  // Only whether each folder is a scratch one, so other sessions' updates do not re-render the list.
+  const scratch = useSessionsStore(
+    useShallow((s) => recent.map((summary) => isScratchFolder(s.byId, summary.projectPath))),
   )
-  const byId = useSessionsStore((s) => s.byId)
   const projects = useProjectsStore((s) => s.projects)
   if (recent.length === 0) return null
-  const where = (summary: SessionSummary) =>
-    isScratchFolder(byId, summary.projectPath)
+  const where = (summary: SessionSummary, index: number) =>
+    scratch[index]
       ? t('newSession.noProject')
       : (projects.find((p) => p.path === summary.projectPath)?.name ??
         basename(summary.projectPath))
@@ -328,7 +329,7 @@ function RecentSessions() {
       <h2 className="px-2 pb-1 text-xs font-medium text-muted-foreground">
         {t('newSession.recent')}
       </h2>
-      {recent.map((summary) => (
+      {recent.map((summary, index) => (
         <button
           key={summary.id}
           type="button"
@@ -338,7 +339,7 @@ function RecentSessions() {
           <AgentMark agent={summary.agentId} size={14} />
           <span className="min-w-0 flex-1 truncate">{sessionTitle(summary)}</span>
           <span className="max-w-40 shrink-0 truncate text-xs text-muted-foreground">
-            {where(summary)}
+            {where(summary, index)}
           </span>
           <span className="w-12 shrink-0 text-right font-mono text-meta text-muted-foreground tabular">
             {shortAgo(summary.updatedAt, now)}

@@ -31,6 +31,7 @@ import {
   tierText,
   type SelectOption,
 } from '@renderer/features/session/composer/levels'
+import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
 import { countdown, tightestLimit, usageTone } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
@@ -38,10 +39,12 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
-import { agentName, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
 import {
+  agentNeed,
+  canStart,
   itemKey,
   menuGroups,
   parseItemKey,
@@ -54,9 +57,9 @@ import { useStartConfig } from './use-start-config'
 const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
   !!o && o.type === 'select' && !!o.choices?.length
 
-/** The installed agents first, each group in catalog order. */
+/** The installed agents first, each group in catalog order, as Settings › Agents lists them. */
 function menuOrder(statuses: AgentStatus[]): AgentStatus[] {
-  return [...statuses.filter(isInstalled), ...statuses.filter((s) => !isInstalled(s))]
+  return [...statuses.filter(listedInstalled), ...statuses.filter((s) => !listedInstalled(s))]
 }
 
 const TONE_TEXT = {
@@ -103,7 +106,7 @@ export function AgentMenu({
       agentId: status.id,
       name: status.name,
       model: isSelect(model) ? model : null,
-      choosable: isInstalled(status),
+      choosable: canStart(status),
     }
   })
   const groups = menuGroups(agents, shown, query, contains)
@@ -141,7 +144,11 @@ export function AgentMenu({
       setHeight(null)
       return
     }
-    setShown(agentId ?? statuses.find(isInstalled)?.id ?? statuses[0]?.id ?? null)
+    setShown(
+      agentId ??
+        (statuses.find(listedInstalled) ?? statuses.find(canStart) ?? statuses[0])?.id ??
+        null,
+    )
     for (const status of statuses) {
       if (status.state !== 'ready' || !status.capabilities.reports) continue
       refreshLimits(status.id).catch((error: unknown) =>
@@ -280,10 +287,17 @@ function RailRow({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('session')
   const now = useNow()
   const limit = tightestLimit(status.limits, now)
-  let trailing = null
-  if (!isInstalled(status)) trailing = t('newSession.agentMenu.notInstalled')
-  else if (status.state === 'failed') trailing = t('newSession.agentMenu.failed')
-  else if (status.signIn === 'required') trailing = t('newSession.agentMenu.signIn')
+  const need = agentNeed(status)
+  const trailing =
+    need === 'install' || need === 'adapter'
+      ? t('newSession.agentMenu.notInstalled')
+      : need === 'installing'
+        ? t('newSession.agentMenu.installing')
+        : need === 'failed'
+          ? t('newSession.agentMenu.failed')
+          : need === 'sign-in'
+            ? t('newSession.agentMenu.signIn')
+            : null
 
   return (
     <TabsTrigger value={status.id} className="justify-start gap-2">
@@ -356,7 +370,8 @@ function Pane({
   const { t } = useTranslation('session')
   if (!status) return null
   const name = status.name
-  const installed = isInstalled(status)
+  const need = agentNeed(status)
+  const installed = need !== 'install'
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
   const highTier = isSelect(effort) && effort.choices.some((c) => tierOf(effort, c.value) !== null)
@@ -365,24 +380,33 @@ function Pane({
       (o) => o.type === 'boolean' && (o.id !== ULTRACODE_OPTION_ID || highTier || o.value === true),
     ) ?? []
 
+  const install = (
+    <Button
+      variant="outline"
+      size="xs"
+      onClick={() => {
+        onLeave()
+        openAgentSettings(status.id)
+      }}
+    >
+      {t('newSession.agentMenu.install')}
+    </Button>
+  )
   let notice = null
   if (!searching) {
-    if (!installed) {
+    if (need === 'install') {
       notice = (
         <Notice text={t('newSession.agentMenu.notInstalledLong', { agent: name })}>
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() => {
-              onLeave()
-              openAgentSettings(status.id)
-            }}
-          >
-            {t('newSession.agentMenu.install')}
-          </Button>
+          {install}
         </Notice>
       )
-    } else if (status.state === 'failed') {
+    } else if (need === 'adapter') {
+      notice = (
+        <Notice text={t('newSession.agentMenu.installsOnFirstUse', { agent: name })}>
+          {install}
+        </Notice>
+      )
+    } else if (need === 'failed') {
       notice = (
         <Notice text={status.detail ?? t('newSession.agentMenu.failedLong', { agent: name })} error>
           <Button
@@ -398,7 +422,7 @@ function Pane({
           </Button>
         </Notice>
       )
-    } else if (status.signIn === 'required') {
+    } else if (need === 'sign-in') {
       notice = (
         <Notice text={t('newSession.agentMenu.signInLong', { agent: name })}>
           <Button

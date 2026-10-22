@@ -1,6 +1,25 @@
-import type { AgentOptions } from '@shared/agent-host'
+import type { AgentOptions, AgentStatus } from '@shared/agent-host'
 import type { AgentId, ConfigOption } from '@shared/thread'
+import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import type { OptionValues } from '@renderer/stores/agent-options'
+
+/**
+ * What an agent needs before New session can start it, by the checks Settings › Agents lists it
+ * with. `adapter` is a package agent whose adapter is not installed yet: its first start installs
+ * it, so it can still be chosen. `install` cannot be chosen.
+ */
+export type AgentNeed = 'install' | 'installing' | 'failed' | 'adapter' | 'sign-in' | null
+
+export function agentNeed(status: AgentStatus): AgentNeed {
+  const r = readiness(status)
+  if (r.kind === 'missing') return 'install'
+  if (r.kind === 'installing') return 'installing'
+  if (r.kind === 'failed') return 'failed'
+  if (!listedInstalled(status)) return 'adapter'
+  return r.kind === 'sign-in' ? 'sign-in' : null
+}
+
+export const canStart = (status: AgentStatus): boolean => agentNeed(status) !== 'install'
 
 // The categories whose last chosen values carry over to the next session, as the host keeps them.
 const REMEMBERED: ReadonlySet<ConfigOption['category']> = new Set([
@@ -67,7 +86,7 @@ export interface MenuAgent {
   name: string
   /** The model option the session starts with; null when the agent's options are unknown. */
   model: ConfigOption | null
-  /** Whether it can be chosen: an agent that is not installed cannot. */
+  /** Whether it can be chosen: see `canStart`. */
   choosable: boolean
 }
 

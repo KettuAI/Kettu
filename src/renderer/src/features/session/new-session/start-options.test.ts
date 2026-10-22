@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentOptions } from '@shared/agent-host'
+import type { AgentOptions, AgentStatus } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
 import {
+  agentNeed,
+  canStart,
   itemKey,
   menuGroups,
   parseItemKey,
@@ -176,5 +178,73 @@ describe('menuGroups', () => {
       'claude-code',
       'codex',
     ])
+  })
+})
+
+const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
+  id: 'codex',
+  name: 'Codex',
+  state: 'available',
+  version: null,
+  package: null,
+  signIn: 'unknown',
+  authMethods: [],
+  canLogout: false,
+  account: null,
+  limits: [],
+  detail: null,
+  installUrl: null,
+  progress: [],
+  launchCommand: 'codex-acp',
+  binaryOverride: null,
+  update: null,
+  updateCheckedAt: null,
+  task: null,
+  installMethods: [],
+  capabilities: {
+    loadSession: false,
+    listSessions: false,
+    resumeSession: false,
+    closeSession: false,
+    deleteSession: false,
+    forkSession: false,
+    steering: false,
+    reports: false,
+    account: false,
+    progressNotes: false,
+  },
+  ...overrides,
+})
+
+const adapter = (installed: boolean) => ({
+  name: '@zed-industries/codex-acp',
+  version: '2.2.2',
+  installed,
+})
+
+describe('agentNeed', () => {
+  it('needs nothing from an agent that can run now', () => {
+    expect(agentNeed(status({ package: adapter(true) }))).toBeNull()
+    expect(agentNeed(status({ id: 'opencode', state: 'ready', signIn: 'signed-in' }))).toBeNull()
+  })
+
+  it('counts a package agent without its adapter as not installed, yet startable', () => {
+    const codex = status({ package: adapter(false) })
+    expect(agentNeed(codex)).toBe('adapter')
+    expect(canStart(codex)).toBe(true)
+  })
+
+  it('cannot start an agent missing from PATH or without Node.js', () => {
+    for (const state of ['not-installed', 'node-missing', 'node-outdated'] as const) {
+      const missing = status({ state, package: adapter(false) })
+      expect(agentNeed(missing)).toBe('install')
+      expect(canStart(missing)).toBe(false)
+    }
+  })
+
+  it('shows an install, a failure and a sign-in before the adapter', () => {
+    expect(agentNeed(status({ state: 'installing', package: adapter(false) }))).toBe('installing')
+    expect(agentNeed(status({ state: 'failed', package: adapter(false) }))).toBe('failed')
+    expect(agentNeed(status({ state: 'ready', signIn: 'required' }))).toBe('sign-in')
   })
 })

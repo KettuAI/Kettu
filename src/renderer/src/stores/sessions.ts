@@ -35,6 +35,17 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
   },
 }))
 
+/** The top-level sessions the user started, most recently updated first. */
+export function recentSessions(
+  byId: Record<string, SessionSummary>,
+  count: number,
+): SessionSummary[] {
+  return Object.values(byId)
+    .filter((s) => s.parentId === null && s.origin === 'user')
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, count)
+}
+
 /** Whether a folder is the scratch folder of a session started with No project. */
 export function isScratchFolder(byId: Record<string, SessionSummary>, path: string): boolean {
   return Object.values(byId).some((s) => s.scratch && s.projectPath === path)
