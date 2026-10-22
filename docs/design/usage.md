@@ -2,7 +2,7 @@
 
 > Status: Draft · Part of the [architecture](../architecture.md) · Not in M0 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, cc-switch at `7da2553`
 
-How much have I used my agents? The usage page answers that across every agent: the tokens in total and per day, the streak of active days, the longest task, which agents, models and projects took the most, and, next to that, each plan's limits as they stand now.
+How much have I used my agents? The usage page answers that across every agent and for any time range: the tokens in total and per day or week, the busiest day, which agents, models and projects took the most, and, next to that, each plan's limits as they stand now.
 
 The numbers come from two sources:
 
@@ -11,7 +11,7 @@ The numbers come from two sources:
 
 ## Where it stands
 
-The data design below is settled enough to build. The interface (where the page lives and how it looks) is not: it waits for mockups the maintainer chooses from ([interface](#interface)).
+The data design below is settled enough to build, and so is the interface: a dashboard screen of its own with a free choice of time range, which the maintainer chose from three mockups on 2026-10-22 ([interface](#interface)).
 
 ## OverBench's own record
 
@@ -27,7 +27,6 @@ So the record keeps one row per turn and model, written by the agent host when t
 
 - **Tokens**: input without cache, output, cache read, cache write, and reasoning where an agent reports it apart from output. The turn's **total** is input + output + cache read + cache write, plus reasoning only for an agent whose output leaves it out (OpenCode, to be checked).
 - **Who and where**: the agent, OverBench's session id and the agent's own session id, the project, and the turn's end time.
-- **The turn's duration**, from the `turn_end` entry, for the longest task.
 - A turn that fails or is cancelled without a response reports nothing, and records nothing.
 
 Cost is not recorded: for a subscription it is not what the user pays ([plan limits](./session-model.md#plan-limits)), and only some agents report it.
@@ -101,8 +100,7 @@ CREATE TABLE usage (
   output      INTEGER NOT NULL,
   reasoning   INTEGER,           -- only where reported apart from output
   cache_read  INTEGER NOT NULL,
-  cache_write INTEGER NOT NULL,
-  turn_ms     INTEGER            -- the record's turns only
+  cache_write INTEGER NOT NULL
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX usage_by_time ON usage (at);
 
@@ -148,24 +146,40 @@ CREATE TABLE cursors (
 
 ## What the page shows
 
-The figures, for the agents and time range chosen (all agents and all time by default):
+The figures, for the agent, time range and source chosen (all agents, all time and this computer by default):
 
 - **Tokens**: the total, then its parts: input, output, cache read, cache write, and the cache's share of the input side. cc-switch and the agents count cache reads in the total too; on the development Mac measured above they are 98.6% of it, so the parts always sit next to the total.
-- **Days**: active days (a local day with any usage), the current streak (consecutive active days up to today or yesterday), the longest streak, and the peak day with its tokens.
-- **Longest task**: the longest turn in OverBench's record. Logs carry no turn boundaries, so this figure always comes from the record.
-- **Breakdowns** by agent, model and project, with each one's tokens and share.
-- **Heatmap**: the last 53 weeks, a column per week, with **Daily**, **Weekly** and **Cumulative** views as in the reference. A day's shade is its quartile among the days with usage (cc-switch), so a few peak days do not wash out the rest, and earlier years can be shown below with the same scale. The week starts on the locale's first day. One pointer listener on the grid drives the tooltip (the date, total and parts), so hovering re-renders one tooltip and not 371 cells; the grid is one Tab stop with arrow keys between days.
+- **Days**: the active days in the range (a local day with any usage), the daily average over them, and the peak day with its tokens.
+- **Trend**: the tokens per day, or per week for a range longer than 92 days, split by agent.
+- **Breakdowns** by model and by project, with each one's tokens and share of the range; by agent through the agent filter and the trend.
+- **Activity**: the last 53 weeks as a heatmap, a column per week, whatever the range; the days outside it are dimmed. A day's shade is its quartile among the days with usage (cc-switch), so a few peak days do not wash out the rest. The week starts on the locale's first day. One pointer listener on the grid drives the tooltip (the date, total and parts), so hovering re-renders one tooltip and not 371 cells; the grid is one Tab stop with arrow keys between days.
 - **Plan limits**: each agent's windows as they stand, from the existing [plan limits](./session-model.md#plan-limits), with nothing new to read.
-- Numbers use one formatter everywhere ("41.7B", "274.5M", "1.2K"; 万 and 亿 in Chinese), with the exact value in a tooltip.
+- Numbers use one formatter everywhere ("41.7B", "274.5M", "1.2K"; 万 and 亿 in Chinese), with the exact value in a tooltip; the tables show exact values.
 
 ## Interface
 
-Not decided. To be drawn as options for the maintainer to choose from, among them:
+A **Usage** screen of its own, laid out as a dashboard. Of the three mockups (a Settings › Usage page, a profile-like page, a dashboard) the maintainer chose the dashboard on 2026-10-22, with the time range free to choose.
 
-- a **Settings › Usage** page, holding both the figures and the settings;
-- a **Usage** screen of its own, opened from the sidebar, which could also be the better place for the plan limits that [problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place) asks for.
+- **Opening it**: a **Usage** row in the sidebar (`ChartNoAxesColumn`), after **Artifacts**. The row's end shows today's tokens or the plan limits ([settings](#settings)).
+- **Header**: the title, when the logs last synced (or "OverBench's record" while the logs are off), and **Sync now**.
+- **Filters**, one row that every panel follows:
+  - the agent: **All**, or one agent, each with its color;
+  - the range: **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied;
+  - the source: **This computer** or **OverBench only**, shown only while **Usage on this computer** is on.
+- **Figures**: four cards in a row: total tokens with the range's dates and length, the daily average with how many of the range's days were active, the peak day, and the cache share.
+- **Trend** and **Plan limits** side by side. The trend is a bar chart, stacked by agent when all are shown; hovering a bar puts its date (or week) and tokens in the panel's header. Plan limits give one block per agent with its plan, the [plan limits](./session-model.md#plan-limits) rows and when they were read, which is the better place [problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place) asks for.
+- **Activity** and **Tokens by type** side by side: the heatmap, and a table of the four parts and their sum with exact counts and shares.
+- **By model** and **By project** side by side: the six largest in the range, with exact counts and shares.
+- The filters are kept in the usage store while the app runs, and reset to the defaults on launch.
 
-Every state is designed with it: no data yet (with the offer to turn on **Usage on this computer**), the first import in progress, a reader that failed, and an agent whose logs were not found.
+**Custom** opens a `Popover` holding the range picker:
+
+- **Presets** in a column on the left: Today, Yesterday, This week, Last week, This month, Last month, Last 7, 30 and 90 days, This year, All time. A preset fills the calendar; it applies only with **Apply**.
+- **Two months** side by side, with previous and next buttons, from the month of the first day with usage to the current month. The first click picks the start, the second the end (in either order); between them, hovering previews the range. Days after today are disabled, today has a ring, and a dot marks the days with usage for the chosen agent.
+- **A footer** with the start and end as text fields in the locale's date format, which accept typing and move the calendar to the typed date; the number of days; **Cancel** and **Apply**. A start without an end applies as that one day.
+- It is the shadcn/ui `Calendar` in range mode, which needs react-day-picker. That dependency waits for the maintainer's approval when the page is built.
+
+Every state is designed with it: no data yet (with the offer to turn on **Usage on this computer**), the first import in progress, a reader that failed, an agent whose logs were not found, and a range with no usage, where the figures show "—" and the tables say so.
 
 ## Settings
 
@@ -204,7 +218,7 @@ From cc-switch, OverBench leaves out the routing proxy and its request log, pric
 - a scan skips a file only when both its size and time are unchanged;
 - one token formatter, not three, and a heatmap that re-renders one tooltip on hover.
 
-Other references: the reference app's profile page, which puts lifetime tokens, the peak day, the longest task and both streaks over a 53-week heatmap with daily, weekly and cumulative views; and Claude Code's `/stats`, which keeps its own daily tokens per model in `~/.claude/stats-cache.json`.
+Other references: the reference app's profile page, which puts lifetime tokens, the peak day, the longest task and both streaks over a 53-week heatmap with daily, weekly and cumulative views (the dashboard keeps the totals, the peak day and the heatmap, and leaves out the streaks and the longest task); and Claude Code's `/stats`, which keeps its own daily tokens per model in `~/.claude/stats-cache.json`.
 
 ## Open questions
 
