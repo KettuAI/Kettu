@@ -627,6 +627,7 @@ function LimitsCard() {
 function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
   const { t, i18n } = useTranslation('usage')
   const [shown, setShown] = useState<DayTotal | null>(null)
+            titled={false}
   const monthLabel = useCallback(
     (day: number) => new Intl.DateTimeFormat(i18n.language, { month: 'short' }).format(day),
     [i18n.language],

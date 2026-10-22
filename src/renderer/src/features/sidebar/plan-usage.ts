@@ -31,6 +31,13 @@ export function usageTone(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): Usag
   return 'success'
 }
 
+/** A percentage's text color at each usage level; with plenty left it keeps its own. */
+export const USAGE_TONE_TEXT: Record<UsageTone, string> = {
+  success: '',
+  attention: 'text-attention-text',
+  destructive: 'text-destructive',
+}
+
 /** Time left in its two largest units: "42m", "5h 12m", "1d 5h"; null once it has passed. */
 export function countdown(ms: number): string | null {
   if (ms <= 0) return null

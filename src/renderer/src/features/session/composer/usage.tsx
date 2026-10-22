@@ -15,6 +15,7 @@ import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PANEL } from '@renderer/features/session/entries/helpers'
+import { USAGE_TONE_TEXT, usageTone } from '@renderer/features/sidebar/plan-usage'
 import { fullTime, limitLabel, longAgo, money, resetTime, tokens } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -342,6 +343,7 @@ export function LimitsPart({
   account,
   agent,
   heading = true,
+  titled = true,
 }: {
   limits: PlanLimit[]
   account: AgentAccount | null
@@ -349,6 +351,8 @@ export function LimitsPart({
   agent?: { id: AgentId; name: string }
   /** The plan and the title above the windows, left out where the plan shows already. */
   heading?: boolean
+  /** The "Plan limits" title at the heading's end, left out where a card above says it. */
+  titled?: boolean
 }) {
   const { t } = useTranslation('composer')
   const now = useNow()
@@ -367,7 +371,7 @@ export function LimitsPart({
             )}
             <span className="truncate">{account?.label ?? t('usage.limits.plan')}</span>
           </span>
-          {limits.length > 0 && (
+          {titled && limits.length > 0 && (
             <span className="text-xs text-muted-foreground">{t('usage.limits.title')}</span>
           )}
         </div>
@@ -379,22 +383,10 @@ export function LimitsPart({
               <span className="text-muted-foreground">{limitLabel(limit)}</span>
               <Progress
                 value={limit.usedPercent ?? 0}
-                tone={
-                  limit.state === 'reached'
-                    ? 'destructive'
-                    : limit.state === 'warning'
-                      ? 'attention'
-                      : 'default'
-                }
+                tone={usageTone(limit)}
                 aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
               />
-              <span
-                className={cn(
-                  'w-8 text-right',
-                  limit.state === 'warning' && 'text-attention-text',
-                  limit.state === 'reached' && 'text-destructive',
-                )}
-              >
+              <span className={cn('w-8 text-right', USAGE_TONE_TEXT[usageTone(limit)])}>
                 {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
               </span>
               {limit.resetsAt ? (

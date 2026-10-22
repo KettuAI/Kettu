@@ -36,7 +36,7 @@ import { sessionTree, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
 import { NO_PROJECT_GROUP, openProjectHome, openUsage, useViewStore } from '@renderer/stores/view'
-import { tightestLimit, usageTone } from './plan-usage'
+import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
 
@@ -182,8 +182,6 @@ function TodayTokens() {
   )
 }
 
-const TONE_TEXT = { success: '', attention: 'text-attention-text', destructive: 'text-destructive' }
-
 /** Across the agents, a reached window first, then the fullest. */
 function tightestOf(
   agents: AgentStatus[],
@@ -214,7 +212,7 @@ function TightestLimit() {
     <span
       className={cn(
         'flex min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground tabular-nums',
-        TONE_TEXT[usageTone(limit)],
+        USAGE_TONE_TEXT[usageTone(limit)],
       )}
     >
       <AgentMark agent={agent.id} size={12} />
