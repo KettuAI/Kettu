@@ -102,6 +102,8 @@ interface UsageEvent {
   delta: Tokens
   model: string
   at: number
+  /** The token count that released it, which a fork may replay. */
+  trigger: number
 }
 
 /** A rollout that cannot be read correctly yet; it is tried again at a later scan. */
@@ -175,6 +177,8 @@ export function createCodexReader(): LogReader {
           await readRollout(file, scan)
           deferred.delete(file.path)
         } catch (error) {
+          // An abort while reading a parent or an earlier page is no reason to defer the file.
+          if (ctx.signal.aborted) throw error
           if (error instanceof Deferral) {
             if (error.deps) {
               const { size, mtimeNs, ino } = file
@@ -182,10 +186,7 @@ export function createCodexReader(): LogReader {
               deferred.set(file.path, { ...memo, fingerprint: fingerprint(index, error.deps) })
             } else deferred.delete(file.path)
             ctx.log('info', `Codex rollout ${file.path} is left for a later scan: ${error.message}`)
-          } else {
-            if (ctx.signal.aborted) throw error
-            ctx.log('warn', `Cannot read Codex rollout ${file.path}: ${message(error)}`)
-          }
+          } else ctx.log('warn', `Cannot read Codex rollout ${file.path}: ${message(error)}`)
         }
         ctx.done(file.size)
       }
@@ -403,7 +404,10 @@ async function readRollout(file: Rollout, scan: Scan): Promise<void> {
       rows.push(toRow(`codex:${file.rolloutId}:${event.n}`, event, session))
     }
   }
-  for (const event of usage) rows.push(toRow(event.key, event, session))
+  // A replayed record without a response id has a key of this file's own; the parent counts it.
+  for (const event of usage) {
+    if (!tokens[event.trigger]?.replay) rows.push(toRow(event.key, event, session))
+  }
   ctx.commit(rows, {
     id: file.name,
     agentId: 'codex',
@@ -525,8 +529,10 @@ async function readRecords(
         // Remote compaction writes its usage only in the record, then a token count of zero.
         if (pending && last && isZero(last)) {
           const delta = clampTokens(pending.usage)
-          if (counts(delta))
-            usage.push({ key: pending.key, delta, model: pending.model, at: pending.at })
+          if (counts(delta)) {
+            const trigger = tokens.length
+            usage.push({ key: pending.key, delta, model: pending.model, at: pending.at, trigger })
+          }
         }
         if (!total && !last) break
 

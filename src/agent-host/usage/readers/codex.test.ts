@@ -751,6 +751,27 @@ describe('forks and subagents', () => {
     ])
   })
 
+  it('leaves out a compaction record without a response id that a fork replays', async () => {
+    write(rollout(day, PARENT), [
+      meta(PARENT),
+      turn(),
+      record('', [500, 0, 50]),
+      tokenCount([0, 0, 0], T(2), { last: [0, 0, 0] }),
+      turn(undefined, T(10)),
+    ])
+    write(rollout(day, CHILD_A), [
+      meta(CHILD_A, { spawnedFrom: PARENT, at: T(5) }),
+      record('', [500, 0, 50], T(6)),
+      tokenCount([0, 0, 0], T(6), { last: [0, 0, 0] }),
+      tokenCount([200, 100, 20], T(7), { last: [200, 100, 20] }),
+    ])
+    const ctx = await scanOnce()
+    expect(table(ctx, CHILD_A)).toEqual([[`codex:${CHILD_A}:1`, 100, 100, 20]])
+    expect(table(ctx, PARENT)).toEqual([
+      [expect.stringMatching(new RegExp(`^codex:usage:${PARENT}:\\d+$`)), 500, 0, 50],
+    ])
+  })
+
   it('waits on a fork whose two parent ids disagree', async () => {
     const child = write(rollout(day, CHILD_A), [
       meta(CHILD_A, { forkedFrom: PARENT, spawnedFrom: CHILD_B, at: T(5) }),
@@ -1023,6 +1044,40 @@ describe('pages that continue a thread', () => {
     const ctx = await scanOnce()
     expect(ctx.rows.size).toBe(0)
     expect(cursorOf(ctx, page)).toBeUndefined()
+  })
+
+  it('reads a page again after a scan aborted while reading the page before it', async () => {
+    write(rollout(day, CHILD_A), [meta(CHILD_A), tokenCount([1_500, 1_300, 150], T(20))])
+    write(lonePage(), [
+      pageMeta,
+      turn(undefined, T(1, 1)),
+      tokenCount([1_700, 1_450, 200], T(5, 1)),
+    ])
+    const expected = [
+      [`codex:${CHILD_A}:1`, 200, 1_300, 150],
+      [`codex:${CHILD_A_PAGE}:1`, 50, 150, 50],
+    ]
+    expect(table(await scanOnce())).toEqual(expected)
+    // Aborts at each check in turn, until a scan runs to its end.
+    for (let at = 1; ; at++) {
+      const controller = new AbortController()
+      let checks = 0
+      const signal = controller.signal
+      signal.throwIfAborted = () => {
+        if (++checks === at) controller.abort()
+        AbortSignal.prototype.throwIfAborted.call(signal)
+      }
+      const reader = createCodexReader()
+      const ctx = context({ signal })
+      const finished = await reader.scan(ctx).then(
+        () => !controller.signal.aborted,
+        () => false,
+      )
+      if (finished) break
+      Object.assign(ctx, { signal: new AbortController().signal })
+      await reader.scan(ctx)
+      expect(table(ctx), `aborted at check ${at}`).toEqual(expected)
+    }
   })
 
   it('counts a page whose counter restarted from its own totals', async () => {
