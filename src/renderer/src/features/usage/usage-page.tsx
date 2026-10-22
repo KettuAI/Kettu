@@ -6,6 +6,7 @@ import type { AgentStatus } from '@shared/agent-host'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SegmentedControl } from '@renderer/components/segmented-control'
+import { exportDiagnostics } from '@renderer/app/actions'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -73,13 +74,7 @@ export default function UsagePage() {
 
   let body: ReactNode
   if (status?.unavailable) {
-    body = (
-      <Alert variant="destructive">
-        <CircleAlertIcon />
-        <AlertTitle>{t('error.title')}</AlertTitle>
-        <AlertDescription>{t('error.unavailable')}</AlertDescription>
-      </Alert>
-    )
+    body = <Unavailable />
   } else if (error && !page) {
     body = (
       <Alert variant="destructive">
@@ -118,12 +113,51 @@ export default function UsagePage() {
   )
 }
 
+/** The database cannot be read, even after its worker was started again. */
+function Unavailable() {
+  const { t } = useTranslation('usage')
+  const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const save = async () => {
+    setSaving(true)
+    setNote(null)
+    try {
+      const path = await exportDiagnostics()
+      if (path) setNote(t('error.savedTo', { path }))
+    } catch (e) {
+      setNote(errorMessage(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Alert variant="destructive">
+      <CircleAlertIcon />
+      <AlertTitle>{t('error.title')}</AlertTitle>
+      <AlertDescription>
+        {t('error.unavailable')}
+        {note && (
+          <span data-selectable="" className="mt-1 block">
+            {note}
+          </span>
+        )}
+      </AlertDescription>
+      <AlertAction>
+        <Button variant="outline" size="compact" disabled={saving} onClick={() => void save()}>
+          {t('error.export')}
+        </Button>
+      </AlertAction>
+    </Alert>
+  )
+}
+
 /** When the logs were last read, and Sync now; or where the figures come from. */
 function SyncState() {
   const { t } = useTranslation('usage')
   const status = useUsageStore((s) => s.status)
   const now = useNow()
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
   if (!status) return null
   if (!status.fromComputer) {
     return <span className="text-xs text-muted-foreground">{t('page.record')}</span>
@@ -136,21 +170,31 @@ function SyncState() {
   const scanning = busy || status.scanning !== null
   return (
     <NoDrag className="gap-2">
-      <span className="text-xs text-muted-foreground">
-        {scanning
-          ? t('page.syncing')
-          : synced !== null
-            ? t('page.synced', { ago: longAgo(synced, now) })
-            : ''}
-      </span>
+      {failed && !scanning ? (
+        <Tooltip>
+          <TooltipTrigger render={<span role="alert" className="text-xs text-destructive" />}>
+            {t('page.syncFailed')}
+          </TooltipTrigger>
+          <TooltipContent className="max-w-80">{failed}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          {scanning
+            ? t('page.syncing')
+            : synced !== null
+              ? t('page.synced', { ago: longAgo(synced, now) })
+              : ''}
+        </span>
+      )}
       <Button
         variant="quiet"
         size="compact"
         disabled={scanning}
         onClick={() => {
           setBusy(true)
+          setFailed(null)
           void syncUsage()
-            .catch(() => {})
+            .catch((e: unknown) => setFailed(errorMessage(e)))
             .finally(() => setBusy(false))
         }}
       >

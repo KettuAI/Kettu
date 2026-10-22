@@ -91,7 +91,7 @@ Codex writes running totals, so the reader has to work out each request's own us
 
 ## Storage
 
-The usage database is `state/usage.db`, a SQLite file of its own, apart from [the thread store](./persistence.md#threads): removing sessions, or a damaged thread store, leaves the usage alone. The agent host runs it in a `usage` worker thread of its own, so a first import never delays opening a session. It follows the thread store's rules for `node:sqlite`, WAL, damage and versioning.
+The usage database is `state/usage.db`, a SQLite file of its own, apart from [the thread store](./persistence.md#threads): removing sessions, or a damaged thread store, leaves the usage alone. The agent host runs it in a `usage` worker thread of its own, so a first import never delays opening a session. It follows the thread store's rules for `node:sqlite`, WAL, damage and versioning. A worker that stops on its own, such as one that ran out of memory, is started again up to twice per launch: the requests it was answering fail, the scan's progress clears, and the next scan reads on from the cursors it committed. After that the page says the database cannot be read, with **Export diagnostics**. **Sync now** and a re-import say so in place when their scan fails; the scans OverBench starts by itself only log it. Decided while the maintainer was away; to be reviewed.
 
 ```sql
 CREATE TABLE usage (
@@ -183,7 +183,7 @@ The figures, for the agent, time range and source chosen (all agents, all time a
 A **Usage** screen of its own, laid out as a dashboard. Of the three mockups (a Settings › Usage page, a profile-like page, a dashboard) the maintainer chose the dashboard on 2026-10-22, with the time range free to choose.
 
 - **Opening it**: a **Usage** row in the sidebar (`ChartNoAxesColumn`), after **Artifacts**. The row's end shows today's tokens or the tightest plan limit ([interface](./ui.md#sidebar), [settings](#settings)).
-- **Header**: the title, when the logs last synced ("Reading the logs…" during a scan, "OverBench's record" while the logs are off), and **Sync now**.
+- **Header**: the title, when the logs last synced ("Reading the logs…" during a scan, "OverBench's record" while the logs are off, "Could not sync" in `--destructive` with the reason in its tooltip when **Sync now** failed), and **Sync now**.
 - **Filters**, one row that every panel follows, wrapping on a narrow window:
   - the agent: **All**, or one agent, each with its mark; shown once two agents have usage, since with one, **All** is the only choice;
   - the range: **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied;

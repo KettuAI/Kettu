@@ -43,32 +43,44 @@ export interface UsageStoreOptions {
   log: LogFn
   onChanged(): void
   onProgress(progress: ScanProgress | null): void
+  /** How the database opened after the worker restarted, or `unavailable` once it stays stopped. */
+  onStatus(status: UsageDbStatus): void
   /** How long closing waits for the worker to fold the WAL before stopping it. */
   closeTimeoutMs?: number
 }
 
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void }
+
+/** How many times a worker that stopped on its own is started again. */
+const RESTARTS = 2
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
 
 export class UsageStore {
   /** How the database opened; `unavailable` when the worker never got that far. */
   readonly ready: Promise<UsageDbStatus>
-  private readonly worker: UsageWorker
+  private settleReady: (status: UsageDbStatus) => void = () => {}
+  private worker: UsageWorker
+  private restarts = 0
   private readonly pending = new Map<number, Pending>()
   private nextId = 1
   private stopped: string | null = null
   private closing: Promise<void> | null = null
 
   constructor(private readonly options: UsageStoreOptions) {
-    let settleReady: (status: UsageDbStatus) => void = () => {}
     this.ready = new Promise((resolve) => {
-      settleReady = resolve
+      this.settleReady = resolve
     })
-    this.worker = options.createWorker(options.file)
-    this.worker.onMessage((reply) => {
+    this.worker = this.startWorker()
+  }
+
+  private startWorker(): UsageWorker {
+    const { options } = this
+    const worker = options.createWorker(options.file)
+    worker.onMessage((reply) => {
       switch (reply.type) {
         case 'ready':
-          settleReady(reply.status)
+          if (this.restarts > 0) options.onStatus(reply.status)
+          this.settleReady(reply.status)
           break
         case 'log':
           options.log(reply.level, `Usage: ${reply.message}`)
@@ -87,13 +99,27 @@ export class UsageStore {
           break
       }
     })
-    this.worker.onExit((error) => {
-      settleReady('unavailable')
-      if (this.closing) return
+    worker.onExit((error) => {
+      if (this.closing) {
+        this.settleReady('unavailable')
+        return
+      }
       const reason = `The usage worker stopped${error ? `: ${error.message}` : ''}`
+      // What it was doing is lost; the next scan reads from the cursors it committed.
+      this.failPending(reason)
+      options.onProgress(null)
+      if (this.restarts < RESTARTS) {
+        this.restarts++
+        options.log('warn', `${reason}; starting it again`)
+        this.worker = this.startWorker()
+        return
+      }
       options.log('error', reason)
       this.stop(reason)
+      this.settleReady('unavailable')
+      options.onStatus('unavailable')
     })
+    return worker
   }
 
   private settle(id: number): Pending | undefined {
@@ -104,6 +130,10 @@ export class UsageStore {
 
   private stop(reason: string): void {
     this.stopped = reason
+    this.failPending(reason)
+  }
+
+  private failPending(reason: string): void {
     for (const pending of this.pending.values()) pending.reject(new Error(reason))
     this.pending.clear()
   }

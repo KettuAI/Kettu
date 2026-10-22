@@ -13,7 +13,7 @@ import {
   type UsageTotal,
 } from '@shared/usage'
 import type { LogFn } from '../storage'
-import type { SourceMap, SourceStats } from './db'
+import type { SourceMap, SourceStats, UsageDbStatus } from './db'
 import type { LogReader, UsageRow } from './model'
 import type { ScanResult } from './protocol'
 import type { UsageStore } from './store'
@@ -25,6 +25,8 @@ export interface UsageTimings {
 }
 
 const TIMINGS: UsageTimings = { firstScanMs: 8_000, intervalMs: 10 * 60_000 }
+
+const unusable = (status: UsageDbStatus) => status === 'unavailable' || status === 'newer'
 
 export interface UsageManagerDeps {
   store: UsageStore | null
@@ -59,7 +61,8 @@ export class UsageManager {
   private unavailable = false
   private firstTimer: ReturnType<typeof setTimeout> | null = null
   private interval: ReturnType<typeof setInterval> | null = null
-  private scanning: Promise<void> | null = null
+  /** The scan that runs or is queued last; it resolves with its error, if it failed. */
+  private scanning: Promise<Error | null> | null = null
   /** Turning the setting off cancelled `scanning`, so a full scan follows it instead of joining. */
   private scanCancelled = false
   private stopped = false
@@ -83,7 +86,7 @@ export class UsageManager {
       return
     }
     void store.ready.then((status) => {
-      this.unavailable = status === 'unavailable' || status === 'newer'
+      this.unavailable = unusable(status)
       void this.refreshStats()
     })
     void this.deps.env().then((env) => {
@@ -136,28 +139,30 @@ export class UsageManager {
   }
 
   /** Reads what is new in the logs; one scan at a time, and nothing while the setting is off. */
-  sync(): Promise<void> {
-    return this.scan()
+  async sync(): Promise<void> {
+    const error = await this.scan()
+    if (error) throw error
   }
 
-  /** Reads what is new in these agents' logs, after any scan that runs. */
-  syncAgents(agentIds: AgentId[]): Promise<void> {
+  /** Reads what is new in these agents' logs, after any scan that runs; a failure is logged. */
+  async syncAgents(agentIds: AgentId[]): Promise<void> {
     const agents = agentIds.filter((id) => this.deps.readers.some((r) => r.agentId === id))
-    return agents.length > 0 ? this.scan(agents) : Promise.resolve()
+    if (agents.length > 0) await this.scan(agents)
   }
 
-  private scan(agents?: AgentId[]): Promise<void> {
+  /** A failure is logged, and the promise resolves with it for the callers that report it. */
+  private scan(agents?: AgentId[]): Promise<Error | null> {
     const { store } = this.deps
     if (!store || !this.fromComputer || this.stopped || this.unavailable) {
-      return this.scanning ?? Promise.resolve()
+      return this.scanning ?? Promise.resolve(null)
     }
     // A full scan asked for while one runs joins it; a scan of chosen agents follows it.
     if (this.scanning && !agents && !this.scanCancelled) return this.scanning
     this.scanCancelled = false
-    const run = (this.scanning ?? Promise.resolve())
+    const run = (this.scanning ?? Promise.resolve(null))
       .then(async () => {
         // The setting may have been turned off while this scan waited for the one before.
-        if (!this.fromComputer || this.stopped) return
+        if (!this.fromComputer || this.stopped) return null
         const env = await this.deps.env()
         this.env = env
         const outcome = await store.scan({
@@ -168,11 +173,13 @@ export class UsageManager {
         })
         this.applyResults(outcome.results)
         await this.refreshStats()
+        return null
       })
       .catch((error: unknown) => {
         this.deps.log('warn', `The usage scan failed: ${(error as Error).message}`)
+        return error as Error
       })
-    const tracked: Promise<void> = run.finally(() => {
+    const tracked: Promise<Error | null> = run.finally(() => {
       if (this.scanning !== tracked) return
       this.scanning = null
       this.scanCancelled = false
@@ -196,13 +203,20 @@ export class UsageManager {
     this.logs.set(agentId, { found: null, syncedAt: null, error: null })
     await this.refreshStats()
     this.deps.changed()
-    await this.scan([agentId])
+    const error = await this.scan([agentId])
+    if (error) throw error
   }
 
   async clearRecord(): Promise<void> {
     await this.deps.store?.clearRecord()
     await this.refreshStats()
     this.deps.changed()
+  }
+
+  /** The store restarted its worker, or stopped trying; the page reads again either way. */
+  storeStatus(status: UsageDbStatus): void {
+    this.unavailable = unusable(status)
+    void this.refreshStats().then(() => this.deps.changed())
   }
 
   /** The store wrote rows; the page reads again, once the first days and counts are current. */

@@ -11,6 +11,7 @@
     "syncing": "正在读取日志…",
     "record": "OverBench 的记录",
     "sync": "立即同步",
+    "syncFailed": "同步失败",
     "agent": "Agent",
     "allShort": "全部",
     "range": "时间范围",
@@ -87,7 +88,9 @@
   "error": {
     "title": "无法读取用量",
     "retry": "重试",
-    "unavailable": "无法打开用量数据库。请重启 OverBench；如果仍然打不开，可以在设置 › 高级中导出诊断信息。"
+    "unavailable": "无法读取用量数据库。请重启 OverBench；如果仍然无法读取，请导出诊断信息。",
+    "export": "导出诊断信息",
+    "savedTo": "已保存到 {{path}}"
   },
   "picker": {
     "button": "自定义",

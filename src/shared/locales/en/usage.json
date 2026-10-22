@@ -11,6 +11,7 @@
     "syncing": "Reading the logs…",
     "record": "OverBench's record",
     "sync": "Sync now",
+    "syncFailed": "Could not sync",
     "agent": "Agent",
     "allShort": "All",
     "range": "Time range",
@@ -89,7 +90,9 @@
   "error": {
     "title": "The usage could not be read",
     "retry": "Retry",
-    "unavailable": "The usage database could not be opened. Restart OverBench; if it stays closed, export diagnostics from Settings › Advanced."
+    "unavailable": "The usage database cannot be read. Restart OverBench; if it still cannot, export diagnostics.",
+    "export": "Export diagnostics",
+    "savedTo": "Saved to {{path}}"
   },
   "picker": {
     "button": "Custom",

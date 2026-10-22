@@ -160,6 +160,7 @@ export class AgentHost {
           log,
           onChanged: () => this.usage.rowsChanged(),
           onProgress: (progress) => this.usage.progressed(progress),
+          onStatus: (status) => this.usage.storeStatus(status),
         })
       : null
     this.usage = new UsageManager({
