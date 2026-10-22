@@ -40,6 +40,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 32  | No message outline beside the thread, expanding on hover       | Thread         | Open         |
 | 33  | Title menu needs polish; agent mark goes before the title      | Top bar        | Open         |
 | 34  | The slash command popover looks crude                          | Composer       | Open         |
+| 35  | The palette is black and grey and reads as cheap               | Design system  | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -352,6 +353,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - **Pin** (`P`), **Mark as unread** (`U`), **Rename** (`R`), **Fork** (`F`).
   - **Move to** ▸ and **Move to project** ▸, whose submenus the screenshot does not show.
   - **Archive** (`A`) and **Delete** (`D`), the last in the destructive color.
+- **Hover button**: added the same day, with a screenshot of OverBench's hovered row (it shows its time) and one of the reference's, whose hovered row shows a **···** button at its end. The maintainer wants the same: hovering a session row shows a **···** button, and its menu is the one the right-click opens, with the same items. Today the menu opens only by right-click, and the row's end holds the time and the status indicator, of which the time goes under [problem 8](#8-session-rows-show-their-time-badly). To settle: where the button sits against the status indicator at the row's end (in its slot, or beside it); that it also shows on keyboard focus, since a hover-only control is out of reach without a pointer; that the title does not change width when the button appears; and that the context menu and this button's menu share one definition of the items, so the two never differ. It follows the project row's hover **+** ([problem 24](#24-the-projects-header-row-can-go-each-project-gets-a-)).
 - **Today**: `SessionMenu` in `src/renderer/src/features/sidebar/session-row.tsx` renders those three items, and the session title menu in the top bar holds the same ones ([Interface: session](../design/ui.md#session)), so the two change together. In the [session lifecycle](../design/session-model.md#session-lifecycle) **Close** drops the live state and keeps the row in the list, and **Delete** removes the session after a confirmation; there is no archive. A [title](../design/session-model.md#titles) comes from the agent's `session_info_update`, else the first line of the first message, and the user cannot change it. Pinned sessions are [out of M0](./m0.md#out-planned-for-later-milestones), together with drag reordering. **Fork** exists, as a message action in the thread, not in this menu.
 - **To settle when planning**:
   - **Rename**: where the user's title is kept, and that it wins over later titles from the agent, which keep arriving through `session_info_update`. ACP has no rename call, so the title would live in OverBench's index only.
@@ -421,3 +423,16 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - A list of hundreds of commands from an agent with many skills, and whether it needs more than scrolling behind the fades.
   - The tooltip's delay and placement, keyboard use (arrows, `Enter`, `Tab`, `Esc` as now), and reduce motion.
   - The rule rewritten in [Interface: composer](../design/ui.md#composer).
+
+## 35. The palette is black and grey and reads as cheap
+
+- **Reported**: 2026-10-22, with a screenshot of the reference (Claude Desktop) showing a session. A direction for the whole system rather than one screen.
+- **Observed**: OverBench reads as black and grey from end to end, and next to the reference it has a cheap feel.
+- **Expected**: the system's colours stay as low-key and restrained as possible, but that does not mean going all black and grey. The reference's style is restrained too, yet it does not feel cheap; OverBench still needs polishing to get there.
+- **Measured** on the reference screenshot (2x, one capture, the display's colour profile not accounted for): sidebar `rgb(250, 251, 248)`, main surface `rgb(252, 251, 252)`, selected row `rgb(240, 240, 238)`, composer `rgb(255, 255, 255)`, inline code chip `rgb(240, 240, 240)`, body text near black (`rgb(6, 6, 6)`). The inline code's text is a dark red (about `rgb(115, 44, 47)` to `rgb(153, 65, 63)`), and the screenshot shows a terracotta spinner and a yellow context ring on the model button. File links in the earlier screenshots are blue.
+- **Today**: every neutral token in `src/renderer/src/styles/globals.css` has zero chroma, so they are pure greys: `--sidebar` is `oklch(0.982 0 0)`, about `rgb(249, 249, 249)`, and `--background` `oklch(0.991 0 0)`, about `rgb(252, 252, 252)`. The surfaces are therefore close to the reference's by number, and what separates the two is the small touches of colour. [Design system: design reference](../design/design-system.md#design-reference) keeps "a neutral palette, its own semantic colors and Inter", and the semantic colours (success, attention, destructive, checked blue, merged, the effort gradients) are used for state only. Earlier passes kept the palette neutral on purpose, as in [problem 22](#22-the-new-session-project-and-agent-menus-look-crude).
+- **To settle when planning**:
+  - What "low-key but not grey" means as a rule: where colour is allowed (the body's code, links and file references of [problem 6](#6-markdown-looks-plain-and-file-references-do-not-stand-out), the checks and selection of [problem 4](#4-the-model-menu-does-not-look-polished), spinners and progress, state), how much chroma, and where it never appears. Both themes, at readable contrast.
+  - Whether the surfaces take a slight tint. The reference's sidebar differs from a pure grey by a few levels; one screenshot is too little to decide, so measure more before changing a surface.
+  - Where the cheap feel comes from. Colour is one part; weights, borders, shadows, radii, icon strokes and spacing are others. A side-by-side audit of the main screens against the reference, in both themes, belongs before the tokens change, in the way of the [menus pass](../design/design-system.md#menus-and-dialogs), with before and after screenshots.
+  - The rule rewritten in [Design system](../design/design-system.md) and the tokens in `globals.css`, including whether the "neutral palette, no accent" statement stands as written.
