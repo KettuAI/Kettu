@@ -6,6 +6,8 @@
     "showList": "以列表显示",
     "hideFiles": "收起文件列表",
     "showFiles": "展开文件列表",
+    "emptyTitle": "还没有文件",
+    "emptyDescription": "这个文件夹里有文件后，会显示在这里。",
     "restore": "还原",
     "maximize": "最大化"
   },

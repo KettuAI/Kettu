@@ -6,6 +6,8 @@
     "showList": "Show as a list",
     "hideFiles": "Hide the file list",
     "showFiles": "Show the file list",
+    "emptyTitle": "No files yet",
+    "emptyDescription": "Files in this folder show up here once there are any.",
     "restore": "Restore",
     "maximize": "Maximize"
   },

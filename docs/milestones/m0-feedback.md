@@ -61,6 +61,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 53  | No line where the sidebar meets the thread                     | Layout         | Fixed        |
 | 54  | Opening a session starts its agent and keeps it running        | Performance    | Open         |
 | 55  | A short thread still scrolls into empty space                  | Thread         | Fixed        |
+| 56  | The empty Files pane's hint is not centred                     | Side panel     | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -552,6 +553,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Decided** for the file icons: 2026-10-22, from a page that rendered one file tree in Material Icon Theme, Catppuccin Icons, vscode-icons and a desaturated Material, in both themes. The choice is Material Icon Theme with its saturation lowered through the theme's own option, so the colours sit with the restrained palette of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap). It brings in `material-icon-theme` (MIT, 5.39.0 on 2026-10-22) as a dependency, whose `dist/material-icons.json` is the mapping in VS Code's icon theme format: 2,148 file names, 1,381 extensions and 4,659 folder names over 1,251 icons. The Markdown preview and editing parts stay open.
 - **Partly fixed**: file-type icons and the Markdown preview. The icons come from `material-icon-theme` 5.39.0, resolved from its manifest as VS Code does, in the tree, the list, the search results, the preview header and the thread's file chips; they load in a chunk of their own on first use ([Design system: file icons](../design/design-system.md#file-icons)). A Markdown file shows rendered through the thread's Streamdown, with **Show source** in the header ([Interface: files](../design/ui.md#files)). Editing is still open.
 - **Changed**: 2026-10-22, after seeing the desaturated icons in the app: they read as grey and dull, so the icons take the theme's own colors, option A of the page, instead of option D. In the same review the top bar's **Files** toggle became the single `Folder` icon instead of `FolderTree`.
+- **Reported again**: 2026-10-22, in words: files still cannot be edited. The editing points above are still to settle, and the editor component needs the maintainer's approval.
 
 ## 39. Terminal tabs cannot be renamed or reordered and look crude
 
@@ -788,3 +790,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Reported**: 2026-10-22, with a screenshot of a thread whose content does not fill the view, which still scrolls down into blank space.
 - **Cause**: the user message that started the latest turn was `MessageScroller`'s `scrollAnchor`, so a new turn opened with the prompt at the top. To let an anchor reach the top, the scroller pads the thread's end with a spacer; after a short reply the spacer stayed, and the thread scrolled into it.
 - **Fixed**: no message is an anchor. A thread shorter than the view does not scroll, sending a message scrolls to the end even from further up, and the thread follows the reply. Measured in the app, the room past the last entry is 0 after a long turn, a short first turn and a short turn after a long one ([Interface: thread](../design/ui.md#thread)). The trade-off: while a long reply streams, the prompt no longer stays at the top; the view follows the reply, and scrolling up stops following it.
+
+## 56. The empty Files pane's hint is not centred
+
+- **Reported**: 2026-10-22, with a screenshot of the Files pane in a folder with no files.
+- **Observed**: the list said "No files in this project." at its top and the preview "Open files appear here" in the middle of its own half, so neither sat in the pane's middle, and the filter and the list toggles had nothing to act on.
+- **Fixed**: a folder with no files shows one centred `Empty`, "No files yet", in the pane's middle, and the header keeps only **Maximize** and **Close** ([Interface: files](../design/ui.md#files)).

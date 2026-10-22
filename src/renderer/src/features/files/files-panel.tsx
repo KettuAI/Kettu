@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronRightIcon,
+  FolderIcon,
   FolderTreeIcon,
   ListIcon,
   ListTreeIcon,
@@ -12,6 +13,13 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@renderer/components/ui/empty'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import {
   ResizableHandle,
@@ -62,6 +70,13 @@ export default function FilesPanel({
   // The list folds away to read a file undisturbed; the saved layout keeps it folded.
   const list = usePanelRef()
   const [listHidden, setListHidden] = useState(false)
+  // A folder with no files yet, as a new scratch session's, has nothing to list or open, so the
+  // pane says so once, in its middle, instead of in each half.
+  const bare = useFilesStore((s) => {
+    const files = s.byProject[projectPath]
+    return !!files && !files.error && files.paths.length === 0 && !s.open[projectPath]
+  })
+  const listShown = !listHidden && !bare
 
   useEffect(() => {
     void loadFiles(projectPath)
@@ -86,14 +101,16 @@ export default function FilesPanel({
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}
-        <PanelButton
-          label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}
-          onClick={() => (listHidden ? list.current?.expand() : list.current?.collapse())}
-        >
-          {/* At the top bar's pane toggle size, as the Folder toggle beside it. */}
-          <FolderTreeIcon className="size-[15px]" />
-        </PanelButton>
-        {!listHidden && (
+        {!bare && (
+          <PanelButton
+            label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}
+            onClick={() => (listHidden ? list.current?.expand() : list.current?.collapse())}
+          >
+            {/* At the top bar's pane toggle size, as the Folder toggle beside it. */}
+            <FolderTreeIcon className="size-[15px]" />
+          </PanelButton>
+        )}
+        {listShown && (
           <InputGroup className="app-region-no-drag h-7 max-w-80 min-w-0 flex-1 bg-background/60">
             <InputGroupAddon>
               <SearchIcon />
@@ -110,7 +127,7 @@ export default function FilesPanel({
           </InputGroup>
         )}
         <span className="flex-1" />
-        {!listHidden && (
+        {listShown && (
           <PanelButton
             label={flat ? t('panel.showTree') : t('panel.showList')}
             onClick={() => setFlat(!flat)}
@@ -131,29 +148,41 @@ export default function FilesPanel({
           <XIcon />
         </PanelButton>
       </div>
-      <ResizablePanelGroup
-        orientation="horizontal"
-        defaultLayout={layout.defaultLayout}
-        onLayoutChanged={layout.onLayoutChanged}
-        className="min-h-0 flex-1"
-      >
-        <ResizablePanel
-          id="files-tree"
-          panelRef={list}
-          defaultSize="220px"
-          minSize="160px"
-          collapsible
-          collapsedSize="0px"
-          onResize={(size) => setListHidden(size.inPixels === 0)}
-          className="min-w-0"
+      {bare ? (
+        <Empty className="min-h-0 flex-1">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FolderIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t('panel.emptyTitle')}</EmptyTitle>
+            <EmptyDescription>{t('panel.emptyDescription')}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <ResizablePanelGroup
+          orientation="horizontal"
+          defaultLayout={layout.defaultLayout}
+          onLayoutChanged={layout.onLayoutChanged}
+          className="min-h-0 flex-1"
         >
-          <Browser projectPath={projectPath} query={query} flat={flat} openPath={open?.path} />
-        </ResizablePanel>
-        <ResizableHandle />
-        <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
-          <FilePreview projectPath={projectPath} file={open} />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          <ResizablePanel
+            id="files-tree"
+            panelRef={list}
+            defaultSize="220px"
+            minSize="160px"
+            collapsible
+            collapsedSize="0px"
+            onResize={(size) => setListHidden(size.inPixels === 0)}
+            className="min-w-0"
+          >
+            <Browser projectPath={projectPath} query={query} flat={flat} openPath={open?.path} />
+          </ResizablePanel>
+          <ResizableHandle />
+          <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
+            <FilePreview projectPath={projectPath} file={open} />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      )}
     </div>
   )
 }
