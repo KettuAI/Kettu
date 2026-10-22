@@ -384,6 +384,7 @@ export class AgentHost {
       'sessions.snapshot': ({ sessionId }) => sessions.snapshot(sessionId),
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
+      'sessions.show': ({ sessionId }, { portId }) => sessions.show(sessionId, portId),
       'sessions.prompt': ({ sessionId, content }) => sessions.prompt(sessionId, content),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.retry': ({ sessionId }) => sessions.retry(sessionId),

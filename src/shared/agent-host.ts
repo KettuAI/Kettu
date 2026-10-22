@@ -213,6 +213,8 @@ export interface HostContract {
   'sessions.snapshot': { params: { sessionId: string }; result: SessionSnapshot }
   'sessions.watch': { params: { sessionId: string }; result: void }
   'sessions.unwatch': { params: { sessionId: string }; result: void }
+  // The session a port shows in front, or null; a turn that ends out of view is unread.
+  'sessions.show': { params: { sessionId: string | null }; result: void }
   'sessions.prompt': { params: { sessionId: string; content: UserContent[] }; result: void }
   'sessions.cancel': { params: { sessionId: string }; result: void }
   'sessions.retry': { params: { sessionId: string }; result: void }
@@ -279,6 +281,7 @@ export const HOST_METHODS = [
   'sessions.snapshot',
   'sessions.watch',
   'sessions.unwatch',
+  'sessions.show',
   'sessions.prompt',
   'sessions.cancel',
   'sessions.retry',

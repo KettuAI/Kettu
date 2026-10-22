@@ -129,9 +129,9 @@ The page scales to many agents: a list first, and a page of its own for each age
 - Each row: the agent's [mark](./design-system.md#agent-marks) at 14 px, title (truncated), and one status indicator in a 16 px slot at the row's end, kept when the row has none so a status appearing never moves the title. Rows show no time. The indicator, in this order of priority:
   1. **Waiting for you** (`attention: 'permission'`): an `--attention` pill with the count. This is the loudest signal in the app.
   2. **Error** (`attention: 'error'`): a destructive `CircleAlert` icon, until the session has been in front of you ([attention](./session-model.md#how-the-host-keeps-sessions)).
-  3. **Running** (`status: 'running'`): a blue dot that breathes out a fading halo ([patterns](./design-system.md#patterns)), so a running row reads apart from an unread one.
+  3. **Running** (`status: 'running'`): a quiet slate-blue dot that breathes out a fading halo ([patterns](./design-system.md#patterns)).
   4. **Starting** (`status: 'starting'`): a `Spinner` while the agent starts or the session loads.
-  5. **Unread** (`attention: 'unread'`): a small neutral dot after a turn ended while you were elsewhere.
+  5. **Unread** (`attention: 'unread'`): a solid `--checked` blue dot after a turn ended while the session was not in front, until you show it ([attention](./session-model.md#how-the-host-keeps-sessions)). It is brighter than the running dot, so a turn that finished stands out over one still working.
 - Hovering a row, or focusing it from the keyboard, shows a **More** button (`Ellipsis`) over the indicator's slot, so the title keeps its width. It opens the same menu as a right-click, and so does the context menu key (`Shift+F10`) on a focused row.
 - A session whose branch has a pull request shows its state icon after the title ([repository state](./design-system.md#repository-state)), as in the reference. Hovering the row shows the branch and the pull request in a tooltip.
 - **Sub-sessions** ([session model](./session-model.md#sub-sessions)) sit under their parent, indented 16 px along a hairline `--border` guide line. A subagent shows the `Bot` icon with its title and, muted, its description ("Explore · Find where the tests read the clock"); a sub-session you started shows its agent's mark and title.

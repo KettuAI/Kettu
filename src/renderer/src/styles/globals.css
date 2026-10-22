@@ -79,7 +79,8 @@
   --color-attention-tint: var(--attention-tint);
   --color-success: var(--success);
   --color-checked: var(--checked);
-  --color-running: var(--checked);
+  --color-running: var(--running);
+  --color-unread: var(--checked);
   --color-success-text: var(--success-text);
   --color-merged: var(--merged);
   --color-diff-add: var(--diff-add);
@@ -175,6 +176,7 @@
   --success: oklch(0.56 0.14 150);
   --success-text: oklch(0.42 0.12 150);
   --checked: oklch(0.6 0.17 255);
+  --running: oklch(0.62 0.07 255);
   --merged: oklch(0.55 0.19 300);
   --diff-add: oklch(0.62 0.15 150 / 9%);
   --diff-del: oklch(0.6 0.2 27 / 8%);
@@ -347,6 +349,7 @@
   --success: oklch(0.74 0.15 150);
   --success-text: oklch(0.8 0.13 150);
   --checked: oklch(0.66 0.15 255);
+  --running: oklch(0.7 0.07 255);
   --merged: oklch(0.72 0.15 300);
   --diff-add: oklch(0.7 0.15 150 / 12%);
   --diff-del: oklch(0.7 0.19 22 / 12%);

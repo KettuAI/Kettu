@@ -55,7 +55,8 @@ Lines are translucent, so one token reads the same on every surface step. The al
 - `--primary` stays shadcn's neutral: near black in the light theme, near white in the dark one. OverBench has no brand accent, so color is left for meaning.
 - `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user. It is the loudest color in the app.
 - `--success` (green): completed checks.
-- `--checked` (blue): a control that is on or chosen, today the switch's track. It is the blue macOS, Windows and GNOME tint their own controls with, so the state reads at a glance. The sidebar's running dot takes the same blue through `bg-running`, the one hue no other state uses.
+- `--checked` (blue): a control that is on or chosen, today the switch's track. It is the blue macOS, Windows and GNOME tint their own controls with, so the state reads at a glance. The sidebar's unread dot takes the same blue through `bg-unread`, the usual mark of something new.
+- `--running` (slate blue, `oklch(0.62 0.07 255)` light and `oklch(0.7 0.07 255)` dark): the sidebar's running dot. It is quieter than `--checked`, so a turn still working stays calm and one that finished stands out.
 - `--destructive` is a brick red, `oklch(0.5 0.17 27)` light and `oklch(0.7 0.16 22)` dark, calmer than shadcn's saturated red. It marks errors, conflicts and deletion in text and icons and tints destructive buttons, so a loud red would shout from every one of them; the darker light value still reaches 5.9:1 on surface 0. `--ring` stays shadcn's.
 - `--muted-foreground` in the light theme is `oklch(0.53 0 0)` instead of shadcn's 0.556, which reaches only 4.49:1 on surface 0, just under WCAG AA.
 - `--sidebar-accent`, the fill of hovered and selected sidebar rows, is `oklch(0.945 0 0)` light and `oklch(0.25 0 0)` dark; shadcn's 0.97 barely shows on surface 0.

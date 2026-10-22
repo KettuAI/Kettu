@@ -62,6 +62,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 54  | Opening a session starts its agent and keeps it running        | Performance    | Open         |
 | 55  | A short thread still scrolls into empty space                  | Thread         | Fixed        |
 | 56  | The empty Files pane's hint is not centred                     | Side panel     | Fixed        |
+| 57  | A finished session leaves no mark, and the running dot is loud | Sidebar        | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -796,3 +797,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Reported**: 2026-10-22, with a screenshot of the Files pane in a folder with no files.
 - **Observed**: the list said "No files in this project." at its top and the preview "Open files appear here" in the middle of its own half, so neither sat in the pane's middle, and the filter and the list toggles had nothing to act on.
 - **Fixed**: a folder with no files shows one centred `Empty`, "No files yet", in the pane's middle, and the header keeps only **Maximize** and **Close** ([Interface: files](../design/ui.md#files)).
+
+## 57. A finished session leaves no mark, and the running dot is loud
+
+- **Reported**: 2026-10-22, after the running dot became an 8 px `--checked` blue dot with a halo. The blue is too bright: the maintainer wants a quieter colour that is still not grey. And once a turn ends the dot simply goes, so a session working in the background gives no sign of when it finished; they want a mark that stays until the session is read.
+- **Cause**: the host has an unread mark, but it counted a session as seen while any port watched it, and the renderer keeps its four most recent sessions watched so that switching back is instant. A turn that ended in one of them, behind another session, was taken as seen. The mark itself was a 6 px `--muted-foreground` dot, easy to miss.
+- **Fixed**: the renderer tells the host which session it shows in front with `sessions.show`, `null` on the project home, New session and Settings, and only that one counts as seen ([Session model](../design/session-model.md#how-the-host-keeps-sessions)). A turn that ends out of view leaves a solid `--checked` blue dot until the session is shown, and the running dot takes `--running`, a quieter slate blue, so a turn still working stays calm and one that finished stands out ([Interface: sidebar](../design/ui.md#sidebar)).

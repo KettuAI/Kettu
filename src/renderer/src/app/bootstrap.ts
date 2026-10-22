@@ -1,6 +1,7 @@
 import type { HostEvent } from '@shared/agent-host'
 import { usePendingSession } from '@renderer/app/actions'
 import { sessionToRestore } from '@renderer/app/restore'
+import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useConnectionStore } from '@renderer/stores/connection'
@@ -80,6 +81,17 @@ function restoreLastSession(): void {
   if (summary) openSession(summary.id, summary.projectPath)
 }
 
+let shownSession: string | null = null
+
+/** Tells the host which session is in front; a turn that ends anywhere else leaves it unread. */
+function showFront(again = false): void {
+  const { main, settings } = useViewStore.getState()
+  const sessionId = main.kind === 'session' && !settings.open ? main.sessionId : null
+  if (sessionId === shownSession && !again) return
+  shownSession = sessionId
+  void host('sessions.show', { sessionId }).catch(() => {})
+}
+
 let wasDisconnected = false
 
 /** Starts loading what the shell shows; resolves once the settings are in, or failed to load. */
@@ -99,8 +111,10 @@ export function bootstrap(): Promise<unknown> {
     wasDisconnected = false
     void loadHostState()
     rewatchAll()
+    showFront(true)
     rewatchGit()
   })
+  useViewStore.subscribe(() => showFront())
 
   const settingsReady = initSettings()
   void initUpdates()

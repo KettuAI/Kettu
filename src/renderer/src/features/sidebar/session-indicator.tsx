@@ -61,7 +61,7 @@ export function SessionIndicator({
       <span
         role="img"
         aria-label={t('indicator.unread')}
-        className="size-1.5 rounded-full bg-muted-foreground"
+        className="size-2 rounded-full bg-unread"
       />
     )
   }

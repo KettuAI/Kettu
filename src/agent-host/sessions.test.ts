@@ -600,7 +600,7 @@ describe('opening and recovering', () => {
       agentId: 'fake-agent',
       projectPath: first.project,
     })
-    // Not watched: the turn's end leaves it unread.
+    // Not shown: the turn's end leaves it unread.
     await port.request('sessions.prompt', {
       sessionId: created.id,
       content: [{ type: 'text', text: 'Fix it' }],
@@ -953,18 +953,29 @@ describe('streaming', () => {
 })
 
 describe('unread and viewing', () => {
-  it('marks a turn that ends unwatched as unread, and watching clears it', async () => {
+  it('marks a turn that ends out of view as unread, and showing clears it', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
-    await port.request('sessions.unwatch', { sessionId })
+    await port.request('sessions.show', { sessionId: null })
     await turn(port, sessionId, 'hello')
     await port.untilStatus(sessionId, 'ready')
     expect(port.summary(sessionId)?.attention).toBe('unread')
-    await port.request('sessions.watch', { sessionId })
+    await port.request('sessions.show', { sessionId })
     expect(port.summary(sessionId)?.attention).toBe('none')
   })
 
-  it('drops the watches of a port that closes', async () => {
+  it('marks a turn that ends behind another session the port still watches', async () => {
+    const { t, port } = await setup()
+    const first = await newSession(t, port)
+    const second = await newSession(t, port)
+    await turn(port, first, 'hello')
+    await port.untilStatus(first, 'ready')
+    expect(port.entries(first).at(-1)).toMatchObject({ stopReason: 'end_turn' })
+    expect(port.summary(first)?.attention).toBe('unread')
+    expect(port.summary(second)?.attention).toBe('none')
+  })
+
+  it('forgets what a port that closes shows', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
     port.disconnect()

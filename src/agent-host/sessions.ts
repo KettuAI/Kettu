@@ -202,6 +202,8 @@ export class SessionManager {
   private readonly records = new Map<string, SessionRecord>()
   private readonly live = new Map<string, Live>()
   private readonly watchers = new Map<string, Set<string>>()
+  // Port id to the session it shows in front.
+  private readonly shown = new Map<string, string>()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
@@ -395,7 +397,7 @@ export class SessionManager {
   }
 
   private update(live: Live, changes: Partial<SessionView>): void {
-    if (changes.error) live.errorSeen = this.watched(live.id)
+    if (changes.error) live.errorSeen = this.inFront(live.id)
     this.emit(live, [{ op: 'session.update', changes }])
   }
 
@@ -733,7 +735,7 @@ export class SessionManager {
             },
           ])
         }
-        if (!child.replaying && !this.watched(child.id)) child.unread = true
+        if (!child.replaying && !this.inFront(child.id)) child.unread = true
         break
       }
       case 'unknown':
@@ -743,31 +745,42 @@ export class SessionManager {
     }
   }
 
-  // Watching.
+  // Watching and showing. A renderer keeps a few recent sessions watched, so switching back is
+  // instant; only the one it shows in front counts as seen.
 
-  private watched(sessionId: string): boolean {
-    return (this.watchers.get(sessionId)?.size ?? 0) > 0
+  private inFront(sessionId: string): boolean {
+    for (const shown of this.shown.values()) if (shown === sessionId) return true
+    return false
   }
 
   watch(sessionId: string, portId: string): void {
-    const record = this.recordOf(sessionId)
+    this.recordOf(sessionId) // rejects an unknown session
     let ports = this.watchers.get(sessionId)
     if (!ports) {
       ports = new Set()
       this.watchers.set(sessionId, ports)
     }
     ports.add(portId)
-    this.markViewed(sessionId, record)
   }
 
   unwatch(sessionId: string, portId: string): void {
     const ports = this.watchers.get(sessionId)
     if (!ports?.delete(portId)) return
     if (ports.size === 0) this.watchers.delete(sessionId)
-    if (this.has(sessionId)) this.markViewed(sessionId, this.recordOf(sessionId))
+  }
+
+  /** The session a port shows in front, or null for none; the one it leaves was seen until now. */
+  show(sessionId: string | null, portId: string): void {
+    const previous = this.shown.get(portId) ?? null
+    if (sessionId === previous) return
+    if (sessionId === null) this.shown.delete(portId)
+    else this.shown.set(portId, this.recordOf(sessionId).id)
+    if (previous !== null && this.has(previous)) this.markViewed(previous, this.recordOf(previous))
+    if (sessionId !== null) this.markViewed(sessionId, this.recordOf(sessionId))
   }
 
   portClosed(portId: string): void {
+    this.shown.delete(portId)
     for (const [sessionId, ports] of this.watchers) {
       if (ports.delete(portId) && ports.size === 0) this.watchers.delete(sessionId)
     }
@@ -1517,7 +1530,7 @@ export class SessionManager {
       git.turnEnded(live.record.projectPath, live.id)
       live.record.branch = git.currentBranch(live.record.projectPath) ?? live.record.branch
     }
-    if (this.watched(live.id)) live.record.lastViewedAt = now
+    if (this.inFront(live.id)) live.record.lastViewedAt = now
     else live.unread = true
     this.persist(live)
     this.touch(live.id)

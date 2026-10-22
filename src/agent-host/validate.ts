@@ -203,6 +203,10 @@ export function createValidators(platform: Platform): Validators {
     'sessions.snapshot': session,
     'sessions.watch': session,
     'sessions.unwatch': session,
+    'sessions.show': (params) => {
+      const o = fields(params)
+      return { sessionId: o.sessionId === null ? null : sessionId(o) }
+    },
     'sessions.prompt': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), content: promptContent(o.content) }
