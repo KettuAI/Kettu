@@ -2,6 +2,7 @@
   "nav": {
     "label": "项目和会话",
     "newSession": "新建会话",
+    "artifacts": "Artifacts",
     "projects": "项目",
     "unavailable": "暂时无法加载项目。",
     "empty": "你打开的项目会显示在这里。"

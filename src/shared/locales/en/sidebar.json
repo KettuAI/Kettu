@@ -2,6 +2,7 @@
   "nav": {
     "label": "Projects and sessions",
     "newSession": "New session",
+    "artifacts": "Artifacts",
     "projects": "Projects",
     "unavailable": "Projects are unavailable right now.",
     "empty": "Projects you open appear here."

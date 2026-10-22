@@ -1,5 +1,5 @@
 import { useMemo, type KeyboardEvent } from 'react'
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, PlusIcon, ShapesIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
@@ -42,13 +42,19 @@ export function AppSidebar() {
         <span className="flex-1" />
         <SidebarToggle />
       </div>
-      <div className="shrink-0 px-2 pt-0.5 pb-2.5">
+      <div className="flex shrink-0 flex-col gap-px px-2 pt-0.5 pb-2.5">
         <NavRow
           icon={<PlusIcon className="text-muted-foreground" />}
           label={t('nav.newSession')}
           shortcut="Mod+N"
           current={drafting}
           onClick={() => newSession()}
+        />
+        {/* Holds the place of a feature planned after this version. */}
+        <NavRow
+          icon={<ShapesIcon className="text-muted-foreground" />}
+          label={t('nav.artifacts')}
+          disabled
         />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
@@ -92,6 +98,7 @@ export function NavRow({
   label,
   shortcut,
   current,
+  disabled,
   onClick,
   extra,
 }: {
@@ -99,13 +106,15 @@ export function NavRow({
   label: string
   shortcut?: string
   current?: boolean
-  onClick: () => void
+  disabled?: boolean
+  onClick?: () => void
   extra?: React.ReactNode
 }) {
   return (
     <SidebarMenuButton
       size="row"
       isActive={current}
+      disabled={disabled}
       onClick={onClick}
       className="[&_svg]:size-[15px] data-active:font-medium"
     >
