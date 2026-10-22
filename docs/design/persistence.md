@@ -14,6 +14,7 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | `state/sessions.json`        | Agent host | The session index                                                                                                                                  |
 | `state/agent-processes.json` | Agent host | The agent processes running and what they left, until seen gone, for the next host to stop ([process trees](./agent-host.md#process-trees))        |
 | `state/agents.json`          | Agent host | The account and plan limits each agent last reported, shown after a restart until it reports again ([sign-in](./agent-host.md#sign-in))            |
+| `state/agent-options.json`   | Agent host | Each agent's config options from its last new session, and the values last chosen, for [New session](./session-model.md#config-options)            |
 | `state/threads.db`           | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                             |
 | `settings.json`              | Main       | [Settings](#settings)                                                                                                                              |
 | `window-state.json`          | Main       | Window size, position and maximized state                                                                                                          |

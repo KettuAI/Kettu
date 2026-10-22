@@ -70,16 +70,81 @@ It sits on the plain `--background` surface, with nothing moving behind it. The 
 
 ### New session
 
-Opened by **New session** (`Mod+N`, also in the File menu) and by the **+** on a project's row in the sidebar. The screen assumes nothing from what was shown before: the top bar says "New session", the thread area holds one line ("What should Claude Code work on?"), and under a composer like the session's sit two menus in the control row, styled as the composer's own:
+> Decided while the maintainer was away (2026-10-22); to be reviewed. The maintainer chose the direction on the design canvas, page "合并选择": C's composer as the base, one control for the agent and the model, each agent's plan usage in that control, and the project and branch inside the composer under a heading that names no project. The details below that the canvas left open were settled in implementation.
 
-- **Project**: after the reference's folder menu, a [search menu](./design-system.md#menus-and-dialogs): a search field ("Search projects…") over **No project**, which starts the session in a [scratch folder](./session-model.md#sessions-without-a-project) of its own, then after a separator **Recent**, the projects by name alone, most recently opened first, then after a separator **Open project…**, which adds a folder and chooses it. A project whose folder name another shares adds, in `--muted-foreground`, the fewest parent folders that tell them apart; a missing one is disabled with "Missing"; the full path is the row's tooltip. Typing filters the projects by name and those folders, leaving **Open project…** in place, with "No matching projects" when none match. Only the projects scroll. It starts at the selected project, or at the one whose **+** opened the screen. With no projects yet the screen still opens, the menu holding only the search field, **No project** and **Open project…**.
-- **Agent**: the agents with their marks, with no group label; one that is not installed is disabled with "Not installed". It starts at **Default agent** from Settings; with **Ask each time** none is chosen, and Send waits until one is.
+Opened by **New session** (`Mod+N`, also in the File menu), by the **+** on a project's row in the sidebar and by an agent card on the [project home](#project-home). OverBench drives several agents, so this screen is its own rather than Claude Desktop's or Codex's: where to work, which agent and model, and how much of each agent's plan is left are all chosen in one place, in the composer.
+
+```text
+                          What should we work on?
+ ┌────────────────────────────────────────────────────────────────────┐
+ │ ▢ overbench / ⎇ main / ✳ Claude Code  Opus 5.5  High ⌄   Default ⌄ │  route line
+ │ Ask Claude Code to…                                                │
+ │                                                                  ↑ │
+ └────────────────────────────────────────────────────────────────────┘
+  Recent
+  ✳ Fix the flaky login test                         overbench    2h
+  ◎ Map the project structure                        self-media   1d
+```
+
+- **Layout**: the top bar says "New session" and holds the chosen project's git status and pane toggles. Below it, the heading, the composer and **Recent** form one block in the composer's 760 px column, centred in the area and raised 28 px above true centre, as in the reference's start screen, so the eye lands on the composer. The block grows with the draft and stays centred.
+- **Heading**: "What should we work on?", at the title role in `--foreground`, centred. It names no project and no agent, because both are chosen below it.
+- **Composer**: the session's composer with one addition, the **route line**, a `--row-height` row inside the box above the text. It reads left to right as where and with what the session starts: the project, the branch, the agent and model, and on the far right the mode. The parts are `quiet` `compact` buttons in `--muted-foreground`, joined by a `/` in `--muted-foreground`; the agent's name and the project's name are `--foreground`. The composer of a session keeps its controls in the row under the box ([composer](#composer)); here they move inside it, because before the session exists they are part of the request itself, as Codex's and Conductor's start screens put them. The text area and the send button follow as in the session. The placeholder is "Ask <agent> to…", or "Describe a task…" while no agent is chosen.
+- **What gives way** on a narrow window: the branch first, down to its icon, then the project's name, then the model's name; the agent's name, the level and the mode keep their width, and every cut name shows in full in its tooltip.
+
+The route line's parts:
+
+- **Project**: `Folder` and the project's name, or "No project", or "Choose a project" while none is. It opens the project menu under it, after the reference's folder menu, a [search menu](./design-system.md#menus-and-dialogs): a search field ("Search projects…") over **No project**, which starts the session in a [scratch folder](./session-model.md#sessions-without-a-project) of its own, then after a separator **Recent**, the projects by name alone, most recently opened first, then after a separator **Open project…**, which adds a folder and chooses it. A project whose folder name another shares adds, in `--muted-foreground`, the fewest parent folders that tell them apart; a missing one is disabled with "Missing"; the full path is the row's tooltip. Typing filters the projects by name and those folders, leaving **Open project…** in place, with "No matching projects" when none match. Only the projects scroll. It starts at the selected project, or at the one whose **+** opened the screen. With no projects yet the screen still opens, the menu holding only the search field, **No project** and **Open project…**.
+- **Branch**: `GitBranch` and the branch the session starts on, in mono; the short commit id when `HEAD` is detached. It is shown, not chosen: OverBench has no branch switching yet, and the branch belongs to the repository, whose one place is the [git status](#git-in-the-top-bar) in the top bar, so this label opens nothing and says so in its tooltip ("The session starts on this branch"). It is left out, with its `/`, for No project and for a folder that is not a repository.
+- **Agent and model**: the agent's mark and name, then the model's name and the reasoning level in `--muted-foreground`, the level in its [tier's gradient](./design-system.md#reasoning-levels) when costly, then `ChevronDown`. For a `provider/model` name only the model part shows. Before the agent has ever run a session, so its models are unknown, it shows the agent alone; while no agent is chosen (**Ask each time** in Settings), "Choose an agent". It opens the [agent menu](#agent-menu).
+- **Mode**: the agent's mode option, named as the agent names it ("Default", "Accept edits"), with `ChevronDown`; its menu lists the modes and closes on a choice, as the session's mode menu does. It shows once the agent's options are known.
+
+The states of the screen:
+
+- **No project or no agent chosen**: Send is disabled, and its tooltip says what is missing ("Choose a project first", "Choose an agent first").
+- **A missing project**: its name shows with "Missing" after it, and one line in `--destructive` under the route line says "This project's folder is missing. Choose another project."; Send is disabled.
+- **A reached plan limit**: when the chosen agent's tightest window is used up, the placeholder says when it resets ("Codex's 5-hour limit resets in 1h 12m"), as the session's composer does; the draft can still be written and sent, and the agent answers for itself.
+- **Recent**: under the composer, a group label over the three sessions you used last, in any project: each row shows the agent's mark, the title, the project's name and how long ago, in the [row anatomy](./visual-style.md#rows), and opens the session. Sub-sessions and subagents are left out. With no sessions yet the group is not shown.
 
 The git status and the terminal toggle follow the chosen project. The chosen agent starts while the screen is shown, so a send waits for the session alone. The first send creates the session there and sends the message: the message shows at once as the first entry of the thread, with "Starting Claude Code…" ("Installing Claude Code…" while its adapter installs) and the latest output under it, and the session takes over once its thread is loaded, so no skeleton shows in between. Until the session exists the text is kept as a [draft](./persistence.md#composer-drafts), so nothing is lost when the start fails (**Back** returns here with the text) or the agent asks to sign in first (the session opens on its sign-in screen, with the text in its composer). Opening the screen again while it is shown keeps the agent you chose.
 
+#### Agent menu
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│ ⌕ Search agents and models                                       │
+├─────────────────────────────┬────────────────────────────────────┤
+│ ✳ Claude Code       ◔ 12%   │ Model                              │
+│ ◎ Codex             ◕ 84%   │ Opus 5.5  Most capable           ✓ │
+│ ▣ OpenCode        Sign in   │ Sonnet 5.5  Fast and capable       │
+│                             │ Haiku 5.5  Fastest                 │
+│                             │ ──────────────────────────────     │
+│                             │ Reasoning                          │
+│                             │ [ Low │ Medium │ High │ Max ]      │
+│                             │ ──────────────────────────────     │
+│                             │ Fast mode                      ( ) │
+└─────────────────────────────┴────────────────────────────────────┘
+```
+
+One [search menu](./design-system.md#menus-and-dialogs) under the agent button, after T3 Code's model picker (a provider rail beside one searchable list, built on Base UI's `Combobox`) and Conductor's unified picker: the agents on the left, the shown agent's model menu on the right, and a search field across both. Choosing a model chooses its agent with it, so the agent and the model are one choice in one place ([one way in](./ux-guidelines.md#principles)), and no model waits for its agent to be chosen first.
+
+- **Search**: "Search agents and models", focused while the menu is open. Typing turns the pane into the matching models of every agent, grouped under each agent's mark and name, and keeps in the rail only the agents with a match; a query that matches an agent's name lists all its models. The level and the switches step aside until the field is cleared, since they belong to one agent. The first match is highlighted, and `Enter` chooses it. With no match at all, the pane says "No matching agents or models". The menu keeps its size while it filters, so the rail and the pane do not jump.
+- **The rail**: one row per agent, the installed ones first in catalog order, then those not installed. A row is the mark, the name and, on the right, the agent's usage or what it needs:
+  - With plan limits: a 12 px usage pie and the percentage of its tightest current window (`tightestLimit`, as the sidebar's usage chips), both in the window's [usage level](./design-system.md#meaning) (`usageTone`): `--success` below 60% used, `--attention` from 60%, `--destructive` from 90% or once the limit is reached. The tooltip lists every window with its percentage and the time to its reset. Opening the menu reads the limits again for the running agents that report them, as the usage popover does, which costs no model call.
+  - Otherwise a word for what the agent needs: "Sign in", "Not installed", "Failed". An agent that needs nothing and reports no limits shows nothing there.
+  - The rail opens on the chosen agent, whose row takes the selected fill. It carries no check: the button already names it, and a check would push the usage out of line. A click or the arrow keys show another agent's pane without choosing that agent.
+  - The rail scrolls once it holds more agents than fit. Adding agents from the ACP Registry will put a row at its foot; that row does not show until the feature is built.
+- **The pane** lays out the shown agent's options as the session's [model menu](#composer) does: the models under the option's name, each with its description, then the reasoning level as segments, then the switches, with the values the session would [start with](./session-model.md#config-options). Choosing a model chooses the agent and the model and closes the menu. The level and the switches keep it open, and set what that agent starts with without choosing it. Only the chosen agent's model carries the check, so another agent's pane shows none. A long list scrolls by itself within 288 px, with scroll-edge fades, so the level and the switches stay in view.
+  - Before an agent has run a session its models are unknown, since ACP lists them only in `session/new`: the pane says "Claude Code lists its models after its first session. It starts with its default model, and you can change it in the session." over **Use Claude Code**, which chooses the agent and closes the menu.
+  - An agent that needs to sign in says "Sign in to Claude Code to use it." with **Sign in…** above its models, and can still be chosen: the session then opens on its sign-in screen. One not installed says "Claude Code is not installed." with **Install…**, and cannot be chosen. One that failed shows its error with **Retry**. **Sign in…** and **Install…** open the agent's page in Settings › Agents, where both live.
+  - While the agents' options load, three `Skeleton` rows stand in at the rows' height.
+- **Keyboard**: focus stays in the search field, where `↑` and `↓` move through the models and `Enter` chooses one, as in every [search menu](./design-system.md#menus-and-dialogs). `Tab` moves on to the rail, where `↑` and `↓` move between agents and show each one's pane, then to the segments and the switches. `Esc` closes the menu and focus returns to its button.
+- **Size**: the rail fits its widest row; the pane is 320 px wide, as the session's model menu is. They share one menu surface, divided by a hairline ([two-pane menus](./design-system.md#menus-and-dialogs)).
+
+What the session starts with is kept per agent and survives a restart: the agent's own defaults from its last new session, then the model, reasoning level and model options last chosen for it in any session, then what is set in this menu. The mode and the other options start at the agent's defaults in every new session, so a permissive mode chosen once is never carried into the next one ([session model](./session-model.md#config-options)).
+
 ### Project home
 
-Shown when you click a project's name in the sidebar, and after the shown session is closed or deleted. The three agents as large selectable cards (mark, name, version, status) to start a session. A hovered card rises 1 px, takes the `sm` shadow and lights up softly from its bottom edge, as the reference's starter cards do. The project's recent sessions are listed below. Like Welcome, it sits on the plain `--background` surface. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
+Shown when you click a project's name in the sidebar, and after the shown session is closed or deleted. The three agents as large selectable cards (mark, name, version, status); a card opens [New session](#new-session) in the project with that agent chosen, so a session is created only with its first message ([problem 45](../milestones/m0-feedback.md#45-sessions-without-a-message-stay-in-the-list)). New session does not replace the project home: the home is the project's own page, with its sessions and **Import sessions**, while New session starts work anywhere. A hovered card rises 1 px, takes the `sm` shadow and lights up softly from its bottom edge, as the reference's starter cards do. The project's recent sessions are listed below. Like Welcome, it sits on the plain `--background` surface. **Import sessions** lists sessions the agents already have for this folder (`agents.listSessions`).
 
 ### Session
 
