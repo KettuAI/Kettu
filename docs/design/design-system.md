@@ -135,7 +135,7 @@ Each agent is shown with its official mark in its own colors. They are the only 
 
 Files and folders show their type's icon from [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) (`material-icon-theme`, MIT), the file icon theme most used in VS Code, resolved from its manifest the way VS Code resolves a file icon theme: the file name (with its parent folder, for names such as `.github/workflows`), then the extensions longest first, then the default; folders by name, open or closed. The light theme takes the manifest's light icons where it has them.
 
-- The colors stay the theme's, at reduced saturation (`saturate-40`, the option chosen in [problem 38](../milestones/m0-feedback.md#38-files-pane-no-markdown-preview-file-type-icons-or-editing)), so they sit with the restrained palette. Like the agent marks, they are colored by design, the only icons that are.
+- The colors are the theme's own, unchanged: a reduced saturation was tried and read as dull ([problem 38](../milestones/m0-feedback.md#38-files-pane-no-markdown-preview-file-type-icons-or-editing)). Like the agent marks, they are colored by design, the only icons that are.
 - Sizes: 16 px in the Files pane's rows and preview header, 12 px in a file chip in the thread.
 - The manifest and the icons load on first use, in a chunk of their own; each icon is a file of its own, never inlined, so only those on screen are read. A plain line icon stands in until they load.
 

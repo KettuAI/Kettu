@@ -25,8 +25,8 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
- * A file's or folder's icon by its type, in the theme's colors at reduced saturation so they sit
- * with the restrained palette. A plain line icon stands in while the theme loads.
+ * A file's or folder's icon by its type, in the theme's own colors. A plain line icon stands in
+ * while the theme loads.
  */
 export function FileTypeIcon({
   path,
@@ -54,7 +54,7 @@ export function FileTypeIcon({
       alt=""
       aria-hidden
       draggable={false}
-      className={cn('shrink-0 saturate-40 select-none', className)}
+      className={cn('shrink-0 select-none', className)}
     />
   )
 }

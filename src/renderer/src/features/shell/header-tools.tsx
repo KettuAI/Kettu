@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { FolderTreeIcon, SquareTerminalIcon } from 'lucide-react'
+import { FileIcon, SquareTerminalIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -28,7 +28,7 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
       <NoDrag className={cn('shrink-0 gap-0.5', isRepo && '-ml-2')}>
         {isRepo && <TopBarRule />}
         <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
-          <FolderTreeIcon />
+          <FileIcon />
         </PaneToggle>
         <PaneToggle
           projectPath={projectPath}
