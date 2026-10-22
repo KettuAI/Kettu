@@ -2,7 +2,7 @@
 
 > Status: Draft · Applied by the [interface design](./ui.md) · Tokens live in `src/renderer/src/styles/globals.css` · Built in [M0.3](../milestones/m0.md#work-packages)
 
-The visual language every screen is built from: surfaces, lines, density, type and motion. Components take every color, radius, size and timing from the tokens below. A value that is not here does not belong in a component; if one is missing, add it here first.
+The visual language every screen is built from: surfaces, lines, density, type and motion. Components take every color, radius, size and timing from the tokens below. A value that is not here does not belong in a component; if one is missing, add it here first. Which value to choose where, and how the interface behaves, are the [visual style](./visual-style.md) and the [UX guidelines](./ux-guidelines.md).
 
 ## Design reference
 

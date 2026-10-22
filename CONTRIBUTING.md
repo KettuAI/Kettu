@@ -12,7 +12,7 @@ pnpm lint
 pnpm typecheck
 ```
 
-From M0.1 on, `pnpm test` must pass as well. The design documents in [docs/](./docs/README.md) describe how each part is meant to work; read the one for the part you change.
+From M0.1 on, `pnpm test` must pass as well. The design documents in [docs/](./docs/README.md) describe how each part is meant to work; read the one for the part you change. Any UI work follows the [design process](./docs/design/design-process.md) and the rules in [visual style](./docs/design/visual-style.md) and [UX guidelines](./docs/design/ux-guidelines.md).
 
 ## UI stack
 

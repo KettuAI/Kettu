@@ -21,6 +21,7 @@ OverBench takes the best implementations already proven in leading projects, int
    - Keep startup fast: load heavy modules (syntax highlighting, diff engines, terminals) lazily with dynamic `import()`.
    - Measure before and after with the DevTools Performance panel. An optimization without a measurement is a guess.
 4. **Polish the UI to the limit.**
+   - Every design goes through the design rules first: [visual style](./docs/design/visual-style.md) for how it looks, [UX guidelines](./docs/design/ux-guidelines.md) for how it behaves, and the steps of the [design process](./docs/design/design-process.md). A design that breaks a rule does not ship; the rule changes first, with the maintainer's agreement. A case the rules do not cover is decided and written into them before it is built.
    - Design every state: loading (`Skeleton`), empty (`Empty`), error, and hover, focus, active and disabled.
    - Check every screen in both light and dark themes, at small and large window sizes.
    - Take colors, radii, sizes and timings from the tokens in the [design system](./docs/design/design-system.md); no raw colors or magic numbers.
@@ -116,7 +117,7 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 ## Definition of done
 
 - `pnpm format:check`, `pnpm lint` and `pnpm typecheck` pass. Also run `pnpm build` when you touch config, the main process or the preload.
-- For UI changes, run the app and look at the result in light and dark themes before reporting the work as done. In development, `REMOTE_DEBUGGING_PORT=9222 pnpm dev` exposes the renderer over the Chrome DevTools Protocol for inspection and screenshots.
+- For UI changes, walk the [visual](./docs/design/visual-style.md#checklist) and [UX](./docs/design/ux-guidelines.md#checklist) checklists, and run the app and look at the result in light and dark themes before reporting the work as done. In development, `REMOTE_DEBUGGING_PORT=9222 pnpm dev` exposes the renderer over the Chrome DevTools Protocol for inspection and screenshots.
 - Once M0.1 adds Vitest, `pnpm test` must pass too, and logic you add or change comes with tests as described in [docs/design/testing.md](./docs/design/testing.md).
 
 ## Conventions
