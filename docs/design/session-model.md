@@ -319,7 +319,7 @@ These details are settled by the implementation in `src/agent-host/sessions.ts`:
 - **Open**: `sessions.open` waits for the load or resume, so its snapshot already holds the replay. A renderer watches first, so it also receives the replay's patches. When the agent cannot start, or the load fails, the session stays live in `failed` (or `auth_required`) and the snapshot shows it, for **Retry**.
 - **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in, `session/load` for a failed load or resume, and for a `disconnected` session it restarts the agent, whose restart resumes it. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
 - **Unread**: `sessions.watch`, `sessions.unwatch`, and a turn ending while a port watches set `lastViewedAt`. A turn ending with no port watching sets `unread`. After a restart a session is unread when `updatedAt` is later than `lastViewedAt`; a session never viewed (`lastViewedAt: null`) is not.
-- **Attention** is `permission` while a request is pending, then `error` for a `failed` session or a set `error`, then `unread`.
+- **Attention** is `permission` while a request is pending, then `error` for a `failed` session or a set `error` the user has not seen, then `unread`. An error is seen once the session is watched, or when it happens while a port watches; the error notice stays in the thread, and the session keeps `error` set until its next turn. A `failed` session keeps its mark until it recovers, since its **Retry** still waits for the user.
 - **Fork**: `sessions.fork` takes a top-level session that is `ready` and calls `session/fork` (ACP's unstable schema, only when `sessionCapabilities.fork` is advertised). The new session is saved at once, with the source's title, config and usage, and shows a copy of the source's thread without its subagent cards, whose sub-sessions stay with the source; its next ids continue after the copied ones. A later open replays the fork's own history from the agent.
 - **Sequence numbers** continue across a close and a reopen, so a port still holding an old replica sees a gap and asks for a snapshot instead of mixing two runs.
 
@@ -336,6 +336,8 @@ Some work needs an agent but none of your folders, so New session offers **No pr
 ### Titles
 
 The title comes from `session_info_update`. Until the agent sends one, the host uses the first line of the first user message, cut to 60 characters. It is persisted in the index.
+
+The user can rename a session (`sessions.rename`). ACP has no rename, so the user's title lives in the index only, as `customTitle`, and wins over the agent's: the summary and notifications show it, while the thread's own `title` keeps following the agent. Renaming to an empty title removes it, and the agent's title shows again.
 
 ## Sub-sessions
 

@@ -1,38 +1,32 @@
-import { useShallow } from 'zustand/react/shallow'
 import { memo, useEffect, useState } from 'react'
-import { BotIcon, ChevronDownIcon, ChevronRightIcon, CornerDownRightIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { createSession, deleteSession, descendantCount, closeSession } from '@renderer/app/actions'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@renderer/components/ui/alert-dialog'
+  BotIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CornerDownRightIcon,
+  EllipsisIcon,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { SidebarMenuButton, SidebarMenuItem } from '@renderer/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { prStateText } from '@renderer/features/git/pr-text'
 import { cn } from '@renderer/lib/utils'
-import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle, type SessionNode } from '@renderer/stores/sessions'
 import { openSession, useViewStore } from '@renderer/stores/view'
 import { SessionIndicator } from './session-indicator'
+import { SessionDialogs, SessionMenuItems, type SessionDialog } from './session-menu'
 
 /** The sidebar indents two levels at most and lists deeper sub-sessions at the second level. */
 const MAX_DEPTH = 2
@@ -68,7 +62,8 @@ export const SessionRow = memo(function SessionRow({
       expandedParents: { ...s.expandedParents, [summary.id]: value },
     }))
 
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [dialog, setDialog] = useState<SessionDialog>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
   const pad = 26 + Math.min(depth, MAX_DEPTH) * 16
   const subagent = summary.origin === 'subagent'
 
@@ -93,9 +88,9 @@ export const SessionRow = memo(function SessionRow({
           className="absolute inset-0 grid place-items-center text-muted-foreground opacity-0 group-hover/menu-button:opacity-100"
         >
           {expanded ? (
-            <ChevronDownIcon strokeWidth={2} className="size-3!" />
+            <ChevronDownIcon className="size-3!" />
           ) : (
-            <ChevronRightIcon strokeWidth={2} className="size-3!" />
+            <ChevronRightIcon className="size-3!" />
           )}
         </span>
       )}
@@ -113,6 +108,12 @@ export const SessionRow = memo(function SessionRow({
       aria-expanded={hasChildren ? expanded : undefined}
       onClick={() => openSession(summary.id, summary.projectPath)}
       onKeyDown={(event) => {
+        // The context menu key opens the More menu, the row's menu for the keyboard.
+        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+          event.preventDefault()
+          setMoreOpen(true)
+          return
+        }
         if (!hasChildren) return
         if (event.key === 'ArrowRight' && !expanded) {
           event.preventDefault()
@@ -138,7 +139,7 @@ export const SessionRow = memo(function SessionRow({
           aria-label={t('row.subSessions', { count: children.length })}
           className="inline-flex items-center gap-0.5 text-[11.5px] text-muted-foreground tabular"
         >
-          <CornerDownRightIcon strokeWidth={1.8} className="size-[11px]!" />
+          <CornerDownRightIcon className="size-[11px]!" />
           {children.length}
         </span>
       )}
@@ -146,36 +147,57 @@ export const SessionRow = memo(function SessionRow({
         summary={summary}
         permissionCount={node.permissionCount}
         running={node.running}
+        className={cn(
+          'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
+          moreOpen && 'opacity-0',
+        )}
       />
     </SidebarMenuButton>
   )
 
   return (
     <SidebarMenuItem>
-      <ContextMenu>
-        {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
-        {summary.branch ? (
-          <Tooltip>
-            <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
-            <TooltipContent side="right" className="flex-col items-start gap-0.5">
-              <span className="font-mono">{summary.branch}</span>
-              {summary.pr && (
-                <span className="opacity-70">
-                  #{summary.pr.number} · {prStateText(summary.pr.state)}
-                </span>
-              )}
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <ContextMenuTrigger render={button} />
-        )}
-        <SessionMenu
-          sessionId={summary.id}
-          projectPath={summary.projectPath}
-          canCreateChild={!subagent}
-          onDelete={() => setConfirmDelete(true)}
-        />
-      </ContextMenu>
+      <div className="group/session relative">
+        <ContextMenu>
+          {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
+          {summary.branch ? (
+            <Tooltip>
+              <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
+              <TooltipContent side="right" className="flex-col items-start gap-0.5">
+                <span className="font-mono">{summary.branch}</span>
+                {summary.pr && (
+                  <span className="opacity-70">
+                    #{summary.pr.number} · {prStateText(summary.pr.state)}
+                  </span>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <ContextMenuTrigger render={button} />
+          )}
+          <ContextMenuContent>
+            <SessionMenuItems summary={summary} onDialog={setDialog} />
+          </ContextMenuContent>
+        </ContextMenu>
+        {/* Sits over the status slot at the row's end, so the title keeps its width. */}
+        <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={t('row.more')}
+                className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-foreground data-popup-open:opacity-100 [&_svg]:size-3.5"
+              />
+            }
+          >
+            <EllipsisIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <SessionMenuItems summary={summary} onDialog={setDialog} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       {expanded && (
         <ul className="relative flex flex-col gap-px pt-px">
           <span
@@ -188,88 +210,7 @@ export const SessionRow = memo(function SessionRow({
           ))}
         </ul>
       )}
-      <DeleteSessionDialog
-        sessionId={summary.id}
-        title={sessionTitle(summary)}
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-      />
+      <SessionDialogs summary={summary} dialog={dialog} onDialog={setDialog} />
     </SidebarMenuItem>
   )
 })
-
-function SessionMenu({
-  sessionId,
-  projectPath,
-  canCreateChild,
-  onDelete,
-}: {
-  sessionId: string
-  projectPath: string
-  canCreateChild: boolean
-  onDelete: () => void
-}) {
-  const { t } = useTranslation(['sidebar', 'common'])
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  return (
-    <ContextMenuContent>
-      {canCreateChild && (
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>{t('row.newSubSession')}</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            {agents.map((agent) => (
-              <ContextMenuItem
-                key={agent.id}
-                disabled={!isInstalled(agent)}
-                onClick={() => void createSession(agent.id, projectPath, sessionId)}
-              >
-                <AgentMark agent={agent.id} size={14} mono={!isInstalled(agent)} />
-                {agent.name}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-      )}
-      <ContextMenuItem onClick={() => void closeSession(sessionId)}>
-        {t('common:actions.close')}
-      </ContextMenuItem>
-      <ContextMenuSeparator />
-      <ContextMenuItem variant="destructive" onClick={onDelete}>
-        {t('row.deleteMenu')}
-      </ContextMenuItem>
-    </ContextMenuContent>
-  )
-}
-
-export function DeleteSessionDialog({
-  sessionId,
-  title,
-  open,
-  onOpenChange,
-}: {
-  sessionId: string
-  title: string
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const { t } = useTranslation(['sidebar', 'common'])
-  const count = open ? descendantCount(sessionId) : 0
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t('row.deleteTitle', { title })}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {count > 0 ? t('row.deleteBodyWithSub', { count }) : t('row.deleteBody')}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => void deleteSession(sessionId)}>
-            {t('row.delete')}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}

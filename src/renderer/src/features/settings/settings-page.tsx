@@ -191,11 +191,11 @@ export default function SettingsPage() {
         <div className="app-region-drag h-top-bar shrink-0" />
         <div
           ref={scroller}
-          className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable]"
+          className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]"
         >
           <div
             key={searching ? 'results' : agent ? `agents/${agent}` : page.id}
-            className="flex max-w-3xl animate-in flex-col gap-9 pt-1 pb-24 fade-in animation-duration-(--duration-fast)"
+            className="mx-auto flex w-full max-w-[560px] animate-in flex-col gap-9 pt-1 pb-24 fade-in animation-duration-(--duration-fast)"
           >
             {searching ? (
               <>

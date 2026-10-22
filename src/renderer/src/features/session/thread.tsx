@@ -26,7 +26,7 @@ import { RunGroup } from './entries/run-group'
 import { SubagentCard } from './entries/subagent-card'
 import { ToolCard } from './entries/tool-card'
 import { ToolGroup } from './entries/tool-group'
-import { buildItems, signatureOf } from './thread-items'
+import { buildItems, signatureOf, type Item } from './thread-items'
 
 // A long history renders from its end: the first frame shows the last items, and older ones
 // follow in transitions after it, which MessageScroller keeps in place as they are prepended.
@@ -42,6 +42,26 @@ function useShownFrom(total: number): number {
     return () => cancelAnimationFrame(frame)
   }, [limit, total])
   return Math.max(0, total - limit)
+}
+
+/** The thoughts and tool calls of a thread, whose rows sit close together. */
+function stepIds(order: string[], signature: string): Set<string> {
+  const ids = new Set<string>()
+  order.forEach((id, i) => {
+    if ('hgt'.includes(signature[i] ?? '-')) ids.add(id)
+  })
+  return ids
+}
+
+const isStep = (item: Item, steps: Set<string>): boolean =>
+  item.type === 'group' || item.type === 'run' || (item.type === 'entry' && steps.has(item.id))
+
+/** 32 px between turns, 4 px between steps, 16 px between anything else. */
+function spacing(item: Item, previous: Item, steps: Set<string>): string {
+  if (item.type === 'entry' && item.turnStart) return 'pt-8'
+  if (item.type === 'reply') return 'pt-2.5'
+  if (isStep(item, steps) && isStep(previous, steps)) return 'pt-1'
+  return 'pt-4'
 }
 
 export const Thread = memo(function Thread({
@@ -63,6 +83,7 @@ export const Thread = memo(function Thread({
     () => buildItems(order ?? [], signature, working),
     [order, signature, working],
   )
+  const steps = useMemo(() => stepIds(order ?? [], signature), [order, signature])
   const awaitingReply = working && signature.endsWith('u')
   const shownFrom = useShownFrom(items.length)
 
@@ -75,7 +96,7 @@ export const Thread = memo(function Thread({
           aria-label={t('thread.label')}
           className="outline-none [scroll-timeline:--scroll-fade-top_y] [scrollbar-gutter:stable_both-edges]"
         >
-          <MessageScrollerContent className="mx-auto w-full max-w-[760px] gap-0 px-6 pt-5 pb-8">
+          <MessageScrollerContent className="mx-auto w-full max-w-thread gap-0 px-6 pt-5 pb-8">
             {items.slice(shownFrom).map((item, shownIndex) => {
               const index = shownFrom + shownIndex
               return (
@@ -84,7 +105,7 @@ export const Thread = memo(function Thread({
                   messageId={item.key}
                   scrollAnchor={item.type === 'entry' && item.scrollAnchor}
                   className={cn(
-                    index > 0 && (item.type === 'entry' && item.turnStart ? 'pt-4' : 'pt-2.5'),
+                    index > 0 && spacing(item, items[index - 1]!, steps),
                     // The growing tail would flip between skipped and rendered on every chunk,
                     // recalculating its whole subtree each time.
                     index === items.length - 1 && '[content-visibility:visible]',
@@ -124,7 +145,7 @@ export const Thread = memo(function Thread({
               )
             })}
             {awaitingReply && (
-              <MessageScrollerItem messageId="working" className="pt-2.5">
+              <MessageScrollerItem messageId="working" className="pt-4">
                 <p className="animate-in text-prose text-muted-foreground animation-duration-(--duration-base) fade-in">
                   <span className="shimmer">{t('thread.working')}</span>
                 </p>

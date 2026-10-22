@@ -8,6 +8,8 @@
     "empty": "此项目还没有终端。"
   },
   "tab": {
+    "rename": "重命名",
+    "nameLabel": "终端名称",
     "newOutput": "有新输出",
     "close": "关闭 {{name}}"
   },

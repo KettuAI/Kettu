@@ -8,6 +8,8 @@
     "empty": "No terminal in this project."
   },
   "tab": {
+    "rename": "Rename",
+    "nameLabel": "Terminal name",
     "newOutput": "New output",
     "close": "Close {{name}}"
   },

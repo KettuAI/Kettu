@@ -35,7 +35,7 @@ export function PrIcon({
         role="img"
         aria-label={t('pr.icon.none')}
         style={{ width: size, height: size }}
-        strokeWidth={1.8}
+
         className={cn('shrink-0 text-muted-foreground', className)}
       />
     )
@@ -46,7 +46,7 @@ export function PrIcon({
       role="img"
       aria-label={t(label)}
       style={{ width: size, height: size }}
-      strokeWidth={1.8}
+
       className={cn('shrink-0', color, className)}
     />
   )
@@ -73,7 +73,7 @@ export function ChecksIcon({
       role="img"
       aria-label={t(label)}
       style={{ width: size, height: size }}
-      strokeWidth={1.8}
+
       className={cn('shrink-0', color)}
     />
   )

@@ -378,6 +378,7 @@ export class AgentHost {
       'sessions.resumeQueue': ({ sessionId }) => sessions.resumeQueue(sessionId),
       'sessions.setConfigOption': ({ sessionId, optionId, value }) =>
         sessions.setConfigOption(sessionId, optionId, value),
+      'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
       'sessions.delete': ({ sessionId }) => sessions.delete(sessionId),
       'sessions.removeAll': () => sessions.removeAll(),

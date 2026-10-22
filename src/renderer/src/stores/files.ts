@@ -24,9 +24,15 @@ interface FilesStore {
   byProject: Record<string, ProjectFiles>
   /** The file shown in each project's Files pane. */
   open: Record<string, OpenFile>
+  /** Markdown files show their source instead of the rendered preview, for every file. */
+  markdownSource: boolean
 }
 
-export const useFilesStore = create<FilesStore>()(() => ({ byProject: {}, open: {} }))
+export const useFilesStore = create<FilesStore>()(() => ({
+  byProject: {},
+  open: {},
+  markdownSource: false,
+}))
 
 const inFlight = new Map<string, Promise<void>>()
 

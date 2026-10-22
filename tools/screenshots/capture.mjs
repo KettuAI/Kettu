@@ -112,7 +112,7 @@ async function run() {
   cdp = await openProject(port, cdp, project)
   await setup()
   await waitFor(
-    `[...document.querySelectorAll('button')].some((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`,
+    `[...document.querySelectorAll('button')].some((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`,
     'the fake agent on the project home',
   )
   await sleep(800)

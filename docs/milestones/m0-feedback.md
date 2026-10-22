@@ -13,7 +13,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 5   | Messages have no action row                                    | Thread entries | Fixed        |
 | 6   | Markdown looks plain and file references do not stand out      | Markdown       | Partly fixed |
 | 7   | The usage popover shows too little and needs a full redesign   | Usage          | Partly fixed |
-| 8   | Session rows show their time badly                             | Sidebar        | Open         |
+| 8   | Session rows show their time badly                             | Sidebar        | Fixed        |
 | 9   | New session is tied to the selected project                    | Sidebar        | Fixed        |
 | 10  | The welcome screen and the project home lack polish            | Home           | Open         |
 | 11  | No steering or queued messages while a turn runs               | Composer       | Fixed        |
@@ -24,37 +24,37 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 16  | Switches keep shadcn's default look                            | Settings       | Fixed        |
 | 17  | Settings › Agents leaves out what matters                      | Settings       | Partly fixed |
 | 18  | The About page needs redoing                                   | Settings       | Open         |
-| 19  | Settings leave too much empty space                            | Settings       | Open         |
+| 19  | Settings leave too much empty space                            | Settings       | Partly fixed |
 | 20  | Collapsing the sidebar is abrupt                               | Sidebar        | Fixed        |
 | 21  | No file browser or preview                                     | Side panel     | Fixed        |
 | 22  | The New session project and agent menus look crude             | New session    | Fixed        |
-| 23  | The project chevron sits before the name and always shows      | Sidebar        | Open         |
-| 24  | The Projects header row can go; each project gets a +          | Sidebar        | Open         |
-| 25  | The sidebar footer needs a design of its own                   | Sidebar        | Open         |
+| 23  | The project chevron sits before the name and always shows      | Sidebar        | Fixed        |
+| 24  | The Projects header row can go; each project gets a +          | Sidebar        | Fixed        |
+| 25  | The sidebar footer needs a design of its own                   | Sidebar        | Partly fixed |
 | 26  | Account details cannot be hidden                               | Settings       | Open         |
 | 27  | Agent adapters have no update check or one-click update        | Agents         | Open         |
-| 28  | The Ready label next to the status dot is redundant            | Settings       | Open         |
+| 28  | The Ready label next to the status dot is redundant            | Settings       | Fixed        |
 | 29  | Agents that are not installed cannot be installed from here    | Settings       | Open         |
-| 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Open         |
+| 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Partly fixed |
 | 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Open         |
 | 32  | No message outline beside the thread, expanding on hover       | Thread         | Open         |
-| 33  | Title menu needs polish; agent mark goes before the title      | Top bar        | Open         |
+| 33  | Title menu needs polish; agent mark goes before the title      | Top bar        | Partly fixed |
 | 34  | The slash command popover looks crude                          | Composer       | Open         |
 | 35  | The palette is black and grey and reads as cheap               | Design system  | Open         |
 | 36  | The composer has no + menu, file or image attachments          | Composer       | Open         |
-| 37  | Icons look heavy; use thin line icons from a library           | Design system  | Open         |
-| 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Open         |
-| 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Open         |
-| 40  | The Settings pages look crude and their colours are untuned    | Settings       | Open         |
+| 37  | Icons look heavy; use thin line icons from a library           | Design system  | Fixed        |
+| 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Partly fixed |
+| 39  | Terminal tabs cannot be renamed or reordered and look crude    | Terminal       | Partly fixed |
+| 40  | The Settings pages look crude and their colours are untuned    | Settings       | Partly fixed |
 | 41  | The plan usage strip is unclear and needs a better place       | Sidebar        | Open         |
-| 42  | Long lines in the file preview run off the pane                | Side panel     | Open         |
-| 43  | The message body needs a typography pass to a given spec       | Thread         | Open         |
+| 42  | Long lines in the file preview run off the pane                | Side panel     | Fixed        |
+| 43  | The message body needs a typography pass to a given spec       | Thread         | Fixed        |
 | 44  | The space beside the window controls needs a design            | Sidebar        | Open         |
 | 45  | Sessions without a message stay in the list                    | Sidebar        | Open         |
-| 46  | A session's error mark stays after it has been seen            | Sidebar        | Open         |
-| 47  | A crowded top bar cuts the session title first                 | Top bar        | Open         |
-| 48  | The spinner's screen reader label is not translated            | Localization   | Open         |
-| 49  | No multimodal support: images, audio and video                 | Media          | Open         |
+| 46  | A session's error mark stays after it has been seen            | Sidebar        | Fixed        |
+| 47  | A crowded top bar cuts the session title first                 | Top bar        | Fixed        |
+| 48  | The spinner's screen reader label is not translated            | Localization   | Fixed        |
+| 49  | No multimodal support: images, audio and video                 | Media          | Partly fixed |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -151,6 +151,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - `SessionIndicator` stops rendering `shortAgo`, and the rule "running and starting rows show no time" in [Interface: sidebar](../design/ui.md#sidebar) goes with it, as does "in place of the time" for the attention pill.
   - Titles gain the width the time took. To settle: whether the 16 px indicator slot stays reserved on rows with no status, so a status appearing never moves the title, or the title runs to the row's end and a status takes its place when it appears.
   - The project home's recent sessions list keeps its time column; this decision covers the sidebar only. Whether the time should show somewhere in the sidebar, such as the row's tooltip, was not asked and is left open.
+- **Fixed**: session rows show no time. The status indicator keeps its 16 px slot at the row's end on every row, so a status appearing never moves the title, and the hover **More** button of [problem 30](#30-the-session-context-menu-lacks-rename-pin-and-archive) sits over that slot ([Interface: sidebar](../design/ui.md#sidebar)). The project home keeps its time column.
 
 ## 9. New session is tied to the selected project
 
@@ -252,6 +253,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - How the page grows and shrinks with the window, in both themes.
     - Doing it together with the other Settings problems, as above.
   - **Decided**: 2026-10-22, the direction of [problem 40](#40-the-settings-pages-look-crude-and-their-colours-are-untuned): the content column is centred in the page area, at most about 560 px wide, instead of aligned to its start.
+- **Partly fixed**: the content column is centred in the page area at most 560 px wide, as decided ([Interface: settings](../design/ui.md#settings)). The rest of the Settings redesign is [problem 40](#40-the-settings-pages-look-crude-and-their-colours-are-untuned).
 
 ## 20. Collapsing the sidebar is abrupt
 
@@ -289,6 +291,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - On a collapsed project it stays shown, so a folded group is still recognisable without the pointer.
 - **Reference**: in the sidebar of Claude Desktop the group "overbench" reads "overbench ⌄" under the pointer and plain "overbench" otherwise, while the collapsed group "This computer" always reads "This computer ›". A **+** sits at the row's end in both states there; OverBench shows its **+** only on hover.
 - **Today**: `ProjectGroup` in `src/renderer/src/features/sidebar/app-sidebar.tsx` renders the chevron (`ChevronDownIcon` or `ChevronRightIcon`, in a 14 px slot) as the first child of the row, before the name, with no hover condition. [Interface: sidebar](../design/ui.md#sidebar) does not describe the chevron. The row's `→` and `←` keys still fold and unfold it. To settle when planning: the chevron's direction and slot after the name, how the name's truncation leaves room for it, whether the row's **+** should show without hover as in the reference, the same treatment for the **No project** group, and the rule written into [Interface: sidebar](../design/ui.md#sidebar). The reduced-motion and keyboard-focus states need a visible chevron too, since a focused row has no hover.
+- **Fixed**: the chevron follows the project's name. A folded group always shows it (`ChevronRight`); an open one only while the row is hovered or has keyboard focus (`ChevronDown`). The same holds for the **No project** group ([Interface: sidebar](../design/ui.md#sidebar)).
 
 ## 24. The Projects header row can go; each project gets a +
 
@@ -305,6 +308,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the **No project** group keeps its **+**, since "real projects" were named, and New session's project menu already offers **No project**.
   - Whether New session should still start at the selected project, or at no project chosen, as [problem 9](#9-new-session-is-tied-to-the-selected-project) first asked ("assumes no project").
   - Where the list's empty text, loading skeleton and load error go without the header above them.
+- **Fixed**: the **Projects** row is gone. Every real project shows its **+** at all times, which opens New session in that project; the **No project** group keeps its **+** on hover. Projects are added with `Mod+O`, File › Open Project…, **Open project…** in New session's project menu, or the Welcome screen. New session still starts at the selected project. The empty text, skeleton and load error sit at the top of the list ([Interface: sidebar](../design/ui.md#sidebar)).
 
 ## 25. The sidebar footer needs a design of its own
 
@@ -317,6 +321,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - How the footer's parts relate as a whole: the notices, the plan usage chips and the Settings row, in their order and spacing. The arrow at the chips is read as putting them in scope; the maintainer's words named only the hint.
   - Whether the **New session** row's `⌘N` goes as well, for consistency. The shortcuts stay findable in Settings › Keyboard shortcuts and in the app menu.
   - The rule written into [Interface: sidebar](../design/ui.md#sidebar), and into the shortcut table if the hints leave the rows.
+- **Partly fixed**: the **Settings** row has no shortcut hint; `Mod+,` stays in the app menu and Settings › Keyboard shortcuts. The **New session** row keeps its `⌘N`. The footer's design as a whole is still open, with the plan usage of [problem 41](#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place).
 
 ## 26. Account details cannot be hidden
 
@@ -357,6 +362,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether only **Ready** loses its word, since it is the state that needs no attention, while states that ask something of the user keep theirs.
   - How the bare dot stays readable without color alone: an accessible name on the dot and a tooltip with the word, and the rule above amended for it.
   - Whether the project home's cards and the Welcome screen follow the Settings list. The maintainer pointed at Settings only; the card there shows "Ready" the same way.
+- **Fixed**: **Ready** is the green dot alone, with "Ready" as its tooltip and accessible name; the states that ask something of the user keep their words. `AgentStateLine` feeds Settings, the project home and the Welcome screen, so all three follow. The sidebar's rule on color alone names the exception ([Interface: Settings › Agents](../design/ui.md#settings--agents)).
 
 ## 29. Agents that are not installed cannot be installed from here
 
@@ -390,6 +396,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The rest of the reference's menu: **Fork** (already a message action, shown only when the agent advertises `session/fork`), **Mark as unread**, **Open in** (an editor or the file manager, which the main process would launch, and **New window**, which is out of M0), and **Move to** and **Move to project**, whose meaning needs the reference's submenus. A session's folder is its ACP `cwd`, so moving it to another project is not something ACP offers.
   - The menu's order and grouping, its destructive item last, and the same set in the top bar's title menu.
   - The rule changes in [Interface: sidebar](../design/ui.md#sidebar), [Interface: session](../design/ui.md#session) and the [session lifecycle](../design/session-model.md#session-lifecycle).
+- **Partly fixed**: **Rename…** (a dialog; an empty title returns to the agent's, and the user's title is kept in the index and wins over later titles from the agent, [session model: titles](../design/session-model.md#titles)), and the hover **More** button. The row's context menu, its **More** menu and the top bar's title menu render one shared item list (`SessionMenuItems`); the button shows on hover and keyboard focus, sits over the status slot so the title keeps its width, and the context menu key opens it too. Still open: pin, archive and the rest of the reference's menu (mark as unread, open in, move), which need their places designed.
 
 ## 31. Earlier replies show actions only on hover, and no Fork
 
@@ -433,6 +440,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - How it sits with the `Bot` icon of a sub-agent's session and with the parent link of a sub-session: which comes first, and whether a sub-agent keeps both marks.
   - Whether the title button's hit area and hover fill include the mark, so it reads as one control.
   - The rule changes in [Interface: session](../design/ui.md#session).
+- **Partly fixed**: the agent's name is gone from the top bar and its mark (14 px) leads the title inside the title button; a subagent's session keeps its `Bot` icon. The button's tooltip gives the full title and the agent. The menu holds the shared items of [problem 30](#30-the-session-context-menu-lacks-rename-pin-and-archive). The panel's polish against the reference is still open.
 
 ## 34. The slash command popover looks crude
 
@@ -496,6 +504,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the no-hand-drawing rule covers the existing inline SVGs. The branch lane and the usage pie are data graphics and the agent marks are brand marks from a library, so they are not UI icons in the sense of Contributing, but that is for the maintainer to confirm.
   - The rule written into [Design system](../design/design-system.md), beside the icon size, and into Contributing.
 - **Decided**: 2026-10-22, from a page that rendered 20 of the app's icons in five libraries (Lucide, Phosphor, Hugeicons, Tabler, Iconoir) with their facts. Lucide stays. All its icons take one stroke width, 1.5, set in one place through `LucideProvider` (present in the installed `lucide-react`), and the 24 call sites that set their own `strokeWidth` lose it. No dependency changes, and shadcn keeps generating Lucide icons (`"iconLibrary": "lucide"`). The other libraries were not taken.
+- **Fixed**: `LucideProvider` in `main.tsx` sets a stroke width of 1.5 for every Lucide icon, and no call site sets its own. The branch lane and the usage pie, data graphics, keep their own strokes ([Design system: density and sizing](../design/design-system.md#density-and-sizing), [Contributing](../../CONTRIBUTING.md)).
 
 ## 38. Files pane: no markdown preview, file-type icons or editing
 
@@ -528,6 +537,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - Whether the agent should be told about a user's edits, and how far editing goes: plain text with highlighting and save, or an editor with search and more.
   - **Where the rule goes**: [Interface: files](../design/ui.md#files) and the [host's project files](../design/agent-host.md#project-files), which both say read-only today.
 - **Decided** for the file icons: 2026-10-22, from a page that rendered one file tree in Material Icon Theme, Catppuccin Icons, vscode-icons and a desaturated Material, in both themes. The choice is Material Icon Theme with its saturation lowered through the theme's own option, so the colours sit with the restrained palette of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap). It brings in `material-icon-theme` (MIT, 5.39.0 on 2026-10-22) as a dependency, whose `dist/material-icons.json` is the mapping in VS Code's icon theme format: 2,148 file names, 1,381 extensions and 4,659 folder names over 1,251 icons. The Markdown preview and editing parts stay open.
+- **Partly fixed**: file-type icons and the Markdown preview. The icons come from `material-icon-theme` 5.39.0 at `saturate(.4)`, the chosen option, resolved from its manifest as VS Code does, in the tree, the list, the search results, the preview header and the thread's file chips; they load in a chunk of their own on first use ([Design system: file icons](../design/design-system.md#file-icons)). The theme's own saturation option rewrites its files on disk, so the renderer applies the same reduction with CSS. A Markdown file shows rendered through the thread's Streamdown, with **Show source** in the header ([Interface: files](../design/ui.md#files)). Editing is still open.
 
 ## 39. Terminal tabs cannot be renamed or reordered and look crude
 
@@ -541,6 +551,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - **The design**: what makes the strip ugly was not itemised. In the screenshot the two labels are identical, the close button shows on the active tab only, the raised active tab sits against a flat inactive one, and **New terminal** floats apart from the tabs. A redesign should be drawn against the reference's tabs and checked in both themes, with the palette and icon decisions of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap) and [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library) applied.
   - A tab's context menu (rename, close and the like) is a candidate that was not asked for.
   - The rule rewritten in [Interface: terminal](../design/ui.md#terminal) and [Terminal](../design/terminal.md).
+- **Partly fixed**: tabs can be renamed (double-click, or **Rename** in a new context menu with **Close**) and dragged into a new order with `@dnd-kit/react`; the keyboard picks a tab up with `Space`. Names and order live in the renderer for the app's run ([Interface: terminal](../design/ui.md#terminal)). Checked on a production build: rename, a click that selects and a drag that reorders. The strip's redesign is still open.
 
 ## 40. The Settings pages look crude and their colours are untuned
 
@@ -555,6 +566,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Where other problems meet in Settings, so one redesign covers them: the empty space of problem 19, the icons of [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library), Agents ([17](#17-settings--agents-leaves-out-what-matters), [27](#27-agent-adapters-have-no-update-check-or-one-click-update), [29](#29-agents-that-are-not-installed-cannot-be-installed-from-here), [26](#26-account-details-cannot-be-hidden), [28](#28-the-ready-label-next-to-the-status-dot-is-redundant)) and About ([18](#18-the-about-page-needs-redoing)).
   - The proof: each of the nine pages in both themes and at several widths, next to the reference, as in the other polish passes.
 - **Decided**: 2026-10-22, from three mockups of the Git page (flat hairlines, grouped cards, a centred settings window). The direction is the flat hairline look, refined: no cards and no shadows on the page, rows divided by hairlines and grouped under small section labels, states shown as tinted pills, and the content column centred in the page area at most about 560 px wide ([problem 19](#19-settings-leave-too-much-empty-space)). The colours follow the palette decision of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap). Grouped cards and the centred window were not taken.
+- **Partly fixed**: the centred 560 px column of [problem 19](#19-settings-leave-too-much-empty-space). The rows' grouping, tinted state pills and colours wait for the palette of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap).
 
 ## 41. The plan usage strip is unclear and needs a better place
 
@@ -583,6 +595,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - That wrapping stays fast in the virtualized preview at the 1 MiB cap, since wrapped rows have uneven heights, and that the line a file reference points to is still centred.
   - Whether wrapping is the only mode or a toggle in the preview header lets the user switch back to scrolling, as code editors do.
   - The rule written into [Interface: files](../design/ui.md#files), next to the preview.
+- **Fixed**: the preview uses the diffs library's `overflow: 'wrap'`, and a wrapped line keeps one number, on its first row, as checked on a production build. A reference to a line still lands on it: the preview steps toward the line from the rows rendered, since wrapped rows differ in height ([Interface: files](../design/ui.md#files)).
 
 ## 43. The message body needs a typography pass to a given spec
 
@@ -617,6 +630,15 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The rules rewritten in [Interface: markdown](../design/ui.md#markdown), [tool calls](../design/ui.md#tool-calls) and [Design system: typography](../design/design-system.md#typography), with the before and after screenshots the spec asks for.
   - The column width, which the review the maintainer asked for on 2026-10-22 found out of step: [Interface: thread](../design/ui.md#thread) has said 768 px (`max-w-3xl`) while the code has used 760 px since the thread was built (`a2ed8bb`). The spec's `42em` replaces both, and the document is corrected in the same change.
 - **Amended**: 2026-10-22, with a screenshot of a reply whose file references (`README.zh-CN.md`, `docs/development-plan.md`, `docs/architecture.md`) render as underlined text, the same as a web link. A file reference renders as its Material file-type icon followed by the file name, so a file and a link can be told apart at a glance. The icon replaces the spec's generic 10 px file icon and comes from the file icon set chosen in [problem 38](#38-files-pane-no-markdown-preview-file-type-icons-or-editing), Material Icon Theme with lowered saturation, through the same mapping, so a file looks the same in the thread as in the Files pane. To settle: the icon's size inside the 20 px chip, since Material's icons lose detail below about 12 px; whether a reference with a line (`commands.go:12`) shows its line after the name; and a folder icon for a reference to a directory.
+- **Fixed**, to the written spec ([Design system: prose](../design/design-system.md#prose), [Interface: thread](../design/ui.md#thread)). How the open points were settled:
+  - The spec's values are those of the default **Text size**, now 15 px; Small and Large are 14 and 16 px, and the sizes are in em so they scale.
+  - File chips keep today's recognition: a link or inline code that names a file in the project's list, so a name that is not a file stays code or text. A link to a local path that is not a project file shows its text alone. Streamdown's link hardening blocked relative links (`[x](src/x.ts)` read "x [blocked]"), so a remark plugin now carries a local link's target past it.
+  - A chip shows the Material icon at 12 px and the name, with `:12` for a line; folders are not recognised yet.
+  - Emphasis counts as Chinese when it holds a Han character.
+  - Single tool calls are flat rows as well, never cards, with their details under them; only a request for permission keeps its card, since it waits for an answer.
+  - The column replaces both the 760 px of the code and the 768 px of the old text: 42em plus the gutters. The composer keeps 760 px.
+  - The written spec was taken where the mockup differs; the muted lead paragraph and the boxed conclusion are left out.
+  - Checked on a production build in both themes; the before and after screenshots go with the acceptance.
 
 ## 44. The space beside the window controls needs a design
 
@@ -652,6 +674,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether seeing the session clears the mark or only steps it down, and whether the same applies to a `failed` session, whose **Reopen** still waits for the user.
   - Whether a parent row keeps showing an error of a sub-session below it once that sub-session was seen.
   - The rule written into [Session model](../design/session-model.md#how-the-host-keeps-sessions) and [Interface: sidebar](../design/ui.md#sidebar).
+- **Fixed**: an error marks the row until the session is in front of the user: watching it, or the error happening while it is watched, counts as seen, and the error notice stays in the thread. A `failed` session keeps its mark until it recovers, since its **Retry** waits ([session model: how the host keeps sessions](../design/session-model.md#how-the-host-keeps-sessions)). A test that failed before the fix covers it, with a fake agent scenario that fails a turn (`/error`).
 
 ## 47. A crowded top bar cuts the session title first
 
@@ -663,6 +686,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The order and the widths at which each part gives way above 520 px, with the side panel open and closed.
   - A minimum width for the title, and whether a cut title shows in full on hover.
   - How it fits the agent mark that [problem 33](#33-title-menu-needs-polish-agent-mark-goes-before-the-title) moves before the title.
+- **Fixed**: the title keeps priority at every width. The git status shrinks a thousand times faster than the title, so the branch name truncates first and the status then gives way down to its branch icon; the branch name takes at most a quarter of the bar, and "Not published" keeps only its icon below 720 px. A cut title shows in full in the title button's tooltip ([Interface: git in the top bar](../design/ui.md#git-in-the-top-bar)).
 
 ## 48. The spinner's screen reader label is not translated
 
@@ -673,6 +697,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **To settle when planning**:
   - Whether callers pass a translated label, or the component reads it from the catalogs itself, given that the shadcn CLI manages `components/ui` and an edit there has to survive updates.
   - The key, since the catalogs have no generic "Loading" yet.
+- **Fixed**: `Spinner` reads its label from the catalogs (`common:loading`, "Loading" and "正在加载"); a caller's own label still replaces it.
 
 ## 49. No multimodal support: images, audio and video
 
@@ -697,3 +722,4 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Amended**: 2026-10-22. Media is not only what the user sends: a file the agent made on disk, such as a video it rendered into a local folder, previews inside the session, played in the thread where the reply or the tool call names it, without leaving the conversation. The same holds for images and audio it produces.
   - **Today**: a file reference in a reply opens the Files pane, where a video gets the binary file notice, and nothing plays in the thread. Only paths in the project's file list count as references, and that list is `git ls-files --cached --others --exclude-standard` (`src/agent-host/files.ts`), so a file written to a git-ignored folder, such as an output folder, or outside the project is not recognised. The renderer has no file system access, and the host reads at most 1 MiB of a file (`FILE_READ_LIMIT` in `src/shared/files.ts`), so a video needs a way to reach the renderer in a stream that can seek, from a path the main process or the host validates, plus the CSP change above.
   - **To settle when planning**: how a media file is found in the thread (a file reference in the reply, a path in a tool call's command or output, or the tool call's `locations`); which folders may be previewed (the project, its git-ignored folders, paths outside it); the inline player's size and controls, with no autoplay, and a larger view; and what happens with a format Electron cannot play, such as opening it in the system's player.
+- **Partly fixed**: an agent message shows its links and other content as labelled chips after its images, as the session model says, through the chip user messages use. The rest is still to be planned.

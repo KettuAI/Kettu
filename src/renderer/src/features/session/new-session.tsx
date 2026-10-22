@@ -203,7 +203,7 @@ function DraftComposer({
           disabled={!canSend}
           onClick={send}
         >
-          <ArrowUpIcon strokeWidth={2.25} />
+          <ArrowUpIcon />
         </InputGroupButton>
       </InputGroupAddon>
     </InputGroup>

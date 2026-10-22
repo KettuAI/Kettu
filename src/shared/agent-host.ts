@@ -228,6 +228,8 @@ export interface HostContract {
     params: { sessionId: string; optionId: string; value: string | boolean }
     result: void
   }
+  // title null: back to the agent's title.
+  'sessions.rename': { params: { sessionId: string; title: string | null }; result: void }
   'sessions.close': { params: { sessionId: string }; result: void }
   'sessions.delete': { params: { sessionId: string }; result: void }
   'sessions.removeAll': { params: void; result: void }
@@ -286,6 +288,7 @@ export const HOST_METHODS = [
   'sessions.steer',
   'sessions.resumeQueue',
   'sessions.setConfigOption',
+  'sessions.rename',
   'sessions.close',
   'sessions.delete',
   'sessions.removeAll',

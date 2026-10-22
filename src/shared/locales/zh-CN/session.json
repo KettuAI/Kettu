@@ -143,10 +143,6 @@
     "savedTo": "已保存到 {{path}}",
     "exportDiagnostics": "导出诊断信息"
   },
-  "header": {
-    "newSubSession": "新建子会话",
-    "delete": "删除…"
-  },
   "pending": {
     "back": "返回",
     "newSubSessionOf": "新建 {{title}} 的子会话",

@@ -8,6 +8,7 @@
     "retry": "重试"
   },
   "untitledSession": "未命名会话",
+  "loading": "正在加载",
   "time": {
     "now": "刚刚",
     "minutesShort": "{{count}} 分钟",

@@ -168,7 +168,7 @@ function RecentSessions({ projectPath }: { projectPath: string }) {
                 </span>
               ) : s.attention === 'error' || s.status === 'failed' ? (
                 <span className="inline-flex items-center gap-1.5 text-xs text-destructive">
-                  <CircleAlertIcon strokeWidth={2} className="size-[13px]" />
+                  <CircleAlertIcon className="size-[13px]" />
                   {t('project.failed')}
                 </span>
               ) : isActive(s) ? (

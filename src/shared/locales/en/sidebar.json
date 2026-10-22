@@ -3,7 +3,6 @@
     "label": "Projects and sessions",
     "newSession": "New session",
     "projects": "Projects",
-    "openProject": "Open project",
     "unavailable": "Projects are unavailable right now.",
     "empty": "Projects you open appear here."
   },
@@ -19,13 +18,18 @@
     "expand": "Expand sub-sessions",
     "subSessions_one": "{{count}} sub-session",
     "subSessions_other": "{{count}} sub-sessions",
+    "rename": "Rename…",
+    "renameTitle": "Rename session",
+    "renameHint": "Leave it empty to use the agent's title again.",
+    "renameSave": "Save",
     "newSubSession": "New sub-session",
     "delete": "Delete",
     "deleteMenu": "Delete…",
     "deleteTitle": "Delete “{{title}}”?",
     "deleteBody": "The agent deletes its transcript too.",
     "deleteBodyWithSub_one": "The agent deletes its transcript too. Its sub-session is deleted with it.",
-    "deleteBodyWithSub_other": "The agent deletes its transcript too. Its {{count}} sub-sessions are deleted with it."
+    "deleteBodyWithSub_other": "The agent deletes its transcript too. Its {{count}} sub-sessions are deleted with it.",
+    "more": "More actions"
   },
   "indicator": {
     "waiting_one": "Waiting for you, {{count}} request",

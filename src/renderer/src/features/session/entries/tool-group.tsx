@@ -1,7 +1,6 @@
 import { memo, useState } from 'react'
 import { ChevronRightIcon, TelescopeIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Card } from '@renderer/components/ui/card'
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,6 +13,7 @@ import { useEntryAnimation } from '../use-thread'
 import { groupLabel, PANEL } from './helpers'
 import { ToolCard } from './tool-card'
 
+/** A run of completed lookups as one row ("Explored 4 files"), opening to a row for each. */
 export const ToolGroup = memo(function ToolGroup({
   sessionId,
   entryIds,
@@ -38,12 +38,8 @@ export const ToolGroup = memo(function ToolGroup({
     }),
   )
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      render={<Card variant="tool" className={animation} />}
-    >
-      <CollapsibleTrigger className="group/tool flex h-card-header w-full items-center gap-2 rounded-[inherit] px-3 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
+    <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0', animation)}>
+      <CollapsibleTrigger className="group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left text-[13px] text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
         <span className="relative flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
           <TelescopeIcon className="size-3.5 transition-opacity duration-(--duration-fast) group-hover/tool:opacity-0" />
           <ChevronRightIcon
@@ -62,7 +58,7 @@ export const ToolGroup = memo(function ToolGroup({
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
-        <div className="flex flex-col border-t border-border-soft py-0.5">
+        <div className="mt-0.5 ml-1.5 flex flex-col gap-0.5 border-l border-border pl-3.5">
           {entryIds.map((id) => (
             <ToolCard
               key={id}
@@ -70,7 +66,6 @@ export const ToolGroup = memo(function ToolGroup({
               entryId={id}
               projectPath={projectPath}
               agentName={agentName}
-              nested
             />
           ))}
         </div>

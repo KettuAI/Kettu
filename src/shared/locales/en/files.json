@@ -20,6 +20,8 @@
   "preview": {
     "emptyTitle": "Open files appear here",
     "emptyDescription": "Pick a file in the tree, or click a file path in the conversation.",
+    "showSource": "Show source",
+    "showRendered": "Show preview",
     "copyPath": "Copy path",
     "closeFile": "Close file",
     "openFailed": "Couldn't open this file",

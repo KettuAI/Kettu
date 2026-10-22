@@ -8,6 +8,7 @@
     "retry": "Retry"
   },
   "untitledSession": "Untitled session",
+  "loading": "Loading",
   "time": {
     "now": "now",
     "minutesShort": "{{count}}m",

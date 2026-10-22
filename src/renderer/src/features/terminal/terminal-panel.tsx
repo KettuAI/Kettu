@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { DragDropProvider, KeyboardSensor, PointerSensor, type DragEndEvent } from '@dnd-kit/react'
+import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import { Maximize2Icon, Minimize2Icon, PlusIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -13,6 +15,12 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@renderer/components/ui/context-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
@@ -22,6 +30,8 @@ import {
   createTerminal,
   forgetTerminal,
   killTerminal,
+  moveTerminal,
+  renameTerminal,
   showTerminal,
   terminalsOf,
   useTerminalsStore,
@@ -29,6 +39,23 @@ import {
 } from '@renderer/stores/terminals'
 import { toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { TerminalView } from './terminal-view'
+
+const pointerDefaults = PointerSensor.defaults.activationConstraints
+
+// Space picks a tab up; Enter stays the tab's own key for selecting it.
+const sensors = [
+  PointerSensor.configure({
+    // A mouse press on a handle starts a drag at once by default, which swallows the tab's clicks;
+    // the handle takes the constraints of a press anywhere else: 5 px of travel or a 200 ms hold.
+    activationConstraints: (event, source) =>
+      typeof pointerDefaults === 'function'
+        ? pointerDefaults(event, Object.create(source, { handle: { value: undefined } }))
+        : pointerDefaults,
+  }),
+  KeyboardSensor.configure({
+    keyboardCodes: { ...KeyboardSensor.defaults.keyboardCodes, start: ['Space'] },
+  }),
+]
 
 /** The side panel: a card holding the project's terminals, with their tabs in its header. */
 export function TerminalPanel({
@@ -41,7 +68,9 @@ export function TerminalPanel({
   const { t } = useTranslation(['terminal', 'common'])
   // Maximized with the sidebar collapsed, the header is the window's top left corner.
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
-  const list = useTerminalsStore(useShallow((s) => terminalsOf(s.byId, projectPath)))
+  const list = useTerminalsStore(
+    useShallow((s) => terminalsOf(s.byId, projectPath, s.order[projectPath])),
+  )
   const activeId = useTerminalsStore((s) => s.active[projectPath])
   const error = useTerminalsStore((s) => s.error)
   const [creating, setCreating] = useState(false)
@@ -58,6 +87,16 @@ export function TerminalPanel({
     if (t.stale) forgetTerminal(t.id)
     else if (t.busy && t.exitCode === null) setClosing(t)
     else void killTerminal(t.id)
+  }
+
+  const dragEnded = (event: DragEndEvent) => {
+    if (event.canceled) return
+    const source = event.operation.source ?? null
+    if (!isSortable(source)) return
+    const id = String(source.id)
+    if (source.index !== source.initialIndex) moveTerminal(projectPath, id, source.index)
+    // The sensor reads a press held for 200 ms as a drag and drops the click, so select here.
+    else if (event.nativeEvent?.type.startsWith('pointer')) showTerminal(projectPath, id)
   }
 
   return (
@@ -80,27 +119,30 @@ export function TerminalPanel({
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}
-        <div
-          role="tablist"
-          aria-label={t('panel.tabs')}
-          className="no-scrollbar app-region-no-drag flex min-w-0 items-center gap-0.5 overflow-x-auto"
-        >
-          {list.map((t) => (
-            <TerminalTab
-              key={t.id}
-              terminal={t}
-              selected={t.id === active?.id}
-              onSelect={() => showTerminal(projectPath, t.id)}
-              onClose={() => close(t)}
-            />
-          ))}
-          {creating && (
-            <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground">
-              <Spinner className="size-3" />
-              {t('panel.starting')}
-            </span>
-          )}
-        </div>
+        <DragDropProvider sensors={sensors} onDragEnd={dragEnded}>
+          <div
+            role="tablist"
+            aria-label={t('panel.tabs')}
+            className="no-scrollbar app-region-no-drag flex min-w-0 items-center gap-0.5 overflow-x-auto"
+          >
+            {list.map((terminal, index) => (
+              <TerminalTab
+                key={terminal.id}
+                terminal={terminal}
+                index={index}
+                selected={terminal.id === active?.id}
+                onSelect={() => showTerminal(projectPath, terminal.id)}
+                onClose={() => close(terminal)}
+              />
+            ))}
+            {creating && (
+              <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground">
+                <Spinner className="size-3" />
+                {t('panel.starting')}
+              </span>
+            )}
+          </div>
+        </DragDropProvider>
         <PanelButton
           label={t('panel.newTerminal')}
           shortcut="Ctrl+Shift+`"
@@ -179,61 +221,171 @@ export function TerminalPanel({
 
 function TerminalTab({
   terminal,
+  index,
   selected,
   onSelect,
   onClose,
 }: {
   terminal: TerminalState
+  index: number
   selected: boolean
   onSelect: () => void
   onClose: () => void
 }) {
-  const { t } = useTranslation('terminal')
+  const { t } = useTranslation(['terminal', 'common'])
+  const [editing, setEditing] = useState(false)
+  const tab = useRef<HTMLButtonElement | null>(null)
+  const refocus = useRef(false)
+  const renameAfterMenu = useRef(false)
+  const { ref, handleRef, isDragging } = useSortable({ id: terminal.id, index, disabled: editing })
+  // The tab button is the drag handle, so a press on the close button never starts a drag.
+  const setTab = useCallback(
+    (element: HTMLButtonElement | null) => {
+      tab.current = element
+      handleRef(element)
+    },
+    [handleRef],
+  )
+  const automatic = terminal.title || terminal.shell
+  const name = terminal.name ?? automatic
   const exited = terminal.exitCode !== null
+
+  useEffect(() => {
+    if (editing || !refocus.current) return
+    refocus.current = false
+    tab.current?.focus()
+  }, [editing])
+
+  // Null cancels. Enter and Esc hand the focus back to the tab; a blur leaves it where it went.
+  const finishRename = (value: string | null, restoreFocus: boolean) => {
+    if (value !== null) renameTerminal(terminal.id, value)
+    refocus.current = restoreFocus
+    setEditing(false)
+  }
+
   return (
-    <div
-      className={cn(
-        'group/tab relative flex h-6 max-w-48 min-w-20 items-center rounded-md text-xs transition-[color,background-color,box-shadow] duration-(--duration-fast)',
-        // The selected tab is raised like a segmented control's thumb, apart from the hover fill.
-        selected
-          ? 'bg-segment-thumb text-foreground shadow-segment'
-          : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-      )}
+    <ContextMenu
+      disabled={editing}
+      // The input waits for the menu to close: an open context menu holds the focus.
+      onOpenChangeComplete={(open) => {
+        if (open || !renameAfterMenu.current) return
+        renameAfterMenu.current = false
+        setEditing(true)
+      }}
     >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={selected}
-        onClick={onSelect}
-        onAuxClick={(e) => e.button === 1 && onClose()}
-        className="flex h-full min-w-0 items-center gap-1.5 rounded-md pr-6 pl-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-      >
-        <SquareTerminalIcon className="size-3.5 shrink-0" />
-        <span className="truncate">{terminal.title || terminal.shell}</span>
-        {exited && (
-          <span className={cn('shrink-0 tabular', terminal.exitCode !== 0 && 'text-destructive')}>
-            {terminal.exitCode}
-          </span>
-        )}
-        {terminal.activity && !selected && (
-          <span
-            role="img"
-            aria-label={t('tab.newOutput')}
-            className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
-          />
-        )}
-      </button>
-      <button
-        type="button"
-        aria-label={t('tab.close', { name: terminal.title || terminal.shell })}
-        onClick={onClose}
+      <ContextMenuTrigger
+        ref={ref}
         className={cn(
-          'absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-background/60 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/tab:opacity-100',
-          selected && 'opacity-100',
+          'group/tab relative flex h-6 max-w-48 min-w-20 items-center rounded-md text-xs transition-[color,background-color,box-shadow] duration-(--duration-fast)',
+          editing
+            ? 'bg-background text-foreground ring-2 ring-ring/50'
+            : // The selected tab is raised like a segmented control's thumb, apart from the hover fill.
+              selected || isDragging
+              ? 'bg-segment-thumb text-foreground shadow-segment'
+              : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
         )}
       >
-        <XIcon className="size-3" />
-      </button>
+        {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
+        <button
+          ref={setTab}
+          type="button"
+          role="tab"
+          aria-selected={selected}
+          // A renamed tab keeps its process title in reach.
+          title={terminal.name ? automatic : undefined}
+          onClick={onSelect}
+          onDoubleClick={() => setEditing(true)}
+          onAuxClick={(e) => e.button === 1 && onClose()}
+          className={cn(
+            'flex h-full min-w-0 items-center gap-1.5 rounded-md pr-6 pl-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            editing && 'invisible',
+          )}
+        >
+          <SquareTerminalIcon className="size-3.5 shrink-0" />
+          <span className="truncate">{name}</span>
+          {exited && (
+            <span className={cn('shrink-0 tabular', terminal.exitCode !== 0 && 'text-destructive')}>
+              {terminal.exitCode}
+            </span>
+          )}
+          {terminal.activity && !selected && (
+            <span
+              role="img"
+              aria-label={t('tab.newOutput')}
+              className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
+            />
+          )}
+        </button>
+        {editing ? (
+          <TabNameInput initial={name} label={t('tab.nameLabel')} onFinish={finishRename} />
+        ) : (
+          <button
+            type="button"
+            aria-label={t('tab.close', { name })}
+            onClick={onClose}
+            className={cn(
+              'absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-background/60 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/tab:opacity-100',
+              selected && 'opacity-100',
+            )}
+          >
+            <XIcon className="size-3" />
+          </button>
+        )}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          onClick={() => {
+            renameAfterMenu.current = true
+          }}
+        >
+          {t('tab.rename')}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={onClose}>{t('common:actions.close')}</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+/** The tab's label as a text field, laid over the tab. Enter or a blur accepts; Esc cancels. */
+function TabNameInput({
+  initial,
+  label,
+  onFinish,
+}: {
+  initial: string
+  label: string
+  onFinish: (value: string | null, restoreFocus: boolean) => void
+}) {
+  // Enter unmounts the input, which blurs it in some engines; only the first outcome counts.
+  const finished = useRef(false)
+  const finish = (value: string | null, restoreFocus: boolean) => {
+    if (finished.current) return
+    finished.current = true
+    onFinish(value, restoreFocus)
+  }
+  return (
+    <div className="absolute inset-0 flex items-center gap-1.5 px-2">
+      <SquareTerminalIcon className="size-3.5 shrink-0" />
+      <input
+        autoFocus
+        aria-label={label}
+        defaultValue={initial}
+        autoComplete="off"
+        spellCheck={false}
+        className="h-full min-w-0 flex-1 bg-transparent outline-none"
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={(e) => finish(e.currentTarget.value, false)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing || e.keyCode === 229) return
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            finish(e.currentTarget.value, true)
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            finish(null, true)
+          }
+        }}
+      />
     </div>
   )
 }

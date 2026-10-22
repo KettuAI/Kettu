@@ -154,10 +154,6 @@
     "savedTo": "Saved to {{path}}",
     "exportDiagnostics": "Export diagnostics"
   },
-  "header": {
-    "newSubSession": "New sub-session",
-    "delete": "Delete…"
-  },
   "pending": {
     "back": "Back",
     "newSubSessionOf": "New sub-session of {{title}}",

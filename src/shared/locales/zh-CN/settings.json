@@ -55,7 +55,7 @@
     },
     "textSize": {
       "name": "文字大小",
-      "description": "用于对话和输入框：13、14 或 15 px。",
+      "description": "用于对话和输入框：14、15 或 16 px。",
       "keywords": "字体 字号 font",
       "small": "小",
       "default": "默认",

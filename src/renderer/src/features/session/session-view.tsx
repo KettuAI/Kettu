@@ -67,7 +67,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   if (!session) {
     body =
       replicaStatus === 'error' ? (
-        <div className="mx-auto w-full max-w-[760px] px-6 pt-6">
+        <div className="mx-auto w-full max-w-thread px-6 pt-6">
           <FailedState
             title={t('view.couldntOpen')}
             message={replicaError ?? t('view.hostSilent')}

@@ -103,7 +103,7 @@ export function BranchPopover({ status, pr }: { status: GitStatus; pr: PullReque
                   <ArrowUpIcon
                     role="img"
                     aria-label={t('popover.notPushed')}
-                    strokeWidth={2}
+
                     className="size-3 shrink-0"
                   />
                 )}

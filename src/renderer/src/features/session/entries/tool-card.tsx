@@ -82,16 +82,17 @@ export interface ToolCardProps {
   entryId: string
   projectPath: string
   agentName: string
-  /** Inside a group the card is a row of the group, without its own ring. */
-  nested?: boolean
 }
 
+/**
+ * A tool call as a quiet row: its icon, what it did and its status, with its details below when
+ * opened. Only a request for permission is framed, since it waits for an answer.
+ */
 export const ToolCard = memo(function ToolCard({
   sessionId,
   entryId,
   projectPath,
   agentName,
-  nested = false,
 }: ToolCardProps) {
   const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'tool')
@@ -119,31 +120,45 @@ export const ToolCard = memo(function ToolCard({
       entry.status === 'in_progress' ||
       entry.status === 'failed')
   const open = hasBody && (permission ? true : (userOpen ?? autoOpen))
+  const framed = !!permission
 
   const card = (
     <Collapsible
       open={open}
       onOpenChange={(next) => setUserOpen(next)}
       render={
-        <Card
-          ref={ref}
-          variant="tool"
-          data-entry-id={entryId}
-          className={cn(
-            nested && 'rounded-none bg-transparent shadow-none',
-            permission && !nested && 'animate-attention shadow-attention',
-            animation,
-          )}
-        />
+        framed ? (
+          <Card
+            ref={ref}
+            variant="tool"
+            data-entry-id={entryId}
+            className={cn('animate-attention shadow-attention', animation)}
+          />
+        ) : (
+          <div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)} />
+        )
       }
     >
-      <ToolHeader entry={entry} label={label} toggle={hasBody && !permission} open={open} />
+      <ToolHeader
+        entry={entry}
+        label={label}
+        toggle={hasBody && !permission}
+        open={open}
+        framed={framed}
+      />
       {hasBody && (
         <CollapsibleContent className={PANEL} keepMounted={false}>
-          <div className={cn('flex flex-col', !nested && 'border-t border-border-soft')}>
-            {label.kind === 'command' && label.target && <CommandBlock command={label.target} />}
+          <div
+            className={cn(
+              'flex flex-col',
+              framed ? 'border-t border-border-soft' : 'gap-1.5 pt-1 pb-2 pl-[22px]',
+            )}
+          >
+            {label.kind === 'command' && label.target && (
+              <CommandBlock command={label.target} framed={framed} />
+            )}
             {entry.content.map((c, i) => (
-              <ContentBlock key={i} content={c} projectPath={projectPath} />
+              <ContentBlock key={i} content={c} projectPath={projectPath} framed={framed} />
             ))}
             {permission && (
               <PermissionPrompt sessionId={sessionId} entry={entry} agentName={agentName} />
@@ -178,11 +193,13 @@ function ToolHeader({
   label,
   toggle,
   open,
+  framed,
 }: {
   entry: ToolEntry
   label: ReturnType<typeof toolLabel>
   toggle: boolean
   open: boolean
+  framed: boolean
 }) {
   const Icon = KIND_ICON[entry.toolKind]
   const stats = useDiffStats(entry.content)
@@ -221,14 +238,17 @@ function ToolHeader({
       <ToolStatus entry={entry} />
     </>
   )
-  const row =
-    'group/tool flex h-card-header w-full min-w-0 items-center gap-2 px-3 text-left outline-none'
+  // A flat row reaches past the column by its padding, so its icon lines up with the prose.
+  const row = framed
+    ? 'group/tool flex h-card-header w-full min-w-0 items-center gap-2 px-3 text-left outline-none'
+    : 'group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[13px] leading-[1.6] text-muted-foreground outline-none'
   if (!toggle) return <div className={row}>{content}</div>
   return (
     <CollapsibleTrigger
       className={cn(
         row,
-        'cursor-default rounded-[inherit] transition-colors duration-(--duration-fast) hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
+        'cursor-default transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
+        framed ? 'rounded-[inherit] hover:bg-accent/60' : 'hover:bg-accent',
       )}
     >
       {content}
@@ -299,7 +319,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
           key="done"
           role="img"
           aria-label={t('status.done')}
-          className={cn(icon, 'zoom-in-75 text-muted-foreground')}
+          className={cn(icon, 'zoom-in-75 text-success')}
         />
       )
     case 'failed':
@@ -323,11 +343,14 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   }
 }
 
-function CommandBlock({ command }: { command: string }) {
+function CommandBlock({ command, framed }: { command: string; framed: boolean }) {
   return (
     <pre
       data-selectable=""
-      className="mx-3 mt-2.5 mb-0.5 overflow-x-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]"
+      className={cn(
+        'overflow-x-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]',
+        framed && 'mx-3 mt-2.5 mb-0.5',
+      )}
     >
       <span className="text-muted-foreground select-none">$ </span>
       {command}
@@ -335,21 +358,37 @@ function CommandBlock({ command }: { command: string }) {
   )
 }
 
-function ContentBlock({ content, projectPath }: { content: ToolContent; projectPath: string }) {
+function ContentBlock({
+  content,
+  projectPath,
+  framed,
+}: {
+  content: ToolContent
+  projectPath: string
+  framed: boolean
+}) {
   const { t } = useTranslation('session')
   switch (content.type) {
     case 'markdown':
       return (
-        <div className="px-3 py-2.5" data-selectable="">
+        <div className={cn(framed && 'px-3 py-2.5')} data-selectable="">
           <Clamp maxHeight={320} more={t('tool.showAll')}>
             <Markdown markdown={content.markdown} className="markdown-compact" />
           </Clamp>
         </div>
       )
     case 'diff':
-      // Inset by the hairline so the diff's opaque lines leave the card's inset ring visible.
+      // Inset by the hairline so the diff's opaque lines leave the card's inset ring visible; a
+      // flat row frames its diff like a code block.
       return (
-        <div className="mx-(--hairline) flex flex-col last:mb-(--hairline)">
+        <div
+          className={cn(
+            'flex flex-col',
+            framed
+              ? 'mx-(--hairline) last:mb-(--hairline)'
+              : 'overflow-hidden rounded-lg border border-border',
+          )}
+        >
           <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
             <Diff
               path={relativePath(content.path, projectPath)}
@@ -361,7 +400,7 @@ function ContentBlock({ content, projectPath }: { content: ToolContent; projectP
       )
     case 'ref':
       return (
-        <div className="px-3 py-2 text-xs text-muted-foreground">
+        <div className={cn('text-xs text-muted-foreground', framed && 'px-3 py-2')}>
           {content.ref.kind === 'link'
             ? content.ref.name || content.ref.uri
             : content.ref.kind === 'unsupported'

@@ -4,30 +4,42 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { GitStatusCluster } from '@renderer/features/git/git-status'
+import { cn } from '@renderer/lib/utils'
 import { useGitStore } from '@renderer/stores/git'
 import { toggleSidePane, useViewStore, type SidePane } from '@renderer/stores/view'
 import { NoDrag, TopBarRule } from './top-bar'
 
-/** The right end of the top bar: the project's git status and the side panel's panes. */
+/**
+ * The right end of the top bar: the project's git status and the side panel's panes. The git
+ * status shrinks a thousand times faster than the session title, so in a crowded bar the branch
+ * gives way first, down to its icon, and the title keeps its room.
+ */
 export function HeaderTools({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('shell')
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   return (
-    <NoDrag className="gap-0.5">
-      <GitStatusCluster projectPath={projectPath} />
-      {isRepo && <TopBarRule />}
-      <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
-        <FolderTreeIcon />
-      </PaneToggle>
-      <PaneToggle
-        projectPath={projectPath}
-        pane="terminal"
-        label={t('headerTools.terminal')}
-        shortcut="Ctrl+`"
-      >
-        <SquareTerminalIcon />
-      </PaneToggle>
-    </NoDrag>
+    <>
+      {isRepo && (
+        <NoDrag className="min-w-8 shrink-1000 overflow-clip [overflow-clip-margin:3px]">
+          <GitStatusCluster projectPath={projectPath} />
+        </NoDrag>
+      )}
+      {/* Pulled back over the bar's gap, to sit as close to the git status as before. */}
+      <NoDrag className={cn('shrink-0 gap-0.5', isRepo && '-ml-2')}>
+        {isRepo && <TopBarRule />}
+        <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
+          <FolderTreeIcon />
+        </PaneToggle>
+        <PaneToggle
+          projectPath={projectPath}
+          pane="terminal"
+          label={t('headerTools.terminal')}
+          shortcut="Ctrl+`"
+        >
+          <SquareTerminalIcon />
+        </PaneToggle>
+      </NoDrag>
+    </>
   )
 }
 

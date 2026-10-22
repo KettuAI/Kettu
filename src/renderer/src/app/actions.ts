@@ -162,6 +162,11 @@ export async function closeSession(sessionId: string): Promise<void> {
   }
 }
 
+/** A null or empty title goes back to the agent's. */
+export async function renameSession(sessionId: string, title: string | null): Promise<void> {
+  await host('sessions.rename', { sessionId, title })
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   const summary = useSessionsStore.getState().byId[sessionId]
   await host('sessions.delete', { sessionId })

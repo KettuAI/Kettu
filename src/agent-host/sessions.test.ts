@@ -553,6 +553,31 @@ describe('opening and recovering', () => {
     expect(port.thread(sessionId).session.title).toBe('hello')
   })
 
+  it('marks a failed turn until the session is seen, and keeps its notice', async () => {
+    const { t, port } = await setup()
+    const created = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    await turn(port, created.id, '/error')
+    await port.until(() => port.summary(created.id)?.attention === 'error')
+    await port.open(created.id)
+    expect(port.summary(created.id)).toMatchObject({ status: 'ready', attention: 'none' })
+    expect(port.thread(created.id).session.error).not.toBeNull()
+    expect(port.entries(created.id)).toContainEqual(
+      expect.objectContaining({ kind: 'notice', severity: 'error' }),
+    )
+  })
+
+  it('does not mark a turn that failed in front of the user', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/error')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+    await port.untilStatus(sessionId, 'ready')
+    expect(port.summary(sessionId)?.attention).toBe('none')
+  })
+
   it('ends a crashed turn: running tools stop and the notice says what follows', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)

@@ -3,7 +3,6 @@
     "label": "项目和会话",
     "newSession": "新建会话",
     "projects": "项目",
-    "openProject": "打开项目",
     "unavailable": "暂时无法加载项目。",
     "empty": "你打开的项目会显示在这里。"
   },
@@ -18,12 +17,17 @@
     "collapse": "收起子会话",
     "expand": "展开子会话",
     "subSessions_other": "{{count}} 个子会话",
+    "rename": "重命名…",
+    "renameTitle": "重命名会话",
+    "renameHint": "留空即恢复 Agent 给出的标题。",
+    "renameSave": "保存",
     "newSubSession": "新建子会话",
     "delete": "删除",
     "deleteMenu": "删除…",
     "deleteTitle": "删除“{{title}}”？",
     "deleteBody": "Agent 也会删除它的对话记录。",
-    "deleteBodyWithSub_other": "Agent 也会删除它的对话记录，它的 {{count}} 个子会话会一并删除。"
+    "deleteBodyWithSub_other": "Agent 也会删除它的对话记录，它的 {{count}} 个子会话会一并删除。",
+    "more": "更多操作"
   },
   "indicator": {
     "waiting_other": "等待你处理，{{count}} 个授权请求",

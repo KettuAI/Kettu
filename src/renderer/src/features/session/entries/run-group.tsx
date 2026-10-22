@@ -81,7 +81,11 @@ export const RunGroup = memo(function RunGroup({
       onOpenChange={(next) => setUserOpen(next)}
       className={cn('min-w-0', animation)}
     >
-      <CollapsibleTrigger className="group/run -mx-1 flex h-6 max-w-[calc(100%+0.5rem)] items-center gap-1 rounded-md px-1 text-ui text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group/run -mx-1.5 flex h-6 max-w-[calc(100%+0.75rem)] items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+        <ChevronRightIcon
+          aria-hidden
+          className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"
+        />
         <span className="min-w-0 truncate">
           {parts.map((part, i) => (
             <span key={i}>
@@ -103,13 +107,9 @@ export const RunGroup = memo(function RunGroup({
           )}
         </span>
         {running && <Spinner aria-label={t('status.running')} className="size-3 shrink-0" />}
-        <ChevronRightIcon
-          aria-hidden
-          className="size-3.5 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"
-        />
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
-        <div className="mt-1.5 flex flex-col gap-2.5 border-l border-border pl-3">
+        <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-border pl-3.5">
           {items.map((item) =>
             item.type === 'group' ? (
               <ToolGroup

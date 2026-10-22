@@ -1,5 +1,5 @@
 import { FileIcon, LinkIcon } from 'lucide-react'
-import type { UserContent } from '@shared/thread'
+import type { ContentRef, UserContent } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
 import { Clamp } from '../clamp'
 
@@ -35,26 +35,32 @@ export function UserContentView({ content }: { content: UserContent[] }) {
                 className="max-h-40 max-w-60 rounded-lg object-cover shadow-card"
               />
             ) : (
-              <span
-                key={i}
-                className="inline-flex h-6 max-w-60 items-center gap-1.5 rounded-[6px] bg-background/60 px-2 text-xs text-muted-foreground shadow-card"
-                title={ref.kind === 'link' ? ref.uri : ref.label}
-              >
-                {ref.kind === 'link' ? (
-                  ref.uri.startsWith('file:') ? (
-                    <FileIcon className="size-3 shrink-0" />
-                  ) : (
-                    <LinkIcon className="size-3 shrink-0" />
-                  )
-                ) : null}
-                <span className="truncate">
-                  {ref.kind === 'link' ? ref.name || basename(ref.uri) : ref.label}
-                </span>
-              </span>
+              <RefChip key={i} contentRef={ref} />
             ),
           )}
         </div>
       )}
     </div>
+  )
+}
+
+/** A link or content OverBench cannot show, as a labelled chip. */
+export function RefChip({ contentRef }: { contentRef: Exclude<ContentRef, { kind: 'image' }> }) {
+  const link = contentRef.kind === 'link'
+  return (
+    <span
+      className="inline-flex h-6 max-w-60 items-center gap-1.5 rounded-[6px] bg-background/60 px-2 text-xs text-muted-foreground shadow-card"
+      title={link ? contentRef.uri : contentRef.label}
+    >
+      {link &&
+        (contentRef.uri.startsWith('file:') ? (
+          <FileIcon className="size-3 shrink-0" />
+        ) : (
+          <LinkIcon className="size-3 shrink-0" />
+        ))}
+      <span className="truncate">
+        {link ? contentRef.name || basename(contentRef.uri) : contentRef.label}
+      </span>
+    </span>
   )
 }

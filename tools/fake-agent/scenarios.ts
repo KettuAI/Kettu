@@ -372,6 +372,11 @@ const crash: Scenario = async (turn) => {
   return new Promise<StopReason>(() => {})
 }
 
+const error: Scenario = async (turn) => {
+  await stream(turn, 'Checking the build. ', { messageId: turn.messageId() })
+  throw RequestError.internalError(undefined, 'The fake agent failed this turn on purpose')
+}
+
 const authRequired: Scenario = async (turn) => {
   // Clients send the failed prompt again after sign-in; like a real agent, that one succeeds.
   if (turn.session.signedOut) {
@@ -865,6 +870,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'parallel-permissions': parallelPermissions,
   cancel,
   crash,
+  error,
   'auth-required': authRequired,
   'large-history': largeHistory,
   'slow-start': slowStart,

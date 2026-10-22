@@ -39,11 +39,14 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
     <div
       role="group"
       aria-label={t('status.repository')}
-      className="inline-flex items-center gap-px"
+      className="inline-flex min-w-0 items-center gap-px"
       onKeyDown={arrowFocus}
     >
       <Popover>
-        <PopoverTrigger className={segment} aria-label={branchLabel(status, t)}>
+        <PopoverTrigger
+          className={cn(segment, 'min-w-0 overflow-hidden')}
+          aria-label={branchLabel(status, t)}
+        >
           <BranchSummary status={status} />
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={6} className="w-[372px] gap-0 overflow-hidden p-0">
@@ -57,7 +60,7 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
           rel="noreferrer"
           tabIndex={-1}
           aria-label={t('status.pullRequest', { number: pr.number })}
-          className={segment}
+          className={cn(segment, 'shrink-0')}
         >
           <PrIcon state={pr.state} size={14} />
           <span className="text-foreground">#{pr.number}</span>
@@ -82,13 +85,14 @@ function BranchSummary({ status }: { status: GitStatus }) {
   return (
     <>
       {head.detached ? (
-        <GitCommitHorizontalIcon className="size-3.5" />
+        <GitCommitHorizontalIcon className="size-3.5 shrink-0" />
       ) : (
-        <GitBranchIcon className="size-3.5" />
+        <GitBranchIcon className="size-3.5 shrink-0" />
       )}
-      {/* A narrow top bar caps the branch and keeps "Not published" to its icon, so the title keeps room. */}
+      {/* The branch takes a quarter of the bar at most and truncates first; below 720 px
+          "Not published" keeps only its icon, so the title keeps room. */}
       <span
-        className="min-w-0 truncate font-mono text-xs text-foreground @max-[520px]/top-bar:max-w-24"
+        className="min-w-0 max-w-[25cqw] truncate font-mono text-xs text-foreground @max-[520px]/top-bar:max-w-24"
         title={head.branch ?? undefined}
       >
         {head.detached
@@ -98,9 +102,9 @@ function BranchSummary({ status }: { status: GitStatus }) {
       {head.detached && <span>{t('status.detached')}</span>}
       {unborn && !head.detached && <span>{t('status.noCommits')}</span>}
       {!upstream && !head.detached && !unborn && (
-        <span className="ml-1 inline-flex items-center gap-1">
+        <span className="ml-1 inline-flex shrink-0 items-center gap-1">
           <CloudUploadIcon className="size-[13px]" />
-          <span className="@max-[520px]/top-bar:sr-only">{t('status.notPublished')}</span>
+          <span className="@max-[720px]/top-bar:sr-only">{t('status.notPublished')}</span>
         </span>
       )}
       {upstream && upstream.ahead > 0 && (
@@ -108,7 +112,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
           className="ml-1 inline-flex animate-in items-center gap-px text-foreground animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
           key={`a${upstream.ahead}`}
         >
-          <ArrowUpIcon strokeWidth={2} className="size-3" />
+          <ArrowUpIcon className="size-3" />
           {upstream.ahead}
         </span>
       )}
@@ -120,7 +124,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
           )}
           key={`b${upstream.behind}`}
         >
-          <ArrowDownIcon strokeWidth={2} className="size-3" />
+          <ArrowDownIcon className="size-3" />
           {upstream.behind}
         </span>
       )}

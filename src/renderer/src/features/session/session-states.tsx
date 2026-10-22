@@ -17,7 +17,7 @@ import { UserContentView } from './entries/user-content'
 export function ThreadSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn('mx-auto flex w-full max-w-[760px] flex-col gap-6 px-6 pt-5', className)}
+      className={cn('mx-auto flex w-full max-w-thread flex-col gap-6 px-6 pt-5', className)}
       aria-hidden
     >
       <Skeleton className="ml-auto h-9 w-2/5 rounded-2xl" />
@@ -86,10 +86,10 @@ export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string
   const installing = useAgentsStore((s) => s.byId[agentId]?.state === 'installing')
   return (
     <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
-      <div className="mx-auto flex w-full max-w-[760px] flex-col px-6 pt-5">
+      <div className="mx-auto flex w-full max-w-thread flex-col px-6 pt-5">
         <Message align="end">
-          <Bubble variant="muted">
-            <BubbleContent className="rounded-2xl px-3.5 py-2 text-prose leading-normal">
+          <Bubble variant="muted" className="max-w-[85%]">
+            <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
               <UserContentView content={[{ type: 'text', text }]} />
             </BubbleContent>
           </Bubble>

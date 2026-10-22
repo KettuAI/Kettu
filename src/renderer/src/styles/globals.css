@@ -115,8 +115,10 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
   --text-prose: var(--prose-size);
+  /* The thread's column: 42em of prose, about 42 Chinese characters a line, plus its gutters. */
+  --container-thread: calc(42 * var(--prose-size) + 3rem);
   --text-ui: var(--ui-size);
-  --text-prose--line-height: 1.625;
+  --text-prose--line-height: 1.75;
 }
 
 :root {
@@ -270,7 +272,7 @@
   --duration-slower: 450ms;
 
   /* Type. */
-  --prose-size: 14px;
+  --prose-size: 15px;
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
@@ -391,10 +393,10 @@
 }
 
 :root[data-text-size='small'] {
-  --prose-size: 13px;
+  --prose-size: 14px;
 }
 :root[data-text-size='large'] {
-  --prose-size: 15px;
+  --prose-size: 16px;
 }
 
 @layer base {
@@ -675,15 +677,23 @@
   transition: flex-grow var(--duration-slow) var(--ease-out-quart);
 }
 
-/* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not
-   in a layer, so they win over the utility classes Streamdown puts on each element. */
+/* Agent prose, rendered by Streamdown, set to the thread's measurements (the typography spec
+   of m0-feedback problem 43). These rules are not in a layer, so they win over the utility
+   classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
+   scales them; the spec's pixel values are those of the default 15 px. */
 .markdown {
   font-size: var(--prose-size);
-  line-height: 1.625;
-  overflow-wrap: break-word;
+  line-height: 1.75;
+  /* The step to full foreground for bold and headings carries the hierarchy. */
+  color: color-mix(in oklch, var(--foreground) 90%, transparent);
+  overflow-wrap: anywhere;
   user-select: text;
 
-  & :where(p, ul, ol, blockquote, table, pre) {
+  & :where(p) {
+    margin: 0 0 0.75em;
+    text-wrap: pretty;
+  }
+  & :where(ul, ol, blockquote, table, pre) {
     margin-block: 0.75em;
   }
   /* Blocks sit in the chunks of markdown-impl.tsx, whose margins collapse through them; :where()
@@ -697,20 +707,24 @@
     margin-bottom: 0;
   }
 
+  /* More space above than below, so a heading sits on its content. */
   & [data-streamdown^='heading-'] {
-    margin: 1.4em 0 0.5em;
+    color: var(--foreground);
     font-weight: var(--font-weight-semibold);
-    line-height: 1.35;
-    letter-spacing: -0.005em;
+    line-height: 1.4;
+    text-wrap: balance;
   }
   & [data-streamdown='heading-1'] {
-    font-size: 1.36em;
+    margin: 1.8em 0 0.4em;
+    font-size: 1.3333em;
   }
   & [data-streamdown='heading-2'] {
-    font-size: 1.2em;
+    margin: 1.75em 0 0.4em;
+    font-size: 1.1333em;
   }
   & [data-streamdown='heading-3'] {
-    font-size: 1.07em;
+    margin: 1.5em 0 0.3em;
+    font-size: 1em;
   }
   &
     :is(
@@ -718,83 +732,113 @@
       [data-streamdown='heading-5'],
       [data-streamdown='heading-6']
     ) {
+    margin: 1.5em 0 0.3em;
+    color: var(--muted-foreground);
     font-size: 1em;
   }
 
   & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
-    padding-left: 1.4em;
+    padding-left: 1.25em;
     list-style-position: outside;
   }
+  & [data-streamdown='ordered-list'] {
+    font-variant-numeric: tabular-nums;
+  }
   & [data-streamdown='list-item'] {
-    margin-block: 0.25em;
-    padding-left: 0.15em;
+    margin-block: 0.3em;
+    padding-block: 0;
   }
   & [data-streamdown='list-item']::marker {
     color: var(--muted-foreground);
   }
+  &
+    [data-streamdown='list-item']
+    > :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    margin-block: 0.25em;
+  }
+  /* Loose lists keep the spacing of tight ones. */
+  & [data-streamdown='list-item'] > p {
+    margin: 0;
+  }
 
   & [data-streamdown='strong'] {
+    color: var(--foreground);
     font-weight: var(--font-weight-semibold);
+  }
+  /* Chinese has no italics; emphasis there is a step of weight (markdown-impl.tsx marks it). */
+  & [data-cjk-emphasis] {
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
   }
 
   & [data-streamdown='link'] {
-    color: inherit;
+    color: var(--foreground);
     text-decoration: underline;
-    text-decoration-color: var(--border-strong);
-    text-underline-offset: 0.2em;
+    text-decoration-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+    text-underline-offset: 3px;
     transition: text-decoration-color var(--duration-fast);
     &:hover {
-      text-decoration-color: currentColor;
-    }
-  }
-
-  /* A file reference opens the file in the Files pane; it reads as a link. */
-  & [data-file-ref] {
-    cursor: pointer;
-    border-radius: 5px;
-    text-align: inherit;
-    outline: none;
-    &:focus-visible {
-      box-shadow: 0 0 0 2px var(--ring);
-    }
-    & [data-streamdown='inline-code'] {
-      text-decoration: underline;
-      text-decoration-color: var(--border-strong);
-      text-underline-offset: 0.2em;
-      transition: text-decoration-color var(--duration-fast);
-    }
-    &:hover [data-streamdown='inline-code'] {
-      text-decoration-color: currentColor;
+      text-decoration-color: var(--foreground);
     }
   }
 
   & [data-streamdown='inline-code'] {
-    border-radius: 5px;
+    border-radius: 4px;
     background: var(--muted);
     padding: 0.1em 0.35em;
     font-family: var(--font-mono);
-    font-size: 0.86em;
+    font-size: 0.85em;
+  }
+
+  /* A file reference is a chip, not a link: its type's icon and its name, the path in its
+     tooltip. It opens the file in the Files pane. */
+  & [data-file-ref] {
+    display: inline-flex;
+    vertical-align: 1px;
+    align-items: center;
+    gap: 3px;
+    margin-left: 4px;
+    border-radius: 5px;
+    background: var(--muted);
+    padding: 0 6px;
+    height: 20px;
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    outline: none;
+    transition:
+      color var(--duration-fast),
+      background-color var(--duration-fast);
+    &:hover {
+      background: var(--accent);
+      color: var(--foreground);
+    }
+    &:focus-visible {
+      box-shadow: 0 0 0 2px var(--ring);
+    }
   }
 
   & [data-streamdown='code-block'] {
-    margin-block: 0.85em;
+    margin-block: 1em;
     gap: 0;
-    border: 0;
-    border-radius: var(--radius-xl);
-    background: var(--card);
-    box-shadow: var(--card-ring);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: color-mix(in oklch, var(--muted) 60%, transparent);
     padding: 0;
     overflow: hidden;
   }
   & [data-streamdown='code-block-header'] {
-    height: 30px;
-    padding-inline: 12px 6px;
+    height: 32px;
+    padding-inline: 14px 6px;
     color: var(--muted-foreground);
-    font-size: 11.5px;
+    font-size: 12px;
   }
-  /* The copy control sits in the header row, without the frosted box Streamdown draws. */
+  /* The copy control sits in the header row as a ghost button, without Streamdown's frosted box. */
   & [data-streamdown='code-block'] > div:not([data-streamdown]) {
-    top: 3px;
+    top: 4px;
     right: 4px;
   }
   & [data-streamdown='code-block'] > div:not([data-streamdown]) > div {
@@ -815,11 +859,13 @@
     height: 24px;
     padding: 0;
     border-radius: var(--radius-md);
+    color: var(--muted-foreground);
     transition:
       color var(--duration-fast) ease-out,
       background-color var(--duration-fast) ease-out;
     &:hover {
       background: var(--accent);
+      color: var(--foreground);
     }
     &:focus-visible {
       outline: 2px solid var(--ring);
@@ -834,35 +880,37 @@
     border: 0;
     border-radius: 0;
     background: transparent;
-    padding: 2px 12px 10px;
-    font-size: 12.5px;
+    padding: 0 14px 12px;
+    font-size: 13px;
     line-height: 1.6;
+    overflow-x: auto;
   }
   & [data-streamdown='code-block-body'] pre {
     margin: 0;
     background: transparent !important;
+    white-space: pre;
+    overflow-wrap: normal;
   }
 
   & [data-streamdown='blockquote'] {
-    border-left: 2px solid var(--border-strong);
-    padding-left: 0.85em;
+    border-left: 2px solid var(--border);
+    padding-left: 12px;
     color: var(--muted-foreground);
     font-style: normal;
   }
 
   & [data-streamdown='horizontal-rule'] {
     margin-block: 1.5em;
-    border-color: var(--border-soft);
+    border: 0;
+    border-top: 1px solid var(--border);
   }
 
   & [data-streamdown='table-wrapper'] {
     position: relative;
     gap: 0;
-    margin-block: 0.85em;
+    margin-block: 1em;
     border: 0;
-    border-radius: var(--radius-xl);
-    background: var(--card);
-    box-shadow: var(--card-ring);
+    background: transparent;
     padding: 0;
   }
   /* The copy control floats over the corner on hover instead of taking a row of its own. */
@@ -872,7 +920,7 @@
     right: 3px;
     z-index: 1;
     border-radius: var(--radius-md);
-    background: var(--card);
+    background: var(--background);
     opacity: 0;
     transition: opacity var(--duration-fast) ease-out;
   }
@@ -881,22 +929,36 @@
   }
   & [data-streamdown='table-wrapper'] > div:last-child {
     border: 0;
-    border-radius: inherit;
+    border-radius: 0;
     background: transparent;
+    overflow-x: auto;
   }
   & [data-streamdown='table'] {
     margin: 0;
     border: 0;
-    font-size: 13px;
+    font-size: 0.9333em;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: normal;
+  }
+  & [data-streamdown='table-header'] {
+    background: transparent;
   }
   & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell']) {
-    border-color: var(--border-soft);
-    padding: 6px 12px;
+    border: 0;
+    padding: 8px 12px;
     line-height: 1.5;
   }
   & [data-streamdown='table-header-cell'] {
-    font-weight: var(--font-weight-medium);
+    border-bottom: 1px solid var(--border);
     color: var(--muted-foreground);
+    font-weight: var(--font-weight-medium);
+    text-align: left;
+  }
+  & [data-streamdown='table-cell'] {
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+  }
+  & [data-streamdown='table-body'] > tr:last-child > [data-streamdown='table-cell'] {
+    border-bottom: 0;
   }
 }
 

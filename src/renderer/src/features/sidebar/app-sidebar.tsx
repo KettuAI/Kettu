@@ -3,15 +3,13 @@ import { ChevronDownIcon, ChevronRightIcon, PlusIcon, SquarePenIcon } from 'luci
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
-import { newSession, openProjectDialog } from '@renderer/app/actions'
-import { Button } from '@renderer/components/ui/button'
+import { newSession } from '@renderer/app/actions'
 import { Kbd } from '@renderer/components/ui/kbd'
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
@@ -54,30 +52,8 @@ export function AppSidebar() {
         />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
-        <SidebarGroup className="gap-0.5 p-0">
-          <div className="flex h-6 items-center pr-1 pl-2">
-            <SidebarGroupLabel className="h-auto flex-1 p-0 text-xs font-medium text-muted-foreground">
-              {t('nav.projects')}
-            </SidebarGroupLabel>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={t('nav.openProject')}
-                    onClick={() => void openProjectDialog()}
-                    className="size-5 rounded-md text-muted-foreground hover:text-foreground"
-                  />
-                }
-              >
-                <PlusIcon className="size-3.5" />
-              </TooltipTrigger>
-              <TooltipContent>
-                {t('nav.openProject')} <span className="opacity-60">{formatShortcut('Mod+O')}</span>
-              </TooltipContent>
-            </Tooltip>
-          </div>
+        {/* No header row: projects are added with Mod+O, the File menu or New session. */}
+        <SidebarGroup role="group" aria-label={t('nav.projects')} className="gap-0.5 p-0">
           {!loaded && loadError ? (
             <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
               {t('nav.unavailable')}
@@ -121,7 +97,7 @@ export function NavRow({
 }: {
   icon: React.ReactNode
   label: string
-  shortcut: string
+  shortcut?: string
   current?: boolean
   onClick: () => void
   extra?: React.ReactNode
@@ -135,11 +111,12 @@ export function NavRow({
     >
       {icon}
       <span className="flex-1">{label}</span>
-      {extra ?? (
-        <Kbd className="h-auto bg-transparent p-0 text-[11px] font-normal text-muted-foreground">
-          {formatShortcut(shortcut)}
-        </Kbd>
-      )}
+      {extra ??
+        (shortcut && (
+          <Kbd className="h-auto bg-transparent p-0 text-[11px] font-normal text-muted-foreground">
+            {formatShortcut(shortcut)}
+          </Kbd>
+        ))}
     </SidebarMenuButton>
   )
 }
@@ -196,27 +173,32 @@ function ProjectGroup({ project }: { project: Project | null }) {
                   if (event.key === 'ArrowRight' && !open) toggle()
                   else if (event.key === 'ArrowLeft' && open) toggle()
                 }}
-                className={cn('gap-1.5 font-medium', project?.missing && 'text-muted-foreground')}
+                className={cn('gap-1 font-medium', project?.missing && 'text-muted-foreground')}
               />
             }
           >
+            <span className="min-w-0 truncate">{name}</span>
+            {/* A folded group always shows its chevron; an open one only under the pointer. */}
             <span
               role="presentation"
               onClick={(event) => {
                 event.stopPropagation()
                 toggle()
               }}
-              className="grid size-3.5 place-items-center text-muted-foreground"
+              className={cn(
+                'grid size-3.5 shrink-0 place-items-center text-muted-foreground transition-opacity duration-(--duration-fast)',
+                open &&
+                  'opacity-0 group-hover/menu-item:opacity-100 group-has-focus-visible/menu-item:opacity-100',
+              )}
             >
               {open ? (
-                <ChevronDownIcon strokeWidth={2} className="size-3!" />
+                <ChevronDownIcon className="size-3!" />
               ) : (
-                <ChevronRightIcon strokeWidth={2} className="size-3!" />
+                <ChevronRightIcon className="size-3!" />
               )}
             </span>
-            <span className="min-w-0 flex-1 truncate">{name}</span>
             {project?.missing && (
-              <span className="text-[11.5px] font-normal text-muted-foreground">
+              <span className="ml-auto text-[11.5px] font-normal text-muted-foreground">
                 {t('project.missing')}
               </span>
             )}
@@ -234,7 +216,7 @@ function ProjectGroup({ project }: { project: Project | null }) {
             <TooltipTrigger
               render={
                 <SidebarMenuAction
-                  showOnHover
+                  showOnHover={!project}
                   aria-label={
                     project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')
                   }

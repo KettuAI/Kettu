@@ -135,6 +135,8 @@ interface Live {
   permissions: Map<string, PendingRequest>
   failure: Failure | null
   unread: boolean
+  /** The current error was in front of the user, so the row no longer marks it. */
+  errorSeen: boolean
   connection: AgentConnection | null
   target: SessionTarget
   opening: Promise<void> | null
@@ -306,7 +308,8 @@ export class SessionManager {
     const permissionCount = live?.permissions.size ?? 0
     let attention: SessionAttention = 'none'
     if (permissionCount > 0) attention = 'permission'
-    else if (status === 'failed' || (session?.error && status !== 'running')) attention = 'error'
+    else if (status === 'failed' || (session?.error && status !== 'running' && !live?.errorSeen))
+      attention = 'error'
     else if (live ? live.unread : this.persistedUnread(record)) attention = 'unread'
     const git = this.deps.git()
     const pr =
@@ -318,7 +321,7 @@ export class SessionManager {
       agentId: record.agentId,
       projectPath: record.projectPath,
       scratch: this.deps.scratch.contains(record.projectPath),
-      title: session ? session.title : record.title,
+      title: record.customTitle ?? (session ? session.title : record.title),
       status,
       attention,
       permissionCount,
@@ -392,6 +395,7 @@ export class SessionManager {
   }
 
   private update(live: Live, changes: Partial<SessionView>): void {
+    if (changes.error) live.errorSeen = this.watched(live.id)
     this.emit(live, [{ op: 'session.update', changes }])
   }
 
@@ -501,6 +505,7 @@ export class SessionManager {
       permissions: new Map(),
       failure: null,
       unread: this.persistedUnread(record),
+      errorSeen: false,
       connection: null,
       target,
       opening: null,
@@ -771,7 +776,10 @@ export class SessionManager {
   private markViewed(sessionId: string, record: SessionRecord): void {
     record.lastViewedAt = this.now()
     const live = this.live.get(sessionId)
-    if (live) live.unread = false
+    if (live) {
+      live.unread = false
+      live.errorSeen = true
+    }
     if (this.records.has(sessionId)) this.saveIndex()
     this.touch(sessionId)
   }
@@ -1148,7 +1156,11 @@ export class SessionManager {
   }
 
   private titleOf(live: Live): string {
-    return live.thread.session.title ?? this.deps.agents.name(live.record.agentId)
+    return (
+      live.record.customTitle ??
+      live.thread.session.title ??
+      this.deps.agents.name(live.record.agentId)
+    )
   }
 
   /**
@@ -1793,6 +1805,16 @@ export class SessionManager {
   }
 
   // Closing, deleting and importing.
+
+  /** A title of the user's own, kept in the index only, since ACP has no rename. */
+  rename(sessionId: string, title: string | null): void {
+    const record = this.recordOf(sessionId)
+    const value = title?.trim().replace(/\s+/g, ' ') || null
+    if (value === null) delete record.customTitle
+    else record.customTitle = value
+    if (this.records.has(sessionId)) this.saveIndex()
+    this.touch(sessionId)
+  }
 
   async close(sessionId: string): Promise<void> {
     const record = this.recordOf(sessionId)

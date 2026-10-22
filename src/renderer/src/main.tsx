@@ -1,5 +1,6 @@
 import './styles/globals.css'
 
+import { LucideProvider } from 'lucide-react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { bootstrap } from './app/bootstrap'
@@ -10,7 +11,10 @@ import { Root } from './app/root'
 void bootstrap().then(() =>
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <Root />
+      {/* One line weight for every icon (design system: icons). */}
+      <LucideProvider strokeWidth={1.5}>
+        <Root />
+      </LucideProvider>
     </StrictMode>,
   ),
 )

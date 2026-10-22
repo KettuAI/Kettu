@@ -296,7 +296,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 onClick={send}
                 className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
               >
-                <ArrowUpIcon strokeWidth={2.25} />
+                <ArrowUpIcon />
               </InputGroupButton>
             )}
           </InputGroupAddon>

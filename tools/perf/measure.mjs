@@ -125,7 +125,7 @@ const shownSession = () =>
 const sessionRow = (sessionId) =>
   `return document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]')`
 
-const fakeAgentCard = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`
+const fakeAgentCard = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`
 
 // From a card on the project home, so the session is empty and ready before anything is measured;
 // New session creates it with the first message instead.
@@ -141,7 +141,7 @@ async function newFakeSession() {
     what: 'the fake agent on the project home (open a project; packaged builds need OVERBENCH_FAKE_AGENT)',
   })
   await click(
-    `return [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.textContent.includes('Ready'))`,
+    `return [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`,
     'the fake agent card',
   )
   // The empty thread's prompt appears once the agent has created the session.

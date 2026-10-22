@@ -3,9 +3,13 @@ import { useTranslation } from 'react-i18next'
 import type { AgentStatus } from '@shared/agent-host'
 import { readiness } from './readiness'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 
-/** A short status with its dot or icon: "Ready", "Sign in to start", "Installing…". */
+/**
+ * A short status with its dot or icon: "Sign in to start", "Installing…". Ready asks nothing of
+ * the user, so it is the dot alone, named by its tooltip and its accessible name.
+ */
 export function AgentStateLine({ status, className }: { status: AgentStatus; className?: string }) {
   const { t } = useTranslation('agents')
   const r = readiness(status)
@@ -13,10 +17,16 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
   switch (r.kind) {
     case 'ready':
       return (
-        <span className={base}>
-          <span aria-hidden className="size-1.5 rounded-full bg-success" />
-          {t('state.ready')}
-        </span>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span role="img" aria-label={t('state.ready')} className={cn(base, 'h-4 px-1')} />
+            }
+          >
+            <span className="size-1.5 rounded-full bg-success" />
+          </TooltipTrigger>
+          <TooltipContent>{t('state.ready')}</TooltipContent>
+        </Tooltip>
       )
     case 'sign-in':
       return (
@@ -37,7 +47,7 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
     case 'failed':
       return (
         <span className={cn(base, 'text-destructive')}>
-          <CircleAlertIcon strokeWidth={2} className="size-3.5" />
+          <CircleAlertIcon className="size-3.5" />
           {t('state.failed')}
         </span>
       )

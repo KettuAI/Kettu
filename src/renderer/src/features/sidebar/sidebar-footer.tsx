@@ -18,7 +18,6 @@ export function SidebarFooterContent() {
       <NavRow
         icon={<SettingsIcon className="text-muted-foreground" />}
         label={t('footer.settings')}
-        shortcut="Mod+,"
         current={settingsOpen}
         onClick={() => openSettings()}
       />

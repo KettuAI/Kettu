@@ -2,29 +2,32 @@ import { CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { shortAgo } from '@renderer/lib/format'
-import { useNow } from '@renderer/lib/use-now'
+import { cn } from '@renderer/lib/utils'
 
 /**
- * One status per row, by priority: waiting for you, error, running, starting, unread.
- * Running and starting rows show no time, since the session is active now.
+ * One status per row, by priority: waiting for you, error, running, starting, unread. Its 16 px
+ * slot stays when there is none, so a status appearing never moves the title.
  */
 export function SessionIndicator({
   summary,
   permissionCount,
   running,
+  className,
 }: {
   summary: SessionSummary
   permissionCount: number
   running: boolean
+  className?: string
 }) {
   const { t } = useTranslation('sidebar')
-  const now = useNow()
   if (permissionCount > 0) {
     return (
       <span
         aria-label={t('indicator.waiting', { count: permissionCount })}
-        className="grid h-4 min-w-4 place-items-center rounded-full bg-attention px-1 text-[10px] font-semibold text-attention-foreground tabular"
+        className={cn(
+          'grid h-4 min-w-4 place-items-center rounded-full bg-attention px-1 text-[10px] font-semibold text-attention-foreground tabular transition-opacity duration-(--duration-fast)',
+          className,
+        )}
       >
         {permissionCount}
       </span>
@@ -37,7 +40,6 @@ export function SessionIndicator({
       <CircleAlertIcon
         role="img"
         aria-label={t('indicator.error')}
-        strokeWidth={2}
         className="size-3.5 text-destructive"
       />
     )
@@ -61,15 +63,14 @@ export function SessionIndicator({
     )
   }
 
-  const active = running || summary.status === 'starting'
   return (
-    <>
-      {!active && (
-        <span className="text-[11.5px] text-muted-foreground tabular">
-          {shortAgo(summary.updatedAt, now)}
-        </span>
+    <span
+      className={cn(
+        'grid w-4 shrink-0 place-items-center transition-opacity duration-(--duration-fast)',
+        className,
       )}
-      <span className="grid w-4 shrink-0 place-items-center">{mark}</span>
-    </>
+    >
+      {mark}
+    </span>
   )
 }

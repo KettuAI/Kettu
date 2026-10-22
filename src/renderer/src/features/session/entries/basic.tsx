@@ -32,7 +32,7 @@ import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { UserActions } from './message-actions'
-import { UserContentView } from './user-content'
+import { RefChip, UserContentView } from './user-content'
 
 export interface EntryProps {
   sessionId: string
@@ -46,8 +46,8 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   return (
     <div className={cn('group/actions flex flex-col items-end gap-0.5', animation)}>
       <Message align="end">
-        <Bubble variant="muted">
-          <BubbleContent className="rounded-2xl px-3.5 py-2 text-prose leading-normal">
+        <Bubble variant="muted" className="max-w-[85%]">
+          <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
             <UserContentView content={entry.content} />
           </BubbleContent>
         </Bubble>
@@ -65,7 +65,7 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
     <div className={cn('min-w-0', animation)} data-selectable="">
       <Markdown markdown={entry.markdown} streaming={entry.streaming} />
       {entry.attachments.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap items-start gap-1.5">
           {entry.attachments.map((ref, i) =>
             ref.kind === 'image' ? (
               <img
@@ -74,7 +74,9 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
                 src={`data:${ref.mimeType};base64,${ref.data}`}
                 className="max-h-72 max-w-full rounded-lg shadow-card"
               />
-            ) : null,
+            ) : (
+              <RefChip key={i} contentRef={ref} />
+            ),
           )}
         </div>
       )}

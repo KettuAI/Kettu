@@ -19,6 +19,8 @@
   "preview": {
     "emptyTitle": "打开的文件会显示在这里",
     "emptyDescription": "在文件树中选择文件，或点击对话中的文件路径。",
+    "showSource": "查看源码",
+    "showRendered": "查看预览",
     "copyPath": "复制路径",
     "closeFile": "关闭文件",
     "openFailed": "无法打开此文件",

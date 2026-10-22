@@ -127,9 +127,17 @@ Each agent is shown with its official mark in its own colors. They are the only 
 | Codex       | The Codex mark, a vertical gradient `#B1A7FF` → `#7A9DFF` → `#3941FF`                              | [`@lobehub/icons`](https://github.com/lobehub/lobe-icons) (MIT)              |
 | OpenCode    | The two-tone OpenCode mark: frame `#17181C` and fill `#E6E5E6` light, `#FFFFFF` and `#5A5858` dark | [sst/opencode](https://github.com/sst/opencode) `packages/identity` (MIT)    |
 
-- Sizes: 14 px in sidebar and list rows, 13 px next to the session title, 17 px on a 32 px tile in cards (16 px on 30 px in the Welcome list). The tile is `--tile` (`oklch(0.965 0 0)` light, `oklch(0.27 0 0)` dark) with an inset `--border-soft` ring and an 8 px radius.
+- Sizes: 14 px in sidebar and list rows and before the session title in the top bar, 17 px on a 32 px tile in cards (16 px on 30 px in the Welcome list). The tile is `--tile` (`oklch(0.965 0 0)` light, `oklch(0.27 0 0)` dark) with an inset `--border-soft` ring and an 8 px radius.
 - An agent that is not installed shows its mark in one color, `--muted-foreground`.
 - The marks ship as SVG files with their license notices; the gradient and the two OpenCode colors are tokens, so they follow the theme.
+
+### File icons
+
+Files and folders show their type's icon from [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) (`material-icon-theme`, MIT), the file icon theme most used in VS Code, resolved from its manifest the way VS Code resolves a file icon theme: the file name (with its parent folder, for names such as `.github/workflows`), then the extensions longest first, then the default; folders by name, open or closed. The light theme takes the manifest's light icons where it has them.
+
+- The colors stay the theme's, at reduced saturation (`saturate-40`, the option chosen in [problem 38](../milestones/m0-feedback.md#38-files-pane-no-markdown-preview-file-type-icons-or-editing)), so they sit with the restrained palette. Like the agent marks, they are colored by design, the only icons that are.
+- Sizes: 16 px in the Files pane's rows and preview header, 12 px in a file chip in the thread.
+- The manifest and the icons load on first use, in a chunk of their own; each icon is a file of its own, never inlined, so only those on screen are read. A plain line icon stands in until they load.
 
 ## Borders and elevation
 
@@ -168,9 +176,10 @@ M0 ships the compact density only. The comfortable values are recorded so that a
 | `--control-height`    | Buttons and selectors                                              | 26 px                      | 32 px                |
 | `--control-height-sm` | Small inline buttons, icon buttons in the title bar                | 24 px                      | 28 px                |
 | `--row-height`        | Sidebar rows, menu items, the plan bar, the composer's control row | 28 px                      | to be measured       |
-| `--card-header`       | Tool call card headers                                             | 30 px                      | 36 px                |
+| `--card-header`       | Card headers, such as a permission request's                       | 30 px                      | 36 px                |
 | `--composer-min`      | The composer with one line of text                                 | 52 px                      | 56 px                |
 | `--icon-size`         | UI icons; 14 px inside cards and controls                          | 16 px                      | 20 px                |
+| Icon stroke           | Every Lucide icon, set once with `LucideProvider` in `main.tsx`    | 1.5                        | 1.5                  |
 | Spacing steps         | Gaps between and around components                                 | 4, 6, 8, 10, 12, 16, 28 px | 8, 12, 16, 28, 40 px |
 
 The radius scale is shadcn's, derived from `--radius`, so shadcn components follow it without new tokens:
@@ -192,11 +201,26 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 ## Typography
 
 - **Families**: Inter Variable for the interface and prose, loaded with its optical-size axis so interface sizes get Inter's text design, falling back to PingFang SC, Microsoft YaHei and Noto Sans CJK SC for Chinese, then `system-ui`. Inter is the nearest open typeface to the reference's own sans at interface sizes: the same tall x-height, width and rhythm, where Geist read a size smaller and a shade lighter. Mono: `ui-monospace`, SF Mono, Cascadia Code, JetBrains Mono, Menlo, Consolas.
-- **Sizes**: 22 px (weight 600, tracking −1.5%) for page titles, 14 px with a 1.625 line height for thread prose (shadcn `Bubble`'s `text-sm leading-relaxed`), 14 px for the sidebar, menus and controls (`--ui-size`, the `text-ui` utility; the reference's interface size), 12 px for code, diffs and secondary labels, 11.5 px mono for versions, times and diff stats. Prose keeps 1.625 instead of the reference's 1.43 because CJK text needs the extra leading.
+- **Sizes**: 22 px (weight 600, tracking −1.5%) for page titles, 15 px with a 1.75 line height for thread prose (`--prose-size`; **Text size** sets 14, 15 or 16 px), 14 px for the sidebar, menus and controls (`--ui-size`, the `text-ui` utility; the reference's interface size), 12 px for code, diffs and secondary labels, 11.5 px mono for versions, times and diff stats. Prose keeps 1.75 instead of the reference's 1.43 because CJK text needs the extra leading.
 - **Weights**: 400 for text, 500 for labels and titles, 600 for markdown headings. In the dark theme every weight drops by 40 on Inter's weight axis (400 becomes 360, 500 becomes 460, 600 becomes 560), as in the reference, because light text on a dark surface looks heavier than it is.
 - Numbers that change in place, such as timers, token counts, diff stats and counters, use `tabular-nums` so they do not jitter.
 - Headings use `text-wrap: balance` and prose `text-wrap: pretty`. Paths, URLs and long identifiers use `overflow-wrap: anywhere`, so they never push a card wider than the column.
 - Icons inline with text sit at `vertical-align: -0.125em`, which centres them on the text.
+
+### Prose
+
+The message body, from the typography spec of [problem 43](../milestones/m0-feedback.md#43-the-message-body-needs-a-typography-pass-to-a-given-spec), all under the `.markdown` class in `globals.css`. Sizes are in em of the prose size, so **Text size** scales them; the pixel values below are those of the default 15 px. Colors come only from the existing tokens, so the dark theme follows without values of its own.
+
+- **Column**: 42em (630 px), about 42 Chinese characters a line. Text in `--foreground` at 90% opacity; bold and headings at full `--foreground`, so the step in lightness carries the hierarchy. Paragraphs `text-wrap: pretty`, long paths and URLs `overflow-wrap: anywhere`, no letter spacing for Chinese.
+- **Headings**: more space above than below, so each sits on its content. h1 20 px with `1.8em 0 0.4em`, h2 17 px with `1.75em 0 0.4em`, h3 15 px with `1.5em 0 0.3em`, h4 and below 15 px in `--muted-foreground`; all at the semibold weight, `text-wrap: balance`, none above the first block.
+- **Paragraphs and emphasis**: `margin: 0 0 0.75em`; bold at the semibold weight, never 700; emphasis italic, except in Chinese text, where it is the medium weight upright (`data-cjk-emphasis`, set when the emphasis holds a Han character).
+- **Lists**: `padding-left: 1.25em`, items 0.3em apart, markers in `--muted-foreground`, ordered numbers `tabular-nums`, nested lists 0.25em above and below, and no margin on a paragraph inside an item, so loose lists keep the spacing of tight ones.
+- **Inline code**: mono at 0.85em on `--muted`, `padding: 0.1em 0.35em`, radius 4 px, no border and no colored text.
+- **Code blocks**: `--muted` at 60%, a 1 px `--border`, radius 8 px, 13 px at 1.6, padding 0 14px 12px under a 32 px header with the language at 12 px in `--muted-foreground` and the copy button as a ghost button; a block scrolls sideways and never wraps; 1em above and below.
+- **Links**: `--foreground` with an underline in `--muted-foreground` at 40%, 3 px below the text, turning `--foreground` on hover.
+- **File chips**: `inline-flex`, 20 px high, `vertical-align: 1px`; the file icon and 3 px; 6 px of padding each side, radius 5 px; mono 11.5 px in `--muted-foreground` on `--muted`, no wrapping; 4 px from what comes before; `--accent` and `--foreground` on hover.
+- **Blockquotes**: a 2 px `--border` rule on the left, 12 px in, `--muted-foreground`, no fill. **Tables**: no frame, in a wrapper that scrolls sideways; 14 px with `tabular-nums`; header cells at the medium weight in `--muted-foreground` over a `--border` line; cells `8px 12px` over a `--border` line at 60%, none under the last row. **Rules**: 1 px `--border`, 1.5em above and below.
+- The user's bubble, the tool call rows and the thread's spacing are in [Interface: thread](./ui.md#thread).
 
 ## Components
 

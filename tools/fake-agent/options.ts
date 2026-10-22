@@ -8,6 +8,7 @@ export const SCENARIOS = [
   'parallel-permissions',
   'cancel',
   'crash',
+  'error',
   'auth-required',
   'large-history',
   'slow-start',
@@ -36,6 +37,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'parallel-permissions': { description: 'Three tool calls asking for permission at once' },
   cancel: { description: 'A long turn that honors cancellation', hint: '--ignore-cancel' },
   crash: { description: 'Exits mid-turn with a non-zero code', hint: '--code <n>' },
+  error: { description: 'Fails the turn with an internal error' },
   'auth-required': {
     description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
   },

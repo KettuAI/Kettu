@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronRightIcon,
-  FileIcon,
-  FolderIcon,
   ListIcon,
   ListTreeIcon,
   Maximize2Icon,
@@ -30,6 +28,7 @@ import { cn } from '@renderer/lib/utils'
 import { loadFiles, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { FilePreview } from './file-preview'
+import { FileTypeIcon } from './file-type-icon'
 import {
   filterPaths,
   folderOf,
@@ -227,10 +226,10 @@ function Tree({
                     isOpen && 'rotate-90',
                   )}
                 />
-                <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <FileTypeIcon path={row.path} folder open={isOpen} className="size-4" />
               </>
             ) : (
-              <FileIcon className="ml-4 size-3.5 shrink-0 text-muted-foreground" />
+              <FileTypeIcon path={row.path} className="ml-4 size-4" />
             )}
             <span className="truncate">{nameOf(row.path)}</span>
           </Row>
@@ -320,7 +319,7 @@ function FileRow({
   const folder = folderOf(path)
   return (
     <Row selected={selected} title={path} onClick={() => openFile(projectPath, path)}>
-      <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <FileTypeIcon path={path} className="size-4" />
       <span className="flex min-w-0 items-baseline gap-1.5">
         <span className="shrink-0">
           {[...path.slice(nameStart)].map((char, i) =>
@@ -403,7 +402,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
                 title={row.path}
                 className="flex h-row items-center gap-1.5 truncate px-3 text-xs font-medium"
               >
-                <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <FileTypeIcon path={row.path} className="size-4" />
                 <span className="truncate">{row.path}</span>
               </div>
             )
