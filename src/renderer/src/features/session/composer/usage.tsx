@@ -172,7 +172,7 @@ function ContextPart({
   const totals = usage.tokens
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
-      <div className="flex items-baseline justify-between text-[13px]">
+      <div className="flex items-baseline justify-between text-ui">
         <span className="font-medium">Context</span>
         <span className={cn('tabular', full && 'text-attention-text')}>
           {Math.round(share * 100)}%
@@ -322,7 +322,7 @@ export function LimitsPart({
   const observed = limits.reduce((at, l) => Math.max(at, l.observedAt), 0)
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
-      <div className="flex items-baseline justify-between text-[13px]">
+      <div className="flex items-baseline justify-between text-ui">
         <span className="flex min-w-0 items-center gap-1.5 font-medium">
           {agent && (
             <>

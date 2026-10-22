@@ -305,7 +305,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   <Autocomplete.Item
                     key={command.name}
                     value={command}
-                    className="flex min-h-row cursor-default items-baseline gap-2 rounded-md px-2 py-1 text-[13px] outline-none select-none data-highlighted:bg-accent"
+                    className="flex min-h-row cursor-default items-baseline gap-2 rounded-md px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
                   >
                     <span className="shrink-0 font-mono text-xs">/{command.name}</span>
                     <span className="min-w-0 truncate text-muted-foreground">

@@ -112,7 +112,7 @@ export default function SettingsPage() {
               aria-label="Search settings"
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onSearchKey}
-              className="text-[13px]"
+              className="text-ui"
             />
             <InputGroupAddon align="inline-end">
               {query ? (
@@ -148,7 +148,7 @@ export default function SettingsPage() {
                 aria-current={selected ? 'page' : undefined}
                 onClick={() => choose(section.id)}
                 className={cn(
-                  'flex h-row items-center gap-2 rounded-lg px-2 text-left text-[13px] outline-none transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50',
+                  'flex h-row items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50',
                   selected
                     ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                     : 'text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground',
@@ -187,10 +187,7 @@ export default function SettingsPage() {
                         aria-labelledby={`settings-${section.id}`}
                         className="flex flex-col gap-2.5"
                       >
-                        <h2
-                          id={`settings-${section.id}`}
-                          className="px-1 text-[13px] font-semibold"
-                        >
+                        <h2 id={`settings-${section.id}`} className="px-1 text-ui font-semibold">
                           {section.title}
                         </h2>
                         <SectionBody section={section} />
@@ -253,7 +250,7 @@ function SectionBody({ section }: { section: SectionDef }) {
 function Row({ row, first }: { row: RowDef; first: boolean }) {
   const text = (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[13px] font-medium">{row.name}</span>
+      <span className="text-ui font-medium">{row.name}</span>
       {row.description && (
         <span className="text-xs leading-normal text-muted-foreground">{row.description}</span>
       )}

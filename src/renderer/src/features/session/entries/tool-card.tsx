@@ -406,7 +406,7 @@ function PermissionPrompt({
 
   return (
     <div className="flex flex-col gap-2.5 px-3 pt-2.5 pb-3">
-      <p className="text-[13px] text-muted-foreground">
+      <p className="text-ui text-muted-foreground">
         {agentName} wants to {ASK[entry.toolKind]}.
       </p>
       <div

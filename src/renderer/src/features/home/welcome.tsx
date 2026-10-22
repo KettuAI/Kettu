@@ -41,11 +41,7 @@ export function Welcome() {
             </p>
           </div>
           <div className={action.className} style={action.style}>
-            <Button
-              size="lg"
-              onClick={() => void openProjectDialog()}
-              className="h-8 px-3 text-[13px]"
-            >
+            <Button size="lg" onClick={() => void openProjectDialog()} className="h-8 px-3 text-ui">
               <FolderOpenIcon data-icon="inline-start" />
               Open project
               <Kbd className="ml-0.5 bg-transparent p-0 text-[11px] text-primary-foreground/55">

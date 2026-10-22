@@ -61,7 +61,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
               <ArrowLeftIcon />
             </Button>
           )}
-          <span className="truncate px-1.5 text-[13px] font-medium">
+          <span className="truncate px-1.5 text-ui font-medium">
             {parent ? `New sub-session of ${sessionTitle(parent)}` : 'New session'}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">

@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
-@import '@fontsource-variable/geist';
+@import '@fontsource-variable/inter/opsz.css';
 
 /* Streamdown and its code plugin style their elements with Tailwind classes. */
 @source '../../../../node_modules/streamdown/dist/*.js';
@@ -29,7 +29,7 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans:
-    'Geist Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
+    'Inter Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
 
@@ -113,6 +113,7 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
   --text-prose: var(--prose-size);
+  --text-ui: var(--ui-size);
   --text-prose--line-height: 1.625;
 }
 
@@ -246,6 +247,8 @@
   --control-height: 26px;
   --control-height-sm: 24px;
   --row-height: 28px;
+  /* Interface text: the sidebar, menus and controls. Prose has its own size below. */
+  --ui-size: 14px;
   --card-header: 30px;
   --composer-min: 52px;
   --icon-size: 16px;
@@ -368,9 +371,9 @@
   --ansi-bright-white: #e5e5e5;
 
   /* Light text on a dark surface looks heavier than it is. */
-  --weight-normal: 380;
-  --weight-medium: 480;
-  --weight-semibold: 580;
+  --weight-normal: 360;
+  --weight-medium: 460;
+  --weight-semibold: 560;
 }
 
 @media (resolution >= 2x) {
@@ -399,10 +402,10 @@
     scrollbar-color: var(--border-strong) transparent;
     scrollbar-width: thin;
   }
-  /* Interface text is 13 px; the root stays 16 px so Tailwind's rem scale is unchanged. */
+  /* Interface text is --ui-size; the root stays 16 px so Tailwind's rem scale is unchanged. */
   body {
     @apply bg-background text-foreground;
-    font-size: 13px;
+    font-size: var(--ui-size);
     line-height: 1.4;
     font-weight: var(--weight-normal);
     overflow: hidden;

@@ -93,7 +93,7 @@ export const ThoughtEntry = memo(function ThoughtEntry({ sessionId, entryId }: E
       : 'Thought'
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={animation}>
-      <CollapsibleTrigger className="group/thought -mx-1 flex h-6 items-center gap-1 rounded-md px-1 text-[13px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group/thought -mx-1 flex h-6 items-center gap-1 rounded-md px-1 text-ui text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
         <span className={cn(entry.streaming && 'shimmer')}>{label}</span>
         <ChevronRightIcon className="size-3.5 transition-transform duration-(--duration-fast) group-data-panel-open/thought:rotate-90" />
       </CollapsibleTrigger>
@@ -233,7 +233,7 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
   const entry = useEntry(sessionId, entryId, 'git')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
-  const line = 'flex min-h-6 items-center gap-2 text-[13px] text-muted-foreground'
+  const line = 'flex min-h-6 items-center gap-2 text-ui text-muted-foreground'
   switch (entry.event) {
     case 'commit':
       return (
@@ -319,7 +319,7 @@ export function PlanList({ items }: { items: PlanItem[] }) {
   return (
     <ul className="flex flex-col gap-0.5">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 py-0.5 text-[13px] leading-5">
+        <li key={i} className="flex items-start gap-2 py-0.5 text-ui leading-5">
           <span className="flex h-5 items-center">
             {item.status === 'completed' ? (
               <CircleCheckIcon

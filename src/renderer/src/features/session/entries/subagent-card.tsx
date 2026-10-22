@@ -45,7 +45,7 @@ export const SubagentCard = memo(function SubagentCard({
       disabled={!child}
       onClick={() => child && openSession(child.id, child.projectPath)}
       className={cn(
-        'group/subagent flex w-full flex-col overflow-hidden rounded-xl bg-card text-left text-[13px] text-card-foreground shadow-card outline-none transition-colors duration-(--duration-fast) hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/50',
+        'group/subagent flex w-full flex-col overflow-hidden rounded-xl bg-card text-left text-ui text-card-foreground shadow-card outline-none transition-colors duration-(--duration-fast) hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/50',
         waiting && 'shadow-attention',
         animation,
       )}

@@ -47,7 +47,7 @@ flowchart LR
 - xterm.js is imported with dynamic `import()` the first time a terminal opens, together with its addons: `@xterm/addon-fit`, `@xterm/addon-webgl` and `@xterm/addon-web-links`.
 - The WebGL renderer draws on the GPU. If the WebGL context is lost, the terminal falls back to xterm.js's DOM renderer without losing its buffer.
 - Scrollback holds 10,000 lines per terminal.
-- Font: Geist Mono at the terminal font size (12, 13 or 14 px; 13 by default), line height 1.2. The cursor is a bar that blinks only while the terminal has focus.
+- Font: the `--font-mono` stack (SF Mono, Cascadia Code, JetBrains Mono, Menlo or Consolas, whichever the platform has) at the terminal font size (12, 13 or 14 px; 13 by default), line height 1.2. The cursor is a bar that blinks only while the terminal has focus.
 - Colors come from the [terminal tokens](./design-system.md#terminal), read from CSS when the theme changes, so a theme switch recolors running terminals at once.
 - Links: `http(s)` URLs are underlined on hover and open in the system browser with `Mod`+click, through main's external-link check.
 

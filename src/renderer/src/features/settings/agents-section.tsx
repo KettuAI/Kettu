@@ -79,7 +79,7 @@ export function AgentCard({ status }: { status: AgentStatus }) {
         <AgentTile agent={status.id} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex items-baseline gap-2">
-            <span className="text-[13px] font-medium">{status.name}</span>
+            <span className="text-ui font-medium">{status.name}</span>
             {status.version && (
               <span className="font-mono text-[11.5px] text-muted-foreground">
                 v{status.version}

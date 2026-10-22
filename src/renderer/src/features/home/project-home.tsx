@@ -51,7 +51,7 @@ export function ProjectHome({ project }: { project: Project }) {
           </div>
 
           {project.missing ? (
-            <div className="flex items-center gap-2 rounded-xl bg-card px-3.5 py-3 text-[13px] shadow-card">
+            <div className="flex items-center gap-2 rounded-xl bg-card px-3.5 py-3 text-ui shadow-card">
               <CircleAlertIcon className="size-4 text-destructive" />
               This folder no longer exists. Its sessions stay listed until it comes back.
             </div>

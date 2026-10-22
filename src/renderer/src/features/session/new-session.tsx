@@ -63,7 +63,7 @@ export function NewSessionView({ project }: { project: Project | null }) {
     <div className="flex h-full min-h-0 flex-col">
       <TopBar>
         <NoDrag className="min-w-0">
-          <span className="truncate px-1.5 text-[13px] font-medium">New session</span>
+          <span className="truncate px-1.5 text-ui font-medium">New session</span>
         </NoDrag>
         <span className="flex-1" />
         {project && <HeaderTools projectPath={project.path} />}

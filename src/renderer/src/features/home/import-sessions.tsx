@@ -137,9 +137,7 @@ export function ImportSessionsDialog({
         </DialogHeader>
         <div className="-mx-1 flex min-h-0 flex-col gap-4 overflow-y-auto px-1">
           {agents.length === 0 && (
-            <p className="text-[13px] text-muted-foreground">
-              No agent here can list its sessions.
-            </p>
+            <p className="text-ui text-muted-foreground">No agent here can list its sessions.</p>
           )}
           {agents.map((agent) => {
             const list = lists[agent.id]
@@ -150,14 +148,14 @@ export function ImportSessionsDialog({
                   {agent.name}
                 </h3>
                 {list?.error ? (
-                  <p className="text-[13px] text-destructive">{list.error}</p>
+                  <p className="text-ui text-destructive">{list.error}</p>
                 ) : !list || (list.loading && !list.sessions.length) ? (
                   <div className="flex flex-col gap-1.5 py-1">
                     <Skeleton className="h-3 w-3/4" />
                     <Skeleton className="h-3 w-1/2" />
                   </div>
                 ) : list.sessions.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">No sessions for this folder.</p>
+                  <p className="text-ui text-muted-foreground">No sessions for this folder.</p>
                 ) : (
                   <ul className="flex flex-col gap-px">
                     {list.sessions.map((s) => {

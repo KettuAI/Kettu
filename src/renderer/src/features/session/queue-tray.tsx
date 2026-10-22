@@ -103,7 +103,7 @@ export function QueueTray({ session }: { session: SessionView }) {
           <li
             key={item.id}
             className={cn(
-              'group/queued flex h-row items-center gap-2 pr-1.5 pl-3 text-[13px]',
+              'group/queued flex h-row items-center gap-2 pr-1.5 pl-3 text-ui',
               i > 0 && 'text-muted-foreground',
             )}
           >

@@ -92,7 +92,7 @@ export default function FilesPanel({
             placeholder="Filter, or ? to search in files"
             aria-label="Filter files"
             spellCheck={false}
-            className="text-[13px]"
+            className="text-ui"
           />
         </InputGroup>
         <span className="flex-1" />
@@ -463,7 +463,7 @@ function Row({
       {...aria}
       style={{ paddingLeft: 8 + depth * 12 }}
       className={cn(
-        'flex h-row w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        'flex h-row w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-ui outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         selected
           ? 'bg-sidebar-accent text-sidebar-accent-foreground'
           : 'hover:bg-sidebar-accent/70',

@@ -48,7 +48,7 @@ export function StartingAgent({
   const agentStarting = state !== 'ready'
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-2 text-center" role="status">
-      <span className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
+      <span className="inline-flex items-center gap-2 text-ui text-muted-foreground">
         <Spinner className="size-3.5" />
         <span className="shimmer">
           {loading && !agentStarting
@@ -143,8 +143,8 @@ export function FailedState({
       <div className="flex items-start gap-2">
         <CircleAlertIcon className="mt-px size-4 shrink-0 text-destructive" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[13px] font-medium">{title}</span>
-          <span className="text-[13px] text-muted-foreground" data-selectable="">
+          <span className="text-ui font-medium">{title}</span>
+          <span className="text-ui text-muted-foreground" data-selectable="">
             {message}
           </span>
         </div>

@@ -79,7 +79,7 @@ export const RunGroup = memo(function RunGroup({
       onOpenChange={(next) => setUserOpen(next)}
       className={cn('min-w-0', animation)}
     >
-      <CollapsibleTrigger className="group/run -mx-1 flex h-6 max-w-[calc(100%+0.5rem)] items-center gap-1 rounded-md px-1 text-[13px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group/run -mx-1 flex h-6 max-w-[calc(100%+0.5rem)] items-center gap-1 rounded-md px-1 text-ui text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
         <span className="min-w-0 truncate">
           {parts.map((part, i) => (
             <span key={i}>

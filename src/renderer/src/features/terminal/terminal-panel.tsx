@@ -131,7 +131,7 @@ export function TerminalPanel({
           <TerminalView key={active.id} terminal={active} />
         ) : (
           !creating && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-[13px] text-muted-foreground">
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-ui text-muted-foreground">
               <span>No terminal in this project.</span>
               <Button variant="outline" size="compact" onClick={() => void newTerminal()}>
                 <SquareTerminalIcon data-icon="inline-start" />

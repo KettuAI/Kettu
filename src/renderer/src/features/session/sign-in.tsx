@@ -69,7 +69,7 @@ export function SignIn({
       </EmptyHeader>
       <EmptyContent className="max-w-[440px] gap-3">
         {methods.length === 0 && (
-          <p className="text-[13px] text-muted-foreground">
+          <p className="text-ui text-muted-foreground">
             {name} did not say how to sign in. Sign in with its own command line, then retry.
           </p>
         )}
@@ -80,7 +80,7 @@ export function SignIn({
               className="flex w-full flex-col gap-2 rounded-xl bg-card p-3 text-left shadow-card"
             >
               <div className="flex flex-col gap-0.5">
-                <span className="text-[13px] font-medium">{method.name}</span>
+                <span className="text-ui font-medium">{method.name}</span>
                 {method.description && (
                   <span className="text-xs text-muted-foreground">{method.description}</span>
                 )}

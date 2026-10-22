@@ -35,7 +35,7 @@ export function QuitConfirm() {
             {update ? 'Restarting' : 'Quitting'} stops what is running now:
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ul className="rounded-[9px] bg-muted py-0.5 text-[13px]">
+        <ul className="rounded-[9px] bg-muted py-0.5 text-ui">
           {request?.sessions.map((s) => (
             <li key={s.sessionId} className="flex h-8 items-center gap-2 px-2.5">
               <AgentMark agent={s.agentId} size={14} />
