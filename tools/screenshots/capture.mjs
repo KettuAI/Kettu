@@ -119,20 +119,41 @@ async function run() {
   await shoot('project-home')
 
   // A click, not the shortcut: on macOS the app menu owns Cmd+N, and input from here skips it.
-  await click(
-    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('New session'))`,
-    'New session',
-  )
-  await waitFor(`document.querySelector('button[aria-label=Agent]')`, 'the New session screen')
-  await click(`return document.querySelector('button[aria-label=Agent]')`, 'the agent menu')
-  await waitFor(`document.querySelector('[role=menu]')`, 'the agent menu')
-  await click(byText('[role=menuitemradio]', 'Fake agent'), 'the fake agent')
+  const openNewSession = async () => {
+    await click(
+      `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('New session'))`,
+      'New session',
+    )
+    await waitFor(
+      `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
+      'the New session screen',
+    )
+  }
+  const agentButton = `document.querySelector('button[aria-label="Agent and model"]')`
+  // The rail opens on the agent chosen, or the first installed one, which need not be the fake one.
+  const openAgentMenu = async () => {
+    await click(`return ${agentButton}`, 'the agent menu')
+    await waitFor(`document.querySelector('[role=tablist]')`, 'the agent menu')
+    await click(byText('[role=tab]', 'Fake agent'), 'the fake agent in the menu')
+  }
+
+  await openNewSession()
+  await openAgentMenu()
+  // Before its first session the fake agent's models are unknown, so its pane offers the agent.
+  await click(byText('[role=option]', 'Use Fake agent'), 'Use Fake agent')
   await waitFor(
-    `[...document.querySelectorAll('p')].some((p) => p.textContent.startsWith('What should'))`,
+    `${agentButton}?.textContent.includes('Fake agent') && !document.querySelector('[role=tablist]')`,
     'the fake agent on the New session screen',
   )
   await sleep(400)
   await shoot('new-session')
+
+  await click(`return document.querySelector('button[aria-label=Project]')`, 'the project menu')
+  await waitFor(`document.querySelector('[role=listbox]')`, 'the project menu')
+  await sleep(400)
+  await shoot('new-session-project-menu')
+  await press('Escape', 27)
+  await sleep(300)
 
   const prompt = async (text) => {
     await cdp.evaluate(`document.querySelector('textarea').focus()`)
@@ -206,6 +227,18 @@ async function run() {
   await waitFor(`document.querySelector('[role=menu]')`, 'the context menu')
   await sleep(400)
   await shoot('context-menu')
+  await press('Escape', 27)
+  await sleep(300)
+
+  // With a session behind it, the menu lists the fake agent's models, levels and switches.
+  await openNewSession()
+  await openAgentMenu()
+  await waitFor(
+    `[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('Fake Deep'))`,
+    "the fake agent's models",
+  )
+  await sleep(400)
+  await shoot('new-session-agent-menu')
   await press('Escape', 27)
   await sleep(300)
 

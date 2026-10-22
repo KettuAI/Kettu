@@ -127,8 +127,8 @@ const sessionRow = (sessionId) =>
 
 const fakeAgentCard = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`
 
-// From a card on the project home, so the session is empty and ready before anything is measured;
-// New session creates it with the first message instead.
+// From a card on the project home, which opens New session on the fake agent. The session is created
+// with its first message, so a short /status turn makes it ready before anything is measured.
 async function newFakeSession() {
   if (!(await evaluate(`Boolean(${fakeAgentCard})`))) {
     // The first project's row comes first; its name opens the project home.
@@ -144,13 +144,19 @@ async function newFakeSession() {
     `return [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`,
     'the fake agent card',
   )
-  // The empty thread's prompt appears once the agent has created the session.
   await waitFor(
-    `[...document.querySelectorAll('p')].some((p) => p.textContent.startsWith('What should'))`,
-    {
-      what: 'the new session to be ready',
-    },
+    `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
+    { what: 'the New session screen' },
   )
+  await clearComposer()
+  await send('Input.insertText', { text: '/status ' })
+  await key('Enter', { keyCode: 13, text: '\r' })
+  // The turn can end between two polls, so this waits for its reply rather than for Stop.
+  await waitFor(
+    `document.body.innerText.includes('Credits: 120') && !document.querySelector('[aria-label=Stop]')`,
+    { what: 'the first turn to end' },
+  )
+  await sleep(500)
 }
 
 /** Sends a prompt through the composer and waits for its turn to end. */
