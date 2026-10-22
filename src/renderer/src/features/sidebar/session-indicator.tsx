@@ -6,7 +6,8 @@ import { cn } from '@renderer/lib/utils'
 
 /**
  * One status per row, by priority: waiting for you, error, running, starting, unread. Its 16 px
- * slot stays when there is none, so a status appearing never moves the title.
+ * slot stays when there is none, so a status appearing never moves the title. The slot is square
+ * because the row truncates its last span, which would otherwise clip the running halo.
  */
 export function SessionIndicator({
   summary,
@@ -48,8 +49,10 @@ export function SessionIndicator({
       <span
         role="img"
         aria-label={t('indicator.running')}
-        className="size-1.5 animate-pulse rounded-full bg-foreground"
-      />
+        className="relative size-2 rounded-full bg-running"
+      >
+        <span className="absolute inset-0 animate-ping rounded-full bg-running opacity-75" />
+      </span>
     )
   } else if (summary.status === 'starting') {
     mark = <Spinner aria-label={t('indicator.starting')} className="size-3 text-muted-foreground" />
@@ -66,7 +69,7 @@ export function SessionIndicator({
   return (
     <span
       className={cn(
-        'grid w-4 shrink-0 place-items-center transition-opacity duration-(--duration-fast)',
+        'grid size-4 shrink-0 place-items-center transition-opacity duration-(--duration-fast)',
         className,
       )}
     >

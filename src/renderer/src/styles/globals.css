@@ -79,6 +79,7 @@
   --color-attention-tint: var(--attention-tint);
   --color-success: var(--success);
   --color-checked: var(--checked);
+  --color-running: var(--checked);
   --color-success-text: var(--success-text);
   --color-merged: var(--merged);
   --color-diff-add: var(--diff-add);
@@ -115,6 +116,9 @@
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Tailwind's ping at the pulse's 2 s, so the running dot breathes rather than flashes. */
+  --animate-ping: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 
   --text-prose: var(--prose-size);
   /* The thread's column: 42em of prose, about 42 Chinese characters a line, plus its gutters. */
@@ -655,6 +659,7 @@
     --tw-exit-rotate: 0 !important;
   }
   .animate-pulse,
+  .animate-ping,
   .shimmer,
   [data-caret] {
     animation: none !important;
@@ -677,6 +682,7 @@
     --tw-exit-rotate: 0 !important;
   }
   & .animate-pulse,
+  & .animate-ping,
   & .shimmer,
   & [data-caret] {
     animation: none !important;

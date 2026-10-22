@@ -129,7 +129,7 @@ The page scales to many agents: a list first, and a page of its own for each age
 - Each row: the agent's [mark](./design-system.md#agent-marks) at 14 px, title (truncated), and one status indicator in a 16 px slot at the row's end, kept when the row has none so a status appearing never moves the title. Rows show no time. The indicator, in this order of priority:
   1. **Waiting for you** (`attention: 'permission'`): an `--attention` pill with the count. This is the loudest signal in the app.
   2. **Error** (`attention: 'error'`): a destructive `CircleAlert` icon, until the session has been in front of you ([attention](./session-model.md#how-the-host-keeps-sessions)).
-  3. **Running** (`status: 'running'`): a dot with Tailwind's `animate-pulse`.
+  3. **Running** (`status: 'running'`): a blue dot that breathes out a fading halo ([patterns](./design-system.md#patterns)), so a running row reads apart from an unread one.
   4. **Starting** (`status: 'starting'`): a `Spinner` while the agent starts or the session loads.
   5. **Unread** (`attention: 'unread'`): a small neutral dot after a turn ended while you were elsewhere.
 - Hovering a row, or focusing it from the keyboard, shows a **More** button (`Ellipsis`) over the indicator's slot, so the title keeps its width. It opens the same menu as a right-click, and so does the context menu key (`Shift+F10`) on a focused row.
