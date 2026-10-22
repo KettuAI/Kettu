@@ -225,5 +225,19 @@ async function run() {
     await sleep(600)
     await shoot(`settings-${section.toLowerCase()}`)
   }
+
+  await click(
+    `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'General')`,
+    'Settings › General',
+  )
+  await click(
+    `return document.querySelector('[data-slot=select-trigger]')`,
+    'the Default agent select',
+  )
+  await waitFor(`document.querySelector('[data-slot=select-content]')`, 'the select list')
+  await sleep(400)
+  await shoot('settings-select')
+  await press('Escape', 27)
+  await sleep(300)
   cdp.close()
 }

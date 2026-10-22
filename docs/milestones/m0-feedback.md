@@ -9,7 +9,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 1   | Thoughts and tool calls cannot be folded together              | Thread entries | Fixed        |
 | 2   | Choosing a model does not close the model menu                 | Model menu     | Fixed        |
 | 3   | No switch for Claude Code's ultracode                          | Model menu     | Fixed        |
-| 4   | The model menu does not look polished                          | Model menu     | Open         |
+| 4   | The model menu does not look polished                          | Model menu     | Partly fixed |
 | 5   | Messages have no action row                                    | Thread entries | Fixed        |
 | 6   | Markdown looks plain and file references do not stand out      | Markdown       | Partly fixed |
 | 7   | The usage popover shows too little and needs a full redesign   | Usage          | Partly fixed |
@@ -20,8 +20,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 12  | Switching sessions visibly stalls                              | Performance    | Partly fixed |
 | 13  | The git popover only displays, and repeats the terminal toggle | Git            | Partly fixed |
 | 14  | The terminal panel's own buttons do nothing                    | Terminal       | Fixed        |
-| 15  | Settings selects show names only and keep the default look     | Settings       | Partly fixed |
-| 16  | Switches keep shadcn's default look                            | Settings       | Open         |
+| 15  | Settings selects show names only and keep the default look     | Settings       | Fixed        |
+| 16  | Switches keep shadcn's default look                            | Settings       | Fixed        |
 | 17  | Settings › Agents leaves out what matters                      | Settings       | Partly fixed |
 | 18  | The About page needs redoing                                   | Settings       | Open         |
 | 19  | Settings leave too much empty space                            | Settings       | Open         |
@@ -60,6 +60,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the menu's presentation is not refined enough.
 - **Expected**: the menu reaches the polish of the reference.
 - **Today**: the menu holds the model list (shortcuts `1` to `4`, scrolling within 288 px behind fades), the reasoning level as a segmented control with a reset button and a `← →` hint, and switches such as Fast mode ([Interface: model menu](../design/ui.md#composer)). The specific problems are to be agreed when planning.
+- **Partly fixed**: the menu follows the refined [menus](../design/design-system.md#menus-and-dialogs) (content-fit width, 12.6 px radius, 6 px padding, the softer popover shadow), model and option names carry weight 500 over their descriptions, and the switches are the redesigned [switch](../design/design-system.md#switches-and-selects). What else falls short is for the maintainer to say against the reference.
 
 ## 5. Messages have no action row
 
@@ -155,6 +156,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Expected**: options show a mark with the name, which is required for agents, so a choice is recognised at a glance; and the select gets a look designed for OverBench.
 - **Today**: both selects in Settings, Default agent in General and Automatic updates in About, go through `SettingSelect` in `src/renderer/src/features/settings/controls.tsx`. It takes only a value and a label per option and renders shadcn's `Select` unchanged, which lines the chosen item up with the trigger by default (`alignItemWithTrigger`). The agents' marks already exist ([Design system: agent marks](../design/design-system.md#agent-marks)). To settle when planning: the select's design and whether other selects in the app follow it, and what "Ask each time" and options that are not agents show in place of a mark.
 - **Partly fixed**: `SettingSelect` options take an icon, shown in the list and the trigger; Default agent shows each agent's mark and a neutral `CircleHelp` for "Ask each time". The select's look is still to be designed.
+- **Fixed**: the select's list is a menu, as [switches and selects](../design/design-system.md#switches-and-selects) describes: it opens below the trigger instead of over it, at least as wide as it, with the menus' surface, radius, padding, labels and `rounded-lg` items.
 
 ## 16. Switches keep shadcn's default look
 
@@ -162,6 +164,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the switches in Settings are shadcn's stock switch, a black track with a white thumb when on.
 - **Expected**: a round of customisation in OverBench's own style.
 - **Today**: `src/renderer/src/components/ui/switch.tsx` is unchanged since it was added. The design system only lightens `--input`, the unchecked track, and leaves switches with shadcn's own feedback ([Design system: meaning](../design/design-system.md#meaning)). The same switch appears in Settings (`SettingSwitch` in `src/renderer/src/features/settings/controls.tsx`) and in the model menu, for options such as Fast mode. To settle when planning: the switch's design (size, on and off colours in both themes, thumb, motion), done together with [problem 15](#15-settings-selects-show-names-only-and-keep-the-default-look) so the settings controls match.
+- **Fixed**: the switch is redrawn as [switches and selects](../design/design-system.md#switches-and-selects) describes: a 28 × 16 px recessed pill with a lifted 12 px thumb (24 × 14 px in menus), `--primary` when on, a slide on `--duration-base` and a stretch while pressed, in both themes.
 
 ## 17. Settings › Agents leaves out what matters
 

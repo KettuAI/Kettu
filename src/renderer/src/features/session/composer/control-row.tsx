@@ -222,7 +222,7 @@ function Choices({
 function ChoiceName({ name }: { name: string }) {
   const [prefix, rest] = splitName(name)
   return (
-    <span className="break-words">
+    <span className="font-medium break-words">
       {prefix && <span className="text-muted-foreground">{prefix}</span>}
       {rest}
     </span>
@@ -370,7 +370,7 @@ function ModelMenu({
                     onClick={() => void onSelect(o.id, o.value !== true)}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span>{o.name}</span>
+                      <span className="font-medium">{o.name}</span>
                       {o.idleOnly && running ? (
                         <span className="text-xs text-muted-foreground">Changes between turns</span>
                       ) : (
