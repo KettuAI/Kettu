@@ -35,6 +35,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 27  | Agent adapters have no update check or one-click update        | Agents         | Open         |
 | 28  | The Ready label next to the status dot is redundant            | Settings       | Open         |
 | 29  | Agents that are not installed cannot be installed from here    | Settings       | Open         |
+| 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -315,3 +316,17 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether "mainstream agents" means only the three the catalog knows, or more from the ACP Registry, which brings back browsing the registry and custom agents, both left out of M0. If more, which come first.
   - How the two kinds look apart: a muted mark exists for the missing ones today, and the maintainer asks for a clear difference. The group, the mark, the state word or dot ([problem 28](#28-the-ready-label-next-to-the-status-dot-is-redundant)) and the button are the parts to design together.
   - The same split in the places that offer agents, the [project home](../design/ui.md#project-home) cards, the [Welcome](../design/ui.md#welcome) screen and the New session agent menu, and its link with the adapter updates of [problem 27](#27-agent-adapters-have-no-update-check-or-one-click-update).
+
+## 30. The session context menu lacks rename, pin and archive
+
+- **Reported**: 2026-10-22, with a screenshot of the context menu on a session row.
+- **Observed**: the menu holds **New sub-session** (with a submenu of agents), **Close** and **Delete…**, and nothing else. Common operations are missing, among them archive, rename and pin.
+- **Expected**: the menu worked out further, with the operations people expect on a session: at least archive, rename and pin, and others of the same kind.
+- **Today**: `SessionMenu` in `src/renderer/src/features/sidebar/session-row.tsx` renders those three items, and the session title menu in the top bar holds the same ones ([Interface: session](../design/ui.md#session)), so the two change together. In the [session lifecycle](../design/session-model.md#session-lifecycle) **Close** drops the live state and keeps the row in the list, and **Delete** removes the session after a confirmation; there is no archive. A [title](../design/session-model.md#titles) comes from the agent's `session_info_update`, else the first line of the first message, and the user cannot change it. Pinned sessions are [out of M0](./m0.md#out-planned-for-later-milestones), together with drag reordering. **Fork** exists, as a message action in the thread, not in this menu.
+- **To settle when planning**:
+  - **Rename**: where the user's title is kept, and that it wins over later titles from the agent, which keep arriving through `session_info_update`. ACP has no rename call, so the title would live in OverBench's index only.
+  - **Pin**: a pinned section above the projects, or pinned rows inside their project, and the pinned sessions' own order. This brings pinned sessions into the work and leaves drag reordering for later.
+  - **Archive**: what it means next to **Close**, which already leaves the row listed. Archive would take the session off the list without deleting it; how an archived one is found and restored, whether it ends the live session, and what it does to a running one.
+  - Other candidates, none asked for yet: **Fork** (already a message action), mark as read or unread, copy the session id or its transcript path, and reveal the project folder.
+  - The menu's order and grouping, its destructive item last, and the same set in the top bar's title menu.
+  - The rule changes in [Interface: sidebar](../design/ui.md#sidebar), [Interface: session](../design/ui.md#session) and the [session lifecycle](../design/session-model.md#session-lifecycle).
