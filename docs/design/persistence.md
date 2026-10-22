@@ -15,6 +15,7 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | `settings.json`       | Main       | [Settings](#settings)                                                                                                                              |
 | `window-state.json`   | Main       | Window size, position and maximized state                                                                                                          |
 | `app-state.json`      | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
+| `agents/`             | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and version                                                     |
 | `localStorage`        | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts

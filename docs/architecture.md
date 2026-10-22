@@ -84,15 +84,15 @@ The mapper also reads two adapter extensions outside ACP, for the [account and p
 
 ### Agents
 
-| Agent       | How it speaks ACP                                      | Sign-in methods it advertises                    | Logout |
-| ----------- | ------------------------------------------------------ | ------------------------------------------------ | ------ |
-| Claude Code | Official adapter `claude-agent-acp`, run with `npx`    | terminal: Claude subscription, Anthropic Console | yes    |
-| Codex       | Official adapter `codex-acp`, run with `npx`           | agent: API key, ChatGPT                          | yes    |
-| OpenCode    | Natively, `opencode acp`, from the user's installation | terminal: Login with opencode                    | no     |
+| Agent       | How it speaks ACP                                       | Sign-in methods it advertises                    | Logout |
+| ----------- | ------------------------------------------------------- | ------------------------------------------------ | ------ |
+| Claude Code | Official adapter `claude-agent-acp`, installed from npm | terminal: Claude subscription, Anthropic Console | yes    |
+| Codex       | Official adapter `codex-acp`, installed from npm        | agent: API key, ChatGPT                          | yes    |
+| OpenCode    | Natively, `opencode acp`, from the user's installation  | terminal: Login with opencode                    | no     |
 
 - Claude Code and Codex have no native ACP mode; the official adapters from the [ACP Registry](https://agentclientprotocol.com/get-started/registry) wrap them. Versions are pinned to what the registry lists and bumped deliberately after testing; the exact packages are in the [agent catalog](./design/agent-host.md#agent-catalog).
-- The adapters need Node.js 22 or later on the user's machine, because `npx` runs them. A managed install that runs them on Electron's bundled Node.js is planned after M0.
-- The registry lists `claude-agent-acp` under a proprietary license. OverBench never bundles it; `npx` fetches it on the user's machine, the same way other registry clients install it.
+- The adapters need Node.js 22 or later with npm on the user's machine. OverBench installs the pinned version into its data directory with the user's npm on first use and runs it with the user's Node.js; Electron's bundled Node.js was rejected for them ([installing adapters](./design/agent-host.md#installing-adapters)).
+- The registry lists `claude-agent-acp` under a proprietary license. OverBench never bundles it; the user's npm fetches it on the user's machine, the same way other registry clients install it.
 - OverBench uses the user's existing `opencode`, so it reuses their configuration and login. The registry's OpenCode build (1.19.3) lags behind current releases (2.0.32 was tested).
 
 What all three advertised in `initialize`:

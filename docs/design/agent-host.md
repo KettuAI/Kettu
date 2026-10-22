@@ -91,7 +91,7 @@ interface AgentDefinition {
   name: string
   registryId: string
   launch:
-    | { kind: 'npx'; package: string }
+    | { kind: 'package'; package: string; version: string } // installed from npm, run on the user's Node.js
     | { kind: 'binary'; command: string; args: string[] }
     | { kind: 'node-script'; script: string } // the fake agent, on Electron's Node.js
   requiresNode?: string
@@ -99,13 +99,13 @@ interface AgentDefinition {
 }
 ```
 
-| `id`          | `registryId` | `launch`                                             | `requiresNode` |
-| ------------- | ------------ | ---------------------------------------------------- | -------------- |
-| `claude-code` | `claude-acp` | `npx` `@agentclientprotocol/claude-agent-acp@0.94.0` | `>=22`         |
-| `codex`       | `codex-acp`  | `npx` `@agentclientprotocol/codex-acp@2.2.2`         | `>=22`         |
-| `opencode`    | `opencode`   | binary `opencode`, args `['acp']`                    | none           |
+| `id`          | `registryId` | `launch`                                                          | `requiresNode` |
+| ------------- | ------------ | ----------------------------------------------------------------- | -------------- |
+| `claude-code` | `claude-acp` | package `@agentclientprotocol/claude-agent-acp`, version `0.94.0` | `>=22`         |
+| `codex`       | `codex-acp`  | package `@agentclientprotocol/codex-acp`, version `2.2.2`         | `>=22`         |
+| `opencode`    | `opencode`   | binary `opencode`, args `['acp']`                                 | none           |
 
-- Package versions are pinned to the ACP Registry entries and bumped deliberately, after a pass with the fake agent and the real agent.
+- Package versions are pinned to the ACP Registry entries and bumped deliberately, after a pass with the fake agent and the real agent. OverBench [installs](#installing-adapters) the pinned version on first use.
 - `opencode` is looked up on `PATH` unless the user picked a binary in settings.
 - In development builds only, the catalog adds `fake-agent`, which runs `tools/fake-agent/main.ts` with Electron's own Node.js (see [testing](./testing.md#fake-agent)). It exists exactly when `host:init` carries a `fakeAgentPath`; the host runs `<electronPath> <fakeAgentPath>` with `ELECTRON_RUN_AS_NODE=1`, so it needs no Node.js on the machine.
 - Both pinned packages were checked to exist on npm with `npm view` on 2026-10-20.
@@ -113,7 +113,7 @@ interface AgentDefinition {
 
 ## Resolving the environment
 
-Apps started from the Dock, Finder, a desktop launcher or the Start menu do not get the `PATH` a terminal has, so `npx` and `opencode` are often not found.
+Apps started from the Dock, Finder, a desktop launcher or the Start menu do not get the `PATH` a terminal has, so `node`, `npm` and `opencode` are often not found.
 
 - **macOS and Linux**: the host runs the user's login shell once, the way VS Code does:
   ```text
@@ -123,24 +123,49 @@ Apps started from the Dock, Finder, a desktop launcher or the Start menu do not 
 - **Windows**: GUI apps inherit the user and system environment, so the host uses `process.env` as is. A `PATH` change made after OverBench started needs an app restart, and Settings › Agents says so.
 - The resolution times out after 10 s. On timeout or failure the host uses the inherited environment and Settings › Agents shows a warning.
 - `ELECTRON_RUN_AS_NODE` and other `ELECTRON_*` variables are removed before the environment reaches an agent.
-- A custom proxy from Settings › Advanced replaces `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms; `npx` and the agents read them. With the default, **Use the environment**, nothing is added.
+- A custom proxy from Settings › Advanced replaces `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms; npm and the agents read them. With the default, **Use the environment**, nothing is added.
 - The result is cached for the life of the host. **Reload environment** in Settings › Agents resolves it again, for example right after installing Node.js.
 
 ## Detecting agents
 
 Detection never starts an agent, so it is cheap enough to run at host startup and whenever Settings › Agents asks.
 
-- **Finding a command**: the host walks the resolved `PATH` itself. On Windows it also tries each `PATHEXT` extension, so `npx` resolves to `npx.cmd` and `opencode` to `opencode.exe`.
-- **`npx` agents**: `npx` must be found, and `node --version` must satisfy `requiresNode`. Otherwise the status is `node-missing` or `node-outdated`, with the install hint.
+- **Finding a command**: the host walks the resolved `PATH` itself. On Windows it also tries each `PATHEXT` extension, so `node` resolves to `node.exe`, `npm` to `npm.cmd` and `opencode` to `opencode.exe`.
+- **Package agents**: `node` must be found, and `node --version` must satisfy `requiresNode`. Otherwise the status is `node-missing` or `node-outdated`, with the install hint. Detection also reports whether the pinned version is [installed](#installing-adapters). Until it is, `npm` must be found too, or the status is `not-installed` with "npm was not found" as `detail`; an installed adapter runs without npm.
 - **Binary agents**: the command or the user's chosen binary must exist and be executable. Otherwise the status is `not-installed`.
 
 An agent that passes detection is `available`. It becomes `ready` only after a successful `initialize`.
+
+## Installing adapters
+
+OverBench installs the pinned Claude Code and Codex adapters once, into its data directory, with the user's npm, and runs them with the user's Node.js. A launch then costs no registry round trip. `npx -y` revalidated the package with the registry on every launch, which took about 1 s of each agent start (2026-10-21, macOS arm64, median time to the `initialize` answer):
+
+| Launch                                  | Claude Code | Codex    |
+| --------------------------------------- | ----------- | -------- |
+| `npx -y <package>@<version>`            | 1,563 ms    | 1,411 ms |
+| `node <entry>` of the installed package | 211 ms      | 151 ms   |
+
+The approach follows Zed's registry agents (`agent_server_store.rs`), which install into the app's data directory and run `node <bin>`. Zed runs `npm install` with a version range before every launch; OverBench pins exact versions, so it installs only when the pinned version changes.
+
+- **Where**: `<userData>/agents/<agentId>/<version>/`, with the package under `node_modules`, the `package.json` and `package-lock.json` npm works from, and `installed.json` (package, version, Node.js and npm versions, install time), which is written last. A version directory without `installed.json` does not count as installed.
+- **When**: at the first start of an agent whose pinned version is not installed, whether a session, the New session screen's early start or **Check plan limits** asked for it. Detection never installs. Meanwhile the agent is `installing`, with npm's latest output as `progress`, and every start that waits on it shares the one install.
+- **Installing**: in a fresh `.partial-<random>` directory beside the version directories, the host writes a `package.json` that depends on exactly the pinned version, then runs `npm install --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=http` there with the agent environment. npm reads the user's `.npmrc`, so a registry mirror, a token and npm's own proxy settings apply, and it reuses the npm cache that `npx` filled before. When npm exits with 0 and the package's entry exists, the host writes `installed.json` and renames the directory to `<version>`, which is atomic on one volume; otherwise it deletes the directory. Every argument is a constant and the location is the working directory, so the [`.cmd` rule](#spawning) holds for `npm.cmd` too. `.partial-*` directories left by a quit or a crash are deleted before the next install.
+- **Install scripts**: neither pinned adapter nor any of its dependencies has an install script; both bring their native binary (Claude Code's CLI, Codex) as platform-specific optional dependencies (checked 2026-10-21). `--ignore-scripts` keeps it so: a version bump whose install needs a script fails its pass with the real agent instead of running unreviewed code.
+- **Dependencies**: the adapter's own dependencies resolve within its ranges at install time, as they did with `npx`, and stay fixed until the next install. The lock file and `installed.json` record what was installed, and Export diagnostics includes both.
+- **Time limit**: an install that has not finished after 15 minutes is stopped with its process tree, the way an [agent is stopped](#stopping-an-agent). Quitting stops a running install the same way.
+- **Running**: the host reads `bin` from the installed package's `package.json`, taking its only entry or the one named after the package without its scope, requires the resolved path to stay inside the package folder, and spawns `<node> <entry>` with the absolute `node` path that detection found, never through a shell. Inside the adapter, `process.execPath` is then the user's Node.js, which codex-acp uses to start Codex.
+- **Updates**: a release that bumps a pinned version installs the new one at the agent's first start after the update. Once the new version answers `initialize`, the agent's older version directories are deleted in the background. If the install fails while an older version is installed, the host starts the newest older one instead, says so in `detail` ("Running 0.93.0: 0.94.0 could not be installed. …") and tries the install again at the next start, so updating while offline does not take an agent away. With no older version, the agent is `failed` with npm's last error lines as `detail`, and **Retry** installs again.
+- **Reinstall**: Settings › Agents offers **Reinstall** for Claude Code and Codex while the agent is not running (`agents.reinstall`). It deletes the installed version and installs it again at once, for an install damaged on disk.
+- **Disk**: each adapter takes about 330 MB (2026-10-21), almost all of it the native binary. The copies under `~/.npm/_npx` that earlier builds' `npx` left belong to npm and are left alone.
 
 ## Agent process lifecycle
 
 ```mermaid
 stateDiagram-v2
   [*] --> available: detected
+  available --> installing: first start, pinned version missing
+  installing --> starting: installed
+  installing --> failed: npm failed or timed out
   available --> starting: first session needs it
   starting --> ready: initialize succeeded
   starting --> failed: spawn error, timeout or protocol mismatch
@@ -157,7 +182,7 @@ stateDiagram-v2
 - **Idle stop**: an agent with no live sessions for 30 minutes is stopped to free memory, and starts again on demand.
 - **Restarts**: if an agent exits while it has live sessions, the host restarts it with backoff (1 s, 2 s, 4 s, up to 30 s) and resumes those sessions ([session model](./session-model.md#recovering-after-a-crash)). After five failed restarts in five minutes it gives up and marks the agent `failed`; the user can retry. Crashes and failed restarts both count toward the five. A start on demand that fails marks the agent `failed` at once, with the reason as `detail`.
 - **Live sessions** are those the host holds that are `starting`, `auth_required`, `ready`, `running`, `awaiting_permission` or `disconnected`; they decide both restarts and the idle stop.
-- **Timeouts**: `initialize` must answer within 180 s on an agent's first launch in the host's lifetime, because `npx` may be downloading the adapter, and within 30 s afterwards. The host cannot tell whether `npx` has the adapter cached, so every agent's first launch gets the long timeout.
+- **Timeouts**: `initialize` must answer within 30 s. Installing is a step of its own before the launch, with its own [time limit](#installing-adapters), so a launch never waits for a download.
 
 ### Spawning
 
@@ -172,11 +197,11 @@ spawn(command, args, {
 })
 ```
 
-- **`npx` agents** run `npx -y <package>`.
+- **Package agents** run `<node> <entry>`, both absolute paths ([installing adapters](#installing-adapters)).
 - **Working directory**: the process runs in the home directory. Each session's project folder reaches the agent as `cwd` in `session/new`, `session/load` and `session/resume`.
-- **Process groups**: on macOS and Linux, `detached: true` puts the agent and everything it spawns (`npx`, Node.js, the agent CLI) in its own process group, so the whole tree can be stopped together.
-- **Windows `.cmd` shims**: Node.js refuses to spawn `.cmd` and `.bat` files without a shell (CVE-2024-27980), so `needsShell` is true only for a resolved `.cmd` file. That is safe because every argument comes from the catalog; nothing the user or an agent typed ever reaches the command line.
-- **stderr** goes into a 64 KB ring buffer per agent. While an agent is `starting`, its latest stderr lines are shown as progress, which makes the first `npx` download visible.
+- **Process groups**: on macOS and Linux, `detached: true` puts the agent and everything it spawns (Node.js, the agent CLI and the commands it runs) in its own process group, so the whole tree can be stopped together.
+- **Windows `.cmd` shims**: Node.js refuses to spawn `.cmd` and `.bat` files without a shell (CVE-2024-27980), so `needsShell` is true only for a resolved `.cmd` file, such as `npm.cmd` during an install or an `opencode.cmd` shim. That is safe because every argument comes from the catalog; nothing the user or an agent typed ever reaches the command line.
+- **stderr** goes into a 64 KB ring buffer per agent. While an agent is `installing` or `starting`, the latest lines of npm's output or of the agent's stderr are shown as progress.
 
 ### Connecting
 
@@ -221,7 +246,7 @@ The same sequence runs on idle stop, restart and quit, for every agent in parall
 ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The host then sets the agent's sign-in state, and every session waiting on it shows the agent's `authMethods`.
 
 - **`agent` methods** (Codex): the host calls `authenticate` with the method `id`. The agent runs its own flow, such as opening the browser. On success the host retries what failed.
-- **`terminal` methods** (Claude Code, OpenCode): the agent must run interactively. The command is the agent's launch command plus the method's `args`, with its `env` and the launch's variables as a prefix (`NAME=value …` on macOS and Linux, `set "NAME=value" && …` on Windows), for example `npx -y @agentclientprotocol/claude-agent-acp@0.94.0 --cli auth login --claudeai` or `opencode acp --login`. **Sign in in terminal** runs that command in the built-in [terminal](./terminal.md#working-with-the-session) and retries when it finishes. The command is also shown quoted for the user's platform, with a copy button and **I've signed in, retry**, for those who prefer their own terminal.
+- **`terminal` methods** (Claude Code, OpenCode): the agent must run interactively. The command is the agent's launch command plus the method's `args`, with its `env` and the launch's variables as a prefix (`NAME=value …` on macOS and Linux, `set "NAME=value" && …` on Windows), for example `<node> <userData>/agents/claude-code/0.94.0/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js --cli auth login --claudeai` or `opencode acp --login`. **Sign in in terminal** runs that command in the built-in [terminal](./terminal.md#working-with-the-session) and retries when it finishes. The command is also shown quoted for the user's platform, with a copy button and **I've signed in, retry**, for those who prefer their own terminal.
 - **Logout** is offered only when the agent advertises `agentCapabilities.auth.logout`. It calls `logout`; the agent's sessions then need sign-in again.
 - Claude Code and Codex also push `_auth/status_update`, an adapter extension that names the account and plan ("Claude Max", "ChatGPT Plus"). It sets the sign-in state without waiting for a failed request, and the plan label heads the [plan limits](./session-model.md#plan-limits).
 - OverBench never reads, stores or forwards credentials.
@@ -245,22 +270,23 @@ ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The 
 
 ## Platform differences
 
-| Concern                   | macOS                                                                   | Linux                          | Windows                                                     |
-| ------------------------- | ----------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------- |
-| Environment at launch     | Minimal `PATH`; resolve the login shell                                 | Same as macOS                  | Inherited user and system environment                       |
-| Finding commands          | `PATH`                                                                  | `PATH`                         | `PATH` with `PATHEXT` (`npx.cmd`, `opencode.exe`)           |
-| Spawning                  | Direct                                                                  | Direct                         | `.cmd` shims through a shell, with catalog-only arguments   |
-| Process tree              | Own process group (`detached`)                                          | Own process group (`detached`) | No groups; `taskkill /T`                                    |
-| Stopping                  | EOF, `SIGTERM`, `SIGKILL` to the group                                  | Same as macOS                  | EOF, then `taskkill /T /F`                                  |
-| Path comparison           | Canonicalize with `fs.realpath.native`; volumes may be case-insensitive | Canonicalize; case-sensitive   | Canonicalize; case-insensitive, drive letters and UNC paths |
-| Line endings from tools   | LF                                                                      | LF                             | Often CRLF; normalized before rendering                     |
-| Data directory            | `~/Library/Application Support/OverBench`                               | `~/.config/OverBench`          | `%APPDATA%\OverBench`                                       |
-| Shell quoting for display | POSIX single quotes                                                     | POSIX single quotes            | `cmd.exe` double quotes                                     |
+| Concern                   | macOS                                                                   | Linux                          | Windows                                                       |
+| ------------------------- | ----------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------- |
+| Environment at launch     | Minimal `PATH`; resolve the login shell                                 | Same as macOS                  | Inherited user and system environment                         |
+| Finding commands          | `PATH`                                                                  | `PATH`                         | `PATH` with `PATHEXT` (`node.exe`, `npm.cmd`, `opencode.exe`) |
+| Spawning                  | Direct                                                                  | Direct                         | `.cmd` shims through a shell, with catalog-only arguments     |
+| Process tree              | Own process group (`detached`)                                          | Own process group (`detached`) | No groups; `taskkill /T`                                      |
+| Stopping                  | EOF, `SIGTERM`, `SIGKILL` to the group                                  | Same as macOS                  | EOF, then `taskkill /T /F`                                    |
+| Path comparison           | Canonicalize with `fs.realpath.native`; volumes may be case-insensitive | Canonicalize; case-sensitive   | Canonicalize; case-insensitive, drive letters and UNC paths   |
+| Line endings from tools   | LF                                                                      | LF                             | Often CRLF; normalized before rendering                       |
+| Data directory            | `~/Library/Application Support/OverBench`                               | `~/.config/OverBench`          | `%APPDATA%\OverBench`                                         |
+| Shell quoting for display | POSIX single quotes                                                     | POSIX single quotes            | `cmd.exe` double quotes                                       |
 
 Paths are always compared after canonicalizing with `path.resolve` and `fs.realpath.native`, never as raw strings. On Windows only drive paths (`C:\…`) and UNC paths count as absolute; a path such as `\src` depends on the host's current drive and is refused.
 
 ## Alternatives considered
 
 - **One agent process per session**: stronger isolation, but every session pays the startup cost and the memory. ACP already multiplexes sessions, so M0 shares one process per agent.
-- **Running the adapters on Electron's Node.js** (`ELECTRON_RUN_AS_NODE`): removes the Node.js requirement, but OverBench would need its own install and update pipeline for the adapters. Planned after M0.
+- **Running the adapters on Electron's Node.js** (`ELECTRON_RUN_AS_NODE`): rejected on 2026-10-21. It would remove the Node.js requirement, but the variable reaches every command the agent runs, so an Electron app the agent starts, such as `pnpm dev` in an Electron project, runs as plain Node.js instead (a child `electron --version` printed `v24.22.0`). Removing it for the adapter's children breaks codex-acp, which starts Codex through `process.execPath`. A wrapper around `process.execPath` that restores it is fragile, and on Windows a `.cmd` wrapper cannot be spawned without a shell. The user's Node.js starts the adapters as fast (211 ms against 213 ms for Claude Code's `initialize`).
+- **Keeping `npx`**: `npx --prefer-offline` skips the registry check but still took 557 ms (Claude Code) and 476 ms (Codex) to `initialize`, and its cache is npm's to evict, which turns a launch into a silent download.
 - **Bundling adapters in the installer**: rejected; `claude-agent-acp` is proprietary and adapters update faster than OverBench releases.
