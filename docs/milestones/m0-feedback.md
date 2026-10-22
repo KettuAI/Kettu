@@ -32,6 +32,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 24  | The Projects header row can go; each project gets a +          | Sidebar        | Open         |
 | 25  | The sidebar footer needs a design of its own                   | Sidebar        | Open         |
 | 26  | Account details cannot be hidden                               | Settings       | Open         |
+| 27  | Agent adapters have no update check or one-click update        | Agents         | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -273,3 +274,18 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - What counts as account details: the email for sure; the plan label, and paths that carry the user name (OpenCode's config folder in the list), were not named.
   - The mask itself: a blur that stays illegible in screenshots, with the value withheld from the accessibility tree and from search while hidden, not only painted over. It must work in both themes and keep the row's layout.
   - Where else an email may appear later (the usage popover shows the plan only today), so the mask is one shared piece, not a per-screen patch.
+
+## 27. Agent adapters have no update check or one-click update
+
+- **Reported**: 2026-10-22.
+- **Observed**: nothing tells the user that a newer version of an agent's ACP adapter exists, and nothing updates one.
+- **Expected**: the app detects new adapter versions by itself and says so, so the user can decide whether to update. Updating is one button that does the whole job. The notice shows in Settings › Agents and also on the home screen: a user who opens the Agents page once in a long while would otherwise never learn that an update exists.
+- **Today**: [Agent host: installing adapters](../design/agent-host.md#installing-adapters) pins exact adapter versions (`claude-agent-acp` 0.94.0, `codex-acp` 2.2.2), "bumped deliberately, after a pass with the fake agent and the real agent", and installs a pinned version once into `<userData>/agents/<agentId>/<version>/`. A newer adapter reaches users only through an OverBench release that bumps the pin, installed at the agent's first start after that update. No code asks npm or the ACP Registry for a newer version. Settings › Agents shows the CLI version the adapter runs, and has **Reinstall** for a damaged install. OpenCode is no adapter: it is the user's own `opencode` binary, found on `PATH`. The [app's update notice](../design/ui.md#updates) is the existing pattern for "something to decide", and only the app's updater feeds it.
+- **To settle when planning**:
+  - Where the latest version comes from (the ACP Registry entry or the npm registry through the user's npm) and how often it is checked. The check has to run off the main thread, honour the user's `.npmrc` and proxy, and cost nothing when offline.
+  - Whether any newer version is offered or only ones OverBench has verified. The pin exists because an unchecked adapter can break the thread (the SDK validates every `session/update` against its schema), so a one-click update trades that safety for freshness; a version range or a compatibility check could sit between the two.
+  - What the update does: install beside the running version and switch once it answers `initialize`, as a pin bump does now, and what happens to sessions running on the old one (wait, ask first as **Reinstall** and the app's **Restart** do, or restart the agent). The old version stays until the new one runs, so a failed update leaves the agent working.
+  - What the user sees as the version: for Claude Code the CLI is bundled in the adapter, so the wish is probably "Claude Code 2.1.303 → newer", not the adapter's number. Whether the registry or npm can say which CLI an adapter version carries.
+  - Where the notice shows: Settings › Agents (the list row and the agent's page, with an **Update** button and its progress) and the home screens, the [project home](../design/ui.md#project-home)'s agent cards and the [Welcome](../design/ui.md#welcome) screen. Whether the sidebar footer, which already holds the update and sign-in notices, needs one too. It should be quiet and neutral like the app's update notice, with a way to dismiss a version.
+  - What OpenCode gets: nothing, or a notice that a newer release exists with a pointer to how the user installed it.
+  - The rule changes in [Agent host: installing adapters](../design/agent-host.md#installing-adapters), where pins are "bumped deliberately", and in [Interface: settings](../design/ui.md#settings--agents).
