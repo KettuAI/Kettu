@@ -241,9 +241,9 @@ export default function SettingsPage() {
 function SectionBody({ section }: { section: SectionDef }) {
   if (section.rows.every((r) => r.layout === 'custom')) {
     return (
-      <div className="flex flex-col gap-2.5">
-        {section.rows.map((row) => (
-          <div key={row.id} className="rounded-xl bg-card px-4 py-3.5 shadow-card">
+      <div className="flex flex-col">
+        {section.rows.map((row, i) => (
+          <div key={row.id} className={cn('px-1 py-4', i > 0 && 'border-t border-border-soft')}>
             {row.render(null)}
           </div>
         ))}
@@ -251,7 +251,7 @@ function SectionBody({ section }: { section: SectionDef }) {
     )
   }
   return (
-    <div className="flex flex-col rounded-xl bg-card shadow-card">
+    <div className="flex flex-col">
       {section.rows.map((row, i) => (
         <Row key={row.id} row={row} first={i === 0} />
       ))}
@@ -269,7 +269,7 @@ function Row({ row, first }: { row: RowDef; first: boolean }) {
     </div>
   )
   return (
-    <div className={cn('px-4 py-3', !first && 'border-t border-border-soft')}>
+    <div className={cn('px-1 py-3', !first && 'border-t border-border-soft')}>
       {row.layout === 'block' ? (
         row.render(text)
       ) : (
