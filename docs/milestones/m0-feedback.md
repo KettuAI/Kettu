@@ -59,7 +59,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 51  | The open pane's toggle hardly looks pressed                    | Top bar        | Fixed        |
 | 52  | The file list cannot be hidden while reading a file            | Side panel     | Fixed        |
 | 53  | No line where the sidebar meets the thread                     | Layout         | Fixed        |
-| 54  | Opening a session starts its agent and keeps it running        | Performance    | Open         |
+| 54  | Opening a session starts its agent and keeps it running        | Performance    | Partly fixed |
 | 55  | A short thread still scrolls into empty space                  | Thread         | Fixed        |
 | 56  | The empty Files pane's hint is not centred                     | Side panel     | Fixed        |
 | 57  | A finished session leaves no mark, and the running dot is loud | Sidebar        | Fixed        |
@@ -785,7 +785,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The six `claude` processes each carried `--resume` with the id of one of the six Claude Code sessions in the index, all opened in that run, the first restored at launch; none was orphaned. The `node` processes are the Claude Code adapter (84 MB RSS), the Codex adapter (57 MB) and `codex.js` (38 MB), the npm launcher that only starts Codex's binary.
   - Codex starts the MCP servers of `~/.codex/config.toml` per thread, here ChatGPT's `computer-use` and `node_repl`, each in a process group of its own, which the stop sequence's signal to the agent's group does not reach.
 - **Decided**: 2026-10-22, by the maintainer. OverBench keeps its own copy of each thread in SQLite through `node:sqlite`, in a worker thread of the host, read a page at a time from the latest turn, 60 entries back to the start of their turn and at most 500, with images over 32 KB stored apart ([Persistence: threads](../design/persistence.md#threads)). Then: open from the copy without an agent, connect an agent with `session/resume` only to continue, release an idle session's agent with `session/close`, and stop agent process trees whole.
-- **In progress**: the thread database, its worker and the host's store are built and tested, and the worker runs in the production build and the packaged app; nothing reads or writes threads yet.
+- **Partly fixed**: sessions store their threads as they change, and opening one reads the latest page from the store and starts no agent; older pages load as the thread scrolls back. A session attaches to its agent with `session/resume` only when it sends a prompt, changes a setting or forks, and the message shows at once ([Session model](../design/session-model.md#how-the-host-keeps-sessions)). Measured in the production build: a closed session of 1,000 or 4,000 entries reopens with its first paint in 38 to 51 ms and no frame over 50 ms; a message sent from it shows in 93 ms while the agent attaches. Still open: releasing an idle session's agent with `session/close`, sessions after an agent crash, and stopping agent process trees whole.
 
 ## 55. A short thread still scrolls into empty space
 

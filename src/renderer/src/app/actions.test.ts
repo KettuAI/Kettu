@@ -18,17 +18,27 @@ const { chooseNewSessionProject, useViewStore } = await import('@renderer/stores
 
 const summary = { id: 's1', projectPath: '/repo' } as SessionSummary
 
+const replica = {
+  state: null,
+  seq: 0,
+  status: 'ready',
+  error: null,
+  older: null,
+  loadingOlder: false,
+  plan: null,
+} as const
+
 describe('closeSession', () => {
   beforeEach(() => {
     request.mockReset()
     request.mockResolvedValue(undefined)
     useSessionsStore.setState({ byId: { s1: summary } })
     useThreadsStore.setState({
-      replicas: { s1: { state: null, seq: 3, status: 'ready', error: null } },
+      replicas: { s1: { ...replica, seq: 3 } },
     })
   })
 
-  it('drops the replica, so opening the session again loads it from the agent', async () => {
+  it('drops the replica, so opening the session again loads it afresh', async () => {
     useViewStore.setState({ main: { kind: 'home' }, projectPath: '/repo' })
     await closeSession('s1')
     expect(request).toHaveBeenCalledWith('sessions.close', { sessionId: 's1' })
@@ -41,8 +51,8 @@ describe('closeSession', () => {
     useSessionsStore.setState({ byId: { s1: summary, s2: child } })
     useThreadsStore.setState({
       replicas: {
-        s1: { state: null, seq: 3, status: 'ready', error: null },
-        s2: { state: null, seq: 1, status: 'ready', error: null },
+        s1: { ...replica, seq: 3 },
+        s2: { ...replica, seq: 1 },
       },
     })
     useViewStore.setState({ main: { kind: 'session', sessionId: 's2' }, projectPath: '/repo' })

@@ -210,8 +210,14 @@ interface PatchBatch {
 }
 interface SessionSnapshot {
   session: SessionView
-  entries: ThreadEntry[]
+  entries: ThreadEntry[] // the latest page of the thread, or every entry from `from`
   seq: number
+  older: number | null // the cursor for the page before `entries`; null when they start the thread
+  plan: PlanEntry | null // the latest plan, when it lies before `entries`
+}
+interface OlderPage {
+  entries: ThreadEntry[]
+  older: number | null
 }
 ```
 
@@ -219,7 +225,17 @@ interface SessionSnapshot {
 - A renderer applies a batch only if its `seq` is exactly one more than the last it applied. On a gap it requests a fresh snapshot and drops batches older than it.
 - `applyPatches` returns new objects only for what changed, so a component that selects one entry re-renders only when that entry changes.
 - Entries are kept in arrival order. Updates change entries in place; nothing is reordered.
-- `entry.update` or `entry.appendText` for an unknown id is a bug: the host logs it to diagnostics, and a renderer that sees one requests a snapshot.
+- `entry.update` or `entry.appendText` for an unknown id is a bug: the host logs it to diagnostics, and a renderer that sees one requests a snapshot. A renderer that holds only the latest pages of a thread skips one instead, since the entry may be on a page it has not loaded, which it then reads as patched.
+
+### Pages
+
+A snapshot carries the latest page of the thread, not all of it, and older pages are read on demand, so a session with a long history opens as fast as a short one:
+
+- Entries have positions, their arrival order from 0, which are kept with the [stored thread](./persistence.md#threads). A page reaches back at least 60 entries, then on to the start of their turn, and at most 500 entries in all. The host pages a live thread from memory by the same rules, so a page is the same whether the session is live or not.
+- `older` is the position of the page's first entry while entries lie before it, and `null` once the page starts the thread. `sessions.page { sessionId, before }` returns the page that ends before that position, with its own `older`.
+- `plan` is the thread's latest plan when it lies before the page, for the plan pinned above the composer.
+- `sessions.snapshot` with `from` returns every entry from that position on, so a renderer that refetches after a gap keeps the older pages it had: it passes its `older`, or 0 once it holds the whole thread.
+- A live session's patches go out before the answer to `sessions.page`, and a renderer applies the batches it has before it prepends the page, so the page and the patches agree.
 
 ### Entry ids
 
@@ -298,8 +314,10 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 | Action                     | ACP                                               | Result                                                                                               |
 | -------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Create                     | `session/new` with `cwd` and `mcpServers: []`     | `acpSessionId`, config options and modes; then `ready`. The index entry is saved once this succeeds. |
-| Open from history          | `session/load`                                    | `thread.reset`, then the replayed history as patches, then `ready`.                                  |
+| Open                       | None                                              | The stored thread's latest page, in `closed`; the agent is not started.                              |
+| Open with no stored thread | `session/load`                                    | `thread.reset`, then the replayed history as patches, then `ready`; the thread is then stored.       |
 | Open without `loadSession` | `session/resume`                                  | `ready` with an info notice that earlier history is not available.                                   |
+| Attach on use              | `session/resume`                                  | A `closed` session that sends a prompt, changes a setting or forks attaches to its agent first.      |
 | Recover after a crash      | `session/resume` once the agent restarts          | `ready`, with the thread kept from memory.                                                           |
 | Close                      | `session/close` when supported                    | Live state dropped; the index entry stays, so it can be reopened.                                    |
 | Delete                     | `session/delete` when supported                   | Removed from the agent and from the index, after the user confirms.                                  |
@@ -314,13 +332,15 @@ When an agent process exits, its live sessions become `disconnected` and keep th
 
 These details are settled by the implementation in `src/agent-host/sessions.ts`:
 
-- **Live and closed**: a session is live while the host holds its thread. A session that is only in the index reports `status: 'closed'`, and its snapshot has the stored title and no entries; `sessions.open` makes it live with `session/load`, or `session/resume` with the notice above.
+- **Live and closed**: a session is live while the host holds its thread in memory. A session that is not live reports `status: 'closed'`, and its snapshot is read from the [thread store](./persistence.md#threads): the index's title, the stored config, commands and usage, and the latest page of entries, settled, as no agent is attached to finish them (nothing streams, an unfinished tool call or compaction is `cancelled`, and a pending permission request is `withdrawn`). A session with no stored thread, such as one just imported, or one whose stored thread belongs to another ACP session, has none of that, and `sessions.open` makes it live with `session/load`, or `session/resume` with the notice above, and stores the thread it gets.
+- **Attaching on use**: a closed session takes a prompt, a queued prompt, a setting or a fork. The host first brings it back into memory from the stored thread, still `closed` and without its agent, together with its subagents, so updates about one add to the thread it has. A prompt then shows at once: the user entry is added and the turn starts `running` while the session attaches with `session/resume`, or with `session/load` whose replay is set aside for an agent that cannot resume. A setting or a fork attaches it first and leaves it `ready`; ultracode goes out with the next attach and needs none. A cancel while it attaches ends the turn at once. When the attach fails, the turn ends and the session goes to `failed` (or `auth_required`), and **Retry** sends the prompt again. Claude Code cannot resume a session nothing was sent to (`-32002`, resource not found): when the agent never answered in the thread, the host starts a new ACP session in its place with `session/new` and keeps the thread.
+- **Checkpoints**: the host stores each live session's thread as it changes. It notes the entries and the parts of the view each patch changes, and writes them at most 5 s after a change, at once when a turn ends, after a replay, when the session closes and when the host shuts down. A write that fails is logged, and the next one writes the whole thread again. A replay that fails partway is not stored.
 - **Create**: `sessions.create` sends the session's summary with `starting` at once, and resolves when `session/new` succeeds. When it fails with `auth_required`, it resolves anyway, with the session live in `auth_required` but not yet in the index; signing in, or `sessions.retry`, runs `session/new` again. Any other failure rejects the request and sends `session.removed`. Creating a session also adds its folder to the projects, unless the folder is a [scratch folder](#sessions-without-a-project).
-- **Open**: `sessions.open` waits for the load or resume, so its snapshot already holds the replay. A renderer watches first, so it also receives the replay's patches. When the agent cannot start, or the load fails, the session stays live in `failed` (or `auth_required`) and the snapshot shows it, for **Retry**.
-- **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in, `session/load` for a failed load or resume, and for a `disconnected` session it restarts the agent, whose restart resumes it. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
+- **Open**: `sessions.open` of a session with a stored thread reads its latest page and starts nothing. Otherwise it waits for the load or resume, so its snapshot already holds the replay. A renderer watches first, so it also receives the replay's patches. When the agent cannot start, or the load fails, the session stays live in `failed` (or `auth_required`) and the snapshot shows it, for **Retry**.
+- **Retry**: `sessions.retry` re-runs what failed: `session/new` for a create, the prompt for a prompt that needed sign-in or whose session could not attach, `session/load` for a failed load or resume, and for a `disconnected` session it restarts the agent, whose restart resumes it. It first clears the agent's `failed` state if needed, as `agents.retry` does. When an agent reports a successful sign-in, every session of it waiting in `auth_required` is retried on its own.
 - **Unread**: a session counts as seen only while a port shows it in front (`sessions.show`). A renderer also keeps a few recent sessions watched, so switching back is instant, and those do not count. Showing a session, leaving it, and a turn ending while it is in front set `lastViewedAt`; a turn ending while no port shows it sets `unread`. After a restart a session is unread when `updatedAt` is later than `lastViewedAt`; a session never viewed (`lastViewedAt: null`) is not.
 - **Attention** is `permission` while a request is pending, then `error` for a `failed` session or a set `error` the user has not seen, then `unread`. An error is seen once the session is shown, or when it happens while a port shows it; the error notice stays in the thread, and the session keeps `error` set until its next turn. A `failed` session keeps its mark until it recovers, since its **Retry** still waits for the user.
-- **Fork**: `sessions.fork` takes a top-level session that is `ready` and calls `session/fork` (ACP's unstable schema, only when `sessionCapabilities.fork` is advertised). The new session is saved at once, with the source's title, config and usage, and shows a copy of the source's thread without its subagent cards, whose sub-sessions stay with the source; its next ids continue after the copied ones. A later open replays the fork's own history from the agent.
+- **Fork**: `sessions.fork` takes a top-level session that is `ready`, or `closed`, which attaches first since not every agent forks a session it does not have open, and calls `session/fork` (ACP's unstable schema, only when `sessionCapabilities.fork` is advertised). The new session is saved at once, with the source's title, config and usage, and shows a copy of the source's thread without its subagent cards, whose sub-sessions stay with the source; its next ids continue after the copied ones. A later open replays the fork's own history from the agent.
 - **Sequence numbers** continue across a close and a reopen, so a port still holding an old replica sees a gap and asks for a snapshot instead of mixing two runs.
 
 ### Sessions without a project

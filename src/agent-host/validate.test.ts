@@ -37,6 +37,22 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'gemini' }))
   })
 
+  it('takes positions as whole numbers from 0', () => {
+    expect(posix['sessions.snapshot']({ sessionId: 's' })).toEqual({ sessionId: 's' })
+    expect(posix['sessions.snapshot']({ sessionId: 's', from: 0 })).toEqual({
+      sessionId: 's',
+      from: 0,
+    })
+    expect(posix['sessions.page']({ sessionId: 's', before: 140 })).toEqual({
+      sessionId: 's',
+      before: 140,
+    })
+    rejects(() => posix['sessions.page']({ sessionId: 's' }))
+    rejects(() => posix['sessions.page']({ sessionId: 's', before: -1 }))
+    rejects(() => posix['sessions.page']({ sessionId: 's', before: 1.5 }))
+    rejects(() => posix['sessions.snapshot']({ sessionId: 's', from: '3' }))
+  })
+
   it('wants absolute paths by the platform rules', () => {
     expect(posix['projects.add']({ path: '/Users/me/app' })).toEqual({ path: '/Users/me/app' })
     rejects(() => posix['projects.add']({ path: 'app' }))

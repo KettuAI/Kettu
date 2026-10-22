@@ -37,6 +37,22 @@ export const EMPTY_SESSION: StoredSession = {
   subagent: null,
 }
 
+export function storedSession(view: SessionView): StoredSession {
+  const { title, config, commands, usage, subagent } = view
+  return { title, config, commands, usage, subagent }
+}
+
+/** Whether a `session.update` changes what is stored of the session. */
+export function changesStored(changes: Partial<SessionView>): boolean {
+  return (
+    'title' in changes ||
+    'config' in changes ||
+    'commands' in changes ||
+    'usage' in changes ||
+    'subagent' in changes
+  )
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -106,6 +122,31 @@ export interface StoredThread {
   entries: PositionedEntry[]
 }
 
+/**
+ * An entry as it stands with no agent attached to finish it: nothing streams, an unfinished tool
+ * call or compaction was cut off, and a permission request has no one to answer it.
+ */
+export function settled(entry: ThreadEntry): ThreadEntry {
+  switch (entry.kind) {
+    case 'agent':
+    case 'thought':
+      return entry.streaming ? { ...entry, streaming: false } : entry
+    case 'compaction':
+      return entry.status === 'in_progress' ? { ...entry, status: 'cancelled' } : entry
+    case 'tool': {
+      const open = entry.status === 'pending' || entry.status === 'in_progress'
+      if (!open && entry.permission === null) return entry
+      return {
+        ...entry,
+        ...(open ? { status: 'cancelled' as const } : {}),
+        ...(entry.permission ? { permission: null, permissionResult: 'withdrawn' as const } : {}),
+      }
+    }
+    default:
+      return entry
+  }
+}
+
 /** Whether `entry` starts a turn: a prompt of its own, or whatever follows the end of one. */
 export function opensTurn(entry: ThreadEntry, previous: { kind: string } | null): boolean {
   if (entry.kind === 'user') return entry.steered !== true
@@ -122,6 +163,21 @@ export function turnOf(
   previous: { kind: string; turn: number } | null,
 ): number {
   return previous === null || opensTurn(entry, previous) ? pos : previous.turn
+}
+
+/**
+ * The index the page ending before index `end` of a thread in memory starts at, by the rules the
+ * database pages by: back at least PAGE_ENTRIES entries to the start of their turn, at most
+ * PAGE_LIMIT entries in all.
+ */
+export function pageStart(
+  order: readonly string[],
+  byId: Readonly<Record<string, ThreadEntry>>,
+  end: number,
+): number {
+  let start = Math.max(0, end - PAGE_ENTRIES)
+  while (start > 0 && !opensTurn(byId[order[start]!]!, byId[order[start - 1]!]!)) start--
+  return Math.max(start, end - PAGE_LIMIT)
 }
 
 type Json = Record<string, unknown>

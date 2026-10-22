@@ -1,22 +1,40 @@
 import { create } from 'zustand'
 import {
   applyPatches,
+  prependEntries,
   threadFromSnapshot,
   UnknownEntryError,
+  type OlderPage,
   type PatchBatch,
+  type PlanEntry,
   type SessionSnapshot,
   type ThreadState,
 } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
 
-// The renderer's replicas of the sessions it shows. Each starts from a snapshot and applies
-// patch batches in sequence order; a gap or a patch for an unknown entry refetches a snapshot.
+// The renderer's replicas of the sessions it shows. Each starts from a snapshot of the latest
+// page of the thread, takes older pages as the thread scrolls back, and applies patch batches in
+// sequence order; a gap or a patch for an unknown entry refetches a snapshot.
 
 export interface Replica {
   state: ThreadState | null // null until the first snapshot arrives
   seq: number
   status: 'loading' | 'ready' | 'error'
   error: string | null
+  /** The cursor for the page before the loaded ones, or null once the thread's start is loaded. */
+  older: number | null
+  loadingOlder: boolean
+  /** The latest plan when it lies before the loaded pages. */
+  plan: PlanEntry | null
+}
+
+const EMPTY: Omit<Replica, 'status'> = {
+  state: null,
+  seq: 0,
+  error: null,
+  older: null,
+  loadingOlder: false,
+  plan: null,
 }
 
 interface ThreadsStore {
@@ -57,13 +75,20 @@ function fetchSnapshot(
 ): Promise<void> {
   const existing = snapshotsInFlight.get(sessionId)
   if (existing) return existing
-  const run = host(method, { sessionId })
+  const current = useThreadsStore.getState().replicas[sessionId]
+  // A replica that holds older pages keeps them: the snapshot reaches back as far as it does.
+  const request =
+    method === 'sessions.snapshot' && current?.state
+      ? host(method, { sessionId, from: current.older ?? 0 })
+      : host(method, { sessionId })
+  const run = request
     .then((snapshot) => receiveSnapshot(sessionId, snapshot))
     .catch((error: unknown) => {
-      const current = useThreadsStore.getState().replicas[sessionId]
+      const latest = useThreadsStore.getState().replicas[sessionId]
       setReplica(sessionId, {
-        state: current?.state ?? null,
-        seq: current?.seq ?? 0,
+        ...EMPTY,
+        ...latest,
+        loadingOlder: false,
         status: 'error',
         error: errorMessage(error),
       })
@@ -78,13 +103,22 @@ function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
   let seq = snapshot.seq
   const buffered = (pending.get(sessionId) ?? []).sort((a, b) => a.seq - b.seq)
   pending.delete(sessionId)
+  const partial = snapshot.older !== null
   for (const batch of buffered) {
     if (batch.seq <= seq) continue
     if (batch.seq !== seq + 1) break
-    state = applyPatches(state, batch.patches)
+    state = applyPatches(state, batch.patches, { partial })
     seq = batch.seq
   }
-  setReplica(sessionId, { state, seq, status: 'ready', error: null })
+  setReplica(sessionId, {
+    state,
+    seq,
+    status: 'ready',
+    error: null,
+    older: snapshot.older,
+    loadingOlder: false,
+    plan: snapshot.plan,
+  })
 }
 
 function flush(): void {
@@ -112,7 +146,9 @@ function flush(): void {
     try {
       const live = replica.state.session.status !== 'starting'
       if (live) markFresh(batch)
-      const state = applyPatches(replica.state, batch.patches)
+      const state = applyPatches(replica.state, batch.patches, {
+        partial: replica.older !== null,
+      })
       next ??= { ...replicas }
       next[batch.sessionId] = { ...replica, state, seq: batch.seq }
     } catch (error) {
@@ -142,6 +178,41 @@ export function receiveBatch(batch: PatchBatch): void {
   if (!frame) frame = requestAnimationFrame(flush)
 }
 
+/**
+ * Loads the page before the loaded ones, for a thread scrolled back toward them. The host sends
+ * a session's patches before the page, so they apply first and the page has what they changed.
+ */
+export function loadOlder(sessionId: string): void {
+  const replica = useThreadsStore.getState().replicas[sessionId]
+  if (!replica?.state || replica.older === null || replica.loadingOlder) return
+  if (snapshotsInFlight.has(sessionId)) return
+  const before = replica.older
+  setReplica(sessionId, { ...replica, loadingOlder: true })
+  host('sessions.page', { sessionId, before })
+    .then((page) => receivePage(sessionId, before, page))
+    .catch((error: unknown) => {
+      console.warn(`Could not load older entries of ${sessionId}: ${errorMessage(error)}`)
+      const current = useThreadsStore.getState().replicas[sessionId]
+      if (current?.loadingOlder) setReplica(sessionId, { ...current, loadingOlder: false })
+    })
+}
+
+function receivePage(sessionId: string, before: number, page: OlderPage): void {
+  if (frame) {
+    cancelAnimationFrame(frame)
+    flush()
+  }
+  const replica = useThreadsStore.getState().replicas[sessionId]
+  // A snapshot replaced the replica while the page was on its way.
+  if (!replica?.state || replica.older !== before) return
+  setReplica(sessionId, {
+    ...replica,
+    state: prependEntries(replica.state, page.entries),
+    older: page.older,
+    loadingOlder: false,
+  })
+}
+
 /** Shows a session: watches it, loads its replica if needed, and keeps a few recent ones live. */
 export function focusSession(sessionId: string): Promise<void> {
   const at = watched.indexOf(sessionId)
@@ -164,7 +235,7 @@ export function focusSession(sessionId: string): Promise<void> {
     void host('sessions.watch', { sessionId }).catch(() => {})
     return Promise.resolve()
   }
-  if (!replica) setReplica(sessionId, { state: null, seq: 0, status: 'loading', error: null })
+  if (!replica) setReplica(sessionId, { ...EMPTY, status: 'loading' })
   return host('sessions.watch', { sessionId })
     .catch(() => {})
     .then(() => fetchSnapshot(sessionId, 'sessions.open'))

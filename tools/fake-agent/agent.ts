@@ -211,6 +211,12 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     return { configOptions: configOptions(session), ...(modes ? { modes } : {}) }
   }
 
+  /** `history-<n>`, a session to import whose replay has n entries, as the perf script uses. */
+  const historySize = (id: string): number | null => {
+    const match = /^history-(\d+)$/.exec(id)
+    return match ? Number(match[1]) : null
+  }
+
   const newSession = (id: string, cwd: string): FakeSession => {
     const session: FakeSession = {
       id,
@@ -218,7 +224,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       title: null,
       turns: 0,
       usedTokens: 0,
-      largeHistory: id.startsWith('large-history') ? historyEntries(env) : null,
+      largeHistory: id.startsWith('large-history') ? historyEntries(env) : historySize(id),
       signedOut: false,
       mode: 'ask',
       model: 'balanced',
@@ -376,6 +382,10 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       requireSignedIn()
       let session = sessions.get(ctx.params.sessionId)
       if (!session) {
+        // Like Claude Code, which keeps no history for a session nothing was sent to.
+        if (env.FAKE_AGENT_RESUME_UNKNOWN === 'fail') {
+          throw RequestError.resourceNotFound(ctx.params.sessionId)
+        }
         // A real agent resumes a session it already titled, so the next prompt keeps the title.
         session = newSession(ctx.params.sessionId, ctx.params.cwd)
         session.title = 'Restored session'

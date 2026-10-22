@@ -394,7 +394,7 @@ const largeHistory: Scenario = async (turn) => {
   turn.session.largeHistory = entries
   await stream(
     turn,
-    `This session now has a **${entries.toLocaleString('en')}-entry** history. Close it and open it again to replay it with \`session/load\`.`,
+    `This session now has a **${entries.toLocaleString('en')}-entry** history for \`session/load\` to replay. OverBench replays only a session it has stored no thread of, such as an imported one: import \`history-<n>\` for one with n entries.`,
   )
   return 'end_turn'
 }

@@ -16,13 +16,15 @@ export function PlanBar({ sessionId, running }: { sessionId: string; running: bo
   const { t } = useTranslation('session')
   const [open, setOpen] = useState(false)
   const plan = useThreadsStore((s) => {
-    const state = s.replicas[sessionId]?.state
+    const replica = s.replicas[sessionId]
+    const state = replica?.state
     if (!state) return null
     for (let i = state.order.length - 1; i >= 0; i--) {
       const entry = state.byId[state.order[i]!]
       if (entry?.kind === 'plan') return entry
     }
-    return null
+    // The latest plan lies on a page not loaded yet.
+    return replica.plan
   })
   if (!plan || plan.items.length === 0) return null
   const done = plan.items.filter((i) => i.status === 'completed').length

@@ -3,7 +3,14 @@
 import type { FileContent, FileList, FileSearch } from './files'
 import type { GitStatus, GitTools, PullRequest, PullRequestState } from './git'
 import type { PortConnectionState } from './port-rpc'
-import type { AgentId, PatchBatch, SessionSnapshot, SessionStatus, UserContent } from './thread'
+import type {
+  AgentId,
+  OlderPage,
+  PatchBatch,
+  SessionSnapshot,
+  SessionStatus,
+  UserContent,
+} from './thread'
 
 export interface AgentAccount {
   kind: 'account' | 'api_key' | 'external' | 'gateway' | 'none'
@@ -210,7 +217,9 @@ export interface HostContract {
     result: SessionSummary
   }
   'sessions.open': { params: { sessionId: string }; result: SessionSnapshot }
-  'sessions.snapshot': { params: { sessionId: string }; result: SessionSnapshot }
+  // With `from`, every entry from that position on, as a replica that holds older pages needs.
+  'sessions.snapshot': { params: { sessionId: string; from?: number }; result: SessionSnapshot }
+  'sessions.page': { params: { sessionId: string; before: number }; result: OlderPage }
   'sessions.watch': { params: { sessionId: string }; result: void }
   'sessions.unwatch': { params: { sessionId: string }; result: void }
   // The session a port shows in front, or null; a turn that ends out of view is unread.
@@ -279,6 +288,7 @@ export const HOST_METHODS = [
   'sessions.import',
   'sessions.open',
   'sessions.snapshot',
+  'sessions.page',
   'sessions.watch',
   'sessions.unwatch',
   'sessions.show',

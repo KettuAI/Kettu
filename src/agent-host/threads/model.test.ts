@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { ThreadEntry } from '@shared/thread'
-import { EMPTY_SESSION, mapRefs, opensTurn, parseStoredSession, turnOf } from './model'
+import {
+  changesStored,
+  EMPTY_SESSION,
+  mapRefs,
+  opensTurn,
+  pageStart,
+  parseStoredSession,
+  settled,
+  turnOf,
+} from './model'
 
 const user = (steered?: boolean): ThreadEntry => ({
   kind: 'user',
@@ -30,6 +39,70 @@ describe('turns', () => {
     expect(turnOf(agent, 5, { kind: 'tool', turn: 3 })).toBe(3)
     expect(turnOf(user(), 5, { kind: 'tool', turn: 3 })).toBe(5)
     expect(turnOf(user(true), 5, { kind: 'tool', turn: 3 })).toBe(3)
+  })
+})
+
+describe('pageStart', () => {
+  // Turns of four entries, as a prompt, a message, a tool call and a message.
+  function thread(turns: number) {
+    const byId: Record<string, ThreadEntry> = {}
+    const order: string[] = []
+    for (let i = 0; i < turns * 4; i++) {
+      const id = `e:${i}`
+      byId[id] = i % 4 === 0 ? { ...user(), id } : { ...agent, id }
+      order.push(id)
+    }
+    return { order, byId }
+  }
+
+  it('goes back 60 entries, then on to the start of their turn', () => {
+    const { order, byId } = thread(50)
+    expect(pageStart(order, byId, 200)).toBe(140)
+    expect(pageStart(order, byId, 198)).toBe(136)
+    expect(pageStart(order, byId, 20)).toBe(0)
+  })
+
+  it('cuts a turn longer than 500 entries', () => {
+    const order = Array.from({ length: 700 }, (_, i) => `e:${i}`)
+    const byId: Record<string, ThreadEntry> = {}
+    for (const [i, id] of order.entries()) byId[id] = i === 0 ? { ...user(), id } : { ...agent, id }
+    expect(pageStart(order, byId, 700)).toBe(200)
+  })
+})
+
+describe('settled', () => {
+  it('stops streaming and cuts off unfinished work', () => {
+    expect(settled({ ...agent, streaming: true })).toEqual(agent)
+    expect(
+      settled({ kind: 'compaction', id: 'c', status: 'in_progress', summary: '' }),
+    ).toMatchObject({ status: 'cancelled' })
+    const tool: ThreadEntry = {
+      kind: 'tool',
+      id: 't',
+      title: 'Run',
+      toolKind: 'execute',
+      status: 'pending',
+      content: [],
+      locations: [],
+      permission: { requestId: 'p1', options: [] },
+      permissionResult: null,
+    }
+    expect(settled(tool)).toMatchObject({
+      status: 'cancelled',
+      permission: null,
+      permissionResult: 'withdrawn',
+    })
+  })
+
+  it('returns a settled entry as it was', () => {
+    expect(settled(agent)).toBe(agent)
+  })
+})
+
+describe('changesStored', () => {
+  it('names the parts of the view that are stored', () => {
+    expect(changesStored({ usage: null })).toBe(true)
+    expect(changesStored({ status: 'running', turnStartedAt: 1 })).toBe(false)
   })
 })
 

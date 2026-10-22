@@ -95,7 +95,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         <ThreadSkeleton className="opacity-70" />
       </div>
     )
-  } else if (empty && status === 'ready') {
+  } else if (empty && (status === 'ready' || status === 'closed')) {
     body = (
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-16">
         <p className="animate-in text-[15px] text-muted-foreground fade-in animation-duration-(--duration-slow)">

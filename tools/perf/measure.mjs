@@ -326,11 +326,35 @@ async function switchTo(sessionId, what) {
   })()`)
 }
 
-log('large-history: close and reopen a session with 1,000 entries, then switch to it…')
-await newFakeSession()
-await runTurn('/large-history')
-const largeSession = await shownSession()
-await closeShownSession()
+/**
+ * A session of `entries` entries, imported from the fake agent as from its CLI. Its first open
+ * replays the history with `session/load` and stores it; closed again, it reopens from the store,
+ * a page at a time, as any session with a long history does.
+ */
+async function storedHistory(entries) {
+  const sessionId = await evaluate(`(async () => {
+    const { request } = window.overbench.agents
+    const [project] = await request('projects.list', undefined)
+    const summary = await request('sessions.import', {
+      agentId: 'fake-agent',
+      projectPath: project.path,
+      acpSessionId: 'history-${entries}',
+    })
+    return summary.id
+  })()`)
+  await waitFor(
+    `Boolean(document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]'))`,
+    {
+      what: `the imported ${entries}-entry session in the sidebar`,
+    },
+  )
+  await switchTo(sessionId, `the imported ${entries}-entry session`)
+  await closeShownSession()
+  return sessionId
+}
+
+log('large-history: reopen a session with 1,000 stored entries, then switch to it…')
+const largeSession = await storedHistory(1000)
 results.reopen = await switchTo(largeSession, 'the reopened 1,000-entry session')
 const entries = await evaluate(
   `document.querySelectorAll('[data-slot=message-scroller-item]').length`,
@@ -353,11 +377,8 @@ results.switch = {
   items: entries,
 }
 
-log('large-history: close and reopen a session with 4,000 entries…')
-await newFakeSession()
-await runTurn('/large-history --entries 4000')
-const hugeSession = await shownSession()
-await closeShownSession()
+log('large-history: reopen a session with 4,000 stored entries…')
+const hugeSession = await storedHistory(4000)
 results.reopen4k = await switchTo(hugeSession, 'the reopened 4,000-entry session')
 await switchTo(stormSession, 'the tool-storm session')
 await sleep(400)
@@ -431,7 +452,7 @@ if (asJson) {
   const sw = (r) =>
     `first paint ${ms(r.paint)}, settled ${ms(r.settled)}, ${r.longFrames} frames over 50 ms (longest ${ms(r.longest)})`
   console.log(
-    `Reopening with session/load: 1,000 entries ${sw(results.reopen)}; 4,000 entries ${sw(results.reopen4k)}.`,
+    `Reopening from the store: 1,000 entries ${sw(results.reopen)}; 4,000 entries ${sw(results.reopen4k)}.`,
   )
   console.log(
     `Switches back to the 1,000-entry session: settled within ${ms(results.switch.settledWorst)}, ${results.switch.longFrames} frames over 50 ms in five (longest ${ms(results.switch.longest)}). To it after it was evicted: ${sw(results.evicted)}.`,

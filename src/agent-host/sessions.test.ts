@@ -493,7 +493,7 @@ describe('cancellation', () => {
 })
 
 describe('opening and recovering', () => {
-  it('replays the history with session/load after a close', async () => {
+  it('opens a closed session from its stored thread, without its agent', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
     await turn(port, sessionId, 'Fix the flaky login test')
@@ -502,31 +502,38 @@ describe('opening and recovering', () => {
 
     await port.request('sessions.close', { sessionId })
     expect(port.summary(sessionId)).toMatchObject({ status: 'closed' })
-    const closed = await port.request('sessions.snapshot', { sessionId })
-    expect(closed).toMatchObject({ session: { status: 'closed' }, entries: [] })
-    const seqBefore = port.replicas.get(sessionId)!.seq
-
-    const patchesFrom = port.events.length
+    const eventsFrom = port.events.length
     const snapshot = await port.request('sessions.open', { sessionId })
-    expect(snapshot.session.status).toBe('ready')
-    expect(snapshot.seq).toBeGreaterThan(seqBefore)
-    const batches = port.events
-      .slice(patchesFrom)
-      .flatMap((event) => (event.type === 'session.patches' ? [event.batch] : []))
-    const ops = batches.flatMap((batch) => batch.patches.map((patch) => patch.op))
-    expect(ops).toContain('thread.reset')
-    expect(ops.indexOf('thread.reset')).toBeLessThan(ops.indexOf('entry.add'))
-    // The renderer's replica, patched through the replay, ends where the snapshot is.
-    expect(port.entries(sessionId)).toEqual(snapshot.entries)
-    expect(port.replicas.get(sessionId)!.seq).toBe(snapshot.seq)
-
-    const kinds = (entries: typeof before) =>
-      entries.filter((e) => e.kind === 'user' || e.kind === 'agent' || e.kind === 'tool').length
-    expect(kinds(snapshot.entries)).toBe(kinds(before))
-    expect(snapshot.entries.find((entry) => entry.kind === 'user')).toMatchObject({
-      content: [{ type: 'text', text: 'Fix the flaky login test' }],
+    expect(snapshot).toMatchObject({
+      session: { status: 'closed', title: 'Fix the flaky login test' },
     })
+    expect(snapshot.older).toBeNull()
+    expect(snapshot.entries).toEqual(before)
+    expect(snapshot.session.config).toEqual(port.thread(sessionId).session.config)
+    expect(port.events.slice(eventsFrom).some((e) => e.type === 'session.patches')).toBe(false)
+  })
+
+  it('replays a session with no stored thread through session/load, and stores it', async () => {
+    const { t, port } = await setup()
+    const imported = await port.request('sessions.import', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      acpSessionId: 'cli-refactor-router',
+    })
+    const eventsFrom = port.events.length
+    const snapshot = await port.open(imported.id)
+    expect(snapshot.session.status).toBe('ready')
+    const ops = port.events
+      .slice(eventsFrom)
+      .flatMap((event) => (event.type === 'session.patches' ? event.batch.patches : []))
+      .map((patch) => patch.op)
+    expect(ops).toContain('thread.reset')
+    expect(snapshot.entries.find((entry) => entry.kind === 'user')).toBeDefined()
     expect(snapshot.entries.every((e) => !('streaming' in e) || e.streaming === false)).toBe(true)
+    await t.host.threads!.flush()
+    const stored = await t.host.threads!.load(imported.id)
+    expect(stored?.entries.map((item) => item.entry)).toEqual(snapshot.entries)
+    expect(stored?.head).toEqual({ agentId: 'fake-agent', acpSessionId: 'cli-refactor-router' })
   })
 
   it('reconnects with session/resume after the agent crashes', async () => {
@@ -620,9 +627,10 @@ describe('opening and recovering', () => {
       attention: 'unread',
     })
     const snapshot = await port.open(created.id)
-    // A new fake agent process does not know the session and synthesizes a short history.
-    expect(snapshot.session.status).toBe('ready')
-    expect(snapshot.entries.length).toBeGreaterThan(0)
+    // The thread comes from the store; the agent is not started to show it.
+    expect(snapshot.session.status).toBe('closed')
+    expect(snapshot.entries.some((entry) => entry.kind === 'turn_end')).toBe(true)
+    expect(current.launcher).toMatchObject({ launches: 0 })
     expect(port.summary(created.id)).toMatchObject({ attention: 'none' })
   })
 })

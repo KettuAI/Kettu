@@ -66,6 +66,14 @@ function relativePath(o: Fields, key: string, platform: Platform): string {
   return value
 }
 
+function position(o: Fields, key: string): number {
+  const value = o[key]
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw invalidParams(`${key} must be a position, a whole number from 0`)
+  }
+  return value
+}
+
 function sessionId(o: Fields): string {
   return string(o, 'sessionId', ID_CHARS)
 }
@@ -200,7 +208,17 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'sessions.open': session,
-    'sessions.snapshot': session,
+    'sessions.snapshot': (params) => {
+      const o = fields(params)
+      return {
+        sessionId: sessionId(o),
+        ...(o.from === undefined ? {} : { from: position(o, 'from') }),
+      }
+    },
+    'sessions.page': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), before: position(o, 'before') }
+    },
     'sessions.watch': session,
     'sessions.unwatch': session,
     'sessions.show': (params) => {

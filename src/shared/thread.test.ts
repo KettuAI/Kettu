@@ -4,6 +4,7 @@ import {
   applyPatches,
   coalescePatches,
   isThreadEntry,
+  prependEntries,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -127,6 +128,25 @@ describe('applyPatches', () => {
       { op: 'entry.appendText', id: 'c:1', text: 'B' },
     ])
     expect(after.byId['c:1']).toMatchObject({ summary: 'AB' })
+  })
+})
+
+describe('pages', () => {
+  it('ignores a patch for an entry on a page not loaded yet, only when told to', () => {
+    const before = state([agent])
+    const patch: Patch = { op: 'entry.update', id: 'e:1', changes: { content: [] } }
+    expect(() => applyPatches(before, [patch])).toThrow(UnknownEntryError)
+    expect(applyPatches(before, [patch], { partial: true })).toBe(before)
+    const append: Patch = { op: 'entry.appendText', id: 'gone', text: 'x' }
+    expect(applyPatches(before, [append], { partial: true })).toBe(before)
+  })
+
+  it('prepends older entries, skipping any already there', () => {
+    const before = state([agent])
+    const after = prependEntries(before, [user, agent])
+    expect(after.order).toEqual(['e:1', 'm:1'])
+    expect(after.byId['m:1']).toBe(before.byId['m:1'])
+    expect(prependEntries(after, [user])).toBe(after)
   })
 })
 

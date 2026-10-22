@@ -1,4 +1,4 @@
-import { memo, startTransition, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   MessageScroller,
@@ -7,10 +7,12 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   useMessageScroller,
+  useMessageScrollerScrollable,
   MessageScrollerViewport,
 } from '@renderer/components/ui/message-scroller'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
-import { useThreadsStore } from '@renderer/stores/threads'
+import { loadOlder, useThreadsStore } from '@renderer/stores/threads'
 import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
@@ -18,10 +20,11 @@ import { ToolGroup } from './entries/tool-group'
 import { hoverReply } from './reply-hover'
 import { buildItems, lastSent, replyKeys, signatureOf, type Item } from './thread-items'
 
-// A long history renders from its end: the first frame shows the last items, and older ones
-// follow in transitions after it, which MessageScroller keeps in place as they are prepended.
-// Each prepend lays the thread out again, so the shown count doubles rather than growing by a
-// fixed step: a thread of N items takes log2(N / 40) passes instead of N / 60.
+// A thread opens on its latest page, and older pages load as it scrolls back toward them, a
+// viewport ahead. Loaded items render from the end: the first frame shows the last items, and
+// older ones follow in transitions after it, which MessageScroller keeps in place as they are
+// prepended. Each prepend lays the thread out again, so the shown count doubles rather than
+// growing by a fixed step: N items take log2(N / 40) passes instead of N / 60.
 const FIRST_ITEMS = 40
 
 function useShownFrom(total: number): number {
@@ -62,6 +65,21 @@ function ScrollOnSend({ sent }: { sent: string | null }) {
   return null
 }
 
+/** Shown at the top while an older page loads there, after a beat so a quick one never flashes. */
+function OlderLoading({ sessionId }: { sessionId: string }) {
+  const loading = useThreadsStore((s) => s.replicas[sessionId]?.loadingOlder ?? false)
+  const { start } = useMessageScrollerScrollable()
+  if (!loading || start) return null
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-x-0 top-3 z-10 flex animate-in justify-center animation-duration-(--duration-base) animation-delay-(--duration-base) fade-in [animation-fill-mode:both]"
+    >
+      <Spinner className="size-4 text-muted-foreground" />
+    </div>
+  )
+}
+
 /** 32 px between turns, 4 px between steps, 16 px between anything else. */
 function spacing(item: Item, previous: Item, steps: Set<string>): string {
   if (item.type === 'entry' && item.turnStart) return 'pt-8'
@@ -99,6 +117,14 @@ export const Thread = memo(function Thread({
   const awaitingReply = working && signature.endsWith('u')
   const sent = lastSent(order ?? [], signature)
   const shownFrom = useShownFrom(items.length)
+  const hasOlder = useThreadsStore((s) => (s.replicas[sessionId]?.older ?? null) !== null)
+  const viewport = useRef<HTMLDivElement>(null)
+  const nearStart = useCallback(() => {
+    const el = viewport.current
+    if (el && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) loadOlder(sessionId)
+  }, [sessionId, hasOlder, shownFrom])
+  // Also after each prepend, and for a page too short to scroll.
+  useEffect(nearStart, [nearStart, items.length])
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
@@ -107,6 +133,8 @@ export const Thread = memo(function Thread({
           top, inset, for keyboard focus only. */}
       <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay after:pointer-events-none after:absolute after:inset-0 after:opacity-0 after:ring-2 after:ring-ring/50 after:ring-inset has-[>[data-slot=message-scroller-viewport]:focus-visible]:after:opacity-100">
         <MessageScrollerViewport
+          ref={viewport}
+          onScroll={nearStart}
           aria-label={t('thread.label')}
           className="outline-none [scroll-timeline:--scroll-fade-top_y] [scrollbar-gutter:stable_both-edges]"
         >
@@ -176,6 +204,7 @@ export const Thread = memo(function Thread({
           size="icon-sm"
           className="rounded-full shadow-md"
         />
+        <OlderLoading sessionId={sessionId} />
       </MessageScroller>
     </MessageScrollerProvider>
   )

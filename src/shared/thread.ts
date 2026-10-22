@@ -198,10 +198,23 @@ export interface PatchBatch {
   patches: Patch[]
 }
 
+export type PlanEntry = Extract<ThreadEntry, { kind: 'plan' }>
+
+/** A session as it is shown: its view and the latest page of its thread. */
 export interface SessionSnapshot {
   session: SessionView
   entries: ThreadEntry[]
   seq: number
+  /** The cursor for the page before `entries`, or null when they start the thread. */
+  older: number | null
+  /** The latest plan when it lies before `entries`, for the plan pinned above the composer. */
+  plan: PlanEntry | null
+}
+
+/** A page of older entries, read with the `older` cursor of the page after it. */
+export interface OlderPage {
+  entries: ThreadEntry[]
+  older: number | null
 }
 
 /** A session's thread, normalized so one entry can change without touching the others. */
@@ -219,7 +232,7 @@ export class UnknownEntryError extends Error {
   }
 }
 
-export function threadFromSnapshot(snapshot: SessionSnapshot): ThreadState {
+export function threadFromSnapshot(snapshot: Omit<SessionSnapshot, 'older' | 'plan'>): ThreadState {
   const byId: Record<string, ThreadEntry> = {}
   const order: string[] = []
   for (const entry of snapshot.entries) {
@@ -233,11 +246,30 @@ export function threadEntries(state: ThreadState): ThreadEntry[] {
   return state.order.map((id) => state.byId[id]!)
 }
 
+/** Puts older entries before the thread's own, skipping any it already has. */
+export function prependEntries(state: ThreadState, entries: readonly ThreadEntry[]): ThreadState {
+  const added = entries.filter((entry) => !(entry.id in state.byId))
+  if (added.length === 0) return state
+  const byId = { ...state.byId }
+  for (const entry of added) byId[entry.id] = entry
+  return {
+    session: state.session,
+    order: [...added.map((entry) => entry.id), ...state.order],
+    byId,
+  }
+}
+
 /**
  * Applies patches in order and returns a new state that shares every object the
  * patches did not change, so a component selecting one entry re-renders only for it.
+ * With `partial`, the state holds only the latest pages of the thread, and a patch for an entry
+ * it does not have changes one on an older page, which reads it as patched later.
  */
-export function applyPatches(state: ThreadState, patches: readonly Patch[]): ThreadState {
+export function applyPatches(
+  state: ThreadState,
+  patches: readonly Patch[],
+  { partial = false }: { partial?: boolean } = {},
+): ThreadState {
   let { session, order, byId } = state
   let byIdCopied = false
   let orderCopied = false
@@ -267,13 +299,19 @@ export function applyPatches(state: ThreadState, patches: readonly Patch[]): Thr
       }
       case 'entry.appendText': {
         const entry = byId[patch.id]
-        if (!entry) throw new UnknownEntryError(patch.id)
+        if (!entry) {
+          if (partial) break
+          throw new UnknownEntryError(patch.id)
+        }
         writableById()[patch.id] = appendText(entry, patch.text)
         break
       }
       case 'entry.update': {
         const entry = byId[patch.id]
-        if (!entry) throw new UnknownEntryError(patch.id)
+        if (!entry) {
+          if (partial) break
+          throw new UnknownEntryError(patch.id)
+        }
         writableById()[patch.id] = { ...entry, ...patch.changes } as ThreadEntry
         break
       }

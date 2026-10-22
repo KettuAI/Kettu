@@ -40,7 +40,9 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const starting = status === 'starting'
   const running = status === 'running' || status === 'awaiting_permission'
   const awaiting = status === 'awaiting_permission'
-  const canSend = status === 'ready' && text.trim().length > 0
+  // A closed session attaches to its agent as the message goes.
+  const idle = status === 'ready' || status === 'closed'
+  const canSend = idle && text.trim().length > 0
   // During a turn the send key queues the message and the steer key sends it into the turn.
   const canQueue = running && text.trim().length > 0
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
@@ -183,7 +185,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   const compact = commands.some((c) => c.name === 'compact')
     ? () => {
-        if (status !== 'ready') return
+        if (!idle) return
         host('sessions.prompt', { sessionId, content: [{ type: 'text', text: '/compact' }] }).catch(
           (e: unknown) => setError(errorMessage(e)),
         )

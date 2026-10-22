@@ -18,9 +18,11 @@ import {
   UnknownEntryError,
   type AgentId,
   type ConfigOption,
+  type OlderPage,
   type Patch,
   type PatchBatch,
   type PermissionKind,
+  type PlanEntry,
   type SessionSnapshot,
   type SessionStatus,
   type SessionView,
@@ -31,11 +33,12 @@ import {
   type UserContent,
   ULTRACODE_OPTION_ID,
 } from '@shared/thread'
-import type {
-  AgentConnection,
-  PermissionAnswer,
-  PermissionRequest,
-  SessionTarget,
+import {
+  AgentRequestError,
+  type AgentConnection,
+  type PermissionAnswer,
+  type PermissionRequest,
+  type SessionTarget,
 } from './acp/connection'
 import {
   isStopReason,
@@ -58,15 +61,32 @@ import type { Projects } from './projects'
 import { CONTEXT_REPORT, hasContextReport, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
+import {
+  changesStored,
+  pageStart,
+  settled,
+  storedSession,
+  type PositionedEntry,
+  type StoredThread,
+  type ThreadPage,
+  type ThreadWrite,
+} from './threads/model'
+import type { ThreadStore } from './threads/store'
 
 export interface SessionTimings {
   /** Patches of a session are flushed at most this often. */
   flushMs: number
   /** How long the host waits for an agent to confirm `session/cancel` before ending the turn. */
   cancelFallbackMs: number
+  /** A changed thread is stored at most this long after its change; a turn's end stores it at once. */
+  checkpointMs: number
 }
 
-export const SESSION_TIMINGS: SessionTimings = { flushMs: 16, cancelFallbackMs: 10_000 }
+export const SESSION_TIMINGS: SessionTimings = {
+  flushMs: 16,
+  cancelFallbackMs: 10_000,
+  checkpointMs: 5_000,
+}
 
 export interface SessionEvents {
   patches(batch: PatchBatch, portIds: readonly string[]): void
@@ -87,6 +107,8 @@ export interface SessionManagerDeps {
   projects: Projects
   scratch: ScratchFolders
   file: JsonFile<SessionsFile>
+  /** Where threads are stored; without it every session opens through its agent. */
+  threads: ThreadStore | null
   diagnostics: Diagnostics
   git(): GitServiceApi | null
   events: SessionEvents
@@ -140,8 +162,22 @@ interface Live {
   connection: AgentConnection | null
   target: SessionTarget
   opening: Promise<void> | null
+  /** `session/resume` for a session brought back from its stored thread, shared by its callers. */
+  attaching: Promise<AgentConnection> | null
   /** Set while the session's tree closes, so no late update brings a child back. */
   closing: boolean
+  /** Each entry's position in the stored thread, which pages are read by. */
+  positions: Map<string, number>
+  nextPos: number
+  /** Entries changed since the last checkpoint. */
+  dirty: Set<string>
+  /** The stored part of the session view changed since the last checkpoint. */
+  sessionDirty: boolean
+  /** The next checkpoint replaces the stored thread: after a replay, or a write that failed. */
+  rewrite: boolean
+  /** A replay failed partway, so the thread is not stored until one completes. */
+  partial: boolean
+  checkpointTimer: ReturnType<typeof setTimeout> | null
 }
 
 const TITLE_LENGTH = 60
@@ -211,10 +247,14 @@ export class SessionManager {
   /** The last `seq` of sessions that are not live, so a reopened session continues it. */
   private readonly seqs = new Map<string, number>()
   private readonly listed = new Map<string, { title: string | null; updatedAt: string | null }>()
+  /** Sessions being brought back from their stored threads, by id. */
+  private readonly reviving = new Map<string, Promise<Live>>()
   private readonly timings: SessionTimings
   private readonly now: () => number
   private requestCounter = 0
   private badgeCount = 0
+  /** Set once the host shuts down: the last checkpoints are written and no more follow. */
+  private stopped = false
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.timings = { ...SESSION_TIMINGS, ...deps.timings }
@@ -391,9 +431,34 @@ export class SessionManager {
         this.deps.diagnostics.log('error', `Session ${live.id}: ${error.message}`)
         continue
       }
+      this.track(live, patch)
       live.queue.push(patch)
     }
     this.scheduleFlush(live)
+    this.scheduleCheckpoint(live)
+  }
+
+  /** Notes what a patch changed for the next checkpoint. */
+  private track(live: Live, patch: Patch): void {
+    switch (patch.op) {
+      case 'entry.add':
+        if (!live.positions.has(patch.entry.id)) live.positions.set(patch.entry.id, live.nextPos++)
+        live.dirty.add(patch.entry.id)
+        break
+      case 'entry.appendText':
+      case 'entry.update':
+        live.dirty.add(patch.id)
+        break
+      case 'session.update':
+        if (changesStored(patch.changes)) live.sessionDirty = true
+        break
+      case 'thread.reset':
+        live.positions.clear()
+        live.nextPos = 0
+        live.dirty.clear()
+        live.rewrite = true
+        break
+    }
   }
 
   private update(live: Live, changes: Partial<SessionView>): void {
@@ -431,14 +496,195 @@ export class SessionManager {
     return `${prefix}:${++live.counter}`
   }
 
-  snapshot(sessionId: string): SessionSnapshot {
-    const live = this.live.get(sessionId)
-    if (!live) {
-      const record = this.recordOf(sessionId)
-      return { session: this.closedView(record), entries: [], seq: this.seqs.get(sessionId) ?? 0 }
+  // Checkpoints: each session's thread goes to the thread store, so it opens without its agent.
+
+  private hasChanges(live: Live): boolean {
+    return live.rewrite || live.sessionDirty || live.dirty.size > 0
+  }
+
+  private scheduleCheckpoint(live: Live): void {
+    if (live.checkpointTimer || !this.deps.threads || this.stopped || live.replaying) return
+    if (!live.saved || live.partial || !this.hasChanges(live)) return
+    live.checkpointTimer = setTimeout(() => {
+      live.checkpointTimer = null
+      this.checkpoint(live)
+    }, this.timings.checkpointMs)
+  }
+
+  /**
+   * Writes what changed since the last checkpoint. The store answers in order, so a later read
+   * sees it. A failed write is logged, and the next checkpoint writes the whole thread again.
+   */
+  private checkpoint(live: Live): void {
+    if (live.checkpointTimer) {
+      clearTimeout(live.checkpointTimer)
+      live.checkpointTimer = null
     }
+    const store = this.deps.threads
+    if (!store || this.stopped || live.replaying || live.partial || !live.saved) return
+    if (!live.record.acpSessionId || !this.hasChanges(live)) return
+    const replace = live.rewrite
+    const entries: PositionedEntry[] = []
+    for (const id of replace ? live.thread.order : live.dirty) {
+      const entry = live.thread.byId[id]
+      const pos = live.positions.get(id)
+      if (entry && pos !== undefined) entries.push({ pos, entry })
+    }
+    const change: ThreadWrite = {
+      head: { agentId: live.record.agentId, acpSessionId: live.record.acpSessionId },
+      entries,
+      ...(replace || live.sessionDirty ? { session: storedSession(live.thread.session) } : {}),
+      ...(replace ? { replace: true } : {}),
+    }
+    live.dirty = new Set()
+    live.sessionDirty = false
+    live.rewrite = false
+    store.write(live.id, change).catch((error: unknown) => {
+      live.rewrite = true
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not store the thread of session ${live.id}: ${(error as Error).message}`,
+      )
+    })
+  }
+
+  // Snapshots and pages: a session's view with the latest page of its thread, from memory while
+  // it is live and from the thread store otherwise.
+
+  /** The stored thread's page, or null when there is none for the session's current ACP session. */
+  private async readPage(
+    record: SessionRecord,
+    read: (store: ThreadStore) => Promise<ThreadPage | null>,
+  ): Promise<ThreadPage | null> {
+    const store = this.deps.threads
+    if (!store || !record.acpSessionId) return null
+    let page: ThreadPage | null
+    try {
+      page = await read(store)
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read the thread of session ${record.id}: ${(error as Error).message}`,
+      )
+      return null
+    }
+    return page && this.isCurrent(record, page.head) ? page : null
+  }
+
+  private async readThread(record: SessionRecord): Promise<StoredThread | null> {
+    const store = this.deps.threads
+    if (!store || !record.acpSessionId) return null
+    let thread: StoredThread | null
+    try {
+      thread = await store.load(record.id)
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read the thread of session ${record.id}: ${(error as Error).message}`,
+      )
+      return null
+    }
+    return thread && this.isCurrent(record, thread.head) ? thread : null
+  }
+
+  /** A thread stored for another ACP session is out of date: the agent's history replaces it. */
+  private isCurrent(record: SessionRecord, head: StoredThread['head']): boolean {
+    return head.agentId === record.agentId && head.acpSessionId === record.acpSessionId
+  }
+
+  async snapshot(sessionId: string, from?: number): Promise<SessionSnapshot> {
+    const live = this.live.get(sessionId)
+    if (live) return this.liveSnapshot(live, from)
+    const record = this.recordOf(sessionId)
+    const page = await this.readPage(record, (store) =>
+      from === undefined ? store.page(sessionId) : store.tail(sessionId, from),
+    )
+    // It went live, or away, while the page was read.
+    if (this.live.has(sessionId) || !this.has(sessionId)) return this.snapshot(sessionId, from)
+    return this.storedSnapshot(record, page)
+  }
+
+  private liveSnapshot(live: Live, from: number | undefined): SessionSnapshot {
     this.flushPatches(live)
-    return { session: live.thread.session, entries: threadEntries(live.thread), seq: live.seq }
+    const { order, byId } = live.thread
+    const start =
+      from === undefined ? pageStart(order, byId, order.length) : this.indexAt(live, from)
+    return {
+      session: live.thread.session,
+      entries: order.slice(start).map((id) => byId[id]!),
+      seq: live.seq,
+      older: start > 0 ? this.posAt(live, start) : null,
+      plan: this.planBefore(live, start),
+    }
+  }
+
+  /** The view of a session that is not live, with its stored page; empty without one. */
+  private storedSnapshot(record: SessionRecord, page: ThreadPage | null): SessionSnapshot {
+    const view = this.closedView(record)
+    return {
+      session: page
+        ? {
+            ...view,
+            config: withUltracode(record, page.session.config),
+            commands: page.session.commands,
+            usage: page.session.usage,
+          }
+        : view,
+      entries: page ? page.entries.map(settled) : [],
+      seq: this.seqs.get(record.id) ?? 0,
+      older: page?.older ?? null,
+      plan: page?.plan ?? null,
+    }
+  }
+
+  /** The index of the first entry at or after a position. */
+  private indexAt(live: Live, pos: number): number {
+    const { order } = live.thread
+    let low = 0
+    let high = order.length
+    while (low < high) {
+      const mid = (low + high) >>> 1
+      if (live.positions.get(order[mid]!)! < pos) low = mid + 1
+      else high = mid
+    }
+    return low
+  }
+
+  private posAt(live: Live, index: number): number {
+    const id = live.thread.order[index]
+    return id === undefined ? live.nextPos : live.positions.get(id)!
+  }
+
+  /** The latest plan, when it lies before the index `start`. */
+  private planBefore(live: Live, start: number): PlanEntry | null {
+    const { order, byId } = live.thread
+    for (let i = order.length - 1; i >= 0; i--) {
+      const entry = byId[order[i]!]
+      if (entry?.kind === 'plan') return i < start ? entry : null
+    }
+    return null
+  }
+
+  /** The page before the position `before`, for a renderer scrolling back through the thread. */
+  async page(sessionId: string, before: number): Promise<OlderPage> {
+    const live = this.live.get(sessionId)
+    if (live) {
+      // Patches go out before the page, so the renderer has every change to the entries it holds.
+      this.flushPatches(live)
+      const { order, byId } = live.thread
+      const end = this.indexAt(live, before)
+      const start = pageStart(order, byId, end)
+      return {
+        entries: order.slice(start, end).map((id) => byId[id]!),
+        older: start > 0 ? this.posAt(live, start) : null,
+      }
+    }
+    const record = this.recordOf(sessionId)
+    const page = await this.readPage(record, (store) => store.page(sessionId, before))
+    if (this.live.has(sessionId) || !this.has(sessionId)) return this.page(sessionId, before)
+    return page
+      ? { entries: page.entries.map(settled), older: page.older }
+      : { entries: [], older: null }
   }
 
   private closedView(record: SessionRecord): SessionView {
@@ -511,7 +757,15 @@ export class SessionManager {
       connection: null,
       target,
       opening: null,
+      attaching: null,
       closing: false,
+      positions: new Map(),
+      nextPos: 0,
+      dirty: new Set(),
+      sessionDirty: false,
+      rewrite: false,
+      partial: false,
+      checkpointTimer: null,
     }
     this.live.set(record.id, live)
     this.deps.agents.sessionsChanged(record.agentId)
@@ -528,6 +782,7 @@ export class SessionManager {
 
   private dropLive(live: Live): void {
     this.flushPatches(live)
+    if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
     if (live.turn?.fallback) clearTimeout(live.turn.fallback)
     live.connection?.unregister(live.record.acpSessionId, live.target)
     this.seqs.set(live.id, live.seq)
@@ -555,6 +810,7 @@ export class SessionManager {
     live.saved = true
     this.records.set(live.id, live.record)
     this.persist(live)
+    this.scheduleCheckpoint(live)
   }
 
   // Mapper output.
@@ -894,9 +1150,10 @@ export class SessionManager {
   }
 
   /**
-   * Opens a session: live ones return at once; others load (replaying the history) or
-   * resume. Agent-side failures leave the session live in `failed` or `auth_required`, so
-   * the snapshot shows them with Retry.
+   * Opens a session: a live one from memory, another from its stored thread without starting its
+   * agent, which attaches once the session is used. One with no stored thread, as an imported
+   * session, loads its history from the agent and stays live. Agent-side failures leave the
+   * session live in `failed` or `auth_required`, so the snapshot shows them with Retry.
    */
   async open(sessionId: string): Promise<SessionSnapshot> {
     const existing = this.live.get(sessionId)
@@ -905,6 +1162,9 @@ export class SessionManager {
       return this.snapshot(sessionId)
     }
     const record = this.recordOf(sessionId)
+    const page = await this.readPage(record, (store) => store.page(sessionId))
+    if (this.live.has(sessionId) || !this.has(sessionId)) return this.open(sessionId)
+    if (page) return this.storedSnapshot(record, page)
     if (record.origin === 'subagent' && record.parentId) {
       // A subagent's thread comes back with its parent's load, which replays the children.
       await this.open(record.parentId)
@@ -1011,11 +1271,13 @@ export class SessionManager {
     this.deps.agents.signedIn(live.record.agentId)
     this.update(live, { status: 'ready', error: null })
     this.touch(live.id)
+    this.checkpoint(live)
   }
 
   /** Resets the parent's thread and every known subagent below it for a replay. */
   private prepareReplay(live: Live, connection: AgentConnection): void {
     live.replaying = true
+    live.partial = false
     live.scope = newTurnScope()
     this.emit(live, [{ op: 'thread.reset' }])
     for (const record of this.descendants(live.id, 'subagent')) {
@@ -1035,6 +1297,7 @@ export class SessionManager {
    */
   private finishReplay(live: Live, ok: boolean): void {
     live.replaying = false
+    live.partial = !ok
     for (const record of this.descendants(live.id, 'subagent')) {
       const child = this.live.get(record.id)
       if (!child) continue
@@ -1042,6 +1305,7 @@ export class SessionManager {
       if (ok && child.mentioned) {
         if (child.thread.session.status === 'starting') this.update(child, { status: 'ready' })
         this.touch(child.id)
+        this.checkpoint(child)
         continue
       }
       if (ok) this.missing.add(child.id)
@@ -1138,8 +1402,9 @@ export class SessionManager {
         await this.startNew(live).catch(() => {})
         return
       case 'prompt':
+        // The turn attaches the session again if it has to.
         this.update(live, { status: 'ready', error: null })
-        await this.runTurnAgain(live, failure.content)
+        this.startTurn(live, failure.content, this.now())
         return
       case 'load':
       case 'resume':
@@ -1157,16 +1422,204 @@ export class SessionManager {
     }
   }
 
-  // Prompt turns.
+  // Sessions that come back from their stored threads: live without their agent, in `closed`,
+  // until a turn or a setting needs it.
 
-  private liveFor(sessionId: string): Live {
+  /** The live session, brought back from its stored thread when it is not live. */
+  private revive(sessionId: string): Promise<Live> {
     const live = this.live.get(sessionId)
-    if (!live) {
-      this.recordOf(sessionId)
+    if (live) return Promise.resolve(live)
+    let reviving = this.reviving.get(sessionId)
+    if (!reviving) {
+      reviving = this.runRevive(sessionId).finally(() => this.reviving.delete(sessionId))
+      this.reviving.set(sessionId, reviving)
+    }
+    return reviving
+  }
+
+  /**
+   * Its subagents come back with it, so an update the agent sends about one adds to the thread it
+   * has rather than starting it again.
+   */
+  private async runRevive(sessionId: string): Promise<Live> {
+    const tree = [this.recordOf(sessionId), ...this.descendants(sessionId, 'subagent')]
+    const threads = await Promise.all(
+      tree.map((record) => (this.live.has(record.id) ? null : this.readThread(record))),
+    )
+    const existing = this.live.get(sessionId)
+    if (existing) return existing
+    const record = this.recordOf(sessionId)
+    if (!threads[0]) {
+      // Nothing stored, or nothing readable: the agent's own history, as on a first open.
+      const live = this.makeLive(record, true, 'starting')
+      await this.runOpening(live, 'load')
+      return live
+    }
+    tree.forEach((item, i) => {
+      const stored = threads[i]
+      if (stored && !this.live.has(item.id) && this.records.has(item.id)) {
+        this.fill(this.makeLive(item, true, 'closed'), stored)
+      }
+    })
+    return this.live.get(sessionId)!
+  }
+
+  /** Puts a stored thread, settled, into a session that just went live. */
+  private fill(live: Live, stored: StoredThread): void {
+    const order: string[] = []
+    const byId: Record<string, ThreadEntry> = {}
+    for (const { pos, entry } of stored.entries) {
+      const shown = settled(entry)
+      if (shown !== entry) live.dirty.add(entry.id)
+      order.push(entry.id)
+      byId[entry.id] = shown
+      live.positions.set(entry.id, pos)
+      live.nextPos = Math.max(live.nextPos, pos + 1)
+      live.counter = Math.max(live.counter, idNumber(entry.id))
+    }
+    const { config, commands, usage } = stored.session
+    live.thread = {
+      session: {
+        ...live.thread.session,
+        config: withUltracode(live.record, config),
+        commands,
+        usage,
+      },
+      order,
+      byId,
+    }
+    this.scheduleCheckpoint(live)
+  }
+
+  /**
+   * Attaches a session that came back from its stored thread to its agent, shared by every caller
+   * until it settles. The session keeps its status; the caller sets the next one.
+   */
+  private connect(live: Live): Promise<AgentConnection> {
+    if (live.connection) return Promise.resolve(live.connection)
+    live.attaching ??= this.attachStored(live).finally(() => {
+      live.attaching = null
+    })
+    return live.attaching
+  }
+
+  /** `session/resume`, or a `session/load` whose replay is set aside for an agent without it. */
+  private async attachStored(live: Live): Promise<AgentConnection> {
+    const { record } = live
+    const runtime = await this.deps.agents.ensureReady(record.agentId)
+    const caps = runtime.init.capabilities
+    const { connection } = runtime
+    let config: ConfigOption[]
+    if (caps.resumeSession) {
+      try {
+        config = (
+          await connection.resumeSession(
+            record.acpSessionId,
+            record.projectPath,
+            sessionMeta(record),
+          )
+        ).config
+      } catch (error) {
+        if (!this.neverAnswered(live, error)) throw error
+        config = await this.renew(live, connection)
+      }
+    } else if (caps.loadSession) {
+      config = (await this.loadQuietly(live, connection)).config
+    } else {
+      throw new HostError(
+        'agent_unavailable',
+        t('session.cannotLoad', { agent: this.deps.agents.name(record.agentId) }),
+      )
+    }
+    if (live.closing || this.live.get(live.id) !== live) {
+      // Closed while it attached: the agent's session closes again rather than stay open unseen.
+      if (caps.closeSession) await connection.closeSession(record.acpSessionId).catch(() => {})
       throw new HostError('busy', t('session.openFirst'))
     }
-    return live
+    this.attach(live, connection)
+    this.update(live, { config: withUltracode(record, config) })
+    for (const child of this.descendants(live.id, 'subagent')) {
+      const childLive = this.live.get(child.id)
+      if (!childLive) continue
+      this.attach(childLive, connection)
+      if (childLive.thread.session.status === 'closed') {
+        const info = childLive.thread.session.subagent
+        this.update(childLive, {
+          status: 'ready',
+          ...(info ? { subagent: { ...info, stateKnown: false } } : {}),
+        })
+        this.touch(childLive.id)
+      }
+    }
+    this.deps.agents.signedIn(record.agentId)
+    return connection
   }
+
+  /** Attaches a closed session for something only its agent can do, such as a setting or a fork. */
+  private async attachClosed(live: Live): Promise<AgentConnection> {
+    const connection = await this.connect(live)
+    if (live.thread.session.status === 'closed') {
+      this.update(live, { status: 'ready' })
+      this.touch(live.id)
+    }
+    return connection
+  }
+
+  /**
+   * Claude Code keeps no history for a session nothing was sent to, so it cannot resume one: an
+   * agent that never answered loses nothing when the session starts over.
+   */
+  private neverAnswered(live: Live, error: unknown): boolean {
+    if (!(error instanceof AgentRequestError) || error.code !== RESOURCE_NOT_FOUND) return false
+    return !live.thread.order.some((id) => {
+      const kind = live.thread.byId[id]?.kind
+      return kind === 'agent' || kind === 'thought' || kind === 'tool' || kind === 'turn_end'
+    })
+  }
+
+  /** `session/new` in place of a session the agent does not have; the thread stays as it is. */
+  private async renew(live: Live, connection: AgentConnection): Promise<ConfigOption[]> {
+    const setup = await connection.newSession(live.record.projectPath, sessionMeta(live.record))
+    live.record.acpSessionId = setup.acpSessionId
+    live.rewrite = true
+    this.update(live, { acpSessionId: setup.acpSessionId })
+    this.save(live)
+    return setup.config
+  }
+
+  /** `session/load` with its replay going nowhere, since the thread is already here. */
+  private async loadQuietly(
+    live: Live,
+    connection: AgentConnection,
+  ): Promise<{ config: ConfigOption[] }> {
+    const { record } = live
+    const scratch = threadFromSnapshot({ session: live.thread.session, entries: [], seq: 0 })
+    let counter = 0
+    const quiet: SessionTarget = {
+      context: () => ({
+        thread: scratch,
+        replaying: true,
+        scope: newTurnScope(),
+        now: this.now(),
+        nextId: () => `q:${++counter}`,
+        sessionIdFor: () => null,
+      }),
+      apply: () => {},
+      requestPermission: () => Promise.resolve('cancelled'),
+    }
+    connection.register(record.acpSessionId, quiet)
+    try {
+      return await connection.loadSession(
+        record.acpSessionId,
+        record.projectPath,
+        sessionMeta(record),
+      )
+    } finally {
+      connection.unregister(record.acpSessionId, quiet)
+    }
+  }
+
+  // Prompt turns.
 
   private titleOf(live: Live): string {
     return (
@@ -1190,12 +1643,11 @@ export class SessionManager {
   }
 
   private async readContext(sessionId: string): Promise<ContextBreakdown | null> {
-    const live = this.liveFor(sessionId)
-    const { record } = live
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.recordOf(sessionId)
     if (!hasContextReport(record.agentId) || record.origin === 'subagent') return null
-    if (live.thread.session.status !== 'ready' || !live.connection) {
-      throw busyError(live.thread.session.status)
-    }
+    const status = live?.thread.session.status ?? 'closed'
+    if (status !== 'ready' || !live?.connection) throw busyError(status)
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     if (!runtime.init.capabilities.forkSession) return null
     const log = (message: string): void => this.deps.diagnostics.log('warn', message)
@@ -1226,14 +1678,13 @@ export class SessionManager {
     return breakdown
   }
 
+  /** Sends a prompt; a session that is not attached attaches to its agent as the turn starts. */
   async prompt(sessionId: string, content: UserContent[]): Promise<void> {
-    const live = this.liveFor(sessionId)
-    if (live.record.origin === 'subagent') {
+    if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
-    if (live.thread.session.status !== 'ready' || !live.connection) {
-      throw busyError(live.thread.session.status)
-    }
+    const live = await this.revive(sessionId)
+    if (!canSend(live.thread.session.status)) throw busyError(live.thread.session.status)
     this.sendPrompt(live, content)
   }
 
@@ -1259,16 +1710,17 @@ export class SessionManager {
    * prompt sent before it heard that a turn started is queued, not refused.
    */
   async queue(sessionId: string, content: UserContent[]): Promise<{ itemId: string | null }> {
-    const live = this.liveFor(sessionId)
-    if (live.record.origin === 'subagent') {
+    if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
+    const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
-    if (status === 'ready' && (queue.length === 0 || queuePaused)) {
-      await this.prompt(sessionId, content)
+    if (canSend(status) && (queue.length === 0 || queuePaused)) {
+      // At once: another prompt waiting on the same revive must see this turn running.
+      this.sendPrompt(live, content)
       return { itemId: null }
     }
-    if (status !== 'ready' && status !== 'running' && status !== 'awaiting_permission') {
+    if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
       throw busyError(status)
     }
     const item = { id: randomUUID(), content, at: this.now() }
@@ -1278,8 +1730,8 @@ export class SessionManager {
     return { itemId: item.id }
   }
 
-  unqueue(sessionId: string, itemId: string): void {
-    const live = this.liveFor(sessionId)
+  async unqueue(sessionId: string, itemId: string): Promise<void> {
+    const live = await this.revive(sessionId)
     const { queue } = live.thread.session
     if (!queue.some((item) => item.id === itemId)) throw notFound(`No queued prompt ${itemId}`)
     const rest = queue.filter((item) => item.id !== itemId)
@@ -1293,7 +1745,7 @@ export class SessionManager {
    * answers that no turn is running, the turn is ending: the prompt stays first in the queue.
    */
   async steer(sessionId: string, itemId: string): Promise<void> {
-    const live = this.liveFor(sessionId)
+    const live = await this.revive(sessionId)
     const item = live.thread.session.queue.find((i) => i.id === itemId)
     if (!item) throw notFound(`No queued prompt ${itemId}`)
     if (!this.deps.agents.status(live.record.agentId).capabilities.steering) {
@@ -1315,7 +1767,7 @@ export class SessionManager {
     if (outcome === 'promptRequired') {
       this.update(live, { queue: [item, ...queue.filter((i) => i.id !== itemId)] })
       this.persist(live)
-      if (live.thread.session.status === 'ready') this.drainQueue(live)
+      if (canSend(live.thread.session.status)) this.drainQueue(live)
       return
     }
     this.emit(live, [
@@ -1335,8 +1787,8 @@ export class SessionManager {
     this.touch(live.id)
   }
 
-  resumeQueue(sessionId: string): void {
-    const live = this.liveFor(sessionId)
+  async resumeQueue(sessionId: string): Promise<void> {
+    const live = await this.revive(sessionId)
     this.update(live, { queuePaused: false })
     this.drainQueue(live)
     this.persist(live)
@@ -1347,7 +1799,7 @@ export class SessionManager {
   private drainQueue(live: Live): void {
     const { status, queue, queuePaused } = live.thread.session
     const [next, ...rest] = queue
-    if (!next || queuePaused || status !== 'ready' || !live.connection) return
+    if (!next || queuePaused || !canSend(status)) return
     this.update(live, { queue: rest })
     this.sendPrompt(live, next.content)
   }
@@ -1378,12 +1830,19 @@ export class SessionManager {
    * history; the fork shows a copy of this thread until it is replayed on a later open.
    */
   async fork(sessionId: string): Promise<SessionSummary> {
-    const source = this.liveFor(sessionId)
-    if (source.record.origin === 'subagent') {
+    if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noFork'))
     }
-    if (source.thread.session.status !== 'ready' || !source.connection) {
-      throw busyError(source.thread.session.status)
+    const source = await this.revive(sessionId)
+    const status = source.thread.session.status
+    if (status !== 'closed' && (status !== 'ready' || !source.connection)) {
+      throw busyError(status)
+    }
+    // Not every agent forks a session it does not have open, so a closed one attaches first.
+    try {
+      await this.attachClosed(source)
+    } catch (error) {
+      throw agentError(error)
     }
     const runtime = await this.deps.agents.ensureReady(source.record.agentId)
     if (!runtime.init.capabilities.forkSession) {
@@ -1417,10 +1876,7 @@ export class SessionManager {
     live.unread = false
     // Subagent cards point at the source's sub-sessions, which the fork does not have.
     const entries = threadEntries(source.thread).filter((entry) => entry.kind !== 'subagent')
-    for (const entry of entries) {
-      const n = Number(/^\w+:(\d+)$/.exec(entry.id)?.[1] ?? 0)
-      if (n > live.counter) live.counter = n
-    }
+    for (const entry of entries) live.counter = Math.max(live.counter, idNumber(entry.id))
     this.emit(
       live,
       entries.map((entry) => ({ op: 'entry.add', entry })),
@@ -1436,16 +1892,15 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
-  private async runTurnAgain(live: Live, content: UserContent[]): Promise<void> {
-    if (!live.connection) {
-      await this.runOpening(live, 'resume')
-      if (live.thread.session.status !== 'ready') return
-    }
-    this.startTurn(live, content, this.now())
-  }
-
   private async runTurn(live: Live, turn: Turn): Promise<void> {
-    const connection = live.connection!
+    let connection: AgentConnection
+    try {
+      connection = await this.connect(live)
+    } catch (error) {
+      if (!turn.ended) this.failConnect(live, turn, error)
+      return
+    }
+    if (turn.ended) return
     try {
       const result = await connection.prompt(live.record.acpSessionId, turn.content)
       if (turn.ended) return
@@ -1537,6 +1992,7 @@ export class SessionManager {
     this.deps.events.attention(live.id, 'turn-ended', this.titleOf(live), turnEndText(stopReason))
     if (stopReason === 'end_turn') this.drainQueue(live)
     else this.pauseQueue(live)
+    this.checkpoint(live)
   }
 
   private failTurn(live: Live, turn: Turn, error: unknown): void {
@@ -1583,10 +2039,23 @@ export class SessionManager {
     this.persist(live)
     this.touch(live.id)
     this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
+    this.checkpoint(live)
+  }
+
+  /** The session could not attach for the turn: it fails as a start does, and Retry sends again. */
+  private failConnect(live: Live, turn: Turn, error: unknown): void {
+    this.finishTurn(live, turn, null)
+    this.update(live, { turnStartedAt: null })
+    this.pauseQueue(live)
+    this.failStart(live, error, { action: 'prompt', content: turn.content })
+    this.persist(live)
+    this.checkpoint(live)
   }
 
   async cancel(sessionId: string): Promise<void> {
-    const live = this.liveFor(sessionId)
+    const live = this.live.get(sessionId)
+    // Nothing runs in a session that is not live.
+    if (!live) return void this.recordOf(sessionId)
     if (live.record.origin === 'subagent') {
       if (!live.thread.session.subagent?.canCancel) {
         throw new HostError('restricted', t('session.subagent.noCancel'))
@@ -1601,8 +2070,13 @@ export class SessionManager {
     const turn = live.turn
     if (!turn || turn.ended || turn.cancelRequested) return
     turn.cancelRequested = true
+    if (!live.connection) {
+      // Still attaching: the prompt never reached the agent.
+      this.endTurn(live, turn, 'cancelled', null)
+      return
+    }
     try {
-      await live.connection?.cancel(live.record.acpSessionId)
+      await live.connection.cancel(live.record.acpSessionId)
     } catch (error) {
       throw agentError(error)
     }
@@ -1738,11 +2212,12 @@ export class SessionManager {
     optionId: string,
     value: string | boolean,
   ): Promise<void> {
-    const live = this.liveFor(sessionId)
-    if (live.record.origin === 'subagent') {
+    if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noConfig'))
     }
-    if (!live.connection) throw busyError(live.thread.session.status)
+    const live = await this.revive(sessionId)
+    const status = live.thread.session.status
+    if (!live.connection && status !== 'closed') throw busyError(status)
     const option = live.thread.session.config.find((o) => o.id === optionId)
     if (!option) throw invalidParams(`No config option ${optionId}`)
     if (option.type === 'boolean' ? typeof value !== 'boolean' : typeof value !== 'string') {
@@ -1762,19 +2237,16 @@ export class SessionManager {
       return
     }
     try {
+      const connection = await this.attachClosed(live)
       if (optionId === SYNTHETIC_MODE_ID) {
-        await live.connection.setMode(live.record.acpSessionId, value as string)
+        await connection.setMode(live.record.acpSessionId, value as string)
         this.update(live, {
           config: live.thread.session.config.map((o): ConfigOption =>
             o.id === SYNTHETIC_MODE_ID ? { ...o, value } : o,
           ),
         })
       } else {
-        const config = await live.connection.setConfigOption(
-          live.record.acpSessionId,
-          optionId,
-          value,
-        )
+        const config = await connection.setConfigOption(live.record.acpSessionId, optionId, value)
         this.update(live, { config: mergeConfig(live.thread.session.config, config) })
       }
     } catch (error) {
@@ -1788,6 +2260,14 @@ export class SessionManager {
    * would abort a turn, so it waits for none to run.
    */
   private async setUltracode(live: Live, on: boolean): Promise<void> {
+    if (!live.connection && live.thread.session.status === 'closed') {
+      // The setting goes out with the `session/resume` that attaches the session.
+      live.record.ultracode = on
+      this.update(live, { config: withUltracode(live.record, live.thread.session.config) })
+      this.save(live)
+      this.touch(live.id)
+      return
+    }
     if (live.turn || live.thread.session.status !== 'ready' || !live.connection) {
       throw new HostError('busy', t('session.ultracodeBetweenTurns'))
     }
@@ -1834,19 +2314,23 @@ export class SessionManager {
     if (record.origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.closesWithParent'))
     }
-    await this.closeAll([...this.descendants(sessionId), record])
+    await this.reviving.get(sessionId)?.catch(() => {})
+    await this.closeAll([...this.descendants(sessionId), record], true)
   }
 
-  /** Closes sessions in order; none of them takes updates once this starts. */
-  private async closeAll(records: readonly SessionRecord[]): Promise<void> {
+  /**
+   * Closes sessions in order; none of them takes updates once this starts. Those `kept` store
+   * their threads first; the others are on their way out of the index.
+   */
+  private async closeAll(records: readonly SessionRecord[], kept: boolean): Promise<void> {
     for (const record of records) {
       const live = this.live.get(record.id)
       if (live) live.closing = true
     }
-    for (const record of records) await this.closeOne(record.id)
+    for (const record of records) await this.closeOne(record.id, kept)
   }
 
-  private async closeOne(sessionId: string): Promise<void> {
+  private async closeOne(sessionId: string, kept: boolean): Promise<void> {
     const live = this.live.get(sessionId)
     if (!live) return
     const connection = live.connection
@@ -1869,6 +2353,7 @@ export class SessionManager {
         )
       })
     }
+    if (kept) this.checkpoint(live)
     this.dropLive(live)
     this.updateBadge()
     // A session that never reached the index has nothing to come back to.
@@ -1881,8 +2366,9 @@ export class SessionManager {
     if (record.origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.deletedWithParent'))
     }
+    await this.reviving.get(sessionId)?.catch(() => {})
     const all = [...this.descendants(sessionId), record]
-    await this.closeAll(all)
+    await this.closeAll(all, false)
     for (const item of all) {
       if (item.origin !== 'user' || !item.acpSessionId) continue
       try {
@@ -1898,6 +2384,17 @@ export class SessionManager {
     }
     for (const item of all) this.forget(item.id)
     this.saveIndex()
+    this.removeThreads(all.map((item) => item.id))
+  }
+
+  private removeThreads(sessionIds: string[]): void {
+    if (sessionIds.length === 0) return
+    this.deps.threads?.remove(sessionIds).catch((error: unknown) => {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not remove stored threads: ${(error as Error).message}`,
+      )
+    })
   }
 
   private forget(sessionId: string): void {
@@ -1911,12 +2408,17 @@ export class SessionManager {
 
   /** Clears the index; the agents keep their transcripts. */
   async removeAll(): Promise<void> {
+    await Promise.allSettled([...this.reviving.values()])
     const live = [...this.live.values()]
-    await this.closeAll(live.filter((l) => l.record.origin === 'user').map((l) => l.record))
+    await this.closeAll(
+      live.filter((l) => l.record.origin === 'user').map((l) => l.record),
+      false,
+    )
     for (const item of live) if (this.live.has(item.id)) this.dropLive(item)
     const ids = new Set([...this.records.keys(), ...this.lastSummaries.keys()])
     for (const id of ids) this.forget(id)
     this.saveIndex()
+    this.removeThreads([...ids])
   }
 
   /** Removes a project's sessions from the index, closing live ones first. */
@@ -1927,13 +2429,16 @@ export class SessionManager {
       const live = this.live.get(summary.id)
       if (live) live.closing = true
     }
-    for (const summary of inProject) if (summary.origin === 'user') await this.closeOne(summary.id)
+    for (const summary of inProject) {
+      if (summary.origin === 'user') await this.closeOne(summary.id, false)
+    }
     for (const summary of inProject) {
       const live = this.live.get(summary.id)
       if (live) this.dropLive(live)
       this.forget(summary.id)
     }
     this.saveIndex()
+    this.removeThreads(inProject.map((summary) => summary.id))
   }
 
   async listImportable(
@@ -2046,13 +2551,31 @@ export class SessionManager {
     return this.list()
   }
 
-  /** Before a clean exit: pending patches go out and turns are left as they are. */
+  /**
+   * Before a clean exit: pending patches go out, every thread is stored as it stands, and turns
+   * are left as they are. No checkpoint follows.
+   */
   shutdown(): void {
     for (const live of this.live.values()) {
       this.flushPatches(live)
       if (live.turn?.fallback) clearTimeout(live.turn.fallback)
+      this.checkpoint(live)
     }
+    this.stopped = true
   }
+}
+
+/** Whether a session in this status takes a prompt: an attached one that is free, or one to attach. */
+function canSend(status: SessionStatus): boolean {
+  return status === 'ready' || status === 'closed'
+}
+
+/** JSON-RPC's code for a session the agent does not have. */
+const RESOURCE_NOT_FOUND = -32002
+
+/** The number in an entry id such as `e:12`, which the session's new ids count on from. */
+function idNumber(id: string): number {
+  return Number(/^\w+:(\d+)$/.exec(id)?.[1] ?? 0)
 }
 
 function turnEndText(stopReason: StopReason): string {
