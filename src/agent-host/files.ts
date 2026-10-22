@@ -4,6 +4,7 @@
 import { open, readdir, realpath, stat, type FileHandle } from 'node:fs/promises'
 import path from 'node:path'
 import {
+  FILE_IMAGE_LIMIT,
   FILE_LIST_LIMIT,
   FILE_MATCH_CHARS,
   FILE_READ_LIMIT,
@@ -12,6 +13,7 @@ import {
   type FileList,
   type FileMatch,
   type FileSearch,
+  type ImageType,
 } from '@shared/files'
 import type { Platform } from '@shared/platform'
 import { HostError, invalidParams, notFound } from './errors'
@@ -21,6 +23,7 @@ import { isAbsolutePath, pathKey } from './paths'
 export interface FilesLimits {
   list: number
   read: number
+  image: number
   search: number
   matchChars: number
   /** Files the search reads when the project is not in a repository. */
@@ -32,6 +35,7 @@ export interface FilesLimits {
 const DEFAULT_LIMITS: FilesLimits = {
   list: FILE_LIST_LIMIT,
   read: FILE_READ_LIMIT,
+  image: FILE_IMAGE_LIMIT,
   search: FILE_SEARCH_LIMIT,
   matchChars: FILE_MATCH_CHARS,
   scanFiles: 5_000,
@@ -76,6 +80,21 @@ function gitOutput(label: string, result: ExecResult): string | null {
 
 function isBinary(bytes: Buffer): boolean {
   return bytes.subarray(0, BINARY_PROBE_BYTES).includes(0)
+}
+
+const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i
+
+/** The picture format by its signature, not its name; null when it is none the preview shows. */
+function imageType(bytes: Buffer): ImageType | null {
+  const ascii = (start: number, end: number) => bytes.toString('latin1', start, end)
+  if (bytes[0] === 0x89 && ascii(1, 8) === 'PNG\r\n\x1a\n') return 'image/png'
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
+  if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') return 'image/gif'
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp'
+  if (ascii(4, 8) === 'ftyp' && ['avif', 'avis'].includes(ascii(8, 12))) return 'image/avif'
+  if (ascii(0, 2) === 'BM') return 'image/bmp'
+  if (ascii(0, 4) === '\0\0\x01\0') return 'image/x-icon'
+  return null
 }
 
 async function readBytes(handle: FileHandle, length: number): Promise<Buffer> {
@@ -148,15 +167,27 @@ export class FilesService {
     return { paths: paths.slice(0, this.limits.list), truncated: true }
   }
 
-  /** A file's text, or why there is none. `relativePath` uses `/` between segments. */
+  /**
+   * A file's text or picture, or why there is none. `relativePath` uses `/` between segments. A
+   * file named as a picture is one only if its first bytes say so.
+   */
   async read(root: string, relativePath: string): Promise<FileContent> {
     const relative = this.normalize(relativePath)
     const real = await this.resolveInside(root, relative)
-    const info = await this.fileStat(real, relative)
-    if (info.size > this.limits.read) return { kind: 'too-large', path: relative, size: info.size }
-    const bytes = await this.readFile(real, info.size)
-    if (isBinary(bytes)) return { kind: 'binary', path: relative, size: info.size }
-    return { kind: 'text', path: relative, size: info.size, text: bytes.toString('utf8') }
+    const { size } = await this.fileStat(real, relative)
+    const named = IMAGE_NAME.test(relative)
+    const limit = named ? this.limits.image : this.limits.read
+    if (size > limit) return { kind: 'too-large', path: relative, size, limit }
+    const bytes = await this.readFile(real, size)
+    const mimeType = named ? imageType(bytes) : null
+    if (mimeType) {
+      return { kind: 'image', path: relative, size, mimeType, data: bytes.toString('base64') }
+    }
+    if (size > this.limits.read) {
+      return { kind: 'too-large', path: relative, size, limit: this.limits.read }
+    }
+    if (isBinary(bytes)) return { kind: 'binary', path: relative, size }
+    return { kind: 'text', path: relative, size, text: bytes.toString('utf8') }
   }
 
   /** Lines that contain `query`, ignoring case. The query is literal text, not a pattern. */

@@ -206,6 +206,8 @@
   --elevation-focus: 0 4px 20px oklch(0 0 0 / 8%);
   --button-shadow: 0 1px 1px oklch(0 0 0 / 4%);
   --card-glow: oklch(0 0 0 / 3%);
+  /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
+  --checker: oklch(0 0 0 / 5%);
 
   --card-ring: inset 0 0 0 var(--hairline) var(--border), var(--highlight);
   --outline-ring: inset 0 0 0 var(--hairline) var(--border-strong), var(--button-shadow);
@@ -367,6 +369,7 @@
   --elevation-focus: 0 4px 24px oklch(0 0 0 / 55%);
   --button-shadow: inset 0 1px 0 oklch(1 0 0 / 5%);
   --card-glow: oklch(1 0 0 / 5%);
+  --checker: oklch(1 0 0 / 7%);
   --segment-ring: inset 0 1px 0 oklch(1 0 0 / 6%), 0 1px 2px oklch(0 0 0 / 30%);
   --thumb-shadow: 0 1px 2px oklch(0 0 0 / 50%);
   --effort-max-shadow: inset 0 0 0 1px var(--effort-max-ring), 0 1px 4px oklch(0.76 0.16 30 / 18%);
@@ -457,6 +460,10 @@
 
 @utility app-region-no-drag {
   -webkit-app-region: no-drag;
+}
+
+@utility checkerboard {
+  background: repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
 }
 
 @utility tabular {

@@ -30,7 +30,9 @@
     "binaryTitle": "Binary file",
     "binaryDescription": "{{size}}, not shown.",
     "tooLargeTitle": "Too large to preview",
-    "tooLargeDescription": "{{size}}; the preview shows files up to 1 MB."
+    "tooLargeDescription": "{{size}}; the preview shows files up to {{limit}}.",
+    "imageFailedTitle": "Couldn't show this image",
+    "imageFailedDescription": "{{size}}; its data does not decode as a picture."
   },
   "link": {
     "open": "Open {{target}}"

@@ -29,7 +29,9 @@
     "binaryTitle": "二进制文件",
     "binaryDescription": "{{size}}，不显示预览。",
     "tooLargeTitle": "文件过大，无法预览",
-    "tooLargeDescription": "{{size}}；预览仅支持不超过 1 MB 的文件。"
+    "tooLargeDescription": "{{size}}；预览仅支持不超过 {{limit}} 的文件。",
+    "imageFailedTitle": "无法显示此图片",
+    "imageFailedDescription": "{{size}}；图片数据无法解码。"
   },
   "link": {
     "open": "打开 {{target}}"

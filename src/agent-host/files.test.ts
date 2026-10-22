@@ -1,6 +1,6 @@
 import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { FILE_MATCH_CHARS, FILE_READ_LIMIT } from '@shared/files'
+import { FILE_IMAGE_LIMIT, FILE_MATCH_CHARS, FILE_READ_LIMIT } from '@shared/files'
 import type { Platform } from '@shared/platform'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FilesService, type FilesLimits } from './files'
@@ -193,6 +193,7 @@ describe('read', () => {
       kind: 'too-large',
       path: 'big.txt',
       size: FILE_READ_LIMIT + 1,
+      limit: FILE_READ_LIMIT,
     })
     expect(await service().read(dir, 'edge.txt')).toMatchObject({ kind: 'text' })
     await s.write(dir, 'small.txt', 'twelve bytes')
@@ -200,6 +201,50 @@ describe('read', () => {
       kind: 'too-large',
       size: 12,
     })
+  })
+
+  it('reads an image whole, typed by its first bytes, up to the image limit', async () => {
+    const dir = await plain()
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(FILE_READ_LIMIT, 1),
+    ])
+    await writeFile(join(dir, 'cover.PNG'), png)
+    expect(await service().read(dir, 'cover.PNG')).toEqual({
+      kind: 'image',
+      path: 'cover.PNG',
+      size: png.length,
+      mimeType: 'image/png',
+      data: png.toString('base64'),
+    })
+    // A JPEG named .png is shown as what it is.
+    await writeFile(join(dir, 'photo.png'), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]))
+    expect(await service().read(dir, 'photo.png')).toMatchObject({ mimeType: 'image/jpeg' })
+    await writeFile(join(dir, 'anim.webp'), Buffer.from('RIFF\x04\x00\x00\x00WEBPVP8 ', 'latin1'))
+    expect(await service().read(dir, 'anim.webp')).toMatchObject({ mimeType: 'image/webp' })
+  })
+
+  it('does not read an image larger than the image limit', async () => {
+    const dir = await plain()
+    await writeFile(join(dir, 'big.jpg'), Buffer.alloc(12, 1))
+    expect(await service({ image: 11 }).read(dir, 'big.jpg')).toEqual({
+      kind: 'too-large',
+      path: 'big.jpg',
+      size: 12,
+      limit: 11,
+    })
+    expect(FILE_IMAGE_LIMIT).toBeGreaterThan(FILE_READ_LIMIT)
+  })
+
+  it('treats a file named as an image that holds something else as any other file', async () => {
+    const dir = await plain()
+    await s.write(dir, 'note.png', 'not a picture')
+    await writeFile(join(dir, 'odd.gif'), Buffer.from([0x00, 0x01, 0x02]))
+    expect(await service().read(dir, 'note.png')).toMatchObject({
+      kind: 'text',
+      text: 'not a picture',
+    })
+    expect(await service().read(dir, 'odd.gif')).toMatchObject({ kind: 'binary' })
   })
 
   it('refuses paths that could leave the project', async () => {

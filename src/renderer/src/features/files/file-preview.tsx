@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { File, Virtualizer, WorkerPoolContext } from '@pierre/diffs/react'
@@ -108,10 +108,14 @@ function Body({ file }: { file: OpenFile }) {
     return (
       <Notice
         title={t('preview.tooLargeTitle')}
-        description={t('preview.tooLargeDescription', { size: bytes(content.size) })}
+        description={t('preview.tooLargeDescription', {
+          size: bytes(content.size),
+          limit: bytes(content.limit),
+        })}
       />
     )
   }
+  if (content.kind === 'image') return <Picture key={content.path} content={content} />
   if (rendered(file, source)) {
     return (
       <div
@@ -123,6 +127,48 @@ function Body({ file }: { file: OpenFile }) {
     )
   }
   return <Code content={content} line={file.line} />
+}
+
+/**
+ * A picture at its own size, or fitted to the pane when larger, over squares that show its
+ * transparency, with its pixel size and file size under it.
+ */
+function Picture({ content }: { content: Extract<FileContent, { kind: 'image' }> }) {
+  const { t } = useTranslation('files')
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const src = useMemo(() => `data:${content.mimeType};base64,${content.data}`, [content])
+  if (failed) {
+    return (
+      <Notice
+        title={t('preview.imageFailedTitle')}
+        description={t('preview.imageFailedDescription', { size: bytes(content.size) })}
+      />
+    )
+  }
+  return (
+    <div className="absolute inset-0 flex flex-col">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <img
+          src={src}
+          alt={nameOf(content.path)}
+          draggable={false}
+          onLoad={(event) =>
+            setNatural({
+              width: event.currentTarget.naturalWidth,
+              height: event.currentTarget.naturalHeight,
+            })
+          }
+          onError={() => setFailed(true)}
+          className="max-h-full max-w-full checkerboard object-contain shadow-[0_0_0_var(--hairline)_var(--border)]"
+        />
+      </div>
+      <p className="shrink-0 pb-3 text-center text-xs text-muted-foreground tabular">
+        {natural && `${natural.width} × ${natural.height} · `}
+        {bytes(content.size)}
+      </p>
+    </div>
+  )
 }
 
 function Notice({ title, description }: { title: string; description: string }) {
