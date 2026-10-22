@@ -109,6 +109,25 @@ export function buildItems(order: string[], signature: string, live = false): It
 }
 
 /**
+ * Each item's reply, by its footer's key: everything a turn shows after its user message. A user
+ * message has none.
+ */
+export function replyKeys(items: Item[]): (string | null)[] {
+  const keys: (string | null)[] = new Array(items.length).fill(null)
+  let reply: string | null = null
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]!
+    if (item.type === 'reply') reply = item.key
+    else if (item.type === 'entry' && item.turnStart) {
+      reply = null
+      continue
+    }
+    keys[i] = reply
+  }
+  return keys
+}
+
+/**
  * One footer per turn with a message, a turn running from a user message to the next. It takes
  * the place of the turn's end marker, or closes a turn from history that has none; the turn still
  * running gets its footer when it ends.

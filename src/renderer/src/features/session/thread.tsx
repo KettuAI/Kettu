@@ -14,7 +14,8 @@ import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
-import { buildItems, signatureOf, type Item } from './thread-items'
+import { hoverReply } from './reply-hover'
+import { buildItems, replyKeys, signatureOf, type Item } from './thread-items'
 
 // A long history renders from its end: the first frame shows the last items, and older ones
 // follow in transitions after it, which MessageScroller keeps in place as they are prepended.
@@ -72,6 +73,9 @@ export const Thread = memo(function Thread({
     [order, signature, working],
   )
   const steps = useMemo(() => stepIds(order ?? [], signature), [order, signature])
+  const replies = useMemo(() => replyKeys(items), [items])
+  // Another session's footer may share a key, so a switch made from the keyboard starts clear.
+  useEffect(() => () => hoverReply(null), [sessionId])
   const awaitingReply = working && signature.endsWith('u')
   const shownFrom = useShownFrom(items.length)
 
@@ -84,7 +88,10 @@ export const Thread = memo(function Thread({
           aria-label={t('thread.label')}
           className="outline-none [scroll-timeline:--scroll-fade-top_y] [scrollbar-gutter:stable_both-edges]"
         >
-          <MessageScrollerContent className="mx-auto w-full max-w-thread gap-0 px-6 pt-5 pb-8">
+          <MessageScrollerContent
+            className="mx-auto w-full max-w-thread gap-0 px-6 pt-5 pb-8"
+            onPointerLeave={() => hoverReply(null)}
+          >
             {items.slice(shownFrom).map((item, shownIndex) => {
               const index = shownFrom + shownIndex
               return (
@@ -92,6 +99,7 @@ export const Thread = memo(function Thread({
                   key={item.key}
                   messageId={item.key}
                   scrollAnchor={item.type === 'entry' && item.scrollAnchor}
+                  onPointerEnter={() => hoverReply(replies[index] ?? null)}
                   className={cn(
                     index > 0 && spacing(item, items[index - 1]!, steps),
                     // The growing tail would flip between skipped and rendered on every chunk,
@@ -101,6 +109,7 @@ export const Thread = memo(function Thread({
                 >
                   {item.type === 'reply' ? (
                     <ReplyFooter
+                      replyKey={item.key}
                       sessionId={sessionId}
                       agentIds={item.agentIds}
                       endId={item.endId}

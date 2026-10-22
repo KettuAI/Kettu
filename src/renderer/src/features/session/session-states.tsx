@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
+import { ArrowUpIcon, CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import { Button } from '@renderer/components/ui/button'
+import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
 import { Message } from '@renderer/components/ui/message'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -13,51 +14,50 @@ import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { UserContentView } from './entries/user-content'
 
-/** A few entry-shaped placeholders while a thread loads or the agent starts. */
+/**
+ * A thread's shape while it loads: a message and a reply at their real sizes and spacing. It fades
+ * in late, so a thread that loads at once shows nothing in between.
+ */
 export function ThreadSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn('mx-auto flex w-full max-w-thread flex-col gap-6 px-6 pt-5', className)}
+      className={cn(
+        'mx-auto flex w-full max-w-thread animate-in flex-col px-6 pt-5 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
+        className,
+      )}
       aria-hidden
     >
-      <Skeleton className="ml-auto h-9 w-2/5 rounded-2xl" />
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-3.5 w-11/12" />
-        <Skeleton className="h-3.5 w-4/5" />
-        <Skeleton className="h-3.5 w-3/5" />
+      <Skeleton className="ml-auto h-[42px] w-2/5 rounded-[14px]" />
+      {/* Bars of 10 px on the prose's 26 px lines, and a folded run's shorter line between. */}
+      <div className="flex flex-col gap-4 pt-12">
+        <Skeleton className="h-2.5 w-11/12" />
+        <Skeleton className="h-2.5 w-4/5" />
       </div>
-      <Skeleton className="h-(--card-header) w-full rounded-xl" />
+      <Skeleton className="mt-6 h-2.5 w-44 opacity-60" />
+      <div className="flex flex-col gap-4 pt-6">
+        <Skeleton className="h-2.5 w-full" />
+        <Skeleton className="h-2.5 w-10/12" />
+        <Skeleton className="h-2.5 w-3/5" />
+      </div>
     </div>
   )
 }
 
 const NO_LINES: string[] = []
 
-/**
- * "Starting Codex…" with the latest lines the agent printed, or "Installing Codex…" with npm's. With
- * `loading`, a session being opened says "Loading the conversation…" once the agent runs.
- */
-export function StartingAgent({
-  agentId,
-  loading = false,
-}: {
-  agentId: AgentId
-  loading?: boolean
-}) {
+/** "Starting Codex…" with the latest lines the agent printed, or "Installing Codex…" with npm's. */
+export function StartingAgent({ agentId }: { agentId: AgentId }) {
   const { t } = useTranslation('session')
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
   const state = useAgentsStore((s) => s.byId[agentId]?.state)
-  const agentStarting = state !== 'ready'
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-2 text-center" role="status">
       <span className="inline-flex items-center gap-2 text-ui text-muted-foreground">
         <Spinner className="size-3.5" />
         <span className="shimmer">
-          {loading && !agentStarting
-            ? t('agentStart.loading')
-            : t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
-                agent: agentName(agentId),
-              })}
+          {t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
+            agent: agentName(agentId),
+          })}
         </span>
       </span>
       {progress.length > 0 && (
@@ -72,6 +72,53 @@ export function StartingAgent({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The composer's frame while a session opens, saying what it waits for where the prompt goes:
+ * "Starting Codex…", or "Loading the conversation…" once the agent runs, with the agent's latest
+ * line under it. The composer takes its place without a shift.
+ */
+export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
+  const { t } = useTranslation('session')
+  const progress = useAgentsStore((s) => s.byId[agentId]?.progress.at(-1))
+  const state = useAgentsStore((s) => s.byId[agentId]?.state)
+  const text =
+    state === 'ready'
+      ? t('agentStart.loading')
+      : t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
+          agent: agentName(agentId),
+        })
+  return (
+    <div className="flex flex-col gap-1">
+      <InputGroup variant="composer">
+        <div
+          role="status"
+          className="flex min-h-(--composer-min) min-w-0 flex-1 items-center py-[15px] pr-1 pl-4 text-prose leading-[22px] text-muted-foreground"
+        >
+          <span className="flex min-w-0 animate-in items-center gap-2 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-base)">
+            <Spinner className="size-3.5 shrink-0" />
+            <span className="truncate shimmer">{text}</span>
+          </span>
+        </div>
+        <InputGroupAddon align="inline-end" className="self-end pr-3 pb-3 pl-1">
+          <InputGroupButton size="round" variant="secondary" disabled tabIndex={-1} aria-hidden>
+            <ArrowUpIcon />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+      <div className="flex min-h-row items-center px-2">
+        {progress && (
+          <span
+            key={progress}
+            className="truncate font-mono text-[11.5px] text-muted-foreground/80 animate-in fade-in animation-duration-(--duration-base)"
+          >
+            {progress}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

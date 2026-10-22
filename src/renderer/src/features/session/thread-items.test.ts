@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView, ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { buildItems, signatureOf, stepItems } from './thread-items'
+import { buildItems, replyKeys, signatureOf, stepItems } from './thread-items'
 
 const session = { id: 's1' } as SessionView
 
@@ -236,6 +236,45 @@ describe('reply footers', () => {
 
   it('leave a turn without a message to its end marker', () => {
     expect(keys([user('u1'), tool('x1', 'execute'), end('t1')])).toEqual(['u1', 'x1', 't1'])
+  })
+})
+
+describe('replyKeys', () => {
+  it("gives each item after a user message its turn's footer", () => {
+    const result = items([
+      user('u1'),
+      tool('x1', 'execute'),
+      agent('a1'),
+      user('u2'),
+      agent('a2'),
+      tool('x2', 'execute'),
+    ])
+    expect(result.map((i) => i.key)).toEqual([
+      'u1',
+      'x1',
+      'a1',
+      'reply:u1',
+      'u2',
+      'a2',
+      'x2',
+      'reply:u2',
+    ])
+    expect(replyKeys(result)).toEqual([
+      null,
+      'reply:u1',
+      'reply:u1',
+      'reply:u1',
+      null,
+      'reply:u2',
+      'reply:u2',
+      'reply:u2',
+    ])
+  })
+
+  it('leaves a turn without a footer out', () => {
+    const s = state([user('u1'), agent('a1'), user('u2'), agent('a2')])
+    const result = buildItems(s.order, signatureOf(s), true)
+    expect(replyKeys(result)).toEqual([null, 'reply:u1', 'reply:u1', null, null])
   })
 })
 

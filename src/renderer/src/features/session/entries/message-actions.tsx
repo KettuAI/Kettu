@@ -13,11 +13,11 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useThreadsStore } from '@renderer/stores/threads'
+import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation, useSessionView } from '../use-thread'
 import { stopReasonText } from './helpers'
 
-// Rows under messages: hidden until the message is hovered or focused, except under the latest
-// reply, where they stay in view.
+// Rows under messages: hidden until the message is hovered or focused.
 const REVEAL =
   'opacity-0 transition-opacity duration-(--duration-fast) group-hover/actions:opacity-100 group-focus-within/actions:opacity-100'
 
@@ -98,15 +98,17 @@ export function UserActions({
 
 /**
  * Under a turn's reply: Copy and Read aloud for the turn's messages, Fork under the latest one,
- * then how the turn ended and when the reply came.
+ * then how the turn ended and when the reply came. It shows while the pointer is over the reply.
  */
 export const ReplyFooter = memo(
   function ReplyFooter({
+    replyKey,
     sessionId,
     agentIds,
     endId,
     latest,
   }: {
+    replyKey: string
     sessionId: string
     agentIds: string[]
     endId: string | null
@@ -128,6 +130,7 @@ export const ReplyFooter = memo(
     const speaking = useSpeaking(speechId)
     const [forking, setForking] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const hovered = useReplyHover((s) => s.key === replyKey)
 
     const text = () => {
       const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
@@ -159,7 +162,7 @@ export const ReplyFooter = memo(
           animation,
         )}
       >
-        <div className={cn('flex items-center gap-0.5', !latest && REVEAL)}>
+        <div className={cn('flex min-w-0 items-center gap-0.5', REVEAL, hovered && 'opacity-100')}>
           <CopyButton text={text} label={t('replyFooter.copyReply')} />
           {canSpeak && (
             <ActionButton
@@ -178,14 +181,14 @@ export const ReplyFooter = memo(
               <GitForkIcon />
             </ActionButton>
           )}
+          {(end || at !== undefined) && (
+            <span className="ml-1.5 flex min-w-0 items-center gap-1.5 truncate tabular">
+              {end && <span>{stopReasonText(end.stopReason, end.durationMs)}</span>}
+              {end && at !== undefined && <span aria-hidden>·</span>}
+              {at !== undefined && <Ago at={at} />}
+            </span>
+          )}
         </div>
-        {(end || at !== undefined) && (
-          <span className="ml-1.5 flex min-w-0 items-center gap-1.5 truncate tabular">
-            {end && <span>{stopReasonText(end.stopReason, end.durationMs)}</span>}
-            {end && at !== undefined && <span aria-hidden>·</span>}
-            {at !== undefined && <Ago at={at} />}
-          </span>
-        )}
         {error && (
           <span className="ml-2 min-w-0 truncate text-destructive" title={error}>
             {error}
@@ -195,6 +198,7 @@ export const ReplyFooter = memo(
     )
   },
   (a, b) =>
+    a.replyKey === b.replyKey &&
     a.sessionId === b.sessionId &&
     a.endId === b.endId &&
     a.latest === b.latest &&

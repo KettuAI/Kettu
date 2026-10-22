@@ -19,7 +19,7 @@ import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { PlanBar } from './plan-bar'
 import { QueueTray } from './queue-tray'
 import { SessionHeader } from './session-header'
-import { FailedState, StartingAgent, ThreadSkeleton } from './session-states'
+import { ComposerPlaceholder, FailedState, StartingAgent, ThreadSkeleton } from './session-states'
 import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
@@ -74,13 +74,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             onRetry={() => void reloadSession(sessionId)}
           />
         </div>
-      ) : summary.status === 'starting' ? (
-        // A session that is not live waits for its agent and the whole `session/load` replay.
-        <div className="flex min-h-0 flex-1 flex-col">
-          <StartingAgent agentId={summary.agentId} loading />
-          <ThreadSkeleton className="opacity-70" />
-        </div>
       ) : (
+        // A session that is not live waits for its agent and the whole `session/load` replay; the
+        // composer's placeholder says which.
         <ThreadSkeleton />
       )
   } else if (status === 'auth_required' && empty) {
@@ -171,7 +167,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           ) : session ? (
             <Composer key={sessionId} session={session} agentName={name} />
           ) : (
-            <div className="h-[calc(var(--composer-min)+var(--row-height)+4px)]" />
+            <ComposerPlaceholder agentId={summary.agentId} />
           )}
         </div>
       </div>

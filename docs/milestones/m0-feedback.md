@@ -36,7 +36,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 28  | The Ready label next to the status dot is redundant            | Settings       | Fixed        |
 | 29  | Agents that are not installed cannot be installed from here    | Settings       | Open         |
 | 30  | The session context menu lacks rename, pin and archive         | Sidebar        | Partly fixed |
-| 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Open         |
+| 31  | Earlier replies show actions only on hover, and no Fork        | Thread entries | Partly fixed |
 | 32  | No message outline beside the thread, expanding on hover       | Thread         | Open         |
 | 33  | Title menu needs polish; agent mark goes before the title      | Top bar        | Partly fixed |
 | 34  | The slash command popover looks crude                          | Composer       | Open         |
@@ -55,6 +55,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 47  | A crowded top bar cuts the session title first                 | Top bar        | Fixed        |
 | 48  | The spinner's screen reader label is not translated            | Localization   | Fixed        |
 | 49  | No multimodal support: images, audio and video                 | Media          | Partly fixed |
+| 50  | Codex's progress notes read as its answer                      | Thread entries | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -188,6 +189,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Expected**: switching feels instant, as the [M0 goal](./m0.md) promises ("Switching between them is instant").
 - **Today**: the only measurement, in [M0 performance](../perf/m0.md), is 36 ms to first paint for a live fake-agent session with 1,000 entries. It does not cover what the screenshot shows: a session that is not live and has to be opened again with `session/load`, the wait for its snapshot (`ThreadSkeleton` in `src/renderer/src/features/session/session-view.tsx`), or real threads full of markdown and diffs. Which of these causes the stall is not known yet. To settle when planning: reproduce the switch with real sessions, profile it in the DevTools Performance panel to find where the time goes (starting the agent and `session/load`, the snapshot, or rendering), and add the case to the performance script.
 - **Partly fixed**: four of the causes found in [M0 feedback findings](./m0-feedback-findings.md#12-switching-sessions) are dealt with. `7dddd70` replays `session/load` in linear time in the agent host, `1365800` mounts a long history in linear time, and `3e26044` restores the last session at launch without waiting for git tools. In `f28120b`, a session that is not live now shows "Starting Claude Code…" while its agent starts, then "Loading the conversation…" over the skeleton until the replay ends ([Interface: states](../design/ui.md#states)). In `6e961aa`, the performance script measures a 4,000-entry reopen, the settled time and long frames of switches, a switch to an evicted session and back to a 4,000-entry one ([M0 performance](../perf/m0.md#2026-10-21-macos-session-switching)). Keeping recent sessions mounted with `<Activity>` was measured and left out: it took a switch back to 4,000 entries from 38 ms to 147 ms to first paint, a single frame the click waits for, to save the 0.9 s that the history takes to fill in after it. Still to decide: agents starting through `npx -y` on every launch, which costs Claude Code 1.1 to 1.4 s, and needs a managed install of each adapter.
+- **Reported again**: 2026-10-22, with a screenshot of a Claude Code session opening: "Loading the conversation…" with a spinner sat above pale blocks at the top of an empty page, with no composer, and read as crude.
+- **Changed**: the skeleton is a message and a reply at their real sizes and spacing and fades in after 200 ms, so a quick load shows nothing; the status moved into the composer's frame, which stands in place with "Starting Claude Code…", then "Loading the conversation…", and the agent's latest line under it, so the composer takes over without a shift ([Interface: states](../design/ui.md#states)).
 
 ## 13. The git popover only displays, and repeats the terminal toggle
 
@@ -411,6 +414,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The held space: the empty band under each earlier reply reads as a hole. The row could take no space until hover, at the cost of the text moving, or sit in a smaller reserved height, or show at rest in a quieter state.
   - The missing Fork: whether earlier replies should offer it. Without a partial `session/fork` it could only fork the whole session, or OverBench could build the new session from the history up to that reply, which needs a design of its own; rewinding to a message was left out of M0 with checkpoints ([problem 5](#5-messages-have-no-action-row)).
   - Whether the latest reply's always-visible row against the hover-only rows above it is itself the inconsistency.
+- **Decided**: 2026-10-22, by the maintainer, with a screenshot of an earlier reply's empty band and the latest reply's row: the row shows only while the pointer is over the message, under every reply, the latest one included.
+- **Partly fixed**: the row is hidden under every reply and shows while the pointer is over the reply, from the first entry after the user message to the row, or while it holds keyboard focus; it still holds its place ([Interface: message actions](../design/ui.md#message-actions)). Fork under earlier replies is still open.
 
 ## 32. No message outline beside the thread, expanding on hover
 
@@ -727,3 +732,15 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - **Today**: a file reference in a reply opens the Files pane, where a video gets the binary file notice, and nothing plays in the thread. Only paths in the project's file list count as references, and that list is `git ls-files --cached --others --exclude-standard` (`src/agent-host/files.ts`), so a file written to a git-ignored folder, such as an output folder, or outside the project is not recognised. The renderer has no file system access, and the host reads at most 1 MiB of a file (`FILE_READ_LIMIT` in `src/shared/files.ts`), so a video needs a way to reach the renderer in a stream that can seek, from a path the main process or the host validates, plus the CSP change above.
   - **To settle when planning**: how a media file is found in the thread (a file reference in the reply, a path in a tool call's command or output, or the tool call's `locations`); which folders may be previewed (the project, its git-ignored folders, paths outside it); the inline player's size and controls, with no autoplay, and a larger view; and what happens with a format Electron cannot play, such as opening it in the system's player.
 - **Partly fixed**: an agent message shows its links and other content as labelled chips after its images, as the session model says, through the chip user messages use. The rest is still to be planned.
+
+## 50. Codex's progress notes read as its answer
+
+- **Reported**: 2026-10-22, with a screenshot of a Codex session in `self-media` analysing the project, after [problem 1](#1-thoughts-and-tool-calls-cannot-be-folded-together)'s fold was settled: the thread still reads oddly. A lone "Thought ›" follows the user's message, then six short notes ("我先梳理项目结构…", "目录显示这是内容制作工作区…") alternate with folded runs before the answer, each note set as body text.
+- **Cause**, found in the session's Codex rollout file and in codex-acp 2.2.2's source:
+  - Codex labels every message with a phase: the six notes are `commentary`, progress updates it writes before its tool calls, and only the last message is `final_answer`. Codex's own app shows commentary as part of the work, not as the answer.
+  - codex-acp forwards the phase only in `_meta.jetbrains.air.phase`, and only to a client that declares `_meta.jetbrains.air` in `initialize` (`createMessagePhaseMeta` and `isAirClient`). Declaring it is not an option: the same flag switches how the adapter renders tool calls (AIR metadata instead of the standard fields), permission options, questions, modes and commands.
+  - So OverBench receives the notes as ordinary `agent_message_chunk`s, and by problem 1's rule that messages never fold, each shows as body text and cuts the work into pieces.
+  - The lone "Thought" before the first note: the first command, run through Codex's code mode, left no item in the history, so on reopening the gap holds the reasoning alone. A thought restored from history has no duration, and Codex's reasoning is a short heading, so it reads "Thought" bare.
+- **To settle**: how OverBench tells Codex's notes from its answer.
+  - Infer it: in a Codex turn, a message that more work follows is commentary, since Codex ends a turn with its final answer. Commentary would then fold with the work around it, and the turn would read as one folded run before the answer. While a turn runs, a note shows as text until work follows it.
+  - Get it from the adapter: ask codex-acp to send the phase to every client, then use it.
