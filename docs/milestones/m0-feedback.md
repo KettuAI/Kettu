@@ -43,6 +43,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 35  | The palette is black and grey and reads as cheap               | Design system  | Open         |
 | 36  | The composer has no + menu, file or image attachments          | Composer       | Open         |
 | 37  | Icons look heavy; use thin line icons from a library           | Design system  | Open         |
+| 38  | Files pane: no markdown preview, file-type icons or editing    | Side panel     | Open         |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -473,3 +474,34 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The solid shapes (stop squares, status dots): whether they stay.
   - Whether the no-hand-drawing rule covers the existing inline SVGs. The branch lane and the usage pie are data graphics and the agent marks are brand marks from a library, so they are not UI icons in the sense of Contributing, but that is for the maintainer to confirm.
   - The rule written into [Design system](../design/design-system.md), beside the icon size, and into Contributing.
+
+## 38. Files pane: no markdown preview, file-type icons or editing
+
+- **Reported**: 2026-10-22, with a screenshot of the Files pane with `README.md` open.
+- **Observed**: three gaps in the pane.
+  - A Markdown file shows only as highlighted source, with no way to switch to a rendered preview.
+  - Every file in the tree has the same plain file icon, and every folder the same folder icon.
+  - A file cannot be edited.
+- **Expected**:
+  - A Markdown file can be switched between its source and a rendered preview.
+  - File icons by type, such as the logo of TypeScript or Go for their files. The maintainer asked that the scheme follow the standard practice, to be looked at before choosing.
+  - Files can be edited in the pane.
+- **Today**: [Interface: files](../design/ui.md#files) makes the pane read-only. The tree rows use Lucide's `FileIcon` and `FolderIcon` (`files-panel.tsx`), and the preview header has no icon. The preview is the diffs library's `File` on the shared worker pool, virtualized, with highlighting by Shiki. The host reads a file up to 1 MiB as text and has no write request ([Agent host: project files](../design/agent-host.md#project-files)); the ACP `fs` client capabilities are off, so the agent edits files on its own. The list and the open file reload when git status changes or the window gains focus ([Interface: files](../design/ui.md#files)).
+- **To settle when planning**: the three differ a lot in size. The preview toggle is small, the icons are a library choice, and editing is large and a product decision about how far OverBench goes as an editor.
+  - **Markdown preview**:
+    - The toggle's place in the preview header, and whether the choice is remembered.
+    - The rendering goes through Streamdown, the markdown renderer the thread already uses, rather than a second one, so the look follows the thread's; this ties to the markdown design of [problem 6](#6-markdown-looks-plain-and-file-references-do-not-stand-out).
+    - Relative links and images in the file: the CSP blocks remote images, and a local one would have to come through the host.
+  - **File icons**:
+    - The standard practice to look at: the file icon themes of editors, which map a file's name and extension to an icon, and folders by name, and the libraries that package such sets for the web. Which one, its licence, and its size need checking.
+    - The rule from [problem 37](#37-icons-look-heavy-use-thin-line-icons-from-a-library) holds: icons come from an established library, never drawn by hand.
+    - Language logos are coloured, so how they sit with a thin line icon system and with the restrained palette of [problem 35](#35-the-palette-is-black-and-grey-and-reads-as-cheap), as the agent marks do.
+    - Cost in a virtualized tree of up to 50,000 rows: icons loaded lazily, nothing parsed per row.
+    - Where they show: the tree, the list, the search results, the preview header, and file references in the thread.
+  - **Editing**:
+    - An editor component. The current preview is not one, so this means a new dependency, which needs the maintainer's approval, loaded lazily like the other heavy modules.
+    - A write request in the host, with the containment and symbolic link rules of reads, an atomic write, a size cap, and care for encoding, line endings and file mode.
+    - Unsaved state: a dirty mark, `Mod+S`, and a prompt when closing or switching a file or quitting.
+    - Conflicts: the open file reloads from disk today, which must not discard unsaved edits, and an agent may edit the same file meanwhile.
+    - Whether the agent should be told about a user's edits, and how far editing goes: plain text with highlighting and save, or an editor with search and more.
+  - **Where the rule goes**: [Interface: files](../design/ui.md#files) and the [host's project files](../design/agent-host.md#project-files), which both say read-only today.
