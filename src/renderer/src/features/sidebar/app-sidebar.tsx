@@ -1,5 +1,5 @@
 import { useMemo, type KeyboardEvent } from 'react'
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon, SquarePenIcon } from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
@@ -44,7 +44,7 @@ export function AppSidebar() {
       </div>
       <div className="shrink-0 px-2 pt-0.5 pb-2.5">
         <NavRow
-          icon={<SquarePenIcon className="text-muted-foreground" />}
+          icon={<PlusIcon className="text-muted-foreground" />}
           label={t('nav.newSession')}
           shortcut="Mod+N"
           current={drafting}
