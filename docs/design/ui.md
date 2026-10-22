@@ -6,12 +6,18 @@ This document designs every screen M0 ships. It applies the [core philosophy](..
 
 ## Window and chrome
 
-- **macOS**: hidden title bar, traffic lights at `{ x: 16, y: 14 }`, centred in a 40 px top bar. The top bar leaves 80 px on the left for them.
-- **Windows and Linux**: hidden title bar with `titleBarOverlay` window controls, 40 px high, colored from the current theme and updated with `setTitleBarOverlay` when the theme changes: the background is `--background`, the symbols `--foreground` (`#0a0a0a` light, `#fafafa` dark). The top bar keeps clear of the controls with `env(titlebar-area-x)` and `env(titlebar-area-width)`. There is no menu bar; the renderer handles the shortcuts.
+- **macOS**: hidden title bar, traffic lights at `{ x: 16, y: 14 }`, centred in a 40 px top bar. The top bar leaves 80 px on the left for them. The [zoom](#zoom) scales the top bar but not the traffic lights, so main moves them to `x = 16 × zoom` and `y = (40 × zoom − 12) / 2`, rounded, which keeps them centred, and the renderer leaves them their unzoomed 52 px as `--traffic-lights` (`52px / var(--zoom)`).
+- **Windows and Linux**: hidden title bar with `titleBarOverlay` window controls, 40 px high times the zoom, so they fill the zoomed top bar, colored from the current theme and updated with `setTitleBarOverlay` when the theme changes: the background is `--background`, the symbols `--foreground` (`#0a0a0a` light, `#fafafa` dark). The top bar keeps clear of the controls with `env(titlebar-area-x)` and `env(titlebar-area-width)`. There is no menu bar; the renderer handles the shortcuts.
 - The top bar is the drag region (`app-region-drag`). Everything clickable inside it is `app-region-no-drag`.
 - The window remembers its size, position and maximized state, and never reopens off-screen ([persistence](./persistence.md#window-and-app-state)). Minimum size: 960 × 600.
 - The window's own background follows the effective theme, `#fcfcfc` light and `#151515` dark, the values of `--background`, also when the theme changes while it is open.
 - On Windows and Linux, closing the last window quits the app, so it goes through the quit confirmation first; on macOS it only closes the window, and agents and terminals keep running.
+
+### Zoom
+
+- The whole window zooms with Chromium's page zoom, in Chrome's steps of 80, 90, 100, 110, 125 and 150%, and opens at 110%, because the interface read small at 100% ([problem 59](../milestones/m0-feedback.md#59-the-interface-reads-small-and-cannot-be-zoomed)). The [keyboard](#keyboard) and, on macOS, the View menu change it.
+- The level is `appearance.zoom` in [settings](./persistence.md#settings), and the renderer sets it on `<html>` as `--zoom`. Main sets it on every load of a window (`did-navigate`), where it applies before the page's first script; `webPreferences.zoomFactor` would come back on a reload after the user chose 100%.
+- Sizes in the [design system](./design-system.md) are CSS pixels at 100%.
 
 ## Launch
 
@@ -488,33 +494,35 @@ Each element uses a pattern from the [design system](./design-system.md#patterns
 
 `Mod` is `Cmd` on macOS and `Ctrl` on Windows and Linux.
 
-| Shortcut                            | Action                                 |
-| ----------------------------------- | -------------------------------------- |
-| `Mod+O`                             | Open project                           |
-| `Mod+N`                             | New session                            |
-| `Mod+B`                             | Toggle the sidebar                     |
-| `Mod+L`                             | Focus the composer                     |
-| `Mod+Shift+[` / `Mod+Shift+]`       | Previous / next session in the sidebar |
-| `Mod+,`                             | Settings; `Esc` goes back              |
-| `` Ctrl+` ``                        | Show or hide the terminal              |
-| `` Ctrl+Shift+` ``                  | New terminal                           |
-| `Mod+L` with terminal text selected | Ask the agent about the selection      |
-| `Esc`                               | Cancel the running turn                |
-| `1` to `4`                          | Answer the pending permission request  |
+| Shortcut                                   | Action                                 |
+| ------------------------------------------ | -------------------------------------- |
+| `Mod+O`                                    | Open project                           |
+| `Mod+N`                                    | New session                            |
+| `Mod+B`                                    | Toggle the sidebar                     |
+| `Mod+L`                                    | Focus the composer                     |
+| `Mod+Shift+[` / `Mod+Shift+]`              | Previous / next session in the sidebar |
+| `Mod+,`                                    | Settings; `Esc` goes back              |
+| `Mod+=` / `Mod+-`, with or without `Shift` | Zoom in / out                          |
+| `Mod+0`                                    | Reset the zoom to 110%                 |
+| `` Ctrl+` ``                               | Show or hide the terminal              |
+| `` Ctrl+Shift+` ``                         | New terminal                           |
+| `Mod+L` with terminal text selected        | Ask the agent about the selection      |
+| `Esc`                                      | Cancel the running turn                |
+| `1` to `4`                                 | Answer the pending permission request  |
 
 Shortcuts appear in tooltips and menus, so they can be discovered.
 
-On macOS, `Cmd+O`, `Cmd+N`, `Cmd+B` and `Cmd+,` are also accelerators of the app menu, which sends them to the window as `app:command` (`open-project`, `new-session`, `toggle-sidebar`, `open-settings`); the renderer handles those four itself only on Windows and Linux, where there is no menu bar, so a shortcut never acts twice.
+On macOS, `Cmd+O`, `Cmd+N`, `Cmd+B` and `Cmd+,` are also accelerators of the app menu, which sends them to the window as `app:command` (`open-project`, `new-session`, `toggle-sidebar`, `open-settings`); the renderer handles those four itself only on Windows and Linux, where there is no menu bar, so a shortcut never acts twice. The zoom keys are View menu items on macOS; on Windows and Linux the renderer handles them, also while a terminal has focus, as VS Code does. Main passes `zoom: true` to `@electron-toolkit/utils`' `watchWindowShortcuts`, which otherwise swallows `Mod+-` and `Mod+Shift+=`.
 
 ### The macOS menu
 
-| Menu      | Items                                                                                                                                                                 |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OverBench | About OverBench · **Check for Updates…** (opens Settings at About and checks there) · **Settings…** `Cmd+,` · Services · Hide, Hide Others, Show All · Quit OverBench |
-| File      | **Open Project…** `Cmd+O` · **New Session** `Cmd+N` · Close Window                                                                                                    |
-| Edit      | The standard roles, so undo, cut, copy, paste and select all work in every text field                                                                                 |
-| View      | **Toggle Sidebar** `Cmd+B` · Reload and Toggle Developer Tools in development builds only · Enter Full Screen                                                         |
-| Window    | The standard window menu                                                                                                                                              |
+| Menu      | Items                                                                                                                                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OverBench | About OverBench · **Check for Updates…** (opens Settings at About and checks there) · **Settings…** `Cmd+,` · Services · Hide, Hide Others, Show All · Quit OverBench                                                        |
+| File      | **Open Project…** `Cmd+O` · **New Session** `Cmd+N` · Close Window                                                                                                                                                           |
+| Edit      | The standard roles, so undo, cut, copy, paste and select all work in every text field                                                                                                                                        |
+| View      | **Toggle Sidebar** `Cmd+B` · **Reset Zoom** `Cmd+0`, **Zoom In** `Cmd+=`, **Zoom Out** `Cmd+-`, with hidden twins for `Cmd++` and `Cmd+_` · Reload and Toggle Developer Tools in development builds only · Enter Full Screen |
+| Window    | The standard window menu                                                                                                                                                                                                     |
 
 Every item carries its label in the interface language, roles included, and the menu is rebuilt when the language changes ([localization](./localization.md#switching)). Menu commands that need a window open one if every window was closed; **Toggle Sidebar** does nothing without one. In development builds F12 also toggles DevTools on every platform.
 

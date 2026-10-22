@@ -1,7 +1,7 @@
 import { app, BrowserWindow, powerMonitor } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
-import type { SettingsFile } from '@shared/settings'
+import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AgentHost } from './agent-host'
 import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
@@ -18,6 +18,7 @@ import { TerminalHost } from './terminal-host'
 import { Updater } from './updater'
 import {
   applyTheme,
+  applyZoom,
   configureWindows,
   createMainWindow,
   showMainWindow,
@@ -61,6 +62,7 @@ async function start(): Promise<void> {
     resolveLocale(file.general.language, systemLocale)
   setLocale(localeOf(settings.get()))
   applyTheme(settings.get().appearance.theme)
+  applyZoom(settings.get().appearance.zoom)
   watchTheme()
   configureWindows({ state: windowState, perf, systemLocale })
   setBadgeEnabled(settings.get().notifications.badge)
@@ -91,7 +93,12 @@ async function start(): Promise<void> {
   })
   const quitFlow = quit
 
-  const menuDeps = { checkForUpdates: () => void updater.check() }
+  const menuDeps = {
+    checkForUpdates: () => void updater.check(),
+    zoom: (step: ZoomStep) => {
+      settings.update({ appearance: { zoom: stepZoom(settings.get().appearance.zoom, step) } })
+    },
+  }
   settings.onChange((next, changed) => {
     broadcast('settings:changed', next)
     const localeChanged = localeOf(next) !== currentLocale()
@@ -103,7 +110,10 @@ async function start(): Promise<void> {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
     if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))
-    if (changed.has('appearance')) applyTheme(next.appearance.theme)
+    if (changed.has('appearance')) {
+      applyTheme(next.appearance.theme)
+      applyZoom(next.appearance.zoom)
+    }
     if (changed.has('notifications')) setBadgeEnabled(next.notifications.badge)
     updater.settingsChanged(next, changed)
   })
@@ -112,8 +122,9 @@ async function start(): Promise<void> {
   installMenu(menuDeps)
 
   app.on('browser-window-created', (_, window) => {
-    // F12 toggles DevTools in development; reload shortcuts are disabled in production.
-    optimizer.watchWindowShortcuts(window)
+    // F12 toggles DevTools in development; reload shortcuts are disabled in production. Without
+    // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
+    optimizer.watchWindowShortcuts(window, { zoom: true })
     quitFlow.watchWindow(window)
     window.once('show', () => applyBadgeTo(window))
     window.on('session-end', () => {

@@ -1,7 +1,10 @@
 import { useEffect } from 'react'
+import { stepZoom, type ZoomStep } from '@shared/settings'
+import { errorMessage } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { flattenTree, sessionTree, useSessionsStore } from '@renderer/stores/sessions'
+import { useSettingsStore } from '@renderer/stores/settings'
 import {
   settingsBack,
   NO_PROJECT_GROUP,
@@ -16,9 +19,9 @@ import { emitAppEvent } from './events'
 
 /**
  * App-wide shortcuts. On macOS, Cmd+O, Cmd+N, Cmd+, and Cmd+B are menu accelerators that arrive as
- * app commands, so they are not handled here. While a terminal has focus on Windows and Linux,
- * only the terminal shortcuts reach the app, since Ctrl+B, Ctrl+L and Ctrl+N mean something to
- * the shell.
+ * app commands, and the zoom keys are menu items, so they are not handled here. While a terminal
+ * has focus on Windows and Linux, only the terminal and zoom shortcuts reach the app, since
+ * Ctrl+B, Ctrl+L and Ctrl+N mean something to the shell.
  */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
@@ -44,6 +47,8 @@ export function useKeyboardShortcuts(): void {
       }
 
       if (!isMod(event) || event.altKey) return
+      const zoom = isMac ? null : zoomStep(event.key)
+      if (zoom !== null) return run(event, () => zoomBy(zoom))
       if (inTerminal && !isMac) {
         const selection = window.getSelection()?.toString() ?? ''
         if (!(event.key.toLowerCase() === 'l' && !event.shiftKey && selection)) return
@@ -74,6 +79,20 @@ function run(event: KeyboardEvent, action: () => void): void {
   event.preventDefault()
   event.stopPropagation()
   action()
+}
+
+/** = or + zooms in, - or _ out and 0 resets, with Shift or without, as in Chrome. */
+function zoomStep(key: string): ZoomStep | null {
+  if (key === '=' || key === '+') return 1
+  if (key === '-' || key === '_') return -1
+  return key === '0' ? 0 : null
+}
+
+function zoomBy(step: ZoomStep): void {
+  const { settings, update } = useSettingsStore.getState()
+  update({ appearance: { zoom: stepZoom(settings.appearance.zoom, step) } }).catch(
+    (error: unknown) => console.warn(`Could not change the zoom: ${errorMessage(error)}`),
+  )
 }
 
 function isEditable(target: EventTarget | null): boolean {

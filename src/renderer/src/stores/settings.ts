@@ -21,12 +21,13 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
 function applyAppearance(settings: SettingsFile): void {
   const root = document.documentElement
-  const { theme, textSize, reduceMotion } = settings.appearance
+  const { theme, textSize, reduceMotion, zoom } = settings.appearance
   const dark = theme === 'dark' || (theme === 'system' && darkQuery.matches)
   root.classList.toggle('dark', dark)
   root.dataset.theme = dark ? 'dark' : 'light'
   root.dataset.textSize = textSize
   root.dataset.reduceMotion = reduceMotion
+  root.style.setProperty('--zoom', String(zoom))
 }
 
 /**

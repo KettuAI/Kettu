@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { BrowserWindow, nativeTheme, screen, shell } from 'electron'
 import type { Locale } from '@shared/locale'
-import type { SettingsFile } from '@shared/settings'
+import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import { isRendererUrl, loadRenderer } from './renderer'
@@ -17,8 +17,12 @@ const BACKGROUND_COLOR = { light: '#fcfcfc', dark: '#151515' }
 const SYMBOL_COLOR = { light: '#0a0a0a', dark: '#fafafa' }
 
 const TITLE_BAR_HEIGHT = 40
+// The traffic lights' height; at 100% they sit at { x: 16, y: 14 }, centred in the top bar.
+const TRAFFIC_LIGHTS_HEIGHT = 12
 const DEFAULT_SIZE = { width: 1280, height: 820 }
 const MIN_SIZE = { width: 960, height: 600 }
+
+let zoom: ZoomLevel = DEFAULT_SETTINGS.appearance.zoom
 
 export function backgroundColor(): string {
   return nativeTheme.shouldUseDarkColors ? BACKGROUND_COLOR.dark : BACKGROUND_COLOR.light
@@ -29,7 +33,31 @@ function titleBarOverlay(): { color: string; symbolColor: string; height: number
   return {
     color: dark ? BACKGROUND_COLOR.dark : BACKGROUND_COLOR.light,
     symbolColor: dark ? SYMBOL_COLOR.dark : SYMBOL_COLOR.light,
-    height: TITLE_BAR_HEIGHT,
+    height: Math.round(TITLE_BAR_HEIGHT * zoom),
+  }
+}
+
+/**
+ * The page zoom scales the top bar but not the window controls, so the traffic lights move to
+ * stay centred in it and the overlay takes its height. The renderer leaves the traffic lights
+ * their unzoomed width (--traffic-lights).
+ */
+function trafficLightPosition(): { x: number; y: number } {
+  return {
+    x: Math.round(16 * zoom),
+    y: Math.round((TITLE_BAR_HEIGHT * zoom - TRAFFIC_LIGHTS_HEIGHT) / 2),
+  }
+}
+
+/** Zooms every window and moves its window controls with the top bar. */
+export function applyZoom(factor: ZoomLevel): void {
+  if (factor === zoom) return
+  zoom = factor
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) continue
+    window.webContents.setZoomFactor(zoom)
+    if (process.platform === 'darwin') window.setWindowButtonPosition(trafficLightPosition())
+    else window.setTitleBarOverlay(titleBarOverlay())
   }
 }
 
@@ -122,7 +150,7 @@ export function createMainWindow(): BrowserWindow {
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     ...(isMac
-      ? { trafficLightPosition: { x: 16, y: 14 } }
+      ? { trafficLightPosition: trafficLightPosition() }
       : { titleBarOverlay: titleBarOverlay() }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -141,6 +169,9 @@ export function createMainWindow(): BrowserWindow {
   })
 
   options.state.track(window)
+  // Set on every load: webPreferences.zoomFactor would come back on a reload after the user
+  // chose 100%. Set here, it applies before the page's first script runs.
+  window.webContents.on('did-navigate', () => window.webContents.setZoomFactor(zoom))
   window.once('ready-to-show', () => {
     if (placement.maximized) window.maximize()
     window.show()

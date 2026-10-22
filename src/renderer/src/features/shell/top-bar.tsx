@@ -21,7 +21,7 @@ export function TopBar({ children, className }: { children: ReactNode; className
     <header
       className={cn(
         '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 pr-2.5 pl-5',
-        collapsed && (isMac ? 'pl-[84px]' : 'pl-2'),
+        collapsed && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
         !isMac &&
           !besidePanel &&
           'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',

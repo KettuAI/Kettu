@@ -14,6 +14,7 @@ export interface SettingsFile {
     theme: 'system' | 'light' | 'dark'
     textSize: 'small' | 'default' | 'large' // thread prose and the composer: 13, 14 or 15 px
     reduceMotion: 'system' | 'always'
+    zoom: ZoomLevel // Chromium's page zoom of the whole window
   }
   notifications: {
     permission: boolean
@@ -32,6 +33,11 @@ export interface SettingsFile {
   updates: { automatic: 'download' | 'notify' | 'off' }
 }
 
+/** Chrome's page zoom steps from 80% to 150%. */
+export const ZOOM_LEVELS = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const
+export type ZoomLevel = (typeof ZOOM_LEVELS)[number]
+export type ZoomStep = -1 | 0 | 1
+
 export type ProxySettings =
   { mode: 'environment' } | { mode: 'custom'; url: string; noProxy: string }
 
@@ -44,13 +50,20 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     restoreLastSession: true,
     confirmQuitWhileRunning: true,
   },
-  appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system' },
+  appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system', zoom: 1.1 },
   notifications: { permission: true, turnEnded: true, error: true, sound: false, badge: true },
   agents: {},
   proxy: { mode: 'environment' },
   terminal: { fontSize: 13 },
   git: { backgroundFetch: false },
   updates: { automatic: 'download' },
+}
+
+/** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
+export function stepZoom(zoom: ZoomLevel, step: ZoomStep): ZoomLevel {
+  if (step === 0) return DEFAULT_SETTINGS.appearance.zoom
+  const at = ZOOM_LEVELS.indexOf(zoom) + step
+  return ZOOM_LEVELS[Math.min(Math.max(at, 0), ZOOM_LEVELS.length - 1)]!
 }
 
 /**

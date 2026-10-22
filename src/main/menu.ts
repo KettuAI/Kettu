@@ -1,11 +1,13 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import type { AppCommand } from '@shared/ipc'
+import type { ZoomStep } from '@shared/settings'
 import { sendCommand, sendEvent } from './events'
 import { t } from './i18n'
 import { currentWindow } from './window'
 
 export interface MenuDeps {
   checkForUpdates(): void
+  zoom(step: ZoomStep): void
 }
 
 /** Sends a command to the current window only; without one there is nothing to act on. */
@@ -109,6 +111,23 @@ export function installMenu(deps: MenuDeps): void {
           label: t('menu.toggleSidebar'),
           accelerator: 'Cmd+B',
           click: () => toCurrentWindow({ kind: 'toggle-sidebar' }),
+        },
+        { type: 'separator' },
+        { label: t('menu.resetZoom'), accelerator: 'Cmd+0', click: () => deps.zoom(0) },
+        { label: t('menu.zoomIn'), accelerator: 'Cmd+=', click: () => deps.zoom(1) },
+        { label: t('menu.zoomOut'), accelerator: 'Cmd+-', click: () => deps.zoom(-1) },
+        // Hidden twins, so each key zooms with Shift and without, as in Chrome.
+        {
+          label: t('menu.zoomIn'),
+          accelerator: 'Cmd+Plus',
+          visible: false,
+          click: () => deps.zoom(1),
+        },
+        {
+          label: t('menu.zoomOut'),
+          accelerator: 'Cmd+_',
+          visible: false,
+          click: () => deps.zoom(-1),
         },
         ...development,
         { type: 'separator' },

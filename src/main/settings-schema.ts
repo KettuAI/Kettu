@@ -7,6 +7,7 @@ import {
   type SettingsFile,
   type SettingsPatch,
   type TerminalSettings,
+  ZOOM_LEVELS,
 } from '@shared/settings'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
@@ -44,6 +45,7 @@ const SECTION_FIELDS = {
     theme: oneOf('system', 'light', 'dark'),
     textSize: oneOf('small', 'default', 'large'),
     reduceMotion: oneOf('system', 'always'),
+    zoom: oneOf(...ZOOM_LEVELS),
   },
   notifications: {
     permission: isBoolean,

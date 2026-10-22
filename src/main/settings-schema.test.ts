@@ -20,7 +20,7 @@ describe('validateSettingsPatch', () => {
   it('accepts a partial change in every section', () => {
     const patch = {
       general: { language: 'zh-CN', sendKey: 'mod-enter', defaultAgent: 'codex' },
-      appearance: { theme: 'dark' },
+      appearance: { theme: 'dark', zoom: 1.25 },
       notifications: { sound: true },
       agents: { opencode: { binaryPath: null } },
       proxy: { mode: 'custom', url: 'http://proxy.local:8080', noProxy: 'localhost' },
@@ -45,6 +45,8 @@ describe('validateSettingsPatch', () => {
     [{ general: { fontFamily: 'x' } }, 'Unknown setting "general.fontFamily"'],
     [{ general: 'enter' }, '"general" must be an object'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
+    [{ appearance: { zoom: 2 } }, '"appearance.zoom" must be one of'],
+    [{ appearance: { zoom: '1.1' } }, '"appearance.zoom" must be one of'],
     [{ notifications: { badge: 'yes' } }, '"notifications.badge" must be a boolean'],
     [{ agents: { cursor: { binaryPath: null } } }, 'Unknown agent "agents.cursor"'],
     [{ agents: { codex: { binaryPath: '/bin/sh' } } }, 'can only be cleared with null'],

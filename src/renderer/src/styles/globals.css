@@ -272,6 +272,9 @@
   --composer-min: 52px;
   --icon-size: 16px;
   --top-bar: 40px;
+  /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
+  --zoom: 1;
+  --traffic-lights: calc(52px / var(--zoom));
   --scroll-fade-size: 28px;
   /* Windows only, where the app draws its scrollbars: a 4 px thumb in a 10 px gutter. */
   --scrollbar-size: 10px;

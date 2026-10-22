@@ -38,7 +38,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="none" className="w-full" aria-label={t('nav.label')}>
       <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-2 pr-2.5 pl-4">
-        {isMac && <span aria-hidden className="w-[52px]" />}
+        {isMac && <span aria-hidden className="w-(--traffic-lights)" />}
         <span className="flex-1" />
         <SidebarToggle />
       </div>

@@ -97,7 +97,7 @@ export default function FilesPanel({
       <div
         className={cn(
           'app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2 pl-2',
-          cornered && (isMac ? 'pl-[84px]' : 'pl-2'),
+          cornered && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
           !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+8px)]',
         )}
       >

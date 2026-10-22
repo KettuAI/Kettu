@@ -64,6 +64,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 56  | The empty Files pane's hint is not centred                     | Side panel     | Fixed        |
 | 57  | A finished session leaves no mark, and the running dot is loud | Sidebar        | Fixed        |
 | 58  | Read aloud under replies is not wanted                         | Thread         | Fixed        |
+| 59  | The interface reads small and cannot be zoomed                 | Window         | Fixed        |
 | 59  | A reply that opens with a heading leaves a gap above it        | Markdown       | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
@@ -819,3 +820,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Reported**: 2026-10-22, with a screenshot of a large blank space between a folded run ("Ran 5 commands") and the reply under it, which opens with a heading.
 - **Cause**: the rules that drop the margin above a reply's first block and below its last had the same specificity as the block rules after them, so a heading, code block, table or rule at either end kept its margin. A leading h2 added 1.75em, 30 px at the default size, to the thread's 16 px between entries.
 - **Fixed**: the edge rules outrank the block rules, as the [design system](../design/design-system.md) already specified. Measured in the app, a reply opening with a heading now sits 16 px below the entry above it, and headings inside a reply keep their margins.
+
+## 59. The interface reads small and cannot be zoomed
+
+- **Reported**: 2026-10-22, in words: the whole interface looks a little small, and `Cmd+Shift+=` and `Cmd+-` do not zoom.
+- **Cause**: the macOS menu had no zoom items, Windows and Linux have no menu, and the renderer handled no zoom keys. `watchWindowShortcuts` from `@electron-toolkit/utils`, which main installs on every window, also swallows `Mod+-` and `Mod+Shift+=` in `before-input-event` unless it is given `zoom: true`.
+- **Fixed**: the window zooms in Chrome's steps from 80% to 150% and opens at 110%. `Mod+=` and `Mod+-`, with or without `Shift`, zoom in and out, and `Mod+0` returns to 110%, from the View menu on macOS and from the renderer on Windows and Linux; Settings › Keyboard shortcuts lists them, and the level is kept in settings ([Interface: zoom](../design/ui.md#zoom)). The traffic lights and the window controls follow the zoomed top bar. Measured in a production build at every step: the traffic lights stay centred in the top bar, and the room left for them ends within 1 px of their edge; at 80% the old fixed inset would have put the sidebar toggle over them.

@@ -170,7 +170,7 @@ Files and folders show their type's icon from [Material Icon Theme](https://gith
 
 ## Density and sizing
 
-M0 ships the compact density only. The comfortable values are recorded so that a later density setting switches tokens, not components.
+M0 ships the compact density only. The comfortable values are recorded so that a later density setting switches tokens, not components. Sizes in this document are CSS pixels at 100%; the window opens at 110% [zoom](./ui.md#zoom).
 
 | Token                 | Used for                                                           | Compact (M0)               | Comfortable (later)  |
 | --------------------- | ------------------------------------------------------------------ | -------------------------- | -------------------- |
