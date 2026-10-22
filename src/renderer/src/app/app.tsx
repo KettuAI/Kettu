@@ -157,9 +157,10 @@ function Workbench() {
           <AppSidebar />
         </div>
       </ResizablePanel>
-      {/* Collapsed, the handle takes no width, so nothing shows at the window's edge. */}
+      {/* The sidebar's edge, as the reference's soft hairline. Collapsed, the handle takes no
+          width, so nothing shows at the window's edge. */}
       <ResizableHandle
-        className={cn(collapsed && 'pointer-events-none w-0')}
+        className={cn('bg-border-soft', collapsed && 'pointer-events-none w-0')}
         onPointerDown={() => sliding.current && endSlide()}
       />
       <ResizablePanel id="main" minSize="560px" className={cn(SLIDING_PANEL, 'bg-background')}>

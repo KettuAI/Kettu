@@ -143,11 +143,12 @@ Files and folders show their type's icon from [Material Icon Theme](https://gith
 
 ### One line per surface
 
-| Closed border                                                                        | No border                                                                                             |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| Composer, tool call cards, code blocks, diffs, attachments, dialogs, menus, popovers | Agent text, the user bubble (a fill only), sidebar rows, buttons inside a container, the sidebar edge |
+| Closed border                                                                        | No border                                                                           |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Composer, tool call cards, code blocks, diffs, attachments, dialogs, menus, popovers | Agent text, the user bubble (a fill only), sidebar rows, buttons inside a container |
 
 - Inside a bordered container, parts are separated by a hairline `Separator` or a surface step, never by a second border.
+- The sidebar and the side panel, on surface 0, meet the thread's surface 1 at a `--border-soft` hairline, drawn by the resizable handle between them at rest, which turns `--border-strong` on hover and drag. The reference draws the same line, measured at about 6% black on a 2× display; the surface step alone, 1% apart, read as an edge that was missing. A collapsed sidebar takes its line with it.
 - Borders are drawn as an inset ring (`box-shadow`, Tailwind's `ring-inset`). A ring takes no layout space, follows the radius exactly, and can change on hover without moving anything.
 - `--hairline` is 1 px, 0.5 px on 2× displays and 1/3 px on 3× displays (`@media (resolution >= 2x)`), so lines are as fine as the display allows.
 

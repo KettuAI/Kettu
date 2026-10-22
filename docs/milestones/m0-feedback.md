@@ -58,6 +58,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 50  | Codex's progress notes read as its answer                      | Thread entries | Fixed        |
 | 51  | The open pane's toggle hardly looks pressed                    | Top bar        | Fixed        |
 | 52  | The file list cannot be hidden while reading a file            | Side panel     | Fixed        |
+| 53  | No line where the sidebar meets the thread                     | Layout         | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -759,3 +760,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 
 - **Reported**: 2026-10-22, with a screenshot of the Files pane: reading a Markdown file, the list beside it distracts.
 - **Fixed**: **Hide the file list** at the start of the pane's header folds the list away, and the preview takes the pane's width; the header keeps only **Show the file list**, **Maximize** and **Close**. The divider folds and opens it too, through react-resizable-panels' collapsible panel, and the pane's saved layout keeps it folded ([Interface: files](../design/ui.md#files)).
+
+## 53. No line where the sidebar meets the thread
+
+- **Reported**: 2026-10-22, with screenshots of Claude Desktop and OverBench side by side: the reference draws a faint line between its sidebar and the conversation, and without one OverBench's edge reads oddly.
+- **Observed**: the sidebar (surface 0, `oklch(0.982 0 0)`) met the thread (surface 1, `oklch(0.991 0 0)`) with no line, as the design system specified; the two surfaces are about 1% apart. The reference's line measures one device pixel at about 6% black on a 2x display.
+- **Fixed**: the resizable handles at the sidebar's edge and the side panel's edge show a `--border-soft` hairline at rest ([Design system: one line per surface](../design/design-system.md#one-line-per-surface)). The side panel takes it too, as the same meeting of surface 0 and surface 1.
