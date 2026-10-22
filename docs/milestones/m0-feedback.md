@@ -64,6 +64,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 56  | The empty Files pane's hint is not centred                     | Side panel     | Fixed        |
 | 57  | A finished session leaves no mark, and the running dot is loud | Sidebar        | Fixed        |
 | 58  | Read aloud under replies is not wanted                         | Thread         | Fixed        |
+| 59  | A reply that opens with a heading leaves a gap above it        | Markdown       | Fixed        |
 
 ## 1. Thoughts and tool calls cannot be folded together
 
@@ -812,3 +813,9 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Reported**: 2026-10-22, with a screenshot of a reply's action row pointing at the speaker icon.
 - **Expected**: the maintainer finds it of no use and asks for it to go.
 - **Fixed**: a reply's row holds **Copy** and, under the latest reply, **Fork** ([Interface: message actions](../design/ui.md#message-actions)). The macOS Edit › Speech menu, which the system provides, stays.
+
+## 59. A reply that opens with a heading leaves a gap above it
+
+- **Reported**: 2026-10-22, with a screenshot of a large blank space between a folded run ("Ran 5 commands") and the reply under it, which opens with a heading.
+- **Cause**: the rules that drop the margin above a reply's first block and below its last had the same specificity as the block rules after them, so a heading, code block, table or rule at either end kept its margin. A leading h2 added 1.75em, 30 px at the default size, to the thread's 16 px between entries.
+- **Fixed**: the edge rules outrank the block rules, as the [design system](../design/design-system.md) already specified. Measured in the app, a reply opening with a heading now sits 16 px below the entry above it, and headings inside a reply keep their margins.

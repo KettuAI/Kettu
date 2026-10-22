@@ -719,14 +719,15 @@
   & :where(ul, ol, blockquote, table, pre) {
     margin-block: 0.75em;
   }
-  /* Blocks sit in the chunks of markdown-impl.tsx, whose margins collapse through them; :where()
-     keeps these rules as specific as when blocks were children, so later block rules still win. */
-  & > :where(:first-child) > :first-child,
-  & > :where(:first-child) > :first-child > :first-child {
+  /* Blocks sit in the chunks of markdown-impl.tsx, whose margins collapse through them. These
+     rules outrank the block rules below, so not even a heading adds space above the first block
+     or below the last. */
+  & > :first-child > :first-child,
+  & > :first-child > :first-child > :first-child {
     margin-top: 0;
   }
-  & > :where(:last-child) > :last-child,
-  & > :where(:last-child) > :last-child > :last-child {
+  & > :last-child > :last-child,
+  & > :last-child > :last-child > :last-child {
     margin-bottom: 0;
   }
 
