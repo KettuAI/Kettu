@@ -174,7 +174,7 @@ The usage page, opened from the sidebar's **Usage** row, is designed in [usage s
 
 The HTML files agents write, designed in [artifacts](./artifacts.md):
 
-- **The Artifacts page**, opened from the sidebar's **Artifacts** row: every artifact as a card with a thumbnail, grouped by project, then by session ([Artifacts page](./artifacts.md#artifacts-page)).
+- **The Artifacts page**, opened from the sidebar's **Artifacts** row: every artifact as a card with a thumbnail, grouped by project, then by session, or grouped and sorted as the user chooses ([Artifacts page](./artifacts.md#artifacts-page)).
 - **The viewer**, from a card: the page live in the main area, isolated from the app ([viewer](./artifacts.md#viewer)), or, for a file that marks its pages, a canvas that pans and zooms, with keys of its own that stay out of the [shortcut table](#keyboard) ([canvas](./artifacts.md#canvas)).
 - **From a session**: a tool call that wrote an artifact opens it from its row, in the side panel beside the thread ([opening from a session](./artifacts.md#opening-from-a-session)).
 
