@@ -546,14 +546,41 @@ describe('remembered accounts', () => {
     const m = manager({}, {}, { remember: (file) => saved.push(file) })
     await m.agents.ensureReady('fake-agent')
     await until(() => m.agents.status('fake-agent').account !== null)
+    const init = {
+      version: '0.1.0',
+      capabilities: expect.objectContaining({ forkSession: true, forkAtMessage: true }),
+    }
     expect(saved.at(-1)).toEqual({
       version: 1,
-      agents: { 'fake-agent': { account, limits: [] } },
+      agents: { 'fake-agent': { account, limits: [], init } },
     })
     await m.agents.logout('fake-agent')
     expect(m.agents.status('fake-agent').account).toBeNull()
-    expect(saved.at(-1)).toEqual({ version: 1, agents: {} })
+    expect(saved.at(-1)).toEqual({
+      version: 1,
+      agents: { 'fake-agent': { account: null, limits: [], init } },
+    })
     await m.agents.stopAll()
+  })
+
+  it('shows the capabilities an earlier run reported while the same adapter is installed', async () => {
+    const remembered = (version: string): AgentsFile => ({
+      version: 1,
+      agents: {
+        'fake-agent': {
+          account: null,
+          limits: [],
+          init: { version, capabilities: { forkSession: true, forkAtMessage: true } },
+        },
+      },
+    })
+    const m = packageManager(['2.0.0'])
+    m.agents.restore(remembered('2.0.0'))
+    await m.agents.list()
+    expect(m.status().capabilities).toMatchObject({ forkSession: true, forkAtMessage: true })
+    m.agents.restore(remembered('1.9.0'))
+    expect(m.status().capabilities).toMatchObject({ forkSession: false, forkAtMessage: false })
+    expect(m.launcher.launches).toBe(0)
   })
 })
 

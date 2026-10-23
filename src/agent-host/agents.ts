@@ -61,7 +61,7 @@ import { formatCommand } from './quote'
 import { limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
-import type { AgentsFile, AgentUpdatesFile } from './storage'
+import type { AgentsFile, AgentUpdatesFile, RememberedInit } from './storage'
 import { compareVersions } from './versions'
 
 export interface LaunchedAgent {
@@ -219,7 +219,9 @@ class Slot {
   signIn: AgentStatus['signIn'] = 'unknown'
   account: AgentAccount | null = null
   limits = new Map<string, PlanLimit>()
-  /** The account and limits as last remembered, so only a change is written. */
+  /** The capabilities of the last `initialize`, from this run or an earlier one. */
+  initRecord: RememberedInit | null = null
+  /** The account, limits and capabilities as last remembered, so only a change is written. */
   remembered = ''
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
@@ -248,7 +250,22 @@ function exitText(agent: string, info: ExitInfo): string {
 function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
   const account = slot.account?.kind === 'none' ? null : slot.account
   const limits = [...slot.limits.values()]
-  return account || limits.length > 0 ? { account, limits } : null
+  const init = slot.initRecord
+  return account || limits.length > 0 || init
+    ? { account, limits, ...(init ? { init } : {}) }
+    : null
+}
+
+/**
+ * An earlier run's capabilities, until the agent initializes again, while the adapter a start
+ * would run is the version that reported them.
+ */
+function rememberedCapabilities(slot: Slot): RememberedInit['capabilities'] | undefined {
+  const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+  const version = (adapter?.current ?? adapter?.fallback)?.version
+  return version !== undefined && slot.initRecord?.version === version
+    ? slot.initRecord.capabilities
+    : undefined
 }
 
 function rememberedJson(slot: Slot): string {
@@ -500,6 +517,9 @@ export class AgentManager {
       }
       const runtime: AgentRuntime = { agentId, connection, init }
       slot.init = init
+      slot.initRecord = init.version
+        ? { version: init.version, capabilities: { ...init.capabilities } }
+        : null
       slot.runtime = runtime
       slot.state = 'ready'
       slot.detail = null
@@ -1385,6 +1405,7 @@ export class AgentManager {
       if (!slot || !entry) continue
       slot.account = entry.account
       slot.limits = new Map(entry.limits.map((limit) => [limit.window, limit]))
+      slot.initRecord = entry.init ?? null
       slot.remembered = rememberedJson(slot)
       this.emit(slot)
     }
@@ -1490,7 +1511,7 @@ export class AgentManager {
           }
         : {}),
     }))
-    const capabilities = init?.capabilities
+    const capabilities = init?.capabilities ?? rememberedCapabilities(slot)
     const { launch } = slot.def
     const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
     return {

@@ -4,6 +4,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
 import { AGENT_IDS, type AgentId, type QueuedPrompt } from '@shared/thread'
+import type { AgentInit } from './acp/connection'
 import { isVersion } from './versions'
 
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void
@@ -228,10 +229,20 @@ export interface SessionsFile {
   sessions: SessionRecord[]
 }
 
-/** What each agent last reported about its account and plan, shown until it reports again. */
+/**
+ * What each agent last reported about its account and plan, shown until it reports again, and the
+ * capabilities its last `initialize` gave with the version that gave them.
+ */
 export interface AgentsFile {
   version: 1
-  agents: Partial<Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[] }>>
+  agents: Partial<
+    Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[]; init?: RememberedInit }>
+  >
+}
+
+export interface RememberedInit {
+  version: string
+  capabilities: Partial<AgentInit['capabilities']>
 }
 
 /**
@@ -414,9 +425,20 @@ export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | str
       ? entry.limits.map(limitOf).filter((l): l is PlanLimit => l !== null)
       : []
     const account = accountOf(entry.account)
-    if (account || limits.length > 0) agents[id] = { account, limits }
+    const init = initOf(entry.init)
+    if (account || limits.length > 0 || init) {
+      agents[id] = { account, limits, ...(init ? { init } : {}) }
+    }
   }
   return { version: 1, agents }
+}
+
+function initOf(value: unknown): RememberedInit | null {
+  if (!isRecord(value) || !isVersion(value.version) || !isRecord(value.capabilities)) return null
+  const capabilities = Object.fromEntries(
+    Object.entries(value.capabilities).filter(([, on]) => typeof on === 'boolean'),
+  )
+  return { version: value.version, capabilities }
 }
 
 // A cache of the registry's answers: an entry that does not parse is dropped, not the file. Only

@@ -248,6 +248,21 @@ describe('the host files', () => {
         },
       }),
     ).toEqual({ version: 1, agents: { 'claude-code': { account, limits: [limit] } } })
+    const init = { version: '0.94.0', capabilities: { forkSession: true, steering: 'yes' } }
+    expect(
+      parseAgentsFile({
+        agents: { 'claude-code': { limits: [], init }, codex: { init: { version: 'next' } } },
+      }),
+    ).toEqual({
+      version: 1,
+      agents: {
+        'claude-code': {
+          account: null,
+          limits: [],
+          init: { version: '0.94.0', capabilities: { forkSession: true } },
+        },
+      },
+    })
     expect(parseAgentsFile({ agents: [] })).toBe('agents is not an object')
     expect(agentsFile(dir, log).file).toBe(path.join(dir, 'state', 'agents.json'))
   })
