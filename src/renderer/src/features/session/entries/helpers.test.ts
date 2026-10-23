@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { forkEntry, groupLabel, runSummary, stopReasonText, toolLabel } from './helpers'
+import type { ToolEntry } from '@shared/thread'
+import {
+  forkEntry,
+  groupLabel,
+  runSummary,
+  stopReasonText,
+  toolLabel,
+  toolStep,
+  type RunStep,
+} from './helpers'
 
 const base = { title: 'Do something', locations: [], rawInput: undefined }
 
@@ -50,24 +59,43 @@ describe('toolLabel', () => {
 })
 
 describe('groupLabel', () => {
-  it('counts each kind of lookup', () => {
-    expect(groupLabel(['read', 'read', 'read', 'read'])).toBe('Explored 4 files')
-    expect(groupLabel(['search', 'search', 'search'])).toBe('Searched 3 times')
-    expect(groupLabel(['read', 'search', 'read', 'fetch'])).toBe(
-      'Explored 2 files, searched once, fetched a page',
+  const lookup = (kind: 'read' | 'search' | 'fetch', path?: string) => ({
+    kind: 'tool' as const,
+    toolKind: kind,
+    status: 'completed' as const,
+    paths: path ? [path] : [],
+  })
+
+  it('names the files a run of lookups read and counts the rest', () => {
+    expect(groupLabel([lookup('read', '/repo/a.ts'), lookup('read', '/repo/b.ts')])).toBe(
+      'Read a.ts, b.ts',
     )
+    expect(groupLabel([lookup('search'), lookup('search'), lookup('search')])).toBe(
+      'Searched 3 times',
+    )
+    expect(
+      groupLabel([lookup('read', '/repo/a.ts'), lookup('search'), lookup('read'), lookup('fetch')]),
+    ).toBe('Read a.ts and 1 more · Searched once · Fetched a page')
   })
 })
 
 describe('runSummary', () => {
-  const run = (kind: string, path?: string) => ({
+  const run = (
+    kind: string,
+    path?: string,
+    extra: Partial<Extract<RunStep, { kind: 'tool' }>> = {},
+  ) => ({
     kind: 'tool' as const,
     toolKind: kind as 'read',
     status: 'completed' as const,
-    path,
+    paths: path ? [path] : [],
+    ...extra,
   })
+  const text = (steps: RunStep[]) => runSummary(steps).parts.map((p) => p.text)
+  const diff = (path: string, oldText: string | null) =>
+    ({ type: 'diff', path, oldText, newText: 'x\n' }) as const
 
-  it('counts each kind in the order it first appears', () => {
+  it('gives each kind a part in the order it first appears', () => {
     expect(
       runSummary([
         run('execute'),
@@ -77,23 +105,104 @@ describe('runSummary', () => {
         run('read', '/repo/a.ts'),
         run('execute'),
       ]),
-    ).toEqual({ parts: ['Ran 3 commands', 'read 2 files'], editAt: -1, failed: 0, running: false })
-  })
-
-  it('names the one file a run edited, and where its stats go', () => {
-    expect(
-      runSummary([
-        { kind: 'thought', durationMs: 8_000 },
-        run('edit', '/repo/docs/ui.md'),
-        run('edit', '/repo/docs/ui.md'),
-        run('search'),
-      ]),
     ).toEqual({
-      parts: ['Thought for 8 s', 'edited ui.md', 'searched once'],
-      editAt: 1,
+      parts: [{ text: 'Ran 3 commands' }, { text: 'Read a.ts, b.ts' }],
       failed: 0,
       running: false,
     })
+  })
+
+  it('names up to two files and counts the rest', () => {
+    const reads = ['README.md', 'plan.md', '01.md', '02.md', '03.md'].map((name) =>
+      run('read', `/repo/docs/${name}`),
+    )
+    expect(text(reads)).toEqual(['Read README.md, plan.md and 3 more'])
+    expect(text([run('read', '/repo/a.ts'), run('read')])).toEqual(['Read a.ts and 1 more'])
+    expect(text([run('read'), run('read')])).toEqual(['Read 2 files'])
+    expect(text([run('delete', '/repo/old.ts'), run('move', '/repo/x.ts')])).toEqual([
+      'Deleted old.ts',
+      'Moved x.ts',
+    ])
+  })
+
+  it('tells two shown files with the same name apart by their folders', () => {
+    expect(text([run('read', '/repo/src/index.ts'), run('read', '/repo/test/index.ts')])).toEqual([
+      'Read src/index.ts, test/index.ts',
+    ])
+    expect(
+      text([
+        run('read', '/repo/src/index.ts'),
+        run('read', '/repo/a.ts'),
+        run('read', '/b/index.ts'),
+      ]),
+    ).toEqual(['Read index.ts, a.ts and 1 more'])
+  })
+
+  it('says Created for an edit that creates its file, with the diffs that follow each', () => {
+    const created = diff('/repo/offload.py', null)
+    const later = diff('/repo/offload.py', 'x\n')
+    const edited = diff('/repo/docs/ui.md', 'a\n')
+    expect(
+      runSummary([
+        { kind: 'thought', durationMs: 8_000 },
+        run('edit', '/repo/offload.py', { diffs: [created] }),
+        run('edit', '/repo/docs/ui.md', { diffs: [edited] }),
+        run('edit', '/repo/offload.py', { diffs: [later] }),
+        run('search'),
+      ]),
+    ).toEqual({
+      parts: [
+        { text: 'Thought for 8 s' },
+        { text: 'Created offload.py', diffs: [created, later] },
+        { text: 'Edited ui.md', diffs: [edited] },
+        { text: 'Searched once' },
+      ],
+      failed: 0,
+      running: false,
+    })
+  })
+
+  it('splits a patch into its files, as Codex sends one with diffs but no locations', () => {
+    const added = diff('/repo/new.py', null)
+    const hunks = [diff('/repo/old.ts', 'a\n'), diff('/repo/old.ts', 'b\n')]
+    const patch: ToolEntry = {
+      kind: 'tool',
+      id: 't:call_1',
+      title: 'Editing files',
+      toolKind: 'edit',
+      status: 'completed',
+      content: [added, ...hunks],
+      locations: [],
+      permission: null,
+      permissionResult: null,
+    }
+    expect(runSummary([toolStep(patch), run('read', '/repo/a.ts')]).parts).toEqual([
+      { text: 'Created new.py', diffs: [added] },
+      { text: 'Edited old.ts', diffs: hunks },
+      { text: 'Read a.ts' },
+    ])
+  })
+
+  it('names one command by its description', () => {
+    expect(
+      text([
+        run('execute', undefined, { description: 'Reran CPU content diff with full key map' }),
+      ]),
+    ).toEqual(['Reran CPU content diff with full key map'])
+    expect(text([run('execute')])).toEqual(['Ran a command'])
+  })
+
+  it("counts several commands, then names the latest one's description", () => {
+    expect(
+      text([
+        run('execute', undefined, { description: 'List the store jobs' }),
+        run('execute'),
+        run('execute', undefined, { description: 'Locate store job builders in vLLM' }),
+      ]),
+    ).toEqual(['Ran 3 commands', 'Locate store job builders in vLLM'])
+    expect(
+      text([run('execute', undefined, { description: 'List the store jobs' }), run('execute')]),
+    ).toEqual(['Ran 2 commands'])
   })
 
   it('counts failures and running steps', () => {
@@ -104,25 +213,80 @@ describe('runSummary', () => {
       { kind: 'thought', streaming: true },
     ])
     expect(summary).toEqual({
-      parts: ['Ran a command', 'fetched a page', 'used a tool', 'thought'],
-      editAt: -1,
+      parts: [
+        { text: 'Ran a command' },
+        { text: 'Fetched a page' },
+        { text: 'Used a tool' },
+        { text: 'Thought' },
+      ],
       failed: 1,
       running: true,
     })
   })
 
   it('names plan updates and compactions once', () => {
-    const summary = runSummary([
-      { kind: 'plan' },
-      run('execute'),
-      { kind: 'plan' },
-      { kind: 'compaction', running: true },
-    ])
-    expect(summary).toEqual({
-      parts: ['Updated the plan', 'ran a command', 'compacted the context'],
-      editAt: -1,
-      failed: 0,
-      running: true,
+    expect(
+      text([
+        { kind: 'plan' },
+        run('execute'),
+        { kind: 'plan' },
+        { kind: 'compaction', running: true },
+      ]),
+    ).toEqual(['Updated the plan', 'Ran a command', 'Compacted the context'])
+  })
+})
+
+describe('toolStep', () => {
+  const tool: ToolEntry = {
+    kind: 'tool',
+    id: 't:1',
+    title: 'Edit',
+    toolKind: 'edit',
+    status: 'completed',
+    content: [{ type: 'diff', path: '/repo/a.ts', oldText: null, newText: 'x' }],
+    locations: [{ path: '/repo/a.ts' }],
+    permission: null,
+    permissionResult: null,
+  }
+
+  it("takes an edit's files from its diffs, else from its locations", () => {
+    expect(toolStep(tool)).toEqual({
+      kind: 'tool',
+      toolKind: 'edit',
+      status: 'completed',
+      paths: ['/repo/a.ts'],
+      diffs: tool.content,
+    })
+    expect(
+      toolStep({
+        ...tool,
+        content: [],
+        locations: [{ path: '/repo/a.ts' }, { path: '/repo/b.ts' }],
+      }),
+    ).toMatchObject({ paths: ['/repo/a.ts', '/repo/b.ts'], diffs: [] })
+  })
+
+  it('keeps the first location of other calls, and the description of a command', () => {
+    expect(
+      toolStep({
+        ...tool,
+        toolKind: 'execute',
+        locations: [],
+        content: [{ type: 'markdown', markdown: 'ok' }],
+        description: 'Run the tests',
+      }),
+    ).toEqual({
+      kind: 'tool',
+      toolKind: 'execute',
+      status: 'completed',
+      paths: [],
+      description: 'Run the tests',
+    })
+    expect(toolStep({ ...tool, toolKind: 'read', content: [] })).toEqual({
+      kind: 'tool',
+      toolKind: 'read',
+      status: 'completed',
+      paths: ['/repo/a.ts'],
     })
   })
 })

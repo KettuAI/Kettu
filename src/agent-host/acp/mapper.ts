@@ -208,6 +208,23 @@ export function rawInputText(raw: unknown): string | undefined {
   return json.length > RAW_INPUT_LIMIT ? `${json.slice(0, RAW_INPUT_LIMIT)}\n…` : json
 }
 
+const DESCRIPTION_LIMIT = 200
+
+/** What a command says it does, as one line: the `description` beside its input's `command`. */
+function commandDescription(raw: unknown): string | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const input = raw as Record<string, unknown>
+  if (input.command === undefined) return undefined
+  // Claude Code also accepts `command_description` since CLI 2.1.295, and forwards the key used.
+  const description = input.description ?? input.command_description
+  if (typeof description !== 'string') return undefined
+  const line = [...description.replace(/\s+/g, ' ').trim()]
+  if (line.length === 0) return undefined
+  return line.length > DESCRIPTION_LIMIT
+    ? `${line.slice(0, DESCRIPTION_LIMIT).join('').trimEnd()}…`
+    : line.join('')
+}
+
 function toolOutput(content: readonly ToolContent[]): string {
   return content
     .map((item) => (item.type === 'markdown' ? item.markdown : ''))
@@ -428,6 +445,8 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
   if (update.locations != null) changes.locations = toolLocations(update.locations)
   const raw = rawInputText(update.rawInput)
   if (raw !== undefined) changes.rawInput = raw
+  const description = commandDescription(update.rawInput)
+  if (description !== undefined) changes.description = description
   if (!ctx.replaying && startsBackgroundWork(update)) out.effects.push({ kind: 'background' })
 
   if (existing?.kind === 'tool') {
@@ -448,6 +467,7 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
     permission: null,
     permissionResult: null,
     ...(raw !== undefined ? { rawInput: raw } : {}),
+    ...(description !== undefined ? { description } : {}),
   }
   addEntry(ctx, out, entry)
   toolEffects(out, update.toolCallId, id, null, entry)

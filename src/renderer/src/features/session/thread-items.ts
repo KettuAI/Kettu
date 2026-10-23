@@ -54,7 +54,7 @@ function markNotes(signature: string, live: boolean): string {
   return chars.join('')
 }
 
-/** A step on its own, or a run of completed lookups ("Explored 4 files"). */
+/** A step on its own, or a run of completed lookups ("Read a.ts and 2 more"). */
 export type Step =
   { key: string; type: 'entry'; id: string } | { key: string; type: 'group'; ids: string[] }
 

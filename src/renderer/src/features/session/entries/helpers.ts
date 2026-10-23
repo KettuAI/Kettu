@@ -1,7 +1,14 @@
-import { entryMessageId, type StopReason, type ToolEntry, type ToolKind } from '@shared/thread'
+import {
+  entryMessageId,
+  type StopReason,
+  type ToolContent,
+  type ToolEntry,
+  type ToolKind,
+} from '@shared/thread'
 import { basename, duration, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
+import { nameHints } from '../project-names'
 
 /** A Collapsible panel animating its height, the one layout animation the design allows. */
 export const PANEL =
@@ -42,114 +49,174 @@ export function respondToPermission(sessionId: string, requestId: string, option
   return host('permissions.respond', { sessionId, requestId, optionId })
 }
 
-/** "Explored 4 files", "Searched 3 times", or both, for a run of completed lookups. */
-export function groupLabel(kinds: ToolKind[]): string {
-  const reads = kinds.filter((k) => k === 'read').length
-  const searches = kinds.filter((k) => k === 'search').length
-  const fetches = kinds.filter((k) => k === 'fetch').length
-  const parts = [
-    reads ? i18n.t('session:summary.explored', { count: reads }) : null,
-    searches ? i18n.t('session:summary.search', { count: searches }) : null,
-    fetches ? i18n.t('session:summary.fetch', { count: fetches }) : null,
-  ].filter((p): p is string => p !== null)
-  return capitalize(parts.join(i18n.t('session:summary.separator')))
+/** A run of completed lookups as one line: "Read a.ts, b.ts and 2 more · Searched 3 times". */
+export function groupLabel(steps: RunStep[]): string {
+  return runSummary(steps)
+    .parts.map((part) => part.text)
+    .join(i18n.t('session:summary.separator'))
 }
 
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
+type Diff = Extract<ToolContent, { type: 'diff' }>
 
 /** A step of a folded run, as its summary counts it. */
 export type RunStep =
   | { kind: 'thought'; durationMs?: number; streaming?: boolean }
-  | { kind: 'tool'; toolKind: ToolKind; status: ToolEntry['status']; path?: string }
+  | {
+      kind: 'tool'
+      toolKind: ToolKind
+      status: ToolEntry['status']
+      /** The files it touched: an edit's from its diffs, else its first location. */
+      paths: string[]
+      /** An edit's diffs, which tell a created file and give the stats. */
+      diffs?: Diff[]
+      description?: string
+    }
   | { kind: 'plan' }
   | { kind: 'compaction'; running: boolean }
 
-type RunPart =
-  | 'thought'
-  | 'plan'
-  | 'compaction'
-  | 'execute'
-  | 'read'
-  | 'edit'
-  | 'delete'
-  | 'move'
-  | 'search'
-  | 'fetch'
-  | 'other'
+/** A tool call as a step of a folded run. */
+export function toolStep(entry: ToolEntry): RunStep {
+  const base = { kind: 'tool' as const, toolKind: entry.toolKind, status: entry.status }
+  const description = entry.description !== undefined ? { description: entry.description } : {}
+  if (entry.toolKind !== 'edit') {
+    const first = entry.locations[0]?.path
+    return { ...base, paths: first !== undefined ? [first] : [], ...description }
+  }
+  // Codex sends a patch's files only in its diffs, and locations only with a permission request.
+  const diffs = entry.content.filter((c) => c.type === 'diff')
+  const paths = diffs.length > 0 ? diffs.map((d) => d.path) : entry.locations.map((l) => l.path)
+  return { ...base, paths: [...new Set(paths)], diffs, ...description }
+}
 
-function partOf(step: RunStep): RunPart {
-  if (step.kind !== 'tool') return step.kind
+/** A part of a fold line, with the diffs whose stats follow it. */
+export interface SummaryPart {
+  text: string
+  diffs?: Diff[]
+}
+
+type FilePart = 'read' | 'create' | 'edit' | 'delete' | 'move'
+
+type RunPart =
+  FilePart | 'thought' | 'plan' | 'compaction' | 'execute' | 'search' | 'fetch' | 'other'
+
+/** What a step adds to a part: an edit adds one unit per file it touched. */
+interface Unit {
+  part: RunPart
+  step: RunStep
+  path?: string
+  diffs?: Diff[]
+}
+
+function unitsOf(step: RunStep, created: Set<string>): Unit[] {
+  if (step.kind !== 'tool') return [{ part: step.kind, step }]
   switch (step.toolKind) {
-    case 'execute':
-    case 'read':
     case 'edit':
+      if (step.paths.length === 0) return [{ part: 'edit', step, diffs: step.diffs }]
+      // A file the run created stays Created through the edits that follow.
+      return step.paths.map((path) => ({
+        part: created.has(path) ? 'create' : 'edit',
+        step,
+        path,
+        diffs: step.diffs?.filter((d) => d.path === path),
+      }))
+    case 'read':
     case 'delete':
     case 'move':
+      return [{ part: step.toolKind, step, path: step.paths[0] }]
+    case 'execute':
     case 'search':
     case 'fetch':
-      return step.toolKind
+      return [{ part: step.toolKind, step }]
     default:
-      return 'other'
+      return [{ part: 'other', step }]
   }
 }
 
+/** "Read a.ts", "Read a.ts, b.ts and 6 more", or "Read 3 files" when none has a path. */
+function filesText(part: FilePart, paths: (string | undefined)[]): string {
+  const known = [...new Set(paths.filter((p) => p !== undefined))]
+  // Files, not calls: the same file read twice counts once.
+  const files = known.length + paths.filter((p) => p === undefined).length
+  if (known.length === 0) return i18n.t(`session:summary.${part}`, { count: files })
+  const shown = known.slice(0, 2)
+  // Two shown files that share a name add the folders that tell them apart.
+  const hints = nameHints(shown)
+  const names = shown
+    .map((path) => {
+      const hint = hints.get(path)
+      return hint ? `${hint}/${basename(path)}` : basename(path)
+    })
+    .join(i18n.t('session:summary.nameSeparator'))
+  const more = files - shown.length
+  return more === 0
+    ? i18n.t(`session:summary.${part}Named`, { names })
+    : i18n.t(`session:summary.${part}More`, { names, more })
+}
+
 /**
- * A folded run's summary, "Ran 3 commands, read 2 files, edited ui.md": one part per kind in the
- * order it first appears. `editAt` is the edit part's index, where the diff stats follow.
+ * A folded run's summary, "Read README.md and 6 more · Created offload.py · Ran 5 commands": one
+ * part per kind in the order it first appears, and a command's description after its part.
  */
 export function runSummary(steps: RunStep[]): {
-  parts: string[]
-  editAt: number
+  parts: SummaryPart[]
   failed: number
   running: boolean
 } {
-  const byPart = new Map<RunPart, RunStep[]>()
+  const created = new Set<string>()
   for (const step of steps) {
-    const part = partOf(step)
-    byPart.set(part, [...(byPart.get(part) ?? []), step])
+    if (step.kind !== 'tool') continue
+    for (const diff of step.diffs ?? []) if (diff.oldText === null) created.add(diff.path)
   }
-  const parts = [...byPart].map(([part, group]) => {
-    const n = group.length
+  const byPart = new Map<RunPart, Unit[]>()
+  for (const unit of steps.flatMap((step) => unitsOf(step, created))) {
+    byPart.set(unit.part, [...(byPart.get(unit.part) ?? []), unit])
+  }
+  const parts = [...byPart].flatMap(([part, units]): SummaryPart[] => {
+    const n = units.length
     switch (part) {
       case 'thought': {
-        const ms = group.reduce(
-          (sum, s) => sum + (s.kind === 'thought' ? (s.durationMs ?? 0) : 0),
+        const ms = units.reduce(
+          (sum, u) => sum + (u.step.kind === 'thought' ? (u.step.durationMs ?? 0) : 0),
           0,
         )
-        return ms >= 1000
-          ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
-          : i18n.t('session:summary.thought')
+        return [
+          {
+            text:
+              ms >= 1000
+                ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
+                : i18n.t('session:summary.thought'),
+          },
+        ]
       }
       case 'plan':
-        return i18n.t('session:summary.plan')
+        return [{ text: i18n.t('session:summary.plan') }]
       case 'compaction':
-        return i18n.t('session:summary.compaction')
-      case 'execute':
-        return i18n.t('session:summary.execute', { count: n })
+        return [{ text: i18n.t('session:summary.compaction') }]
+      case 'execute': {
+        const last = units.at(-1)?.step
+        const description = last?.kind === 'tool' ? last.description : undefined
+        if (n === 1 && description) return [{ text: description }]
+        const count = { text: i18n.t('session:summary.execute', { count: n }) }
+        return description ? [count, { text: description }] : [count]
+      }
       case 'search':
-        return i18n.t('session:summary.search', { count: n })
+        return [{ text: i18n.t('session:summary.search', { count: n }) }]
       case 'fetch':
-        return i18n.t('session:summary.fetch', { count: n })
+        return [{ text: i18n.t('session:summary.fetch', { count: n }) }]
       case 'other':
-        return i18n.t('session:summary.tool', { count: n })
+        return [{ text: i18n.t('session:summary.tool', { count: n }) }]
       default: {
-        // Files, not calls: the same file read twice counts once.
-        const paths = group.map((s) => (s.kind === 'tool' ? s.path : undefined))
-        const known = new Set(paths.filter((p) => p !== undefined))
-        const files = known.size + paths.filter((p) => p === undefined).length
-        const [only] = known
-        return files === 1 && only
-          ? i18n.t(`session:summary.${part}Named`, { name: basename(only) })
-          : i18n.t(`session:summary.${part}`, { count: files })
+        const text = filesText(
+          part,
+          units.map((u) => u.path),
+        )
+        if (part !== 'create' && part !== 'edit') return [{ text }]
+        return [{ text, diffs: units.flatMap((u) => u.diffs ?? []) }]
       }
     }
   })
-  if (parts[0]) parts[0] = capitalize(parts[0])
   return {
     parts,
-    editAt: [...byPart.keys()].indexOf('edit'),
     failed: steps.filter((s) => s.kind === 'tool' && s.status === 'failed').length,
     running: steps.some((s) => {
       if (s.kind === 'thought') return !!s.streaming

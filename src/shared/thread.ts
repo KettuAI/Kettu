@@ -153,6 +153,7 @@ export interface ToolEntry {
   permission: PendingPermission | null
   permissionResult: { optionId: string; kind: PermissionKind } | 'cancelled' | 'withdrawn' | null
   rawInput?: string // the command or input as text, when the agent sent one
+  description?: string // what a command does, in the agent's words (Claude Code's Bash)
 }
 
 export type ToolContent =
@@ -447,6 +448,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         typeof value.status === 'string' &&
         isListOf(value.content, isToolContent) &&
         isListOf(value.locations, isRecord) &&
+        (value.description === undefined || typeof value.description === 'string') &&
         (value.permission == null ||
           (isRecord(value.permission) && isListOf(value.permission.options, isRecord)))
       )

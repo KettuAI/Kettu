@@ -10,10 +10,11 @@ import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useShallow } from 'zustand/react/shallow'
 import { useEntryAnimation } from '../use-thread'
-import { groupLabel, PANEL } from './helpers'
+import { CutLabel } from './cut-label'
+import { groupLabel, PANEL, toolStep } from './helpers'
 import { ToolCard } from './tool-card'
 
-/** A run of completed lookups as one row ("Explored 4 files"), opening to a row for each. */
+/** A run of completed lookups as one row ("Read a.ts and 2 more"), opening to a row for each. */
 export const ToolGroup = memo(function ToolGroup({
   sessionId,
   entryIds,
@@ -28,14 +29,14 @@ export const ToolGroup = memo(function ToolGroup({
   useTranslation('session')
   const [open, setOpen] = useState(false)
   const animation = useEntryAnimation(sessionId, entryIds[0]!)
-  const kinds = useThreadsStore(
+  const entries = useThreadsStore(
     useShallow((s) => {
       const byId = s.replicas[sessionId]?.state?.byId
-      return entryIds.map((id) => {
-        const entry = byId?.[id]
-        return entry?.kind === 'tool' ? entry.toolKind : 'other'
-      })
+      return entryIds.map((id) => byId?.[id])
     }),
+  )
+  const label = groupLabel(
+    entries.flatMap((entry) => (entry?.kind === 'tool' ? [toolStep(entry)] : [])),
   )
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0', animation)}>
@@ -50,12 +51,13 @@ export const ToolGroup = memo(function ToolGroup({
             )}
           />
         </span>
-        <span
+        <CutLabel
           key={entryIds.length}
           className="min-w-0 flex-1 truncate animate-in fade-in animation-duration-(--duration-base)"
+          full={label}
         >
-          {groupLabel(kinds)}
-        </span>
+          {label}
+        </CutLabel>
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
         <div className="mt-0.5 ml-1.5 flex flex-col gap-0.5 border-l border-border pl-3.5">

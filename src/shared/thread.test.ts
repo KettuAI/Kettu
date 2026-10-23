@@ -238,6 +238,7 @@ describe('isThreadEntry', () => {
       locations: [{ path: 'a.ts' }],
       permission: { requestId: 'p1', options: [{ id: 'o', name: 'Allow', kind: 'allow_once' }] },
       permissionResult: null,
+      description: 'Rewrite a.ts',
     },
     { kind: 'subagent', id: 's:1', sessionId: 'child' },
     { kind: 'session_message', id: 'sm:1', senderId: null, content: [] },
@@ -268,6 +269,7 @@ describe('isThreadEntry', () => {
       }),
     ).toBe(false)
     expect(isThreadEntry({ ...valid[3], permission: { requestId: 'p' } })).toBe(false)
+    expect(isThreadEntry({ ...valid[3], description: 1 })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
   })
 })

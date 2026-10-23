@@ -15,7 +15,8 @@ import { stepItems } from '../thread-items'
 import { useEntryAnimation } from '../use-thread'
 import { AgentEntry } from './basic'
 import { Entry } from './entry'
-import { PANEL, runSummary, type RunStep } from './helpers'
+import { CutLabel } from './cut-label'
+import { PANEL, runSummary, toolStep, type RunStep, type SummaryPart } from './helpers'
 import { ToolGroup } from './tool-group'
 import { useDiffStats } from './use-diff-stats'
 
@@ -30,8 +31,8 @@ interface RunGroupProps {
 
 /**
  * Two or more steps of work between messages, folded into one line that says what they did
- * ("Ran 3 commands, edited ui.md +3 −0") and expands to the steps. A step waiting for permission
- * holds it open.
+ * ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to the steps. A step waiting
+ * for permission holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,
@@ -50,19 +51,12 @@ export const RunGroup = memo(function RunGroup({
     }),
   )
   const steps: RunStep[] = []
-  const edits: ToolContent[] = []
   let waiting = false
   for (const entry of entries) {
     if (entry?.kind === 'thought') {
       steps.push({ kind: 'thought', durationMs: entry.durationMs, streaming: entry.streaming })
     } else if (entry?.kind === 'tool') {
-      steps.push({
-        kind: 'tool',
-        toolKind: entry.toolKind,
-        status: entry.status,
-        path: entry.locations[0]?.path,
-      })
-      if (entry.toolKind === 'edit') edits.push(...entry.content)
+      steps.push(toolStep(entry))
       if (entry.permission) waiting = true
     } else if (entry?.kind === 'plan') {
       steps.push({ kind: 'plan' })
@@ -70,8 +64,7 @@ export const RunGroup = memo(function RunGroup({
       steps.push({ kind: 'compaction', running: entry.status === 'in_progress' })
     }
   }
-  const stats = useDiffStats(edits)
-  const { parts, editAt, failed, running } = runSummary(steps)
+  const { parts, failed, running } = runSummary(steps)
   const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
   const spaced = useMemo(
     () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'c')),
@@ -94,26 +87,12 @@ export const RunGroup = memo(function RunGroup({
           aria-hidden
           className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"
         />
-        <span className="min-w-0 truncate">
-          {parts.map((part, i) => (
-            <span key={i}>
-              {i > 0 && t('summary.separator')}
-              {part}
-              {i === editAt && stats && (stats.insertions > 0 || stats.deletions > 0) && (
-                <span className="ml-1.5 font-mono text-[11.5px] tabular">
-                  <span className="text-success-text">+{stats.insertions}</span>{' '}
-                  <span className="text-destructive">−{stats.deletions}</span>
-                </span>
-              )}
-            </span>
-          ))}
-          {failed > 0 && (
-            <span className="text-destructive">
-              {t('summary.separator')}
-              {t('summary.failed', { failed })}
-            </span>
-          )}
-        </span>
+        <CutLabel
+          className="min-w-0 truncate"
+          full={<Summary parts={parts} failed={failed} plain />}
+        >
+          <Summary parts={parts} failed={failed} />
+        </CutLabel>
         {running && <Spinner aria-label={t('status.running')} className="size-3 shrink-0" />}
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
@@ -148,6 +127,48 @@ export const RunGroup = memo(function RunGroup({
     </Collapsible>
   )
 }, sameRun)
+
+/** The fold line's text; `plain` drops its colors for the tooltip's inverted surface. */
+function Summary({
+  parts,
+  failed,
+  plain = false,
+}: {
+  parts: SummaryPart[]
+  failed: number
+  plain?: boolean
+}) {
+  const { t } = useTranslation('session')
+  return (
+    <>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && t('summary.separator')}
+          {part.text}
+          {part.diffs && <PartStats diffs={part.diffs} plain={plain} />}
+        </span>
+      ))}
+      {failed > 0 && (
+        <span className={cn(!plain && 'text-destructive')}>
+          {t('summary.separator')}
+          {t('summary.failed', { failed })}
+        </span>
+      )}
+    </>
+  )
+}
+
+/** The insertions and deletions of a part's diffs, after the file it names. */
+function PartStats({ diffs, plain }: { diffs: ToolContent[]; plain: boolean }) {
+  const stats = useDiffStats(diffs)
+  if (!stats || (stats.insertions === 0 && stats.deletions === 0)) return null
+  return (
+    <span className="ml-1.5 font-mono text-meta tabular">
+      <span className={cn(!plain && 'text-success-text')}>+{stats.insertions}</span>{' '}
+      <span className={cn(!plain && 'text-destructive')}>−{stats.deletions}</span>
+    </span>
+  )
+}
 
 // The thread rebuilds its items on every change of shape, so the ids arrive as a new array.
 function sameRun(a: RunGroupProps, b: RunGroupProps): boolean {
