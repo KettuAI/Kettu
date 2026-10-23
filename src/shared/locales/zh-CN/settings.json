@@ -284,6 +284,8 @@
     "noUsage": "不提供套餐用量",
     "usageOnceRunning": "运行后显示套餐用量",
     "hidden": "已隐藏",
+    "revealAccount": "点击显示",
+    "maskAccount": "点击隐藏",
     "hideAccounts": "隐藏账号",
     "showAccounts": "显示账号",
     "hideAccountsHint": "模糊显示邮箱和账号名，方便截图和共享屏幕",

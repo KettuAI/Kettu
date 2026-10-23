@@ -214,16 +214,43 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
 }
 
 /**
- * Account details behind a mask while Settings › Agents hides them: blurred on screen, and the
- * value itself withheld from the accessibility tree and from copying.
+ * Account details behind a mask while Settings > Agents hides them: blurred on screen, and the
+ * value itself withheld from the accessibility tree and from copying. Clicking the mask shows
+ * that one value until it is clicked again; the setting itself stays on.
  */
 export function Masked({ children }: { children: string }) {
   const { t } = useTranslation('settings')
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
+  const [revealed, setRevealed] = useState(false)
+  // Hiding accounts again masks every value, including one shown by a click.
+  const [hiddenBefore, setHiddenBefore] = useState(hidden)
+  if (hidden !== hiddenBefore) {
+    setHiddenBefore(hidden)
+    setRevealed(false)
+  }
   if (!hidden) return <span data-selectable="">{children}</span>
   return (
-    <span role="img" aria-label={t('agents.hidden')} className="inline-block blur-xs select-none">
-      {'•'.repeat(Math.min(Math.max(children.length, 6), 18))}
-    </span>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-pressed={revealed}
+            aria-label={revealed ? undefined : t('agents.hidden')}
+            onClick={() => setRevealed((shown) => !shown)}
+            className="pointer-events-auto -mx-1 inline-block rounded-sm px-1 outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
+          />
+        }
+      >
+        {revealed ? (
+          children
+        ) : (
+          <span aria-hidden className="inline-block blur-xs select-none">
+            {'•'.repeat(Math.min(Math.max(children.length, 6), 18))}
+          </span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{t(revealed ? 'agents.maskAccount' : 'agents.revealAccount')}</TooltipContent>
+    </Tooltip>
   )
 }

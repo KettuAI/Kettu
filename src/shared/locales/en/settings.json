@@ -286,6 +286,8 @@
     "noUsage": "No plan usage reported",
     "usageOnceRunning": "Plan usage shows once it runs",
     "hidden": "Hidden",
+    "revealAccount": "Click to show",
+    "maskAccount": "Click to hide",
     "hideAccounts": "Hide accounts",
     "showAccounts": "Show accounts",
     "hideAccountsHint": "Blur emails and account names, for screenshots and shared screens",
