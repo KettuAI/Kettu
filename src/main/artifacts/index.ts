@@ -37,6 +37,7 @@ export class Artifacts {
   }
 
   watchWindow(contents: WebContents): void {
+    this.origins.watch(contents)
     guardArtifactFrames(contents, {
       platform: process.platform,
       blocked: (event) => sendEvent(contents, 'artifact:blocked', event),

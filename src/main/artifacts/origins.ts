@@ -48,6 +48,11 @@ export class ArtifactOrigins {
     return artifactUrl(artifactId)
   }
 
+  /** A page that loads again opens what it shows anew, as the frame guard starts over then. */
+  watch(contents: WebContents): void {
+    contents.on('did-navigate', () => this.opened.delete(contents))
+  }
+
   /** Undoes one `open` of the artifact at `url` by `contents`; the artifact is still served. */
   close(contents: WebContents, url: string): void {
     const host = artifactHost(url)

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import type { WebContents } from 'electron'
 import { describe, expect, it } from 'vitest'
 import { ArtifactOrigins, artifactHost, artifactUrl, originId } from './origins'
@@ -67,6 +68,18 @@ describe('ArtifactOrigins', () => {
     expect(origins.isOpenedIn(windowA, url)).toBe(false)
     origins.open(windowA, ID)
     expect(origins.isOpenedIn(windowA, url)).toBe(true)
+  })
+
+  it("forgets a window's origins when its page loads again, and only that window's", () => {
+    const origins = new ArtifactOrigins()
+    const window = new EventEmitter() as unknown as WebContents
+    origins.watch(window)
+    const url = origins.open(window, ID)
+    origins.open(windowA, ID)
+    window.emit('did-navigate', {}, 'http://localhost:5173/', 200, 'OK')
+    expect(origins.isOpenedIn(window, url)).toBe(false)
+    expect(origins.isOpenedIn(windowA, url)).toBe(true)
+    expect(origins.artifactOf(originId(ID))).toBe(ID)
   })
 
   it('ignores closing what was never opened', () => {
