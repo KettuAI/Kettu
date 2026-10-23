@@ -218,8 +218,13 @@ export function QueueStack({
     edit: (item) =>
       run(
         host('sessions.unqueue', { sessionId, itemId: item.id }).then(() => {
-          restoreAttachments(sessionId, item.content)
-          emitAppEvent({ kind: 'insert-into-composer', sessionId, text: promptText(item) })
+          if (restoreAttachments(sessionId, item.content) > 0) {
+            onError(t('attachments.limit', { ns: 'composer' }))
+          }
+          const text = promptText(item)
+          emitAppEvent(
+            text ? { kind: 'insert-into-composer', sessionId, text } : { kind: 'focus-composer' },
+          )
         }),
       ),
     remove: (item) =>

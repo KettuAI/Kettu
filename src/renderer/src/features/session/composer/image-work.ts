@@ -1,3 +1,4 @@
+import { i18n } from '@renderer/lib/i18n'
 import ImageWorker from './image-worker?worker'
 
 export interface ImageJob {
@@ -17,7 +18,9 @@ export interface PreparedImage {
   ms: number
 }
 
-export type ImageResult = { id: number } & (PreparedImage | { error: string })
+export type ImageResult = { id: number } & (
+  PreparedImage | { error: 'unreadable' | 'too-large'; detail: string }
+)
 
 let worker: Worker | null = null
 let nextId = 1
@@ -36,8 +39,10 @@ export function prepareImage(blob: Blob): Promise<PreparedImage> {
   const id = nextId++
   return new Promise((resolve, reject) => {
     pending.set(id, (result) => {
-      if ('error' in result) reject(new Error(result.error))
-      else resolve(result)
+      if (!('error' in result)) return resolve(result)
+      console.warn(`Could not prepare an image: ${result.detail}`)
+      const key = result.error === 'too-large' ? 'imageTooLarge' : 'cannotRead'
+      reject(new Error(i18n.t(`composer:attachments.${key}`)))
     })
     const job: ImageJob = { id, blob }
     worker!.postMessage(job)

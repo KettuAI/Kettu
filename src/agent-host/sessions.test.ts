@@ -107,7 +107,7 @@ describe('attachments', () => {
       sessionId,
       content: withAttachment('/attachments', added.id),
     })
-    const saved = path.join(t.dir, 'attachments', `${sha(PNG)}.png`)
+    const saved = path.join(t.dir, 'attachments', 'sent', `${sha(PNG)}.png`)
     await port.until(() => reply(port, sessionId).includes('- resource_link Image 1'))
     expect(reply(port, sessionId)).toContain(pathToFileURL(saved).href)
     expect(sentAttachment(port, sessionId)).toMatchObject({
@@ -177,7 +177,35 @@ describe('attachments', () => {
     })
     await port.untilStatus(sessionId, 'ready')
     const fork = await port.request('sessions.fork', { sessionId })
+    // Deleting the source at once takes its bytes, but not the fork's copy.
+    await port.request('sessions.delete', { sessionId })
+    await port.request('sessions.close', { sessionId: fork.id })
     const blob = await port.request('sessions.blob', { sessionId: fork.id, hash: sha(PNG) })
+    expect(new Uint8Array(blob.bytes)).toEqual(PNG)
+  })
+
+  it('sends the attachments of a prompt that waited for a sign-in, and keeps them', async () => {
+    const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)
+    const { t, port } = await setup({
+      agentEnv: { FAKE_AGENT_AUTH: 'required', FAKE_AGENT_LOGIN_MARKER: marker },
+    })
+    await port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'fake-login' })
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/crash')
+    await port.untilStatus(sessionId, 'closed')
+    // The agent the send starts is signed out, so the turn fails before anything is sent.
+    const added = await attach(port)
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: withAttachment('/attachments', added.id),
+    })
+    await port.untilStatus(sessionId, 'auth_required')
+    expect(sentAttachment(port, sessionId)?.sent).toBeNull()
+    await writeFile(marker, '')
+    await port.request('sessions.retry', { sessionId })
+    await port.until(() => reply(port, sessionId).includes('- image image/png, 12 bytes'))
+    expect(sentAttachment(port, sessionId)).toMatchObject({ sent: 'image', blob: sha(PNG) })
+    const blob = await port.request('sessions.blob', { sessionId, hash: sha(PNG) })
     expect(new Uint8Array(blob.bytes)).toEqual(PNG)
   })
 })

@@ -104,8 +104,6 @@ export interface ThreadWrite {
   replace?: boolean
   /** The bytes of attachments the entries name by hash: a sent image or pasted text. */
   blobs?: StoredBlob[]
-  /** A session to copy the bytes the entries name from, as a fork's source. */
-  blobsFrom?: string
 }
 
 export interface StoredBlob {

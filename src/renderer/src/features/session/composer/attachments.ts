@@ -101,11 +101,15 @@ export function removeAttachment(draft: string, key: string): void {
     draft,
     items.filter((i) => i.key !== key),
   )
-  if (item.attachment) {
-    void host('attachments.remove', { id: item.attachment.id }).catch((error: unknown) =>
-      console.warn(`Could not remove attachment ${item.attachment!.id}`, error),
-    )
-  }
+  removeRecord(item)
+}
+
+function removeRecord(item: DraftAttachment): void {
+  const id = item.attachment?.id
+  if (!id) return
+  void host('attachments.remove', { id }).catch((error: unknown) =>
+    console.warn(`Could not remove attachment ${id}`, error),
+  )
 }
 
 export interface AttachmentsBlock {
@@ -146,8 +150,11 @@ export function attachmentContent(items: readonly DraftAttachment[]): UserConten
   )
 }
 
-/** Attachments a queued message held, back in a composer as added ones. */
-export function restoreAttachments(draft: string, content: readonly UserContent[]): void {
+/**
+ * Attachments a queued message held, back in a composer as added ones. Returns how many did not
+ * fit under the limit; their records go.
+ */
+export function restoreAttachments(draft: string, content: readonly UserContent[]): number {
   const restored: DraftAttachment[] = content.flatMap((c) =>
     c.type === 'ref' && c.ref.kind === 'attachment'
       ? [
@@ -165,7 +172,19 @@ export function restoreAttachments(draft: string, content: readonly UserContent[
         ]
       : [],
   )
-  if (restored.length === 0) return
+  if (restored.length === 0) return 0
   const items = draftAttachments(draft)
-  setDraftAttachments(draft, [...items, ...restored].slice(0, ATTACHMENT_LIMIT))
+  const room = Math.max(0, ATTACHMENT_LIMIT - items.length)
+  setDraftAttachments(draft, [...items, ...restored.slice(0, room)])
+  const left = restored.slice(room)
+  for (const item of left) removeRecord(item)
+  return left.length
+}
+
+/** Drops a composer's attachments with their records, as when its session is deleted. */
+export function dropAttachments(draft: string): void {
+  const items = draftAttachments(draft)
+  if (items.length === 0) return
+  setDraftAttachments(draft, [])
+  for (const item of items) removeRecord(item)
 }

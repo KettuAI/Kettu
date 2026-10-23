@@ -199,7 +199,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       (sendKey === 'enter' ? isMod(event) && !event.shiftKey : isMod(event) && event.shiftKey)
     if (steers) {
       event.preventDefault()
-      queue(true)
+      if (canQueue) queue(true)
       return
     }
     if (!sends) return

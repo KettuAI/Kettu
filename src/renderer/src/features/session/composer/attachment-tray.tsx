@@ -43,21 +43,19 @@ export function AttachmentTray({
   const row = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const [announcement, setAnnouncement] = useState('')
-  const seen = useRef(new Map(items.map((item) => [item.key, item.name])))
+  const seen = useRef(new Set(items.map((item) => item.key)))
   const index = Math.min(active, Math.max(0, items.length - 1))
   const shown = items.length > 0
 
-  // Says what was added or removed, for a screen reader.
+  // Says what was added, for a screen reader. A removal is said where the user removes one, so
+  // the tiles of a message being sent are not read out as removed.
   useEffect(() => {
-    const now = new Map(items.map((item) => [item.key, item.name]))
-    const added = [...now].filter(([key]) => !seen.current.has(key)).map(([, name]) => name)
-    const removed = [...seen.current].filter(([key]) => !now.has(key)).map(([, name]) => name)
-    seen.current = now
-    const said = [
-      ...added.map((name) => t('attachments.announceAdded', { name })),
-      ...removed.map((name) => t('attachments.announceRemoved', { name })),
-    ]
-    if (said.length > 0) setAnnouncement(said.join(' '))
+    const added = items.filter((item) => !seen.current.has(item.key))
+    seen.current = new Set(items.map((item) => item.key))
+    if (added.length === 0) return
+    setAnnouncement(
+      added.map((item) => t('attachments.announceAdded', { name: item.name })).join(' '),
+    )
   }, [items, t])
 
   // A vertical wheel scrolls the row sideways; React's wheel listener is passive, so it cannot.
@@ -73,14 +71,6 @@ export function AttachmentTray({
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [shown])
-
-  if (!shown) {
-    return (
-      <span className="sr-only" aria-live="polite">
-        {announcement}
-      </span>
-    )
-  }
 
   const focusTile = (i: number) => {
     setActive(i)
@@ -99,8 +89,10 @@ export function AttachmentTray({
     const item = items[i]
     if (!item) return
     removeAttachment(draft, item.key)
-    if (items.length === 1) onLeave()
-    else focusTile(Math.min(i, items.length - 2))
+    setAnnouncement(t('attachments.announceRemoved', { name: item.name }))
+    // The next tile takes focus, or the text after the last one.
+    if (i === items.length - 1) onLeave()
+    else focusTile(i)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -135,48 +127,53 @@ export function AttachmentTray({
   const view = (item: DraftAttachment): TileView =>
     draftView(item, takesImages === false, agentName, t)
 
+  // The live region stays one node, outside the listbox, whether or not the row shows.
   return (
-    <div
-      ref={row}
-      role="listbox"
-      aria-label={t('attachments.label')}
-      aria-orientation="horizontal"
-      onKeyDown={onKeyDown}
-      className="flex w-full gap-1.5 overflow-x-auto px-1.5 pt-1.5 [scrollbar-width:none] scroll-fade-x"
-    >
-      <AnimatePresence initial={false}>
-        {items.map((item, i) => (
-          <motion.div
-            key={item.key}
-            layout={reduceMotion ? false : 'position'}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={
-              reduceMotion
-                ? { opacity: 0, transition: { duration: 0.12 } }
-                : { opacity: 0, scale: 0.9, transition: { duration: 0.12 } }
-            }
-            transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
-            className="shrink-0"
-          >
-            <AttachmentTile
-              view={view(item)}
-              role="option"
-              aria-selected={i === index}
-              aria-label={`${item.name}, ${view(item).tooltip.split('\n').at(-1)}`}
-              tabIndex={i === index ? 0 : -1}
-              onFocus={() => setActive(i)}
-              onClick={() => open(item)}
-              onRemove={() => remove(i)}
-              removeLabel={t('attachments.remove', { name: item.name })}
-            />
-          </motion.div>
-        ))}
-      </AnimatePresence>
+    <>
+      {shown && (
+        <div
+          ref={row}
+          role="listbox"
+          aria-label={t('attachments.label')}
+          aria-orientation="horizontal"
+          onKeyDown={onKeyDown}
+          className="flex w-full gap-1.5 overflow-x-auto px-1.5 pt-1.5 [scrollbar-width:none] scroll-fade-x"
+        >
+          <AnimatePresence initial={false}>
+            {items.map((item, i) => (
+              <motion.div
+                key={item.key}
+                layout={reduceMotion ? false : 'position'}
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={
+                  reduceMotion
+                    ? { opacity: 0, transition: { duration: 0.12 } }
+                    : { opacity: 0, scale: 0.9, transition: { duration: 0.12 } }
+                }
+                transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
+                className="shrink-0"
+              >
+                <AttachmentTile
+                  view={view(item)}
+                  role="option"
+                  aria-selected={i === index}
+                  aria-label={`${item.name}, ${view(item).tooltip.split('\n').at(-1)}`}
+                  tabIndex={i === index ? 0 : -1}
+                  onFocus={() => setActive(i)}
+                  onClick={() => open(item)}
+                  onRemove={() => remove(i)}
+                  removeLabel={t('attachments.remove', { name: item.name })}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
       <span className="sr-only" aria-live="polite">
         {announcement}
       </span>
-    </div>
+    </>
   )
 }
 

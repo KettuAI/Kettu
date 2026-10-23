@@ -13,10 +13,16 @@ scope.onmessage = async (event: MessageEvent<ImageJob>) => {
     const message: ImageResult = { id, ...result, ms: performance.now() - started }
     scope.postMessage(message, [result.bytes])
   } catch (error) {
-    const message: ImageResult = { id, error: String((error as Error)?.message ?? error) }
+    const message: ImageResult = {
+      id,
+      error: error instanceof TooLarge ? 'too-large' : 'unreadable',
+      detail: String((error as Error)?.message ?? error),
+    }
     scope.postMessage(message)
   }
 }
+
+class TooLarge extends Error {}
 
 async function prepare(blob: Blob) {
   const bitmap = await createImageBitmap(blob)
@@ -34,17 +40,25 @@ async function prepare(blob: Blob) {
         scaled: null,
       }
     }
-    // Too large for every model, or a type no model takes: re-encoded, transparency kept.
-    const canvas = draw(bitmap, IMAGE_SIDE)
+    // Too large for every model, or a type no model takes: re-encoded, transparency kept. A PNG
+    // can still be over the limit at 2000 px, so it gets smaller until it fits.
+    let canvas = draw(bitmap, IMAGE_SIDE)
     const type = hasTransparency(canvas) ? 'image/png' : 'image/jpeg'
-    const out = await canvas.convertToBlob({ type, quality: 0.9 })
+    let out = await canvas.convertToBlob({ type, quality: 0.9 })
+    while (out.size > IMAGE_BYTES) {
+      const side = Math.floor(Math.max(canvas.width, canvas.height) * 0.8)
+      if (side < THUMB_SIDE) throw new TooLarge(`Still ${out.size} bytes at ${canvas.width} px`)
+      canvas = draw(bitmap, side)
+      out = await canvas.convertToBlob({ type, quality: 0.9 })
+    }
+    const resized = canvas.width !== width || canvas.height !== height
     return {
       thumb: await dataUrl(thumb),
       width,
       height,
       bytes: await out.arrayBuffer(),
       mimeType: type,
-      scaled: { width: canvas.width, height: canvas.height },
+      scaled: resized ? { width: canvas.width, height: canvas.height } : null,
     }
   } finally {
     bitmap.close()

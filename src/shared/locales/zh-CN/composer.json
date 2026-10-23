@@ -85,6 +85,7 @@
     "adding": "正在添加…",
     "removeFailed": "请先移除未能添加的附件",
     "cannotRead": "无法读取",
+    "imageTooLarge": "这张图片太大，缩小后仍无法发送",
     "cannotOpen": "无法打开这张图片。",
     "sentAsImage": "以图片发送",
     "sentScaled": "以图片发送，已缩小到 {{size}}",

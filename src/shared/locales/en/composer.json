@@ -89,6 +89,7 @@
     "adding": "Adding…",
     "removeFailed": "Remove the attachments that could not be added",
     "cannotRead": "Can't be read",
+    "imageTooLarge": "This image is too large to send, even scaled down",
     "cannotOpen": "This image can't be opened.",
     "sentAsImage": "Sent as an image",
     "sentScaled": "Sent as an image, scaled to {{size}}",

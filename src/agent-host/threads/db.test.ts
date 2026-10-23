@@ -289,7 +289,7 @@ describe('the thread database', () => {
     expect(String(json)).toContain('"blob"')
   })
 
-  it('keeps the bytes of sent attachments through a whole write and copies them to a fork', () => {
+  it('keeps the bytes of sent attachments through a whole write that still names them', () => {
     const file = tempFile()
     const db = open(file)
     const hash = 'ab'.repeat(32)
@@ -335,15 +335,16 @@ describe('the thread database', () => {
     })
     expect(db.blob('s1', hash)?.data).toEqual(data)
 
-    db.write('fork', { head, entries: [{ pos: 0, entry: sent }], blobsFrom: 's1' })
-    expect(db.blob('fork', hash)?.data).toEqual(data)
-    db.remove(['s1'])
+    // A whole write without the entry drops its bytes, and so does removing the thread.
+    db.write('s2', {
+      head,
+      entries: [{ pos: 0, entry: sent }],
+      blobs: [{ hash, mime: 'image/png', data }],
+    })
+    db.write('s1', { head, entries: turns(1, 0), replace: true })
     expect(db.blob('s1', hash)).toBeNull()
-    expect(db.blob('fork', hash)?.data).toEqual(data)
-
-    // A whole write without the entry drops its bytes.
-    db.write('fork', { head, entries: turns(1, 0), replace: true })
-    expect(db.blob('fork', hash)).toBeNull()
+    db.remove(['s2'])
+    expect(db.blob('s2', hash)).toBeNull()
     db.close()
   })
 

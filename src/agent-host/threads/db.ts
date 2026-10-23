@@ -129,9 +129,6 @@ function prepareAll(db: DatabaseSync) {
       'INSERT OR IGNORE INTO blobs (session_id, hash, mime, data) VALUES (?, ?, ?, ?)',
     ),
     blob: sql('SELECT mime, data FROM blobs WHERE session_id = ? AND hash = ?'),
-    copyBlob: sql(`
-      INSERT OR IGNORE INTO blobs (session_id, hash, mime, data)
-      SELECT ?, hash, mime, data FROM blobs WHERE session_id = ? AND hash = ?`),
   }
 }
 
@@ -400,11 +397,10 @@ export class ThreadDb {
   write(sessionId: string, change: ThreadWrite): void {
     this.guard((sql, db) => {
       this.transaction(db, () => {
-        const needed = attachmentBlobs(change.entries.map(({ entry }) => entry))
         // Writing whole drops the session's bytes with its rows; those its attachments name stay.
         const kept: StoredBlob[] = []
         if (change.replace) {
-          for (const hash of needed) {
+          for (const hash of attachmentBlobs(change.entries.map(({ entry }) => entry))) {
             const row = sql.blob.get(sessionId, hash)
             if (row) kept.push({ hash, mime: String(row.mime), data: row.data as Uint8Array })
           }
@@ -428,9 +424,6 @@ export class ThreadDb {
         )
         for (const blob of [...kept, ...(change.blobs ?? [])]) {
           sql.insertBlob.run(sessionId, blob.hash, blob.mime, blob.data)
-        }
-        if (change.blobsFrom) {
-          for (const hash of needed) sql.copyBlob.run(sessionId, change.blobsFrom, hash)
         }
         const entries = [...change.entries].sort((a, b) => a.pos - b.pos)
         for (const { pos, entry } of entries) {

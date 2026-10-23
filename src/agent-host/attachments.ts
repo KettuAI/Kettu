@@ -1,9 +1,10 @@
 // The attachments of drafts and queued prompts: their records in state/attachments.json and the
 // bytes the renderer handed over in attachments/, named by SHA-256 and extension, until a prompt
-// sends them or the user removes them. See docs/design/session-model.md#where-the-bytes-live.
+// sends them or the user removes them; and in attachments/sent/, the copies that links sent to an
+// agent point to. See docs/design/session-model.md#where-the-bytes-live.
 
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AttachmentBytes } from '@shared/agent-host'
@@ -13,7 +14,7 @@ import { invalidParams, notFound } from './errors'
 import { t } from './i18n'
 import { JsonFile, type LogFn } from './storage'
 
-/** A record nothing sent or removed in this long is dropped when the host starts. */
+/** A record nothing sent or removed in this long, or a sent copy this old, goes when the host starts. */
 export const ATTACHMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
 export interface AttachmentRecord {
@@ -96,7 +97,7 @@ export class Attachments {
     })
   }
 
-  /** Reads the records, dropping old ones, and the saved bytes that no record or link needs. */
+  /** Reads the records, dropping old ones, the saved bytes no record holds, and old sent copies. */
   async load(): Promise<void> {
     const data = await this.file.load()
     const cutoff = this.now() - ATTACHMENT_MAX_AGE_MS
@@ -105,21 +106,16 @@ export class Attachments {
     }
     if (this.records.size !== data.attachments.length) this.save()
     const kept = new Set([...this.records.values()].map(fileName))
-    let names: string[]
-    try {
-      names = await readdir(this.dir)
-    } catch {
-      return
+    for (const name of await this.files(this.dir)) {
+      if (!kept.has(name)) await this.removeFile(path.join(this.dir, name))
     }
-    // Bytes no record holds may still be what a sent link points to, so only old ones go.
-    for (const name of names) {
-      if (kept.has(name)) continue
-      const file = path.join(this.dir, name)
-      try {
-        if ((await stat(file)).mtimeMs < cutoff) await rm(file, { force: true })
-      } catch (error) {
-        this.options.log('warn', `Could not remove ${file}: ${(error as Error).message}`)
-      }
+    for (const name of await this.files(this.sentDir)) {
+      const file = path.join(this.sentDir, name)
+      const old = await stat(file).then(
+        (info) => info.mtimeMs < cutoff,
+        () => false,
+      )
+      if (old) await this.removeFile(file)
     }
   }
 
@@ -175,9 +171,17 @@ export class Attachments {
     return { mimeType: record.mimeType, bytes: toArrayBuffer(data) }
   }
 
-  /** The saved file's URI, for an agent that is sent a link rather than the bytes. */
-  fileUri(record: AttachmentRecord): string {
-    return pathToFileURL(this.bytesPath(record)).href
+  /**
+   * A link for an agent that is sent one rather than the bytes: to a copy of its own, which stays
+   * 30 days after it was last sent, however the draft's record and bytes go.
+   */
+  async sentLink(record: AttachmentRecord, data: Uint8Array): Promise<string> {
+    const file = path.join(this.sentDir, fileName(record))
+    await mkdir(this.sentDir, { recursive: true, mode: 0o700 })
+    await writeFile(file, data, { mode: 0o600 })
+    const at = new Date(this.now())
+    await utimes(file, at, at)
+    return pathToFileURL(file).href
   }
 
   async remove(id: string): Promise<void> {
@@ -185,11 +189,8 @@ export class Attachments {
     await this.release([id])
   }
 
-  /**
-   * Drops the records once their prompt went or they were removed, and their bytes unless
-   * another record or a link sent to an agent (`linked`) still needs them.
-   */
-  async release(ids: readonly string[], linked: ReadonlySet<string> = new Set()): Promise<void> {
+  /** Drops the records once their prompt went or they were removed, and their bytes unless another record holds them. */
+  async release(ids: readonly string[]): Promise<void> {
     const released: AttachmentRecord[] = []
     for (const id of ids) {
       const record = this.records.get(id)
@@ -201,10 +202,7 @@ export class Attachments {
     this.save()
     const kept = new Set([...this.records.values()].map(fileName))
     for (const record of released) {
-      if (kept.has(fileName(record)) || linked.has(record.hash)) continue
-      await rm(this.bytesPath(record), { force: true }).catch((error: unknown) =>
-        this.options.log('warn', `Could not remove attachment bytes: ${(error as Error).message}`),
-      )
+      if (!kept.has(fileName(record))) await this.removeFile(this.bytesPath(record))
     }
   }
 
@@ -212,8 +210,28 @@ export class Attachments {
     return this.file.flush()
   }
 
+  private get sentDir(): string {
+    return path.join(this.dir, 'sent')
+  }
+
   private bytesPath(record: Pick<AttachmentRecord, 'hash' | 'mimeType'>): string {
     return path.join(this.dir, fileName(record))
+  }
+
+  /** The files in a folder, none when it does not exist yet. */
+  private async files(dir: string): Promise<string[]> {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true })
+      return entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
+    } catch {
+      return []
+    }
+  }
+
+  private async removeFile(file: string): Promise<void> {
+    await rm(file, { force: true }).catch((error: unknown) =>
+      this.options.log('warn', `Could not remove ${file}: ${(error as Error).message}`),
+    )
   }
 
   private save(): void {

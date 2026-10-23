@@ -10,6 +10,7 @@ import {
   attachImages,
   attachmentContent,
   attachmentsBlock,
+  dropAttachments,
   pastedImages,
   removeAttachment,
   restoreAttachments,
@@ -208,7 +209,7 @@ describe('attachmentContent and restoreAttachments', () => {
     ])
 
     setDraftAttachments(DRAFT, [item({ key: 'held', name: 'Image 3' })])
-    restoreAttachments(DRAFT, [{ type: 'text', text: 'Look' }, ...content])
+    expect(restoreAttachments(DRAFT, [{ type: 'text', text: 'Look' }, ...content])).toBe(0)
     const restored = draftAttachments(DRAFT)
     expect(restored.map((i) => [i.name, i.status, i.attachment?.id, i.size])).toEqual([
       ['Image 3', 'ready', undefined, 3],
@@ -216,5 +217,32 @@ describe('attachmentContent and restoreAttachments', () => {
       ['Image 2', 'ready', 'a2', 9],
     ])
     expect(new Set(restored.map((i) => i.key)).size).toBe(3)
+  })
+
+  it('puts back only what fits under 20 and removes the records of the rest', () => {
+    setDraftAttachments(
+      DRAFT,
+      Array.from({ length: 18 }, (_, i) => item({ key: `k${i}` })),
+    )
+    const queued = attachmentContent(
+      ['q1', 'q2', 'q3'].map((id) => item({ attachment: record(id, id) })),
+    )
+    expect(restoreAttachments(DRAFT, queued)).toBe(1)
+    expect(draftAttachments(DRAFT)).toHaveLength(20)
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledWith('attachments.remove', { id: 'q3' })
+  })
+})
+
+describe('dropAttachments', () => {
+  it('drops the attachments of a deleted session with their records', () => {
+    setDraftAttachments(DRAFT, [
+      item({ key: 'a', attachment: record('a1', 'Image 1') }),
+      item({ key: 'b', status: 'adding' }),
+    ])
+    dropAttachments(DRAFT)
+    expect(draftAttachments(DRAFT)).toEqual([])
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledWith('attachments.remove', { id: 'a1' })
   })
 })

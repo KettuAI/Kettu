@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -57,7 +57,6 @@ describe('Attachments', () => {
     })
     const saved = path.join(dir, 'attachments', `${sha(PNG)}.png`)
     expect(new Uint8Array(await readFile(saved))).toEqual(PNG)
-    expect(fileURLToPath(attachments.fileUri(attachments.get(added.id)))).toBe(saved)
     const read = await attachments.read(added.id)
     expect(read.mimeType).toBe('image/png')
     expect(new Uint8Array(read.bytes)).toEqual(PNG)
@@ -104,37 +103,39 @@ describe('Attachments', () => {
     expect(() => attachments.get(second.id)).toThrow()
   })
 
-  it('keeps the bytes a link sent to an agent points to', async () => {
+  it('links an agent to a copy of its own, which outlives the draft', async () => {
     const attachments = store()
-    const added = await attachments.add(image(), null)
-    await attachments.release([added.id], new Set([sha(PNG)]))
-    expect(() => attachments.get(added.id)).toThrow()
-    expect(await readdir(path.join(dir, 'attachments'))).toEqual([`${sha(PNG)}.png`])
+    const first = await attachments.add(image(), null)
+    const uri = await attachments.sentLink(attachments.get(first.id), PNG)
+    const sent = path.join(dir, 'attachments', 'sent', `${sha(PNG)}.png`)
+    expect(fileURLToPath(uri)).toBe(sent)
+    await attachments.release([first.id])
+    // The same image pasted again and removed takes only its own bytes.
+    const again = await attachments.add(image(), null)
+    await attachments.remove(again.id)
+    expect(new Uint8Array(await readFile(sent))).toEqual(PNG)
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual(['sent'])
   })
 
-  it('drops records and unneeded bytes older than 30 days when it starts', async () => {
+  it('drops records older than 30 days, bytes no record holds and old sent copies', async () => {
     const attachments = store()
     const old = await attachments.add(image(), null)
+    await attachments.sentLink(attachments.get(old.id), PNG)
     now += 2 * DAY
     const fresh = await attachments.add(image(new Uint8Array([9, 9]), 'Image 2'), null)
+    await attachments.sentLink(attachments.get(fresh.id), new Uint8Array([9, 9]))
     await attachments.flush()
-
-    // Bytes a sent link points to: no record, so only their age keeps them.
-    const linked = path.join(dir, 'attachments', 'a'.repeat(64))
-    const stale = path.join(dir, 'attachments', 'b'.repeat(64))
-    await writeFile(linked, 'linked')
-    await writeFile(stale, 'stale')
-    const past = new Date(now - ATTACHMENT_MAX_AGE_MS - DAY)
-    await utimes(stale, past, past)
+    // Left behind by a crash: no record holds it.
+    await writeFile(path.join(dir, 'attachments', `${'b'.repeat(64)}.png`), 'orphan')
 
     now += ATTACHMENT_MAX_AGE_MS - DAY
     const reopened = store()
     await reopened.load()
     expect(() => reopened.get(old.id)).toThrow()
     expect(reopened.view(fresh.id).name).toBe('Image 2')
-    expect((await readdir(path.join(dir, 'attachments'))).sort()).toEqual(
-      [`${sha(PNG)}.png`, `${sha(new Uint8Array([9, 9]))}.png`, 'a'.repeat(64)].sort(),
-    )
+    const kept = `${sha(new Uint8Array([9, 9]))}.png`
+    expect((await readdir(path.join(dir, 'attachments'))).sort()).toEqual([kept, 'sent'])
+    expect(await readdir(path.join(dir, 'attachments', 'sent'))).toEqual([kept])
     await reopened.flush()
     const file = JSON.parse(await readFile(path.join(dir, 'state', 'attachments.json'), 'utf8'))
     expect(file.attachments.map((r: AttachmentRecord) => r.id)).toEqual([fresh.id])

@@ -75,6 +75,7 @@ import { CONTEXT_REPORT, hasContextReport, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
 import {
+  attachmentBlobs,
   changesStored,
   pageStart,
   settled,
@@ -160,7 +161,7 @@ type Failure =
   | { action: 'create' }
   | { action: 'load' }
   | { action: 'resume' }
-  | { action: 'prompt'; content: UserContent[] }
+  | { action: 'prompt'; content: UserContent[]; entryId: string | null }
 
 interface Turn {
   startedAt: number
@@ -224,8 +225,6 @@ interface Live {
   partial: boolean
   /** Bytes of sent attachments for the next checkpoint, by hash. */
   blobs: Map<string, StoredBlob>
-  /** A fork's source, whose stored bytes the fork's attachments name, until a write took them. */
-  blobsFrom: string | null
   checkpointTimer: ReturnType<typeof setTimeout> | null
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
@@ -626,33 +625,26 @@ export class SessionManager {
       if (entry && pos !== undefined) entries.push({ pos, entry })
     }
     const blobs = [...live.blobs.values()]
-    const blobsFrom = live.blobsFrom
     const change: ThreadWrite = {
       head: { agentId: live.record.agentId, acpSessionId: live.record.acpSessionId },
       entries,
       ...(replace || live.sessionDirty ? { session: storedSession(live.thread.session) } : {}),
       ...(replace ? { replace: true } : {}),
       ...(blobs.length > 0 ? { blobs } : {}),
-      ...(blobsFrom ? { blobsFrom } : {}),
     }
     live.dirty = new Set()
     live.sessionDirty = false
     live.rewrite = false
     live.blobs = new Map()
-    store.write(live.id, change).then(
-      () => {
-        if (live.blobsFrom === blobsFrom) live.blobsFrom = null
-      },
-      (error: unknown) => {
-        live.rewrite = true
-        // Kept for the rewrite, which takes the whole thread but only the bytes it is handed.
-        for (const blob of blobs) if (!live.blobs.has(blob.hash)) live.blobs.set(blob.hash, blob)
-        this.deps.diagnostics.log(
-          'warn',
-          `Could not store the thread of session ${live.id}: ${(error as Error).message}`,
-        )
-      },
-    )
+    store.write(live.id, change).catch((error: unknown) => {
+      live.rewrite = true
+      // Kept for the rewrite, which takes the whole thread but only the bytes it is handed.
+      for (const blob of blobs) if (!live.blobs.has(blob.hash)) live.blobs.set(blob.hash, blob)
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not store the thread of session ${live.id}: ${(error as Error).message}`,
+      )
+    })
   }
 
   // Snapshots and pages: a session's view with the latest page of its thread, from memory while
@@ -875,7 +867,6 @@ export class SessionManager {
       rewrite: false,
       partial: false,
       blobs: new Map(),
-      blobsFrom: null,
       checkpointTimer: null,
       used: false,
       background: false,
@@ -1648,7 +1639,7 @@ export class SessionManager {
       case 'prompt':
         // The turn attaches the session again if it has to.
         this.update(live, { status: 'ready', error: null })
-        this.startTurn(live, failure.content, this.now())
+        this.startTurn(live, failure.content, this.now(), failure.entryId)
         return
       case 'load':
       case 'resume':
@@ -2100,7 +2091,6 @@ export class SessionManager {
     shown: UserContent[]
     blobs: StoredBlob[]
     ids: string[]
-    linked: Set<string>
   }> {
     const store = this.deps.attachments
     const prompt = this.deps.agents.status(live.record.agentId).capabilities.prompt
@@ -2108,7 +2098,6 @@ export class SessionManager {
     const shown: UserContent[] = []
     const blobs: StoredBlob[] = []
     const ids: string[] = []
-    const linked = new Set<string>()
     for (const item of content) {
       if (item.type !== 'ref' || item.ref.kind !== 'attachment') {
         wire.push(item)
@@ -2132,9 +2121,8 @@ export class SessionManager {
         ref = { kind: 'image', mimeType: record.mimeType, data: data.toString('base64') }
         sent = 'image'
       } else {
-        ref = { kind: 'link', uri: store.fileUri(record), name: record.name }
+        ref = { kind: 'link', uri: await store.sentLink(record, data), name: record.name }
         sent = 'linked'
-        linked.add(record.hash)
       }
       wire.push({ type: 'ref', ref })
       shown.push({
@@ -2150,7 +2138,7 @@ export class SessionManager {
         },
       })
     }
-    return { wire, shown, blobs, ids, linked }
+    return { wire, shown, blobs, ids }
   }
 
   private async resend(live: Live, attachment: Attachment): Promise<UserContent> {
@@ -2167,14 +2155,11 @@ export class SessionManager {
   }
 
   /** Keeps the sent bytes for the thread store and lets the attachments' records go. */
-  private commitAttachments(
-    live: Live,
-    resolved: { blobs: StoredBlob[]; ids: string[]; linked: Set<string> },
-  ): void {
+  private commitAttachments(live: Live, resolved: { blobs: StoredBlob[]; ids: string[] }): void {
     if (resolved.ids.length === 0) return
     for (const blob of resolved.blobs) live.blobs.set(blob.hash, blob)
     this.scheduleCheckpoint(live)
-    void this.deps.attachments?.release(resolved.ids, resolved.linked)
+    void this.deps.attachments?.release(resolved.ids)
   }
 
   async blob(sessionId: string, hash: string): Promise<AttachmentBytes> {
@@ -2189,11 +2174,7 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     const pending = live?.blobs.get(hash)
     if (pending) return pending
-    const threads = this.deps.threads
-    if (!threads) return null
-    const stored = await threads.blob(sessionId, hash)
-    // A fork's copy is made with its first write; until then its source holds them.
-    return stored ?? (live?.blobsFrom ? await threads.blob(live.blobsFrom, hash) : null)
+    return (await this.deps.threads?.blob(sessionId, hash)) ?? null
   }
 
   // The queue: OverBench's own, for every agent, since ACP has none. One turn runs at a time,
@@ -2376,6 +2357,12 @@ export class SessionManager {
     const entries = (cut?.entries ?? threadEntries(source.thread)).filter(
       (entry) => entry.kind !== 'subagent',
     )
+    // Read now, so the reads go before a delete of the source that would take the bytes with it.
+    const reading = Promise.all(
+      [...attachmentBlobs(entries)].map((hash) =>
+        this.storedBlob(source.id, hash).catch(() => null),
+      ),
+    )
     let setup
     try {
       setup = await runtime.connection.forkSession(
@@ -2387,6 +2374,7 @@ export class SessionManager {
     } catch (error) {
       throw agentError(error)
     }
+    const blobs = (await reading).filter((blob) => blob !== null)
     const now = this.now()
     const record: SessionRecord = {
       ...source.record,
@@ -2401,9 +2389,7 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
-    // The attachments' bytes come along: from the source's store, or from memory until written.
-    live.blobsFrom = source.id
-    live.blobs = new Map(source.blobs)
+    live.blobs = new Map(blobs.map((blob) => [blob.hash, blob]))
     for (const entry of entries) live.counter = Math.max(live.counter, idNumber(entry.id))
     this.emit(
       live,
@@ -2622,7 +2608,7 @@ export class SessionManager {
       },
     ])
     if (authRequired) {
-      live.failure = { action: 'prompt', content: turn.content }
+      live.failure = { action: 'prompt', content: turn.content, entryId: turn.entryId }
       this.deps.agents.authRequired(live.record.agentId)
       this.update(live, {
         status: 'auth_required',
@@ -2660,7 +2646,11 @@ export class SessionManager {
     this.finishTurn(live, turn, null)
     this.update(live, { turnStartedAt: null, turnStartUsed: null })
     this.pauseQueue(live)
-    this.failStart(live, error, { action: 'prompt', content: turn.content })
+    this.failStart(live, error, {
+      action: 'prompt',
+      content: turn.content,
+      entryId: turn.entryId,
+    })
     this.persist(live)
     this.checkpoint(live)
   }

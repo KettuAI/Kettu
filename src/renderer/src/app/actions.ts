@@ -6,6 +6,7 @@ import {
   NEW_SESSION_DRAFT,
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
+import { dropAttachments } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { clearPicks, noteStarting, type OptionValues } from '@renderer/stores/agent-options'
@@ -229,6 +230,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await host('sessions.delete', { sessionId })
   forgetSession(sessionId)
   clearDraft(sessionId)
+  dropAttachments(sessionId)
   useSessionsStore.getState().remove(sessionId)
 }
 
@@ -237,6 +239,7 @@ export function sessionRemoved(sessionId: string): void {
   useSessionsStore.getState().remove(sessionId)
   forgetSession(sessionId)
   clearDraft(sessionId)
+  dropAttachments(sessionId)
 }
 
 /**
