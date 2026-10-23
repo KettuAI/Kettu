@@ -309,11 +309,12 @@ export interface CliDecision {
 }
 
 /**
- * The installed program runs when it answered its version, it meets the adapter's minimum and no
- * start with it failed. `minimum` is undefined before the adapter is installed, when it is not
- * known yet.
+ * The installed program runs when the setting allows it, it answered its version, it meets the
+ * adapter's minimum and no start with it failed. `minimum` is undefined before the adapter is
+ * installed, when it is not known yet.
  */
 export function decideCli(input: {
+  prefer: AgentCliSource
   found: InstalledCli | null
   minimum: string | null | undefined
   failure: { path: string; reason: string } | null
@@ -331,5 +332,5 @@ export function decideCli(input: {
   const installed = { ...found, problem }
   // The adapter reads a variable the environment sets, whatever OverBench passes.
   if (found.variable) return { runs: 'installed', installed }
-  return { runs: problem ? 'bundled' : 'installed', installed }
+  return { runs: input.prefer === 'installed' && !problem ? 'installed' : 'bundled', installed }
 }

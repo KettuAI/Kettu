@@ -249,6 +249,18 @@
     "programOnPath": "opencode on PATH",
     "reset": "Reset",
     "chooseBinary": "Choose binary…",
+    "cli": {
+      "choose": "Which {{name}} runs",
+      "installed": "Installed",
+      "bundled": "Bundled",
+      "bundledLine": "Bundled with the adapter",
+      "found": "Installed {{command}} {{version}} at {{path}}",
+      "notFound": "No {{command}} found on PATH.",
+      "tooOld": "Your {{command}} is {{version}}; the adapter needs {{minimum}} or later.",
+      "failed": "Your {{command}} did not start: {{reason}}",
+      "unsupported": "{{path}} cannot run without a shell.",
+      "noMinimum": "The adapter does not say which {{name}} it needs."
+    },
     "environment": {
       "pending": "Reading your environment…",
       "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}} ms.",

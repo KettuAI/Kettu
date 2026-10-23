@@ -95,6 +95,7 @@ export interface AgentTask {
 /** Which CLI a Claude Code or Codex adapter runs: the user's own, or the copy it brings. */
 export interface AgentCli {
   command: string // looked up on PATH, such as claude
+  prefer: AgentCliSource // the setting: the installed program when it can run, or always the copy
   runs: AgentCliSource // what a start runs now
   installed: InstalledCli | null // null: none found
 }

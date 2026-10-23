@@ -63,6 +63,7 @@ const SECTION_FIELDS = {
 type FieldSection = keyof typeof SECTION_FIELDS
 
 const FIELD_SECTIONS = Object.keys(SECTION_FIELDS) as FieldSection[]
+const AGENT_CLI = oneOf('installed', 'bundled')
 const FONT_SIZES = [12, 13, 14] as const
 const PROXY_PROTOCOLS = ['http:', 'https:', 'socks:', 'socks4:', 'socks5:']
 const MAX_PATH_LENGTH = 4096
@@ -136,12 +137,19 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
       for (const [agentId, entry] of Object.entries(value)) {
         if (!AGENT_IDS.includes(agentId as AgentId)) {
           problems.push(`Unknown agent "agents.${agentId}"`)
-        } else if (!isRecord(entry) || Object.keys(entry).some((key) => key !== 'binaryPath')) {
-          problems.push(`"agents.${agentId}" accepts only "binaryPath"`)
-        } else if ('binaryPath' in entry && entry.binaryPath !== null) {
-          problems.push(
-            `"agents.${agentId}.binaryPath" can only be cleared with null; choose a program in the dialog`,
-          )
+        } else if (
+          !isRecord(entry) ||
+          Object.keys(entry).some((key) => key !== 'binaryPath' && key !== 'cli')
+        ) {
+          problems.push(`"agents.${agentId}" accepts only "binaryPath" and "cli"`)
+        } else {
+          if ('binaryPath' in entry && entry.binaryPath !== null) {
+            problems.push(
+              `"agents.${agentId}.binaryPath" can only be cleared with null; choose a program in the dialog`,
+            )
+          }
+          const problem = 'cli' in entry ? AGENT_CLI(entry.cli, `agents.${agentId}.cli`) : null
+          if (problem) problems.push(problem)
         }
       }
     } else if (section === 'proxy') {
@@ -184,7 +192,12 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
   if (patch.agents) {
     for (const agentId of Object.keys(patch.agents) as AgentId[]) {
-      if (patch.agents[agentId]?.binaryPath === null) delete next.agents[agentId]
+      const change = patch.agents[agentId]
+      const entry = { ...next.agents[agentId] }
+      if (change?.binaryPath === null) delete entry.binaryPath
+      if (change?.cli) entry.cli = change.cli
+      if (Object.keys(entry).length > 0) next.agents[agentId] = entry
+      else delete next.agents[agentId]
     }
   }
   if (patch.terminal) {
@@ -200,7 +213,7 @@ export function withAgentBinary(
   binaryPath: string,
 ): SettingsFile {
   const next = structuredClone(current)
-  next.agents[agentId] = { binaryPath }
+  next.agents[agentId] = { ...next.agents[agentId], binaryPath }
   return next
 }
 
@@ -257,10 +270,18 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
           problems.push(`"agents.${agentId}" must be an object`)
           continue
         }
-        if (entry.binaryPath === undefined) continue
-        const problem = checkStoredPath(entry.binaryPath, `agents.${agentId}.binaryPath`)
-        if (problem) problems.push(problem)
-        else settings.agents[agentId] = { binaryPath: entry.binaryPath as string }
+        const stored: NonNullable<SettingsFile['agents'][AgentId]> = {}
+        if (entry.binaryPath !== undefined) {
+          const problem = checkStoredPath(entry.binaryPath, `agents.${agentId}.binaryPath`)
+          if (problem) problems.push(problem)
+          else stored.binaryPath = entry.binaryPath as string
+        }
+        if (entry.cli !== undefined) {
+          const problem = AGENT_CLI(entry.cli, `agents.${agentId}.cli`)
+          if (problem) problems.push(problem)
+          else stored.cli = entry.cli as 'installed' | 'bundled'
+        }
+        if (Object.keys(stored).length > 0) settings.agents[agentId] = stored
       }
     }
   }

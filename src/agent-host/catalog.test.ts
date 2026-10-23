@@ -344,6 +344,13 @@ describe('detectAgent with the CLI the user installed', () => {
     })
   })
 
+  it('runs the copy when the user chose it', async () => {
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ cliPreference: 'bundled' }))).toMatchObject({
+      spec: { env: {} },
+      adapter: { cli: { runs: 'bundled', installed: { version: '2.1.304', problem: null } } },
+    })
+  })
+
   it('leaves a program the environment names to the adapter', async () => {
     const detection = await detectAgent(
       CLAUDE_CODE,

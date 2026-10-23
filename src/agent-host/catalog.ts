@@ -2,6 +2,7 @@
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
+import type { AgentCliSource } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
@@ -238,6 +239,7 @@ export interface DetectContext {
   /** Asks a CLI its version; without it, no installed CLI is looked for. */
   probeCli?: CliProbe
   cliFiles?: CliFiles
+  cliPreference?: AgentCliSource
   /** The installed CLI a start failed with, which is not used again until this is cleared. */
   cliFailure?: { path: string; reason: string } | null
 }
@@ -304,6 +306,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       const runs = current ?? other
       const decision = def.cli
         ? decideCli({
+            prefer: ctx.cliPreference ?? 'installed',
             found: found?.installed ?? null,
             minimum:
               found && runs ? await def.cli.minimum(runs.dir, launch.package, files) : undefined,

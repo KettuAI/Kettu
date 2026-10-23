@@ -174,6 +174,7 @@ interface AgentStatus {
 // See using the installed CLI in the agent host design.
 interface AgentCli {
   command: string // looked up on PATH: claude or codex
+  prefer: 'installed' | 'bundled' // the setting: the installed program when it can run, or always the copy
   runs: 'installed' | 'bundled' // what a start runs now
   installed: {
     path: string // as the adapter runs it, after resolving shims

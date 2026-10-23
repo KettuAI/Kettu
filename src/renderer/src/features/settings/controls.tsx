@@ -189,26 +189,34 @@ export function RevealAction({ path }: { path: string }) {
 
 /**
  * A path as a location, in the interface font: folders quiet, slashes quieter, the last part in
- * the label's weight. It truncates from the end and shows in full in its title.
+ * the label's weight. Too long, the folders truncate first, so the name stays; it shows in full in
+ * its title.
  */
 export function PathText({ path, missing }: { path: string; missing?: boolean }) {
   const parts = path.split(/(?<=.)[/\\]/)
   const separator = path.includes('\\') && !path.includes('/') ? '\\' : '/'
+  const name = parts.pop() ?? ''
+  const slash = <span className="mx-0.5">{separator}</span>
   return (
     <span
       title={path}
       data-selectable=""
-      className="block min-w-0 truncate text-xs leading-normal text-muted-foreground"
+      className="flex min-w-0 text-xs leading-normal whitespace-nowrap text-muted-foreground"
     >
-      {parts.map((part, i) => {
-        const last = i === parts.length - 1
-        return (
-          <span key={i}>
-            {i > 0 && <span className="mx-0.5">{separator}</span>}
-            <span className={cn(last && !missing && 'font-medium text-foreground')}>{part}</span>
-          </span>
-        )
-      })}
+      {parts.length > 0 && (
+        <span className="min-w-0 truncate">
+          {parts.map((part, i) => (
+            <span key={i}>
+              {i > 0 && slash}
+              {part}
+            </span>
+          ))}
+        </span>
+      )}
+      <span className="max-w-full shrink-0 truncate">
+        {parts.length > 0 && slash}
+        <span className={cn(!missing && 'font-medium text-foreground')}>{name}</span>
+      </span>
     </span>
   )
 }

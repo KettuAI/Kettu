@@ -786,6 +786,7 @@ describe('the CLI the user installed', () => {
     expect(m.status()).toMatchObject({
       state: 'ready',
       cli: {
+        prefer: 'installed',
         runs: 'installed',
         installed: { version: '2.0.0', problem: null },
       },
