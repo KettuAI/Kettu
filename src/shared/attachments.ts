@@ -1,5 +1,5 @@
-// Limits of the attachments a message carries, checked in the composer and again by the host.
-// See docs/design/session-model.md#attachments.
+// Limits of the attachments a message carries, checked in the composer and again by the host,
+// and the rules both use to tell how an attachment is sent. See docs/design/session-model.md#attachments.
 
 /** Attachments in one prompt. */
 export const ATTACHMENT_LIMIT = 20
@@ -34,3 +34,60 @@ export const MODEL_IMAGE_TYPES: readonly string[] = [
   'image/gif',
   'image/webp',
 ]
+
+/** A text file up to this size goes with its contents, about what an agent's own file read takes. */
+export const EMBED_BYTES = 256 * 1024
+
+// Besides text/*, the types the host gives a file it found to be text.
+const TEXT_TYPES: ReadonlySet<string> = new Set([
+  'application/json',
+  'application/xml',
+  'application/yaml',
+  'application/toml',
+  'application/sql',
+  'application/x-sh',
+  'image/svg+xml',
+])
+
+/** Whether the host found a file of this type to be text. */
+export function isTextType(mimeType: string | null): boolean {
+  return mimeType !== null && (mimeType.startsWith('text/') || TEXT_TYPES.has(mimeType))
+}
+
+interface Sendable {
+  type: 'image' | 'file' | 'folder' | 'text'
+  mimeType: string | null
+  size: number | null
+}
+
+/** Whether a file goes with its contents to an agent that takes embedded context. */
+export function embedsText(attachment: Sendable): boolean {
+  return (
+    attachment.type === 'file' &&
+    isTextType(attachment.mimeType) &&
+    attachment.size !== null &&
+    attachment.size <= EMBED_BYTES
+  )
+}
+
+/** An attachment's share of `PROMPT_BYTES`: an image in base64 and a text, but not a link. */
+export function promptShare(attachment: Sendable): number {
+  if (attachment.type === 'image') return sentBytes(attachment.size ?? 0)
+  return embedsText(attachment) ? (attachment.size ?? 0) : 0
+}
+
+/** A file or folder main granted the host for one attachment, as the renderer knows it. */
+export interface GrantedAttachment {
+  grantId: string
+  name: string
+  kind: 'file' | 'folder'
+  /** A file's bytes when it was granted; null for a folder. */
+  size: number | null
+}
+
+/** What main hands the host: the path behind a grant, which the renderer never sees. */
+export interface AttachmentGrant {
+  grantId: string
+  path: string
+  kind: 'file' | 'folder'
+}

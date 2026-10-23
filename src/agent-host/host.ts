@@ -4,6 +4,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
+import type { AttachmentGrant } from '@shared/attachments'
 import type { AgentProcess, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
@@ -367,6 +368,12 @@ export class AgentHost {
     this.options.send({ type: 'host:busy', requestId, sessions: this.sessions.busy() })
   }
 
+  /** Takes the paths main granted for attachments, then says so, before main answers the renderer. */
+  grant(requestId: number, grants: AttachmentGrant[]): void {
+    this.attachments.grant(grants)
+    this.options.send({ type: 'host:granted', requestId })
+  }
+
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
   shutdown(): Promise<void> {
     this.stopping ??= (async () => {
@@ -591,6 +598,7 @@ export class AgentHost {
       'git.tools': () => this.gitCall((g) => g.tools()),
       'attachments.add': ({ source, thumb }) => this.attachments.add(source, thumb),
       'attachments.read': ({ id }) => this.attachments.read(id),
+      'attachments.update': ({ id, thumb, scaled }) => this.attachments.update(id, thumb, scaled),
       'attachments.remove': ({ id }) => this.attachments.remove(id),
       'files.list': ({ projectPath }) =>
         this.filesCall(projectPath, (root) => this.files.list(root)),

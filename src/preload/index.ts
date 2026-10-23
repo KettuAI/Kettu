@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { HOST_METHODS, type AgentsApi, type HostEvent } from '@shared/agent-host'
 import type { AppCommand, OverbenchApi, QuitRequest } from '@shared/ipc'
 import { isLocale, type Locale } from '@shared/locale'
@@ -96,6 +96,19 @@ const api: OverbenchApi = {
   },
   notifications: {
     test: () => invoke('notifications:test'),
+  },
+  attachments: {
+    pick: (kind, defaultPath) => invoke('dialog:add-attachments', kind, defaultPath),
+    // Only a drop, a paste or a file input yields a File with a path, so a page names none itself.
+    fromFiles: async (files) => {
+      const paths = files.map((file) => webUtils.getPathForFile(file))
+      const granted = await invoke(
+        'attachments:grant',
+        paths.filter((path) => path !== ''),
+      )
+      let next = 0
+      return paths.map((path) => (path === '' ? null : (granted[next++] ?? null)))
+    },
   },
   updates: {
     getStatus: () => invoke('update:get-status'),

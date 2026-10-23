@@ -2,6 +2,7 @@
 // session lifecycle, sub-sessions, and the session index.
 
 import { randomUUID } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import type {
   AttachmentBytes,
   ContextBreakdown,
@@ -9,7 +10,7 @@ import type {
   SessionAttention,
   SessionSummary,
 } from '@shared/agent-host'
-import { PROMPT_BYTES, sentBytes } from '@shared/attachments'
+import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import {
@@ -31,7 +32,6 @@ import {
   type SessionView,
   type StopReason,
   type Attachment,
-  type ContentRef,
   type ThreadEntry,
   type ThreadState,
   type TokenTotals,
@@ -52,15 +52,24 @@ import {
   mergeConfig,
   newTurnScope,
   SYNTHETIC_MODE_ID,
+  promptBlocks,
   type MapperEffect,
   type MapperOutput,
   type ModelTokens,
+  type PromptBlock,
   type SubagentState,
   type TurnScope,
 } from './acp/mapper'
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
-import { toArrayBuffer, type Attachments } from './attachments'
+import {
+  embedFile,
+  linkBlock,
+  resolvePath,
+  sendAttachment,
+  toArrayBuffer,
+  type Attachments,
+} from './attachments'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import { lostValues, lostValuesNotice, type LostValue } from './config-notice'
 import type { Diagnostics } from './diagnostics'
@@ -2111,7 +2120,7 @@ export class SessionManager {
       const store = this.deps.attachments
       if (!store) throw invalidParams('This host takes no attachments')
       const attachment = store.view(item.ref.attachment.id)
-      bytes += sentBytes(attachment.size ?? 0)
+      bytes += promptShare(attachment)
       return { type: 'ref', ref: { kind: 'attachment', attachment } }
     })
     if (bytes > PROMPT_BYTES) throw invalidParams(t('session.promptTooLarge'))
@@ -2120,78 +2129,65 @@ export class SessionManager {
 
   /**
    * What goes to the agent for this content, how the thread shows it once sent, and the bytes
-   * the thread store keeps for it. An image goes as an image to an agent that takes images, and
-   * as a link to its saved file to one that does not.
+   * the thread store keeps for it. Each attachment goes as the agent's prompt capabilities allow
+   * ([how each is sent](docs/design/session-model.md#how-each-is-sent)).
    */
   private async resolveAttachments(
     live: Live,
     content: readonly UserContent[],
   ): Promise<{
-    wire: UserContent[]
+    wire: PromptBlock[]
     shown: UserContent[]
     blobs: StoredBlob[]
     ids: string[]
   }> {
     const store = this.deps.attachments
     const prompt = this.deps.agents.status(live.record.agentId).capabilities.prompt
-    const wire: UserContent[] = []
+    const wire: PromptBlock[] = []
     const shown: UserContent[] = []
     const blobs: StoredBlob[] = []
     const ids: string[] = []
     for (const item of content) {
       if (item.type !== 'ref' || item.ref.kind !== 'attachment') {
-        wire.push(item)
+        wire.push(...promptBlocks([item]))
         shown.push(item)
         continue
       }
       if (item.ref.attachment.sent) {
-        // Sent before, as when the agent asked to sign in: again from the bytes the thread keeps.
+        // Sent before, as when the agent asked to sign in: again from what the thread keeps.
         wire.push(await this.resend(live, item.ref.attachment))
         shown.push(item)
         continue
       }
       if (!store) throw invalidParams('This host takes no attachments')
       const record = store.get(item.ref.attachment.id)
-      const data = await store.bytes(record)
+      const sent = await sendAttachment(store, record, prompt)
       ids.push(record.id)
-      blobs.push({ hash: record.hash, mime: record.mimeType, data: new Uint8Array(data) })
-      let ref: ContentRef
-      let sent: Attachment['sent']
-      if (prompt?.image) {
-        ref = { kind: 'image', mimeType: record.mimeType, data: data.toString('base64') }
-        sent = 'image'
-      } else {
-        ref = { kind: 'link', uri: await store.sentLink(record, data), name: record.name }
-        sent = 'linked'
-      }
-      wire.push({ type: 'ref', ref })
+      if (sent.blob) blobs.push(sent.blob)
+      wire.push(sent.block)
       shown.push({
         type: 'ref',
-        ref: {
-          kind: 'attachment',
-          attachment: {
-            ...store.view(record.id),
-            uri: ref.kind === 'link' ? ref.uri : null,
-            sent,
-            blob: record.hash,
-          },
-        },
+        ref: { kind: 'attachment', attachment: { ...store.view(record.id), ...sent.changes } },
       })
     }
     return { wire, shown, blobs, ids }
   }
 
-  private async resend(live: Live, attachment: Attachment): Promise<UserContent> {
-    if (attachment.sent === 'linked' && attachment.uri) {
-      return { type: 'ref', ref: { kind: 'link', uri: attachment.uri, name: attachment.name } }
+  private async resend(live: Live, attachment: Attachment): Promise<PromptBlock> {
+    const { uri, name, mimeType, size } = attachment
+    if (attachment.sent === 'linked' && uri) return linkBlock(uri, name, mimeType, size)
+    if (attachment.sent === 'embedded' && uri) {
+      const prompt = this.deps.agents.status(live.record.agentId).capabilities.prompt
+      const resolved = await resolvePath(fileURLToPath(uri), 'file', name)
+      return (await embedFile(resolved.real, uri, name, mimeType, prompt, resolved.size)).block
     }
     const hash = attachment.blob
     const stored = hash ? await this.storedBlob(live.id, hash).catch(() => null) : null
     if (attachment.sent === 'image' && stored) {
       const data = Buffer.from(stored.data).toString('base64')
-      return { type: 'ref', ref: { kind: 'image', mimeType: stored.mime, data } }
+      return { type: 'image', mimeType: stored.mime, data, ...(uri ? { uri } : {}) }
     }
-    throw notFound(t('session.attachmentGone', { name: attachment.name }))
+    throw notFound(t('session.attachmentGone', { name }))
   }
 
   /** Keeps the sent bytes for the thread store and lets the attachments' records go. */
