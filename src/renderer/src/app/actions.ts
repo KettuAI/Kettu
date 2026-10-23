@@ -4,7 +4,6 @@ import {
   clearDraft,
   draftedSessions,
   NEW_SESSION_DRAFT,
-  writeDraft,
 } from '@renderer/features/session/composer/drafts'
 import { dropAttachments } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
@@ -100,16 +99,18 @@ export async function createSession(
   }))
   preloadRenderers()
   try {
+    // The host sends the first message once the session has started, also after a sign-in.
     const summary = await host('sessions.create', {
       agentId,
       projectPath,
       ...(parentId ? { parentId } : {}),
       ...(options && Object.keys(options).length > 0 ? { options } : {}),
+      ...(prompt !== null ? { prompt: [{ type: 'text', text: prompt }] } : {}),
     })
     // The host now remembers what carries over; the rest starts afresh next time.
     if (options) clearPicks(agentId)
+    if (prompt !== null) clearDraft(NEW_SESSION_DRAFT)
     useSessionsStore.getState().upsert(summary)
-    if (prompt !== null) await sendFirstPrompt(summary, prompt)
     // The session shows with its thread and renderer ready, so no skeleton flashes in between.
     await Promise.all([focusSession(summary.id), loadMarkdown().catch(() => {})])
     const current = usePendingSession.getState().pending
@@ -158,29 +159,6 @@ export function startNewSession(
   return parent
     ? createSession(agentId, parent.projectPath, parent.id, prompt, options)
     : createSession(agentId, projectPath, null, prompt, options)
-}
-
-/**
- * Sends the New session screen's message into the session it started. One the session cannot
- * take yet, as when its agent asks to sign in first, waits in that session's composer.
- */
-async function sendFirstPrompt(summary: SessionSummary, prompt: string): Promise<void> {
-  clearDraft(NEW_SESSION_DRAFT)
-  if (summary.status === 'ready') {
-    try {
-      await host('sessions.prompt', {
-        sessionId: summary.id,
-        content: [{ type: 'text', text: prompt }],
-      })
-      return
-    } catch (error) {
-      console.warn(
-        `Could not send the first message to ${summary.id}; keeping it as a draft`,
-        error,
-      )
-    }
-  }
-  writeDraft(summary.id, prompt)
 }
 
 /**
