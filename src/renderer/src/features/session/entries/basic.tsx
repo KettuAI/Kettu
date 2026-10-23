@@ -33,7 +33,7 @@ import { Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
 import { UserActions } from './message-actions'
-import { RefChip, UserContentView } from './user-content'
+import { RefChip, SentAttachments, UserContentView } from './user-content'
 
 export interface EntryProps {
   sessionId: string
@@ -44,15 +44,27 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   const entry = useEntry(sessionId, entryId, 'user')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
+  const attachments = entry.content.flatMap((c) =>
+    c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
+  )
+  const rest = entry.content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
     <div className={cn('group/actions flex flex-col items-end gap-0.5', animation)}>
-      <Message align="end">
-        <Bubble variant="muted" className="max-w-[85%]">
-          <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
-            <UserContentView content={entry.content} />
-          </BubbleContent>
-        </Bubble>
-      </Message>
+      {attachments.length > 0 && (
+        <div className="flex w-full justify-end pb-1">
+          <SentAttachments sessionId={sessionId} attachments={attachments} />
+        </div>
+      )}
+      {/* A message of attachments alone has no bubble. */}
+      {rest.length > 0 && (
+        <Message align="end">
+          <Bubble variant="muted" className="max-w-[85%]">
+            <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
+              <UserContentView content={rest} />
+            </BubbleContent>
+          </Bubble>
+        </Message>
+      )}
       <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
     </div>
   )

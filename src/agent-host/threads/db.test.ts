@@ -289,6 +289,64 @@ describe('the thread database', () => {
     expect(String(json)).toContain('"blob"')
   })
 
+  it('keeps the bytes of sent attachments through a whole write and copies them to a fork', () => {
+    const file = tempFile()
+    const db = open(file)
+    const hash = 'ab'.repeat(32)
+    const data = new Uint8Array([1, 2, 3, 4])
+    const sent: ThreadEntry = {
+      kind: 'user',
+      id: 'u',
+      content: [
+        { type: 'text', text: 'Look' },
+        {
+          type: 'ref',
+          ref: {
+            kind: 'attachment',
+            attachment: {
+              id: 'a1',
+              type: 'image',
+              name: 'Image 1',
+              uri: null,
+              mimeType: 'image/png',
+              size: 4,
+              sent: 'image',
+              thumb: 'data:image/webp;base64,AAAA',
+              blob: hash,
+            },
+          },
+        },
+      ],
+    }
+    // The bytes go in with the entry that names them, in the same write as the thread row.
+    db.write('s1', {
+      head,
+      entries: [{ pos: 0, entry: sent }],
+      blobs: [{ hash, mime: 'image/png', data }],
+    })
+    expect(db.blob('s1', hash)).toEqual({ hash, mime: 'image/png', data })
+    expect(db.blob('s1', 'cd'.repeat(32))).toBeNull()
+    expect(db.page('s1', null)!.entries).toEqual([sent])
+
+    db.write('s1', {
+      head,
+      entries: [{ pos: 0, entry: sent }, ...turns(1, 0).map((e) => ({ ...e, pos: e.pos + 1 }))],
+      replace: true,
+    })
+    expect(db.blob('s1', hash)?.data).toEqual(data)
+
+    db.write('fork', { head, entries: [{ pos: 0, entry: sent }], blobsFrom: 's1' })
+    expect(db.blob('fork', hash)?.data).toEqual(data)
+    db.remove(['s1'])
+    expect(db.blob('s1', hash)).toBeNull()
+    expect(db.blob('fork', hash)?.data).toEqual(data)
+
+    // A whole write without the entry drops its bytes.
+    db.write('fork', { head, entries: turns(1, 0), replace: true })
+    expect(db.blob('fork', hash)).toBeNull()
+    db.close()
+  })
+
   it('removes threads with their images', () => {
     const file = tempFile()
     const db = open(file)

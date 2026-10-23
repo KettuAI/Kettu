@@ -1,8 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
 import { ArrowUpIcon, ListPlusIcon, SquareIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import type { SessionView, SlashCommand } from '@shared/thread'
+import type { SessionView, SlashCommand, UserContent } from '@shared/thread'
 import { onAppEvent } from '@renderer/app/events'
 import {
   InputGroup,
@@ -15,7 +22,17 @@ import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { useAgentsStore } from '@renderer/stores/agents'
+import {
+  selectDraft,
+  setDraftAttachments,
+  useAttachmentsStore,
+  type DraftAttachment,
+} from '@renderer/stores/attachments'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { cn } from '@renderer/lib/utils'
+import { ImageDialog, type ImageDialogTarget } from '../attachments/image-dialog'
+import { AttachmentTray } from './attachment-tray'
+import { attachImages, attachmentContent, attachmentsBlock, pastedImages } from './attachments'
 import { ControlRow } from './control-row'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
 
@@ -35,6 +52,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const limits = useAgentsStore((s) => s.byId[session.agentId]?.limits)
   const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
+  const attachments = useAttachmentsStore(selectDraft(sessionId))
+  const [viewing, setViewing] = useState<ImageDialogTarget | null>(null)
 
   const status = session.status
   const starting = status === 'starting'
@@ -42,9 +61,11 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const awaiting = status === 'awaiting_permission'
   // A closed session attaches to its agent as the message goes.
   const idle = status === 'ready' || status === 'closed'
-  const canSend = idle && text.trim().length > 0
+  const blocked = attachmentsBlock(attachments, text)
+  const hasMessage = text.trim().length > 0 || attachments.length > 0
+  const canSend = idle && hasMessage && !blocked
   // During a turn the send key queues the message and the steer key sends it into the turn.
-  const canQueue = running && text.trim().length > 0
+  const canQueue = running && hasMessage && !blocked
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
@@ -96,17 +117,22 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     if (!next.startsWith('/')) setSlashDismissed(false)
   }
 
-  const take = (): string => {
+  const take = (): { prompt: string; held: DraftAttachment[] } => {
     const prompt = text
+    const held = attachments
     setText('')
     clearDraft(sessionId)
+    setDraftAttachments(sessionId, [])
     setError(null)
-    return prompt
+    return { prompt, held }
   }
-  const restore = (prompt: string) => (e: unknown) => {
-    setError(errorMessage(e))
-    setText((current) => (current ? current : prompt))
-  }
+  const restore =
+    ({ prompt, held }: { prompt: string; held: DraftAttachment[] }) =>
+    (e: unknown) => {
+      setError(errorMessage(e))
+      setText((current) => (current ? current : prompt))
+      if (held.length > 0) setDraftAttachments(sessionId, held)
+    }
 
   // Both go through the host's queue, which sends at once when the session is free.
   const send = () => {
@@ -114,8 +140,12 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   }
 
   const queue = (steer: boolean) => {
-    const prompt = take()
-    host('sessions.queue', { sessionId, content: [{ type: 'text', text: prompt }] })
+    const taken = take()
+    const content: UserContent[] = [
+      ...(taken.prompt.trim() ? [{ type: 'text' as const, text: taken.prompt }] : []),
+      ...attachmentContent(taken.held),
+    ]
+    host('sessions.queue', { sessionId, content })
       .then(({ itemId }) => {
         // Once queued, a failed steer leaves the message in the queue, not lost.
         if (steer && itemId) {
@@ -124,7 +154,15 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           )
         }
       })
-      .catch(restore(prompt))
+      .catch(restore(taken))
+  }
+
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const images = pastedImages(event.clipboardData)
+    if (images.length === 0) return
+    event.preventDefault()
+    const left = attachImages(sessionId, images)
+    setError(left > 0 ? t('attachments.limit') : null)
   }
 
   const cancel = () => {
@@ -211,8 +249,21 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         itemToStringValue={(command: SlashCommand) => `/${command.name} `}
         autoHighlight
       >
-        <InputGroup ref={group} variant="composer" data-disabled={starting || undefined}>
-          <div className="relative min-w-0 flex-1 self-stretch">
+        <InputGroup
+          ref={group}
+          variant="composer"
+          data-disabled={starting || undefined}
+          className={cn(attachments.length > 0 && 'flex-wrap')}
+        >
+          <AttachmentTray
+            draft={sessionId}
+            agentId={session.agentId}
+            agentName={agentName}
+            onOpen={setViewing}
+            onLeave={() => textarea.current?.focus()}
+          />
+          {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
+          <div className="relative min-w-0 flex-[1_1_12rem] self-stretch">
             <Autocomplete.Input
               render={
                 <InputGroupTextarea
@@ -222,6 +273,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   placeholder={placeholder}
                   disabled={starting}
                   onKeyDown={onKeyDown}
+                  onPaste={onPaste}
                   className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-4 pr-1 pl-5 text-prose leading-6 placeholder:text-placeholder md:text-prose"
                 />
               }
@@ -291,6 +343,21 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   />
                 </TooltipContent>
               </Tooltip>
+            ) : blocked && hasMessage ? (
+              // A disabled button takes no pointer, so the tooltip says why from around it.
+              <Tooltip>
+                <TooltipTrigger render={<span key="send" />}>
+                  <InputGroupButton
+                    size="round"
+                    variant="secondary"
+                    aria-label={t('prompt.send')}
+                    disabled
+                  >
+                    <ArrowUpIcon />
+                  </InputGroupButton>
+                </TooltipTrigger>
+                <TooltipContent>{blocked.message}</TooltipContent>
+              </Tooltip>
             ) : (
               <InputGroupButton
                 key="send"
@@ -335,13 +402,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       </Autocomplete.Root>
       {/* Holds the row's height while the agent starts, so nothing jumps when the options arrive. */}
       <div className="flex min-h-row flex-col">
-        {error && (
+        {(error || blocked?.notice) && (
           <p className="animate-in px-2 pt-1 text-xs text-danger fade-in" role="alert">
-            {error}
+            {error ?? blocked?.message}
           </p>
         )}
         {!starting && <ControlRow session={session} onCompact={compact} ultracode={ultracode} />}
       </div>
+      <ImageDialog target={viewing} onClose={() => setViewing(null)} />
     </div>
   )
 }

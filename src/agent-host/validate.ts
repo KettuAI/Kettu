@@ -5,11 +5,11 @@ import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-h
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
+import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@shared/attachments'
 import { AGENT_IDS, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
 import { invalidParams } from './errors'
 import { isAbsolutePath } from './paths'
 
-export const PROMPT_BYTES = 10 * 1024 * 1024
 const ID_CHARS = 256
 const ACP_ID_CHARS = 1_024
 // Windows extended-length paths go up to 32,767 characters.
@@ -190,9 +190,43 @@ function contentRef(value: unknown, at: string): { ref: ContentRef; bytes: numbe
       const name = string(o, 'name', TEXT_CHARS)
       return { ref: { kind: 'link', uri, name }, bytes: uri.length + name.length }
     }
+    case 'attachment': {
+      // Only the id counts: the host takes everything else from its own record.
+      const id = string(fields(o.attachment), 'id', ID_CHARS)
+      return { ref: { kind: 'attachment', attachment: attachmentStub(id) }, bytes: 0 }
+    }
     default:
-      throw invalidParams(`${at}: a prompt can carry images and links only`)
+      throw invalidParams(`${at}: a prompt can carry images, links and attachments only`)
   }
+}
+
+/** An attachment ref holding only its id, until the host fills it in from its record. */
+export function attachmentStub(
+  id: string,
+): Extract<ContentRef, { kind: 'attachment' }>['attachment'] {
+  return {
+    id,
+    type: 'image',
+    name: '',
+    uri: null,
+    mimeType: null,
+    size: null,
+    sent: null,
+    thumb: null,
+    blob: null,
+  }
+}
+
+const HASH = /^[0-9a-f]{64}$/
+const THUMB = /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/
+
+/** Bytes a renderer hands over, not empty and not too large. */
+function bytes(o: Fields, key: string, max: number): ArrayBuffer {
+  const value = o[key]
+  if (!(value instanceof ArrayBuffer)) throw invalidParams(`${key} must be an ArrayBuffer`)
+  if (value.byteLength === 0) throw invalidParams(`${key} must not be empty`)
+  if (value.byteLength > max) throw invalidParams(`${key} is larger than ${max} bytes`)
+  return value
 }
 
 /** Prompt content: texts, images and links, at most 10 MB in all, and not empty. */
@@ -202,6 +236,7 @@ export function promptContent(value: unknown): UserContent[] {
     throw invalidParams(`content has more than ${PROMPT_ITEMS} items`)
   const out: UserContent[] = []
   let bytes = 0
+  let attachments = 0
   let substance = false
   value.forEach((item: unknown, index) => {
     const at = `content[${index}]`
@@ -214,6 +249,9 @@ export function promptContent(value: unknown): UserContent[] {
     } else if (o.type === 'ref') {
       const { ref, bytes: size } = contentRef(o.ref, at)
       bytes += size
+      if (ref.kind === 'attachment' && ++attachments > ATTACHMENT_LIMIT) {
+        throw invalidParams(`A prompt carries at most ${ATTACHMENT_LIMIT} attachments`)
+      }
       substance = true
       out.push({ type: 'ref', ref })
     } else {
@@ -353,6 +391,12 @@ export function createValidators(platform: Platform): Validators {
     'sessions.unqueue': queueItem,
     'sessions.steer': queueItem,
     'sessions.resumeQueue': session,
+    'sessions.blob': (params) => {
+      const o = fields(params)
+      const hash = string(o, 'hash', 64)
+      if (!HASH.test(hash)) throw invalidParams('hash must be a SHA-256 in hex')
+      return { sessionId: sessionId(o), hash }
+    },
     'sessions.setConfigOption': (params) => {
       const o = fields(params)
       const value = o.value
@@ -476,6 +520,23 @@ export function createValidators(platform: Platform): Validators {
     'usage.sync': none,
     'usage.reimport': agent,
     'usage.clearRecord': none,
+    'attachments.add': (params) => {
+      const o = fields(params)
+      const source = fields(o.source)
+      const thumb = o.thumb === null ? null : string(o, 'thumb', THUMB_CHARS)
+      if (thumb !== null && !THUMB.test(thumb))
+        throw invalidParams('thumb must be an image data URL')
+      return {
+        source: {
+          bytes: bytes(source, 'bytes', ATTACHMENT_BYTES),
+          mimeType: string(source, 'mimeType', ID_CHARS),
+          name: string(source, 'name', TEXT_CHARS),
+        },
+        thumb,
+      }
+    },
+    'attachments.read': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
+    'attachments.remove': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
     'files.list': project,
     'files.read': (params) => {
       const o = fields(params)

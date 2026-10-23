@@ -1133,6 +1133,27 @@ const recall: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/** One line for each block besides text, so a test or a person can see what was sent. */
+const attachments: Scenario = async (turn) => {
+  const lines = turn.prompt.flatMap((block) => {
+    switch (block.type) {
+      case 'image':
+        return [`- image ${block.mimeType}, ${Buffer.from(block.data, 'base64').byteLength} bytes`]
+      case 'resource_link':
+        return [`- resource_link ${block.name} ${block.uri}`]
+      case 'resource':
+        return [`- resource ${block.resource.uri}`]
+      case 'audio':
+        return [`- audio ${block.mimeType}`]
+      default:
+        return []
+    }
+  })
+  const text = lines.length > 0 ? lines.join('\n') : 'The prompt carried nothing but text.'
+  await stream(turn, text, { chunks: [text], delayMs: 0, messageId: turn.messageId() })
+  return 'end_turn'
+}
+
 const chinese: Scenario = async (turn) => {
   if (!(await stream(turn, CHINESE_ANSWER, { messageId: turn.messageId() }))) return 'cancelled'
   return 'end_turn'
@@ -1162,6 +1183,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   status,
   context,
   recall,
+  attachments,
   chinese,
 }
 

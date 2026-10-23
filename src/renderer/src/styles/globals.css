@@ -379,6 +379,13 @@
     animation-fill-mode: both;
     animation-timeline: scroll(self y);
   }
+  .scroll-fade-x {
+    animation-name: scroll-fade-reveal-s, scroll-fade-reveal-e;
+    animation-duration: 1ms;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self inline), scroll(self inline);
+  }
 }
 
 /* A top fade drawn over a scroller rather than masking it: Chromium repaints a scroller whose mask

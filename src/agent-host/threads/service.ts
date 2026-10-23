@@ -59,6 +59,8 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
     case 'remove':
       db.remove(request.sessionIds)
       return null
+    case 'blob':
+      return db.blob(request.sessionId, request.hash)
     case 'close':
       db.close()
       return null

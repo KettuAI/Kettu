@@ -81,5 +81,22 @@
       "ringExpired": "Context {{percent}}% used. The prompt cache has expired.",
       "ringExpiredEstimate": "Context {{percent}}% used. The prompt cache has probably expired."
     }
+  },
+  "attachments": {
+    "label": "Attachments",
+    "imageName": "Image {{number}}",
+    "remove": "Remove {{name}}",
+    "adding": "Adding…",
+    "removeFailed": "Remove the attachments that could not be added",
+    "cannotRead": "Can't be read",
+    "cannotOpen": "This image can't be opened.",
+    "sentAsImage": "Sent as an image",
+    "sentScaled": "Sent as an image, scaled to {{size}}",
+    "sentAsLink": "{{agent}} doesn't take images. It gets a link to the file and may open it with its own tools.",
+    "sentLinked": "Sent as a link to the file",
+    "limit": "Only 20 attachments fit in one message",
+    "tooLarge": "These attachments are over 10 MB in all. Remove some to send.",
+    "announceAdded": "{{name}} attached",
+    "announceRemoved": "{{name}} removed"
   }
 }

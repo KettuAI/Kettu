@@ -10,7 +10,7 @@ import {
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { CornerDownRightIcon, PencilIcon, PlayIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { QueuedPrompt, SessionView } from '@shared/thread'
+import type { Attachment, QueuedPrompt, SessionView } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -18,6 +18,7 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { follow, springs } from '@renderer/lib/motion'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
+import { restoreAttachments } from './composer/attachments'
 import {
   actionCard,
   BEHIND,
@@ -44,6 +45,12 @@ function promptText(item: QueuedPrompt): string {
     .map((c) => (c.type === 'text' ? c.text : c.ref.kind === 'link' ? c.ref.uri : ''))
     .join(' ')
     .trim()
+}
+
+function queuedAttachments(item: QueuedPrompt): Attachment[] {
+  return item.content.flatMap((c) =>
+    c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
+  )
 }
 
 /** A card's fill: the composer's surface at the front, darkening toward `--queue-back` behind. */
@@ -210,11 +217,21 @@ export function QueueStack({
     steer: (item) => run(host('sessions.steer', { sessionId, itemId: item.id })),
     edit: (item) =>
       run(
+        host('sessions.unqueue', { sessionId, itemId: item.id }).then(() => {
+          restoreAttachments(sessionId, item.content)
+          emitAppEvent({ kind: 'insert-into-composer', sessionId, text: promptText(item) })
+        }),
+      ),
+    remove: (item) =>
+      run(
         host('sessions.unqueue', { sessionId, itemId: item.id }).then(() =>
-          emitAppEvent({ kind: 'insert-into-composer', sessionId, text: promptText(item) }),
+          Promise.all(
+            queuedAttachments(item).map((attachment) =>
+              host('attachments.remove', { id: attachment.id }),
+            ),
+          ),
         ),
       ),
-    remove: (item) => run(host('sessions.unqueue', { sessionId, itemId: item.id })),
   }
 
   const live = actionCard({
@@ -349,6 +366,7 @@ function QueueCard({
   const { t } = useTranslation('session')
   const present = useIsPresent()
   const shown = live && present
+  const attachments = queuedAttachments(item).length
   return (
     <motion.li
       initial={{ opacity: 0, y: pose.y, scale: pose.scale }}
@@ -376,7 +394,13 @@ function QueueCard({
           {index === 0 ? t('queue.next') : t('queue.number', { number: index + 1 })}
         </span>
         <span className="min-w-0 flex-1 truncate text-small">
-          {promptText(item) || t('queue.attachment')}
+          {promptText(item) || (attachments === 0 && t('queue.attachment'))}
+          {attachments > 0 && (
+            <span className="text-tertiary">
+              {promptText(item) && ' · '}
+              {t('queue.attachments', { count: attachments })}
+            </span>
+          )}
         </span>
         {count && <span className="shrink-0 text-xs text-muted-foreground tabular">{count}</span>}
       </div>

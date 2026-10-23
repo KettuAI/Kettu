@@ -1783,6 +1783,7 @@ export class AgentManager {
         reports: limitsReport(slot.def.id) !== null,
         account: slot.def.reportsAccount ?? false,
         progressNotes: slot.def.progressNotes ?? false,
+        prompt: capabilities?.prompt ?? null,
       },
     }
   }
