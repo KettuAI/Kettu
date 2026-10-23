@@ -293,8 +293,9 @@ function Dashboard({ page }: { page: PageData }) {
   )
   const agents = useMemo(() => agentsWithUsage(summary, AGENT_IDS), [summary])
   const shownAgents = agent === 'all' ? agents : [agent]
-  // A chosen agent stays a choice in a range where it used nothing.
-  const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
+  // A chosen agent stays a choice once its usage is gone, as after clearing the record.
+  const choices =
+    agent === 'all' || summary.agents.includes(agent) ? summary.agents : [...summary.agents, agent]
   const facts = useMemo(() => figures(days, range), [days, range])
   const heat = heatmapRange(today, firstDay)
   const heatDays = useMemo(

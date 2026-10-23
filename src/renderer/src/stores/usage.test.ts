@@ -14,7 +14,14 @@ const {
 } = await import('./usage')
 const { addDays, dayOf } = await import('@renderer/features/usage/model')
 
-const empty: UsageSummary = { days: [], models: [], projects: [], sources: {}, first: null }
+const empty: UsageSummary = {
+  days: [],
+  models: [],
+  projects: [],
+  sources: {},
+  first: null,
+  agents: [],
+}
 
 describe('usage store', () => {
   beforeEach(() => {

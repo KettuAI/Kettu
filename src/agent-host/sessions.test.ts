@@ -383,6 +383,7 @@ describe('a prompt turn', () => {
     ])
     expect(summary.sources['fake-agent']).toBe('overbench')
     expect(summary.first).toBeGreaterThanOrEqual(today)
+    expect(summary.agents).toEqual(['fake-agent'])
     expect(turnEnd.id).toMatch(/^e:/)
     const status = await port.request('usage.status', undefined)
     expect(status).toMatchObject({ fromComputer: false, scanning: null, unavailable: false })

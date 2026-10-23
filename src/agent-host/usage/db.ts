@@ -67,7 +67,7 @@ export type UsageDbLog = (level: 'info' | 'warn' | 'error', message: string) => 
 /** Which source counts for each agent; an agent left out counts nothing. */
 export type SourceMap = Partial<Record<AgentId, UsageSource>>
 
-export type DbSummary = Omit<UsageSummary, 'sources' | 'first' | 'projects'> & {
+export type DbSummary = Omit<UsageSummary, 'sources' | 'first' | 'agents' | 'projects'> & {
   projects: Omit<UsageSummary['projects'][number], 'scratch'>[]
 }
 

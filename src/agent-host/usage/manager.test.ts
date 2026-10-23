@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentId } from '@shared/thread'
-import type { UsageStatus } from '@shared/usage'
+import type { UsageScope, UsageStatus } from '@shared/usage'
+import type { SourceStats } from './db'
 import { UsageManager, type UsageManagerDeps } from './manager'
 import type { LogReader } from './model'
 import type { ScanRequest } from './protocol'
@@ -155,6 +156,32 @@ describe('a scan that fails', () => {
     scans[2]?.fail(new Error('again'))
     await vi.waitFor(() => expect(logs).toHaveLength(3))
     expect(logs.at(-1)).toBe('The usage scan failed: again')
+  })
+})
+
+describe('the page', () => {
+  it('names the same agents under both scopes, whichever source has their usage', async () => {
+    const { store } = fakeStore()
+    const stats: SourceStats[] = [
+      { agentId: 'claude-code', source: 'log', rows: 9, first: 0, last: 1 },
+      { agentId: 'codex', source: 'log', rows: 4, first: 0, last: 1 },
+      { agentId: 'codex', source: 'overbench', rows: 2, first: 0, last: 1 },
+      { agentId: 'fake-agent', source: 'overbench', rows: 1, first: 0, last: 1 },
+    ]
+    Object.assign(store, {
+      stats: async () => stats,
+      summary: async () => ({ days: [], models: [], projects: [] }),
+    })
+    let changed = 0
+    const usage = manager(store, { changed: () => changed++ })
+    usage.rowsChanged()
+    await vi.waitFor(() => expect(changed).toBe(1))
+    const agents = async (scope: UsageScope) => (await usage.summary([], 0, 1, scope)).agents
+    expect(await agents('computer')).toEqual(['claude-code', 'codex', 'fake-agent'])
+    expect(await agents('overbench')).toEqual(['claude-code', 'codex', 'fake-agent'])
+
+    usage.setFromComputer(false)
+    expect(await agents('computer')).toEqual(['codex', 'fake-agent'])
   })
 })
 

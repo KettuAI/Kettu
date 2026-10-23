@@ -275,13 +275,25 @@ export class UsageManager {
     const first = this.stats
       .filter((s) => sources[s.agentId] === s.source)
       .reduce<number | null>((min, s) => (min === null || s.first < min ? s.first : min), null)
-    if (!store || this.unavailable) return { days: [], models: [], projects: [], sources, first }
+    const agents = this.agentsWithUsage()
+    if (!store || this.unavailable) {
+      return { days: [], models: [], projects: [], sources, first, agents }
+    }
     const summary = await store.summary(dayStarts, from, to, sources)
     const projects = summary.projects.map((p) => ({
       ...p,
       scratch: p.project !== null && this.deps.isScratch(p.project),
     }))
-    return { ...summary, projects, sources, first }
+    return { ...summary, projects, sources, first, agents }
+  }
+
+  private agentsWithUsage(): AgentId[] {
+    const scopes = [this.sources('computer'), this.sources('overbench')]
+    return AGENT_IDS.filter((agentId) =>
+      this.stats.some(
+        (s) => s.agentId === agentId && scopes.some((sources) => sources[agentId] === s.source),
+      ),
+    )
   }
 
   async total(from: number, to: number): Promise<UsageTotal> {

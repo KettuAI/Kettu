@@ -165,6 +165,7 @@ CREATE INDEX cursors_by_agent ON cursors (agent_id);
 | `usage.clearRecord` | none                             | none           | Deletes OverBench's own record                                                          |
 
 - `dayStarts` are the local midnights the renderer works out, ascending, at most 50 years of them, so days stay right across daylight saving time; `scope` is `computer` or `overbench`. The host validates both like every request.
+- A summary also names the agents with usage under either scope at any time, which the page's agent filter offers under both.
 - `usage.changed` (no payload) says the figures changed; `usage.status` carries the new `UsageStatus` whenever the setting, a scan's progress or a reader's state changes. Both go to all ports.
 
 ## What the page shows
@@ -186,7 +187,7 @@ A **Usage** screen of its own, laid out as a dashboard. Of the three mockups (a 
 - **Opening it**: a **Usage** row in the sidebar (`ChartNoAxesColumn`), after **Artifacts**. The row's end shows today's tokens or the tightest plan limit ([interface](./ui.md#sidebar), [settings](#settings)).
 - **Header**: the title, when the logs last synced ("Reading the logs…" during a scan, "OverBench's record" while the logs are off, "Could not sync" in `--destructive` with the reason in its tooltip when **Sync now** failed), and **Sync now**.
 - **Filters**, one row that every panel follows, in two groups that wrap as [the interface](./ui.md#usage) describes, what is counted on the left and when on the right:
-  - the agent: **All**, or one agent by its mark, with its name in a tooltip; shown once two agents have usage, since with one, **All** is the only choice;
+  - the agent: **All**, or one agent by its mark, with its name in a tooltip; the same agents under both sources, every one with usage in either of them at any time, so the row stays as it is when the source changes and the figures show "—" for an agent with none in the chosen one; shown once two agents have usage, since with one, **All** is the only choice;
   - the source: **This computer** or **OverBench only**, shown only while **Usage on this computer** is on;
   - the range: **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied.
 - **Figures**: four cards, total tokens with the range's dates and length, the daily average with how many of the range's days were active, the busiest day, and the cache share. Each number is compact with the exact value in a tooltip.
