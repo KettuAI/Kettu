@@ -180,7 +180,7 @@ export class AgentHost {
     this.deps.onBadge(0)
     const roots = this.agentProcesses
     this.agentProcesses = []
-    // After a clean stop the host has already stopped every agent itself.
+    // After a clean stop the host has stopped every agent itself, or left it in its own record.
     if (clean || roots.length === 0) return
     log.warn(`Stopping ${roots.length} agent process tree(s) left by the host`)
     // They ran until the host died a moment ago.

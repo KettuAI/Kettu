@@ -9,7 +9,7 @@ import type { Platform } from '@shared/platform'
 import { spawnArguments } from './agent-process'
 import { needsShell, type Env } from './find-command'
 import { t } from './i18n'
-import { processControl } from './process-tree'
+import { processControl, QUIT_REASON, type ProcessControl, type ToolOptions } from './process-tree'
 import { TextRing } from './ring'
 import { compareVersions } from './versions'
 
@@ -210,6 +210,8 @@ export interface ProgramOptions {
   timeoutMs: number
   signal?: AbortSignal
   onOutput?(text: string): void
+  /** The process tools that stop it; tests pass their own. */
+  control?: ProcessControl
 }
 
 export interface NpmOptions extends Omit<ProgramOptions, 'program'> {
@@ -217,11 +219,15 @@ export interface NpmOptions extends Omit<ProgramOptions, 'program'> {
 }
 
 /** Ends a program and what it started: its group on macOS and Linux, its tree on Windows. */
-function stopTree(pid: number, platform: Platform, exited: Promise<unknown>): void {
+function stopTree(
+  pid: number,
+  platform: Platform,
+  exited: Promise<unknown>,
+  tools: ToolOptions,
+  control: ProcessControl = processControl(platform),
+): void {
   if (platform === 'win32') {
-    void processControl(platform)
-      .taskkill([pid])
-      .catch(() => {})
+    void control.taskkill([pid], tools).catch(() => {})
     return
   }
   const signal = (name: NodeJS.Signals): void => {
@@ -273,16 +279,16 @@ export function runProgram(options: ProgramOptions): Promise<ProgramRun> {
       take(text)
     })
     child.stderr.setEncoding('utf8').on('data', take)
-    const stop = (): void => {
-      if (child.pid) stopTree(child.pid, platform, exited)
+    const stop = (tools: ToolOptions): void => {
+      if (child.pid) stopTree(child.pid, platform, exited, tools, options.control)
     }
     const timer = setTimeout(() => {
       timedOut = true
-      stop()
+      stop({})
     }, options.timeoutMs)
     const onAbort = (): void => {
       aborted = true
-      stop()
+      stop({ quitting: options.signal?.reason === QUIT_REASON })
     }
     options.signal?.addEventListener('abort', onAbort, { once: true })
     const finish = (run: Omit<ProgramRun, 'timedOut' | 'aborted' | 'output' | 'stdout'>): void => {

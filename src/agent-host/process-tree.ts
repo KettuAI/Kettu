@@ -89,6 +89,9 @@ export interface ToolOptions {
   quitting?: boolean
 }
 
+/** What a quit aborts a tool's run with, so that the run's stop gets the quit's limits too. */
+export const QUIT_REASON = new Error('OverBench is quitting')
+
 export interface ProcessControl {
   platform: Platform
   list(options?: ToolOptions): Promise<ProcessRow[]>

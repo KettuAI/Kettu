@@ -10,6 +10,7 @@ import {
   processControl,
   terminateTrees,
   type ProcessControl,
+  type Terminated,
   type ToolOptions,
 } from './process-tree'
 import { quoteCmd } from './quote'
@@ -30,6 +31,10 @@ export interface StopTimings {
 
 export const STOP_TIMINGS: StopTimings = { eofMs: 2_000, termMs: 3_000 }
 
+// How long a quit's kill waits for the exit, so that the reap of what is left starts before the
+// record's last write: docs/design/agent-host.md has the sum.
+const KILL_WAIT_MS = 500
+
 export interface SpawnedAgent {
   readonly pid: number | null
   /** When it was spawned, which names it apart from a later process with its pid. */
@@ -42,6 +47,12 @@ export interface SpawnedAgent {
    * or `taskkill /T /F` on Windows. What it leaves behind once it exits is `AgentTrees`' to stop.
    */
   stop(tools?: ToolOptions): Promise<ExitInfo>
+  /**
+   * Ends it now, for a quit that cannot wait for `stop` any longer, wherever the stop has got to:
+   * `SIGKILL` to the groups its stop listed, else to its own, or `taskkill /T /F` with the quit's
+   * limit on Windows. Resolves once it has exited, or after KILL_WAIT_MS.
+   */
+  kill(): Promise<void>
 }
 
 export interface SpawnOptions {
@@ -109,6 +120,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   child.stdin.on('error', (error) => options.onEvent?.('stdin error', error.message))
   child.stderr.setEncoding('utf8').on('data', (text: string) => options.onStderr(text))
 
+  let terminated: Terminated | null = null
   // It still runs after EOF, so its tree goes as a whole, found while the links to it hold.
   const endTree = async (pid: number, tools: ToolOptions): Promise<void> => {
     if (platform === 'win32') {
@@ -125,7 +137,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
       return
     }
     options.onEvent?.('SIGTERM')
-    const terminated = await terminateTrees(control, [{ pid, startedAt }], tools).catch(
+    terminated = await terminateTrees(control, [{ pid, startedAt }], tools).catch(
       (error: unknown) => {
         options.onEvent?.('process listing failed', (error as Error).message)
         return null
@@ -153,6 +165,21 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
     return stopping
   }
 
+  const kill = async (): Promise<void> => {
+    if (hasExited || !child.pid) return
+    if (platform === 'win32') {
+      options.onEvent?.('taskkill')
+      void control.taskkill([child.pid], { quitting: true }).catch((error: unknown) => {
+        options.onEvent?.('taskkill failed', (error as Error).message)
+      })
+    } else {
+      options.onEvent?.('SIGKILL')
+      if (terminated) killSurvivors(control, terminated)
+      else signalGroup(control, child.pid, 'SIGKILL')
+    }
+    await waitForExit(exited, KILL_WAIT_MS)
+  }
+
   return {
     pid: child.pid ?? null,
     startedAt,
@@ -162,6 +189,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
       return hasExited
     },
     stop,
+    kill,
   }
 }
 
