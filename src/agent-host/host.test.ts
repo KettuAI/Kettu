@@ -602,3 +602,99 @@ describe('sessions without a project', () => {
     })
   })
 })
+
+describe('artifacts', () => {
+  it('serves the interface over the port, with its events', async () => {
+    const { t, port } = await setup()
+    const other = t.connect()
+    const { id } = await t.host.artifacts.create({
+      project: t.project,
+      sessionId: 's1',
+      title: 'Report',
+      html: '<p>one</p>',
+      pages: 1,
+      note: null,
+    })
+    await t.host.artifacts.write({
+      id,
+      baseVersion: 1,
+      html: '<p>two</p>',
+      pages: 1,
+      author: 's1',
+      note: 'Second',
+    })
+    expect(await port.request('artifacts.list', {})).toEqual([
+      expect.objectContaining({ id, title: 'Report', version: 2, editing: [] }),
+    ])
+    expect(await port.request('artifacts.read', { id, version: 1 })).toEqual({
+      title: 'Report',
+      version: 1,
+      html: '<p>one</p>',
+    })
+    expect(await port.request('artifacts.versions', { id })).toEqual([
+      { version: 2, createdAt: expect.any(Number), author: 's1', note: 'Second', size: 10 },
+      { version: 1, createdAt: expect.any(Number), author: 's1', note: null, size: 10 },
+    ])
+
+    await port.request('artifacts.watch', { id })
+    await other.request('artifacts.watch', { id })
+    expect(other.events.filter((e) => e.type === 'artifacts.activity').at(-1)).toEqual({
+      type: 'artifacts.activity',
+      id,
+      viewers: 2,
+      editing: [],
+    })
+    await expect(
+      port.request('artifacts.restoreVersion', { id, version: 1, baseVersion: 1 }),
+    ).rejects.toMatchObject({ code: 'conflict', data: { version: 2, deleted: false } })
+    expect(
+      await port.request('artifacts.restoreVersion', { id, version: 1, baseVersion: 2 }),
+    ).toEqual({ version: 3 })
+    for (const watcher of [port, other]) {
+      expect(watcher.events).toContainEqual({ type: 'artifacts.version', id, version: 3 })
+    }
+    other.disconnect()
+    await port.request('artifacts.rename', { id, title: 'Traffic report' })
+    expect(port.events.filter((e) => e.type === 'artifacts.activity').at(-1)).toMatchObject({
+      viewers: 1,
+    })
+
+    await expect(port.request('artifacts.delete', { id, permanently: true })).rejects.toMatchObject(
+      { code: 'conflict', data: { version: 3, deleted: false } },
+    )
+    await port.request('artifacts.delete', { id })
+    expect(await port.request('artifacts.list', {})).toEqual([])
+    expect(await port.request('artifacts.list', { deleted: true })).toEqual([
+      expect.objectContaining({ id, title: 'Traffic report', deletedAt: expect.any(Number) }),
+    ])
+    await port.request('artifacts.undelete', { id })
+    await port.request('artifacts.delete', { id })
+    await port.request('artifacts.delete', { id, permanently: true })
+    expect(await port.request('artifacts.list', { deleted: true })).toEqual([])
+    await expect(port.request('artifacts.read', { id })).rejects.toMatchObject({
+      code: 'not_found',
+    })
+    expect(port.events.filter((e) => e.type === 'artifacts.changed')).toHaveLength(8)
+    expect(await readdir(path.join(t.dir, 'artifacts', 'content'))).toEqual([])
+  })
+
+  it('keeps the artifacts of a deleted session', async () => {
+    const { t, port } = await setup()
+    const session = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    const { id } = await t.host.artifacts.create({
+      project: session.projectPath,
+      sessionId: session.id,
+      title: 'Report',
+      html: '<p>one</p>',
+      pages: 1,
+      note: null,
+    })
+    await port.request('sessions.delete', { sessionId: session.id })
+    expect(await port.request('artifacts.list', {})).toEqual([
+      expect.objectContaining({ id, sessionId: session.id, project: t.project }),
+    ])
+  })
+})

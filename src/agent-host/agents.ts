@@ -322,6 +322,8 @@ function updateEntry(slot: Slot): AgentUpdatesFile['agents'][AgentId] {
 
 export class AgentManager {
   private readonly slots = new Map<AgentId, Slot>()
+  /** Processes their stop did not end, kept listed and reaped at quit until they exit. */
+  private readonly givenUp = new Map<LaunchedAgent, Slot>()
   private readonly timings: AgentTimings
   private detected: Promise<void> | null = null
   private lastAuthCommands = '[]'
@@ -605,7 +607,8 @@ export class AgentManager {
     } catch (error) {
       slot.intentionalStop = true
       connection.close()
-      await launched.stop(this.tools())
+      const info = await launched.stop(this.tools())
+      if (!launched.hasExited) this.letGo(slot, launched, info)
       throw error instanceof AgentRequestError
         ? new Error(`${slot.def.name} failed to initialize: ${error.message}`)
         : error
@@ -624,6 +627,7 @@ export class AgentManager {
     this.deps.diagnostics.event(agentId, 'exit', describeExit(info))
     void this.reapTree(slot, launched)
     connection.close()
+    if (this.givenUp.delete(launched)) this.emitProcesses()
     if (slot.launched !== launched) return
     slot.launched = null
     slot.runtime = null
@@ -1355,12 +1359,38 @@ export class AgentManager {
     this.emit(slot)
     slot.stopping = this.noteTree(launched)
       .then(() => launched.stop(this.tools()))
-      .then(() => this.reapTree(slot, launched))
+      .then((info) => {
+        if (!launched.hasExited) this.letGo(slot, launched, info)
+        return this.reapTree(slot, launched)
+      })
     try {
       await slot.stopping
     } finally {
       slot.stopping = null
     }
+  }
+
+  /**
+   * Gives up a process its stop did not end, such as one whose `taskkill` failed: its stdin is
+   * closed, so its runtime is never handed out again, and the next start runs a new process. It
+   * stays listed for main until it exits, and its tree is stopped once more now and at quit.
+   */
+  private letGo(slot: Slot, launched: LaunchedAgent, info: ExitInfo): void {
+    if (slot.launched !== launched) return
+    const { diagnostics } = this.deps
+    diagnostics.event(slot.def.id, 'stop failed', describeExit(info))
+    diagnostics.log('warn', `${slot.def.name} did not stop: ${describeExit(info)}`)
+    slot.runtime?.connection.close()
+    slot.launched = null
+    slot.runtime = null
+    this.givenUp.set(launched, slot)
+    this.emitProcesses()
+    void this.reapTree(slot, launched)
+    // A start that failed reports itself.
+    if (slot.starting) return
+    slot.state = slot.detection?.state ?? 'available'
+    slot.detail = null
+    this.emit(slot)
   }
 
   /** Only a quit is short of time, and only it gets the process tools' short limits. */
@@ -1398,6 +1428,7 @@ export class AgentManager {
       this.updateCheck,
       ...slots.map((slot) => slot.taskRun?.catch(() => {})),
       ...slots.map((slot) => this.stop(slot.def.id)),
+      ...[...this.givenUp].map(([launched, slot]) => this.reapTree(slot, launched)),
     ]).then(() => true)
     let timer: ReturnType<typeof setTimeout> | undefined
     const late = new Promise<false>((resolve) => {
@@ -1406,9 +1437,9 @@ export class AgentManager {
     const stopped = await Promise.race([stops, late])
     clearTimeout(timer)
     if (stopped) return
+    const running = [...slots.map((slot) => [slot.launched, slot] as const), ...this.givenUp]
     await Promise.all(
-      slots.map((slot) => {
-        const launched = slot.launched
+      running.map(([launched, slot]) => {
         if (!launched || launched.hasExited) return
         this.deps.diagnostics.log(
           'warn',
@@ -1922,7 +1953,11 @@ export class AgentManager {
   }
 
   processes(): AgentProcess[] {
-    return [...this.slots.values()].flatMap(({ def, launched }) =>
+    const running = [
+      ...[...this.slots.values()].map((slot) => [slot.launched, slot] as const),
+      ...this.givenUp,
+    ]
+    return running.flatMap(([launched, { def }]) =>
       launched?.pid != null
         ? [{ agentId: def.id, pid: launched.pid, startedAt: launched.startedAt }]
         : [],

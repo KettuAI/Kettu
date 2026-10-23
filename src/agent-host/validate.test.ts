@@ -254,6 +254,49 @@ describe('createValidators', () => {
       write({ projectPath: '/p', path: 'a.ts', text: 'x'.repeat(1024 * 1024 + 1), version: null }),
     )
   })
+
+  it('checks the artifact requests', () => {
+    const id = 'art_01JBX3Q0R5K8V2M7N4P6S9T1WZ'
+    expect(posix['artifacts.list'](undefined)).toEqual({})
+    expect(posix['artifacts.list']({ deleted: true, extra: 1 })).toEqual({ deleted: true })
+    rejects(() => posix['artifacts.list']({ deleted: 'yes' }))
+
+    for (const method of ['artifacts.versions', 'artifacts.watch', 'artifacts.undelete'] as const) {
+      expect(posix[method]({ id, extra: 1 })).toEqual({ id })
+      rejects(() => posix[method]({}))
+      rejects(() => posix[method]({ id: 'art_01jbx3q0r5k8v2m7n4p6s9t1wz' }))
+      rejects(() => posix[method]({ id: 'art_01JBX3Q0R5K8V2M7N4P6S9T1W' }))
+      rejects(() => posix[method]({ id: 'art_01JBX3Q0R5K8V2M7N4P6S9T1WI' }))
+      rejects(() => posix[method]({ id: '../art_01JBX3Q0R5K8V2M7N4P6S9T1WZ' }))
+    }
+
+    const read = posix['artifacts.read']
+    expect(read({ id })).toEqual({ id })
+    expect(read({ id, version: 3 })).toEqual({ id, version: 3 })
+    rejects(() => read({ id, version: 0 }))
+    rejects(() => read({ id, version: 1.5 }))
+    rejects(() => read({ id, version: '2' }))
+
+    const rename = posix['artifacts.rename']
+    expect(rename({ id, title: 'Traffic report' })).toEqual({ id, title: 'Traffic report' })
+    expect(rename({ id, title: 'x'.repeat(120) }).title).toHaveLength(120)
+    rejects(() => rename({ id, title: 'x'.repeat(121) }))
+    rejects(() => rename({ id, title: '   ' }))
+    rejects(() => rename({ id }))
+
+    expect(posix['artifacts.delete']({ id })).toEqual({ id })
+    expect(posix['artifacts.delete']({ id, permanently: true })).toEqual({ id, permanently: true })
+    rejects(() => posix['artifacts.delete']({ id, permanently: 1 }))
+
+    const restore = posix['artifacts.restoreVersion']
+    expect(restore({ id, version: 1, baseVersion: 3, extra: 1 })).toEqual({
+      id,
+      version: 1,
+      baseVersion: 3,
+    })
+    rejects(() => restore({ id, version: 1 }))
+    rejects(() => restore({ id, version: -1, baseVersion: 3 }))
+  })
 })
 
 describe('promptContent', () => {

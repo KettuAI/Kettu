@@ -1,11 +1,11 @@
 // The thread service in the test's own thread, behind the worker interface: messages are cloned
 // and delivered later, as between threads, but no bundled worker file is needed.
 
-import type { ThreadReply, ThreadRequest } from '../threads/protocol'
+import type { ThreadReply, ThreadRequest, ThreadWorkerData } from '../threads/protocol'
 import { startThreadService } from '../threads/service'
 import type { ThreadWorker } from '../threads/store'
 
-export function inThreadWorker(file: string): ThreadWorker {
+export function inThreadWorker(data: ThreadWorkerData): ThreadWorker {
   let onMessage: ((reply: ThreadReply) => void) | null = null
   let onExit: ((error: Error | null) => void) | null = null
   let handle: ((request: ThreadRequest) => void) | null = null
@@ -18,7 +18,7 @@ export function inThreadWorker(file: string): ThreadWorker {
   }
   // Started like a real worker: after the caller has attached its listeners.
   setImmediate(() => {
-    if (!stopped) handle = startThreadService(file, deliver)
+    if (!stopped) handle = startThreadService(data, deliver)
   })
   return {
     postMessage: (request) => {
