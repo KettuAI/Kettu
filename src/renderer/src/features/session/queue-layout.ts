@@ -101,3 +101,25 @@ export function shownRange(count: number, open: boolean, offset: number): [numbe
   if (!open) return [0, Math.min(count, 3)]
   return [Math.max(0, Math.floor(offset) - 1), Math.min(count, Math.ceil(offset) + 5)]
 }
+
+/**
+ * The card that shows its actions, or -1: once fanned out and settled, the one under the pointer
+ * when it is one of the three in front, else the front one while the stack has keyboard focus.
+ */
+export function actionCard({
+  open,
+  following,
+  front,
+  hovered,
+  keyboard,
+}: {
+  open: boolean
+  following: boolean
+  front: number
+  hovered: number
+  keyboard: boolean
+}): number {
+  if (!open || following) return -1
+  if (hovered >= front && hovered <= front + 2) return hovered
+  return keyboard ? front : -1
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  actionCard,
   BEHIND,
   CARD,
   STEP,
@@ -100,5 +101,26 @@ describe('offsets', () => {
     expect(shownRange(10, true, 0)).toEqual([0, 5])
     expect(shownRange(10, true, 3.5)).toEqual([2, 9])
     expect(shownRange(4, true, 3)).toEqual([2, 4])
+  })
+})
+
+describe('actionCard', () => {
+  const base = { open: true, following: false, front: 0, hovered: -1, keyboard: false }
+
+  it('is the hovered card among the three in front', () => {
+    expect(actionCard({ ...base, hovered: 2 })).toBe(2)
+    expect(actionCard({ ...base, front: 2, hovered: 4 })).toBe(4)
+    expect(actionCard({ ...base, hovered: 3 })).toBe(-1)
+    expect(actionCard({ ...base, front: 2, hovered: 1 })).toBe(-1)
+  })
+
+  it('is the front card from the keyboard', () => {
+    expect(actionCard({ ...base, front: 1, keyboard: true })).toBe(1)
+    expect(actionCard({ ...base, front: 1, hovered: 2, keyboard: true })).toBe(2)
+  })
+
+  it('is none while folded or following the wheel', () => {
+    expect(actionCard({ ...base, open: false, hovered: 0, keyboard: true })).toBe(-1)
+    expect(actionCard({ ...base, following: true, hovered: 0, keyboard: true })).toBe(-1)
   })
 })

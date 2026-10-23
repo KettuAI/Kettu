@@ -52,14 +52,14 @@ export function PlanBar({
       aria-hidden={hidden || undefined}
       className={cn(
         'mb-2 transition-[opacity,translate] duration-(--duration-fast) ease-out-quart',
-        hidden && '-translate-y-1 opacity-0',
+        hidden && '-translate-y-1 opacity-0 motion-reduce:translate-y-0',
       )}
     >
       <CollapsibleTrigger className="flex h-row w-full items-center gap-2.5 rounded-lg px-4 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
         <ChevronRightIcon
           aria-hidden
           className={cn(
-            'size-3 shrink-0 text-muted-foreground transition-transform duration-(--duration-fast)',
+            'size-3 shrink-0 text-muted-foreground transition-transform duration-(--duration-fast) motion-reduce:transition-none',
             open && 'rotate-90',
           )}
         />

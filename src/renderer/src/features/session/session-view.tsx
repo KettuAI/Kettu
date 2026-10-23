@@ -54,6 +54,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
 
   const [actionError, setActionError] = useState<string | null>(null)
   const [queueOpen, setQueueOpen] = useState(false)
+  // A queued message's failed action; the stack clears it with its next action or its last item.
+  const [queueError, setQueueError] = useState<string | null>(null)
   const status = session?.status ?? summary.status
   const running = status === 'running' || status === 'awaiting_permission'
   const fail = useCallback((e: unknown) => setActionError(errorMessage(e)), [])
@@ -152,9 +154,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             </AlertAction>
           </Alert>
         )}
-        {actionError && (
+        {(actionError || queueError) && (
           <p role="alert" className="animate-in px-1 text-xs text-destructive fade-in">
-            {actionError}
+            {actionError ?? queueError}
           </p>
         )}
         <div className="flex flex-col">
@@ -167,7 +169,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           )}
           {/* Mounted only while something waits; its cards sit behind the composer. */}
           {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
-            <QueueStack session={session} onOpenChange={setQueueOpen} onError={fail} />
+            <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
           )}
           {summary.origin === 'subagent' ? (
             <SubagentBar summary={summary} session={session} />
