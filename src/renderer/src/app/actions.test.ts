@@ -13,6 +13,7 @@ const {
   createSession,
   deleteSession,
   followShownSession,
+  forkSession,
   newSession,
   newSessionInPlace,
   openProjectDialog,
@@ -410,6 +411,34 @@ describe('createSession with a first message', () => {
       expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' }),
     )
     expect(request).toHaveBeenCalledWith('sessions.prompt', expect.anything())
+  })
+})
+
+describe('forkSession', () => {
+  beforeEach(() => {
+    request.mockReset()
+    useSessionsStore.setState({ byId: { s1: summary } })
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/repo' })
+  })
+
+  it('shows nothing when the fork is deleted while it starts', async () => {
+    request.mockRejectedValueOnce(
+      Object.assign(new Error('The session was removed before it started'), {
+        code: 'not_found',
+        data: { reason: 'removed_while_starting' },
+      }),
+    )
+    await expect(forkSession('s1')).resolves.toBeUndefined()
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 's1' })
+  })
+
+  it('passes any other failure on, for the reply to show', async () => {
+    request.mockRejectedValueOnce(
+      Object.assign(new Error('The session is running'), { code: 'busy' }),
+    )
+    await expect(forkSession('s1')).rejects.toMatchObject({ code: 'busy' })
+    request.mockRejectedValueOnce(Object.assign(new Error('No session s1'), { code: 'not_found' }))
+    await expect(forkSession('s1')).rejects.toMatchObject({ code: 'not_found' })
   })
 })
 

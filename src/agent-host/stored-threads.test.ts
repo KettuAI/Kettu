@@ -711,6 +711,29 @@ describe('keeping the config across an attach', () => {
     ])
   })
 
+  it("keeps the source's values for a fork the app stopped while they were set", async () => {
+    const agentEnv = { FAKE_AGENT_FORK_CONFIG: 'reset', FAKE_AGENT_SET_CONFIG_MS: '200' }
+    const { t: first, port: before } = await setup({ agentEnv })
+    const sessionId = await chosenSession(first, before)
+    const sets = () =>
+      first.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/set_config_option')
+        .length
+    const own = sets()
+    void before.request('sessions.fork', { sessionId }).catch(() => {})
+    await vi.waitFor(() => expect(sets()).toBeGreaterThan(own))
+    const forkId = before.events.flatMap((e) =>
+      e.type === 'session.summary' && e.summary.id !== sessionId ? [e.summary.id] : [],
+    )[0]!
+
+    const { port } = await restart(first, { agentEnv })
+    const listed = await port.request('sessions.list', {})
+    expect(listed.find((s) => s.id === forkId)?.status).toBe('closed')
+    await port.open(forkId)
+    expect(values(port, forkId)).toMatchObject(chosen)
+  })
+
   describe('when the mode cannot be set again', () => {
     const notSent = 'Your message was not sent. It waits in the queue until you resume it.'
 

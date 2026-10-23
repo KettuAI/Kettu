@@ -981,12 +981,40 @@ describe('forking with the source config', () => {
       expect(statuses.indexOf('ready')).toBe(statuses.length - 1)
     })
 
-    it('ends the fork when it is deleted meanwhile', async () => {
-      const { port, forkId, outcome } = await forkInFlight()
+    const sets = (t: TestHost) =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/set_config_option')
+        .length
+
+    it('ends the fork when it is deleted meanwhile, saying so in plain words', async () => {
+      const { t, port, forkId, outcome } = await forkInFlight()
       await port.request('sessions.delete', { sessionId: forkId })
-      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      const sent = sets(t)
+      expect(await outcome).toMatchObject({
+        error: {
+          code: 'not_found',
+          message: 'The session was removed before it started',
+          data: { reason: 'removed_while_starting' },
+        },
+      })
       const listed = await port.request('sessions.list', {})
       expect(listed.map((s) => s.id)).not.toContain(forkId)
+      // Its values stop with it.
+      expect(sets(t)).toBe(sent)
+    })
+
+    it('keeps the fork listed, closed, when it is closed meanwhile', async () => {
+      const { t, port, forkId, outcome } = await forkInFlight()
+      await port.request('sessions.close', { sessionId: forkId })
+      const sent = sets(t)
+      expect(await outcome).toMatchObject({ value: { id: forkId, status: 'closed' } })
+      const listed = await port.request('sessions.list', {})
+      expect(listed.find((s) => s.id === forkId)?.status).toBe('closed')
+      expect(sets(t)).toBe(sent)
+      // It keeps the source's values, which its next attach sets again.
+      await port.open(forkId)
+      expect(values(port, forkId)).toMatchObject({ model: 'deep', thought_level: 'high' })
     })
 
     it('ends the fork when its project is removed meanwhile', async () => {
@@ -1003,8 +1031,10 @@ describe('forking with the source config', () => {
       const listed = await port.request('sessions.list', {})
       expect(listed.find((s) => s.id === forkId)?.status).toBe('closed')
       await port.open(forkId)
-      // Its values were not refused, only not set yet, so the thread says nothing.
+      // Its values were not refused, only not set yet, so the thread says nothing, and it keeps
+      // the source's for its next attach to set.
       expect(port.entries(forkId).filter((entry) => entry.kind === 'notice')).toEqual([])
+      expect(values(port, forkId)).toMatchObject({ model: 'deep', thought_level: 'high' })
     })
   })
 })
