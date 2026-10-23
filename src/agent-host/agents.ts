@@ -826,11 +826,22 @@ export class AgentManager {
       version: running.version,
       cliVersion: slot.installedCli,
     })
-    // While the user's own CLI runs, only a newer adapter is an update; its CLI would not run.
+    // While the user's own CLI runs, only a newer adapter is an update; its CLI would not run,
+    // unless the new adapter needs a newer CLI than the user's, which the update then brings.
     if (offered && adapter.cli?.runs === 'installed') {
+      const mine = adapter.cli.installed
+      const outgrown =
+        !!slot.def.cli?.pinsVersion &&
+        !!offered.cliVersion &&
+        !!mine?.version &&
+        !mine.variable &&
+        compareVersions(mine.version, offered.cliVersion) < 0
       offered =
         compareVersions(offered.adapterVersion, running.version) > 0
-          ? { adapterVersion: offered.adapterVersion, cliVersion: null }
+          ? {
+              adapterVersion: offered.adapterVersion,
+              cliVersion: outgrown ? offered.cliVersion : null,
+            }
           : null
     }
     if (adapter.current) return offered
@@ -979,7 +990,8 @@ export class AgentManager {
     }
     const { platform, diagnostics } = this.deps
     const version = update.adapterVersion
-    const withoutCli = adapter.cli?.runs === 'installed'
+    // An update that brings no CLI of its own keeps running the user's.
+    const withoutCli = adapter.cli?.runs === 'installed' && update.cliVersion === null
     const [, ...flags] = withoutCli ? [...NPM_INSTALL_ARGS, OMIT_CLI_ARG] : NPM_INSTALL_ARGS
     const command = formatCommand(
       { command: npm, args: ['install', `${launch.package}@${version}`, ...flags] },

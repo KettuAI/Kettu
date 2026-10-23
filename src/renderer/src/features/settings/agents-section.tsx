@@ -766,6 +766,17 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   )
 }
 
+/**
+ * The adapter an update brings when that is all it changes: the user's own CLI runs and keeps
+ * running, so the update is named after the adapter, not the agent.
+ */
+function adapterOnlyUpdate(status: AgentStatus): { name: string; version: string } | null {
+  if (status.cli?.runs !== 'installed' || !status.package || status.update?.cliVersion !== null) {
+    return null
+  }
+  return status.package
+}
+
 /** The agent's version, whether a newer one exists, and the check for it. */
 function VersionGroup({ status, version }: { status: AgentStatus; version: string | null }) {
   const { t } = useTranslation('settings')
@@ -787,9 +798,12 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
         )}
       />
       {status.update
-        ? t('agents.update.released', {
-            version: status.update.cliVersion ?? status.update.adapterVersion,
-          })
+        ? t(
+            adapterOnlyUpdate(status) ? 'agents.update.adapterReleased' : 'agents.update.released',
+            {
+              version: status.update.cliVersion ?? status.update.adapterVersion,
+            },
+          )
         : t('agents.update.upToDate')}
       {' · '}
       {checkedAt
@@ -899,20 +913,33 @@ function TaskNotice({
   }
   if (status.update) {
     const next = status.update.cliVersion
+    const adapter = adapterOnlyUpdate(status)
     return (
       <Alert variant="info">
         <CircleArrowUpIcon />
         <AlertTitle>
-          {next && next !== version
-            ? t('agents.update.noticeTitle', { name: status.name, version: next })
-            : t('agents.update.noticeTitleAdapter', { name: status.name })}
+          {adapter
+            ? t('agents.update.noticeTitleAdapterOnly', {
+                package: adapter.name,
+                version: status.update.adapterVersion,
+              })
+            : next && next !== version
+              ? t('agents.update.noticeTitle', { name: status.name, version: next })
+              : t('agents.update.noticeTitleAdapter', { name: status.name })}
         </AlertTitle>
         <AlertDescription className="flex flex-col gap-2.5">
           <span>
-            {t('agents.update.noticeBody', {
-              current: version ?? status.package?.version ?? '',
-              name: status.name,
-            })}
+            {adapter
+              ? t('agents.update.noticeBodyAdapterOnly', {
+                  package: adapter.name,
+                  current: adapter.version,
+                  command: status.cli?.command ?? '',
+                  name: status.name,
+                })
+              : t('agents.update.noticeBody', {
+                  current: version ?? status.package?.version ?? '',
+                  name: status.name,
+                })}
           </span>
           <span>
             <Button size="compact" onClick={() => startUpdate(status.id)}>

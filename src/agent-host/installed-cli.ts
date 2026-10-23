@@ -58,6 +58,11 @@ export interface AdapterCli {
    * CLI and tried again with the copy. Otherwise the CLI first runs with a session.
    */
   startsAtInitialize: boolean
+  /**
+   * The adapter pins one CLI version exactly, so the CLI version an update check finds for a new
+   * adapter is also the oldest that adapter runs.
+   */
+  pinsVersion: boolean
   /** The file that runs without a shell, or null when there is none. */
   resolve(found: string, platform: Platform, files: CliFiles): Promise<ResolvedCli | null>
   /** The oldest CLI the adapter installed in `dir` runs, or null when it names none. */
@@ -131,6 +136,7 @@ export const CLAUDE_CLI: AdapterCli = {
   command: 'claude',
   variable: 'CLAUDE_CODE_EXECUTABLE',
   startsAtInitialize: false,
+  pinsVersion: true,
   // The adapter also calls it with execFile, so on Windows it must be a program itself.
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
@@ -148,6 +154,7 @@ export const CODEX_CLI: AdapterCli = {
   command: 'codex',
   variable: 'CODEX_PATH',
   startsAtInitialize: true,
+  pinsVersion: false,
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
     if (!file) return null

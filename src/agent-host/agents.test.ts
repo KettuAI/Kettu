@@ -556,6 +556,7 @@ const FAKE_CLI: AdapterCli = {
   command: 'fake-cli',
   variable: 'FAKE_CLI_PATH',
   startsAtInitialize: true,
+  pinsVersion: false,
   resolve: async (found) => ({ path: found, env: {} }),
   minimum: async () => '1.0.0',
 }
@@ -807,6 +808,32 @@ describe('the CLI the user installed', () => {
     await m.agents.stopAll()
   })
 
+  it('does not download the copy over one --version that timed out', async () => {
+    const answers = [true, false]
+    const versions = new CliVersions({
+      platform: process.platform === 'win32' ? 'win32' : 'darwin',
+      run: async () => ({
+        code: 0,
+        signal: null,
+        timedOut: answers.shift() ?? false,
+        aborted: false,
+        output: new TextRing(64),
+        stdout: 'fake-cli 2.0.0\n',
+      }),
+      stat: async () => ({ size: 1, mtimeMs: 1 }),
+    })
+    const m = cliManager({
+      installed: [installedAt('2.0.0', { withoutCli: true })],
+      cliVersions: versions,
+    })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs).toEqual([])
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH)).toEqual([
+      expect.stringContaining('fake-cli'),
+    ])
+    await m.agents.stopAll()
+  })
+
   it('installs the copy beside an install without it when a start with the CLI fails', async () => {
     const m = cliManager({
       installed: [installedAt('2.0.0', { withoutCli: true })],
@@ -1035,6 +1062,8 @@ async function updateManager(
     latest?: () => Promise<AgentUpdate>
     /** The version of an installed CLI the adapter runs. */
     installedCli?: string
+    /** The adapter pins its CLI, so the check's CLI version is the oldest it runs. */
+    pinsVersion?: boolean
   } = {},
 ) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'overbench-updates-'))
@@ -1043,7 +1072,9 @@ async function updateManager(
     id: 'codex',
     name: 'Codex',
     launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
-    ...(options.installedCli ? { cli: FAKE_CLI } : {}),
+    ...(options.installedCli
+      ? { cli: { ...FAKE_CLI, pinsVersion: options.pinsVersion ?? false } }
+      : {}),
   }
   const write = async (name: string, version: string, cli: string, installedAt: number) => {
     const dir = path.join(root, 'codex', name)
@@ -1172,6 +1203,21 @@ describe('update checks', () => {
     })
     await newer.agents.update('codex')
     expect(newer.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.1.0', true]])
+  })
+
+  it('brings the CLI with an update that needs a newer one than the user has', async () => {
+    const m = await updateManager({
+      installedCli: '2.0.0',
+      pinsVersion: true,
+      latest: async () => ({ adapterVersion: '2.1.0', cliVersion: '2.5.0' }),
+    })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    expect((await m.agents.checkUpdates())[0]?.update).toEqual({
+      adapterVersion: '2.1.0',
+      cliVersion: '2.5.0',
+    })
+    await m.agents.update('codex')
+    expect(m.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.1.0', undefined]])
   })
 
   it('offers nothing when up to date, or before the first install', async () => {
