@@ -4,7 +4,7 @@
     "version": "v{{version}}",
     "reload": "Reload",
     "loading": "Loading the page",
-    "blocked": "This page tried to open {{host}}",
+    "blocked": "This page tried to open <host>{{host}}</host>",
     "openInBrowser": "Open in browser",
     "dismiss": "Dismiss",
     "stoppedTitle": "The page stopped",
