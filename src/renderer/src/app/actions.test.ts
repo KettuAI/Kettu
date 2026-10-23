@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
 
 const request = vi.fn()
@@ -419,10 +419,20 @@ describe('createSession with a first message', () => {
   })
 
   it('keeps it when the agent cannot start, and sends it with a retry', async () => {
+    const stored = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => stored.set(key, value),
+      removeItem: (key: string) => stored.delete(key),
+    })
+    onTestFinished(() => {
+      vi.stubGlobal('localStorage', undefined)
+    })
     request.mockRejectedValueOnce(new Error('spawn failed'))
     await createSession('codex', '/repo', null, 'Fix the build')
     expect(usePendingSession.getState().pending).toMatchObject({ prompt: 'Fix the build' })
-    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
+    // Stored at once, since a quit can close the window before a later write.
+    expect(stored.get(`draft:${NEW_SESSION_DRAFT}`)).toBe('Fix the build')
 
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('running') : undefined,
@@ -433,6 +443,20 @@ describe('createSession with a first message', () => {
     )
     expect(request).toHaveBeenLastCalledWith('sessions.open', expect.anything())
     expect(request).toHaveBeenCalledWith('sessions.create', withPrompt)
+  })
+
+  it('leaves a draft written since the failure when it retries', async () => {
+    request.mockRejectedValueOnce(new Error('spawn failed'))
+    await createSession('codex', '/repo', null, 'Fix the build')
+    writeDraft(NEW_SESSION_DRAFT, 'Something else')
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('running') : undefined,
+    )
+    retryPendingSession()
+    await vi.waitFor(() =>
+      expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' }),
+    )
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else')
   })
 })
 

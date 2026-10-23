@@ -3,6 +3,7 @@ import type { AgentId } from '@shared/thread'
 import {
   clearDraft,
   draftedSessions,
+  flushDraft,
   NEW_SESSION_DRAFT,
   readDraft,
   writeDraft,
@@ -101,8 +102,9 @@ export async function createSession(
   }))
   preloadRenderers()
   // The host sends the first message once the session has started, also after a sign-in. It
-  // leaves the draft as it goes, so a window reloaded meanwhile does not offer it again.
-  if (prompt !== null) clearDraft(NEW_SESSION_DRAFT)
+  // leaves the draft as it goes, so a window reloaded meanwhile does not offer it again; a retry
+  // leaves alone a draft written since.
+  if (prompt !== null && readDraft(NEW_SESSION_DRAFT) === prompt) clearDraft(NEW_SESSION_DRAFT)
   try {
     const summary = await host('sessions.create', {
       agentId,
@@ -122,9 +124,11 @@ export async function createSession(
       openSession(summary.id, summary.projectPath)
     }
   } catch (error) {
-    // Back to New session's draft, unless something else was written there meanwhile.
+    // Back to New session's draft, unless something else was written there meanwhile, and stored
+    // at once, since a quit can close the window before a later write.
     if (prompt !== null && !readDraft(NEW_SESSION_DRAFT).trim()) {
       writeDraft(NEW_SESSION_DRAFT, prompt)
+      flushDraft(NEW_SESSION_DRAFT)
     }
     // Deleted, or its project removed, while it started: nothing is left to show.
     if (removedWhileStarting(error)) {
