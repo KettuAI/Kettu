@@ -158,6 +158,16 @@ describe('nextState', () => {
     ).toEqual({ kind: 'idle', checkedAt: 1000 })
   })
 
+  it('shows that electron-updater could not load, even after an automatic check', () => {
+    expect(
+      nextState(
+        { kind: 'idle', checkedAt: null },
+        { type: 'load-failed', message: 'no autoUpdater', manual: false },
+        install,
+      ),
+    ).toEqual({ kind: 'error', message: 'no autoUpdater', manual: false })
+  })
+
   it('falls back to the found version after a failed automatic download', () => {
     expect(
       nextState(

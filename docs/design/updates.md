@@ -16,6 +16,7 @@ What this design takes from where:
 The updater lives in main (`src/main/updater.ts`), because installing means quitting the app, which only main can do.
 
 - `electron-updater` is loaded with dynamic `import()` after the window is shown, so startup does not pay for it. Its work is asynchronous network and file I/O and never blocks main.
+- The bundle keeps that `import()` native, so Node's own loader turns the CommonJS package into a namespace. It names only the exports it finds in the source, and electron-updater defines `autoUpdater` with a getter (6.8.9, observed on 2026-10-23), so the updater takes it from the namespace's `default` when the named export is missing (`src/main/auto-updater.ts`). A [process test](./testing.md#unit-and-integration-tests) loads it the same way.
 - The feed is the GitHub Releases of `overbench/overbench`. electron-builder writes it into `app-update.yml` inside the app at build time, and nothing at runtime can change it. It does so only for the `dmg` and `zip`, NSIS and AppImage targets: an unpacked `pnpm package` build has no `app-update.yml`, so its checks fail and are only logged.
 - Requests go through electron-updater's own session (`autoUpdater.netSession`). When Settings › Advanced › Proxy is Custom, that session uses the same proxy as the agents, so an update downloads wherever the agents can reach the network; otherwise it follows the system proxy. Chromium takes the proxy as `scheme://host:port`, so a path or credentials in the URL are dropped for updates, and the no-proxy list becomes its bypass rules. The proxy changes as soon as the setting does.
 - The updater is off in development (`app.isPackaged` is false) and in builds that cannot update themselves (below).
@@ -55,6 +56,7 @@ The updater lives in main (`src/main/updater.ts`), because installing means quit
 
 - Releases carry no separate blockmaps, so the Windows installer always downloads whole (`disableDifferentialDownload`); an AppImage embeds its blockmap, so Linux downloads only the changed blocks. Either way the file's SHA-512 is checked against `latest*.yml` before it counts as ready.
 - A failed automatic check or download is logged and retried at the next hourly check; nothing is shown: the state goes back to what it was, `idle` or, after a failed download, `available`. A check or download you started shows its error in Settings › About, reduced to its first line. Starting a check while an automatic one runs joins it and makes its error yours.
+- When electron-updater itself cannot be loaded, no check can run at all, so even an automatic check moves to `error` and Settings › About says that it could not check, instead of "You're up to date". The next check tries to load it again.
 - No check runs while an update downloads or is ready, and **Check for updates** then returns the current status.
 
 ## States
