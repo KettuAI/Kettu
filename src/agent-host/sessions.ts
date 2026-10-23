@@ -436,9 +436,10 @@ export class SessionManager {
     return record.customTitle ?? (live ? live.thread.session.title : record.title)
   }
 
-  turnRunning(sessionId: string): boolean {
+  /** The session's running turn, for telling it from a later one; null between turns. */
+  runningTurn(sessionId: string): object | null {
     const turn = this.live.get(sessionId)?.turn
-    return turn !== null && turn !== undefined && !turn.ended
+    return turn && !turn.ended ? turn : null
   }
 
   private children(parentId: string): SessionRecord[] {

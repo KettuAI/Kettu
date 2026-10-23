@@ -4,7 +4,7 @@
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS } from '@shared/artifacts'
 import { countPages } from './pages'
-import { ArtifactError, type ArtifactStore } from './store'
+import { ArtifactError, type ArtifactStore, type Editor } from './store'
 
 export const HTML_BYTES = 5 * 1024 * 1024
 export const NOTE_CHARS = 200
@@ -60,8 +60,11 @@ export interface ArtifactToolsDeps {
   store: ArtifactStore
   /** A session's title, null for one without a title, or undefined for one OverBench forgot. */
   sessionTitle(sessionId: string): string | null | undefined
-  /** Whether the session's turn is running, so that what it writes counts as editing. */
-  turnRunning(sessionId: string): boolean
+  /**
+   * The session's running turn, compared by identity, so that what it writes counts as editing
+   * only while that same turn runs. Null between turns.
+   */
+  runningTurn(sessionId: string): object | null
   now?: () => number
 }
 
@@ -311,6 +314,18 @@ function args(value: unknown, allowed: readonly string[]): Args {
   return o as Args
 }
 
+/** Longer than `max` as JSON Schema counts length: in code points, not UTF-16 units. */
+function longer(text: string, max: number): boolean {
+  if (text.length <= max) return false
+  let n = 0
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i)
+    if (c >= 0xd800 && c <= 0xdbff) i++
+    if (++n > max) return true
+  }
+  return false
+}
+
 function invalid(message: string): ToolError {
   return new ToolError('invalid', message)
 }
@@ -341,7 +356,7 @@ function optionalNumber(o: Args, key: string, min: number, max?: number): number
 
 function title(o: Args): string {
   const value = o.title
-  if (typeof value !== 'string' || value.length === 0 || value.length > ARTIFACT_TITLE_CHARS) {
+  if (typeof value !== 'string' || value.length === 0 || longer(value, ARTIFACT_TITLE_CHARS)) {
     throw invalid(`title must be 1 to ${ARTIFACT_TITLE_CHARS} characters.`)
   }
   if (value.trim() === '') throw invalid('title must not be blank.')
@@ -351,7 +366,7 @@ function title(o: Args): string {
 function note(o: Args): string | null {
   const value = o.note
   if (value === undefined || value === null) return null
-  if (typeof value !== 'string' || value.length > NOTE_CHARS) {
+  if (typeof value !== 'string' || longer(value, NOTE_CHARS)) {
     throw invalid(`note must be at most ${NOTE_CHARS} characters.`)
   }
   return value.trim() === '' ? null : value
@@ -500,22 +515,36 @@ export class ArtifactTools {
     }
   }
 
-  /** Counts a write against the session's 60 a minute, or refuses it. */
-  private write(caller: Caller): void {
+  /** Refuses a write once the session made 60 in the last minute. */
+  private allowWrite(caller: Caller): void {
     const now = this.now()
     const recent = (this.writes.get(caller.sessionId) ?? []).filter((at) => at > now - MINUTE_MS)
-    if (recent.length >= WRITES_PER_MINUTE) {
-      this.writes.set(caller.sessionId, recent)
-      const wait = Math.max(1, Math.ceil((recent[0]! + MINUTE_MS - now) / 1000))
-      throw new ToolError('rate_limited', `Too many changes in a minute. Wait ${wait} s.`)
-    }
-    recent.push(now)
+    this.writes.set(caller.sessionId, recent)
+    if (recent.length < WRITES_PER_MINUTE) return
+    const wait = Math.max(1, Math.ceil((recent[0]! + MINUTE_MS - now) / 1000))
+    throw new ToolError('rate_limited', `Too many changes in a minute. Wait ${wait} s.`)
+  }
+
+  /** Counts a write that was made; a refused one does not count. */
+  private countWrite(caller: Caller): void {
+    const recent = this.writes.get(caller.sessionId) ?? []
+    recent.push(this.now())
     this.writes.set(caller.sessionId, recent)
   }
 
-  /** The session a change counts as editing for, while its turn runs. */
-  private editor(caller: Caller): string | undefined {
-    return this.deps.turnRunning(caller.sessionId) ? caller.sessionId : undefined
+  /** The session left: its writes need no counting. */
+  forget(sessionId: string): void {
+    this.writes.delete(sessionId)
+  }
+
+  /** The session a change counts as editing for, while the turn it was made in runs. */
+  private editor(caller: Caller): Editor | undefined {
+    const turn = this.deps.runningTurn(caller.sessionId)
+    if (turn === null) return undefined
+    return {
+      session: caller.sessionId,
+      current: () => this.deps.runningTurn(caller.sessionId) === turn,
+    }
   }
 
   private sessionName(sessionId: string | null): string {
@@ -567,7 +596,7 @@ export class ArtifactTools {
 
   private async create(caller: Caller, o: Args): Promise<CallToolResult> {
     const input = { title: title(o), html: html(o), note: note(o) }
-    this.write(caller)
+    this.allowWrite(caller)
     const pages = countPages(input.html)
     const editor = this.editor(caller)
     const { id, version } = await this.deps.store.create({
@@ -577,6 +606,7 @@ export class ArtifactTools {
       pages,
       ...(editor ? { editor } : {}),
     })
+    this.countWrite(caller)
     return result(`Created ${id} version ${version}, ${pagesText(pages)}.`, { id, version, pages })
   }
 
@@ -616,12 +646,13 @@ export class ArtifactTools {
     if (o.title !== undefined) {
       // A rename makes no version, so base_version and a note have nothing to apply to.
       const newTitle = title(o)
-      this.write(caller)
+      this.allowWrite(caller)
       const editor = this.editor(caller)
       await store.rename(artifactId, newTitle, {
         project: caller.project,
         ...(editor ? { editor } : {}),
       })
+      this.countWrite(caller)
       const { version } = await store.get(artifactId, { project: caller.project })
       return result(
         `Renamed ${artifactId} to "${newTitle}"; it stays at version ${version.version}.`,
@@ -638,18 +669,20 @@ export class ArtifactTools {
     let next: string
     if (o.html !== undefined) {
       next = html(o)
-      this.write(caller)
+      this.allowWrite(caller)
     } else {
       const list = edits(o)
-      this.write(caller)
-      const latest = await store.read(artifactId, { project: caller.project })
-      if (latest.artifact.head !== baseVersion) {
+      this.allowWrite(caller)
+      // The version first, so a stale one is refused without reading the HTML.
+      const { artifact } = await store.get(artifactId, { project: caller.project })
+      if (artifact.head !== baseVersion) {
         throw new ArtifactError('conflict', 'Not the latest version', {
-          version: latest.artifact.head,
+          version: artifact.head,
           deleted: false,
         })
       }
-      next = applyEdits(latest.html, list)
+      const base = await store.read(artifactId, { project: caller.project, version: baseVersion })
+      next = applyEdits(base.html, list)
       const bytes = Buffer.byteLength(next, 'utf8')
       if (bytes > HTML_BYTES) throw tooLarge(bytes)
     }
@@ -665,6 +698,7 @@ export class ArtifactTools {
       project: caller.project,
       ...(editor ? { editor } : {}),
     })
+    this.countWrite(caller)
     return result(`Updated ${artifactId} to version ${version}, ${pagesText(pages)}.`, {
       id: artifactId,
       version,
@@ -673,7 +707,7 @@ export class ArtifactTools {
   }
 
   private async list(caller: Caller, o: Args): Promise<CallToolResult> {
-    if (o.query !== undefined && (typeof o.query !== 'string' || o.query.length > QUERY_CHARS)) {
+    if (o.query !== undefined && (typeof o.query !== 'string' || longer(o.query, QUERY_CHARS))) {
       throw invalid(`query must be text of at most ${QUERY_CHARS} characters.`)
     }
     const query = typeof o.query === 'string' ? folded(o.query.trim()) : ''
@@ -701,8 +735,9 @@ export class ArtifactTools {
 
   private async delete(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
-    this.write(caller)
+    this.allowWrite(caller)
     const { purgeAt } = await this.deps.store.delete(artifactId, { project: caller.project })
+    this.countWrite(caller)
     return result(
       `Moved ${artifactId} to Recently deleted; the user can restore it until ${iso(purgeAt)}.`,
       { id: artifactId, purge_at: iso(purgeAt) },
@@ -729,7 +764,7 @@ export class ArtifactTools {
     const artifactId = id(o)
     const version = wholeNumber(o, 'version', 1)
     const baseVersion = wholeNumber(o, 'base_version', 1)
-    this.write(caller)
+    this.allowWrite(caller)
     const editor = this.editor(caller)
     const restored = await this.deps.store.restore({
       id: artifactId,
@@ -739,6 +774,7 @@ export class ArtifactTools {
       project: caller.project,
       ...(editor ? { editor } : {}),
     })
+    this.countWrite(caller)
     return result(`Restored version ${version} of ${artifactId} as version ${restored.version}.`, {
       id: artifactId,
       version: restored.version,

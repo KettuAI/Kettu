@@ -45,7 +45,8 @@ async function say(turn: Turn, text: string): Promise<void> {
 /**
  * `/artifacts` makes "Fake canvas" in the project, or changes the one there with an edit, then
  * reads it back; `/artifacts --read <id>` reads that artifact. Each call shows as a tool call
- * named as Claude Code names MCP tools, and the reply lists what each call returned.
+ * named as Claude Code names MCP tools, and the reply lists what each call returned. With
+ * `--until-cancel` the turn runs on after the reply until it is cancelled, whatever the pace.
  */
 export const artifacts: Scenario = async (turn) => {
   const server = overbench(turn.session.mcpServers)
@@ -121,5 +122,10 @@ export const artifacts: Scenario = async (turn) => {
     await client.close()
   }
   await say(turn, lines.join('\n'))
-  return 'end_turn'
+  if (!turn.options.untilCancel) return 'end_turn'
+  await new Promise<void>((resolve) => {
+    if (turn.signal.aborted) resolve()
+    else turn.signal.addEventListener('abort', () => resolve(), { once: true })
+  })
+  return 'cancelled'
 }

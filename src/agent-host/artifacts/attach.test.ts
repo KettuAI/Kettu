@@ -5,7 +5,12 @@ import { mkdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { startTestHost, type TestHost, type TestPort } from '../testing/harness'
+import {
+  startTestHost,
+  type InProcessLauncher,
+  type TestHost,
+  type TestPort,
+} from '../testing/harness'
 
 let current: TestHost | null = null
 
@@ -158,6 +163,37 @@ describe('the artifacts service in sessions', () => {
     expect((await port.request('artifacts.list', {}))[0]!.editing).toEqual([])
   })
 
+  it.each(['cancel', 'close', 'exit'] as const)(
+    'ends editing when the turn is stopped, the session closes or its agent exits: %s',
+    async (end) => {
+      const { t, port, create } = await setup()
+      const sessionId = await create()
+      await run(port, sessionId, '/artifacts')
+      const [artifact] = await port.request('artifacts.list', {})
+      const id = artifact!.id
+      await port.request('artifacts.watch', { id })
+      const editing = () =>
+        port.events.findLast((event) => event.type === 'artifacts.activity' && event.id === id)
+      await port.request('sessions.prompt', {
+        sessionId,
+        content: [{ type: 'text', text: '/artifacts --until-cancel' }],
+      })
+      await port.until(() => {
+        const last = editing()
+        return last?.type === 'artifacts.activity' && last.editing.includes(sessionId)
+      })
+      expect((await port.request('artifacts.list', {}))[0]!.editing).toEqual([sessionId])
+      if (end === 'cancel') await port.request('sessions.cancel', { sessionId })
+      else if (end === 'close') await port.request('sessions.close', { sessionId })
+      else (t.launcher as InProcessLauncher).crash()
+      await port.until(() => {
+        const last = editing()
+        return last?.type === 'artifacts.activity' && last.editing.length === 0
+      })
+      expect((await port.request('artifacts.list', {}))[0]!.editing).toEqual([])
+    },
+  )
+
   it('keeps two projects apart', async () => {
     const { t, port, create } = await setup()
     const other = path.join(t.dir, 'other')
@@ -187,7 +223,7 @@ describe('the artifacts service in sessions', () => {
     vi.spyOn(t.host.agents, 'mcpServersByName').mockReturnValue(true)
     const sessionId = await create()
     await run(port, sessionId, '/artifacts')
-    const name = `overbench-${sessionId.replace(/-/g, '').slice(0, 4)}`
+    const name = `overbench-${sessionId.replace(/-/g, '').slice(0, 12)}`
     const tool = port
       .entries(sessionId)
       .find((entry) => entry.kind === 'tool' && entry.title.includes('create_artifact'))

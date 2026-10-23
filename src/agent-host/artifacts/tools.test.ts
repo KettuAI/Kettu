@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ARTIFACT_KEEP_DELETED_MS } from '@shared/artifacts'
 import { inThreadWorker } from '../testing/thread-worker'
 import { ThreadStore } from '../threads/store'
@@ -54,11 +54,12 @@ function setup() {
     [A.sessionId, 'Design the sign-in'],
     [B.sessionId, null],
   ])
-  const running = new Set<string>()
+  // Each session's running turn, compared by identity.
+  const turns = new Map<string, object>()
   const tools = new ArtifactTools({
     store,
     sessionTitle: (sessionId) => titles.get(sessionId),
-    turnRunning: (sessionId) => running.has(sessionId),
+    runningTurn: (sessionId) => turns.get(sessionId) ?? null,
     now: () => clock.now,
   })
   cleanups.push(async () => {
@@ -81,7 +82,7 @@ function setup() {
     })
     return value.id as string
   }
-  return { store, tools, call, create, clock, events, titles, running }
+  return { store, tools, call, create, clock, events, titles, turns }
 }
 
 function refused(result: CallToolResult, code: string): void {
@@ -175,6 +176,16 @@ describe('the artifacts tools', () => {
     }
   })
 
+  it('count titles, notes and queries in characters, not UTF-16 units', async () => {
+    const { call } = setup()
+    const emoji = '🎨'.repeat(120)
+    const made = await call(A, 'create_artifact', { title: emoji, html: '<p></p>', note: emoji })
+    expect(made.result.isError).toBeUndefined()
+    refused((await call(A, 'create_artifact', { title: `${emoji}x`, html: '' })).result, 'invalid')
+    const listed = await call(A, 'list_artifacts', { query: '🎨'.repeat(200) })
+    expect(listed.result.isError).toBeUndefined()
+  })
+
   it('keep the HTML within 5 MiB of UTF-8', async () => {
     const { call, create } = setup()
     const big = 'é'.repeat(HTML_BYTES / 2 + 1)
@@ -265,6 +276,20 @@ describe('the artifacts tools', () => {
       expect(text).toBe(`${id} is at version 2. Read it again and apply your change to version 2.`)
     }
     expect((await store.read(id)).version.version).toBe(2)
+  })
+
+  it('refuse edits from a stale version without reading the HTML', async () => {
+    const { call, create, store } = setup()
+    const id = await create()
+    await call(A, 'update_artifact', { id, base_version: 1, html: '<p>v2</p>' })
+    const read = vi.spyOn(store, 'read')
+    const stale = await call(A, 'update_artifact', {
+      id,
+      base_version: 1,
+      edits: [{ old_text: 'v1', new_text: 'v3' }],
+    })
+    refused(stale.result, 'conflict')
+    expect(read).not.toHaveBeenCalled()
   })
 
   it('apply edits in order, each to exactly one place, or none of them', async () => {
@@ -459,12 +484,23 @@ describe('the artifacts tools', () => {
     expect(later.value).toEqual({ id, version: 2, pages: 0 })
   })
 
+  it('count only the writes that were made', async () => {
+    const { call, create, clock } = setup()
+    for (let i = 0; i < WRITES_PER_MINUTE; i++) {
+      clock.now += 10
+      refused((await call(A, 'delete_artifact', { id: MISSING })).result, 'not_found')
+    }
+    refused((await call(A, 'create_artifact', { title: '', html: '' })).result, 'invalid')
+    const id = await create(A)
+    expect(id).toMatch(/^art_/)
+  })
+
   it('count what a running turn writes as editing, until the turn ends', async () => {
-    const { call, create, store, running, events } = setup()
+    const { call, create, store, turns, events } = setup()
     const idle = await create(A)
     expect((await store.list({ project: A.project }))[0]!.editing).toEqual([])
 
-    running.add(A.sessionId)
+    turns.set(A.sessionId, {})
     const id = await create(A)
     await store.watch(id, 'port-1')
     await call(A, 'update_artifact', { id, base_version: 1, html: '<p>2</p>' })
@@ -485,5 +521,31 @@ describe('the artifacts tools', () => {
     )
     store.stopEditing(A.sessionId)
     expect(events.changed).toBe(changed + 1)
+  })
+
+  it('count no editing for a turn that ended while its change was written', async () => {
+    const { tools, create, store, turns } = setup()
+    const id = await create(A, { html: '<p>v1</p>' })
+    const writes: [string, (version: number) => Record<string, unknown>][] = [
+      ['create_artifact', () => ({ title: 'Late', html: '<p></p>' })],
+      ['update_artifact', (version) => ({ id, base_version: version, html: `<p>${version}</p>` })],
+      ['update_artifact', () => ({ id, title: 'Late rename' })],
+      ['restore_artifact_version', (version) => ({ id, version: 1, base_version: version })],
+    ]
+    for (const [name, args] of writes) {
+      for (const next of ['none', 'another turn']) {
+        turns.set(A.sessionId, {})
+        const head = (await store.get(id)).artifact.head
+        const writing = tools.call(A, name, args(head))
+        // Stopped, closed or cut off by the agent's exit while the thread worker writes: the
+        // turn's end clears what it edited before the write comes back.
+        if (next === 'none') turns.delete(A.sessionId)
+        else turns.set(A.sessionId, {})
+        store.stopEditing(A.sessionId)
+        expect((await writing).isError).toBeUndefined()
+        const listed = await store.list({ project: A.project })
+        expect(listed.map((artifact) => artifact.editing)).toEqual(listed.map(() => []))
+      }
+    }
   })
 })

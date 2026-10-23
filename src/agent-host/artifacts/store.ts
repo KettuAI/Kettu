@@ -65,9 +65,18 @@ export interface Reach {
   project?: string
 }
 
-/** The session whose running turn makes a change, which counts as editing until the turn ends. */
+/**
+ * The session whose running turn makes a change, which then counts as editing until the turn
+ * ends. `current` says, once the change is written, whether that same turn still runs: one that
+ * ended meanwhile already cleared what it edited.
+ */
 export interface Editor {
-  editor?: string
+  session: string
+  current(): boolean
+}
+
+export interface Editing {
+  editor?: Editor
 }
 
 export function versionSummary(record: VersionRecord): VersionSummary {
@@ -200,7 +209,7 @@ export class ArtifactStore {
       html: string
       pages: number
       note: string | null
-    } & Editor,
+    } & Editing,
   ): Promise<{ id: string; version: number }> {
     const { editor, ...rest } = input
     const at = this.now()
@@ -221,7 +230,7 @@ export class ArtifactStore {
       author: string | null
       note: string | null
     } & Reach &
-      Editor,
+      Editing,
   ): Promise<{ version: number }> {
     const { project, editor, ...rest } = input
     const { version } = await this.call('write', {
@@ -243,7 +252,7 @@ export class ArtifactStore {
       author: string | null
       note?: string | null
     } & Reach &
-      Editor,
+      Editing,
   ): Promise<{ version: number }> {
     const { project, note, editor, ...rest } = input
     const { version } = await this.call('restore', {
@@ -264,7 +273,11 @@ export class ArtifactStore {
   }
 
   /** Changes the title, which is not versioned. */
-  async rename(id: string, title: string, { project, editor }: Reach & Editor = {}): Promise<void> {
+  async rename(
+    id: string,
+    title: string,
+    { project, editor }: Reach & Editing = {},
+  ): Promise<void> {
     await this.call('rename', { id, title, project: project ?? null })
     this.edited(id, editor)
     this.deps.changed()
@@ -303,15 +316,15 @@ export class ArtifactStore {
   }
 
   /** Counts the editor's change; called before the change is announced, so lists include it. */
-  private edited(id: string, editor: string | undefined): void {
-    if (!editor) return
+  private edited(id: string, editor: Editor | undefined): void {
+    if (!editor?.current()) return
     let sessions = this.editors.get(id)
     if (!sessions) {
       sessions = new Set()
       this.editors.set(id, sessions)
     }
-    if (sessions.has(editor)) return
-    sessions.add(editor)
+    if (sessions.has(editor.session)) return
+    sessions.add(editor.session)
     this.sendActivity(id)
   }
 

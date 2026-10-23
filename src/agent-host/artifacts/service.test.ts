@@ -39,7 +39,7 @@ async function setup() {
   const service = new ArtifactService({
     store,
     sessionTitle: () => 'A session',
-    turnRunning: () => false,
+    runningTurn: () => null,
     log,
     appVersion: '0.0.0-test',
   })
@@ -122,7 +122,10 @@ describe('the artifacts service', () => {
     expect(service.servers('s3', '/p', 'overbench-1a2b')[0]).toMatchObject({
       name: 'overbench-1a2b',
     })
-    expect(sessionServiceName('1A2B3C4D-0000-4000-8000-000000000000')).toBe('overbench-1a2b')
+    // 48 bits, so two sessions in one folder do not share a name.
+    expect(sessionServiceName('1A2B3C4D-5E6F-4000-8000-000000000000')).toBe(
+      'overbench-1a2b3c4d5e6f',
+    )
   })
 
   it('keeps a session token while the session stays, and makes a new one after', async () => {

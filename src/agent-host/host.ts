@@ -184,7 +184,7 @@ export class AgentHost {
     this.artifactService = new ArtifactService({
       store: this.artifacts,
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
-      turnRunning: (sessionId) => this.sessions.turnRunning(sessionId),
+      runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       log,
       appVersion: options.appVersion,
     })

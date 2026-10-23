@@ -85,7 +85,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   chinese: { description: 'A long answer in Chinese, with every Markdown block' },
   artifacts: {
     description: "Makes or changes a canvas through OverBench's artifacts service, then reads it",
-    hint: '--read <artifact id>',
+    hint: '--read <artifact id> --until-cancel',
   },
 }
 
@@ -103,6 +103,7 @@ export interface ScenarioOptions {
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
   read: string | null // artifacts: the artifact to read instead
+  untilCancel: boolean // artifacts: the turn runs on after its calls until it is cancelled
 }
 
 export interface ScenarioChoice {
@@ -188,6 +189,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     thenMs: parseNumber(flagValue(args, 'then')),
     atEnd: flagValue(args, 'at-end') !== undefined,
     read: flagValue(args, 'read') || null,
+    untilCancel: flagValue(args, 'until-cancel') !== undefined,
   }
   return { scenario, options, text }
 }

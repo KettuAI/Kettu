@@ -37,9 +37,12 @@ interface Grant {
   project: string
 }
 
-/** A name of the session's own, for an agent that keeps one server of each name per folder. */
+/**
+ * A name of the session's own, for an agent that keeps one server of each name per folder until
+ * it exits: 12 hex characters of the session id, 48 bits, so two sessions there do not share one.
+ */
 export function sessionServiceName(sessionId: string): string {
-  return `${SERVICE_NAME}-${sessionId.replace(/-/g, '').slice(0, 4).toLowerCase()}`
+  return `${SERVICE_NAME}-${sessionId.replace(/-/g, '').slice(0, 12).toLowerCase()}`
 }
 
 function digest(token: string): string {
@@ -148,6 +151,7 @@ export class ArtifactService {
 
   /** The session's token ends: it closed, was released or was deleted. */
   revoke(sessionId: string): void {
+    this.tools.forget(sessionId)
     const key = this.sessions.get(sessionId)
     if (key === undefined) return
     this.sessions.delete(sessionId)
@@ -183,7 +187,11 @@ export class ArtifactService {
     if (!grant) {
       return refuse(res, 401, 'A session token is required', { 'WWW-Authenticate': 'Bearer' })
     }
-    this.sdk ??= loadSdk()
+    // A failed load is tried again with the next request rather than kept.
+    this.sdk ??= loadSdk().catch((error: unknown) => {
+      this.sdk = null
+      throw error
+    })
     const sdk = await this.sdk
     const server = this.mcpServer(sdk, { sessionId: grant.sessionId, project: grant.project })
     const transport = new sdk.StreamableHTTPServerTransport({
