@@ -100,6 +100,17 @@ describe('createValidators', () => {
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
   })
 
+  it('takes a first message as prompt content', () => {
+    const prompt = [{ type: 'text', text: 'Fix the build' }]
+    expect(posix['sessions.create']({ agentId: 'codex', projectPath: null, prompt })).toEqual({
+      agentId: 'codex',
+      projectPath: null,
+      prompt,
+    })
+    rejects(() => posix['sessions.create']({ agentId: 'codex', projectPath: null, prompt: [] }))
+    rejects(() => posix['sessions.create']({ agentId: 'codex', projectPath: null, prompt: 'hi' }))
+  })
+
   it('takes start values as strings or booleans by option id', () => {
     const options = { model: 'opus', fast: true }
     expect(

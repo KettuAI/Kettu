@@ -163,7 +163,7 @@ interface AppStateFile {
 
 ## Composer drafts
 
-- Unsent composer text is stored in `localStorage` under `draft:<sessionId>`, written 300 ms after the last keystroke and when you switch sessions. The [New session](./ui.md#new-session) screen keeps its text the same way under `draft:new`, until the session it starts exists; a first message that session cannot take yet moves to that session's draft.
+- Unsent composer text is stored in `localStorage` under `draft:<sessionId>`, written 300 ms after the last keystroke and when you switch sessions. The [New session](./ui.md#new-session) screen keeps its text the same way under `draft:new`, until the session it starts exists, which then holds the first message itself ([session model](./session-model.md#how-the-host-keeps-sessions)).
 - A draft with [attachments](./session-model.md#attachments) is stored as JSON, `{ text, attachments }`, each attachment with its id, type, name, size and thumbnail; its bytes stay with the host. A draft stored as plain text reads as text alone.
 - Sending a prompt or deleting the session removes the draft, and so does the host removing the session, as with its parent or by the [removal of sessions with no message](./session-model.md#how-the-host-keeps-sessions), which keeps every session with a draft. The host's records of its attachments go with it.
 - A draft larger than 1 MB, or one whose write fails (for example on the storage quota), stays in memory until the app quits, and the failure is logged.

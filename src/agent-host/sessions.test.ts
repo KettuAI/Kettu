@@ -1839,6 +1839,139 @@ describe('opening and recovering', () => {
   })
 })
 
+describe('the first message', () => {
+  const text = (value: string) => [{ type: 'text' as const, text: value }]
+  const users = (port: TestPort, sessionId: string) =>
+    port.entries(sessionId).filter((entry) => entry.kind === 'user')
+  const create = (t: TestHost, port: TestPort, prompt: string, options = {}) =>
+    port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      prompt: text(prompt),
+      ...options,
+    })
+
+  it('goes out as the first turn once the session has started', async () => {
+    const { t, port } = await setup()
+    const summary = await create(t, port, 'Fix the flaky login test')
+    expect(summary).toMatchObject({ status: 'running', title: 'Fix the flaky login test' })
+    await port.open(summary.id)
+    await port.untilEntry(summary.id, (entry) => entry.kind === 'turn_end')
+    expect(port.entries(summary.id)[0]).toMatchObject({
+      kind: 'user',
+      content: text('Fix the flaky login test'),
+    })
+    expect(users(port, summary.id)).toHaveLength(1)
+  })
+
+  it('stays in the thread when its turn fails', async () => {
+    const { t, port } = await setup()
+    const summary = await create(t, port, '/error')
+    await port.open(summary.id)
+    await port.untilEntry(summary.id, (entry) => entry.kind === 'notice')
+    await port.untilStatus(summary.id, 'ready')
+    expect(users(port, summary.id)).toHaveLength(1)
+    await current!.host.threads!.flush()
+    const stored = await current!.host.threads!.load(summary.id)
+    expect(stored?.entries[0]?.entry).toMatchObject({ kind: 'user', content: text('/error') })
+  })
+
+  it('waits in the thread while sign-in is needed, and goes out once signed in', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_AUTH: 'required' } })
+    const summary = await create(t, port, 'Fix the flaky login test')
+    expect(summary.status).toBe('auth_required')
+    const snapshot = await port.open(summary.id)
+    expect(snapshot.entries).toEqual([
+      expect.objectContaining({ kind: 'user', content: text('Fix the flaky login test') }),
+      expect.objectContaining({
+        kind: 'notice',
+        severity: 'error',
+        title: expect.stringContaining('needs you to sign in'),
+      }),
+    ])
+
+    await port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'fake-login' })
+    await port.untilEntry(summary.id, (entry) => entry.kind === 'turn_end')
+    await port.untilStatus(summary.id, 'ready')
+    expect(users(port, summary.id)).toHaveLength(1)
+    await t.host.threads!.flush()
+    const stored = await t.host.threads!.load(summary.id)
+    expect(stored?.entries[0]?.entry).toMatchObject({ kind: 'user' })
+  })
+
+  it('goes out with the start values chosen for it, after a sign-in too', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_AUTH: 'required' } })
+    const summary = await create(t, port, 'Fix the flaky login test', {
+      options: { model: 'deep', mode: 'code' },
+    })
+    expect(summary.status).toBe('auth_required')
+    await port.open(summary.id)
+    await port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'fake-login' })
+    await port.untilEntry(summary.id, (entry) => entry.kind === 'turn_end')
+    const value = (id: string) =>
+      port.thread(summary.id).session.config.find((o) => o.id === id)?.value
+    expect([value('model'), value('mode')]).toEqual(['deep', 'code'])
+    const sent = t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter((r) => r.direction === 'out' && r.method !== null)
+      .map((r) => r.method)
+    expect(sent.lastIndexOf('session/set_config_option')).toBeLessThan(
+      sent.indexOf('session/prompt'),
+    )
+  })
+
+  it('waits in the paused queue of a session closed while it starts', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_SET_CONFIG_MS: '200' } })
+    const outcome = create(t, port, 'Fix the flaky login test', { options: { model: 'deep' } })
+    await port.until(() => port.events.some((e) => e.type === 'session.summary'))
+    const first = port.events.find((e) => e.type === 'session.summary')
+    if (first?.type !== 'session.summary') throw new Error('No summary')
+    const sessionId = first.summary.id
+    const sets = () =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/set_config_option')
+        .length
+    await vi.waitFor(() => expect(sets()).toBe(1))
+    await port.request('sessions.close', { sessionId })
+    expect(await outcome).toMatchObject({ id: sessionId, status: 'closed' })
+    const snapshot = await port.open(sessionId)
+    // The thread says the message never went, so it does not read as sent.
+    expect(snapshot.entries).toEqual([
+      expect.objectContaining({ kind: 'user', content: text('Fix the flaky login test') }),
+      expect.objectContaining({
+        kind: 'notice',
+        severity: 'info',
+        title: 'The session closed before your message was sent',
+      }),
+    ])
+    expect(snapshot.session).toMatchObject({
+      queue: [{ content: text('Fix the flaky login test') }],
+      queuePaused: true,
+    })
+    const prompts = () =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/prompt')
+    expect(prompts()).toEqual([])
+
+    // Resumed, it goes out once, as a new message after the notice.
+    await port.request('sessions.resumeQueue', { sessionId })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    expect(prompts()).toHaveLength(1)
+    expect(port.entries(sessionId).map((entry) => entry.kind)).toEqual([
+      'user',
+      'notice',
+      'user',
+      ...port
+        .entries(sessionId)
+        .slice(3)
+        .map((entry) => entry.kind),
+    ])
+    expect(users(port, sessionId)).toHaveLength(2)
+  })
+})
+
 describe('sign-in', () => {
   it('retries after a sign-in in a terminal', async () => {
     const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)

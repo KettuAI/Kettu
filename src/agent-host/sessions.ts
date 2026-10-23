@@ -248,6 +248,10 @@ interface Live {
   checkpointTimer: ReturnType<typeof setTimeout> | null
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
+  /** A new session's first message, in its thread already, to send once the session has started. */
+  first: { content: UserContent[]; entryId: string } | null
+  /** The values New session chose, set once `session/new` answers, also after a sign-in. */
+  startValues: Record<string, string | boolean>
   /** It started work that runs on after its tool call, which Claude Code reports no end of. */
   background: boolean
   /** Since when nothing has needed its agent, and since when no port has shown it in front. */
@@ -890,6 +894,8 @@ export class SessionManager {
       blobs: new Map(),
       checkpointTimer: null,
       used: false,
+      first: null,
+      startValues: {},
       background: false,
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
@@ -1241,9 +1247,11 @@ export class SessionManager {
     projectPath: string | null
     parentId?: string
     options?: Record<string, string | boolean>
+    prompt?: UserContent[]
   }): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    const prompt = params.prompt && this.hydrate(params.prompt)
     if (params.projectPath === null && params.parentId !== undefined) {
       throw invalidParams('A sub-session belongs to the project of its parent')
     }
@@ -1278,9 +1286,13 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
+    // The message shows at once and goes out as the session's first turn, so it never enters the
+    // index without it.
+    if (prompt) live.first = { content: prompt, entryId: this.addPrompt(live, prompt, now) }
     this.touch(live.id)
     try {
-      await this.startNew(live, options)
+      live.startValues = options
+      await this.startNew(live)
     } catch (error) {
       if (!(error instanceof HostError && error.code === 'auth_required')) {
         // A session closed or deleted while it started is already dropped.
@@ -1299,10 +1311,7 @@ export class SessionManager {
    * deleted, or whose project is removed, before or while it starts is not saved again, and the
    * start fails with `not_found`.
    */
-  private async startNew(
-    live: Live,
-    options: Record<string, string | boolean> = {},
-  ): Promise<void> {
+  private async startNew(live: Live): Promise<void> {
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
     const runtime = await this.deps.agents.ensureReady(live.record.agentId)
     if (gone()) throw removedWhileStarting()
@@ -1312,7 +1321,10 @@ export class SessionManager {
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
       if (gone()) throw removedWhileStarting()
-      throw this.failStart(live, error, { action: 'create' })
+      const failed = this.failStart(live, error, { action: 'create' })
+      // The first message waits for the sign-in, which retries the start and then sends it.
+      if (failed.code === 'auth_required' && live.first) this.signInNotice(live, failed)
+      throw failed
     }
     if (gone()) {
       // It never reached the index, so the agent's new session goes the way a hidden one does.
@@ -1333,17 +1345,66 @@ export class SessionManager {
       error: null,
     })
     this.save(live)
-    await this.applyStartOptions(live, runtime.connection, options, {
+    await this.applyStartOptions(live, runtime.connection, live.startValues, {
       stop: () => gone() || runtime.connection.isClosed,
     })
     if (gone()) {
-      // Closing or deleting it already closed or deleted the agent's session.
-      if (!live.removing && this.has(live.id)) return
-      throw removedWhileStarting()
+      // Closing or deleting it already closed or deleted the agent's session; closing it kept the
+      // first message in its paused queue.
+      if (live.removing || !this.has(live.id)) throw removedWhileStarting()
+      return
     }
     this.update(live, { status: 'ready' })
     this.deps.agents.signedIn(live.record.agentId)
     this.touch(live.id)
+    const first = live.first
+    live.first = null
+    if (first) this.startTurn(live, first.content, this.now(), first.entryId)
+  }
+
+  /**
+   * A new session closed, or stopped by the quit, before its first message went out: the message
+   * waits at the front of its paused queue, and the thread says so, as it does for a prompt held
+   * when the mode was lost.
+   */
+  private holdFirst(live: Live): void {
+    if (!live.saved || !live.first) return
+    const { content } = live.first
+    live.first = null
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('notice.closedBeforeSent.title'),
+          description: t('notice.closedBeforeSent.description'),
+        },
+      },
+    ])
+    const queue = live.thread.session.queue
+    this.update(live, {
+      queue: [{ id: randomUUID(), content, at: this.now() }, ...queue],
+      queuePaused: true,
+    })
+    this.persist(live)
+  }
+
+  /** The thread's notice that the agent asks to sign in, as a failed turn adds it. */
+  private signInNotice(live: Live, error: HostError): void {
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'error',
+          title: t('notice.signInNeeded', { agent: this.deps.agents.name(live.record.agentId) }),
+          description: error.message,
+        },
+      },
+    ])
   }
 
   /** Removes an agent's session that no thread or index entry holds, leaving no trace. */
@@ -2157,16 +2218,18 @@ export class SessionManager {
   private sendPrompt(live: Live, content: UserContent[]): void {
     live.used = true
     const now = this.now()
+    this.startTurn(live, content, now, this.addPrompt(live, content, now))
+  }
+
+  /** The user entry of a prompt, and the title it gives a session that has none; its entry id. */
+  private addPrompt(live: Live, content: UserContent[], now: number): string {
     const entryId = this.nextId(live)
-    const patches: Patch[] = [
-      { op: 'entry.add', entry: { kind: 'user', id: entryId, content, at: now } },
-    ]
-    this.emit(live, patches)
+    this.emit(live, [{ op: 'entry.add', entry: { kind: 'user', id: entryId, content, at: now } }])
     if (live.thread.session.title === null) {
       const title = fallbackTitle(content)
       if (title) this.update(live, { title })
     }
-    this.startTurn(live, content, now, entryId)
+    return entryId
   }
 
   // Attachments: the renderer names each by its record's id; the host fills in the rest from the
@@ -3103,6 +3166,7 @@ export class SessionManager {
       this.finishTurn(live, live.turn, 'cancelled')
     }
     this.clearPermissions(live, 'cancelled')
+    if (kept) this.holdFirst(live)
     const runtime = this.deps.agents.runtime(live.record.agentId)
     if (
       connection &&
@@ -3430,10 +3494,12 @@ export class SessionManager {
 
   /**
    * Before a clean exit: pending patches go out, every thread is stored as it stands, and turns
-   * are left as they are. No checkpoint follows.
+   * are left as they are, but a first message not sent yet waits in its queue. No checkpoint
+   * follows.
    */
   shutdown(): void {
     for (const live of this.live.values()) {
+      this.holdFirst(live)
       this.flushPatches(live)
       if (live.turn?.fallback) clearTimeout(live.turn.fallback)
       if (live.releaseTimer) clearTimeout(live.releaseTimer)

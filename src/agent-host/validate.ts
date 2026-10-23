@@ -375,6 +375,7 @@ export function createValidators(platform: Platform): Validators {
         projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
         ...(parentId !== undefined ? { parentId } : {}),
         ...(options !== undefined ? { options } : {}),
+        ...(o.prompt !== undefined ? { prompt: promptContent(o.prompt) } : {}),
       }
     },
     'sessions.import': (params) => {
