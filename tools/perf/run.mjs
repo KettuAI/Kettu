@@ -11,12 +11,11 @@ import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { connect, launchApp, makeProject, openProject } from '../launch.mjs'
+import { connect, launchApp, makeProject, openProject, stopApp } from '../launch.mjs'
 
 const args = process.argv.slice(2)
 const index = args.indexOf('--port')
 const port = Number(index === -1 ? 9250 : args[index + 1])
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
 const scratch = mkdtempSync(join(tmpdir(), 'overbench-perf-'))
 const project = join(scratch, 'demo-project')
@@ -44,8 +43,7 @@ try {
     `Perf run failed: ${error instanceof Error ? error.message : String(error)}\n`,
   )
 } finally {
-  app.kill()
-  await sleep(1000)
+  await stopApp(app)
   rmSync(scratch, { recursive: true, force: true, maxRetries: 5 })
 }
 process.exit(code)

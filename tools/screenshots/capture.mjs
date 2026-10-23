@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { connect, launchApp, makeProject, openProject } from '../launch.mjs'
+import { connect, launchApp, makeProject, openProject, stopApp } from '../launch.mjs'
 
 const args = process.argv.slice(2)
 const valueOf = (flag) => {
@@ -38,8 +38,7 @@ try {
   failed = true
   log(`Capture failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
-  app.kill()
-  await sleep(1000)
+  await stopApp(app)
   rmSync(scratch, { recursive: true, force: true, maxRetries: 5 })
 }
 process.exit(failed ? 1 : 0)

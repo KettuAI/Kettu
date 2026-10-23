@@ -2,7 +2,7 @@
 // Protocol (tools/screenshots, tools/perf): a fresh data folder, the fake agent, the perf flag and
 // a debugging port. No dependencies.
 
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
@@ -53,6 +53,20 @@ export function launchApp({ port, userData, env = {} }) {
       stdio: ['ignore', 'inherit', 'inherit'],
     },
   )
+}
+
+/** Stops an app from `launchApp` and the processes it started, and waits for it to exit. */
+export async function stopApp(app, timeout = 10_000) {
+  if (app.exitCode !== null || app.signalCode !== null) return
+  const exited = new Promise((done) => app.once('exit', done))
+  // On Windows, kill() ends only the main process; the hosts and the terminal's shells would
+  // keep files in the scratch folder open.
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(app.pid), '/t', '/f'], { stdio: 'ignore' })
+  } else {
+    app.kill()
+  }
+  await Promise.race([exited, sleep(timeout)])
 }
 
 /** Connects to the app's window, waiting for it to answer. */
