@@ -112,6 +112,13 @@ describe('startValues', () => {
       startValues(entry({ remembered: { model: 'opus' } }), { fast: true, mode: 'default' }),
     ).toEqual({ model: 'opus', fast: true })
   })
+
+  it("sends every value of a provisional entry, which need not be the agent's defaults", () => {
+    const opened = { ...entry(), provisional: true }
+    expect(startValues(opened)).toEqual(
+      Object.fromEntries(opened.config.map((option) => [option.id, option.value])),
+    )
+  })
 })
 
 describe('item keys', () => {

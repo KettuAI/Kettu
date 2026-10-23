@@ -1,8 +1,8 @@
 // Reports from an agent's own commands, which ACP has no request for: Claude Code's `/usage`
 // and Codex's `/status` for the current use of the plan limits, and Claude Code's `/context` for
-// what fills a session's context. Each runs in a session OverBench makes for it and deletes or
-// closes afterwards, so it shows in no thread and in no session list. All three run in the agent
-// itself, without a model call.
+// what fills a session's context. Each runs in a hidden session that OverBench makes for it and
+// removes afterwards, so it shows in no thread and stays in none of the agent's history. All
+// three run in the agent itself, without a model call.
 
 import type { PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
@@ -14,10 +14,46 @@ import { t } from './i18n'
 
 export const REPORT_TIMEOUT_MS = 60_000
 
+/** The running agent a hidden session is opened in. */
+export interface HiddenRuntime {
+  agentId: AgentId
+  connection: AgentConnection
+  init: AgentInit
+}
+
+/**
+ * How a hidden session is removed so that none of the agent's history keeps it: `session/delete`,
+ * once more after a while as claude-agent-acp needs (DELETE_AGAIN_MS), or `session/close`.
+ */
+export type Removal = 'delete' | 'delete-again' | 'close'
+
+// Each agent's removal, as checked against its own history. An agent not listed opens no hidden
+// session, so OverBench leaves nothing in a history nobody checked.
+const REMOVALS: Partial<Record<AgentId, Removal>> = {
+  'claude-code': 'delete-again',
+  // codex-acp 2.2.2 answers `session/delete` with Codex's `thread/archive`, which writes the thread
+  // to disk among the archived ones. A thread that never reached the model, such as one that only
+  // ran `/status`, is not written at all, and closing it leaves nothing.
+  codex: 'close',
+  opencode: 'delete',
+  // The fake agent stands in for Claude Code.
+  'fake-agent': 'delete-again',
+}
+
+/**
+ * How the agent's hidden sessions are removed, or null when it may open none: it was not checked,
+ * or it does not offer the request its removal needs. There is no fallback to the other request,
+ * which can leave a trace (Codex's delete archives; OpenCode's close keeps the session listed).
+ */
+export function hiddenRemoval(agentId: AgentId, init: AgentInit): Removal | null {
+  const removal = REMOVALS[agentId]
+  if (!removal) return null
+  const { closeSession, deleteSession } = init.capabilities
+  return (removal === 'close' ? closeSession : deleteSession) ? removal : null
+}
+
 export interface Report {
   command: string
-  /** Deletes the session once more after a while, as claude-agent-acp needs (DELETE_AGAIN_MS). */
-  deleteAgain: boolean
 }
 
 /** The command whose report names an agent's plan limits, and how to read that report. */
@@ -26,16 +62,16 @@ export interface LimitsReport extends Report {
   parse(markdown: string, now: number): PlanLimit[] | null
 }
 
-const CLAUDE_USAGE: LimitsReport = { command: '/usage', deleteAgain: true, parse: parseUsageReport }
+const CLAUDE_USAGE: LimitsReport = { command: '/usage', parse: parseUsageReport }
 
 const LIMITS_REPORTS: Partial<Record<AgentId, LimitsReport>> = {
   'claude-code': CLAUDE_USAGE,
-  codex: { command: '/status', deleteAgain: false, parse: parseStatusReport },
+  codex: { command: '/status', parse: parseStatusReport },
   // The fake agent stands in for Claude Code.
   'fake-agent': CLAUDE_USAGE,
 }
 
-export const CONTEXT_REPORT: Report = { command: '/context', deleteAgain: true }
+export const CONTEXT_REPORT: Report = { command: '/context' }
 
 export function limitsReport(agentId: AgentId): LimitsReport | null {
   return LIMITS_REPORTS[agentId] ?? null
@@ -48,16 +84,21 @@ export function hasContextReport(agentId: AgentId): boolean {
 
 /**
  * Runs the report's command in the session `open` makes and returns the agent's messages, then
- * deletes the session, or closes it where the agent cannot delete.
+ * removes the session. An agent whose hidden sessions cannot be removed gets no report.
  */
 export async function runReport(
-  runtime: { connection: AgentConnection; init: AgentInit },
+  runtime: HiddenRuntime,
   open: () => Promise<string>,
-  { command, deleteAgain }: Report,
+  { command }: Report,
   log: (message: string) => void,
   timeoutMs = REPORT_TIMEOUT_MS,
 ): Promise<string[]> {
-  const { connection, init } = runtime
+  const { connection } = runtime
+  const removal = hiddenRemoval(runtime.agentId, runtime.init)
+  if (!removal) {
+    log(`${command} not run: the agent's hidden sessions cannot be removed without a trace`)
+    return []
+  }
   const acpSessionId = await open()
   let timer: ReturnType<typeof setTimeout> | null = null
   try {
@@ -77,20 +118,33 @@ export async function runReport(
     ])
   } finally {
     if (timer) clearTimeout(timer)
-    const { deleteSession, closeSession } = init.capabilities
-    const failed = (error: unknown): void => {
-      if (!connection.isClosed) {
-        log(`Could not remove the session of ${command}: ${(error as Error).message}`)
-      }
-    }
-    if (deleteSession) {
-      await connection.deleteSession(acpSessionId).catch(failed)
-      for (const delay of deleteAgain ? DELETE_AGAIN_MS : []) {
-        setTimeout(() => void connection.deleteSession(acpSessionId).catch(failed), delay).unref()
-      }
-    } else if (closeSession) {
-      await connection.closeSession(acpSessionId).catch(failed)
-    }
+    await removeHiddenSession(runtime, acpSessionId, removal, (message) =>
+      log(`Could not remove the session of ${command}: ${message}`),
+    )
+  }
+}
+
+/**
+ * Removes a session OverBench made for itself by `removal`, from `hiddenRemoval`, and drops its
+ * late updates. Failures go to `log` while the agent still runs.
+ */
+export async function removeHiddenSession(
+  { connection }: HiddenRuntime,
+  acpSessionId: string,
+  removal: Removal,
+  log: (message: string) => void,
+): Promise<void> {
+  connection.unregister(acpSessionId)
+  const failed = (error: unknown): void => {
+    if (!connection.isClosed) log((error as Error).message)
+  }
+  if (removal === 'close') {
+    await connection.closeSession(acpSessionId).catch(failed)
+    return
+  }
+  await connection.deleteSession(acpSessionId).catch(failed)
+  for (const delay of removal === 'delete-again' ? DELETE_AGAIN_MS : []) {
+    setTimeout(() => void connection.deleteSession(acpSessionId).catch(failed), delay).unref()
   }
 }
 

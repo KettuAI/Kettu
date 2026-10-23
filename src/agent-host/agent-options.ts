@@ -1,6 +1,7 @@
 // What New session shows for each agent before a session exists. ACP lists an agent's config
-// options only in answer to `session/new`, so the host keeps the last list each agent gave, the
-// reasoning levels each model offered, and the values the user last chose.
+// options only in answer to `session/new` and the requests that open a session, so the host keeps
+// the last list each agent gave, the reasoning levels each model offered, and the values the user
+// last chose.
 
 import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
@@ -97,6 +98,38 @@ export class AgentOptionsStore {
   }
 
   /**
+   * The options of a session the agent loaded or resumed, at that session's values. With none
+   * known, its model, model options and level stand in, marked provisional, until a new session
+   * reports the agent's defaults; a mode and the other options are left out, since they never
+   * carry over. They also add the model's levels.
+   */
+  opened(agentId: AgentId, config: readonly ConfigOption[]): void {
+    const current = this.byAgent.get(agentId)
+    if (current) {
+      this.put({ ...current, levels: withLevels(current.levels, config) })
+      return
+    }
+    // Ultracode is left out too: New session sends every provisional value, and a set ultracode
+    // would override the user's own Claude Code setting.
+    const kept = config.filter((o) => REMEMBERED_CATEGORIES.has(o.category))
+    if (kept.length === 0) return
+    this.put({
+      agentId,
+      config: kept,
+      levels: withLevels({}, config),
+      remembered: {},
+      observedAt: this.now(),
+      provisional: true,
+    })
+  }
+
+  /** Whether the agent's own defaults are known, from a new session. */
+  known(agentId: AgentId): boolean {
+    const entry = this.byAgent.get(agentId)
+    return !!entry && !entry.provisional
+  }
+
+  /**
    * The user set an option to `value`, in a session or as a start value; `config` is the session's
    * options after it, whose levels belong to the model now chosen.
    */
@@ -128,7 +161,8 @@ export class AgentOptionsStore {
 }
 
 // Everything but the time it was seen, which alone is no reason to write or send.
-const contentOf = (o: AgentOptions): string => JSON.stringify([o.config, o.levels, o.remembered])
+const contentOf = (o: AgentOptions): string =>
+  JSON.stringify([o.config, o.levels, o.remembered, o.provisional === true])
 
 function withLevels(
   levels: Record<string, ConfigOption>,
@@ -208,7 +242,14 @@ export function parseAgentOptionsFile(data: Record<string, unknown>): AgentOptio
       }
     }
     const observedAt = typeof entry.observedAt === 'number' ? entry.observedAt : 0
-    agents[agentId] = { agentId, config, levels, remembered, observedAt }
+    agents[agentId] = {
+      agentId,
+      config,
+      levels,
+      remembered,
+      observedAt,
+      ...(entry.provisional === true ? { provisional: true } : {}),
+    }
   }
   return { version: 1, agents }
 }

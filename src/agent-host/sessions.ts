@@ -297,6 +297,9 @@ export class SessionManager {
       liveSessions: (agentId) => this.connectedCount(agentId),
       agentExited: (agentId) => this.agentExited(agentId),
       signedIn: (agentId) => this.agentSignedIn(agentId),
+      optionsKnown: (agentId) => !deps.options || deps.options.known(agentId),
+      optionsSeen: (agentId, config) =>
+        deps.options?.started(agentId, withUltracode({ agentId }, config)),
     }
   }
 
@@ -1334,14 +1337,14 @@ export class SessionManager {
           throw error
         }
         this.finishReplay(live, true)
-        this.update(live, { config: withUltracode(live.record, setup.config) })
+        this.opened(live, setup.config)
       } else {
         const setup = await connection.resumeSession(
           acpSessionId,
           projectPath,
           sessionMeta(live.record),
         )
-        this.update(live, { config: withUltracode(live.record, setup.config) })
+        this.opened(live, setup.config)
         if (live.thread.order.length === 0) {
           this.emit(live, [
             {
@@ -1726,7 +1729,7 @@ export class SessionManager {
       throw new HostError('busy', t('session.openFirst'))
     }
     this.attach(live, connection)
-    this.update(live, { config: withUltracode(record, config) })
+    this.opened(live, config)
     for (const child of this.descendants(live.id, 'subagent')) {
       const childLive = this.live.get(child.id)
       if (!childLive) continue
@@ -1742,6 +1745,13 @@ export class SessionManager {
     }
     this.deps.agents.signedIn(record.agentId)
     return connection
+  }
+
+  /** A loaded or resumed session's options, which New session also learns from. */
+  private opened(live: Live, config: ConfigOption[]): void {
+    const { agentId } = live.record
+    this.update(live, { config: withUltracode(live.record, config) })
+    this.deps.options?.opened(agentId, withUltracode({ agentId }, config))
   }
 
   /** Attaches a closed session for something only its agent can do, such as a setting or a fork. */

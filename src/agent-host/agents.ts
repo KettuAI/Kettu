@@ -18,7 +18,7 @@ import type {
 import type { AgentProcess } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import {
   AgentConnection,
   AgentRequestError,
@@ -58,7 +58,14 @@ import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
 import { formatCommand } from './quote'
-import { limitsReport, runReport, type LimitsReport } from './reports'
+import {
+  hiddenRemoval,
+  limitsReport,
+  removeHiddenSession,
+  runReport,
+  type LimitsReport,
+  type Removal,
+} from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile } from './storage'
@@ -107,6 +114,8 @@ export interface AgentTimings {
   progressMs: number
   /** The shortest gap between two `/usage` reports. */
   limitsMs: number
+  /** How long the hidden `session/new` that reads an agent's options may take. */
+  optionsMs: number
   /** How long one `npm view` of the update check may take. */
   updateViewMs: number
   /** How long after the host starts a due update check waits, so it stays out of startup. */
@@ -123,6 +132,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   maxFailures: 5,
   progressMs: 250,
   limitsMs: 60_000,
+  optionsMs: 30_000,
   updateViewMs: 20_000,
   updateDelayMs: 60_000,
   updateIntervalMs: 24 * 60 * 60_000,
@@ -139,6 +149,10 @@ export interface AgentSessionHooks {
   liveSessions(agentId: AgentId): number
   agentExited(agentId: AgentId, info: ExitInfo): void
   signedIn(agentId: AgentId): void
+  /** Whether New session knows the agent's config options already. */
+  optionsKnown(agentId: AgentId): boolean
+  /** The config options of a hidden session, at the agent's own values. */
+  optionsSeen(agentId: AgentId, config: ConfigOption[]): void
 }
 
 export interface AgentManagerDeps {
@@ -150,7 +164,7 @@ export interface AgentManagerDeps {
   diagnostics: Diagnostics
   launcher: AgentLauncher
   settings(): HostSettings
-  /** The folder the `/usage` report's session runs in. */
+  /** The folder hidden sessions run in: the reports' and the one that reads the options. */
   reportsDir: string
   /** `<userData>/agents`, where package agents are installed. */
   adaptersDir: string
@@ -223,6 +237,11 @@ class Slot {
   remembered = ''
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
+  optionsRun: Promise<void> | null = null
+  /** The removal of the hidden session that read the options, once its `session/new` answered. */
+  optionsRemoval: Promise<void> | null = null
+  /** A read of the options failed or found none; not tried again until the agent restarts. */
+  optionsFailed = false
   progress = new TextRing(8 * 1024)
   idleTimer: ReturnType<typeof setTimeout> | null = null
   progressTimer: ReturnType<typeof setTimeout> | null = null
@@ -278,6 +297,8 @@ export class AgentManager {
     liveSessions: () => 0,
     agentExited: () => {},
     signedIn: () => {},
+    optionsKnown: () => true,
+    optionsSeen: () => {},
   }
 
   constructor(private readonly deps: AgentManagerDeps) {
@@ -453,6 +474,7 @@ export class AgentManager {
     slot.detail = null
     slot.progress.clear()
     slot.intentionalStop = false
+    slot.optionsFailed = false
     slot.launchSpec = spec
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
@@ -1210,6 +1232,9 @@ export class AgentManager {
     }
     slot.idleTimer = slot.progressTimer = null
     if (slot.starting) await slot.starting.catch(() => {})
+    // The hidden session that read the options goes before the agent does. Only its removal is
+    // waited for, not a `session/new` still unanswered, whose late answer is removed anyway.
+    if (slot.optionsRemoval) await settledWithin(slot.optionsRemoval, REMOVAL_WAIT_MS)
     const launched = slot.launched
     if (!launched) return
     slot.intentionalStop = true
@@ -1326,7 +1351,13 @@ export class AgentManager {
     try {
       messages = await runReport(
         runtime,
-        async () => (await runtime.connection.newSession(dir)).acpSessionId,
+        async () => {
+          const setup = await runtime.connection.newSession(dir)
+          // Only while none are known: the empty folder's defaults never replace a session's.
+          if (!this.hooks.optionsKnown(slot.def.id))
+            this.hooks.optionsSeen(slot.def.id, setup.config)
+          return setup.acpSessionId
+        },
         report,
         log,
       )
@@ -1353,6 +1384,93 @@ export class AgentManager {
       slot.limits.set(limit.window, held ? { ...limit, state: before.state } : limit)
     }
     this.emit(slot)
+  }
+
+  /**
+   * Reads the agent's config options for New session while none are known, from `session/new` in
+   * a hidden session that is removed at once, so the models show before the first session. Only
+   * an agent whose hidden sessions can be removed without a trace is read. Never rejects: a
+   * failure, or no answer within `optionsMs`, is logged and not tried again until the agent
+   * restarts, and New session shows the agent without its models.
+   */
+  readOptions(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    slot.optionsRun ??= this.openForOptions(slot).finally(() => {
+      slot.optionsRun = null
+    })
+    return slot.optionsRun
+  }
+
+  private async openForOptions(slot: Slot): Promise<void> {
+    const agentId = slot.def.id
+    const log = (message: string): void =>
+      this.deps.diagnostics.log('warn', `${slot.def.name}: ${message}`)
+    // A limits report running meanwhile reads them too.
+    await slot.limitsRun?.catch(() => {})
+    if (slot.optionsFailed || slot.signIn === 'required' || this.hooks.optionsKnown(agentId)) return
+    // Read right after a start: an agent that stopped meanwhile is not started again for it.
+    const runtime = this.runtime(agentId)
+    const removal = runtime && hiddenRemoval(agentId, runtime.init)
+    if (!runtime || !removal) return
+    try {
+      await this.readInHiddenSession(slot, runtime, removal, log)
+    } catch (error) {
+      if (error instanceof AgentRequestError && error.kind === 'auth_required') {
+        this.authRequired(agentId)
+        return
+      }
+      slot.optionsFailed = true
+      log(`could not read its options: ${agentError(error).message}`)
+    }
+  }
+
+  /** `session/new` in the hidden folder, bounded by `optionsMs`, then the session's removal. */
+  private async readInHiddenSession(
+    slot: Slot,
+    runtime: AgentRuntime,
+    removal: Removal,
+    log: (message: string) => void,
+  ): Promise<void> {
+    const agentId = slot.def.id
+    const remove = (acpSessionId: string): Promise<void> =>
+      removeHiddenSession(runtime, acpSessionId, removal, (message) =>
+        log(`could not remove the session its options were read in: ${message}`),
+      )
+    const dir = this.deps.reportsDir
+    await mkdir(dir, { recursive: true })
+    const opening = runtime.connection.newSession(dir)
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const setup = await Promise.race([
+      opening,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), this.timings.optionsMs)
+      }),
+    ]).finally(() => {
+      if (timer) clearTimeout(timer)
+    })
+    if (!setup) {
+      slot.optionsFailed = true
+      log(`gave no options within ${this.timings.optionsMs / 1000} s`)
+      // A late answer still opened a session, which goes like any other.
+      void opening.then(
+        (late) => remove(late.acpSessionId),
+        () => {},
+      )
+      return
+    }
+    try {
+      if (setup.config.length === 0) slot.optionsFailed = true
+      else this.hooks.optionsSeen(agentId, setup.config)
+      this.signedIn(agentId)
+    } finally {
+      const removing = remove(setup.acpSessionId)
+      slot.optionsRemoval = removing
+      try {
+        await removing
+      } finally {
+        slot.optionsRemoval = null
+      }
+    }
   }
 
   /** Where the agent reads its configuration and which CLI its adapter runs, for its page. */
@@ -1646,6 +1764,21 @@ export class AgentManager {
         : [],
     )
   }
+}
+
+// A stop waits this long at most for a hidden session's removal, well under the 6 s main gives
+// the host to stop on quit; removing takes milliseconds unless the agent hangs.
+const REMOVAL_WAIT_MS = 1_000
+
+/** Waits for `promise`, which never rejects, for at most `ms`. */
+function settledWithin(promise: Promise<void>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return Promise.race([
+    promise,
+    new Promise<void>((resolve) => (timer = setTimeout(resolve, ms))),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
 }
 
 /** Maps a failed ACP request to the port error the renderer acts on. */

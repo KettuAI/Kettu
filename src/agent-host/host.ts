@@ -470,6 +470,7 @@ export class AgentHost {
       'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
       'agents.start': async ({ agentId }) => {
         await agents.ensureReady(agentId)
+        await agents.readOptions(agentId)
       },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.details': ({ agentId }) => agents.details(agentId),

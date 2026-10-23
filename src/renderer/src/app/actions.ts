@@ -7,7 +7,7 @@ import {
 } from '@renderer/features/session/composer/drafts'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
-import { clearPicks, type OptionValues } from '@renderer/stores/agent-options'
+import { clearPicks, noteStarting, type OptionValues } from '@renderer/stores/agent-options'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -149,12 +149,16 @@ async function sendFirstPrompt(summary: SessionSummary, prompt: string): Promise
 
 /**
  * Starts the agent while the New session screen is shown, so the first send waits only for the
- * session; a failure shows when the session is created.
+ * session, and has the host read its options when none are known; a failure shows when the
+ * session is created.
  */
 export function warmAgent(agentId: AgentId): void {
-  host('agents.start', { agentId }).catch((error: unknown) =>
-    console.warn(`Could not start ${agentId} ahead of the session: ${errorMessage(error)}`),
-  )
+  noteStarting(agentId, 1)
+  host('agents.start', { agentId })
+    .catch((error: unknown) =>
+      console.warn(`Could not start ${agentId} ahead of the session: ${errorMessage(error)}`),
+    )
+    .finally(() => noteStarting(agentId, -1))
 }
 
 /** Forks the session into a new one in the same project and shows it. */

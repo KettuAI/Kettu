@@ -247,6 +247,106 @@ describe('starting with chosen options', () => {
   })
 })
 
+describe('options before a session exists', () => {
+  const sent = (t: TestHost, method: string) =>
+    t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter((r) => r.direction === 'out' && r.method === method).length
+  // The sessions the fake agent itself still lists in the folder hidden sessions run in.
+  const leftovers = async (t: TestHost, port: TestPort) =>
+    (
+      await port.request('agents.listSessions', {
+        agentId: 'fake-agent',
+        projectPath: path.join(t.dir, 'agent-reports'),
+      })
+    ).sessions.filter((s) => s.acpSessionId.startsWith('fake-'))
+
+  it('reads the models when the agent starts, in a session left in no list', async () => {
+    const { t, port } = await setup()
+    expect(await port.request('agents.options', undefined)).toEqual([])
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
+    expect(options?.config.at(-1)?.id).toBe('__ultracode')
+    expect(port.events.some((e) => e.type === 'agent.options')).toBe(true)
+    expect(sent(t, 'session/delete')).toBeGreaterThan(0)
+    expect(await leftovers(t, port)).toEqual([])
+    expect(await port.request('sessions.list', {})).toHaveLength(0)
+  })
+
+  it('opens no session to read them once they are known', async () => {
+    const { t, port } = await setup()
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    expect(sent(t, 'session/new')).toBe(1)
+  })
+
+  it('keeps the options of the plan limits report', async () => {
+    const { t, port } = await setup()
+    await port.request('agents.refreshLimits', { agentId: 'fake-agent' })
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
+    expect(sent(t, 'session/new')).toBe(1)
+  })
+
+  it("shows a loaded session's model as provisional, and still reads the defaults", async () => {
+    const { t, port } = await setup()
+    const imported = await port.request('sessions.import', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      acpSessionId: 'cli-refactor-router',
+    })
+    await port.open(imported.id)
+    const [opened] = await port.request('agents.options', undefined)
+    expect(opened).toMatchObject({ provisional: true })
+    expect(opened?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
+    expect(opened?.config.some((o) => o.category === 'mode')).toBe(false)
+    expect(opened?.config.some((o) => o.id === '__ultracode')).toBe(false)
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    expect(sent(t, 'session/new')).toBe(1)
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.provisional).toBeUndefined()
+    expect(options?.config.some((o) => o.category === 'mode')).toBe(true)
+  })
+
+  it('opens one hidden session when the limits report and the read run together', async () => {
+    const { t, port } = await setup()
+    await Promise.all([
+      port.request('agents.refreshLimits', { agentId: 'fake-agent' }),
+      port.request('agents.start', { agentId: 'fake-agent' }),
+    ])
+    expect(sent(t, 'session/new')).toBe(1)
+    expect(await port.request('agents.options', undefined)).toHaveLength(1)
+  })
+
+  it('starts the agent without options when it must sign in first', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_AUTH: 'required' } })
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    expect(await port.request('agents.options', undefined)).toEqual([])
+    const statuses = await port.request('agents.list', undefined)
+    expect(statuses.find((s) => s.id === 'fake-agent')?.signIn).toBe('required')
+    expect(await leftovers(t, port)).toEqual([])
+  })
+
+  it('starts the agent without options when they do not come in time', async () => {
+    const { t, port } = await setup({
+      agentEnv: { FAKE_AGENT_NEW_SESSION_MS: '300' },
+      agentTimings: { optionsMs: 20 },
+    })
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    expect(await port.request('agents.options', undefined)).toEqual([])
+    // The late answer opens a session, which goes once it comes.
+    const deadline = Date.now() + 5_000
+    while (sent(t, 'session/delete') === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    expect(await leftovers(t, port)).toEqual([])
+    await port.request('agents.start', { agentId: 'fake-agent' })
+    expect(sent(t, 'session/new')).toBe(1)
+  })
+})
+
 describe('forking', () => {
   it('starts a new session from the history, shown with its entries', async () => {
     const { t, port } = await setup()

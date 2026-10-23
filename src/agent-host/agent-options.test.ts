@@ -96,6 +96,31 @@ describe('AgentOptionsStore', () => {
     expect(file.save).toHaveBeenCalledTimes(1)
   })
 
+  it("takes an opened session's model and level as provisional, without its mode", () => {
+    const { options } = store()
+    const ultracode: ConfigOption = {
+      id: '__ultracode',
+      name: 'Ultracode',
+      category: 'other',
+      type: 'boolean',
+      value: false,
+    }
+    const opened = [mode, model('large'), level('high', ['medium', 'high']), ultracode]
+    options.opened('codex', opened)
+    // Ultracode stays out: a provisional value is sent, and would override the user's setting.
+    expect(options.get('codex')).toMatchObject({ config: opened.slice(1, 3), provisional: true })
+    expect(options.known('codex')).toBe(false)
+
+    const started = [mode, model('small'), level('medium', ['low', 'medium'])]
+    options.started('codex', started)
+    expect(options.known('codex')).toBe(true)
+    options.opened('codex', [mode, model('large'), level('max', ['high', 'max'])])
+    const entry = options.get('codex')!
+    expect(entry.config).toEqual(started)
+    expect(entry.provisional).toBeUndefined()
+    expect(entry.levels.large?.choices?.map((c) => c.value)).toEqual(['high', 'max'])
+  })
+
   it('ignores a choice for an agent that has not started a session', () => {
     const { options, changed } = store()
     options.chose('codex', model('small'), 'large', [model('large')])

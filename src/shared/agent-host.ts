@@ -143,6 +143,7 @@ export interface AgentOptions {
   levels: Record<string, ConfigOption> // the `thought_level` option each model offered, by model
   remembered: Record<string, string | boolean> // the user's last values, by option id
   observedAt: number
+  provisional?: boolean // from a loaded or resumed session, so not the agent's own defaults
 }
 
 /** An agent's page in Settings › Agents: what its status leaves out, read when the page opens. */

@@ -208,6 +208,7 @@
       "signInLong": "Sign in to {{agent}} to use it.",
       "signInAction": "Sign in…",
       "noModels": "{{agent}} lists its models after its first session. It starts with its default model, and you can change it in the session.",
+      "modelsOnStart": "{{agent}} lists its models once it has started.",
       "useAgent": "Use {{agent}}",
       "noMatch": "No matching agents or models"
     }

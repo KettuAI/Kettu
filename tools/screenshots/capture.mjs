@@ -174,7 +174,7 @@ async function run() {
 
   await openNewSession()
   await openAgentMenu()
-  // Before its first session the fake agent's models are unknown, so its pane offers the agent.
+  // Until the fake agent has started its models are unknown, so its pane offers the agent.
   await click(byText('[role=option]', 'Use Fake agent'), 'Use Fake agent')
   await waitFor(
     `${agentButton}?.textContent.includes('Fake agent') && !document.querySelector('[role=tablist]')`,

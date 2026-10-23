@@ -323,6 +323,15 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     }
   }
 
+  // FAKE_AGENT_WITHOUT leaves session capabilities out, such as `close`.
+  const without = new Set((env.FAKE_AGENT_WITHOUT ?? '').split(',').map((name) => name.trim()))
+  const sessionCapabilities = () =>
+    Object.fromEntries(
+      ['list', 'resume', 'close', 'delete', 'fork']
+        .filter((name) => !without.has(name))
+        .map((name) => [name, {}]),
+    )
+
   return agent({ name: 'fake-agent' })
     .onConnect((opened) => {
       connection = opened
@@ -357,7 +366,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           loadSession: true,
           promptCapabilities: { image: true, embeddedContext: true },
           mcpCapabilities: { http: false, sse: false },
-          sessionCapabilities: { list: {}, resume: {}, close: {}, delete: {}, fork: {} },
+          sessionCapabilities: sessionCapabilities(),
           auth: { logout: {} },
           _meta: { authStatus: {} },
         },
@@ -383,8 +392,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       pushAuthStatus()
       return {}
     })
-    .onRequest(methods.agent.session.new, (ctx) => {
+    .onRequest(methods.agent.session.new, async (ctx) => {
       requireSignedIn()
+      // Not scaled: it stands for an agent that is slow to open a session, whatever the pace.
+      const slowMs = Number(env.FAKE_AGENT_NEW_SESSION_MS ?? '') || 0
+      if (slowMs > 0) await new Promise((resolve) => setTimeout(resolve, slowMs))
       const session = newSession(nextId('fake'), ctx.params.cwd)
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return { sessionId: session.id, ...sessionSetup(session) }
