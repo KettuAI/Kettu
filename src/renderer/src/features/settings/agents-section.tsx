@@ -52,6 +52,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
+import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { countdown, usageTone } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
@@ -764,17 +765,6 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
       </div>
     </div>
   )
-}
-
-/**
- * The adapter an update brings when that is all it changes: the user's own CLI runs and keeps
- * running, so the update is named after the adapter, not the agent.
- */
-function adapterOnlyUpdate(status: AgentStatus): { name: string; version: string } | null {
-  if (status.cli?.runs !== 'installed' || !status.package || status.update?.cliVersion !== null) {
-    return null
-  }
-  return status.package
 }
 
 /** The agent's version, whether a newer one exists, and the check for it. */
