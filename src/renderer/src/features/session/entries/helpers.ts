@@ -1,4 +1,4 @@
-import type { StopReason, ToolEntry, ToolKind } from '@shared/thread'
+import { entryMessageId, type StopReason, type ToolEntry, type ToolKind } from '@shared/thread'
 import { basename, duration, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
@@ -173,4 +173,19 @@ export function stopReasonText(stopReason: StopReason, durationMs: number): stri
     case 'refusal':
       return i18n.t('session:stopReason.refusal')
   }
+}
+
+/**
+ * The agent message a reply's Fork starts the new session at, or null when it offers none. The
+ * latest reply forks the whole session, which any agent with `session/fork` can; an earlier one
+ * needs an agent that forks at a message, and a message the agent gave an id.
+ */
+export function forkEntry(
+  reply: { latest: boolean; agentIds: readonly string[] },
+  agent: { forkSession: boolean; forkAtMessage: boolean } | undefined,
+): string | null {
+  const last = reply.agentIds.at(-1)
+  if (last === undefined || !agent?.forkSession) return null
+  if (reply.latest) return last
+  return agent.forkAtMessage && entryMessageId(last) !== null ? last : null
 }

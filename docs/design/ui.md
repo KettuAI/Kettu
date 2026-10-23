@@ -298,9 +298,9 @@ Between sending a prompt and the first output, a status line ("Working…") with
 
 ### Message actions
 
-Every turn with a reply ends in one row, after its last entry, in place of its turn-end marker: **Copy** (every message of the turn's reply, as markdown) and, under the latest reply, **Fork into a new session**, when the agent supports `session/fork`; then the turn-end text and when the reply began ("Worked for 1 m 9 s · just now"). The buttons are quiet `icon-xs` buttons with tooltips. The row is hidden under every reply, the latest one too, and shows while the pointer is over the reply, from the first entry after the user message to the row itself, or while it holds keyboard focus; it holds its place, so the text does not move. A turn from a replay has no end marker and no times, so its row holds the buttons only. The turn still running gets its row when it ends.
+Every turn with a reply ends in one row, after its last entry, in place of its turn-end marker: **Copy** (every message of the turn's reply, as markdown) and **Fork into a new session**; then the turn-end text and when the reply began ("Worked for 1 m 9 s · just now"). The buttons are quiet `icon-xs` buttons with tooltips. The row is hidden under every reply, the latest one too, and shows while the pointer is over the reply, from the first entry after the user message to the row itself, or while it holds keyboard focus; it holds its place, so the text does not move. A turn from a replay has no end marker and no times, so its row holds the buttons only. The turn still running gets its row when it ends.
 
-Fork copies the whole session, never a part of it: ACP's `session/fork` takes no message to fork at. Rewinding to a message and pinning are left for later.
+Fork starts a new session with the conversation up to the end of that reply's turn, and shows it. It shows when the agent supports `session/fork`: under every reply for an agent that forks at a message (Claude Code and Codex), else under the latest reply only, which forks the whole session ([fork from a reply](./session-model.md#how-the-host-keeps-sessions)). It works in a `ready` or `closed` session and is disabled in any other, such as while a turn runs. Rewinding to a message and pinning are left for later.
 
 ### Markdown
 

@@ -245,6 +245,11 @@ export function threadEntries(state: ThreadState): ThreadEntry[] {
   return state.order.map((id) => state.byId[id]!)
 }
 
+/** The id the agent gave a message, from its entry id (`m:<messageId>`); null when it gave none. */
+export function entryMessageId(id: string): string | null {
+  return id.startsWith('m:') ? id.slice(2).replace(/#(agent|thought|user)$/, '') : null
+}
+
 /** Puts older entries before the thread's own, skipping any it already has. */
 export function prependEntries(state: ThreadState, entries: readonly ThreadEntry[]): ThreadState {
   const added = entries.filter((entry) => !(entry.id in state.byId))

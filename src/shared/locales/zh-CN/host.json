@@ -15,6 +15,8 @@
     "cannotLoad": "{{agent}} 不支持加载或恢复会话",
     "cannotSteer": "{{agent}} 不支持在对话进行中接收消息",
     "cannotFork": "{{agent}} 不支持分叉会话",
+    "cannotForkAt": "{{agent}} 只能从最新一条回复分叉",
+    "noForkPoint": "无法从这条回复分叉",
     "cannotList": "{{agent}} 无法列出它的会话",
     "ultracodeBetweenTurns": "Ultracode 只能在两轮对话之间切换",
     "ultracodeDescription": "用于大型任务的动态工作流；切换会重启 Claude Code",

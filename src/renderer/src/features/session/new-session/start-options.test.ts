@@ -208,6 +208,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
     closeSession: false,
     deleteSession: false,
     forkSession: false,
+    forkAtMessage: false,
     steering: false,
     reports: false,
     account: false,

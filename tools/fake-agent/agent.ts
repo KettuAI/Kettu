@@ -1,5 +1,6 @@
 // A scripted ACP agent for development and tests. It never calls a model.
 
+import { createHash } from 'node:crypto'
 import { existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -54,8 +55,16 @@ interface Recorded {
   update: SessionUpdate
 }
 
+interface ForkPoint {
+  version?: unknown
+  messageId: string
+  messageFingerprint?: string
+  messageOccurrence?: number
+}
+
 interface FakeSession extends FakeSessionState {
   history: Recorded[]
+  turnStarts: number[] // where each prompt's records begin in `history`
   updatedAt: string
   turn: { abort: AbortController; ignoreCancel: boolean } | null
 }
@@ -231,6 +240,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       thought: 'medium',
       fast: false,
       history: [],
+      turnStarts: [],
       updatedAt: new Date().toISOString(),
       turn: null,
     }
@@ -272,6 +282,60 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       .map((block) => (block.type === 'text' ? block.text : ''))
       .join('')
       .trim()
+
+  /** The text of the prompt whose records begin at `start`. */
+  const promptAt = (session: FakeSession, start: number): string => {
+    const blocks: ContentBlock[] = []
+    for (const { sessionId, update } of session.history.slice(start)) {
+      if (sessionId !== session.id || update.sessionUpdate !== 'user_message_chunk') break
+      blocks.push(update.content)
+    }
+    return promptText(blocks)
+  }
+
+  /**
+   * Where a fork's history ends: after the turn of the message a fork point names, in
+   * `_meta.jetbrains.air.fork` as both official adapters read it, else at the end. Its fingerprint
+   * and occurrence, when given, must name the same message.
+   */
+  const forkEnd = (
+    source: FakeSession,
+    meta: Record<string, unknown> | null | undefined,
+  ): number => {
+    const point = (meta?.jetbrains as { air?: { fork?: ForkPoint } } | undefined)?.air?.fork
+    if (point?.version !== 1) return source.history.length
+    const texts = new Map<string, string>()
+    let at = -1
+    source.history.forEach(({ sessionId, update }, i) => {
+      if (sessionId !== source.id || update.sessionUpdate !== 'agent_message_chunk') return
+      if (!update.messageId) return
+      const text = update.content.type === 'text' ? update.content.text : ''
+      texts.set(update.messageId, (texts.get(update.messageId) ?? '') + text)
+      if (update.messageId === point.messageId) at = i
+    })
+    const text = texts.get(point.messageId)
+    if (at < 0 || text === undefined) {
+      throw RequestError.invalidParams(
+        { messageId: point.messageId },
+        `Fork point message ${point.messageId} was not found in session ${source.id}`,
+      )
+    }
+    const ids = [...texts.keys()]
+    const occurrence = ids
+      .slice(0, ids.indexOf(point.messageId) + 1)
+      .filter((id) => texts.get(id) === text).length
+    const fingerprint = `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`
+    if (
+      (point.messageFingerprint !== undefined && point.messageFingerprint !== fingerprint) ||
+      (point.messageOccurrence !== undefined && point.messageOccurrence !== occurrence)
+    ) {
+      throw RequestError.invalidParams(
+        { messageId: point.messageId },
+        `The fork point's fingerprint or occurrence does not match message ${point.messageId}`,
+      )
+    }
+    return source.turnStarts.find((start) => start > at) ?? source.history.length
+  }
 
   // The turn's own counts, as every adapter reports them; cache reads grow with the context.
   const tokenUsage = (session: FakeSession): Usage => {
@@ -457,11 +521,13 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       requireSignedIn()
       const source = sessions.get(ctx.params.sessionId)
       if (!source) throw RequestError.resourceNotFound(ctx.params.sessionId)
+      const end = forkEnd(source, ctx.params._meta)
       const fork = newSession(nextId('fake'), ctx.params.cwd)
       fork.title = source.title
-      fork.turns = source.turns
+      fork.turnStarts = source.turnStarts.filter((start) => start < end)
+      fork.turns = end < source.history.length ? fork.turnStarts.length : source.turns
       fork.usedTokens = source.usedTokens
-      fork.history = source.history.map((r) => ({ ...r, sessionId: fork.id }))
+      fork.history = source.history.slice(0, end).map((r) => ({ ...r, sessionId: fork.id }))
       setTimeout(() => announceCommands(ctx.client, fork.id), 0)
       return { sessionId: fork.id, ...sessionSetup(fork) }
     })
@@ -582,6 +648,9 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       session.turn = { abort, ignoreCancel: choice.options.ignoreCancel }
       session.turns++
       session.updatedAt = new Date().toISOString()
+      const lastStart = session.turnStarts.at(-1)
+      const previousPrompt = lastStart === undefined ? null : promptAt(session, lastStart)
+      session.turnStarts.push(session.history.length)
       for (const block of ctx.params.prompt) {
         record(session, session.id, { sessionUpdate: 'user_message_chunk', content: block })
       }
@@ -594,6 +663,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         session,
         options: choice.options,
         text: choice.text,
+        previousPrompt,
         signal: abort.signal,
         supportsSubagents:
           typeof clientCapabilities.subagents === 'object' && clientCapabilities.subagents !== null,

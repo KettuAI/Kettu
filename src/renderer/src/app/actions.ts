@@ -142,9 +142,12 @@ export function warmAgent(agentId: AgentId): void {
   )
 }
 
-/** Forks the session into a new one in the same project and shows it. */
-export async function forkSession(sessionId: string): Promise<void> {
-  const summary = await host('sessions.fork', { sessionId })
+/**
+ * Forks the session into a new one in the same project and shows it; from `entryId`, a reply's
+ * agent message, up to the end of that reply's turn.
+ */
+export async function forkSession(sessionId: string, entryId?: string): Promise<void> {
+  const summary = await host('sessions.fork', entryId ? { sessionId, entryId } : { sessionId })
   useSessionsStore.getState().upsert(summary)
   openSession(summary.id, summary.projectPath)
 }

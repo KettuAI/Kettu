@@ -1538,6 +1538,7 @@ export class AgentManager {
         closeSession: capabilities?.closeSession ?? false,
         deleteSession: capabilities?.deleteSession ?? false,
         forkSession: capabilities?.forkSession ?? false,
+        forkAtMessage: capabilities?.forkAtMessage ?? false,
         // codex-acp 2.2.2 ignores `idleBehavior` and starts a turn of its own when none is
         // running (its PR #593 would fix it), which OverBench would not know about.
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',

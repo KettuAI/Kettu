@@ -933,6 +933,16 @@ const context: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/** What the agent remembers, so a fork can be checked against the reply it started from. */
+const recall: Scenario = async (turn) => {
+  const text =
+    turn.previousPrompt === null
+      ? 'You have not said anything before.'
+      : `Your last message was: ${turn.previousPrompt}`
+  await stream(turn, text, { chunks: [text], delayMs: 0, messageId: turn.messageId() })
+  return 'end_turn'
+}
+
 export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'basic-turn': basicTurn,
   'long-stream': longStream,
@@ -953,6 +963,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   usage,
   status,
   context,
+  recall,
 }
 
 export const compact: Scenario = async (turn) => {

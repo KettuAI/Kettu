@@ -29,6 +29,8 @@ export interface Turn {
   readonly options: ScenarioOptions
   /** The prompt text, without the scenario command. */
   readonly text: string
+  /** The prompt before this one in the session's history, which a fork may have cut. */
+  readonly previousPrompt: string | null
   /** Aborted when the client cancels the turn, unless the scenario ignores cancellation. */
   readonly signal: AbortSignal
   readonly supportsSubagents: boolean

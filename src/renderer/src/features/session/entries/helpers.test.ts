@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupLabel, runSummary, stopReasonText, toolLabel } from './helpers'
+import { forkEntry, groupLabel, runSummary, stopReasonText, toolLabel } from './helpers'
 
 const base = { title: 'Do something', locations: [], rawInput: undefined }
 
@@ -134,5 +134,31 @@ describe('stopReasonText', () => {
     expect(stopReasonText('max_tokens', 0)).toBe('Stopped at the token limit')
     expect(stopReasonText('max_turn_requests', 0)).toBe('Stopped at the request limit')
     expect(stopReasonText('refusal', 0)).toBe('Declined')
+  })
+})
+
+describe('forkEntry', () => {
+  const both = { forkSession: true, forkAtMessage: true }
+  const wholeOnly = { forkSession: true, forkAtMessage: false }
+  const reply = (latest: boolean, agentIds = ['m:msg_1', 'm:msg_2']) => ({ latest, agentIds })
+
+  it("forks at the reply's last message", () => {
+    expect(forkEntry(reply(true), both)).toBe('m:msg_2')
+    expect(forkEntry(reply(false), both)).toBe('m:msg_2')
+  })
+
+  it('offers an earlier reply only to an agent that forks at a message', () => {
+    expect(forkEntry(reply(true), wholeOnly)).toBe('m:msg_2')
+    expect(forkEntry(reply(false), wholeOnly)).toBeNull()
+  })
+
+  it('needs a message the agent gave an id under an earlier reply', () => {
+    expect(forkEntry(reply(false, ['m:msg_1', 'e:12']), both)).toBeNull()
+    expect(forkEntry(reply(true, ['e:12']), both)).toBe('e:12')
+  })
+
+  it('offers nothing without session/fork', () => {
+    expect(forkEntry(reply(true), { forkSession: false, forkAtMessage: false })).toBeNull()
+    expect(forkEntry(reply(true), undefined)).toBeNull()
   })
 })

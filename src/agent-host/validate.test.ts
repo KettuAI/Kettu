@@ -53,6 +53,16 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.snapshot']({ sessionId: 's', from: '3' }))
   })
 
+  it('forks at an entry only when one is named', () => {
+    expect(posix['sessions.fork']({ sessionId: 's' })).toEqual({ sessionId: 's' })
+    expect(posix['sessions.fork']({ sessionId: 's', entryId: 'm:msg_1' })).toEqual({
+      sessionId: 's',
+      entryId: 'm:msg_1',
+    })
+    rejects(() => posix['sessions.fork']({ sessionId: 's', entryId: '' }))
+    rejects(() => posix['sessions.fork']({ sessionId: 's', entryId: 3 }))
+  })
+
   it('wants absolute paths by the platform rules', () => {
     expect(posix['projects.add']({ path: '/Users/me/app' })).toEqual({ path: '/Users/me/app' })
     rejects(() => posix['projects.add']({ path: 'app' }))

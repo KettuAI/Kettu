@@ -126,6 +126,7 @@ export interface AgentStatus {
     closeSession: boolean
     deleteSession: boolean
     forkSession: boolean
+    forkAtMessage: boolean // `session/fork` up to a message, through the adapters' fork point
     steering: boolean // `_session/steering` into a running turn
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
     account: boolean // names its account through `_auth/status_update` as it starts
@@ -295,7 +296,8 @@ export interface HostContract {
   'sessions.prompt': { params: { sessionId: string; content: UserContent[] }; result: void }
   'sessions.cancel': { params: { sessionId: string }; result: void }
   'sessions.retry': { params: { sessionId: string }; result: void }
-  'sessions.fork': { params: { sessionId: string }; result: SessionSummary }
+  // `entryId`: a reply's agent message, to fork the session up to its turn; see the session model.
+  'sessions.fork': { params: { sessionId: string; entryId?: string }; result: SessionSummary }
   'sessions.context': { params: { sessionId: string }; result: ContextBreakdown | null }
   'sessions.queue': {
     params: { sessionId: string; content: UserContent[] }

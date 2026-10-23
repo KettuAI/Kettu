@@ -500,7 +500,7 @@ export class AgentHost {
       'sessions.prompt': ({ sessionId, content }) => sessions.prompt(sessionId, content),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.retry': ({ sessionId }) => sessions.retry(sessionId),
-      'sessions.fork': ({ sessionId }) => sessions.fork(sessionId),
+      'sessions.fork': ({ sessionId, entryId }) => sessions.fork(sessionId, entryId),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.queue': ({ sessionId, content }) => sessions.queue(sessionId, content),
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
