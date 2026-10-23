@@ -125,29 +125,37 @@ const shownSession = () =>
 const sessionRow = (sessionId) =>
   `return document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]')`
 
-const fakeAgentCard = `[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`
+const agentButton = `document.querySelector('button[aria-label="Agent and model"]')`
+const fakeAgentTab = `[...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.includes('Fake agent'))`
+// Before its first session the fake agent's pane offers the agent; after it, its models.
+const fakeAgentChoice = `[...document.querySelectorAll('[role=option]')].find((o) => /Use Fake agent|Fake Balanced/.test(o.textContent))`
 
-// From a card on the project home, which opens New session on the fake agent. The session is created
-// with its first message, so a short /status turn makes it ready before anything is measured.
+// From the first project's +, which opens New session there, with the fake agent chosen in the
+// agent menu. The session is created with its first message, so a short /status turn makes it
+// ready before anything is measured.
 async function newFakeSession() {
-  if (!(await evaluate(`Boolean(${fakeAgentCard})`))) {
-    // The first project's row comes first; its name opens the project home.
-    await click(
-      `return document.querySelector('[data-sidebar=menu-button][aria-expanded]')`,
-      'the project in the sidebar',
-    )
-  }
-  await waitFor(`Boolean(${fakeAgentCard})`, {
-    what: 'the fake agent on the project home (open a project; packaged builds need OVERBENCH_FAKE_AGENT)',
-  })
   await click(
-    `return [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`,
-    'the fake agent card',
+    `return document.querySelector('[data-sidebar=menu-action][aria-label^="New session in "]')`,
+    "a project's + (open a project)",
   )
   await waitFor(
     `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
     { what: 'the New session screen' },
   )
+  if (!(await evaluate(`Boolean(${agentButton}?.textContent.includes('Fake agent'))`))) {
+    await click(`return ${agentButton}`, 'the agent menu')
+    // Right after launch the menu can open before the agents are listed.
+    await waitFor(`Boolean(${fakeAgentTab})`, {
+      what: 'the fake agent in the agent menu (packaged builds need OVERBENCH_FAKE_AGENT)',
+    })
+    await click(`return ${fakeAgentTab}`, 'the fake agent in the agent menu')
+    await waitFor(`Boolean(${fakeAgentChoice})`, { what: "the fake agent's pane" })
+    await click(`return ${fakeAgentChoice}`, 'the fake agent')
+    await waitFor(
+      `${agentButton}?.textContent.includes('Fake agent') && !document.querySelector('[role=tablist]')`,
+      { what: 'the fake agent on the New session screen' },
+    )
+  }
   await clearComposer()
   await send('Input.insertText', { text: '/status ' })
   await key('Enter', { keyCode: 13, text: '\r' })
@@ -280,7 +288,7 @@ const after = await evaluate('window.overbench.app.perfMetrics()')
 const agentHost = after.processes.find((p) => p.name === 'OverBench Agent Host')
 results.agentHostMB = agentHost ? agentHost.workingSetKB / 1024 : null
 
-/** Closes the shown session through its menu, which returns to the project home. */
+/** Closes the shown session through its menu, which leaves it for New session. */
 async function closeShownSession() {
   await click(
     `return document.querySelector('header [data-slot=dropdown-menu-trigger]')`,
@@ -295,7 +303,7 @@ async function closeShownSession() {
     'Close',
   )
   await waitFor(`!document.querySelector('header [data-slot=dropdown-menu-trigger]')`, {
-    what: 'the project home after Close',
+    what: 'New session after Close',
   })
 }
 

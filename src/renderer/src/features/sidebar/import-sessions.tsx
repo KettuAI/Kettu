@@ -38,7 +38,7 @@ export function ImportSessionsDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { t } = useTranslation(['home', 'common'])
+  const { t } = useTranslation(['sidebar', 'common'])
   const agents = useAgentsStore(
     useShallow((s) =>
       usableAgents(s.order, s.byId).filter(

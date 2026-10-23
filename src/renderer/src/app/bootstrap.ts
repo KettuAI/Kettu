@@ -1,6 +1,6 @@
 import type { HostEvent } from '@shared/agent-host'
-import { usePendingSession } from '@renderer/app/actions'
-import { sessionToRestore } from '@renderer/app/restore'
+import { followShownSession, newSessionInPlace, usePendingSession } from '@renderer/app/actions'
+import { launchTarget } from '@renderer/app/restore'
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
@@ -86,16 +86,24 @@ export async function loadHostState(): Promise<void> {
   await Promise.allSettled([loadSessionState(), loadGitTools(), loadUsageStatus(), loadToday()])
 }
 
-/** Reopens the session shown when the app last closed, as Settings › General allows. */
-function restoreLastSession(): void {
+let launched = false
+
+/**
+ * Leaves the launch view for the session shown when the app last closed, as Settings › General
+ * allows, else for New session; Welcome stays while there are no projects.
+ */
+function finishLaunch(): void {
+  launched = true
   if (usePendingSession.getState().pending) return
-  const summary = sessionToRestore({
+  const target = launchTarget({
     enabled: useSettingsStore.getState().settings.general.restoreLastSession,
     sessionId: lastSessionId,
     main: useViewStore.getState().main,
     byId: useSessionsStore.getState().byId,
+    hasProjects: useProjectsStore.getState().projects.length > 0,
   })
-  if (summary) openSession(summary.id, summary.projectPath)
+  if (target?.kind === 'session') openSession(target.summary.id, target.summary.projectPath)
+  else if (target) newSessionInPlace()
 }
 
 let shownSession: string | null = null
@@ -132,15 +140,20 @@ export function bootstrap(): Promise<unknown> {
     rewatchGit()
   })
   useViewStore.subscribe(() => showFront())
+  followShownSession()
+  // A project list that fills after launch, as after a failed first read, leaves the launch view.
+  useProjectsStore.subscribe((state, previous) => {
+    if (launched && state.projects !== previous.projects) finishLaunch()
+  })
 
   const settingsReady = initSettings()
   void initUpdates()
   initTerminals()
   const sessionState = loadSessionState()
   void loadGitTools()
-  // Restoring waits for the session list, not for git tools, whose `gh auth status` can take
-  // seconds on a slow network.
-  void Promise.allSettled([settingsReady, sessionState]).then(restoreLastSession)
+  // Leaving the launch view waits for the session list, not for git tools, whose
+  // `gh auth status` can take seconds on a slow network.
+  void Promise.allSettled([settingsReady, sessionState]).then(finishLaunch)
 
   window.addEventListener('focus', refreshShownProject)
   return Promise.allSettled([settingsReady])

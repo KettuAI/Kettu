@@ -13,7 +13,8 @@
     "newSessionIn": "New session in {{name}}",
     "noProject": "No project",
     "noProjectTooltip": "Each runs in a scratch folder of its own",
-    "newSessionNoProject": "New session with No project"
+    "newSessionNoProject": "New session with No project",
+    "importSessions": "Import sessions…"
   },
   "row": {
     "collapse": "Collapse sub-sessions",
@@ -30,6 +31,15 @@
     "deleteBodyWithSub_one": "The agent deletes its transcript too. Its sub-session is deleted with it.",
     "deleteBodyWithSub_other": "The agent deletes its transcript too. Its {{count}} sub-sessions are deleted with it.",
     "more": "More actions"
+  },
+  "import": {
+    "title": "Import sessions",
+    "description": "Sessions the agents already have for {{project}}, such as ones you started in a terminal. Imported sessions open with their full history.",
+    "noAgents": "No agent here can list its sessions.",
+    "noSessions": "No sessions for this folder.",
+    "added": "Added",
+    "import": "Import",
+    "showMore": "Show more"
   },
   "indicator": {
     "waiting_one": "Waiting for you, {{count}} request",

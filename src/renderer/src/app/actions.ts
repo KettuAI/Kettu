@@ -12,7 +12,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
-import { openNewSession, openProjectHome, openSession, useViewStore } from '@renderer/stores/view'
+import { openNewSession, openSession, placeNewSession, useViewStore } from '@renderer/stores/view'
 import { create } from 'zustand'
 
 /** A session being created: shown in place of the thread until `session/new` answers. */
@@ -41,7 +41,7 @@ export async function addProjectFromDialog(): Promise<string | null> {
 
 export async function openProjectDialog(): Promise<void> {
   const path = await addProjectFromDialog()
-  if (path) openProjectHome(path)
+  if (path) newSession(path)
 }
 
 /**
@@ -49,16 +49,31 @@ export async function openProjectDialog(): Promise<void> {
  * No project when asked, or when the selected folder is a scratch session's.
  */
 export function newSession(projectPath: string | null = null, noProject = false): void {
+  openNewSession(...newSessionStart(projectPath, noProject))
+}
+
+/**
+ * New session as `newSession` opens it, in place of what the main area showed, such as a session
+ * that went; Settings stays as it is.
+ */
+export function newSessionInPlace(projectPath: string | null = null, noProject = false): void {
+  placeNewSession(...newSessionStart(projectPath, noProject))
+}
+
+function newSessionStart(
+  projectPath: string | null,
+  noProject: boolean,
+): [string | null, AgentId | null, boolean] {
   const selected = useViewStore.getState().projectPath
   const inScratch =
     projectPath === null &&
     selected !== null &&
     isScratchFolder(useSessionsStore.getState().byId, selected)
-  openNewSession(
+  return [
     projectPath,
     useSettingsStore.getState().settings.general.defaultAgent,
     noProject || inScratch,
-  )
+  ]
 }
 
 /** Starts a session in the project, or with a null `projectPath` in a scratch folder. */
@@ -172,10 +187,8 @@ export async function closeSession(sessionId: string): Promise<void> {
   const closed = [sessionId, ...descendantIds(sessionId)]
   await host('sessions.close', { sessionId })
   for (const id of closed) forgetSession(id)
-  const view = useViewStore.getState()
-  if (view.main.kind === 'session' && closed.includes(view.main.sessionId)) {
-    openProjectHome(summary?.projectPath ?? view.projectPath)
-  }
+  const { main } = useViewStore.getState()
+  if (main.kind === 'session' && closed.includes(main.sessionId)) leaveSession(summary)
 }
 
 /** A null or empty title goes back to the agent's. */
@@ -183,16 +196,31 @@ export async function renameSession(sessionId: string, title: string | null): Pr
   await host('sessions.rename', { sessionId, title })
 }
 
+/** Removing it from the list takes it off screen too, through `followShownSession`. */
 export async function deleteSession(sessionId: string): Promise<void> {
-  const summary = useSessionsStore.getState().byId[sessionId]
   await host('sessions.delete', { sessionId })
   forgetSession(sessionId)
   clearDraft(sessionId)
   useSessionsStore.getState().remove(sessionId)
-  const view = useViewStore.getState()
-  if (view.main.kind === 'session' && view.main.sessionId === sessionId) {
-    openProjectHome(summary?.projectPath ?? view.projectPath)
-  }
+}
+
+/** After the shown session goes: New session where it ran, with No project for a scratch one. */
+function leaveSession(summary: SessionSummary | undefined): void {
+  if (summary?.scratch) newSessionInPlace(null, true)
+  else newSessionInPlace(summary?.projectPath ?? null)
+}
+
+/**
+ * Leaves a shown session that drops out of the list, deleted here, by the agent host or with its
+ * parent, for New session where it ran. Returns the unsubscribe.
+ */
+export function followShownSession(): () => void {
+  return useSessionsStore.subscribe((state, previous) => {
+    const { main } = useViewStore.getState()
+    if (main.kind !== 'session' || state.byId[main.sessionId]) return
+    const gone = previous.byId[main.sessionId]
+    if (gone) leaveSession(gone)
+  })
 }
 
 /** All sessions under a session, for the confirmation that names how many go with it. */

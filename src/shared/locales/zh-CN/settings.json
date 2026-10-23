@@ -31,7 +31,7 @@
     },
     "defaultAgent": {
       "name": "默认 Agent",
-      "description": "新建会话时使用的 Agent。选择“每次询问”时，在项目主页中选择。",
+      "description": "新建会话时使用的 Agent。选择“每次询问”时，在新建会话中选择。",
       "askEachTime": "每次询问"
     },
     "sendKey": {
@@ -222,7 +222,7 @@
       "keywords": "删除 清除 清空 delete clear",
       "button": "移除所有会话…",
       "dialogTitle_other": "从 OverBench 中移除全部 {{count}} 个会话？",
-      "dialogDescription": "侧边栏将变为空白。Agent 会保留各自的对话记录，之后可以在项目主页重新导入这些会话。",
+      "dialogDescription": "侧边栏将变为空白。Agent 会保留各自的对话记录，之后可以在侧边栏中项目的菜单里重新导入这些会话。",
       "confirm": "全部移除"
     },
     "groups": {

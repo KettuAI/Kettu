@@ -5,7 +5,7 @@ vi.stubGlobal('window', { overbench: { perf: false } })
 const {
   closeSettings,
   openAgentSettings,
-  openProjectHome,
+  openNewSession,
   openSession,
   openSettings,
   settingsBack,
@@ -17,7 +17,7 @@ const settings = () => useViewStore.getState().settings
 describe('settings view', () => {
   beforeEach(() => {
     useViewStore.setState({
-      main: { kind: 'home' },
+      main: { kind: 'welcome' },
       projectPath: null,
       settings: { open: false, section: null, agent: null },
     })
@@ -42,16 +42,16 @@ describe('settings view', () => {
     expect(settings()).toEqual({ open: true, section: 'about', agent: null })
   })
 
-  it('keeps the section when a session or project home takes the window', () => {
+  it('keeps the section when a session or New session takes the window', () => {
     openSettings('terminal')
     openSession('s1', '/repo')
     expect(settings()).toEqual({ open: false, section: 'terminal', agent: null })
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 's1' })
 
     openSettings()
-    openProjectHome('/repo')
+    openNewSession('/repo', null)
     expect(settings()).toEqual({ open: false, section: 'terminal', agent: null })
-    expect(useViewStore.getState().main).toEqual({ kind: 'home' })
+    expect(useViewStore.getState().main).toEqual({ kind: 'new', agentId: null, noProject: false })
   })
 
   it("opens an agent's page under Agents, and a section clears it", () => {

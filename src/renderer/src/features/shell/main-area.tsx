@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { usePendingSession } from '@renderer/app/actions'
-import { ProjectHome } from '@renderer/features/home/project-home'
 import { Welcome } from '@renderer/features/home/welcome'
 import { LaunchState } from '@renderer/features/shell/launch-state'
 import { SidePanelArea } from '@renderer/features/shell/side-panel-area'
@@ -15,8 +14,8 @@ import { useViewStore } from '@renderer/stores/view'
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
 
 /**
- * What the main area shows: Welcome, a project's home, New session, a session being created, a
- * session, in a project or in a scratch folder, or the usage page.
+ * What the main area shows: Welcome, New session, a session being created, a session, in a project
+ * or in a scratch folder, or the usage page.
  */
 export function MainArea() {
   const projects = useProjectsStore((s) => s.projects)
@@ -73,7 +72,8 @@ export function MainArea() {
   } else if (main.kind === 'session' && sessionExists) {
     content = <SessionView key={main.sessionId} sessionId={main.sessionId} />
   } else {
-    content = <ProjectHome project={project} />
+    // Launch has not decided yet; a shown session that went away leaves through followShownSession.
+    return <LaunchState />
   }
   return <SidePanelArea projectPath={project.path}>{content}</SidePanelArea>
 }

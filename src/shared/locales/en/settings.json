@@ -32,7 +32,7 @@
     },
     "defaultAgent": {
       "name": "Default agent",
-      "description": "The agent New session starts. With Ask each time, the project home lets you pick.",
+      "description": "The agent New session starts. With Ask each time, you choose one there.",
       "askEachTime": "Ask each time"
     },
     "sendKey": {
@@ -224,7 +224,7 @@
       "button": "Remove all sessions…",
       "dialogTitle_one": "Remove the only session from OverBench?",
       "dialogTitle_other": "Remove all {{count}} sessions from OverBench?",
-      "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from a project's home.",
+      "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from each project's menu in the sidebar.",
       "confirm": "Remove all"
     },
     "groups": {
