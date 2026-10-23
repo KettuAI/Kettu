@@ -6,7 +6,7 @@ const appData = resolve('app-data')
 const cwd = resolve('worktree')
 const base: UserDataInput = {
   isPackaged: false,
-  hasSwitch: false,
+  switchValue: '',
   appData,
   override: undefined,
   cwd,
@@ -34,9 +34,18 @@ describe('devUserDataPath', () => {
     expect(devUserDataPath({ ...base, override: '  ' })).toBe(join(appData, 'OverBench Dev'))
   })
 
-  it('leaves Electron alone when --user-data-dir is passed', () => {
-    expect(devUserDataPath({ ...base, hasSwitch: true })).toBeNull()
-    expect(devUserDataPath({ ...base, hasSwitch: true, override: resolve('x') })).toBeNull()
+  it('leaves Electron alone when --user-data-dir has a value', () => {
+    const switchValue = resolve('from-switch')
+    expect(devUserDataPath({ ...base, switchValue })).toBeNull()
+    expect(devUserDataPath({ ...base, switchValue, override: resolve('x') })).toBeNull()
+  })
+
+  it('does not count a --user-data-dir without a value', () => {
+    // `--user-data-dir /tmp/x` leaves the value empty; Electron then keeps its default folder.
+    expect(devUserDataPath({ ...base, switchValue: '' })).toBe(join(appData, 'OverBench Dev'))
+    expect(devUserDataPath({ ...base, switchValue: '  ' })).toBe(join(appData, 'OverBench Dev'))
+    const folder = resolve('elsewhere', 'feature-x')
+    expect(devUserDataPath({ ...base, switchValue: '', override: folder })).toBe(folder)
   })
 
   it('leaves a packaged build alone, whatever the variable says', () => {

@@ -45,7 +45,7 @@ if (process.platform === 'linux') {
 // keys on it.
 const devUserData = devUserDataPath({
   isPackaged: app.isPackaged,
-  hasSwitch: app.commandLine.hasSwitch('user-data-dir'),
+  switchValue: app.commandLine.getSwitchValue('user-data-dir'),
   appData: app.getPath('appData'),
   override: process.env['OVERBENCH_USER_DATA'],
   cwd: process.cwd(),
