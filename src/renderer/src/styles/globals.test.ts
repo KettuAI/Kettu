@@ -43,7 +43,7 @@ describe('reduce motion in globals.css', () => {
   ])('holds looping animations still under %s', (_name, blocks) => {
     // Spinners and pulses loop forever, so they must stop; one-shot animations may play.
     expect(stoppedSelectors(blocks[0])).toEqual(
-      expect.arrayContaining(['.animate-spin', '.animate-pulse', '.animate-ping']),
+      expect.arrayContaining(['.animate-spin', '.animate-pulse']),
     )
   })
 

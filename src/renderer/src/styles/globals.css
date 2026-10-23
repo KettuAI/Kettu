@@ -85,8 +85,6 @@
   --color-checked-tint-hover: var(--checked-tint-hover);
   --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-mark: var(--mark);
-  --color-running: var(--running);
-  --color-unread: var(--checked);
   --color-success-text: var(--success-text);
   --color-merged: var(--merged);
   --color-diff-add: var(--diff-add);
@@ -132,9 +130,6 @@
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* Tailwind's ping at the pulse's 2 s, so the running dot breathes rather than flashes. */
-  --animate-ping: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 
   --text-prose: var(--prose-size);
   /* The thread's column: 42em of prose, about 42 Chinese characters a line, plus its gutters. */
@@ -213,7 +208,6 @@
   --destructive-tint-hover: oklch(0.5 0.17 27 / 13%);
   /* A search match marked in its text. */
   --mark: oklch(0.88 0.15 90 / 55%);
-  --running: oklch(0.62 0.07 255);
   --merged: oklch(0.55 0.19 300);
   --diff-add: oklch(0.62 0.15 150 / 9%);
   --diff-del: oklch(0.6 0.2 27 / 8%);
@@ -406,7 +400,6 @@
   --checked-tint-hover: oklch(0.66 0.15 255 / 22%);
   --destructive-tint-hover: oklch(0.7 0.16 22 / 18%);
   --mark: oklch(0.8 0.14 85 / 32%);
-  --running: oklch(0.7 0.07 255);
   --merged: oklch(0.72 0.15 300);
   --diff-add: oklch(0.7 0.15 150 / 12%);
   --diff-del: oklch(0.7 0.19 22 / 12%);
@@ -723,7 +716,6 @@
     --tw-exit-rotate: 0 !important;
   }
   .animate-pulse,
-  .animate-ping,
   .animate-spin,
   .shimmer,
   [data-caret] {
@@ -747,7 +739,6 @@
     --tw-exit-rotate: 0 !important;
   }
   & .animate-pulse,
-  & .animate-ping,
   & .animate-spin,
   & .shimmer,
   & [data-caret] {
