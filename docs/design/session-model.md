@@ -308,7 +308,7 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 
 ## Attachments
 
-> Proposed 2026-10-22 for #40, with the [interface](./ui.md#attachments); built once the maintainer has picked an option.
+> Decided 2026-10-23 for #40, with the [interface](./ui.md#attachments); to be built.
 
 Files, images and folders the user adds to a prompt. The renderer sends each as an attachment ref that names a record the host holds; at send time the host builds its content block from that record and from what the agent advertised in `initialize`'s `promptCapabilities`, which `AgentStatus.capabilities.prompt` passes on (`image`, `audio`, `embeddedContext`). claude-agent-acp 0.94.0, codex-acp 2.2.2 and OpenCode 2.0.32 all advertise `image` and `embeddedContext`, and none `audio` (observed 2026-10-22).
 

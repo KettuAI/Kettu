@@ -386,12 +386,12 @@ Every menu, the dropdown menus and the context menus alike, shares one set of me
 
 - The session menus, the title menu and the row's context menu, hold **New sub-session**, **Close**, a separator and **Delete…**.
 - The two-pane menu was decided while the maintainer was away (2026-10-22); to be reviewed. Its rail fits its widest row.
-- The file type icons in the `@` list were proposed with the [attachments](#attachments) for #40 (2026-10-22); to be reviewed.
+- The file type icons in the `@` list came with the [attachments](#attachments) for #40, chosen with option A on 2026-10-23 on the comparison page, which shows them.
 - **Dialogs** (`Dialog`, `AlertDialog`): surface 3, `rounded-3xl`, 20 px padding and 16 px between parts, at most 384 px wide, with the `lg` shadow. The title is 16 px at weight 500, the description 13 px with a relaxed line height in `--text-secondary`. The buttons sit right-aligned at the end, 8 px apart, at the `default` size; the footer has no band or rule of its own. A destructive action uses `Button`'s `destructive` variant.
 
 ### Attachments
 
-The tiles a message's [attachments](./ui.md#attachments) show as, in the composer and in the thread; proposed for #40 (2026-10-22), to be reviewed.
+The tiles a message's [attachments](./ui.md#attachments) show as, in the composer and in the thread; chosen for #40 on 2026-10-23, option A of three.
 
 | Part         | Look                                                                                                                                                                                                                                                                 |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

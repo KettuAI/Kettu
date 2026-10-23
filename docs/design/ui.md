@@ -413,7 +413,7 @@ The layout follows the reference: the box holds the message, its text, its [atta
 
 ### Attachments
 
-> Proposed 2026-10-22 for #40: option A of three, tiles in the box, recommended; it is built once the maintainer has picked an option.
+> Decided 2026-10-23 for #40: of three options tried on the [comparison page](https://claude.ai/artifact/MDCp3YWNX49NKR4wUqTvvu), the maintainer chose A, tiles in the box, over chips under the box and references inside the text; to be built.
 
 Files, photos and folders a message carries besides its text. The host sends each one as the agent's prompt capabilities allow ([session model: attachments](./session-model.md#attachments)); this section is what the user sees. The looks are in the [design system](./design-system.md#attachments).
 
