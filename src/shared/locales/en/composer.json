@@ -4,8 +4,8 @@
     "placeholder": {
       "starting": "Starting {{agent}}…",
       "awaiting": "Waiting for your approval",
-      "steer": "Queue a message, or steer with {{shortcut}}",
-      "queue": "Queue a message for when the turn ends",
+      "steer": "Ask {{agent}} to…   {{queue}} to queue, {{steer}} to steer",
+      "queue": "Ask {{agent}} to…   {{queue}} to queue",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
       "ask": "Ask {{agent}} to…"
     },

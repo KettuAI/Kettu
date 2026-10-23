@@ -45,6 +45,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const canSend = idle && text.trim().length > 0
   // During a turn the send key queues the message and the steer key sends it into the turn.
   const canQueue = running && text.trim().length > 0
+  const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
   // Claude Code turns on ultracode for a message that says the word; no config option sets it.
@@ -173,9 +174,11 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     : awaiting
       ? t('prompt.placeholder.awaiting')
       : running
-        ? steering
-          ? t('prompt.placeholder.steer', { shortcut: formatShortcut(steerKey) })
-          : t('prompt.placeholder.queue')
+        ? t(steering ? 'prompt.placeholder.steer' : 'prompt.placeholder.queue', {
+            agent: agentName,
+            queue: formatShortcut(queueKey),
+            steer: formatShortcut(steerKey),
+          })
         : reached?.resetsAt
           ? t('prompt.placeholder.limitReached', {
               limit: limitLabel(reached),
@@ -255,7 +258,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                     t={t}
                     i18nKey={steering ? 'prompt.queueSteerTooltip' : 'prompt.queueTooltip'}
                     values={{
-                      queueShortcut: formatShortcut(sendKey === 'enter' ? 'Enter' : 'Mod+Enter'),
+                      queueShortcut: formatShortcut(queueKey),
                       steerShortcut: formatShortcut(steerKey),
                     }}
                     components={{ shortcut: <span className="opacity-60" /> }}

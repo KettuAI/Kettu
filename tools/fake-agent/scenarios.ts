@@ -802,7 +802,7 @@ const plan: Scenario = async (turn) => {
       kind: 'read',
       status: 'in_progress',
     })
-    await turn.sleep(300)
+    await turn.sleep(turn.options.stepMs)
     await turn.send({ sessionUpdate: 'tool_call_update', toolCallId, status: 'completed' })
   }
   await stream(turn, '\n\nAll four steps are done.')

@@ -4,8 +4,8 @@
     "placeholder": {
       "starting": "正在启动 {{agent}}…",
       "awaiting": "等待你的授权",
-      "steer": "输入消息排队，或按 {{shortcut}} 立即插入当前对话",
-      "queue": "输入消息，本轮对话结束后发送",
+      "steer": "让 {{agent}} 帮你…   {{queue}} 排队，{{steer}} 立即插入当前对话",
+      "queue": "让 {{agent}} 帮你…   {{queue}} 排队，本轮结束后发送",
       "limitReached": "限额已用完（{{limit}}）· {{time}} 重置",
       "ask": "让 {{agent}} 帮你…"
     },
