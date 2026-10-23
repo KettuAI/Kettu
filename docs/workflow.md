@@ -14,8 +14,8 @@ How work travels from an idea or a report to a release. Since v0.0.1, every chan
 
 ## Who takes part
 
-- **The maintainer** sets direction, accepts features and designs, merges and releases.
-- **Coding agents** file and triage issues, design, build and review. They act through the maintainer's `gh` account, so their issues and pull requests appear as the maintainer's. GitHub never lets an account approve its own pull request, so the merge itself is the maintainer's approval.
+- **The maintainer** sets direction, accepts features and designs, and releases.
+- **Coding agents** file and triage issues, design, build and review. They act through the maintainer's `gh` account, so their issues and pull requests appear as the maintainer's. GitHub never lets an account approve its own pull request, so a pull request merges through auto-merge once an agent's review and CI pass, not through an approval.
 - **Outside contributors** report bugs and ask for features through the issue forms. They do not send code; see [outside contributions](#outside-contributions).
 
 ## The pipeline
@@ -33,7 +33,7 @@ flowchart TD
   DP --> R
   R --> P[in-progress, draft PR]
   P --> V[review and checks]
-  V --> G{{merge}}
+  V --> G[auto-merge]
   G --> L{{release}}
 ```
 
@@ -79,7 +79,9 @@ An agent that stops before the end comments what is left and puts the issue back
 - Every pull request is reviewed by an agent that did not write it, for correctness and against the design rules and their checklists, as review comments. The author fixes or answers each one.
 - The required `CI` check must pass: all three platforms and the title and issue link. Editing the title or description runs all of it again.
 - A change under `src/` or `tools/`, to `package.json`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
-- The maintainer merges, on GitHub or by naming the pull requests to merge in a chat with an agent.
+- Once the review leaves nothing open, the reviewing agent turns on auto-merge (`gh pr merge <N> --auto --squash`), and GitHub merges the pull request when the required `CI` check passes. Auto-merge is allowed in the repository settings since 2026-10-23: only the project opens pull requests, so a reviewed change with green CI needs no one to press the button.
+- A push after that keeps auto-merge on, so a change made after the review goes back to the reviewer: the author turns auto-merge off (`gh pr merge <N> --disable-auto`) before pushing it.
+- Design and release pull requests are the exception: the maintainer merges them, as their [gates](#gates) say. The maintainer can also merge any pull request at once, or hold one by turning its auto-merge off.
 - The merge is a squash: the pull request's title becomes the commit subject on `main`, the branch is deleted, and `Closes #N` in its description closes the issue.
 
 A pull request that does only part of an issue says `Refs #N` instead, and the issue stays open with a comment on what is left.
@@ -108,11 +110,10 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 | ------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Accept  | An issue in `state:needs-decision`                                                       | Accepts it (it moves to `ready` or `needs-design`, with a milestone) or closes it |
 | Design  | A design pull request                                                                    | Tries the options, then merges it or asks for changes                             |
-| Merge   | Every pull request                                                                       | Merges it or asks for changes                                                     |
 | Close   | Closing an issue without a merged pull request: a duplicate, not planned, not reproduced | Confirms                                                                          |
 | Release | Each version                                                                             | Confirms the release pull request, the tag and the publication                    |
 
-A bug needs no gate before work starts. The docs already decided what should happen, and the merge gate sees the fix. Approving a merge also approves closing the issues the pull request names with `Closes`.
+A bug needs no gate before work starts or ends. The docs already decided what should happen, and the review and CI see the fix. A merge, automatic or the maintainer's, closes the issues the pull request names with `Closes`.
 
 ## Issues
 
@@ -212,13 +213,13 @@ A ruleset on `main`:
 - **One issue, one session, one worktree, one branch.** The main checkout stays on a clean `main` and is only pulled. Sessions sharing one checkout used to take the same feedback number and the same dev ports; separate worktrees end that. Parallel sessions take issues in different areas, so that two sessions never touch the same files.
 - **Roles.** A session plays one role at a time, and may play several in a row, such as triage and then build for the same bug. It never reviews its own pull request.
 
-| Role    | Takes                                        | Produces                                       | Never                                          |
-| ------- | -------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| Triage  | `state:needs-triage` issues                  | Labels, states, reproductions, comments        | Closes an issue or changes code                |
-| Design  | `state:needs-design` issues                  | A docs pull request with options to try        | Builds beyond prototypes                       |
-| Build   | `state:ready` issues                         | A pull request                                 | Works outside the issue's scope                |
-| Review  | Pull requests ready for review               | Review comments                                | Approves, merges or pushes to the branch       |
-| Release | A release issue, or the maintainer's request | The release pull request and the draft release | Tags or publishes without the maintainer's yes |
+| Role    | Takes                                        | Produces                                       | Never                                            |
+| ------- | -------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ |
+| Triage  | `state:needs-triage` issues                  | Labels, states, reproductions, comments        | Closes an issue or changes code                  |
+| Design  | `state:needs-design` issues                  | A docs pull request with options to try        | Builds beyond prototypes                         |
+| Build   | `state:ready` issues                         | A pull request                                 | Works outside the issue's scope                  |
+| Review  | Pull requests ready for review               | Review comments, then auto-merge               | Approves, merges by hand or pushes to the branch |
+| Release | A release issue, or the maintainer's request | The release pull request and the draft release | Tags or publishes without the maintainer's yes   |
 
 - **Reporting.** An agent reports every issue, pull request and comment it creates, with its link, and asks at every [gate](#gates).
 - **Not yet.** Agents run in sessions the maintainer starts. Event-driven bots on GitHub (triage on open, stale and duplicate bots) wait until volume asks for them; the first step then is a scheduled triage run over `state:needs-triage`.
