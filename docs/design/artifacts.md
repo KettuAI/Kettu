@@ -127,21 +127,24 @@ CREATE TABLE artifact_versions (
 ) STRICT, WITHOUT ROWID;
 ```
 
-- **Each version's HTML** is a file in `artifacts/content/` under the data folder, in a folder named by the hash's first two hex characters, named by the hash with `.html`. It is written to a temporary file and renamed into place before its row commits, so a row never names a missing file; a file a crash left without a row is removed by the next purge.
+- **Each version's HTML** is a file in `artifacts/content/` under the data folder, in a folder named by the hash's first two hex characters, named by the hash with `.html`. The worker writes it to a temporary file, flushes it and renames it into place before its row commits, so a row never names a missing file; a file a crash left without a row, and a temporary file, are removed by the next purge. Since the worker also runs the purge, a purge never meets a file whose row is about to commit. The host reads the files itself, with `fs.promises`.
+- **The page count** comes with the HTML from whoever writes the version: the service [counts it when written](#the-canvas-format), and a restore copies it from the version restored.
 - **A new schema version** of the thread database creates both tables, empty; its migration changes nothing else.
 - Moving a project folder leaves its artifacts under the old path, as its sessions are; they still list under it.
 
 ### Versions
 
 - Numbering, authorship and the refusal of a stale `base_version` follow the [core rules](../architecture.md#artifacts). The user's own changes, a restore from the version history or an import, are authored by the user.
-- **The title is not versioned**: renaming changes the artifact, not a version, and the history shows the versions under the current title.
+- **The title is not versioned**: renaming changes the artifact, not a version, and the history shows the versions under the current title. Nor does renaming change `updated_at`, which is the latest version's time.
 - **Restoring** writes the restored version's hash as a new version, so its file is shared, not copied.
 - The data folder's space is shown in Settings, with artifacts counted on their own, since every version is kept.
 
 ### Recently deleted
 
-- **Deleting**, by an agent or the user, sets `deleted_at`. The artifact leaves the page and the lists; reading it gives `deleted`. The user can restore it, or delete it permanently at once.
-- **The purge** runs when the host starts and every 24 hours: it removes the artifacts deleted more than 30 days ago, their versions by cascade, and then every content file no version names.
+- **Deleting**, by an agent or the user, sets `deleted_at`. The artifact leaves the page and the lists; reading it gives `deleted`. The user can restore it, or delete it permanently at once. Deleting it again keeps the first time, so its 30 days do not start over.
+- **In Recently deleted** the user still reads an artifact and its versions, and renames it; nobody makes a version of it until it is restored.
+- **Deleting permanently** removes the artifact's rows and, at once, every file of its versions that no other version names.
+- **The purge** runs when the host starts and every 24 hours: it removes the artifacts deleted more than 30 days ago, their versions by cascade, and then every content file no version names. It touches no file while the database is not open, as when a newer app wrote it, since it cannot tell which files are named, and in the content folder it removes nothing but version files and temporary files.
 
 ### Import and export
 
@@ -442,7 +445,16 @@ interface VersionSummary {
   note: string | null
   size: number
 }
+
+interface ArtifactState {
+  version: number // the latest
+  deleted: boolean // in Recently deleted
+}
 ```
+
+- **Validation**: an `id` must be of the `art_` and ULID form, `version` and `baseVersion` whole numbers from 1, and a title 1 to 120 characters and not blank; anything else is `invalid_params`.
+- **Refusals**: an id or version the host does not know is `not_found`. A request the artifact's state does not allow is `conflict`, with that `ArtifactState` as the error's data: a `baseVersion` that is not the latest, a restore while the artifact is in Recently deleted, or deleting permanently one that is not there.
+- **Viewers** are counted per watch, so one window that shows an artifact in two places counts two; a port that closes takes its watches with it. `artifacts.activity` goes to the watching ports whenever the count changes.
 
 The viewer parses the HTML with the renderer's `DOMParser`, which builds an inert document that runs no script and loads nothing, and takes the pages from it by the [format's rules](#the-canvas-format).
 
