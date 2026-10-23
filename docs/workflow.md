@@ -4,7 +4,7 @@
 
 How work travels from an idea or a report to a release. Since v0.0.1, every change goes through an issue and a pull request: the maintainer's own features, users' reports and the bugs coding agents find. Coding agents do most of the work, so this document is written for them as much as for people; [CONTRIBUTING.md](../CONTRIBUTING.md) is the short version for outside contributors.
 
-The design draws on how Ghostty, Zed, opencode, Codex, uv, Biome, Electron, Tauri and shadcn/ui run their repositories, as observed on 2026-10-22. It takes issue types over type labels and prefixed labels from Zed and Biome, kept to a few dozen; version milestones and parent issues from Ghostty; squash merges without required approvals from uv and opencode; one combined required check from uv and Codex; and "issues, not code, until the terms are clear" from Codex. It leaves out what only pays off at their volume: triage bots, stale bots, merge queues, vouch lists and CODEOWNERS.
+The design draws on how Ghostty, Zed, opencode, Codex, uv, Biome, Electron, Tauri and shadcn/ui run their repositories, as observed on 2026-10-22. It takes issue types over type labels and prefixed labels from Zed and Biome, kept to a few dozen; version milestones and parent issues from Ghostty; squash merges without required approvals from uv and opencode; one combined required check from uv and Codex; issues but no code from outside, from Codex; and a weekly release train from Zed. It leaves out what only pays off at their volume: triage bots, stale bots, merge queues, vouch lists and CODEOWNERS.
 
 ## Principles
 
@@ -12,13 +12,13 @@ The design draws on how Ghostty, Zed, opencode, Codex, uv, Biome, Electron, Taur
 - **Each record has one job.** An issue says what is wrong or wanted and why. A pull request says how it was done and how it was checked. The design docs say how the system works. They link to each other instead of repeating each other.
 - **The maintainer decides; agents do the rest.** The maintainer is asked only at the [gates](#gates). Everything else goes ahead and is reported with a link.
 - **Small units.** One issue is one pull request. Work that needs more becomes a parent issue with sub-issues.
-- **Everything on GitHub is English**, like the repository.
+- **Short, in the right language.** An issue or a pull request says its point and stops. Issues we open and all pull requests are English; replies on an issue use the language its reporter wrote in.
 
 ## Who takes part
 
 - **The maintainer** sets direction, accepts features and designs, merges and releases.
-- **Coding agents** (Claude Code, Codex, opencode) file and triage issues, design, build and review. They act through the maintainer's `gh` account, so their issues and pull requests appear as the maintainer's. GitHub never lets an account approve its own pull request, so the merge itself is the maintainer's approval.
-- **Outside contributors** report bugs and ask for features through the issue forms; code is covered in [outside contributions](#outside-contributions).
+- **Coding agents** file and triage issues, design, build and review. They act through the maintainer's `gh` account, so their issues and pull requests appear as the maintainer's. GitHub never lets an account approve its own pull request, so the merge itself is the maintainer's approval.
+- **Outside contributors** report bugs and ask for features through the issue forms. They do not send code; see [outside contributions](#outside-contributions).
 
 ## The pipeline
 
@@ -72,13 +72,13 @@ A `state:needs-design` issue goes through the [design process](./design/design-p
 3. **Branch** from the latest `origin/main`, in a worktree of its own: one issue, one session, one worktree, one branch. The branch name follows [branches](#branches).
 4. **Build** to the definition of done in [AGENTS.md](../AGENTS.md#definition-of-done). A bug fix starts with a test that fails.
 5. **Open a draft pull request** after the first push, so CI starts early and the claim is visible.
-6. **Mark it ready for review** once the template's checklist holds, and report the link.
+6. **Mark it ready for review** once the definition of done holds, and report the link.
 
 An agent that stops before the end comments what is left and puts the issue back to `state:ready`.
 
 ### 5. Review and merge
 
-- Every pull request is reviewed by an agent that did not write it, for correctness, the design rules and the checklists, as review comments. The author fixes or answers each one.
+- Every pull request is reviewed by an agent that did not write it, for correctness and against the design rules and their checklists, as review comments. The author fixes or answers each one.
 - The required `CI` check must pass on all three platforms.
 - A change under `src/` also runs the Screenshots workflow, whose captures show it on each platform.
 - The maintainer merges, on GitHub or by naming the pull requests to merge in a chat with an agent.
@@ -88,9 +88,12 @@ A pull request that does only part of an issue says `Refs #N` instead, and the i
 
 ### 6. Release
 
-- Milestones are versions. Before 1.0, a minor version completes a design milestone (`v0.1.0` completes [M0](./milestones/m0.md), `v0.2.0` will be M1), and patch versions are previews cut from whatever has merged in between.
-- A release is a pull request, `chore(release): vX.Y.Z`, that bumps `package.json`. Its description carries the release notes, drafted from the squash commits since the last tag and grouped by type.
-- After it merges: CI and Screenshots green on all three platforms for that commit, then the tag, then the [Release workflow](../.github/workflows/release.yml)'s draft, then publishing. The notes live on the GitHub release only.
+Releases ride a weekly train, as Zed's do: often enough that a fix reaches users within days, and rarely enough that each update, which every user downloads and installs on restart, is worth it. A merged issue does not trigger a release on its own.
+
+- **Weekly**: once a week, on a fixed day, a patch release is cut from `main` if it holds at least one user-visible change (`feat`, `fix` or `perf`) since the last tag. A week without one ships nothing.
+- **Out of band**: a merged fix for an `urgent` issue ships at once, as a patch release of its own.
+- **Milestones**: when a milestone's last issue closes, the next train ships it as a minor version. Before 1.0, a minor version completes a design milestone (`v0.1.0` completes [M0](./milestones/m0.md), `v0.2.0` will be M1), and the weekly patches in between are previews.
+- **How**: an agent opens `chore(release): vX.Y.Z`, which bumps `package.json`; its description is the release notes, grouped by type and drafted from the squash commits since the last tag. After it merges come CI and Screenshots green on all three platforms for that commit, the tag, the [Release workflow](../.github/workflows/release.yml)'s draft, which the maintainer can install and try, and then publishing. The notes live on the GitHub release only.
 
 ## Gates
 
@@ -129,20 +132,27 @@ Every label carries a description on GitHub, which agents read with `gh label li
 | `regression`                                                                                                                                                                                                                                                                      | It worked in an earlier version                                                               |
 | `upstream`                                                                                                                                                                                                                                                                        | The cause lies in an agent, an adapter, Electron or a library; the issue links upstream       |
 | `performance`, `accessibility`                                                                                                                                                                                                                                                    | Cross-cutting concerns, next to the area                                                      |
-| `good first issue`, `help wanted`                                                                                                                                                                                                                                                 | For outside contributors, once [outside code](#outside-contributions) is accepted             |
 
 `area:agents` covers the agent host, adapters and ACP; `area:session` the session lifecycle, history and persistence; `area:thread` the thread's entries and Markdown; `area:window` the main process, windows, menus and shortcuts; `area:build` CI, packaging, releases and `tools/`. GitHub's default labels go: types replace `bug`, `enhancement`, `question` and `documentation`, and close reasons replace `duplicate`, `invalid` and `wontfix`.
 
 ### Titles and descriptions
 
-- **Titles** are English, in sentence case, without prefixes, tags or emoji, and up to about 70 characters. A bug's title states the problem as seen ("Choosing a model does not close the model menu"); a feature's or task's states the outcome ("Rename sessions inline").
-- **Descriptions** follow the forms' sections. A bug has what happens, what should happen, steps, the environment (OverBench version, OS, agent and its version) and evidence: logs, Export diagnostics, screenshots or a failing test. A feature has the problem, the proposal, "done when" and what is out of scope. A task has what, why and "done when".
-- `gh issue create` skips the forms, so agents write the same sections themselves, with the type set (`--type Bug`).
+Say the core problem and stop. Many issues are one sentence and a screenshot; none needs headings unless it is long.
+
+- **Titles** are in sentence case, without prefixes, tags or emoji, and up to about 70 characters. A bug's title states the problem as seen ("Choosing a model does not close the model menu"); a feature's or task's states the outcome ("Rename sessions inline").
+- **Descriptions** give the problem in a sentence or two, with a screenshot when one shows it. Steps, the environment, logs or "done when" are added only when someone needs them to act.
+- **Language**: issues we open are English. A reporter's title and text stay as written, and every reply on an issue uses the language its reporter wrote in, so a Chinese report gets Chinese replies.
+- `gh issue create` skips the forms, so agents set the type themselves (`--type Bug`).
 - Design docs are linked by their section anchors, and code by path.
 
 ### Forms
 
-`.github/ISSUE_TEMPLATE/` holds `bug.yml` (type Bug; requires the version, OS, agent, steps, expected and actual behavior; logs are optional), `feature.yml` (type Feature; requires the problem and the proposal) and `config.yml`, which turns blank issues off and points security reports to private vulnerability reporting. Both forms add `state:needs-triage`. There is no task form, because tasks come from the maintainer and agents.
+`.github/ISSUE_TEMPLATE/` holds two short forms, both adding `state:needs-triage`:
+
+- `bug.yml` (type Bug): what happened, where a screenshot is welcome, plus the OverBench version and the OS, which decide where to look. The agent, steps and logs are optional.
+- `feature.yml` (type Feature): one field, what you want and why.
+
+`config.yml` turns blank issues off and points security reports to private vulnerability reporting. There is no task form, because tasks come from the maintainer and agents.
 
 ### Milestones
 
@@ -160,7 +170,8 @@ Discussions stay off for now, so issues are the one place to report. When outsid
 ### Pull requests
 
 - **Title**: Conventional Commits, `type(scope): subject`, imperative, lowercase and at most 50 characters, because it becomes the commit subject on `main`. CI checks it.
-- **Description**: `.github/pull_request_template.md`, with What, Why, How (only when not obvious), Testing (what ran, on which platforms), Screenshots (UI changes, light and dark), `Closes #N` or `Refs #N`, and a checklist taken from the definition of done. CI checks that it links an issue.
+- **Description**: one or two sentences on what changes and why, `Closes #N` (or `Refs #N`), and one line on how it was checked, with screenshots in light and dark for a UI change. No headings or checklists; a sentence on a non-obvious decision only when there is one. `.github/pull_request_template.md` holds just those lines, and CI checks that the description links an issue.
+- **Language**: English, always.
 - **Size**: one issue each. Split a pull request that grows past what one review can hold; as a rough guide, 400 changed lines, not counting generated files and the lockfile.
 - **Commits** inside a branch follow Conventional Commits as before, but only the squash commit lands on `main`. Its subject is the pull request's title with `(#N)`, and its body is empty: the pull request it links holds the why, the testing and the review.
 - No tool-generated trailers or attribution lines, in commits, pull requests or issues.
@@ -181,22 +192,23 @@ A ruleset on `main`:
 - **One issue, one session, one worktree, one branch.** The main checkout stays on a clean `main` and is only pulled. Sessions sharing one checkout used to take the same feedback number and the same dev ports; separate worktrees end that. Parallel sessions take issues in different areas, so that two sessions never touch the same files.
 - **Roles.** A session plays one role at a time, and may play several in a row, such as triage and then build for the same bug. It never reviews its own pull request.
 
-| Role    | Takes                                             | Produces                                       | Never                                          |
-| ------- | ------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| Triage  | `state:needs-triage` issues                       | Labels, states, reproductions, comments        | Closes an issue or changes code                |
-| Design  | `state:needs-design` issues                       | A docs pull request with options to try        | Builds beyond prototypes                       |
-| Build   | `state:ready` issues                              | A pull request                                 | Works outside the issue's scope                |
-| Review  | Pull requests ready for review                    | Review comments                                | Approves, merges or pushes to the branch       |
-| Release | The maintainer's request, or a finished milestone | The release pull request and the draft release | Tags or publishes without the maintainer's yes |
+| Role    | Takes                                      | Produces                                       | Never                                          |
+| ------- | ------------------------------------------ | ---------------------------------------------- | ---------------------------------------------- |
+| Triage  | `state:needs-triage` issues                | Labels, states, reproductions, comments        | Closes an issue or changes code                |
+| Design  | `state:needs-design` issues                | A docs pull request with options to try        | Builds beyond prototypes                       |
+| Build   | `state:ready` issues                       | A pull request                                 | Works outside the issue's scope                |
+| Review  | Pull requests ready for review             | Review comments                                | Approves, merges or pushes to the branch       |
+| Release | The weekly train, or a merged `urgent` fix | The release pull request and the draft release | Tags or publishes without the maintainer's yes |
 
 - **Reporting.** An agent reports every issue, pull request and comment it creates, with its link, and asks at every [gate](#gates).
 - **Not yet.** Agents run in sessions the maintainer starts. Event-driven bots on GitHub (triage on open, stale and duplicate bots) wait until volume asks for them; the first step then is a scheduled triage run over `state:needs-triage`.
 
 ## Outside contributions
 
-- **Reports and requests** are welcome through the [forms](#forms).
-- **Code**: OverBench has no license yet, so there are no terms under which it could accept code from outside. Until there is one, outside contributions are issues, reproductions, analysis and design discussion, as in Codex. Once the license exists: features start from an accepted issue, bug fixes from any issue, and a CLA or DCO is chosen with the license.
-- **Quality bar**, whatever the tools: the author understands every line, can answer for it in their own words, and has run what the template asks. A pull request that shows otherwise is closed.
+OverBench takes issues from outside, not code: fixes and features are written by the project, as in Codex.
+
+- **Reports and requests** are welcome through the [forms](#forms), in any language.
+- **Pull requests** can be opened by collaborators only. The repository has been set that way since 2026-10-22 (`pull_request_creation_policy: collaborators_only`); anyone can still read and comment on them.
 - **Security** problems go to GitHub's private vulnerability reporting, described in `SECURITY.md`, and never to a public issue: OverBench runs agents that run shell commands.
 
 ## Adoption
@@ -207,7 +219,7 @@ A parent issue tracks the move, with one sub-issue per step:
 2. Labels and milestone `v0.1.0`, with M0's remaining work.
 3. Issue forms, the pull request template, `SECURITY.md`, and updates to `CONTRIBUTING.md`, `AGENTS.md` and the [docs index](./README.md).
 4. CI: the combined `CI` check, the title and issue-link check, and Screenshots on pull requests.
-5. Repository settings: squash merges only, with the pull request's title and an empty body; delete branches on merge; private vulnerability reporting; then the ruleset, once steps 1 and 4 have landed.
+5. Repository settings: squash merges only, with the pull request's title and an empty body; delete branches on merge; private vulnerability reporting; then the ruleset, once steps 1 and 4 have landed. Pull requests were limited to collaborators on 2026-10-22.
 6. The 22 problems in [M0 feedback](./milestones/m0-feedback.md) that are open or partly fixed become issues in `v0.1.0`, each naming its old number. The document is then frozen, linking to the milestone.
 
 ## To decide
@@ -218,3 +230,4 @@ A parent issue tracks the move, with one sub-issue per step:
 - How CI checks titles and issue links: a short script in the repository, or `amannn/action-semantic-pull-request`, which is a new dependency.
 - Whether the squash commit's body stays empty or takes the pull request's description.
 - Whether Discussions stay off.
+- The weekly release day, and the time zone it follows.
