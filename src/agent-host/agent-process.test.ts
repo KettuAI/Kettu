@@ -250,6 +250,35 @@ describe('a quit that cannot wait for the stop', () => {
   })
 })
 
+describe('a Windows stop that does not end the agent', () => {
+  it('says so when taskkill succeeded and the agent still runs', async () => {
+    // The Windows stop, through a control whose taskkill ends nothing, on every platform.
+    const control: ProcessControl = {
+      platform: 'win32',
+      list: async () => [],
+      kill: () => {},
+      taskkill: async () => {},
+      delay: () => Promise.resolve(),
+    }
+    let stderr = ''
+    const agent = spawnAgent(spec({ FAKE_AGENT_IGNORE_EOF: '1' }), {
+      platform: 'win32',
+      env: process.env,
+      cwd: process.cwd(),
+      onStderr: (text) => (stderr += text),
+      timings: { eofMs: 200, termMs: 200 },
+      control,
+    })
+    try {
+      expect(await until(() => stderr.includes('ready'), 10_000)).toBe(true)
+      expect(await agent.stop()).toMatchObject({ error: 'did not exit after taskkill' })
+      expect(agent.hasExited).toBe(false)
+    } finally {
+      if (agent.pid && alive(agent.pid)) process.kill(agent.pid, 'SIGKILL')
+    }
+  })
+})
+
 describe('a process tool that times out', () => {
   it.each([
     ['at a quit, without waiting for the exit', true],
@@ -283,7 +312,9 @@ describe('a process tool that times out', () => {
     try {
       expect(await until(() => stderr.includes('ready'), 10_000)).toBe(true)
       const started = Date.now()
-      expect(await agent.stop({ quitting })).toMatchObject({ error: expect.any(String) })
+      expect(await agent.stop({ quitting })).toMatchObject({
+        error: 'taskkill failed: taskkill did not finish within 50 ms',
+      })
       const took = Date.now() - started
       if (quitting) expect(took).toBeLessThan(1_500)
       else expect(took).toBeGreaterThanOrEqual(1_750)

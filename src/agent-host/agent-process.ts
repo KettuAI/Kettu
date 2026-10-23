@@ -18,7 +18,7 @@ import { quoteCmd } from './quote'
 export interface ExitInfo {
   code: number | null
   signal: string | null
-  /** Set when the process could not be started at all. */
+  /** Set when the process could not be started at all, or when a stop did not end it. */
   error?: string
 }
 
@@ -45,6 +45,7 @@ export interface SpawnedAgent {
   /**
    * EOF; then, if it still runs, SIGTERM to its whole process tree and SIGKILL to what is left,
    * or `taskkill /T /F` on Windows. What it leaves behind once it exits is `AgentTrees`' to stop.
+   * When it still runs at the end, the result's `error` names the step that failed.
    */
   stop(tools?: ToolOptions): Promise<ExitInfo>
   /**
@@ -121,6 +122,8 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   child.stderr.setEncoding('utf8').on('data', (text: string) => options.onStderr(text))
 
   let terminated: Terminated | null = null
+  // What a stop that did not end the agent reports: the last step it took, or the one that failed.
+  let failure = 'did not exit after SIGKILL'
   // It still runs after EOF, so its tree goes as a whole, found while the links to it hold.
   const endTree = async (pid: number, tools: ToolOptions): Promise<void> => {
     if (platform === 'win32') {
@@ -129,9 +132,11 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
         () => true,
         (error: unknown) => {
           options.onEvent?.('taskkill failed', (error as Error).message)
+          failure = `taskkill failed: ${(error as Error).message}`
           return false
         },
       )
+      if (ended) failure = 'did not exit after taskkill'
       // A quit leaves what a taskkill that gave up was ending to the reap, which tries again.
       if (ended || !tools.quitting) await waitForExit(exited, timings.termMs)
       return
@@ -160,7 +165,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
         if (!(await waitForExit(exited, timings.eofMs)) && child.pid)
           await endTree(child.pid, tools)
       }
-      return hasExited ? exited : { code: null, signal: null, error: 'did not exit after SIGKILL' }
+      return hasExited ? exited : { code: null, signal: null, error: failure }
     })()
     return stopping
   }
