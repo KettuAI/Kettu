@@ -65,12 +65,16 @@ export function isTrusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   )
 }
 
-/** `isTrusted`, once every frame the page is creating has committed, which holds the call till then. */
-export async function isTrustedOnceSettled(
+/**
+ * Runs `run` with `isTrusted`, at once, or while a frame of the page is pending, once every frame
+ * has committed. Held calls and messages start in the order they came, before any that come after.
+ */
+export function whenSettled<T>(
   event: IpcMainInvokeEvent | IpcMainEvent,
-): Promise<boolean> {
-  await framesSettled(event.sender)
-  return isTrusted(event)
+  run: (trusted: boolean) => T,
+): T | Promise<T> {
+  const settling = framesSettled(event.sender)
+  return settling ? settling.then<T>(() => run(isTrusted(event))) : run(isTrusted(event))
 }
 
 function handle<C extends IpcInvokeChannel>(
@@ -78,15 +82,15 @@ function handle<C extends IpcInvokeChannel>(
   arity: number,
   handler: (caller: Caller, ...args: unknown[]) => IpcInvokeResult<C> | Promise<IpcInvokeResult<C>>,
 ): void {
-  ipcMain.handle(channel, async (event, ...args: unknown[]) => {
-    if (!(await isTrustedOnceSettled(event))) {
-      throw new Error(`Rejected "${channel}" call from untrusted sender`)
-    }
-    if (args.length !== arity) {
-      throw new Error(`"${channel}" takes ${arity} argument(s), got ${args.length}`)
-    }
-    return handler({ window: BrowserWindow.fromWebContents(event.sender), event }, ...args)
-  })
+  ipcMain.handle(channel, async (event, ...args: unknown[]) =>
+    whenSettled(event, (trusted) => {
+      if (!trusted) throw new Error(`Rejected "${channel}" call from untrusted sender`)
+      if (args.length !== arity) {
+        throw new Error(`"${channel}" takes ${arity} argument(s), got ${args.length}`)
+      }
+      return handler({ window: BrowserWindow.fromWebContents(event.sender), event }, ...args)
+    }),
+  )
 }
 
 function on<C extends keyof IpcSendContract>(
@@ -94,17 +98,10 @@ function on<C extends keyof IpcSendContract>(
   handler: (event: IpcMainEvent, ...args: unknown[]) => void,
 ): void {
   ipcMain.on(channel, (event, ...args: unknown[]) => {
-    const run = (): void => {
-      if (!isTrusted(event)) {
-        log.warn(`Rejected "${channel}" message from untrusted sender`)
-        return
-      }
-      handler(event, ...args)
-    }
-    // Held messages run in the order they came, before any that arrives after the frames settle.
-    const settling = framesSettled(event.sender)
-    if (settling) void settling.then(run)
-    else run()
+    void whenSettled(event, (trusted) => {
+      if (trusted) handler(event, ...args)
+      else log.warn(`Rejected "${channel}" message from untrusted sender`)
+    })
   })
 }
 

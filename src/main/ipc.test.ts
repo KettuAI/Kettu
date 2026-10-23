@@ -15,7 +15,7 @@ vi.mock('electron', () => ({
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
-const { isTrusted, isTrustedOnceSettled } = await import('./ipc')
+const { isTrusted, whenSettled } = await import('./ipc')
 const { watchSubframes } = await import('./subframes')
 
 const ARTIFACT = 'overbench-artifact://0123456789abcdef0123456789/'
@@ -88,13 +88,19 @@ describe('isTrusted', () => {
   })
 })
 
-describe('isTrustedOnceSettled', () => {
-  it("holds a call while a frame is pending and answers it once the frame is an artifact's", async () => {
+describe('whenSettled', () => {
+  it('runs at once, with whether the sender is trusted, while no frame is pending', () => {
+    const contents = new FakeContents()
+    watch(contents)
+    expect(whenSettled(eventFrom(contents), (trusted) => trusted)).toBe(true)
+  })
+
+  it("holds a call while a frame is pending and runs it once the frame is an artifact's", async () => {
     const contents = new FakeContents()
     watch(contents)
     const frame = contents.addFrame()
     let answer: boolean | null = null
-    const call = isTrustedOnceSettled(eventFrom(contents)).then((trusted) => (answer = trusted))
+    const call = whenSettled(eventFrom(contents), (trusted) => (answer = trusted))
     await Promise.resolve()
     expect(answer).toBeNull()
     contents.commit(frame, ARTIFACT)
@@ -106,8 +112,24 @@ describe('isTrustedOnceSettled', () => {
     const contents = new FakeContents()
     watch(contents)
     const frame = contents.addFrame()
-    const call = isTrustedOnceSettled(eventFrom(contents))
+    const call = whenSettled(eventFrom(contents), (trusted) => trusted)
     contents.commit(frame, 'http://localhost:5173/')
     expect(await call).toBe(false)
+  })
+
+  it('runs held calls and messages in the order they came', async () => {
+    const contents = new FakeContents()
+    watch(contents)
+    const frame = contents.addFrame()
+    const order: string[] = []
+    const call = whenSettled(eventFrom(contents), async () => {
+      order.push('call')
+      await Promise.resolve()
+      order.push('call answered')
+    })
+    void whenSettled(eventFrom(contents), () => order.push('message'))
+    contents.commit(frame, ARTIFACT)
+    await call
+    expect(order).toEqual(['call', 'message', 'call answered'])
   })
 })
