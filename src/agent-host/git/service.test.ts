@@ -242,7 +242,8 @@ describe('retain and release', () => {
     expect(await waitFor(() => statuses.at(-1)?.head.oid === oid, 4000)).toBe(true)
 
     svc.release(dir, 'b')
-    await sleep(300)
+    // A refresh still running at the release would read the next commit; this one starts after it.
+    await svc.status(dir)
     const before = statuses.length
     await s.commit(dir, 'c.txt', 'feat: no longer live')
     await sleep(1200)
