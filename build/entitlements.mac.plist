@@ -8,5 +8,14 @@
     <true/>
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
+    <!-- macOS counts the requests of commands that agents and the terminal run against the app,
+         and the hardened runtime denies them without a prompt unless the app holds these. The
+         ad-hoc build, which has no hardened runtime, is not affected by them. -->
+    <key>com.apple.security.device.camera</key>
+    <true/>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
   </dict>
 </plist>

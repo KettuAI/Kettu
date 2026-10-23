@@ -157,7 +157,7 @@ export class Updater {
       autoUpdater.allowDowngrade = false
       autoUpdater.autoDownload = this.autoDownload(settings)
       autoUpdater.autoInstallOnAppQuit = this.mode === 'install'
-      // Releases carry no blockmaps, so the Windows installer always downloads whole.
+      // Releases carry no NSIS blockmap, so the Windows installer always downloads whole.
       autoUpdater.disableDifferentialDownload = process.platform === 'win32'
       autoUpdater.on('checking-for-update', () =>
         this.dispatch({ type: 'checking', manual: this.manual }),

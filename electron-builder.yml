@@ -26,15 +26,16 @@ publish:
 
 mac:
   category: public.app-category.developer-tools
-  # Squirrel.Mac installs updates from a zip, which needs a Developer ID first; until then the
-  # update links to the release and the dmg is all a release needs.
+  # Without a Developer ID the update links to the release, so the dmg is all a release needs.
+  # electron-builder.mac-signed.yml adds the zip that Squirrel.Mac installs from.
   target:
     - dmg
   entitlementsInherit: build/entitlements.mac.plist
-  # No Developer ID yet. Left unsigned, a downloaded build is reported as damaged; an ad-hoc
-  # signature keeps the bundle valid, so Gatekeeper offers Open Anyway instead. The hardened
-  # runtime would refuse to load the ad-hoc signed Electron framework (no Team ID), so it stays
-  # off until a Developer ID signs the app.
+  # Ad-hoc signing, for local builds and releases without the signing secrets; a Developer ID
+  # build uses electron-builder.mac-signed.yml (docs/design/updates.md#macos-signing). Left
+  # unsigned, a downloaded build is reported as damaged; an ad-hoc signature keeps the bundle
+  # valid, so Gatekeeper offers Open Anyway instead. The hardened runtime would refuse to load the
+  # ad-hoc signed Electron framework (no Team ID), so it is on only with the Developer ID.
   identity: '-'
   hardenedRuntime: false
   notarize: false

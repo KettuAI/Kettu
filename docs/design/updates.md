@@ -1,6 +1,6 @@
 # Updates
 
-> Status: Draft · Part of the [architecture](../architecture.md) · Built in [M0.5](../milestones/m0.md#work-packages) · Observed on 2026-10-20: `electron-updater` 6.8, electron-builder 26
+> Status: Draft · Part of the [architecture](../architecture.md) · Built in [M0.5](../milestones/m0.md#work-packages) · Observed on 2026-10-20: `electron-updater` 6.8, electron-builder 26; [macOS signing](#macos-signing) on 2026-10-23: electron-builder 26.15, `@electron/notarize` 2.5
 
 An app that cannot update itself leaves its users on the version they first installed. OverBench checks for new releases in the background, downloads them, and installs one when the app restarts, so staying current takes one click and never interrupts work. The interface is in [ui.md](./ui.md#updates).
 
@@ -23,24 +23,67 @@ The updater lives in main (`src/main/updater.ts`), because installing means quit
 
 ## Platforms
 
-| Platform | Package                              | Mode    | How the update installs                                                                               |
-| -------- | ------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------- |
-| macOS    | `dmg` and `zip`, Developer ID signed | Install | Squirrel.Mac checks the new bundle's signature and swaps it in on restart                             |
-| macOS    | Ad-hoc signed, as M0 builds are      | Link    | Squirrel.Mac refuses apps without a Developer ID, so the update opens the release page to download it |
-| Windows  | NSIS, per user                       | Install | The new installer runs silently on restart and starts the app again                                   |
-| Linux    | AppImage                             | Install | The AppImage file is replaced and started again                                                       |
-| Linux    | Not started from an AppImage         | Off     | Settings › About says that updates come from the package manager                                      |
+| Platform | Package                                                             | Mode    | How the update installs                                                                               |
+| -------- | ------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| macOS    | `dmg` and `zip`, Developer ID signed and notarized                  | Install | Squirrel.Mac checks the new bundle's signature and swaps it in on restart                             |
+| macOS    | `dmg`, ad-hoc signed, without the [signing secrets](#macos-signing) | Link    | Squirrel.Mac refuses apps without a Developer ID, so the update opens the release page to download it |
+| Windows  | NSIS, per user                                                      | Install | The new installer runs silently on restart and starts the app again                                   |
+| Linux    | AppImage                                                            | Install | The AppImage file is replaced and started again                                                       |
+| Linux    | Not started from an AppImage                                        | Off     | Settings › About says that updates come from the package manager                                      |
 
-- **Link** mode checks and tells you like Install mode, but the action opens the release page in the browser, because the app cannot replace itself. Code signing and notarization are planned after M0 ([scope](../milestones/m0.md#out-planned-for-later-milestones)); a signed build switches to Install with no other change.
-- The release workflow decides the mode at build time and electron-vite inlines it as a constant, so the app never has to inspect its own signature: `MAIN_VITE_UPDATE_MODE` is `install` or `link`. Without it, macOS builds link and the others install, so a local `pnpm package` behaves like a release; a signed macOS build sets `install`.
-- Squirrel.Mac installs from a `zip`, so the `zip` target goes back into `electron-builder.yml` next to `dmg` together with the Developer ID. Until then a macOS release has only the `dmg`.
+- **Link** mode checks and tells you like Install mode, but the action opens the release page in the browser, because the app cannot replace itself. The release workflow signs and notarizes macOS once its [signing secrets](#macos-signing) are set, and a signed build switches to Install with no other change.
+- The release workflow decides the mode at build time and electron-vite inlines it as a constant, so the app never has to inspect its own signature: `MAIN_VITE_UPDATE_MODE` is `install` or `link`. Without it, macOS builds link and the others install, so a local `pnpm package` behaves like an ad-hoc signed release; the workflow sets `install` on a Developer ID signed macOS build.
+- Squirrel.Mac installs from a `zip`, so a signed macOS build adds the `zip` target next to the `dmg`; an ad-hoc signed release has only the `dmg`.
 
 ## Releases
 
-- A release holds the six installers, macOS, Windows and Linux each for x64 and arm64, and the four update files clients read: `latest.yml` (Windows), `latest-mac.yml`, `latest-linux.yml` and `latest-linux-arm64.yml`. Blockmaps, the macOS `zip` and unpacked apps are not uploaded. CI uploads them to a **draft** release on a version tag, and no client sees it until the maintainer publishes the draft.
-- `.github/workflows/release.yml` runs on `v*` tags. Each architecture builds on its own runner (`macos-latest`, `macos-15-intel`, `windows-latest`, `windows-11-arm`, `ubuntu-24.04`, `ubuntu-24.04-arm`), so node-pty is compiled or picked for the machine that also runs the tests. A build fails unless the tag equals `v` plus the version in `package.json`, runs the tests, builds with `MAIN_VITE_UPDATE_MODE` set per platform (`link` on macOS), and runs `electron-builder --publish never`, keeping only its installer and update file. A last job joins the update files, since macOS and Windows clients read one file that lists both architectures and electron-updater picks theirs by the `arm64` or `x64` in the file name, and uploads everything to the draft with the workflow's `GITHUB_TOKEN`; it refuses to touch a published release. Started by hand, the workflow builds and tests every installer and joins the update files without touching a release. electron-builder's `publish` section (`provider: github`, `owner: overbench`, `repo: overbench`) writes `app-update.yml` into the app. Signing identities are not looked up yet (`CSC_IDENTITY_AUTO_DISCOVERY=false`). Linux builds on `ubuntu-24.04`, never `ubuntu-latest`: node-pty 1.1.0 ships no Linux prebuild, so `pnpm install` compiles it on the runner, and a newer Ubuntu would silently raise the glibc the AppImage needs. Moving to a newer one is a decision about which distributions OverBench supports.
-- Until a Developer ID signs them, macOS builds are ad-hoc signed without the hardened runtime (`identity: '-'` and `hardenedRuntime: false` in `electron-builder.yml`). A build left unsigned has an invalid bundle signature, which macOS reports as damaged with no way to open it; an ad-hoc signed one is valid, so Gatekeeper offers **Open Anyway** in System Settings › Privacy & Security. The hardened runtime refuses to load the ad-hoc signed Electron framework, whose signature has no Team ID, so it comes back together with the Developer ID.
+- A release holds the six installers, macOS, Windows and Linux each for x64 and arm64, the two macOS `zip`s Squirrel.Mac installs from when macOS is signed, with their blockmaps, and the four update files clients read: `latest.yml` (Windows), `latest-mac.yml`, `latest-linux.yml` and `latest-linux-arm64.yml`. Other blockmaps and unpacked apps are not uploaded. CI uploads them to a **draft** release on a version tag, and no client sees it until the maintainer publishes the draft.
+- `.github/workflows/release.yml` runs on `v*` tags. Each architecture builds on its own runner (`macos-latest`, `macos-15-intel`, `windows-latest`, `windows-11-arm`, `ubuntu-24.04`, `ubuntu-24.04-arm`), so node-pty is compiled or picked for the machine that also runs the tests. A build fails unless the tag equals `v` plus the version in `package.json`, runs the tests, builds with `MAIN_VITE_UPDATE_MODE` set per platform (`link` on macOS unless it is signed), and runs `electron-builder --publish never`, keeping only its installers and update file. A last job joins the update files, since macOS and Windows clients read one file that lists both architectures and electron-updater picks theirs by the `arm64` or `x64` in the file name, and uploads everything to the draft with the workflow's `GITHUB_TOKEN`; it refuses to touch a published release. Started by hand, the workflow builds and tests every installer and joins the update files without touching a release. electron-builder's `publish` section (`provider: github`, `owner: overbench`, `repo: overbench`) writes `app-update.yml` into the app. An ad-hoc signed build does not look up signing identities (`CSC_IDENTITY_AUTO_DISCOVERY=false`). Linux builds on `ubuntu-24.04`, never `ubuntu-latest`: node-pty 1.1.0 ships no Linux prebuild, so `pnpm install` compiles it on the runner, and a newer Ubuntu would silently raise the glibc the AppImage needs. Moving to a newer one is a decision about which distributions OverBench supports.
+- Without the Developer ID, macOS builds are ad-hoc signed without the hardened runtime (`identity: '-'` and `hardenedRuntime: false` in `electron-builder.yml`). A build left unsigned has an invalid bundle signature, which macOS reports as damaged with no way to open it; an ad-hoc signed one is valid, so Gatekeeper offers **Open Anyway** in System Settings › Privacy & Security. The hardened runtime refuses to load the ad-hoc signed Electron framework, whose signature has no Team ID, so it is on only in a Developer ID signed build.
 - Versions are semver. Releases marked as pre-release on GitHub are never offered (`allowPrerelease: false`) and an older version never replaces a newer one (`allowDowngrade: false`). A beta channel comes later.
+
+## macOS signing
+
+The release workflow signs macOS with the Developer ID when every signing secret is set, and keeps ad-hoc signing and Link mode when none is, so releases made before the certificate arrives do not change. Its first job, **macOS signing**, decides once per run with `tools/workflow/mac-signing.mjs`, which is told only whether each secret is set, and logs the path it took as a notice.
+
+| Secrets set                                                                                           | The run                                                                          |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| None                                                                                                  | Ad-hoc signed `dmg`, Link mode                                                   |
+| The certificate, and the API key or the Apple ID                                                      | Signed, notarized and stapled `dmg` and `zip`, Install mode; the API key if both |
+| Anything else: part of a set, the certificate without either, or notarization without the certificate | Fails before anything builds                                                     |
+
+| Secret                        | Holds                                                                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------- |
+| `CSC_LINK`                    | The Developer ID Application certificate with its private key, as a base64 `.p12`         |
+| `CSC_KEY_PASSWORD`            | The password the `.p12` was exported with                                                 |
+| `APPLE_API_KEY`               | The contents of the App Store Connect API key's `.p8` file                                |
+| `APPLE_API_KEY_ID`            | That key's Key ID                                                                         |
+| `APPLE_API_ISSUER`            | The Issuer ID shown above the list of keys                                                |
+| `APPLE_ID`                    | Instead of the API key: the email of the Apple Account that notarizes                     |
+| `APPLE_APP_SPECIFIC_PASSWORD` | An [app-specific password](https://support.apple.com/en-us/102654) for that Apple Account |
+| `APPLE_TEAM_ID`               | The team's ten-character Team ID                                                          |
+
+- A signed build packages with `electron-builder.mac-signed.yml`, which extends `electron-builder.yml`. It adds the `zip`, takes the identity from the certificate in `CSC_LINK` instead of `'-'`, fails if nothing signs (`forceCodeSigning`), turns on the hardened runtime, under which `build/entitlements.mac.plist` lets V8 compile code, and notarizes. electron-builder imports the certificate into a temporary keychain, signs the app, and has `@electron/notarize` submit it with `notarytool` and staple it; the `dmg` and `zip` are made from the stapled app. The `dmg` itself stays unsigned, electron-builder's default, because Gatekeeper checks the app inside it.
+- Under the hardened runtime, macOS refuses the camera, the microphone and Apple Events without a prompt to an app that lacks their entitlements, and it counts requests from commands that agents and the terminal run as OverBench's. So `build/entitlements.mac.plist` also grants `device.camera`, `device.audio-input` and `automation.apple-events`, and the signed config adds the text of their prompts in `mac.extendInfo`, so such a command still gets a prompt; the ad-hoc build signs with the same file, where these three have no effect without the hardened runtime.
+- notarytool takes the API key as a file, so the workflow writes the secret to the runner's temporary folder and passes that path as `APPLE_API_KEY`. electron-builder notarizes with an Apple ID whenever `APPLE_ID` or `APPLE_APP_SPECIFIC_PASSWORD` is set, so the workflow passes it only the set the first job chose.
+- electron-builder only warns when it cannot notarize, so every signed build checks the app in the `dmg` and in the `zip` with `codesign --verify --deep --strict`, `spctl --assess --type execute`, which must report `source=Notarized Developer ID`, and `xcrun stapler validate`. On a runner with Gatekeeper off, spctl accepts anything, so it is skipped with a warning.
+- Squirrel.Mac installs only an update signed like the running app, so ad-hoc signed builds keep linking to the release, and their users download the first signed release by hand.
+
+To set it up, the maintainer:
+
+1. Creates a **Developer ID Application** certificate in [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/certificates/list), which needs the Account Holder, from a certificate signing request made with Keychain Access › Certificate Assistant › Request a Certificate From a Certificate Authority, and opens the downloaded certificate so it joins its private key in the login keychain.
+2. Exports it from Keychain Access › My Certificates as `developer-id.p12` with a password, checking that its name starts with "Developer ID Application:" (electron-builder also signs with an Apple Development certificate, and the run then fails at notarization), and stores both:
+   ```sh
+   base64 -i developer-id.p12 | gh secret set CSC_LINK --repo overbench/overbench
+   gh secret set CSC_KEY_PASSWORD --repo overbench/overbench
+   ```
+3. Generates a **Team Key** with **App Manager** access in [App Store Connect › Users and Access › Integrations › App Store Connect API](https://appstoreconnect.apple.com/access/integrations/api), downloads its `AuthKey_<Key ID>.p8`, which is offered only once, and stores it with the Key ID and the Issuer ID:
+   ```sh
+   gh secret set APPLE_API_KEY --repo overbench/overbench < AuthKey_XXXXXXXXXX.p8
+   gh secret set APPLE_API_KEY_ID --repo overbench/overbench
+   gh secret set APPLE_API_ISSUER --repo overbench/overbench
+   ```
+4. Runs the Release workflow by hand on `main` (`gh workflow run release.yml --repo overbench/overbench --ref main`, or Actions › Release › Run workflow), which touches no release. The **macOS signing** job's notice must name the certificate and the API key, and the `macos-latest` and `macos-15-intel` jobs must pass **Check the signature and notarization**; their `release-macos-latest` and `release-macos-15-intel` artifacts hold a `dmg` to try.
 
 ## Checking and downloading
 
@@ -54,7 +97,7 @@ The updater lives in main (`src/main/updater.ts`), because installing means quit
   | Notify only          | Every hour      | When you choose **Download** |         |
   | Off                  | Only when asked | When you choose **Download** |         |
 
-- Releases carry no separate blockmaps, so the Windows installer always downloads whole (`disableDifferentialDownload`); an AppImage embeds its blockmap, so Linux downloads only the changed blocks. Either way the file's SHA-512 is checked against `latest*.yml` before it counts as ready.
+- Releases carry no NSIS blockmap, so the Windows installer always downloads whole (`disableDifferentialDownload`). A signed macOS release carries its `zip`'s blockmap, so from the second update installed in place, when electron-updater has the previous `zip` in its cache, macOS downloads only the changed blocks; an AppImage embeds its blockmap, so Linux downloads only the changed blocks too. In every case the file's SHA-512 is checked against `latest*.yml` before it counts as ready.
 - A failed automatic check or download is logged and retried at the next hourly check; nothing is shown: the state goes back to what it was, `idle` or, after a failed download, `available`. A check or download you started shows its error in Settings › About, reduced to its first line. Starting a check while an automatic one runs joins it and makes its error yours.
 - When electron-updater itself cannot be loaded, no check can run at all, so even an automatic check moves to `error` and Settings › About says that it could not check, instead of "You're up to date". The next check tries to load it again.
 - No check runs while an update downloads or is ready, and **Check for updates** then returns the current status.
