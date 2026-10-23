@@ -155,12 +155,12 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 
 - **Neutral by default.** Surfaces, lines, text and chrome icons are the neutral tokens. Nothing is colored to decorate.
 - **Color means one of five things**, each with its tokens in [meaning](./design-system.md#meaning) and [data graphics](./design-system.md#data-graphics):
-  - state: running, unread, waiting on the user, failed, succeeded, merged;
+  - state: waiting on the user, failed, succeeded, merged;
   - a control that is on or chosen: `--checked`;
   - cost: the [reasoning levels](./design-system.md#reasoning-levels) gradient;
   - identity: the agent marks and the file-type icons, the only multicolor images, and each agent's series in a chart, in its mark's color;
   - amount, in a chart only: one hue that deepens with the amount, the [data graphics](./design-system.md#data-graphics) steps of `--checked` (decided while the maintainer was away; to be reviewed).
-- **Quiet for ongoing, clear for done.** A state that lasts is the quieter tone, as `--running` is beside `--checked` ([problem 57](../milestones/m0-feedback.md#57-a-finished-session-leaves-no-mark-and-the-running-dot-is-loud)). `--attention` is the loudest color in the app and only marks something waiting on the user.
+- **Quiet unless it needs you.** A sidebar row's running and unread marks are neutral, a muted `Spinner` and a muted dot. `--attention` is the loudest color in the app and only marks something waiting on the user.
 - **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exception.
 - **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` in a component, and no Tailwind palette utilities (`bg-white`, `text-red-500`). A new color is a token in `globals.css` and a row in the design system first, in both themes, at AA contrast on every surface it sits on.
 

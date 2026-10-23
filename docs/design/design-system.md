@@ -53,13 +53,12 @@ Lines are translucent, so one token reads the same on every surface step. The al
 ### Meaning
 
 - `--primary` stays shadcn's neutral: near black in the light theme, near white in the dark one. OverBench has no brand accent, so color is left for meaning.
-- `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user. It is the loudest color in the app.
+- `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user, such as the dot at the end of a sidebar row, which carries a 1 px inset ring in `--attention-text` so its edge reaches 3:1 on the light sidebar. It is the loudest color in the app.
 - `--success` (green): completed checks.
 - **Tints** are a meaning color at a low alpha, the fill of a status pill or a notice, with the color's text step on top: `--success-tint` with `--success-text`; `--checked-tint` with `--checked-text` (`oklch(0.47 0.16 255)` light, `oklch(0.8 0.1 255)` dark) for information and an action on offer, such as an agent update; `--attention-tint` with `--attention-text`; `--destructive-tint` with `--destructive`. A pill that is a button deepens its tint on hover (`--checked-tint-hover`, `--destructive-tint-hover`). Light tints are 9 to 13% and dark ones 13 to 22%, so they read the same on surfaces 0 and 1.
 - `--mark` (a soft yellow, `oklch(0.88 0.15 90 / 55%)` light and `oklch(0.8 0.14 85 / 32%)` dark): the text a search matched, and the brief flash on the row a search result jumps to. It is no state, so it never appears outside search.
 - **Usage levels**: a bar of plan usage takes `--success` below 60% used, `--attention` from 60% and `--destructive` from 90% or once the limit is reached, and its percentage the matching text step, so how much is left reads before the number does. Progress that is not usage, such as a download, stays `--checked`.
-- `--checked` (blue): a control that is on or chosen, today the switch's track. It is the blue macOS, Windows and GNOME tint their own controls with, so the state reads at a glance. The sidebar's unread dot takes the same blue through `bg-unread`, the usual mark of something new.
-- `--running` (slate blue, `oklch(0.62 0.07 255)` light and `oklch(0.7 0.07 255)` dark): the sidebar's running dot. It is quieter than `--checked`, so a turn still working stays calm and one that finished stands out.
+- `--checked` (blue): a control that is on or chosen, today the switch's track. It is the blue macOS, Windows and GNOME tint their own controls with, so the state reads at a glance.
 - `--destructive` is a brick red, `oklch(0.5 0.17 27)` light and `oklch(0.7 0.16 22)` dark, calmer than shadcn's saturated red. It marks errors, conflicts and deletion in text and icons and tints destructive buttons, so a loud red would shout from every one of them; the darker light value still reaches 5.9:1 on surface 0. `--ring` stays shadcn's.
 - `--muted-foreground` in the light theme is `oklch(0.53 0 0)` instead of shadcn's 0.556, which reaches only 4.49:1 on surface 0, just under WCAG AA.
 - `--sidebar-accent`, the fill of hovered and selected sidebar rows, is `oklch(0.945 0 0)` light and `oklch(0.25 0 0)` dark; shadcn's 0.97 barely shows on surface 0.
@@ -386,12 +385,12 @@ Durations are custom properties: `duration-(--duration-fast)` times a transition
 
 ### CSS or Motion
 
-| CSS                                                                                   | Motion                                               |
-| ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Hover, press, focus, color, opacity and shadow changes                                | Elements leaving the tree (`AnimatePresence`)        |
-| Enter-only effects, through tw-animate-css (`animate-in`, `fade-in`)                  | Springs, layout and shared-element animations        |
-| Looping indicators: `Spinner`, `Skeleton`, `shimmer`, `animate-pulse`, `animate-ping` | Gestures: drag and anything that follows the pointer |
-| Disclosures (`Collapsible`) and scroll-edge fades (`scroll-fade`)                     |                                                      |
+| CSS                                                                   | Motion                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------- |
+| Hover, press, focus, color, opacity and shadow changes                | Elements leaving the tree (`AnimatePresence`)        |
+| Enter-only effects, through tw-animate-css (`animate-in`, `fade-in`)  | Springs, layout and shared-element animations        |
+| Looping indicators: `Spinner`, `Skeleton`, `shimmer`, `animate-pulse` | Gestures: drag and anything that follows the pointer |
+| Disclosures (`Collapsible`) and scroll-edge fades (`scroll-fade`)     |                                                      |
 
 CSS cannot animate an element that is being removed, which is why exits go to Motion. The enter and exit transitions built into shadcn components stay as they are.
 
@@ -408,7 +407,7 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 | Thinking, waiting | shadcn's `shimmer` utility on the status text                                                                                                                                                                                                               | None                                                                                               |
 | Loading           | shadcn `Skeleton` and `Spinner`                                                                                                                                                                                                                             | None                                                                                               |
 | Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself. The thread's top edge uses `scroll-fade-top-overlay`, a gradient over the scroller, since a mask there repaints the thread while it streams | `--scroll-fade-size: 28px`                                                                         |
-| Running           | An 8 px `bg-running` dot under Tailwind's `animate-ping`, a copy of the dot that grows to twice its size and fades, at 75% opacity                                                                                                                          | `--animate-ping` at 2 s, the period of `animate-pulse`, so the dot breathes rather than flashes    |
+| Running           | The shared `Spinner` at 12 px in `--muted-foreground`, at the end of a sidebar row                                                                                                                                                                          | None                                                                                               |
 | Copy feedback     | The copy button in Streamdown's code blocks                                                                                                                                                                                                                 | None                                                                                               |
 | Staggered entry   | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1 fill-mode-both`, with a growing `animation-delay`                                                                                                                                                | `--duration-slow`, `--ease-out-quint`; the first item after 60 ms, each next one 30 ms later, once |
 | Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                                                                                                                                                                    | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal              |

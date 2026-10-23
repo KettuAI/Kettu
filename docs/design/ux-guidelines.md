@@ -66,12 +66,12 @@ Every action shows that it was received, scaled to how long it takes:
 
 Four levels, from quiet to loud. A signal takes the lowest level that is true.
 
-| Level   | Means                              | Shows as                                                                                   |
-| ------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| Working | A turn is running                  | The `--running` dot on its row                                                             |
-| New     | A turn finished out of view        | The `--checked` dot on its row, until the session is shown                                 |
-| Waiting | The agent needs an answer to go on | `--attention`: the count on the row, the ring on the card, the count on Settings' **Back** |
-| Failed  | Something failed out of view       | The error mark on its row, until the session is shown                                      |
+| Level   | Means                              | Shows as                                                                                 |
+| ------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| Working | A turn is running                  | A muted `Spinner` on its row                                                             |
+| New     | A turn finished out of view        | A muted dot on its row, until the session is shown                                       |
+| Waiting | The agent needs an answer to go on | `--attention`: the dot on the row, the ring on the card, the count on Settings' **Back** |
+| Failed  | Something failed out of view       | The error mark on its row, until the session is shown                                    |
 
 - **A mark goes once its cause is seen** ([problems 46, 57](../milestones/m0-feedback.md#57-a-finished-session-leaves-no-mark-and-the-running-dot-is-loud)); the record of it, such as the error notice in the thread, stays.
 - **A signal is never lost by navigating away**: when its source leaves the screen, the way back carries it, as Settings' **Back** carries the waiting count.

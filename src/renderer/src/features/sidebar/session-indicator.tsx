@@ -6,8 +6,7 @@ import { cn } from '@renderer/lib/utils'
 
 /**
  * One status per row, by priority: waiting for you, error, running, starting, unread. Its 16 px
- * slot stays when there is none, so a status appearing never moves the title. The slot is square
- * because the row truncates its last span, which would otherwise clip the running halo.
+ * slot stays when there is none, so a status appearing never moves the title.
  */
 export function SessionIndicator({
   summary,
@@ -21,22 +20,17 @@ export function SessionIndicator({
   className?: string
 }) {
   const { t } = useTranslation('sidebar')
-  if (permissionCount > 0) {
-    return (
-      <span
-        aria-label={t('indicator.waiting', { count: permissionCount })}
-        className={cn(
-          'grid h-4 min-w-4 place-items-center rounded-full bg-attention px-1 text-[10px] font-semibold text-attention-foreground tabular transition-opacity duration-(--duration-fast)',
-          className,
-        )}
-      >
-        {permissionCount}
-      </span>
-    )
-  }
 
   let mark = null
-  if (summary.attention === 'error' || summary.status === 'failed') {
+  if (permissionCount > 0) {
+    mark = (
+      <span
+        role="img"
+        aria-label={t('indicator.waiting', { count: permissionCount })}
+        className="size-2 rounded-full bg-attention inset-ring-1 inset-ring-attention-text"
+      />
+    )
+  } else if (summary.attention === 'error' || summary.status === 'failed') {
     mark = (
       <CircleAlertIcon
         role="img"
@@ -45,15 +39,7 @@ export function SessionIndicator({
       />
     )
   } else if (running) {
-    mark = (
-      <span
-        role="img"
-        aria-label={t('indicator.running')}
-        className="relative size-2 rounded-full bg-running"
-      >
-        <span className="absolute inset-0 animate-ping rounded-full bg-running opacity-75" />
-      </span>
-    )
+    mark = <Spinner aria-label={t('indicator.running')} className="size-3 text-muted-foreground" />
   } else if (summary.status === 'starting') {
     mark = <Spinner aria-label={t('indicator.starting')} className="size-3 text-muted-foreground" />
   } else if (summary.attention === 'unread') {
@@ -61,7 +47,7 @@ export function SessionIndicator({
       <span
         role="img"
         aria-label={t('indicator.unread')}
-        className="size-2 rounded-full bg-unread"
+        className="size-2 rounded-full bg-muted-foreground"
       />
     )
   }
