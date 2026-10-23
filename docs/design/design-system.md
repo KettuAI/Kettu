@@ -53,7 +53,7 @@ Lines are translucent, so one token reads the same on every surface step. The al
 ### Meaning
 
 - `--primary` stays shadcn's neutral: near black in the light theme, near white in the dark one. OverBench has no brand accent, so color is left for meaning.
-- `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user, such as the dot at the end of a sidebar row. It is the loudest color in the app.
+- `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user, such as the dot at the end of a sidebar row, which carries a 1 px inset ring in `--attention-text` so its edge reaches 3:1 on the light sidebar. It is the loudest color in the app.
 - `--success` (green): completed checks.
 - **Tints** are a meaning color at a low alpha, the fill of a status pill or a notice, with the color's text step on top: `--success-tint` with `--success-text`; `--checked-tint` with `--checked-text` (`oklch(0.47 0.16 255)` light, `oklch(0.8 0.1 255)` dark) for information and an action on offer, such as an agent update; `--attention-tint` with `--attention-text`; `--destructive-tint` with `--destructive`. A pill that is a button deepens its tint on hover (`--checked-tint-hover`, `--destructive-tint-hover`). Light tints are 9 to 13% and dark ones 13 to 22%, so they read the same on surfaces 0 and 1.
 - `--mark` (a soft yellow, `oklch(0.88 0.15 90 / 55%)` light and `oklch(0.8 0.14 85 / 32%)` dark): the text a search matched, and the brief flash on the row a search result jumps to. It is no state, so it never appears outside search.

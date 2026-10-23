@@ -160,7 +160,7 @@ Every piece of text takes one of these roles. A size, weight, line height or col
   - cost: the [reasoning levels](./design-system.md#reasoning-levels) gradient;
   - identity: the agent marks and the file-type icons, the only multicolor images, and each agent's series in a chart, in its mark's color;
   - amount, in a chart only: one hue that deepens with the amount, the [data graphics](./design-system.md#data-graphics) steps of `--checked` (decided while the maintainer was away; to be reviewed).
-- **Quiet unless it needs you.** A state that lasts or that nobody has to act on stays neutral: a running session shows a muted `Spinner` and an unread one a muted dot. `--attention` is the loudest color in the app and only marks something waiting on the user.
+- **Quiet unless it needs you.** A sidebar row's running and unread marks are neutral, a muted `Spinner` and a muted dot. `--attention` is the loudest color in the app and only marks something waiting on the user.
 - **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exception.
 - **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` in a component, and no Tailwind palette utilities (`bg-white`, `text-red-500`). A new color is a token in `globals.css` and a row in the design system first, in both themes, at AA contrast on every surface it sits on.
 
