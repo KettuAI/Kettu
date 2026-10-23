@@ -342,6 +342,7 @@
       "title": "Install {{name}}",
       "body": "OverBench installs it in the background; when it is done, this page shows it as installed.",
       "adapterBody": "OverBench installs {{package}} into its own data folder and runs it on your Node.js.",
+      "adapterBodyCli": "OverBench installs {{package}} into its own data folder and runs it on your Node.js with your {{command}} {{version}}, so {{name}} is not downloaded again.",
       "method": "Install with",
       "methods": {
         "brew": "Homebrew",

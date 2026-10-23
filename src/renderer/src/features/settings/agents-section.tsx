@@ -1002,9 +1002,16 @@ function InstallNotice({ status }: { status: AgentStatus }) {
       <AlertTitle>{t('agents.install.title', { name: status.name })}</AlertTitle>
       <AlertDescription className="flex flex-col gap-2.5">
         <span>
-          {status.package
-            ? t('agents.install.adapterBody', { package: status.package.name })
-            : t('agents.install.body')}
+          {status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
+            ? t('agents.install.adapterBodyCli', {
+                package: status.package.name,
+                command: status.cli.command,
+                version: status.cli.installed.version,
+                name: status.name,
+              })
+            : status.package
+              ? t('agents.install.adapterBody', { package: status.package.name })
+              : t('agents.install.body')}
         </span>
         {!status.package && (
           <span className="flex items-center gap-3">

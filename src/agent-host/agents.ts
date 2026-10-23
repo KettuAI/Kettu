@@ -29,6 +29,7 @@ import {
 import {
   installAdapter,
   NPM_INSTALL_ARGS,
+  OMIT_CLI_ARG,
   programFailure,
   readInstallFiles,
   removeInstall,
@@ -654,7 +655,10 @@ export class AgentManager {
     }
     const { diagnostics, platform } = this.deps
     const agentId = slot.def.id
-    const version = request.version ?? adapter.version
+    // The copy is needed where the install a start runs has none: that version again, with it.
+    const copy = adapter.cli?.needsCopy ? adapter.current : null
+    const version = request.version ?? copy?.version ?? adapter.version
+    const withoutCli = !copy && adapter.cli?.runs === 'installed'
     slot.state = 'installing'
     slot.detail = null
     slot.progress.clear()
@@ -677,12 +681,18 @@ export class AgentManager {
         timeoutMs: this.timings.installMs,
         signal: abort.signal,
         onOutput: (text) => this.onProgress(slot, text),
-        ...(request.alongside ? { alongside: true } : {}),
+        ...(request.alongside || copy ? { alongside: true } : {}),
+        ...(withoutCli ? { withoutCli: true } : {}),
       })
       diagnostics.event(agentId, 'installed', `${version} in ${Date.now() - started} ms`)
       slot.adapterNote = null
       await this.detect(slot)
-      const spec = slot.detection?.state === 'available' ? slot.detection.spec : null
+      const detected = slot.detection?.state === 'available' ? slot.detection : null
+      // The user's CLI turned out older than the adapter just installed needs: the copy comes too.
+      if (withoutCli && !detected?.spec && detected?.adapter?.cli?.needsCopy) {
+        return this.installPackage(slot, request.fallback === false ? { fallback: false } : {})
+      }
+      const spec = detected?.spec ?? null
       if (!spec) throw new Error(`${adapter.package} ${version} is incomplete on disk.`)
       return spec
     } catch (error) {
@@ -812,10 +822,17 @@ export class AgentManager {
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
     if (!adapter || !running) return null
-    const offered = decideUpdate(slot.latest, {
+    let offered = decideUpdate(slot.latest, {
       version: running.version,
       cliVersion: slot.installedCli,
     })
+    // While the user's own CLI runs, only a newer adapter is an update; its CLI would not run.
+    if (offered && adapter.cli?.runs === 'installed') {
+      offered =
+        compareVersions(offered.adapterVersion, running.version) > 0
+          ? { adapterVersion: offered.adapterVersion, cliVersion: null }
+          : null
+    }
     if (adapter.current) return offered
     return offered && compareVersions(offered.adapterVersion, adapter.version) >= 0
       ? offered
@@ -962,7 +979,8 @@ export class AgentManager {
     }
     const { platform, diagnostics } = this.deps
     const version = update.adapterVersion
-    const [, ...flags] = NPM_INSTALL_ARGS
+    const withoutCli = adapter.cli?.runs === 'installed'
+    const [, ...flags] = withoutCli ? [...NPM_INSTALL_ARGS, OMIT_CLI_ARG] : NPM_INSTALL_ARGS
     const command = formatCommand(
       { command: npm, args: ['install', `${launch.package}@${version}`, ...flags] },
       platform,
@@ -987,6 +1005,7 @@ export class AgentManager {
           signal,
           onOutput,
           alongside: true,
+          ...(withoutCli ? { withoutCli: true } : {}),
         })
         diagnostics.event(agentId, 'updated', `${installed.version} in ${Date.now() - started} ms`)
         await this.detect(slot)
