@@ -1,4 +1,4 @@
-import type { SessionSummary } from '@shared/agent-host'
+import { REMOVED_WHILE_STARTING, type SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import {
   clearDraft,
@@ -78,6 +78,11 @@ function newSessionStart(
   ]
 }
 
+function removedWhileStarting(error: unknown): boolean {
+  const data = (error as { data?: { reason?: unknown } } | null)?.data
+  return errorCode(error) === 'not_found' && data?.reason === REMOVED_WHILE_STARTING
+}
+
 /** Starts a session in the project, or with a null `projectPath` in a scratch folder. */
 export async function createSession(
   agentId: AgentId,
@@ -113,6 +118,15 @@ export async function createSession(
       openSession(summary.id, summary.projectPath)
     }
   } catch (error) {
+    // Deleted, or its project removed, while it started: nothing is left to show, and the first
+    // message is still New session's draft.
+    if (removedWhileStarting(error)) {
+      const current = usePendingSession.getState().pending
+      if (current?.agentId === agentId && current.projectPath === projectPath) {
+        usePendingSession.setState({ pending: null })
+      }
+      return
+    }
     usePendingSession.setState({
       pending: {
         agentId,

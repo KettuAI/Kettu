@@ -223,6 +223,12 @@ export interface Project {
 
 export type SessionAttention = 'none' | 'permission' | 'unread' | 'error'
 
+/**
+ * The `reason` in the `data` of the `not_found` that `sessions.create` fails with when its new
+ * session was deleted, or its project removed, while it started: nothing is left to show.
+ */
+export const REMOVED_WHILE_STARTING = 'removed_while_starting'
+
 export interface SessionSummary {
   id: string
   agentId: AgentId
