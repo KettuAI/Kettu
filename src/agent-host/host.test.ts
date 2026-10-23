@@ -246,6 +246,8 @@ function fakeGit() {
     operation: null,
     commits: [],
     remote: null,
+    defaultBranch: null,
+    push: null,
     lastFetchedAt: null,
     updatedAt: 1,
     stale: false,
@@ -262,6 +264,30 @@ function fakeGit() {
     fetch: async () => {
       throw new Error('fatal: could not read from remote')
     },
+    pull: async (p) => (calls.push(`pull ${p}`), { status: status(p), log: 'pulled' }),
+    push: async (p, to) => (
+      calls.push(`push ${p} ${to.remote}/${to.branch}`),
+      { status: status(p), log: 'pushed' }
+    ),
+    publish: async (p, name, visibility) => (
+      calls.push(`publish ${p} ${name} ${visibility}`),
+      { status: status(p), log: 'published' }
+    ),
+    createPullRequest: async () => {
+      throw new Error('not used')
+    },
+    commit: async () => {
+      throw new Error('not used')
+    },
+    changes: async (p) => (calls.push(`changes ${p}`), []),
+    incoming: async () => [],
+    fileDiff: async (_p, path) => ({
+      path,
+      oldText: '',
+      newText: 'x',
+      binary: false,
+      tooLarge: false,
+    }),
     pullRequest: async (url) => ({
       url,
       owner: 'a',
@@ -271,7 +297,7 @@ function fakeGit() {
       state: 'open',
       head: 'fix',
       base: 'main',
-      checks: { state: 'passing', passed: 1, failed: 0, pending: 0 },
+      checks: { state: 'passing', passed: 1, failed: 0, pending: 0, runs: [] },
       review: null,
       mergeable: 'clean',
       updatedAt: 1,
@@ -332,6 +358,7 @@ describe('git', () => {
           ),
         ),
     })
+    await port.request('projects.add', { path: t.project })
     const tools = port.request('git.tools', undefined)
     const status = port.request('git.status', { projectPath: t.project })
     await new Promise((r) => setTimeout(r, 20))
@@ -368,6 +395,7 @@ describe('git', () => {
             })
         }),
     })
+    await port.request('projects.add', { path: t.project })
     const other = t.connect()
     // A closed port never gets its answer, so the request is left pending.
     void other.request('git.status', { projectPath: t.project }).catch(() => null)
@@ -387,6 +415,12 @@ describe('git', () => {
     await port.request('agents.list', undefined)
     // The resolved environment reaches git once the shell has answered.
     expect(git.calls).toContain('setEnvironment')
+    // Git runs in registered projects and scratch folders only.
+    const elsewhere = { projectPath: path.dirname(t.project) }
+    for (const method of ['git.status', 'git.fetch', 'git.currentPullRequest'] as const) {
+      await expect(port.request(method, elsewhere)).rejects.toMatchObject({ code: 'not_found' })
+    }
+    await port.request('projects.add', { path: t.project })
     const status = await port.request('git.status', { projectPath: t.project })
     expect(status.head.branch).toBe('main')
     await port.request('git.status', { projectPath: t.project })
@@ -407,6 +441,16 @@ describe('git', () => {
       code: 'git_error',
       message: 'fatal: could not read from remote',
     })
+    // Writes and on-demand reads act on registered projects only.
+    const target = { remote: 'origin', branch: 'main' }
+    await expect(
+      port.request('git.push', { projectPath: path.dirname(t.project), ...target }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      port.request('git.push', { projectPath: t.project, ...target }),
+    ).resolves.toMatchObject({ log: 'pushed' })
+    expect(git.calls).toContain(`push ${t.project} origin/main`)
+    expect(git.calls.filter((c) => c.startsWith('push '))).toHaveLength(1)
     await port.request('git.unwatch', { projectPath: t.project })
     expect(git.calls).toContainEqual(expect.stringMatching(/^release .* port-1$/))
     await other.request('git.status', { projectPath: t.project })

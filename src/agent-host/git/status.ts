@@ -1,6 +1,7 @@
 // One status refresh: the commands of the design's table, run for one project folder.
 
 import { stat, readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { CommitSummary, GitStatus } from '@shared/git'
 import { CommandError, expectOk, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './exec'
@@ -13,6 +14,7 @@ import {
   parsePorcelainStatus,
   parseShortstat,
   pickRemote,
+  resolvePushTarget,
   type PorcelainStatus,
 } from './parse'
 
@@ -56,6 +58,8 @@ export function emptyStatus(projectPath: string, now: number): GitStatus {
     operation: null,
     commits: [],
     remote: null,
+    defaultBranch: null,
+    push: null,
     lastFetchedAt: null,
     updatedAt: now,
     stale: false,
@@ -113,6 +117,8 @@ export async function readStatus(ctx: StatusContext): Promise<GitStatus> {
     operation,
     commits,
     remote,
+    defaultBranch: baseRef === null ? null : branchOfRef(baseRef, remote?.name),
+    push: branch === null ? null : resolvePushTarget(config, branch),
     lastFetchedAt,
     updatedAt: ctx.now(),
     stale: false,
@@ -176,16 +182,25 @@ async function resolveRepo(ctx: StatusContext): Promise<RepoInfo | null> {
   return ctx.cache.repo
 }
 
-// The remote entries only change with the repository's config file.
+// Where the user's own settings live, such as push.default; system-wide ones are not watched.
+function globalConfigFiles(): string[] {
+  const explicit = process.env.GIT_CONFIG_GLOBAL
+  if (explicit) return [explicit]
+  const xdg = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
+  return [join(homedir(), '.gitconfig'), join(xdg, 'git', 'config')]
+}
+
+// The entries only change with the repository's config file or the user's.
 async function readConfig(ctx: StatusContext, info: RepoInfo): Promise<[string, string][]> {
-  const signature = await fileSignature(join(info.commonDir, 'config'))
+  const signature = (
+    await Promise.all([join(info.commonDir, 'config'), ...globalConfigFiles()].map(fileSignature))
+  ).join('|')
   if (ctx.cache.config?.signature === signature) return ctx.cache.config.entries
   const result = await git(ctx, [
     'config',
-    '--local',
     '-z',
     '--get-regexp',
-    '^(remote\\..+\\.url|branch\\..+\\.remote)$',
+    '^(remote\\..+\\.url|branch\\..+\\.(remote|merge|pushremote)|remote\\.pushdefault|push\\.default)$',
   ])
   // Exit code 1 means no entry matched.
   if (result.failure === null && result.code === 1) {

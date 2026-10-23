@@ -44,6 +44,32 @@ describe('createExec', () => {
     expect(Date.now() - started).toBeLessThan(4000)
   })
 
+  it('ends what the command started when it times out, as gh does a git push', async () => {
+    // The child starts a grandchild that writes its pid, then both wait forever.
+    const script = [
+      "const { spawn } = require('node:child_process')",
+      "const g = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })",
+      'process.stdout.write(String(g.pid))',
+      'setInterval(() => {}, 1000)',
+    ].join(';')
+    const result = await make().exec(node, ['-e', script], { timeoutMs: 1500 })
+    expect(result.failure).toBe('timeout')
+    const grandchild = Number(result.stdout)
+    expect(grandchild).toBeGreaterThan(0)
+    const alive = (): boolean => {
+      try {
+        process.kill(grandchild, 0)
+        return true
+      } catch {
+        return false
+      }
+    }
+    for (let i = 0; i < 50 && alive(); i++) await new Promise((r) => setTimeout(r, 100))
+    const survived = alive()
+    if (survived) process.kill(grandchild, 'SIGKILL')
+    expect(survived).toBe(false)
+  })
+
   it('reports a missing command', async () => {
     const empty = await mkdtemp(join(tmpdir(), 'ob-exec-'))
     dirs.push(empty)

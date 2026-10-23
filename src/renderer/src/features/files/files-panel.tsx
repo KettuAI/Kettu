@@ -36,6 +36,7 @@ import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { loadFiles, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
+import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
 import { FileTypeIcon } from './file-type-icon'
 import { UnsavedPrompt } from './unsaved-prompt'
@@ -65,6 +66,7 @@ export default function FilesPanel({
   const { t } = useTranslation(['files', 'common'])
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
   const open = useFilesStore((s) => s.open[projectPath] ?? null)
+  const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const [query, setQuery] = useState('')
   const [flat, setFlat] = useState(false)
   const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
@@ -75,7 +77,13 @@ export default function FilesPanel({
   // pane says so once, in its middle, instead of in each half.
   const bare = useFilesStore((s) => {
     const files = s.byProject[projectPath]
-    return !!files && !files.error && files.paths.length === 0 && !s.open[projectPath]
+    return (
+      !!files &&
+      !files.error &&
+      files.paths.length === 0 &&
+      !s.open[projectPath] &&
+      !s.diffs[projectPath]
+    )
   })
   const listShown = !listHidden && !bare
 
@@ -180,7 +188,11 @@ export default function FilesPanel({
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
-            <FilePreview projectPath={projectPath} file={open} />
+            {diff ? (
+              <DiffPreview projectPath={projectPath} diff={diff} />
+            ) : (
+              <FilePreview projectPath={projectPath} file={open} />
+            )}
           </ResizablePanel>
         </ResizablePanelGroup>
       )}

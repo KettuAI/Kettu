@@ -79,5 +79,16 @@
     "unfold": "unfold",
     "controlCharacter": "Control character",
     "completions": "Completions"
+  },
+  "diff": {
+    "uncommitted": "uncommitted",
+    "openFile": "Open file",
+    "close": "Close diff",
+    "failed": "Couldn't show this change",
+    "binaryDescription": "A binary file's change is not shown.",
+    "tooLargeTitle": "Too large to compare",
+    "tooLargeDescription": "One side of this change is over 1 MB.",
+    "sameTitle": "No changes to show",
+    "sameDescription": "Both sides of this file are the same now."
   }
 }

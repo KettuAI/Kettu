@@ -8,6 +8,7 @@
 //
 // On Linux CI, run it under `xvfb-run -a`.
 
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -27,6 +28,7 @@ mkdirSync(out, { recursive: true })
 const scratch = mkdtempSync(join(tmpdir(), 'overbench-shots-'))
 const project = join(scratch, 'demo-project')
 makeProject(project)
+makeHistory(project, join(scratch, 'origin.git'))
 const app = launchApp({ port, userData: join(scratch, 'user-data') })
 
 let failed = false
@@ -41,6 +43,38 @@ try {
   rmSync(scratch, { recursive: true, force: true, maxRetries: 5 })
 }
 process.exit(failed ? 1 : 0)
+
+// A history for the branch popover: feat/login is one commit past its upstream's, two not pushed,
+// main on the remote has moved on since the branch started, and two files are uncommitted.
+function makeHistory(dir, remote) {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+  )
+  const git = (...rest) => execFileSync('git', rest, { cwd: dir, stdio: 'ignore', env })
+  const commit = (file, text, message) => {
+    writeFileSync(join(dir, file), text)
+    git('add', file)
+    git('commit', '-q', '-m', message)
+  }
+  git('init', '-q', '--bare', '-b', 'main', remote)
+  git('branch', 'main')
+  git('remote', 'add', 'origin', remote)
+  git('push', '-q', '-u', 'origin', 'main', 'feat/login')
+  commit(
+    'src/user.ts',
+    'export const lastUser = () => null\n',
+    'feat(login): remember the last user',
+  )
+  git('push', '-q')
+  commit('src/clock.ts', 'export const now = () => Date.now()\n', 'fix(login): read the clock once')
+  commit('src/clock.test.ts', 'export {}\n', 'test(login): freeze time in tests')
+  git('checkout', '-q', 'main')
+  commit('README.md', '# Demo\n', 'docs: describe the demo project')
+  git('push', '-q', 'origin', 'main')
+  git('checkout', '-q', 'feat/login')
+  git('fetch', '-q', 'origin')
+  writeFileSync(join(dir, 'src', 'login.ts'), 'export const login = (user: string) => !!user\n')
+}
 
 async function run() {
   let cdp = await connect(port)
@@ -227,6 +261,46 @@ async function run() {
   await waitFor(`document.querySelector('[role=menu]')`, 'the context menu')
   await sleep(400)
   await shoot('context-menu')
+  await press('Escape', 27)
+  await sleep(300)
+
+  // The branch popover, with the uncommitted files open, a commit's card, then a file's diff.
+  await click(`return document.querySelector('button[aria-label^="Branch "]')`, 'the branch')
+  await waitFor(`document.querySelector('[data-git-row]')`, 'the branch popover')
+  await sleep(600)
+  await shoot('git-popover')
+  await click(byText('[data-git-row]', 'Uncommitted changes'), 'the uncommitted changes')
+  await waitFor(
+    `[...document.querySelectorAll('[data-git-row]')].some((r) => r.textContent.includes('session.ts'))`,
+    'the uncommitted files',
+  )
+  await sleep(400)
+  await shoot('git-popover-files')
+  const commitRow = await cdp.evaluate(`(() => {
+    const row = [...document.querySelectorAll('[data-git-row]')].find((r) => r.textContent.includes('read the clock once'))
+    const r = row.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })()`)
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...commitRow })
+  await waitFor(`document.querySelector('[data-slot=hover-card-content]')`, 'the commit card')
+  await sleep(600)
+  await shoot('git-commit-card')
+  await click(byText('[data-git-row]', 'login.ts'), 'the changed file')
+  await waitFor(`document.querySelector('.diff.file-preview')`, 'the diff in the Files pane')
+  await sleep(1500)
+  await shoot('git-diff')
+  await click(`return document.querySelector('button[aria-label="Close diff"]')`, 'Close diff')
+  await sleep(300)
+  // Push for real, to the scratch remote, then the popover in sync.
+  await click(`return document.querySelector('button[aria-label^="Branch "]')`, 'the branch')
+  await waitFor(`document.querySelector('[data-git-row]')`, 'the branch popover')
+  await click(byText('button', 'Push'), 'Push')
+  await waitFor(
+    `[...document.querySelectorAll('p')].some((p) => p.textContent.startsWith('Up to date with'))`,
+    'the push to finish',
+  )
+  await sleep(600)
+  await shoot('git-popover-synced')
   await press('Escape', 27)
   await sleep(300)
 

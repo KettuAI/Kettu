@@ -2,6 +2,8 @@
 
 import { execFile, type ChildProcess, type ExecFileException } from 'node:child_process'
 import { stat } from 'node:fs/promises'
+import type { Platform } from '@shared/platform'
+import { descendantsOf, processControl, type ProcessControl } from '../process-tree'
 import { findWindowsExecutable } from './executable'
 
 export type ExecFailure =
@@ -55,11 +57,38 @@ export interface CreateExecOptions {
   platform?: NodeJS.Platform
   /** Replaces the Windows lookup, for tests. */
   find?: (name: string, env: NodeJS.ProcessEnv) => Promise<string | null>
+  /** Lists and ends processes, for a command that runs out of time. */
+  control?: ProcessControl
+}
+
+/**
+ * Ends a command that ran out of time and what it started, such as the git push under
+ * `gh repo create --push`, which would otherwise run on: `taskkill /T` on Windows; elsewhere
+ * its descendants, listed while it still runs, since its children lose it as their parent once
+ * it is gone. They share the agent host's process group, so the group is not signalled.
+ */
+async function stopTree(control: ProcessControl, pid: number): Promise<void> {
+  if (control.platform === 'win32') {
+    await control.taskkill([pid]).catch(() => {})
+    return
+  }
+  const rows = await control.list().catch(() => [])
+  for (const target of [pid, ...descendantsOf(rows, pid).map((row) => row.pid)]) {
+    try {
+      control.kill(target, 'SIGKILL')
+    } catch {
+      // Already gone.
+    }
+  }
 }
 
 export function createExec(
   getEnv: () => NodeJS.ProcessEnv,
-  { platform = process.platform, find = findWindowsExecutable }: CreateExecOptions = {},
+  {
+    platform = process.platform,
+    find = findWindowsExecutable,
+    control = processControl(platform as Platform),
+  }: CreateExecOptions = {},
 ): ExecRunner {
   const children = new Set<ChildProcess>()
   const resolved = new Map<string, string>()
@@ -86,6 +115,8 @@ export function createExec(
     if (stopped) return failed('killed', 'The git service was disposed')
     return new Promise<ExecResult>((resolve) => {
       let child: ChildProcess
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let timedOut = false
       try {
         child = execFile(
           command,
@@ -93,15 +124,20 @@ export function createExec(
           {
             cwd: options.cwd,
             env,
-            timeout: options.timeoutMs,
             maxBuffer: options.maxBuffer ?? DEFAULT_MAX_BUFFER,
             windowsHide: true,
             encoding: 'utf8',
           },
           (error, stdout, stderr) => {
+            clearTimeout(timer)
             children.delete(child)
             if (!error) {
               resolve({ code: 0, stdout, stderr, failure: null, message: '' })
+              return
+            }
+            if (timedOut) {
+              const message = `timed out after ${options.timeoutMs} ms`
+              resolve({ code: null, stdout, stderr, failure: 'timeout', message })
               return
             }
             const code: unknown = error.code
@@ -109,7 +145,7 @@ export function createExec(
               resolve({ code, stdout, stderr, failure: null, message: error.message })
               return
             }
-            void classify(error, options.cwd, stopped).then((failure) => {
+            void classify(error, options.cwd).then((failure) => {
               // The cached location may be stale, such as after an uninstall.
               if (failure === 'not-found') resolved.clear()
               resolve({ code: null, stdout, stderr, failure, message: error.message })
@@ -121,6 +157,13 @@ export function createExec(
         return
       }
       children.add(child)
+      const pid = child.pid
+      if (pid !== undefined) {
+        timer = setTimeout(() => {
+          timedOut = true
+          void stopTree(control, pid)
+        }, options.timeoutMs)
+      }
       // Nothing here reads input; a closed stdin makes a stray prompt fail instead of hang.
       child.stdin?.on('error', () => {})
       child.stdin?.end()
@@ -141,13 +184,9 @@ function failed(failure: ExecFailure, message: string): ExecResult {
   return { code: null, stdout: '', stderr: '', failure, message }
 }
 
-async function classify(
-  error: ExecFileException,
-  cwd: string | undefined,
-  stopped: boolean,
-): Promise<ExecFailure> {
+async function classify(error: ExecFileException, cwd: string | undefined): Promise<ExecFailure> {
   if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return 'max-buffer'
-  if (error.killed) return stopped ? 'killed' : 'timeout'
+  if (error.killed) return 'killed'
   if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
     // Node reports a missing working directory as ENOENT for the command.
     if (cwd !== undefined && !(await isDirectory(cwd))) return 'cwd-missing'

@@ -7,11 +7,18 @@ import {
   parseGitVersion,
   parseGithubRemote,
   parseLeftRightCount,
+  parseAuthoredLog,
+  parseCommitHeader,
   parseLog,
+  parseNameStatus,
+  parseNumstat,
   parseOidLines,
+  parsePorcelainFiles,
   parsePorcelainStatus,
   parseShortstat,
   pickRemote,
+  resolvePushTarget,
+  withLineCounts,
 } from './parse'
 
 const OID = '3f2a1c1d9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a49'
@@ -201,13 +208,15 @@ describe('config and remotes', () => {
     expect(pickRemote([], 'main')).toBeNull()
   })
 
-  it('uses a configured remote that is not called origin only when it is the branch remote', () => {
+  it('uses a remote not called origin when it is the branch remote or the only one', () => {
     const entries: [string, string][] = [
       ['remote.fork.url', 'https://github.com/me/app'],
       ['branch.main.remote', 'fork'],
     ]
     expect(pickRemote(entries, 'main')).toEqual({ name: 'fork', url: 'https://github.com/me/app' })
-    expect(pickRemote(entries, 'other')).toBeNull()
+    expect(pickRemote(entries, 'other')).toEqual({ name: 'fork', url: 'https://github.com/me/app' })
+    const two: [string, string][] = [...entries, ['remote.upstream.url', 'https://github.com/a/b']]
+    expect(pickRemote(two, 'other')).toBeNull()
   })
 })
 
@@ -310,5 +319,201 @@ describe('isNoPullRequestMessage', () => {
   it('matches the message of a branch without a pull request', () => {
     expect(isNoPullRequestMessage('no pull requests found for branch "fix/x"\n')).toBe(true)
     expect(isNoPullRequestMessage('could not determine current branch')).toBe(false)
+  })
+})
+
+describe('parseNameStatus', () => {
+  it('reads plain changes, renames and copies', () => {
+    const output =
+      '\n' +
+      z(
+        'M',
+        'src/a b.ts',
+        'A',
+        'new.ts',
+        'D',
+        'gone.ts',
+        'R087',
+        'old.ts',
+        'moved.ts',
+        'C100',
+        'x.ts',
+        'y.ts',
+        'T',
+        'link',
+      )
+    expect(parseNameStatus(output)).toEqual([
+      { path: 'src/a b.ts', oldPath: null, status: 'modified', insertions: null, deletions: null },
+      { path: 'new.ts', oldPath: null, status: 'added', insertions: null, deletions: null },
+      { path: 'gone.ts', oldPath: null, status: 'deleted', insertions: null, deletions: null },
+      { path: 'moved.ts', oldPath: 'old.ts', status: 'renamed', insertions: null, deletions: null },
+      { path: 'y.ts', oldPath: 'x.ts', status: 'copied', insertions: null, deletions: null },
+      { path: 'link', oldPath: null, status: 'typechange', insertions: null, deletions: null },
+    ])
+  })
+
+  it('is empty for empty output', () => {
+    expect(parseNameStatus('')).toEqual([])
+  })
+})
+
+describe('parseNumstat', () => {
+  it('reads counts, binary files and renames', () => {
+    const output = z('3\t1\tsrc/a.ts', '-\t-\timage.png', '5\t0\t', 'old.ts', 'moved.ts')
+    expect(parseNumstat(output)).toEqual([
+      { path: 'src/a.ts', insertions: 3, deletions: 1 },
+      { path: 'image.png', insertions: null, deletions: null },
+      { path: 'moved.ts', insertions: 5, deletions: 0 },
+    ])
+  })
+
+  it('adds the counts to the files they name', () => {
+    const files = parseNameStatus(z('M', 'a.ts', 'A', 'b.ts'))
+    expect(withLineCounts(files, [{ path: 'a.ts', insertions: 2, deletions: 4 }])).toMatchObject([
+      { path: 'a.ts', insertions: 2, deletions: 4 },
+      { path: 'b.ts', insertions: null, deletions: null },
+    ])
+  })
+})
+
+describe('parsePorcelainFiles', () => {
+  it('lists changed, renamed, conflicted and untracked files', () => {
+    const output = z(
+      '# branch.oid ' + OID,
+      '1 .M N... 100644 100644 100644 aaa bbb src/a file.ts',
+      '1 A. N... 000000 100644 100644 000 bbb added.ts',
+      '1 .D N... 100644 100644 000000 aaa aaa deleted.ts',
+      '2 R. N... 100644 100644 100644 aaa aaa R100 moved name.ts',
+      'old name.ts',
+      'u UU N... 100644 100644 100644 100644 aaa bbb ccc both.ts',
+      '? new dir/file.ts',
+    )
+    expect(parsePorcelainFiles(output).map((f) => [f.status, f.path, f.oldPath])).toEqual([
+      ['modified', 'src/a file.ts', null],
+      ['added', 'added.ts', null],
+      ['deleted', 'deleted.ts', null],
+      ['renamed', 'moved name.ts', 'old name.ts'],
+      ['conflicted', 'both.ts', null],
+      ['untracked', 'new dir/file.ts', null],
+    ])
+  })
+})
+
+describe('parseCommitHeader', () => {
+  it('splits the subject from the body', () => {
+    const output = [
+      OID,
+      'Ada',
+      'ada@example.com',
+      '1792483200',
+      'fix: one\r\n\r\nWhy it was wrong.\r\nAnd more.\n',
+    ].join('\0')
+    expect(parseCommitHeader(output)).toEqual({
+      oid: OID,
+      authorName: 'Ada',
+      authorEmail: 'ada@example.com',
+      time: 1792483200,
+      subject: 'fix: one',
+      body: 'Why it was wrong.\nAnd more.',
+    })
+  })
+
+  it('has an empty body for a one-line message and rejects other output', () => {
+    expect(parseCommitHeader([OID, 'A', 'a@x', '1', 'chore: x\n'].join('\0'))?.body).toBe('')
+    expect(parseCommitHeader('fatal: bad object')).toBeNull()
+  })
+})
+
+describe('parseAuthoredLog', () => {
+  it('reads commits with their authors', () => {
+    expect(
+      parseAuthoredLog([OID, 'ci: snapshots', '1792483200', 'github-actions\n'].join('\0')),
+    ).toEqual([{ oid: OID, subject: 'ci: snapshots', time: 1792483200, author: 'github-actions' }])
+  })
+})
+
+describe('resolvePushTarget', () => {
+  const origin: [string, string] = ['remote.origin.url', 'https://github.com/acme/app.git']
+  const fork: [string, string] = ['remote.fork.url', 'git@github.com:me/app.git']
+  const tracking = (branch: string, remote: string, merge: string): [string, string][] => [
+    [`branch.${branch}.remote`, remote],
+    [`branch.${branch}.merge`, `refs/heads/${merge}`],
+  ]
+  const acme = { owner: 'acme', repo: 'app' }
+
+  it('pushes a branch to its upstream of the same name', () => {
+    expect(resolvePushTarget([origin, ...tracking('fix', 'origin', 'fix')], 'fix')).toEqual({
+      kind: 'remote',
+      remote: 'origin',
+      github: acme,
+      branch: 'fix',
+      setUpstream: false,
+    })
+  })
+
+  it('publishes a branch without an upstream to origin under its own name', () => {
+    expect(resolvePushTarget([fork, origin], 'feat')).toMatchObject({
+      remote: 'origin',
+      branch: 'feat',
+      setUpstream: true,
+    })
+  })
+
+  it('refuses an upstream of another name, as push.default=simple does', () => {
+    // `git switch -c fix origin/main` tracks origin/main; a plain push would land on main.
+    expect(resolvePushTarget([origin, ...tracking('fix', 'origin', 'main')], 'fix')).toEqual({
+      kind: 'otherName',
+      upstream: 'origin/main',
+    })
+  })
+
+  it('follows push.default for an upstream of another name', () => {
+    const entries = [origin, ...tracking('fix', 'origin', 'main')]
+    expect(resolvePushTarget([...entries, ['push.default', 'upstream']], 'fix')).toMatchObject({
+      remote: 'origin',
+      branch: 'main',
+      setUpstream: false,
+    })
+    expect(resolvePushTarget([...entries, ['push.default', 'current']], 'fix')).toMatchObject({
+      remote: 'origin',
+      branch: 'fix',
+      setUpstream: false,
+    })
+  })
+
+  it('never pushes to a local upstream', () => {
+    expect(resolvePushTarget([origin, ...tracking('loc', '.', 'main')], 'loc')).toEqual({
+      kind: 'localUpstream',
+    })
+  })
+
+  it('prefers pushRemote, then remote.pushDefault, over the upstream remote', () => {
+    const entries = [origin, fork, ...tracking('fix', 'origin', 'main')]
+    expect(resolvePushTarget([...entries, ['branch.fix.pushremote', 'fork']], 'fix')).toMatchObject(
+      { remote: 'fork', github: { owner: 'me', repo: 'app' }, branch: 'fix' },
+    )
+    expect(resolvePushTarget([...entries, ['remote.pushdefault', 'fork']], 'fix')).toMatchObject({
+      remote: 'fork',
+      branch: 'fix',
+      setUpstream: false,
+    })
+    // A pushRemote can send a branch with a local upstream to a real remote.
+    expect(
+      resolvePushTarget(
+        [origin, ...tracking('loc', '.', 'main'), ['branch.loc.pushremote', 'origin']],
+        'loc',
+      ),
+    ).toMatchObject({ remote: 'origin', branch: 'loc', setUpstream: false })
+  })
+
+  it('tells no remote apart from several with none chosen', () => {
+    expect(resolvePushTarget([], 'feat')).toEqual({ kind: 'noRemote' })
+    expect(resolvePushTarget([fork], 'feat')).toMatchObject({ kind: 'remote', remote: 'fork' })
+    expect(
+      resolvePushTarget([fork, ['remote.upstream.url', 'https://github.com/acme/app']], 'feat'),
+    ).toEqual({ kind: 'unknownRemote' })
+    expect(resolvePushTarget([origin, ['branch.feat.remote', 'gone']], 'feat')).toEqual({
+      kind: 'unknownRemote',
+    })
   })
 })

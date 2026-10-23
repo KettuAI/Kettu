@@ -1,6 +1,11 @@
 // What the GitHub CLI is asked for, and how its JSON maps to OverBench's pull request model.
 
-import { GITHUB_PULL_REQUEST_URL, type PullRequest, type PullRequestState } from '@shared/git'
+import {
+  GITHUB_PULL_REQUEST_URL,
+  type CheckRun,
+  type PullRequest,
+  type PullRequestState,
+} from '@shared/git'
 import type { BranchPullRequest } from './api'
 
 const PULL_REQUEST_FIELDS =
@@ -74,19 +79,62 @@ function checkOutcome(item: Json): CheckOutcome {
   }
 }
 
+const OUTCOME_ORDER: Record<CheckOutcome, number> = { failed: 0, pending: 1, passed: 2 }
+
+function isStatusContext(item: Json): boolean {
+  return item.__typename === 'StatusContext' || (!('status' in item) && 'state' in item)
+}
+
+// GitHub shows a workflow's check as "workflow / job".
+function checkName(item: Json): string {
+  if (isStatusContext(item)) return text(item.context) || 'status'
+  const name = text(item.name) || 'check'
+  const workflow = text(item.workflowName)
+  return workflow && workflow !== name ? `${workflow} / ${name}` : name
+}
+
+function httpsUrl(value: unknown): string | null {
+  const url = text(value)
+  return url.startsWith('https://') ? url : null
+}
+
+// A run that has not started reports 0001-01-01, which is not a time worth showing.
+function timeOf(value: unknown): number | null {
+  const time = Date.parse(text(value))
+  return Number.isNaN(time) || time <= 0 ? null : time
+}
+
+function checkRun(item: Json): CheckRun {
+  return {
+    name: checkName(item),
+    outcome: checkOutcome(item),
+    url: httpsUrl(isStatusContext(item) ? item.targetUrl : item.detailsUrl),
+    startedAt: timeOf(item.startedAt ?? item.createdAt),
+    completedAt: timeOf(item.completedAt),
+  }
+}
+
 /** Sums `statusCheckRollup`: any failure fails, else any pending run is pending. */
 export function summarizeChecks(rollup: unknown): PullRequest['checks'] {
   const counts: Record<CheckOutcome, number> = { passed: 0, failed: 0, pending: 0 }
+  const runs: CheckRun[] = []
   if (Array.isArray(rollup)) {
     for (const item of rollup) {
-      if (isObject(item)) counts[checkOutcome(item)]++
+      if (!isObject(item)) continue
+      const run = checkRun(item)
+      counts[run.outcome]++
+      runs.push(run)
     }
   }
+  runs.sort(
+    (a, b) =>
+      OUTCOME_ORDER[a.outcome] - OUTCOME_ORDER[b.outcome] || a.name.localeCompare(b.name, 'en'),
+  )
   let state: PullRequest['checks']['state'] = 'none'
   if (counts.failed > 0) state = 'failing'
   else if (counts.pending > 0) state = 'pending'
   else if (counts.passed > 0) state = 'passing'
-  return { state, ...counts }
+  return { state, ...counts, runs }
 }
 
 function reviewOf(value: unknown): PullRequest['review'] {

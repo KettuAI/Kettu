@@ -3,7 +3,7 @@
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
 import { FILE_READ_LIMIT } from '@shared/files'
-import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
+import { GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { AGENT_IDS, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
 import { invalidParams } from './errors'
@@ -91,6 +91,32 @@ function relativePath(o: Fields, key: string, platform: Platform): string {
   if (value.includes('\0')) throw invalidParams(`${key} contains a NUL character`)
   if (isAbsolutePath(value, platform) || value.startsWith('/') || value.startsWith('\\')) {
     throw invalidParams(`${key} must be a relative path`)
+  }
+  return value
+}
+
+/** A commit id, full or abbreviated. */
+function objectId(o: Fields, key: string): string {
+  const value = string(o, key, 64)
+  if (!/^[0-9a-f]{4,64}$/i.test(value)) throw invalidParams(`${key} must be a commit id`)
+  return value
+}
+
+/** A path as git prints it: relative to the repository root, with forward slashes. */
+function gitPath(o: Fields, key: string): string {
+  const value = string(o, key, PATH_CHARS)
+  if (value.includes('\0')) throw invalidParams(`${key} contains a NUL character`)
+  if (value.startsWith('/') || /^[A-Za-z]:/.test(value) || value.split(/[\\/]/).includes('..')) {
+    throw invalidParams(`${key} must be a path inside the repository`)
+  }
+  return value
+}
+
+// A remote or branch name that cannot read as an option or carry a refspec's punctuation.
+function refName(o: Fields, key: string): string {
+  const value = string(o, key, ID_CHARS)
+  if (value === '' || value.startsWith('-') || /[\s~^:?*[\\\0]/.test(value)) {
+    throw invalidParams(`${key} is not a branch or remote name`)
   }
   return value
 }
@@ -351,6 +377,65 @@ export function createValidators(platform: Platform): Validators {
     'git.status': project,
     'git.unwatch': project,
     'git.fetch': project,
+    'git.pull': project,
+    'git.push': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        remote: refName(o, 'remote'),
+        branch: refName(o, 'branch'),
+      }
+    },
+    'git.publish': (params) => {
+      const o = fields(params)
+      const name = string(o, 'name', 100)
+      if (!isRepositoryName(name)) {
+        throw invalidParams('name is not a repository name')
+      }
+      if (o.visibility !== 'private' && o.visibility !== 'public') {
+        throw invalidParams('visibility must be private or public')
+      }
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        name,
+        visibility: o.visibility,
+      }
+    },
+    'git.createPullRequest': (params) => {
+      const o = fields(params)
+      const title = string(o, 'title', 256)
+      if (title.trim() === '') throw invalidParams('title must not be blank')
+      const body = o.body === '' ? '' : string(o, 'body', 65_536)
+      const base = refName(o, 'base')
+      if (typeof o.draft !== 'boolean') throw invalidParams('draft must be a boolean')
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        title,
+        body,
+        base,
+        draft: o.draft,
+      }
+    },
+    'git.commit': (params) => {
+      const o = fields(params)
+      return { projectPath: absolutePath(o, 'projectPath', platform), oid: objectId(o, 'oid') }
+    },
+    'git.changes': project,
+    'git.incoming': (params) => {
+      const o = fields(params)
+      if (o.from !== 'upstream' && o.from !== 'base')
+        throw invalidParams('from must be upstream or base')
+      return { projectPath: absolutePath(o, 'projectPath', platform), from: o.from }
+    },
+    'git.fileDiff': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        path: gitPath(o, 'path'),
+        oldPath: o.oldPath === null || o.oldPath === undefined ? null : gitPath(o, 'oldPath'),
+        ref: o.ref === null || o.ref === undefined ? null : objectId(o, 'ref'),
+      }
+    },
     'git.pullRequest': (params) => {
       const url = string(fields(params), 'url', URL_CHARS)
       if (!GITHUB_PULL_REQUEST_URL.test(url))

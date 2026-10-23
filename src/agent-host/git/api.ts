@@ -1,6 +1,17 @@
 // The git service's interface, as the rest of the agent host uses it.
 
-import type { GitStatus, GitTools, PullRequest, PullRequestState } from '@shared/git'
+import type {
+  ChangedFile,
+  CommitDetails,
+  FileDiff,
+  GitOperation,
+  GitStatus,
+  GitTools,
+  LogCommit,
+  PullRequest,
+  PullRequestState,
+  RepositoryVisibility,
+} from '@shared/git'
 import type { GitEntry, ToolKind } from '@shared/thread'
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -28,7 +39,36 @@ export interface GitServiceApi {
   release(projectPath: string, subscriberId: string): void
   releaseAll(subscriberId: string): void
   /** `git fetch --prune`; rejects with git's message on failure. */
-  fetch(projectPath: string): Promise<GitStatus>
+  fetch(projectPath: string): Promise<GitOperation>
+  /**
+   * The writes: one per project at a time, a second rejecting with `busy`. Each rejects with
+   * git's or gh's output when the command fails, and refuses a branch that has diverged.
+   */
+  pull(projectPath: string): Promise<GitOperation>
+  /**
+   * Pushes the branch to the status's `push` target, which must still be `expected`, the target
+   * the interface showed and asked about.
+   */
+  push(projectPath: string, expected: { remote: string; branch: string }): Promise<GitOperation>
+  /** Creates a GitHub repository for a folder that has no remote, and pushes to it. */
+  publish(
+    projectPath: string,
+    name: string,
+    visibility: RepositoryVisibility,
+  ): Promise<GitOperation>
+  createPullRequest(
+    projectPath: string,
+    draft: { title: string; body: string; base: string; draft: boolean },
+  ): Promise<PullRequest>
+  commit(projectPath: string, oid: string): Promise<CommitDetails>
+  changes(projectPath: string): Promise<ChangedFile[]>
+  incoming(projectPath: string, from: 'upstream' | 'base'): Promise<LogCommit[]>
+  fileDiff(
+    projectPath: string,
+    path: string,
+    oldPath: string | null,
+    ref: string | null,
+  ): Promise<FileDiff>
   /** Details for a pull request chip; `url` matches GITHUB_PULL_REQUEST_URL. */
   pullRequest(url: string): Promise<PullRequest>
   /** The current branch's pull request, from the last `gh pr view`. */

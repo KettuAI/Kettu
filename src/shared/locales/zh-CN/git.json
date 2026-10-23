@@ -12,6 +12,12 @@
       "rebase": "变基中",
       "cherryPick": "拣选中",
       "revert": "还原中"
+    },
+    "running": {
+      "fetch": "正在抓取",
+      "pull": "正在拉取",
+      "push": "正在推送",
+      "publish": "正在发布"
     }
   },
   "pr": {
@@ -48,39 +54,152 @@
     "reviewUpdated": "{{review}} · {{when}}更新",
     "openOnGitHub": "在 GitHub 上打开"
   },
-  "lane": {
-    "label": {
-      "ahead_other": "领先 {{base}} {{count}} 个提交",
-      "notPushed": "{{count}} 个未推送",
-      "behind": "落后 {{count}} 个提交",
-      "uncommitted": "有未提交的更改",
-      "separator": "，"
-    },
-    "pushed": "{{count}} 个已推送",
-    "notPushed": "↑{{count}} 未推送",
-    "notPublished": "{{count}} 个未发布",
-    "changes": "更改"
-  },
   "popover": {
     "copyBranch": "复制分支名",
-    "copyCommand": "复制命令",
-    "from": "基于 <branch/>",
-    "tracking": "跟踪 <branch/>",
+    "from": "基于 <branch>{{name}}</branch>",
+    "tracking": "跟踪 <branch>{{name}}</branch>",
     "notPublished": "未发布",
+    "detached": "HEAD 已分离",
+    "unborn": "尚无提交"
+  },
+  "timeline": {
+    "incoming_other": "有 {{count}} 个新提交可拉取",
+    "incomingTitle": "{{upstream}} 上有、此分支还没有的提交",
+    "uncommitted": "未提交的更改",
+    "files_other": "{{count}} 个文件",
+    "openDiff": "打开 {{name}} 的差异",
+    "copied": "已复制",
+    "copyId": "复制提交 ID",
+    "copyMessage": "复制提交信息",
+    "openOnGitHub": "在 GitHub 上打开",
+    "onRemote": "已在 {{upstream}}",
     "notPushed": "未推送",
-    "moreCommits": "还有 {{count}} 个",
-    "filesChanged_other": "{{count}} 个文件已更改",
-    "staged": "{{count}} 个已暂存",
-    "newFiles": "{{count}} 个新文件",
-    "conflicts_other": "{{count}} 个冲突",
-    "noChanges": "工作区没有更改",
-    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看 Pull Request。",
+    "notPublished": "未发布",
+    "more": "还有 {{count}} 个",
+    "baseAhead_other": "分出后有 {{count}} 个新提交",
+    "baseEven": "分出后没有新提交"
+  },
+  "prPart": {
+    "meta": "<state>{{state}}</state> · <head/> → <base/> · {{when}}更新",
+    "queued": "排队中",
+    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看和创建 Pull Request。",
     "signInGh": "登录 GitHub CLI 后即可查看 Pull Request：",
-    "noPr": "此分支没有 Pull Request。",
-    "createPr": "创建 Pull Request",
+    "copyCommand": "复制命令",
+    "publishFirst": "发布此分支后才能创建 Pull Request。",
+    "none": "没有 Pull Request",
+    "create": "创建 Pull Request…",
+    "blocked": {
+      "draft": "草稿需要标记为可审查后才能合并",
+      "conflicts": "与 {{base}} 有冲突",
+      "checks": "必需的检查通过后才能合并",
+      "review": "获得批准后才能合并",
+      "rules": "被仓库的合并规则阻止"
+    }
+  },
+  "sync": {
     "fetched": "{{when}}抓取",
     "neverFetched": "从未抓取",
     "noRemote": "没有远程仓库",
-    "fetch": "抓取"
+    "fetch": "抓取",
+    "pull": "拉取",
+    "push": "推送",
+    "publishBranch": "发布分支",
+    "publishRepo": "发布…",
+    "waiting": "等待正在进行的操作结束",
+    "running": {
+      "fetch": "正在抓取… {{seconds}} 秒",
+      "pull": "正在拉取… {{seconds}} 秒",
+      "push": "正在推送… {{seconds}} 秒",
+      "publish": "正在发布… {{seconds}} 秒"
+    },
+    "step": {
+      "merge": "请先完成合并。",
+      "rebase": "请先完成变基。",
+      "cherryPick": "请先完成拣选。",
+      "revert": "请先完成还原。",
+      "conflicts": "请先解决冲突。"
+    }
+  },
+  "reason": {
+    "noBranch": "不在任何分支上",
+    "operation": "{{operation}}",
+    "noRemote": "此仓库没有远程仓库",
+    "noUpstream": "此分支尚未发布",
+    "nothingToPull": "没有可拉取的提交",
+    "nothingToPush": "没有可推送的提交",
+    "diverged": "此分支与 {{upstream}} 已分叉",
+    "ghMissing": "安装 GitHub CLI 后才能发布",
+    "ghSignedOut": "登录 GitHub CLI 后才能发布",
+    "unknownRemote": "有多个远程仓库，且没有为此分支指定其中一个",
+    "localUpstream": "此分支跟踪的是本仓库的分支",
+    "otherName": "此分支跟踪的是名称不同的 {{upstream}}"
+  },
+  "hint": {
+    "noBranch": "切换到一个分支后才能拉取或推送。",
+    "operation": "{{operation}}",
+    "publishRepo": "发布会在 GitHub 上创建仓库并推送此分支。",
+    "publishBranch": "发布此分支即可推送，并创建 Pull Request。",
+    "diverged": "已与 {{upstream}} 分叉：请在终端中变基或合并，再推送。",
+    "upToDate": "已与 {{upstream}} 同步。",
+    "ghMissing": "安装 GitHub CLI 后即可把此仓库发布到 GitHub。",
+    "ghSignedOut": "运行 gh auth login 登录 GitHub CLI 后即可发布此仓库。",
+    "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个；请在终端中指定远程仓库推送。",
+    "localUpstream": "此分支跟踪的是本仓库的分支，推送没有目标。",
+    "otherName": "此分支跟踪的是名称不同的 {{upstream}}，git 不会推送它；请在终端中指定推送目标。"
+  },
+  "failure": {
+    "operation": {
+      "fetch": "抓取",
+      "pull": "拉取",
+      "push": "推送",
+      "publish": "发布"
+    },
+    "rejected": "{{operation}}被拒绝：远程仓库有新提交。",
+    "notFastForward": "{{operation}}已停止：两边的分支已分叉。",
+    "localChanges": "{{operation}}已停止：本地更改会被覆盖。",
+    "auth": "{{operation}}失败：git 无法登录远程仓库。",
+    "network": "{{operation}}失败：无法连接远程仓库。",
+    "remoteMissing": "{{operation}}失败：找不到远程仓库。",
+    "nameTaken": "{{operation}}失败：已有同名仓库。",
+    "timeout": "{{operation}}耗时过长，已停止。",
+    "busy": "此仓库正在执行另一个 git 操作。",
+    "other": "{{operation}}失败：{{detail}}",
+    "showLog": "查看日志"
+  },
+  "dialog": {
+    "confirmPush": {
+      "title": "推送到 {{branch}}？",
+      "description_other": "{{count}} 个提交会直接进入默认分支 {{branch}}，不经过 Pull Request。",
+      "descriptionUncounted": "此分支会直接进入默认分支 {{branch}}，不经过 Pull Request。",
+      "action": "推送到 {{branch}}"
+    },
+    "publish": {
+      "title": "发布到 GitHub",
+      "description": "在 GitHub 上创建仓库，添加为 origin，并推送此分支。",
+      "name": "仓库名称",
+      "nameInvalid": "只能使用字母、数字、“.”、“-”和“_”，最多 100 个字符。",
+      "visibility": "可见性",
+      "private": "私有",
+      "public": "公开",
+      "account": "仓库将创建在 GitHub 账号 {{account}} 下。",
+      "ghMissing": "发布需要 <cli>GitHub CLI</cli>。请先安装，再运行 gh auth login 登录。",
+      "ghSignedOut": "发布需要 GitHub CLI。请先登录：",
+      "action": "发布"
+    },
+    "createPr": {
+      "title": "创建 Pull Request",
+      "description": "从 <branch>{{head}}</branch> 合入 {{repo}}，使用 GitHub CLI 创建。",
+      "titleField": "标题",
+      "body": "描述",
+      "base": "目标分支",
+      "draft": "草稿",
+      "draftHint": "草稿需要标记为可审查后才能合并。",
+      "action": "创建"
+    },
+    "log": {
+      "title": "{{operation}}日志",
+      "copy": "复制日志",
+      "empty": "没有输出"
+    }
   }
 }

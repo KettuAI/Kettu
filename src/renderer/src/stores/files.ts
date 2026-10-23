@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { EditorState, Text } from '@codemirror/state'
 import type { FileContent } from '@shared/files'
+import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { useGitStore } from './git'
 import { toggleSidePane } from './view'
@@ -33,6 +34,22 @@ export interface OpenFile {
   resets: number
 }
 
+/** A file's change from the branch popover, shown in the preview's place. */
+export interface DiffTarget {
+  /** Relative to the repository root, as git names it. */
+  path: string
+  oldPath: string | null
+  /** The commit, or null for the working tree against HEAD. */
+  ref: string | null
+  /** The same file as the Files pane names it, or null when it lies outside the project. */
+  projectFile: string | null
+}
+
+export interface DiffView extends DiffTarget {
+  result: FileDiff | null
+  error: string | null
+}
+
 /** What waits on the answer to "Save changes?". */
 export type PendingChange = { kind: 'open'; path: string; line: number | null } | { kind: 'close' }
 
@@ -44,6 +61,8 @@ interface FilesStore {
   markdownSource: boolean
   /** By project, the change to the open file that asks first because it has unsaved edits. */
   pending: Record<string, PendingChange>
+  /** By project, the diff that covers the open file until it is closed. */
+  diffs: Record<string, DiffView>
 }
 
 export const useFilesStore = create<FilesStore>()(() => ({
@@ -51,6 +70,7 @@ export const useFilesStore = create<FilesStore>()(() => ({
   open: {},
   markdownSource: false,
   pending: {},
+  diffs: {},
 }))
 
 /**
@@ -119,6 +139,7 @@ function fresh(path: string, line: number | null, content: FileContent | null): 
  */
 export function openFile(projectPath: string, path: string, line: number | null = null): void {
   toggleSidePane(projectPath, 'files', true)
+  closeDiff(projectPath)
   const current = useFilesStore.getState().open[projectPath]
   if (current?.dirty && current.path !== path) {
     setPending(projectPath, { kind: 'open', path, line })
@@ -306,9 +327,54 @@ export async function saveAll(): Promise<boolean> {
 
 /** Lists the files and reads the open one again, after a change on disk or on window focus. */
 export function refreshFiles(projectPath: string): void {
+  const diff = useFilesStore.getState().diffs[projectPath]
+  // The working tree's side of a diff changes with the files.
+  if (diff?.ref === null) void readDiff(projectPath, diff)
   if (!useFilesStore.getState().byProject[projectPath]) return
   void loadFiles(projectPath)
   void readOpenFile(projectPath)
+}
+
+const sameTarget = (a: DiffTarget | undefined, b: DiffTarget): boolean =>
+  a?.path === b.path && a.oldPath === b.oldPath && a.ref === b.ref
+
+async function readDiff(projectPath: string, target: DiffTarget): Promise<void> {
+  const settle = (change: Partial<DiffView>): void =>
+    useFilesStore.setState((s) =>
+      sameTarget(s.diffs[projectPath], target)
+        ? { diffs: { ...s.diffs, [projectPath]: { ...s.diffs[projectPath]!, ...change } } }
+        : {},
+    )
+  try {
+    const { path, oldPath, ref } = target
+    settle({ result: await host('git.fileDiff', { projectPath, path, oldPath, ref }), error: null })
+  } catch (error) {
+    settle({ error: errorMessage(error) })
+  }
+}
+
+/**
+ * Shows a file's change in the project's Files pane, over the open file, which keeps its edits
+ * and comes back when the diff closes.
+ */
+export function openDiff(projectPath: string, target: DiffTarget): void {
+  toggleSidePane(projectPath, 'files', true)
+  const current = useFilesStore.getState().diffs[projectPath]
+  if (!sameTarget(current, target)) {
+    useFilesStore.setState((s) => ({
+      diffs: { ...s.diffs, [projectPath]: { ...target, result: null, error: null } },
+    }))
+  }
+  void readDiff(projectPath, target)
+}
+
+export function closeDiff(projectPath: string): void {
+  if (!useFilesStore.getState().diffs[projectPath]) return
+  useFilesStore.setState((s) => {
+    const diffs = { ...s.diffs }
+    delete diffs[projectPath]
+    return { diffs }
+  })
 }
 
 // A new git status means the working tree changed, after an agent's edit as after one of yours;

@@ -296,7 +296,7 @@ describe('fetch', () => {
 
     const { svc } = createTestService(s, services)
     expect((await svc.status(work)).upstream?.behind).toBe(0)
-    const status = await svc.fetch(work)
+    const { status } = await svc.fetch(work)
     expect(status.upstream?.behind).toBe(1)
     expect(status.lastFetchedAt).not.toBeNull()
   })

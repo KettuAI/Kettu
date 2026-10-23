@@ -1,7 +1,18 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { FileContent, FileList, FileSearch, FileWritten } from './files'
-import type { GitStatus, GitTools, PullRequest, PullRequestState } from './git'
+import type {
+  ChangedFile,
+  CommitDetails,
+  FileDiff,
+  GitOperation,
+  GitStatus,
+  GitTools,
+  LogCommit,
+  PullRequest,
+  PullRequestState,
+  RepositoryVisibility,
+} from './git'
 import type { PortConnectionState } from './port-rpc'
 import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
@@ -309,7 +320,32 @@ export interface HostContract {
   'diagnostics.collect': { params: void; result: DiagnosticsBundle }
   'git.status': { params: { projectPath: string }; result: GitStatus }
   'git.unwatch': { params: { projectPath: string }; result: void }
-  'git.fetch': { params: { projectPath: string }; result: GitStatus }
+  'git.fetch': { params: { projectPath: string }; result: GitOperation }
+  'git.pull': { params: { projectPath: string }; result: GitOperation }
+  // Publishes the branch when it has no upstream.
+  'git.push': {
+    params: { projectPath: string; remote: string; branch: string }
+    result: GitOperation
+  }
+  'git.publish': {
+    params: { projectPath: string; name: string; visibility: RepositoryVisibility }
+    result: GitOperation
+  }
+  'git.createPullRequest': {
+    params: { projectPath: string; title: string; body: string; base: string; draft: boolean }
+    result: PullRequest
+  }
+  'git.commit': { params: { projectPath: string; oid: string }; result: CommitDetails }
+  'git.changes': { params: { projectPath: string }; result: ChangedFile[] }
+  'git.incoming': {
+    params: { projectPath: string; from: 'upstream' | 'base' }
+    result: LogCommit[]
+  }
+  // ref null: the working tree against HEAD; otherwise the commit against its first parent.
+  'git.fileDiff': {
+    params: { projectPath: string; path: string; oldPath: string | null; ref: string | null }
+    result: FileDiff
+  }
   'git.pullRequest': { params: { url: string }; result: PullRequest }
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
   'git.tools': { params: void; result: GitTools }
@@ -389,6 +425,14 @@ export const HOST_METHODS = [
   'git.status',
   'git.unwatch',
   'git.fetch',
+  'git.pull',
+  'git.push',
+  'git.publish',
+  'git.createPullRequest',
+  'git.commit',
+  'git.changes',
+  'git.incoming',
+  'git.fileDiff',
   'git.pullRequest',
   'git.currentPullRequest',
   'git.tools',

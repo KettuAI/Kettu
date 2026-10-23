@@ -114,7 +114,22 @@
   "git": {
     "notReady": "Git 暂不可用",
     "ghMissing": "未安装 GitHub CLI（gh）",
-    "ghSignedOut": "GitHub CLI 尚未登录，请在终端中运行 \"gh auth login\""
+    "ghSignedOut": "GitHub CLI 尚未登录，请在终端中运行 \"gh auth login\"",
+    "busy": "此项目正在执行另一个 git 操作，请等它结束后再试",
+    "notRepository": "此文件夹不是 git 仓库",
+    "operationInProgress": "请先完成正在进行的合并或变基",
+    "noBranch": "请先切换到一个分支：HEAD 处于分离状态或还没有提交",
+    "noUpstream": "此分支尚未发布",
+    "diverged": "此分支与 {{upstream}} 已分叉，请先变基或合并，再推送",
+    "pullFirst": "{{upstream}} 上有此分支没有的提交，请先拉取",
+    "noRemote": "此仓库没有可推送的远程仓库",
+    "remoteExists": "此仓库已经有远程仓库",
+    "pushTargetChanged": "推送目标已变为 {{target}}，请重新查看弹层",
+    "notOnGithub": "请先把此分支推送到 GitHub 远程仓库",
+    "sameBranch": "此分支和目标分支是同一个分支",
+    "localUpstream": "此分支跟踪的是本仓库的分支，没有可推送的远程仓库",
+    "otherName": "此分支跟踪的是名称不同的 {{upstream}}，请在终端中推送",
+    "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个"
   },
   "content": {
     "audio": "音频（{{type}}）",

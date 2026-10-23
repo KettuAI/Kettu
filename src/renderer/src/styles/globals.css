@@ -497,8 +497,9 @@
     font-weight: var(--weight-normal);
     overflow: hidden;
   }
-  /* Desktop app: only text that is content can be selected. */
-  #root {
+  /* Desktop app: only text that is content can be selected. On body, so that popovers, menus
+     and dialogs, which portal outside #root, follow it too. */
+  body {
     user-select: none;
     -webkit-user-select: none;
   }

@@ -78,5 +78,16 @@
     "unfold": "展开",
     "controlCharacter": "控制字符",
     "completions": "补全"
+  },
+  "diff": {
+    "uncommitted": "未提交",
+    "openFile": "打开文件",
+    "close": "关闭差异",
+    "failed": "无法显示此更改",
+    "binaryDescription": "不显示二进制文件的更改。",
+    "tooLargeTitle": "文件太大，无法比较",
+    "tooLargeDescription": "此更改有一侧超过 1 MB。",
+    "sameTitle": "没有可显示的更改",
+    "sameDescription": "此文件两侧的内容现在相同。"
   }
 }

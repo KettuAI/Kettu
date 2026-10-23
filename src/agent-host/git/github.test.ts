@@ -17,8 +17,9 @@ const statusContext = (state: string) => ({ __typename: 'StatusContext', context
 
 describe('summarizeChecks', () => {
   it('has no state without checks', () => {
-    expect(summarizeChecks([])).toEqual({ state: 'none', passed: 0, failed: 0, pending: 0 })
-    expect(summarizeChecks(null)).toEqual({ state: 'none', passed: 0, failed: 0, pending: 0 })
+    const none = { state: 'none', passed: 0, failed: 0, pending: 0, runs: [] }
+    expect(summarizeChecks([])).toEqual(none)
+    expect(summarizeChecks(null)).toEqual(none)
     expect(summarizeChecks(undefined).state).toBe('none')
   })
 
@@ -29,12 +30,14 @@ describe('summarizeChecks', () => {
       checkRun('COMPLETED', 'NEUTRAL'),
       statusContext('SUCCESS'),
     ])
-    expect(checks).toEqual({ state: 'passing', passed: 4, failed: 0, pending: 0 })
+    expect(checks).toMatchObject({ state: 'passing', passed: 4, failed: 0, pending: 0 })
   })
 
   it('is pending while a run has not completed', () => {
     for (const status of ['QUEUED', 'IN_PROGRESS', 'WAITING', 'PENDING', 'REQUESTED']) {
-      expect(summarizeChecks([checkRun('COMPLETED', 'SUCCESS'), checkRun(status, null)])).toEqual({
+      expect(
+        summarizeChecks([checkRun('COMPLETED', 'SUCCESS'), checkRun(status, null)]),
+      ).toMatchObject({
         state: 'pending',
         passed: 1,
         failed: 0,
@@ -54,7 +57,34 @@ describe('summarizeChecks', () => {
       checkRun('IN_PROGRESS', null),
       checkRun('COMPLETED', 'FAILURE'),
     ])
-    expect(checks).toEqual({ state: 'failing', passed: 1, failed: 1, pending: 1 })
+    expect(checks).toMatchObject({ state: 'failing', passed: 1, failed: 1, pending: 1 })
+  })
+
+  it('lists each run, failing first, then pending, then passed, by name', () => {
+    const { runs } = summarizeChecks([
+      { ...checkRun('COMPLETED', 'SUCCESS'), name: 'lint', workflowName: 'CI' },
+      {
+        ...checkRun('IN_PROGRESS', null),
+        name: 'e2e',
+        startedAt: '2026-10-20T08:00:00Z',
+        completedAt: '0001-01-01T00:00:00Z',
+        detailsUrl: 'https://github.com/acme/app/actions/runs/1',
+      },
+      { ...checkRun('COMPLETED', 'FAILURE'), name: 'build', workflowName: 'build' },
+      { ...statusContext('SUCCESS'), targetUrl: 'http://ci.example.com/1' },
+    ])
+    expect(runs).toEqual([
+      { name: 'build', outcome: 'failed', url: null, startedAt: null, completedAt: null },
+      {
+        name: 'e2e',
+        outcome: 'pending',
+        url: 'https://github.com/acme/app/actions/runs/1',
+        startedAt: Date.parse('2026-10-20T08:00:00Z'),
+        completedAt: null,
+      },
+      { name: 'ci', outcome: 'passed', url: null, startedAt: null, completedAt: null },
+      { name: 'CI / lint', outcome: 'passed', url: null, startedAt: null, completedAt: null },
+    ])
   })
 
   it.each(['FAILURE', 'TIMED_OUT', 'CANCELLED', 'STARTUP_FAILURE', 'ACTION_REQUIRED', 'STALE'])(
@@ -71,7 +101,7 @@ describe('summarizeChecks', () => {
   it('reads the shape when the type name is missing', () => {
     expect(
       summarizeChecks([{ state: 'SUCCESS' }, { status: 'COMPLETED', conclusion: 'FAILURE' }]),
-    ).toEqual({
+    ).toMatchObject({
       state: 'failing',
       passed: 1,
       failed: 1,
@@ -109,7 +139,13 @@ describe('mapPullRequest', () => {
       state: 'open',
       head: 'fix/flaky-login',
       base: 'main',
-      checks: { state: 'passing', passed: 1, failed: 0, pending: 0 },
+      checks: {
+        state: 'passing',
+        passed: 1,
+        failed: 0,
+        pending: 0,
+        runs: [{ name: 'build', outcome: 'passed', url: null, startedAt: null, completedAt: null }],
+      },
       review: 'approved',
       mergeable: 'clean',
       updatedAt: Date.parse('2026-10-20T08:30:00Z'),

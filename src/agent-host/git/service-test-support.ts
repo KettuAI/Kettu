@@ -32,6 +32,12 @@ export interface FakeGh {
   byUrl: Record<string, object>
   /** When set, `gh pr view` and `gh pr list` fail with this message. */
   error: string | null
+  /** Does what `gh repo create` would in the folder; null: the command fails. */
+  onRepoCreate: ((root: string) => Promise<void>) | null
+  /** What `gh pr create` opens; null: the command fails. */
+  created: { url: string } | null
+  /** `gh pr view` cannot find the pull request just created, as right after creation. */
+  createdUnseen: boolean
   calls: string[][]
   /** Calls that were not `--version` or `auth status`. */
   pullRequestCalls(): string[][]
@@ -65,6 +71,9 @@ export function createFakeGh(real: Exec): { gh: FakeGh; exec: Exec; gitCalls: st
     list: [],
     byUrl: {},
     error: null,
+    onRepoCreate: null,
+    created: null,
+    createdUnseen: false,
     calls: [],
     pullRequestCalls: () => gh.calls.filter((call) => call[0] === 'pr'),
   }
@@ -98,6 +107,19 @@ export function createFakeGh(real: Exec): { gh: FakeGh; exec: Exec; gitCalls: st
         : result({ code: 1, stderr: 'no pull requests found for branch "x"\n' })
     }
     if (args[0] === 'pr' && args[1] === 'list') return result({ stdout: JSON.stringify(gh.list) })
+    if (args[0] === 'repo' && args[1] === 'create') {
+      if (!gh.onRepoCreate) return result({ code: 1, stderr: 'GraphQL: Name already exists' })
+      await gh.onRepoCreate(options.cwd ?? '')
+      return result({ stdout: 'https://github.com/acme/new\n', stderr: 'Created repository\n' })
+    }
+    if (args[0] === 'pr' && args[1] === 'create') {
+      if (!gh.created) return result({ code: 1, stderr: 'GraphQL: No commits between main and x' })
+      if (!gh.createdUnseen) {
+        gh.byUrl[gh.created.url] = gh.created
+        gh.view = gh.created
+      }
+      return result({ stdout: `${gh.created.url}\n`, stderr: 'Creating pull request\n' })
+    }
     return result({ code: 1, stderr: `unexpected gh call: ${args.join(' ')}` })
   }
   return { gh, exec, gitCalls }

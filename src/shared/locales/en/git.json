@@ -12,6 +12,12 @@
       "rebase": "Rebasing",
       "cherryPick": "Cherry-picking",
       "revert": "Reverting"
+    },
+    "running": {
+      "fetch": "Fetching",
+      "pull": "Pulling",
+      "push": "Pushing",
+      "publish": "Publishing"
     }
   },
   "pr": {
@@ -48,42 +54,156 @@
     "reviewUpdated": "{{review}} · Updated {{when}}",
     "openOnGitHub": "Open on GitHub"
   },
-  "lane": {
-    "label": {
-      "ahead_one": "{{count}} commit ahead of {{base}}",
-      "ahead_other": "{{count}} commits ahead of {{base}}",
-      "notPushed": "{{count}} not pushed",
-      "behind": "{{count}} behind",
-      "uncommitted": "uncommitted changes",
-      "separator": ", "
-    },
-    "pushed": "{{count}} pushed",
-    "notPushed": "↑{{count}} not pushed",
-    "notPublished": "{{count}} not published",
-    "changes": "changes"
-  },
   "popover": {
     "copyBranch": "Copy branch name",
-    "copyCommand": "Copy command",
-    "from": "from <branch/>",
-    "tracking": "tracking <branch/>",
+    "from": "from <branch>{{name}}</branch>",
+    "tracking": "tracking <branch>{{name}}</branch>",
     "notPublished": "not published",
-    "notPushed": "Not pushed",
-    "moreCommits": "{{count}} more",
-    "filesChanged_one": "{{count}} file changed",
-    "filesChanged_other": "{{count}} files changed",
-    "staged": "{{count}} staged",
-    "newFiles": "{{count}} new",
-    "conflicts_one": "{{count}} conflict",
-    "conflicts_other": "{{count}} conflicts",
-    "noChanges": "No changes in the working tree",
-    "installGh": "Install the <cli>GitHub CLI</cli> to see pull requests.",
+    "detached": "Detached HEAD",
+    "unborn": "No commits yet"
+  },
+  "timeline": {
+    "incoming_one": "{{count}} new commit to pull",
+    "incoming_other": "{{count}} new commits to pull",
+    "incomingTitle": "Commits on {{upstream}} that this branch does not have",
+    "uncommitted": "Uncommitted changes",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "openDiff": "Open the diff of {{name}}",
+    "copied": "Copied",
+    "copyId": "Copy commit id",
+    "copyMessage": "Copy message",
+    "openOnGitHub": "Open on GitHub",
+    "onRemote": "on {{upstream}}",
+    "notPushed": "not pushed",
+    "notPublished": "not published",
+    "more": "{{count}} more",
+    "baseAhead_one": "{{count}} new commit since branching",
+    "baseAhead_other": "{{count}} new commits since branching",
+    "baseEven": "No new commits since branching"
+  },
+  "prPart": {
+    "meta": "<state>{{state}}</state> · <head/> → <base/> · updated {{when}}",
+    "queued": "Queued",
+    "installGh": "Install the <cli>GitHub CLI</cli> to see and create pull requests.",
     "signInGh": "Sign in to the GitHub CLI to see pull requests:",
-    "noPr": "No pull request for this branch.",
-    "createPr": "Create pull request",
-    "fetched": "Fetched {{when}}",
-    "neverFetched": "Never fetched",
+    "copyCommand": "Copy command",
+    "publishFirst": "Publish the branch to open a pull request.",
+    "none": "No pull request",
+    "create": "Create pull request…",
+    "blocked": {
+      "draft": "A draft cannot be merged until it is ready for review",
+      "conflicts": "Has conflicts with {{base}}",
+      "checks": "Cannot merge until the required checks pass",
+      "review": "Cannot merge until it is approved",
+      "rules": "Blocked by the repository's merge rules"
+    }
+  },
+  "sync": {
+    "fetched": "fetched {{when}}",
+    "neverFetched": "never fetched",
     "noRemote": "No remote",
-    "fetch": "Fetch"
+    "fetch": "Fetch",
+    "pull": "Pull",
+    "push": "Push",
+    "publishBranch": "Publish branch",
+    "publishRepo": "Publish…",
+    "waiting": "Waits for the running operation",
+    "running": {
+      "fetch": "Fetching… {{seconds}} s",
+      "pull": "Pulling… {{seconds}} s",
+      "push": "Pushing… {{seconds}} s",
+      "publish": "Publishing… {{seconds}} s"
+    },
+    "step": {
+      "merge": "Finish the merge first.",
+      "rebase": "Finish the rebase first.",
+      "cherryPick": "Finish the cherry-pick first.",
+      "revert": "Finish the revert first.",
+      "conflicts": "Resolve the conflicts first."
+    }
+  },
+  "reason": {
+    "noBranch": "Not on a branch",
+    "operation": "{{operation}}",
+    "noRemote": "This repository has no remote",
+    "noUpstream": "The branch is not published yet",
+    "nothingToPull": "Nothing to pull",
+    "nothingToPush": "Nothing to push",
+    "diverged": "The branch has diverged from {{upstream}}",
+    "ghMissing": "Install the GitHub CLI to publish",
+    "ghSignedOut": "Sign in to the GitHub CLI to publish",
+    "unknownRemote": "Several remotes, and none is set for this branch",
+    "localUpstream": "The branch tracks a branch of this repository",
+    "otherName": "The branch tracks {{upstream}}, which has another name"
+  },
+  "hint": {
+    "noBranch": "Check out a branch to pull or push.",
+    "operation": "{{operation}}",
+    "publishRepo": "Publish creates a GitHub repository and pushes this branch.",
+    "publishBranch": "Publish the branch to push it and open a pull request.",
+    "diverged": "Diverged from {{upstream}}: rebase or merge in the terminal, then push.",
+    "upToDate": "Up to date with {{upstream}}.",
+    "ghMissing": "Install the GitHub CLI to publish this repository to GitHub.",
+    "ghSignedOut": "Sign in to the GitHub CLI with gh auth login to publish this repository.",
+    "unknownRemote": "This repository has several remotes and none is set for this branch; push from the terminal, naming the remote.",
+    "localUpstream": "The branch tracks a branch of this repository, so a push has nowhere to go.",
+    "otherName": "The branch tracks {{upstream}}, which has another name, so git would not push it; push from the terminal, naming where it goes."
+  },
+  "failure": {
+    "operation": {
+      "fetch": "Fetch",
+      "pull": "Pull",
+      "push": "Push",
+      "publish": "Publish"
+    },
+    "rejected": "{{operation}} was rejected: the remote has new commits.",
+    "notFastForward": "{{operation}} stopped: the branches have diverged.",
+    "localChanges": "{{operation}} stopped: local changes would be overwritten.",
+    "auth": "{{operation}} failed: git could not sign in to the remote.",
+    "network": "{{operation}} failed: the remote cannot be reached.",
+    "remoteMissing": "{{operation}} failed: the remote repository was not found.",
+    "nameTaken": "{{operation}} failed: a repository with this name already exists.",
+    "timeout": "{{operation}} took too long and was stopped.",
+    "busy": "Another git operation is running in this repository.",
+    "other": "{{operation}} failed: {{detail}}",
+    "showLog": "Show log"
+  },
+  "dialog": {
+    "confirmPush": {
+      "title": "Push to {{branch}}?",
+      "description_one": "{{count}} commit goes straight to {{branch}}, the default branch, without a pull request.",
+      "description_other": "{{count}} commits go straight to {{branch}}, the default branch, without a pull request.",
+      "descriptionUncounted": "This branch goes straight to {{branch}}, the default branch, without a pull request.",
+      "action": "Push to {{branch}}"
+    },
+    "publish": {
+      "title": "Publish to GitHub",
+      "description": "Creates a GitHub repository, adds it as origin and pushes this branch.",
+      "name": "Repository name",
+      "nameInvalid": "Use letters, digits, \".\", \"-\" and \"_\", up to 100 characters.",
+      "visibility": "Visibility",
+      "private": "Private",
+      "public": "Public",
+      "account": "It goes to {{account}} on GitHub.",
+      "ghMissing": "Publishing uses the <cli>GitHub CLI</cli>. Install it, then sign in with gh auth login.",
+      "ghSignedOut": "Publishing uses the GitHub CLI. Sign in first:",
+      "action": "Publish"
+    },
+    "createPr": {
+      "title": "Create pull request",
+      "description": "From <branch>{{head}}</branch> into {{repo}}, with the GitHub CLI.",
+      "titleField": "Title",
+      "body": "Description",
+      "base": "Base",
+      "draft": "Draft",
+      "draftHint": "A draft cannot be merged until it is marked ready for review.",
+      "action": "Create"
+    },
+    "log": {
+      "title": "{{operation}} log",
+      "copy": "Copy log",
+      "empty": "No output"
+    }
   }
 }

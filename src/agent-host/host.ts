@@ -420,6 +420,23 @@ export class AgentHost {
     }
   }
 
+  /** Runs a git request that reads or writes a registered project or a scratch folder. */
+  private async gitProjectCall<T>(
+    projectPath: string,
+    run: (git: GitServiceApi, canonical: string) => Promise<T>,
+  ): Promise<T> {
+    const canonical = await this.gitProject(projectPath)
+    return this.gitCall((g) => run(g, canonical))
+  }
+
+  /** A registered project or a scratch folder, canonical; git runs nowhere else. */
+  private async gitProject(projectPath: string): Promise<string> {
+    this.requireGit()
+    const canonical = await this.projects.resolveDirectory(projectPath)
+    if (!this.scratch.contains(canonical)) this.projects.match(canonical)
+    return canonical
+  }
+
   /**
    * Runs a file request for a registered project or a scratch folder, once the environment git
    * needs is resolved.
@@ -500,7 +517,7 @@ export class AgentHost {
       'diagnostics.collect': () => this.collectDiagnostics(),
       'git.status': async ({ projectPath }, { portId }) => {
         const git = this.requireGit()
-        const canonical = await projects.resolveDirectory(projectPath)
+        const canonical = await this.gitProject(projectPath)
         await this.env.ready()
         if (!this.hub.has(portId)) return this.gitCall((g) => g.status(canonical))
         const key = pathKey(canonical, this.options.platform)
@@ -525,17 +542,26 @@ export class AgentHost {
         if (retained.ports.size === 0) this.gitRetains.delete(key)
         git.release(retained.path, portId)
       },
-      'git.fetch': async ({ projectPath }) => {
-        this.requireGit()
-        const canonical = await projects.resolveDirectory(projectPath)
-        return this.gitCall((g) => g.fetch(canonical))
-      },
+      'git.fetch': ({ projectPath }) => this.gitProjectCall(projectPath, (g, p) => g.fetch(p)),
+      'git.pull': ({ projectPath }) => this.gitProjectCall(projectPath, (g, p) => g.pull(p)),
+      'git.push': ({ projectPath, remote, branch }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.push(p, { remote, branch })),
+      'git.publish': ({ projectPath, name, visibility }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.publish(p, name, visibility)),
+      'git.createPullRequest': ({ projectPath, title, body, base, draft }) =>
+        this.gitProjectCall(projectPath, (g, p) =>
+          g.createPullRequest(p, { title, body, base, draft }),
+        ),
+      'git.commit': ({ projectPath, oid }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.commit(p, oid)),
+      'git.changes': ({ projectPath }) => this.gitProjectCall(projectPath, (g, p) => g.changes(p)),
+      'git.incoming': ({ projectPath, from }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.incoming(p, from)),
+      'git.fileDiff': ({ projectPath, path, oldPath, ref }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.fileDiff(p, path, oldPath, ref)),
       'git.pullRequest': ({ url }) => this.gitCall((g) => g.pullRequest(url)),
-      'git.currentPullRequest': async ({ projectPath }) => {
-        this.requireGit()
-        const canonical = await projects.resolveDirectory(projectPath)
-        return this.gitCall((g) => g.currentPullRequest(canonical))
-      },
+      'git.currentPullRequest': ({ projectPath }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),
       'git.tools': () => this.gitCall((g) => g.tools()),
       'files.list': ({ projectPath }) =>
         this.filesCall(projectPath, (root) => this.files.list(root)),

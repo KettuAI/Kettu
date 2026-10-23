@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import {
+  descendantsOf,
   parseCim,
   parsePs,
   processControl,
@@ -96,6 +97,21 @@ describe('treeOf', () => {
       row(102, 100, 102, T + 60_000), // the new process's own child
     ]
     expect(pids(treeOf(rows, { ...root, seenAt: T + 70_000 }, 'win32'))).toEqual([101])
+  })
+})
+
+describe('descendantsOf', () => {
+  it('follows parent links, past a reused pid', () => {
+    const rows = [
+      row(10, 1, 1, T),
+      row(11, 10, 1, T + 10_000),
+      row(12, 11, 1, T + 20_000),
+      row(13, 1, 1, T + 30_000),
+      // Started well before 11 did: a reused pid that only looks like its child.
+      row(14, 11, 1, T + 1_000),
+    ]
+    expect(descendantsOf(rows, 10).map((r) => r.pid)).toEqual([11, 12])
+    expect(descendantsOf(rows, 99)).toEqual([])
   })
 })
 

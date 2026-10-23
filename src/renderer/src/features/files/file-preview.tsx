@@ -241,7 +241,7 @@ function Body({ projectPath, file }: { projectPath: string; file: OpenFile }) {
   )
 }
 
-function Lines() {
+export function Lines() {
   return (
     <div className="flex flex-col gap-2 p-4">
       <Skeleton className="h-3 w-3/5" />
@@ -293,7 +293,7 @@ function Picture({ content }: { content: Extract<FileContent, { kind: 'image' }>
   )
 }
 
-function Notice({ title, description }: { title: string; description: string }) {
+export function Notice({ title, description }: { title: string; description: string }) {
   return (
     <Empty className="h-full">
       <EmptyHeader>

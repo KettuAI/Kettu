@@ -4,14 +4,18 @@ import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import {
   GITHUB_PULL_REQUEST_URL,
+  type GitOperation,
   type GitStatus,
   type GitTools,
   type PullRequest,
+  type PushTarget,
 } from '@shared/git'
 import type { ToolKind } from '@shared/thread'
 import type { BranchPullRequest, GitEventDraft, GitServiceApi, GitServiceDeps } from './api'
+import { HostError } from '../errors'
 import { t } from '../i18n'
 import { createCoalescer } from './coalesce'
+import { readChanges, readCommitDetails, readFileDiff, readIncoming } from './details'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
 import { CommandError, createExec, describeFailure, FETCH_TIMEOUT_MS, type Exec } from './exec'
 import {
@@ -21,6 +25,14 @@ import {
   viewPullRequestByUrl,
 } from './gh'
 import { nextPollDelayMs } from './github'
+import {
+  createdPullRequest,
+  createPullRequest,
+  logOf,
+  publishRepository,
+  pull,
+  push,
+} from './operations'
 import { createRepoCache, emptyStatus, readStatus, type RepoCache } from './status'
 import { watchGitDir, type GitDirWatch, type WatchFn } from './watch'
 
@@ -76,7 +88,9 @@ interface ProjectState {
   watcher: GitDirWatch | null
   watcherGitDir: string | null
   watcherStarting: boolean
-  fetching: Promise<GitStatus> | null
+  fetching: Promise<GitOperation> | null
+  /** The pull, push or publish that is running; one at a time. */
+  operation: Promise<unknown> | null
   calls: Map<string, ToolCall>
   /** The last snapshot that tool call comparisons have already accounted for. */
   baseline: Snapshot | null
@@ -209,6 +223,7 @@ export function createGitService(
         watcherGitDir: null,
         watcherStarting: false,
         fetching: null,
+        operation: null,
         calls: new Map(),
         baseline: null,
         reportedPullRequests: new Set(),
@@ -489,14 +504,15 @@ export function createGitService(
 
   // Fetch
 
-  function fetchProject(state: ProjectState): Promise<GitStatus> {
+  function fetchProject(state: ProjectState): Promise<GitOperation> {
+    if (state.operation) return Promise.reject(busy())
     state.fetching ??= track(runFetch(state)).finally(() => {
       state.fetching = null
     })
     return state.fetching
   }
 
-  async function runFetch(state: ProjectState): Promise<GitStatus> {
+  async function runFetch(state: ProjectState): Promise<GitOperation> {
     const result = await exec('git', ['fetch', '--prune'], {
       cwd: state.projectPath,
       timeoutMs: FETCH_TIMEOUT_MS,
@@ -508,7 +524,85 @@ export function createGitService(
           : result.stderr.trim() || describeFailure(result),
       )
     }
-    return (await requestRefresh(state)).status
+    return { status: (await requestRefresh(state)).status, log: logOf(result) }
+  }
+
+  // Writes
+
+  function busy(): HostError {
+    return new HostError('busy', t('git.busy'))
+  }
+
+  /** Runs one write at a time per project, then refreshes and returns the status with its value. */
+  function locked<T>(
+    state: ProjectState,
+    run: (status: GitStatus) => Promise<T>,
+  ): Promise<{ status: GitStatus; value: T }> {
+    if (state.operation || state.fetching) return Promise.reject(busy())
+    const work = (async (): Promise<{ status: GitStatus; value: T }> => {
+      const before = (await requestRefresh(state)).status
+      try {
+        const value = await run(before)
+        const after = await requestRefresh(state)
+        if (isLive(state)) background(requestPoll(state, true))
+        return { status: after.status, value }
+      } catch (error) {
+        // What the failure left behind, such as a half-made remote, shows at once.
+        refreshInBackground(state)
+        throw error
+      } finally {
+        // Released before the caller hears back, so its next request is not refused.
+        state.operation = null
+      }
+    })()
+    // The caller handles the rejection; the lock only needs to know that one is running.
+    state.operation = track(work).then(
+      () => undefined,
+      () => undefined,
+    )
+    return work
+  }
+
+  function exclusive(
+    state: ProjectState,
+    run: (status: GitStatus) => Promise<string>,
+  ): Promise<GitOperation> {
+    return locked(state, run).then(({ status, value }) => ({ status, log: value }))
+  }
+
+  /** Refuses what the interface never offers: a detached or unborn head, a merge in progress. */
+  function checkBranch(status: GitStatus): string {
+    if (!status.repo) throw new Error(t('git.notRepository'))
+    if (status.operation) throw new Error(t('git.operationInProgress'))
+    if (status.head.detached || status.head.branch === null) throw new Error(t('git.noBranch'))
+    return status.head.branch
+  }
+
+  /** The status's push target, or why there is none, as the interface says it. */
+  function pushTarget(status: GitStatus): Extract<PushTarget, { kind: 'remote' }> {
+    const to = status.push
+    switch (to?.kind) {
+      case 'remote':
+        return to
+      case 'localUpstream':
+        throw new Error(t('git.localUpstream'))
+      case 'otherName':
+        throw new Error(t('git.otherName', { upstream: to.upstream }))
+      case 'unknownRemote':
+        throw new Error(t('git.unknownRemote'))
+      default:
+        throw new Error(t('git.noRemote'))
+    }
+  }
+
+  async function requireGh(): Promise<void> {
+    const tools = await getTools()
+    if (tools.gh.state === 'not-installed') throw new Error(t('git.ghMissing'))
+    if (tools.gh.state === 'signed-out') throw new Error(t('git.ghSignedOut'))
+  }
+
+  async function knownStatus(state: ProjectState): Promise<GitStatus> {
+    return state.status ?? (await requestRefresh(state)).status
   }
 
   async function runBackgroundFetch(): Promise<void> {
@@ -516,7 +610,7 @@ export function createGitService(
     backgroundFetching = true
     try {
       for (const state of [...projects.values()]) {
-        if (disposed || !isLive(state) || !state.status?.remote) continue
+        if (disposed || !isLive(state) || !state.status?.remote || state.operation) continue
         try {
           await fetchProject(state)
           logChange(state, 'fetch', 'info', null)
@@ -643,6 +737,100 @@ export function createGitService(
       } catch (error) {
         return Promise.reject(error instanceof Error ? error : new Error(String(error)))
       }
+    },
+
+    pull(projectPath) {
+      return exclusive(projectFor(projectPath), (status) => {
+        checkBranch(status)
+        if (!status.upstream) throw new Error(t('git.noUpstream'))
+        if (status.upstream.ahead > 0 && status.upstream.behind > 0) {
+          throw new Error(t('git.diverged', { upstream: status.upstream.name }))
+        }
+        return pull(exec, status.projectPath)
+      })
+    },
+
+    push(projectPath, expected) {
+      return exclusive(projectFor(projectPath), (status) => {
+        const branch = checkBranch(status)
+        const to = pushTarget(status)
+        if (to.remote !== expected.remote || to.branch !== expected.branch) {
+          throw new Error(t('git.pushTargetChanged', { target: `${to.remote}/${to.branch}` }))
+        }
+        // Behind matters only when the push goes to the upstream itself.
+        const upstream = status.upstream
+        if (upstream && upstream.name === `${to.remote}/${to.branch}` && upstream.behind > 0) {
+          throw new Error(
+            t(upstream.ahead > 0 ? 'git.diverged' : 'git.pullFirst', { upstream: upstream.name }),
+          )
+        }
+        return push(exec, status.projectPath, branch, to)
+      })
+    },
+
+    publish(projectPath, name, visibility) {
+      return exclusive(projectFor(projectPath), async (status) => {
+        checkBranch(status)
+        if (status.push?.kind !== 'noRemote') throw new Error(t('git.remoteExists'))
+        await requireGh()
+        return publishRepository(exec, status.repo!.root, name, visibility)
+      })
+    },
+
+    async createPullRequest(projectPath, draft) {
+      const state = projectFor(projectPath)
+      const { value } = await locked(state, async (status) => {
+        await requireGh()
+        checkBranch(status)
+        const base = status.remote?.github
+        const to = status.push
+        if (!base || to?.kind !== 'remote' || to.setUpstream || !to.github) {
+          throw new Error(t('git.notOnGithub'))
+        }
+        const sameRepo = to.github.owner === base.owner && to.github.repo === base.repo
+        if (sameRepo && to.branch === draft.base) throw new Error(t('git.sameBranch'))
+        const created = await createPullRequest(exec, state.projectPath, {
+          ...draft,
+          repo: `${base.owner}/${base.repo}`,
+          head: sameRepo ? to.branch : `${to.github.owner}:${to.branch}`,
+        })
+        return { url: created.url, head: to.branch }
+      })
+      try {
+        return await api.pullRequest(value.url)
+      } catch (error) {
+        // The pull request exists; only its details are missing until the next poll.
+        logChange(state, 'gh pr view', 'warn', `gh pr view failed: ${messageOf(error)}`)
+        return createdPullRequest(value.url, value.head, draft, now())
+      }
+    },
+
+    async commit(projectPath, oid) {
+      const state = projectFor(projectPath)
+      await knownStatus(state)
+      return readCommitDetails(exec, state.projectPath, oid)
+    },
+
+    async changes(projectPath) {
+      const state = projectFor(projectPath)
+      const status = await knownStatus(state)
+      if (!status.repo) return []
+      return readChanges(exec, state.projectPath, status.head.oid === null)
+    },
+
+    async incoming(projectPath, from) {
+      const state = projectFor(projectPath)
+      const status = await knownStatus(state)
+      const ref = from === 'upstream' ? status.upstream?.name : status.base?.name
+      if (!status.repo || !ref || status.head.oid === null) return []
+      return readIncoming(exec, state.projectPath, ref)
+    },
+
+    async fileDiff(projectPath, path, oldPath, ref) {
+      const state = projectFor(projectPath)
+      const status = await knownStatus(state)
+      if (!status.repo) throw new Error(t('git.notRepository'))
+      return readFileDiff(exec, status.repo.root, path, oldPath, ref, status.head.oid === null)
     },
 
     async pullRequest(url) {

@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import type { TFunction } from 'i18next'
 import {
   ArrowDownIcon,
@@ -13,8 +13,11 @@ import { useTranslation } from 'react-i18next'
 import type { GitStatus } from '@shared/git'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { cn } from '@renderer/lib/utils'
-import { useGitStore } from '@renderer/stores/git'
+import { host } from '@renderer/lib/host'
+import { Spinner } from '@renderer/components/ui/spinner'
+import { loadGitTools, receiveCurrentPr, receiveGitStatus, useGitStore } from '@renderer/stores/git'
 import { BranchPopover } from './branch-popover'
+import { GitDialogs } from './git-dialogs'
 import { ChecksIcon, PrIcon } from './pr-icon'
 
 /** Middle truncation keeps both ends of a branch name, where the meaning usually is. */
@@ -33,7 +36,21 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('git')
   const status = useGitStore((s) => s.status[projectPath])
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
+  const [open, setOpen] = useState(false)
+  const popup = useRef<HTMLDivElement>(null)
   if (!status?.repo) return null
+
+  const onOpenChange = (next: boolean): void => {
+    setOpen(next)
+    if (!next) return
+    // Opening shows the repository as it is now, not as the last watch event left it.
+    void host('git.status', { projectPath }).then(receiveGitStatus, () => {})
+    void host('git.currentPullRequest', { projectPath }).then(
+      (current) => receiveCurrentPr(projectPath, current),
+      () => {},
+    )
+    if (!useGitStore.getState().tools) void loadGitTools()
+  }
 
   return (
     <div
@@ -42,17 +59,24 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
       className="inline-flex min-w-0 items-center gap-px"
       onKeyDown={arrowFocus}
     >
-      <Popover>
+      <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger
           className={cn(segment, 'min-w-0 overflow-hidden')}
           aria-label={branchLabel(status, t)}
         >
           <BranchSummary status={status} />
         </PopoverTrigger>
-        <PopoverContent align="end" sideOffset={6} className="w-[372px] gap-0 overflow-hidden p-0">
-          <BranchPopover status={status} pr={pr} />
+        <PopoverContent
+          ref={popup}
+          align="end"
+          sideOffset={6}
+          initialFocus={() => popup.current?.querySelector<HTMLElement>('[data-git-row]') ?? true}
+          className="max-h-(--available-height) w-98 gap-0 overflow-x-hidden overflow-y-auto p-0"
+        >
+          <BranchPopover status={status} pr={pr} onClose={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
+      <GitDialogs status={status} />
       {pr && (
         <a
           href={pr.url}
@@ -77,8 +101,17 @@ function branchLabel(status: GitStatus, t: TFunction<'git'>): string {
     : t('status.branch', { name: status.head.branch ?? '' })
 }
 
+const RUNNING_KEY = {
+  fetch: 'status.running.fetch',
+  pull: 'status.running.pull',
+  push: 'status.running.push',
+  publishBranch: 'status.running.publish',
+  publishRepo: 'status.running.publish',
+} as const
+
 function BranchSummary({ status }: { status: GitStatus }) {
   const { t } = useTranslation('git')
+  const running = useGitStore((s) => s.running[status.projectPath]?.kind ?? null)
   const { head, upstream, changes, operation } = status
   const changed = changes.staged + changes.unstaged + changes.untracked
   const unborn = !head.oid
@@ -101,32 +134,45 @@ function BranchSummary({ status }: { status: GitStatus }) {
       </span>
       {head.detached && <span>{t('status.detached')}</span>}
       {unborn && !head.detached && <span>{t('status.noCommits')}</span>}
-      {!upstream && !head.detached && !unborn && (
-        <span className="ml-1 inline-flex shrink-0 items-center gap-1">
-          <CloudUploadIcon className="size-[13px]" />
-          <span className="@max-[720px]/top-bar:sr-only">{t('status.notPublished')}</span>
-        </span>
-      )}
-      {upstream && upstream.ahead > 0 && (
+      {/* A pull, push or publish takes the place of the sync arrows, so the popover can close. */}
+      {running && running !== 'fetch' ? (
         <span
-          className="ml-1 inline-flex animate-in items-center gap-px text-foreground animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
-          key={`a${upstream.ahead}`}
+          role="status"
+          aria-label={t(RUNNING_KEY[running])}
+          className="ml-1 inline-flex items-center"
         >
-          <ArrowUpIcon className="size-3" />
-          {upstream.ahead}
+          <Spinner className="size-3" />
         </span>
-      )}
-      {upstream && upstream.behind > 0 && (
-        <span
-          className={cn(
-            'inline-flex animate-in items-center gap-px animation-duration-(--duration-base) fade-in slide-in-from-bottom-1',
-            upstream.ahead ? 'ml-0.5' : 'ml-1',
+      ) : (
+        <>
+          {!upstream && !head.detached && !unborn && (
+            <span className="ml-1 inline-flex shrink-0 items-center gap-1">
+              <CloudUploadIcon className="size-[13px]" />
+              <span className="@max-[720px]/top-bar:sr-only">{t('status.notPublished')}</span>
+            </span>
           )}
-          key={`b${upstream.behind}`}
-        >
-          <ArrowDownIcon className="size-3" />
-          {upstream.behind}
-        </span>
+          {upstream && upstream.ahead > 0 && (
+            <span
+              className="ml-1 inline-flex animate-in items-center gap-px text-foreground animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
+              key={`a${upstream.ahead}`}
+            >
+              <ArrowUpIcon className="size-3" />
+              {upstream.ahead}
+            </span>
+          )}
+          {upstream && upstream.behind > 0 && (
+            <span
+              className={cn(
+                'inline-flex animate-in items-center gap-px animation-duration-(--duration-base) fade-in slide-in-from-bottom-1',
+                upstream.ahead ? 'ml-0.5' : 'ml-1',
+              )}
+              key={`b${upstream.behind}`}
+            >
+              <ArrowDownIcon className="size-3" />
+              {upstream.behind}
+            </span>
+          )}
+        </>
       )}
       {operation && (
         <span className="ml-1 font-medium text-attention-text">

@@ -188,6 +188,27 @@ export function treeOf(rows: ProcessRow[], root: TreeRoot, platform: Platform): 
 }
 
 /**
+ * The processes started under `pid`, by parent links alone, for a child that shares its parent's
+ * process group. A process that started before its listed parent took a reused pid, so it is not
+ * followed.
+ */
+export function descendantsOf(rows: ProcessRow[], pid: number): ProcessRow[] {
+  const root = rows.find((row) => row.pid === pid)
+  if (!root) return []
+  const found = new Set<ProcessRow>()
+  const queue = [root]
+  for (let parent = queue.shift(); parent; parent = queue.shift()) {
+    for (const row of rows) {
+      if (row.ppid !== parent.pid || row === root || found.has(row)) continue
+      if (row.startedAt < parent.startedAt - START_SLACK_MS) continue
+      found.add(row)
+      queue.push(row)
+    }
+  }
+  return [...found]
+}
+
+/**
  * Where to send a signal on macOS and Linux: each group a root or a member leads, which reaches
  * processes started after the listing too, and a member of a group outside the trees alone.
  * Negative targets are groups.

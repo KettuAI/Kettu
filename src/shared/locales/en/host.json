@@ -115,7 +115,22 @@
   "git": {
     "notReady": "Git is not available yet",
     "ghMissing": "The GitHub CLI (gh) is not installed",
-    "ghSignedOut": "The GitHub CLI is not signed in; run \"gh auth login\" in a terminal"
+    "ghSignedOut": "The GitHub CLI is not signed in; run \"gh auth login\" in a terminal",
+    "busy": "Another git operation is running in this project; try again when it ends",
+    "notRepository": "This folder is not a git repository",
+    "operationInProgress": "Finish the merge or rebase in progress first",
+    "noBranch": "Check out a branch first: HEAD is detached or has no commits",
+    "noUpstream": "The branch is not published yet",
+    "diverged": "The branch and {{upstream}} have diverged; rebase or merge first, then push",
+    "pullFirst": "{{upstream}} has commits this branch does not have; pull first",
+    "noRemote": "The repository has no remote to push to",
+    "remoteExists": "The repository already has a remote",
+    "pushTargetChanged": "Where this push goes has changed to {{target}}; look at the popover again",
+    "notOnGithub": "Push the branch to a GitHub remote first",
+    "sameBranch": "The branch and the base are the same branch",
+    "localUpstream": "The branch tracks a branch of this repository, so there is no remote to push to",
+    "otherName": "The branch tracks {{upstream}}, which has another name; push it from the terminal",
+    "unknownRemote": "This repository has several remotes and none is set for this branch"
   },
   "content": {
     "audio": "Audio ({{type}})",

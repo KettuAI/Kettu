@@ -127,6 +127,61 @@ describe('createValidators', () => {
     rejects(() => v({ url: 'javascript:alert(1)' }))
   })
 
+  it('checks the git writes', () => {
+    const push = posix['git.push']
+    const target = { projectPath: '/p', remote: 'origin', branch: 'feat/login' }
+    expect(push(target)).toEqual(target)
+    rejects(() => push({ projectPath: '/p' }))
+    rejects(() => push({ ...target, remote: '--receive-pack=evil' }))
+    rejects(() => push({ ...target, branch: 'main:refs/heads/other' }))
+    rejects(() => push({ ...target, branch: '' }))
+
+    const publish = posix['git.publish']
+    expect(publish({ projectPath: '/p', name: 'my-app.v2', visibility: 'private' })).toEqual({
+      projectPath: '/p',
+      name: 'my-app.v2',
+      visibility: 'private',
+    })
+    rejects(() => publish({ projectPath: '/p', name: '-x', visibility: 'private' }))
+    rejects(() => publish({ projectPath: '/p', name: 'a/b', visibility: 'private' }))
+    rejects(() => publish({ projectPath: '/p', name: '..', visibility: 'public' }))
+    rejects(() => publish({ projectPath: '/p', name: 'app', visibility: 'internal' }))
+
+    const create = posix['git.createPullRequest']
+    const draft = { projectPath: '/p', title: 'Fix it', body: '', base: 'main', draft: false }
+    expect(create(draft)).toEqual(draft)
+    rejects(() => create({ ...draft, title: '   ' }))
+    rejects(() => create({ ...draft, base: '--force' }))
+    rejects(() => create({ ...draft, base: 'a b' }))
+    rejects(() => create({ ...draft, draft: 'yes' }))
+    rejects(() => create({ ...draft, body: 'x'.repeat(65_537) }))
+  })
+
+  it('checks the git reads', () => {
+    expect(posix['git.commit']({ projectPath: '/p', oid: '3f2a1c1' })).toEqual({
+      projectPath: '/p',
+      oid: '3f2a1c1',
+    })
+    rejects(() => posix['git.commit']({ projectPath: '/p', oid: 'HEAD~1' }))
+    rejects(() => posix['git.commit']({ projectPath: '/p', oid: '--all' }))
+    rejects(() => posix['git.incoming']({ projectPath: '/p', from: 'origin' }))
+
+    const diff = posix['git.fileDiff']
+    expect(diff({ projectPath: '/p', path: 'src/a.ts', oldPath: null, ref: null })).toEqual({
+      projectPath: '/p',
+      path: 'src/a.ts',
+      oldPath: null,
+      ref: null,
+    })
+    expect(
+      diff({ projectPath: '/p', path: 'b.ts', oldPath: 'a.ts', ref: 'abc1234' }),
+    ).toMatchObject({ oldPath: 'a.ts', ref: 'abc1234' })
+    rejects(() => diff({ projectPath: '/p', path: '../x', oldPath: null, ref: null }))
+    rejects(() => diff({ projectPath: '/p', path: '/etc/hosts', oldPath: null, ref: null }))
+    rejects(() => diff({ projectPath: '/p', path: 'a', oldPath: 'x/../../y', ref: null }))
+    rejects(() => diff({ projectPath: '/p', path: 'a', oldPath: null, ref: 'main' }))
+  })
+
   it('checks the file requests', () => {
     expect(posix['files.list']({ projectPath: '/p', extra: 1 })).toEqual({ projectPath: '/p' })
     rejects(() => posix['files.list']({ projectPath: 'p' }))
