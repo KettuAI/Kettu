@@ -2,13 +2,14 @@
   "notice": {
     "dismiss": "Dismiss",
     "ready": "Update ready",
-    "available": "{{version}} is available",
+    "available": "is out",
     "updatedTo": "Updated to",
     "restart": "Restart",
     "download": "Download",
     "whatsNew": "What’s new",
     "readyTooltip": "OverBench {{version}} is downloaded. Restart to finish; your sessions come back.",
-    "availableTooltip": "OverBench {{version}} is available. Download it from the release page."
+    "availableTooltip": "OverBench {{version}} is out. Download it from the release page.",
+    "updatedTooltip": "OverBench was updated to {{version}}."
   },
   "quit": {
     "titleUpdate": "Restart to update?",

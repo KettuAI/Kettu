@@ -181,6 +181,7 @@ Radius follows the element's role; the values are the [radius scale](./design-sy
 
 - A shape nested inside another keeps its corner concentric: the inner radius is the outer one less the gap between them, as a menu item is inside its menu.
 - No arbitrary radius (`rounded-[6px]`). A role that needs one adds a row here first.
+- One exception: the update notice's dismiss button, a 16 px round outline button on the card's corner, which breaks the control heights and the radius table on purpose ([update notice](./ui.md#updates)).
 
 ### Lines and elevation
 

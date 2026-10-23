@@ -37,15 +37,22 @@ export function UpdateNotice() {
   }
 
   const close = (
-    <Button
-      variant="outline"
-      size="icon-xs"
-      aria-label={t('notice.dismiss')}
-      onClick={dismiss}
-      className="absolute -top-1.5 -right-1.5 size-4 rounded-full text-muted-foreground opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-foreground"
-    >
-      <XIcon className="size-2.5" />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="outline"
+            size="icon-xs"
+            aria-label={t('notice.dismiss')}
+            onClick={dismiss}
+            className="absolute -top-2 -right-1.5 size-4 rounded-full text-muted-foreground opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-foreground focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+          />
+        }
+      >
+        <XIcon />
+      </TooltipTrigger>
+      <TooltipContent side="top">{t('notice.dismiss')}</TooltipContent>
+    </Tooltip>
   )
 
   const version = (
@@ -54,31 +61,36 @@ export function UpdateNotice() {
     </span>
   )
 
-  const row = (
-    <div
-      role="status"
-      className="group/update relative flex min-h-9 animate-in items-center gap-2 rounded-[8px] bg-card pr-1 pl-2.5 text-xs shadow-card animation-duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1"
-    >
+  // The words hide whole once the label cannot hold them beside the version.
+  const card = (
+    <div className="flex min-h-9 items-center gap-2 rounded-[8px] bg-card pr-1.5 pl-2.5 text-xs shadow-card">
       {notice.kind === 'updated' ? (
         <CircleCheckIcon className="size-[15px] shrink-0 text-success" />
       ) : (
         <CircleArrowUpIcon className="size-[15px] shrink-0" />
       )}
-      <span className="flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
+      <span className="@container/notice flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (
           <>
-            <span className="truncate font-medium">{t('notice.ready')}</span>
+            <span className="truncate font-medium @max-[7.5rem]/notice:hidden">
+              {t('notice.ready')}
+            </span>
             {version}
           </>
         )}
         {notice.kind === 'link' && (
-          <span className="truncate font-medium">
-            {t('notice.available', { version: notice.version })}
-          </span>
+          <>
+            {version}
+            <span className="truncate font-medium @max-[5rem]/notice:hidden">
+              {t('notice.available')}
+            </span>
+          </>
         )}
         {notice.kind === 'updated' && (
           <>
-            <span className="truncate font-medium">{t('notice.updatedTo')}</span>
+            <span className="truncate font-medium @max-[6.5rem]/notice:hidden">
+              {t('notice.updatedTo')}
+            </span>
             {version}
           </>
         )}
@@ -115,19 +127,29 @@ export function UpdateNotice() {
           </a>
         )}
       </span>
-      {close}
     </div>
   )
 
-  if (notice.kind === 'updated') return row
+  const tooltip =
+    notice.kind === 'ready'
+      ? t('notice.readyTooltip', { version: notice.version })
+      : notice.kind === 'link'
+        ? t('notice.availableTooltip', { version: notice.version })
+        : t('notice.updatedTooltip', { version: notice.version })
+
+  // The dismiss button is a sibling of the card, so its own tooltip replaces the card's.
   return (
-    <Tooltip>
-      <TooltipTrigger render={row} delay={500} />
-      <TooltipContent side="top" align="start" className="max-w-64">
-        {notice.kind === 'ready'
-          ? t('notice.readyTooltip', { version: notice.version })
-          : t('notice.availableTooltip', { version: notice.version })}
-      </TooltipContent>
-    </Tooltip>
+    <div
+      role="status"
+      className="group/update relative animate-in not-first:mt-1.5 animation-duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1"
+    >
+      <Tooltip>
+        <TooltipTrigger render={card} delay={500} />
+        <TooltipContent side="top" align="start" className="max-w-64">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+      {close}
+    </div>
   )
 }
