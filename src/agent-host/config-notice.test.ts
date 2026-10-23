@@ -139,6 +139,39 @@ describe('lostValuesNotice', () => {
     ])
   })
 
+  it('speaks of the session for one that attached again, and of a message it held back', () => {
+    expect(lostValuesNotice(lost, { subject: 'session', held: true })).toEqual({
+      severity: 'warning',
+      title: 'This session could not keep all of its settings',
+      description: [
+        'Mode is Auto review instead of Read-only.',
+        'This session has no Reasoning option, so Low is not available.',
+        'You can change them in the composer.',
+        'Your message was not sent. It waits in the queue until you resume it.',
+      ].join('\n'),
+    })
+    expect(lines(lostValuesNotice(switches, { subject: 'session' }))?.at(-1)).toBe(
+      'This session has no Fast mode option, so it cannot be turned on.',
+    )
+  })
+
+  it('speaks of the session in Chinese too', () => {
+    setLocale('zh-CN')
+    expect(lostValuesNotice(lost, { subject: 'session', held: true })).toEqual({
+      severity: 'warning',
+      title: '这个会话没能保留全部设置',
+      description: [
+        'Mode 为 Auto review，而不是 Read-only。',
+        '这个会话没有 Reasoning 选项，无法使用 Low。',
+        '可以在输入框中修改。',
+        '你的消息没有发送，会留在队列中，点击「继续」后才会发出。',
+      ].join('\n'),
+    })
+    expect(lines(lostValuesNotice(switches, { subject: 'session' }))?.at(-1)).toBe(
+      '这个会话没有 Fast mode 选项，无法开启。',
+    )
+  })
+
   it('has no line for a missing switch that was off, since nothing is lost', () => {
     const off: LostValue = { type: 'boolean', option: 'Fast mode', wanted: false, actual: null }
     expect(lostValuesNotice([off])).toBeNull()

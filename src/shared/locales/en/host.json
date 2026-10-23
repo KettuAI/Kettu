@@ -45,13 +45,21 @@
       "description": "OverBench ended the turn after {{seconds}} seconds. The agent may still be finishing work in the background."
     },
     "lostValues": {
-      "title": "This fork could not keep all of its settings",
+      "fork": {
+        "title": "This fork could not keep all of its settings",
+        "missing": "This fork has no {{option}} option, so {{wanted}} is not available.",
+        "cannotTurnOn": "This fork has no {{option}} option, so it cannot be turned on."
+      },
+      "session": {
+        "title": "This session could not keep all of its settings",
+        "missing": "This session has no {{option}} option, so {{wanted}} is not available.",
+        "cannotTurnOn": "This session has no {{option}} option, so it cannot be turned on."
+      },
       "differs": "{{option}} is {{actual}} instead of {{wanted}}.",
-      "missing": "This fork has no {{option}} option, so {{wanted}} is not available.",
       "isOff": "{{option}} is off instead of on.",
       "isOn": "{{option}} is on instead of off.",
-      "cannotTurnOn": "This fork has no {{option}} option, so it cannot be turned on.",
-      "next": "You can change them in the composer."
+      "next": "You can change them in the composer.",
+      "held": "Your message was not sent. It waits in the queue until you resume it."
     }
   },
   "attention": {
