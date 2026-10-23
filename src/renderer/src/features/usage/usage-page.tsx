@@ -185,20 +185,20 @@ function SyncState() {
   const [failed, setFailed] = useState<string | null>(null)
   if (fromComputer === null) return null
   if (!fromComputer) {
-    return <span className="text-xs text-muted-foreground">{t('page.record')}</span>
+    return <span className="text-xs text-tertiary">{t('page.record')}</span>
   }
   const scanning = busy || reading
   return (
     <NoDrag className="gap-2">
       {failed && !scanning ? (
         <Tooltip>
-          <TooltipTrigger render={<span role="alert" className="text-xs text-destructive" />}>
+          <TooltipTrigger render={<span role="alert" className="text-xs text-danger" />}>
             {t('page.syncFailed')}
           </TooltipTrigger>
           <TooltipContent className="max-w-80">{failed}</TooltipContent>
         </Tooltip>
       ) : (
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-tertiary">
           {scanning
             ? t('page.syncing')
             : synced !== null
@@ -238,7 +238,7 @@ function Importing() {
   const share = scanning.bytes > 0 ? (scanning.doneBytes / scanning.bytes) * 100 : 0
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs text-muted-foreground tabular-nums">
+      <span className="text-xs text-tertiary tabular-nums">
         {t('page.importing', { done: bytes(scanning.doneBytes), total: bytes(scanning.bytes) })}
       </span>
       <Progress value={share} aria-label={t('page.syncing')} />
@@ -543,12 +543,12 @@ function Figures({
   const hourEnd = (start: number) => hours?.starts[hours.starts.indexOf(start) + 1] ?? start
   const figure = (label: string, value: ReactNode, note: string) => (
     <Card className="gap-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs text-tertiary">{label}</span>
       <span className="text-[22px] leading-7 font-semibold tracking-[-0.015em]">{value}</span>
-      <span className="text-xs text-pretty text-muted-foreground">{note}</span>
+      <span className="text-xs text-pretty text-tertiary">{note}</span>
     </Card>
   )
-  const none = <span className="text-muted-foreground">—</span>
+  const none = <span className="text-tertiary">—</span>
   return (
     <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
       {figure(
@@ -645,17 +645,14 @@ function TrendCard({
       <CardHead
         title={title}
         aside={
-          <span aria-live="polite" className="truncate text-xs text-muted-foreground tabular-nums">
+          <span aria-live="polite" className="truncate text-xs text-tertiary tabular-nums">
             {shown ? describe(shown) : ''}
           </span>
         }
       />
       <TrendChart bars={bars} agents={agents} label={title} future={future} onShow={setShown} />
       {/* A slot per bar, as wide as its bar, so each label sits under the bar it names. */}
-      <div
-        className="flex justify-center gap-px text-xs text-muted-foreground tabular-nums"
-        aria-hidden
-      >
+      <div className="flex justify-center gap-px text-xs text-tertiary tabular-nums" aria-hidden>
         {bars.map((bar, i) => {
           const end = i === bars.length - 1
           const shown = i === 0 || end || (bars.length > 2 && bar === middle)
@@ -674,7 +671,7 @@ function TrendCard({
         })}
       </div>
       {legend && agents.length > 1 && (
-        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-3 text-xs text-tertiary">
           {agents.map((id) => (
             <span key={id} className="flex items-center gap-1.5">
               <span aria-hidden className={cn('size-2 rounded-xs', AGENT_FILL[id])} />
@@ -710,7 +707,7 @@ function LimitsCard() {
         <CardHead title={t('limits.title')} />
       </div>
       {agents.length === 0 ? (
-        <p className="px-4 pt-1 pb-3 text-xs text-muted-foreground">{t('limits.none')}</p>
+        <p className="px-4 pt-1 pb-3 text-xs text-secondary">{t('limits.none')}</p>
       ) : (
         agents.map((status) => (
           <LimitsPart
@@ -743,7 +740,7 @@ function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
       <CardHead
         title={t('activity.title')}
         aside={
-          <span aria-live="polite" className="truncate text-xs text-muted-foreground tabular-nums">
+          <span aria-live="polite" className="truncate text-xs text-tertiary tabular-nums">
             {shown
               ? t('trend.label', { date: dayText(shown.day), tokens: tokens(shown.total) })
               : t('activity.weeks')}
@@ -758,7 +755,7 @@ function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
         weekdayLabel={weekdayLabel}
         onShow={setShown}
       />
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs text-tertiary">
         {outside && <span>{t('activity.outside')}</span>}
         <span className="flex-1" />
         <HeatLegend less={t('activity.less')} more={t('activity.more')} />
@@ -784,7 +781,7 @@ function PartsCard({ facts }: { facts: ReturnType<typeof figures> }) {
     <Card>
       <CardHead title={t('parts.title')} />
       <table className="w-full text-xs tabular-nums">
-        <thead className="text-muted-foreground">
+        <thead className="text-tertiary">
           <tr>
             <th className="pb-1.5 text-left font-normal">{t('parts.type')}</th>
             <th className="pb-1.5 text-right font-normal">{t('parts.tokens')}</th>
@@ -793,7 +790,7 @@ function PartsCard({ facts }: { facts: ReturnType<typeof figures> }) {
         </thead>
         <tbody>
           {rows.map((part) => (
-            <tr key={part} className="border-t border-border-soft">
+            <tr key={part} className="border-t border-subtle">
               <td className="py-1.5">
                 <span className="flex items-center gap-2">
                   <span aria-hidden className={cn('size-2 rounded-xs', PART_FILL[part])} />
@@ -801,15 +798,15 @@ function PartsCard({ facts }: { facts: ReturnType<typeof figures> }) {
                 </span>
               </td>
               <td className="py-1.5 text-right font-mono">{exactCount(facts.parts[part])}</td>
-              <td className="py-1.5 text-right text-muted-foreground">
+              <td className="py-1.5 text-right text-tertiary">
                 {facts.total > 0 ? percent(facts.parts[part] / facts.total) : '—'}
               </td>
             </tr>
           ))}
-          <tr className="border-t border-border-soft font-medium">
+          <tr className="border-t border-subtle font-medium">
             <td className="py-1.5">{t('parts.total')}</td>
             <td className="py-1.5 text-right font-mono">{exactCount(facts.total)}</td>
-            <td className="py-1.5 text-right text-muted-foreground">
+            <td className="py-1.5 text-right text-tertiary">
               {facts.total > 0 ? percent(1) : '—'}
             </td>
           </tr>
@@ -839,10 +836,10 @@ function BreakdownCard({
     <Card>
       <CardHead title={title} />
       {rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{t('noUsage')}</p>
+        <p className="text-xs text-secondary">{t('noUsage')}</p>
       ) : (
         <table className="w-full table-fixed text-xs tabular-nums">
-          <thead className="text-muted-foreground">
+          <thead className="text-tertiary">
             <tr>
               <th className="pb-1.5 text-left font-normal">{column}</th>
               <th className="w-36 pb-1.5 text-right font-normal">{t('parts.tokens')}</th>
@@ -851,7 +848,7 @@ function BreakdownCard({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.key} className="border-t border-border-soft">
+              <tr key={row.key} className="border-t border-subtle">
                 <td className="py-1.5">
                   <Tooltip>
                     <TooltipTrigger
@@ -865,7 +862,7 @@ function BreakdownCard({
                   </Tooltip>
                 </td>
                 <td className="py-1.5 text-right font-mono">{exactCount(row.total)}</td>
-                <td className="py-1.5 text-right text-muted-foreground">
+                <td className="py-1.5 text-right text-tertiary">
                   {total > 0 ? percent(row.total / total) : '—'}
                 </td>
               </tr>

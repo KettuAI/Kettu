@@ -70,7 +70,7 @@ export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () =
 
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-2 pb-3">
-      <div className="-mr-2 flex h-6 items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="-mr-2 flex h-6 items-center gap-1.5 text-xs text-tertiary">
         <span className="min-w-0 flex-1 truncate">
           {status.remote ? (
             <>
@@ -124,9 +124,7 @@ export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () =
       ) : (
         !running &&
         plan.hint && (
-          <p className="text-xs leading-normal text-muted-foreground">
-            {t(`hint.${plan.hint}`, words)}
-          </p>
+          <p className="text-xs leading-normal text-secondary">{t(`hint.${plan.hint}`, words)}</p>
         )
       )}
     </div>
@@ -214,7 +212,7 @@ function FailureLine({
     detail: lastLine(failed.log),
   })
   return (
-    <div className="-mr-2 flex items-start gap-2 text-xs text-destructive">
+    <div className="-mr-2 flex items-start gap-2 text-xs text-danger">
       <p className="min-w-0 flex-1 pt-1 leading-normal [overflow-wrap:anywhere]">{sentence}</p>
       {failed.log && !failed.busy && (
         <Button

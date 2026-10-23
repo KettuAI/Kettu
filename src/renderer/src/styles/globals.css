@@ -2,12 +2,13 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter/opsz.css';
+@import './tokens.css';
 
 /* Streamdown and its code plugin style their elements with Tailwind classes. */
 @source '../../../../node_modules/streamdown/dist/*.js';
 @source '../../../../node_modules/@streamdown/code/dist/*.js';
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is([data-theme='dark'] *));
 
 /* Reduce motion follows the OS, and Settings › Appearance can force it on. */
 @custom-variant motion-reduce {
@@ -33,6 +34,37 @@
   --font-mono:
     ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
 
+  /* The palette's own names, from tokens.css: bg-app, text-secondary, border-subtle, ... */
+  --background-color-app: var(--bg-app);
+  --background-color-surface: var(--bg-surface);
+  --background-color-subtle: var(--bg-subtle);
+  --background-color-hover: var(--bg-hover);
+  --background-color-selected: var(--bg-selected);
+  --background-color-code-inline: var(--bg-code-inline);
+  --background-color-code-block: var(--bg-code-block);
+  --background-color-scrim: var(--scrim);
+  --text-color-primary: var(--text-primary);
+  --text-color-secondary: var(--text-secondary);
+  --text-color-tertiary: var(--text-tertiary);
+  --text-color-placeholder: var(--text-placeholder);
+  --text-color-disabled: var(--text-disabled);
+  --text-color-icon: var(--icon-default);
+  --border-color-default: var(--border-default);
+  --border-color-subtle: var(--border-subtle);
+  --border-color-strong: var(--border-strong);
+  --color-attention: var(--attention);
+  --color-attention-dot: var(--attention-dot);
+  --color-attention-foreground: var(--attention-foreground);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-danger-border: var(--danger-border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  --color-focus: var(--focus);
+
+  /* shadcn/ui's names, which tokens.css points at the palette. */
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -53,6 +85,7 @@
   --color-border-strong: var(--border-strong);
   --color-destructive: var(--destructive);
   --color-destructive-tint: var(--destructive-tint);
+  --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -73,20 +106,7 @@
   --color-segment-thumb: var(--segment-thumb);
   --color-pressed: var(--pressed);
   --color-pressed-hover: var(--pressed-hover);
-  --color-attention: var(--attention);
-  --color-attention-foreground: var(--attention-foreground);
-  --color-attention-text: var(--attention-text);
-  --color-attention-tint: var(--attention-tint);
-  --color-success: var(--success);
-  --color-success-tint: var(--success-tint);
-  --color-checked: var(--checked);
-  --color-checked-text: var(--checked-text);
-  --color-checked-tint: var(--checked-tint);
-  --color-checked-tint-hover: var(--checked-tint-hover);
-  --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-mark: var(--mark);
-  --color-success-text: var(--success-text);
-  --color-merged: var(--merged);
   --color-diff-add: var(--diff-add);
   --color-diff-del: var(--diff-del);
   --color-brand-claude: var(--brand-claude);
@@ -118,10 +138,10 @@
   --shadow-composer: var(--composer-ring);
   --shadow-composer-hover: var(--composer-hover);
   --shadow-composer-focus: var(--composer-focus);
+  --shadow-queue: var(--queue-ring);
   --shadow-attention: var(--attention-ring-shadow);
   --shadow-segment: var(--segment-ring);
   --shadow-thumb: var(--thumb-shadow);
-  --shadow-effort-max: var(--effort-max-shadow);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);
@@ -152,157 +172,8 @@
   --text-meta--line-height: 16px;
 }
 
-:root,
-.light {
-  color-scheme: light;
-
-  /* Surfaces 0-3, mapped onto shadcn's tokens. */
-  --sidebar: oklch(0.982 0 0);
-  --background: oklch(0.991 0 0);
-  --card: oklch(1 0 0);
-  --popover: oklch(1 0 0);
-
-  --foreground: oklch(0.145 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.53 0 0);
-  --accent: oklch(0.962 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.5 0.17 27);
-  --destructive-tint: oklch(0.5 0.17 27 / 8%);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.708 0 0);
-  --tile: oklch(0.965 0 0);
-  --track: oklch(0 0 0 / 12%);
-  --segment-track: oklch(0 0 0 / 5%);
-  --segment-thumb: oklch(1 0 0);
-  /* A toggle that is on, such as a side pane's: sunk into the bar, flat, with a hairline edge. */
-  --pressed: oklch(0 0 0 / 8%);
-  --pressed-hover: oklch(0 0 0 / 11%);
-  /* What a queued message's card fades toward as it sits further back in the stack. */
-  --queue-back: oklch(0.96 0 0);
-
-  /* Lines are translucent so one token reads the same on every surface. Alphas are for the
-     0.5 px hairline of a 2x display and halved below, so a line keeps its visual weight. */
+:root {
   --hairline: 1px;
-  --border: oklch(0 0 0 / 8%);
-  --border-soft: oklch(0 0 0 / 4.5%);
-  --border-strong: oklch(0 0 0 / 14%);
-
-  --attention: oklch(0.78 0.15 72);
-  --attention-foreground: oklch(0.27 0.06 60);
-  --attention-text: oklch(0.5 0.12 60);
-  --attention-tint: oklch(0.78 0.15 72 / 13%);
-  --attention-ring: oklch(0.78 0.15 72 / 80%);
-  --attention-halo: oklch(0.78 0.15 72 / 20%);
-  --success: oklch(0.56 0.14 150);
-  --success-text: oklch(0.42 0.12 150);
-  --success-tint: oklch(0.56 0.14 150 / 11%);
-  --checked: oklch(0.6 0.17 255);
-  --checked-text: oklch(0.47 0.16 255);
-  --checked-tint: oklch(0.6 0.17 255 / 9%);
-  --checked-tint-hover: oklch(0.6 0.17 255 / 15%);
-  --destructive-tint-hover: oklch(0.5 0.17 27 / 13%);
-  /* A search match marked in its text. */
-  --mark: oklch(0.88 0.15 90 / 55%);
-  --merged: oklch(0.55 0.19 300);
-  --diff-add: oklch(0.62 0.15 150 / 9%);
-  --diff-del: oklch(0.6 0.2 27 / 8%);
-
-  /* The top reasoning levels: warm gradients on their names. */
-  --effort-high-1: oklch(0.6 0.14 70);
-  --effort-high-2: oklch(0.56 0.18 40);
-  --effort-max-1: oklch(0.6 0.15 60);
-  --effort-max-2: oklch(0.56 0.2 18);
-  --effort-max-3: oklch(0.52 0.2 300);
-  --effort-max-ring: oklch(0.6 0.18 30 / 32%);
-  --sheen: oklch(0.72 0.17 35 / 26%);
-
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.945 0 0);
-  --sidebar-accent-foreground: oklch(0.145 0 0);
-  --sidebar-border: var(--border);
-  --sidebar-ring: oklch(0.708 0 0);
-
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-
-  /* Elevation. */
-  --highlight: 0 0 #0000;
-  --elevation-sm: 0 1px 2px oklch(0 0 0 / 5%), 0 2px 8px oklch(0 0 0 / 4%);
-  --elevation-md: 0 2px 6px oklch(0 0 0 / 8%), 0 8px 24px oklch(0 0 0 / 12%);
-  --elevation-lg: 0 2px 6px oklch(0 0 0 / 6%), 0 16px 28px oklch(0 0 0 / 14%);
-  --elevation-focus: 0 4px 20px oklch(0 0 0 / 8%);
-  --button-shadow: 0 1px 1px oklch(0 0 0 / 4%);
-  /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
-  --checker: oklch(0 0 0 / 5%);
-
-  --card-ring: inset 0 0 0 var(--hairline) var(--border), var(--highlight);
-  --outline-ring: inset 0 0 0 var(--hairline) var(--border-strong), var(--button-shadow);
-  --menu-ring: inset 0 0 0 var(--hairline) var(--border), var(--elevation-md), var(--highlight);
-  --dialog-ring: inset 0 0 0 var(--hairline) var(--border), var(--elevation-lg), var(--highlight);
-  --composer-ring: inset 0 0 0 var(--hairline) var(--border), var(--elevation-sm), var(--highlight);
-  --composer-hover:
-    inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-sm), var(--highlight);
-  --composer-focus:
-    inset 0 0 0 var(--hairline) var(--border-strong), 0 0 0 var(--hairline) var(--border-strong),
-    var(--elevation-focus), var(--highlight);
-  --attention-ring-shadow:
-    inset 0 0 0 1px var(--attention-ring), 0 0 0 3px var(--attention-halo), var(--highlight);
-  --segment-ring: 0 0 0 var(--hairline) var(--border), 0 1px 2px oklch(0 0 0 / 8%);
-  --thumb-shadow: 0 1px 2px oklch(0 0 0 / 24%), 0 0 0 0.5px oklch(0 0 0 / 6%);
-  --effort-max-shadow: inset 0 0 0 1px var(--effort-max-ring), 0 1px 3px oklch(0.6 0.18 30 / 14%);
-
-  /* Agent marks, the only brand colors in the interface. */
-  --brand-claude: #d97757;
-  --brand-codex-1: #b1a7ff;
-  --brand-codex-2: #7a9dff;
-  --brand-codex-3: #3941ff;
-  --brand-opencode-frame: #17181c;
-  --brand-opencode-fill: #e6e5e6;
-
-  /* Usage charts: each agent's series, from its mark, and the heatmap's five steps. */
-  --agent-claude-code: var(--brand-claude);
-  --agent-codex: var(--brand-codex-2);
-  --agent-opencode: oklch(0.6 0 0);
-  --agent-other: oklch(0.78 0 0);
-  --heat-0: oklch(0 0 0 / 5.5%);
-  --heat-1: color-mix(in oklch, var(--checked) 26%, transparent);
-  --heat-2: color-mix(in oklch, var(--checked) 48%, transparent);
-  --heat-3: color-mix(in oklch, var(--checked) 74%, transparent);
-  --heat-4: var(--checked);
-
-  /* Terminal, read by xterm.js. VS Code's default ANSI colors (MIT). */
-  --terminal-background: var(--sidebar);
-  --terminal-foreground: var(--foreground);
-  --terminal-cursor: var(--foreground);
-  --terminal-selection: oklch(0 0 0 / 12%);
-  --ansi-black: #000000;
-  --ansi-red: #cd3131;
-  --ansi-green: #107c10;
-  --ansi-yellow: #949800;
-  --ansi-blue: #0451a5;
-  --ansi-magenta: #bc05bc;
-  --ansi-cyan: #0598bc;
-  --ansi-white: #555555;
-  --ansi-bright-black: #666666;
-  --ansi-bright-red: #f14c4c;
-  --ansi-bright-green: #14ce14;
-  --ansi-bright-yellow: #b5ba00;
-  --ansi-bright-blue: #3b8eea;
-  --ansi-bright-magenta: #d670d6;
-  --ansi-bright-cyan: #29b8db;
-  --ansi-bright-white: #a5a5a5;
 
   /* Density: compact. */
   --radius: 7px;
@@ -337,13 +208,10 @@
   --weight-semibold: 600;
 }
 
+/* Lines are as fine as the display allows. */
 @media (resolution >= 2x) {
-  :root,
-  .light {
+  :root {
     --hairline: 0.5px;
-    --border: oklch(0 0 0 / 16%);
-    --border-soft: oklch(0 0 0 / 9%);
-    --border-strong: oklch(0 0 0 / 28%);
   }
 }
 
@@ -353,116 +221,11 @@
   }
 }
 
-.dark {
-  color-scheme: dark;
-
-  --sidebar: oklch(0.15 0 0);
-  --background: oklch(0.196 0 0);
-  --card: oklch(0.217 0 0);
-  --popover: oklch(0.243 0 0);
-
-  --foreground: oklch(0.985 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.265 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.265 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.27 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.7 0.16 22);
-  --destructive-tint: oklch(0.7 0.16 22 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.556 0 0);
-  --tile: oklch(0.27 0 0);
-  --track: oklch(1 0 0 / 14%);
-  --segment-track: oklch(1 0 0 / 6%);
-  --segment-thumb: oklch(1 0 0 / 12%);
-  --pressed: oklch(1 0 0 / 10%);
-  --pressed-hover: oklch(1 0 0 / 14%);
-  --queue-back: oklch(0.196 0 0);
-
-  --border: oklch(1 0 0 / 7%);
-  --border-soft: oklch(1 0 0 / 4%);
-  --border-strong: oklch(1 0 0 / 12%);
-
-  --attention: oklch(0.8 0.15 75);
-  --attention-foreground: oklch(0.25 0.05 70);
-  --attention-text: oklch(0.82 0.13 75);
-  --attention-tint: oklch(0.8 0.15 75 / 12%);
-  --attention-ring: oklch(0.8 0.15 75 / 75%);
-  --attention-halo: oklch(0.8 0.15 75 / 16%);
-  --success: oklch(0.74 0.15 150);
-  --success-text: oklch(0.8 0.13 150);
-  --success-tint: oklch(0.74 0.15 150 / 13%);
-  --checked: oklch(0.66 0.15 255);
-  --checked-text: oklch(0.8 0.1 255);
-  --checked-tint: oklch(0.66 0.15 255 / 14%);
-  --checked-tint-hover: oklch(0.66 0.15 255 / 22%);
-  --destructive-tint-hover: oklch(0.7 0.16 22 / 18%);
-  --mark: oklch(0.8 0.14 85 / 32%);
-  --merged: oklch(0.72 0.15 300);
-  --diff-add: oklch(0.7 0.15 150 / 12%);
-  --diff-del: oklch(0.7 0.19 22 / 12%);
-
-  --effort-high-1: oklch(0.86 0.12 82);
-  --effort-high-2: oklch(0.78 0.15 52);
-  --effort-max-1: oklch(0.86 0.12 78);
-  --effort-max-2: oklch(0.76 0.16 22);
-  --effort-max-3: oklch(0.75 0.15 305);
-  --effort-max-ring: oklch(0.76 0.16 30 / 40%);
-  --sheen: oklch(0.82 0.13 45 / 24%);
-
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.922 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.25 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-ring: oklch(0.556 0 0);
-
-  --highlight: inset 0 1px 0 oklch(1 0 0 / 5%);
-  --elevation-sm: 0 1px 2px oklch(0 0 0 / 40%), 0 2px 8px oklch(0 0 0 / 30%);
-  --elevation-md: 0 2px 8px oklch(0 0 0 / 45%), 0 8px 28px oklch(0 0 0 / 65%);
-  --elevation-lg: 0 2px 6px oklch(0 0 0 / 45%), 0 16px 28px oklch(0 0 0 / 50%);
-  --elevation-focus: 0 4px 24px oklch(0 0 0 / 55%);
-  --button-shadow: inset 0 1px 0 oklch(1 0 0 / 5%);
-  --checker: oklch(1 0 0 / 7%);
-  --segment-ring: inset 0 1px 0 oklch(1 0 0 / 6%), 0 1px 2px oklch(0 0 0 / 30%);
-  --thumb-shadow: 0 1px 2px oklch(0 0 0 / 50%);
-  --effort-max-shadow: inset 0 0 0 1px var(--effort-max-ring), 0 1px 4px oklch(0.76 0.16 30 / 18%);
-
-  --brand-opencode-frame: #ffffff;
-  --brand-opencode-fill: #5a5858;
-
-  --agent-opencode: oklch(0.72 0 0);
-  --agent-other: oklch(0.45 0 0);
-  --heat-0: oklch(1 0 0 / 6.5%);
-
-  --terminal-selection: oklch(1 0 0 / 20%);
-  --ansi-green: #0dbc79;
-  --ansi-yellow: #e5e510;
-  --ansi-blue: #2472c8;
-  --ansi-magenta: #bc3fbc;
-  --ansi-cyan: #11a8cd;
-  --ansi-white: #e5e5e5;
-  --ansi-bright-green: #23d18b;
-  --ansi-bright-yellow: #f5f543;
-  --ansi-bright-white: #e5e5e5;
-
-  /* Light text on a dark surface looks heavier than it is. */
+/* Light text on a dark surface looks heavier than it is. */
+[data-theme='dark'] {
   --weight-normal: 360;
   --weight-medium: 460;
   --weight-semibold: 560;
-}
-
-@media (resolution >= 2x) {
-  .dark {
-    --border: oklch(1 0 0 / 14%);
-    --border-soft: oklch(1 0 0 / 8%);
-    --border-strong: oklch(1 0 0 / 24%);
-  }
 }
 
 :root[data-text-size='small'] {
@@ -474,13 +237,13 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-focus;
   }
   html {
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
     scrollbar-width: thin;
   }
   /* Interface text is --ui-size; the root stays 16 px so Tailwind's rem scale is unchanged. */
@@ -510,8 +273,11 @@
     text-wrap: balance;
   }
   ::placeholder {
-    color: var(--muted-foreground);
+    color: var(--text-placeholder);
     opacity: 1;
+  }
+  ::selection {
+    background-color: var(--selection);
   }
   kbd {
     font-family: var(--font-mono);
@@ -528,6 +294,28 @@
 
 @utility checkerboard {
   background: repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
+
+/* The keyboard focus ring: 2 px, 2 px clear of the element. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+/* The same ring on a container while something inside it has keyboard focus. */
+@utility focus-ring-within {
+  &:has(:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+/* An input group's ring, only while its text control has focus: a button inside rings itself. */
+@utility focus-ring-control {
+  &:has([data-slot='input-group-control']:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
 }
 
 @utility tabular {
@@ -633,7 +421,7 @@
 :root[data-platform='win32'] ::-webkit-scrollbar-thumb {
   border: var(--scrollbar-inset) solid transparent;
   border-radius: calc(infinity * 1px);
-  background: var(--border-strong) padding-box;
+  background: var(--scrollbar-thumb) padding-box;
 }
 :root[data-platform='win32'] ::-webkit-scrollbar-thumb:hover {
   border-width: calc(var(--scrollbar-inset) - 1px);
@@ -641,23 +429,6 @@
 /* MessageScroller hides its scrollbar while it follows output. */
 :root[data-platform='win32'] [data-autoscrolling]::-webkit-scrollbar-thumb {
   background: transparent;
-}
-
-/* The names of the top reasoning levels. */
-@utility text-effort-high {
-  background-image: linear-gradient(90deg, var(--effort-high-1), var(--effort-high-2));
-  background-clip: text;
-  color: transparent;
-}
-@utility text-effort-max {
-  background-image: linear-gradient(
-    90deg,
-    var(--effort-max-1),
-    var(--effort-max-2) 55%,
-    var(--effort-max-3)
-  );
-  background-clip: text;
-  color: transparent;
 }
 
 /* One sweep of light across a surface, as when the highest reasoning level is chosen. */
@@ -764,8 +535,7 @@
 .markdown {
   font-size: var(--prose-size);
   line-height: 1.7;
-  /* The step to full foreground for bold and headings carries the hierarchy. */
-  color: color-mix(in oklch, var(--foreground) 90%, transparent);
+  color: var(--text-primary);
   overflow-wrap: anywhere;
   user-select: text;
 
@@ -853,19 +623,23 @@
   }
 
   & [data-streamdown='link'] {
-    color: var(--foreground);
+    color: var(--link);
     text-decoration: underline;
-    text-decoration-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+    text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
     text-underline-offset: 3px;
-    transition: text-decoration-color var(--duration-fast);
+    transition:
+      color var(--duration-fast),
+      text-decoration-color var(--duration-fast);
     &:hover {
-      text-decoration-color: var(--foreground);
+      color: var(--link-hover);
+      text-decoration-color: currentColor;
     }
   }
 
   & [data-streamdown='inline-code'] {
     border-radius: 4px;
-    background: var(--muted);
+    background: var(--bg-code-inline);
+    color: var(--text-primary);
     padding: 0.1em 0.35em;
     font-family: var(--font-mono);
     font-size: 0.85em;
@@ -898,16 +672,17 @@
       color: var(--foreground);
     }
     &:focus-visible {
-      box-shadow: 0 0 0 2px var(--ring);
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
   }
 
   & [data-streamdown='code-block'] {
     margin-block: 1em;
     gap: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    background: color-mix(in oklch, var(--muted) 60%, transparent);
+    background: var(--bg-code-block);
     padding: 0;
     overflow: hidden;
   }
@@ -949,8 +724,8 @@
       color: var(--foreground);
     }
     &:focus-visible {
-      outline: 2px solid var(--ring);
-      outline-offset: -2px;
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
     }
     & svg {
       width: 14px;
@@ -1022,7 +797,7 @@
     overflow-wrap: normal;
   }
   & [data-streamdown='table-header'] {
-    background: transparent;
+    background: var(--bg-code-block);
   }
   & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell']) {
     border: 0;
@@ -1030,13 +805,13 @@
     line-height: 1.5;
   }
   & [data-streamdown='table-header-cell'] {
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-subtle);
     color: var(--muted-foreground);
     font-weight: var(--font-weight-medium);
     text-align: left;
   }
   & [data-streamdown='table-cell'] {
-    border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+    border-bottom: 1px solid var(--border-subtle);
   }
   & [data-streamdown='table-body'] > tr:last-child > [data-streamdown='table-cell'] {
     border-bottom: 0;
@@ -1055,11 +830,11 @@
   line-height: 1.55;
 }
 
-/* Diffs sit on the card like code blocks, not on the Shiki theme's own background. Outer
+/* Diffs sit on the code block surface, not on the Shiki theme's own background. Outer
    declarations win over the theme's :host rule inside the diff's shadow root. */
 .diff {
-  --diffs-light-bg: var(--card);
-  --diffs-dark-bg: var(--card);
+  --diffs-light-bg: var(--bg-code-block);
+  --diffs-dark-bg: var(--bg-code-block);
 }
 
 /* The Files pane's preview fills the pane, so a short file ends where the pane does. */

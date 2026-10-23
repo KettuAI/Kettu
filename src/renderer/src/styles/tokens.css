@@ -1,0 +1,326 @@
+/* Color tokens: every color, line and shadow color in the renderer, and the only file that may
+   hold color literals (tools/lint/color-literals.mjs enforces it). Light values sit on :root,
+   dark ones on [data-theme='dark'] and, until the settings set the theme, under
+   prefers-color-scheme: dark. The two dark blocks must stay identical (tools/lint/contrast.mjs
+   checks it). See docs/design/design-system.md#color. */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-app: #fdfdfc;
+  --bg-sidebar: #f9f9f8;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f2f2f0;
+  --bg-code-inline: #f0f0ee;
+  --bg-code-block: #f7f7f5;
+  --bg-hover: #f0f0ee;
+  --bg-selected: #ededeb;
+
+  --border-default: #e3e3e1;
+  --border-subtle: #ececea;
+  /* One step past border-default: hovered and focused fields, outline buttons. */
+  --border-strong: #d6d6d3;
+
+  --text-primary: #262626;
+  --text-secondary: #525252;
+  --text-tertiary: #6b6b6b;
+  --text-placeholder: #737373;
+  --text-disabled: #a3a3a3;
+  --icon-default: #6b6b6b;
+
+  --attention: #c2410c;
+  --attention-dot: #ea580c;
+  --danger: #b42318;
+  --success: #15803d;
+  --warning: #b45309;
+  --link: #2563eb;
+  --link-hover: #1d4ed8;
+  --focus: rgb(37 99 235 / 55%);
+  --selection: rgb(37 99 235 / 18%);
+
+  /* A turn that ended abnormally, and other failure notices. */
+  --danger-tint: #fdf6f5;
+  --danger-border: #f1d5d1;
+  /* What a queued message's card darkens toward as it sits further back in the stack. */
+  --queue-back: #f4f4f2;
+  --scrollbar-thumb: rgb(0 0 0 / 18%);
+  /* The dimmed page behind a dialog or a sheet. */
+  --scrim: rgb(0 0 0 / 10%);
+  /* A search match marked in its text. */
+  --mark: oklch(0.88 0.15 90 / 55%);
+  /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
+  --checker: rgb(0 0 0 / 5%);
+
+  --elevation-composer: 0 6px 20px rgb(20 20 19 / 6%), 0 -3px 10px rgb(20 20 19 / 4%);
+  --elevation-queue: 0 1px 6px rgb(20 20 19 / 5%);
+  --elevation-popover: 0 8px 24px rgb(20 20 19 / 10%);
+  /* Contact shadows of small raised controls: an outline button, a switch or segment thumb. */
+  --elevation-button: 0 1px 1px rgb(0 0 0 / 4%);
+  --elevation-thumb: 0 1px 2px rgb(0 0 0 / 24%), 0 0 0 0.5px rgb(0 0 0 / 6%);
+  --elevation-segment: 0 1px 2px rgb(0 0 0 / 8%);
+  /* The top edge of a raised surface catching the light; dark theme only. */
+  --highlight: 0 0 #0000;
+
+  /* Agent marks, the only brand colors in the interface. */
+  --brand-claude: #d97757;
+  --brand-codex-1: #b1a7ff;
+  --brand-codex-2: #7a9dff;
+  --brand-codex-3: #3941ff;
+  --brand-opencode-frame: #17181c;
+  --brand-opencode-fill: #e6e5e6;
+
+  /* Usage charts: each agent's series, and the amount the heatmap deepens with. */
+  --agent-opencode: oklch(0.6 0 0);
+  --agent-other: oklch(0.78 0 0);
+  --heat-hue: oklch(0.6 0.17 255);
+  --heat-0: rgb(0 0 0 / 5.5%);
+
+  /* Terminal, read by xterm.js. VS Code's default ANSI colors (MIT). */
+  --ansi-black: #000000;
+  --ansi-red: #cd3131;
+  --ansi-green: #107c10;
+  --ansi-yellow: #949800;
+  --ansi-blue: #0451a5;
+  --ansi-magenta: #bc05bc;
+  --ansi-cyan: #0598bc;
+  --ansi-white: #555555;
+  --ansi-bright-black: #666666;
+  --ansi-bright-red: #f14c4c;
+  --ansi-bright-green: #14ce14;
+  --ansi-bright-yellow: #b5ba00;
+  --ansi-bright-blue: #3b8eea;
+  --ansi-bright-magenta: #d670d6;
+  --ansi-bright-cyan: #29b8db;
+  --ansi-bright-white: #a5a5a5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --bg-app: #1b1b1a;
+    --bg-sidebar: #171716;
+    --bg-surface: #232322;
+    --bg-subtle: #2b2b29;
+    --bg-code-inline: #2e2e2c;
+    --bg-code-block: #20201f;
+    --bg-hover: #2a2a28;
+    --bg-selected: #33332f;
+
+    --border-default: #3a3a37;
+    --border-subtle: #2f2f2c;
+    --border-strong: #474743;
+
+    --text-primary: #ececea;
+    --text-secondary: #b5b4af;
+    --text-tertiary: #9a9994;
+    --text-placeholder: #8f8e89;
+    --text-disabled: #6b6a66;
+    --icon-default: #9a9994;
+
+    --attention: #fb923c;
+    --attention-dot: #fb923c;
+    --danger: #f87171;
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --link: #60a5fa;
+    --link-hover: #60a5fa;
+    --focus: rgb(96 165 250 / 60%);
+    --selection: rgb(96 165 250 / 28%);
+
+    --danger-tint: #2a1d1b;
+    --danger-border: #4a2c28;
+    --queue-back: #1e1e1d;
+    --scrollbar-thumb: rgb(255 255 255 / 20%);
+    --scrim: rgb(0 0 0 / 10%);
+    --mark: oklch(0.8 0.14 85 / 32%);
+    --checker: rgb(255 255 255 / 7%);
+
+    --elevation-composer: 0 6px 20px rgb(0 0 0 / 40%), 0 -3px 10px rgb(0 0 0 / 40%);
+    --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
+    --elevation-popover: 0 8px 24px rgb(0 0 0 / 40%);
+    --elevation-button: inset 0 1px 0 rgb(255 255 255 / 5%);
+    --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
+    --elevation-segment: inset 0 1px 0 rgb(255 255 255 / 6%), 0 1px 2px rgb(0 0 0 / 30%);
+    --highlight: inset 0 1px 0 rgb(255 255 255 / 5%);
+
+    --brand-opencode-frame: #ffffff;
+    --brand-opencode-fill: #5a5858;
+
+    --agent-opencode: oklch(0.72 0 0);
+    --agent-other: oklch(0.45 0 0);
+    --heat-hue: oklch(0.66 0.15 255);
+    --heat-0: rgb(255 255 255 / 6.5%);
+
+    --ansi-green: #0dbc79;
+    --ansi-yellow: #e5e510;
+    --ansi-blue: #2472c8;
+    --ansi-magenta: #bc3fbc;
+    --ansi-cyan: #11a8cd;
+    --ansi-white: #e5e5e5;
+    --ansi-bright-green: #23d18b;
+    --ansi-bright-yellow: #f5f543;
+    --ansi-bright-white: #e5e5e5;
+  }
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-app: #1b1b1a;
+  --bg-sidebar: #171716;
+  --bg-surface: #232322;
+  --bg-subtle: #2b2b29;
+  --bg-code-inline: #2e2e2c;
+  --bg-code-block: #20201f;
+  --bg-hover: #2a2a28;
+  --bg-selected: #33332f;
+
+  --border-default: #3a3a37;
+  --border-subtle: #2f2f2c;
+  --border-strong: #474743;
+
+  --text-primary: #ececea;
+  --text-secondary: #b5b4af;
+  --text-tertiary: #9a9994;
+  --text-placeholder: #8f8e89;
+  --text-disabled: #6b6a66;
+  --icon-default: #9a9994;
+
+  --attention: #fb923c;
+  --attention-dot: #fb923c;
+  --danger: #f87171;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --link: #60a5fa;
+  --link-hover: #60a5fa;
+  --focus: rgb(96 165 250 / 60%);
+  --selection: rgb(96 165 250 / 28%);
+
+  --danger-tint: #2a1d1b;
+  --danger-border: #4a2c28;
+  --queue-back: #1e1e1d;
+  --scrollbar-thumb: rgb(255 255 255 / 20%);
+  --scrim: rgb(0 0 0 / 10%);
+  --mark: oklch(0.8 0.14 85 / 32%);
+  --checker: rgb(255 255 255 / 7%);
+
+  --elevation-composer: 0 6px 20px rgb(0 0 0 / 40%), 0 -3px 10px rgb(0 0 0 / 40%);
+  --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
+  --elevation-popover: 0 8px 24px rgb(0 0 0 / 40%);
+  --elevation-button: inset 0 1px 0 rgb(255 255 255 / 5%);
+  --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
+  --elevation-segment: inset 0 1px 0 rgb(255 255 255 / 6%), 0 1px 2px rgb(0 0 0 / 30%);
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 5%);
+
+  --brand-opencode-frame: #ffffff;
+  --brand-opencode-fill: #5a5858;
+
+  --agent-opencode: oklch(0.72 0 0);
+  --agent-other: oklch(0.45 0 0);
+  --heat-hue: oklch(0.66 0.15 255);
+  --heat-0: rgb(255 255 255 / 6.5%);
+
+  --ansi-green: #0dbc79;
+  --ansi-yellow: #e5e510;
+  --ansi-blue: #2472c8;
+  --ansi-magenta: #bc3fbc;
+  --ansi-cyan: #11a8cd;
+  --ansi-white: #e5e5e5;
+  --ansi-bright-green: #23d18b;
+  --ansi-bright-yellow: #f5f543;
+  --ansi-bright-white: #e5e5e5;
+}
+
+/* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
+   its own, such as the theme previews in Settings, resolves them against its own values. */
+:root,
+[data-theme] {
+  /* shadcn/ui's names, so its components pick the palette up unchanged. */
+  --background: var(--bg-app);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--text-primary);
+  --primary-foreground: var(--bg-surface);
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-subtle);
+  --muted-foreground: var(--text-tertiary);
+  --accent: var(--bg-hover);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --border: var(--border-default);
+  --border-soft: var(--border-subtle);
+  --input: var(--border-default);
+  --ring: var(--focus);
+  --sidebar: var(--bg-sidebar);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--text-primary);
+  --sidebar-primary-foreground: var(--bg-surface);
+  --sidebar-accent: var(--bg-hover);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--focus);
+  --chart-1: var(--text-disabled);
+  --chart-2: var(--text-tertiary);
+  --chart-3: var(--text-secondary);
+  --chart-4: var(--text-primary);
+  --chart-5: var(--text-primary);
+
+  /* Neutral fills of controls. */
+  --tile: var(--bg-subtle);
+  --track: var(--border-default);
+  --segment-track: var(--bg-subtle);
+  --segment-thumb: var(--bg-surface);
+  --pressed: var(--bg-selected);
+  --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+
+  /* Meaning, derived. */
+  --attention-foreground: var(--bg-surface);
+  --attention-ring: color-mix(in srgb, var(--attention) 80%, transparent);
+  --attention-halo: color-mix(in srgb, var(--attention) 20%, transparent);
+  --destructive-tint: var(--danger-tint);
+  --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
+  --diff-add: color-mix(in srgb, var(--success) 9%, transparent);
+  --diff-del: color-mix(in srgb, var(--danger) 8%, transparent);
+  --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
+
+  --agent-claude-code: var(--brand-claude);
+  --agent-codex: var(--brand-codex-2);
+  --heat-1: color-mix(in oklch, var(--heat-hue) 26%, transparent);
+  --heat-2: color-mix(in oklch, var(--heat-hue) 48%, transparent);
+  --heat-3: color-mix(in oklch, var(--heat-hue) 74%, transparent);
+  --heat-4: var(--heat-hue);
+
+  --terminal-background: var(--bg-sidebar);
+  --terminal-foreground: var(--text-primary);
+  --terminal-cursor: var(--text-primary);
+  --terminal-selection: var(--selection);
+
+  /* Borders are inset rings, so they take no layout space and follow the radius. */
+  --card-ring: inset 0 0 0 var(--hairline) var(--border-default), var(--highlight);
+  --outline-ring: inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-button);
+  --menu-ring:
+    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
+  --dialog-ring:
+    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
+  --composer-ring:
+    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-composer), var(--highlight);
+  --composer-hover:
+    inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-composer), var(--highlight);
+  --composer-focus:
+    inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-composer), var(--highlight);
+  --queue-ring:
+    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-queue), var(--highlight);
+  --attention-ring-shadow:
+    inset 0 0 0 1px var(--attention-ring), 0 0 0 3px var(--attention-halo), var(--highlight);
+  --segment-ring: 0 0 0 var(--hairline) var(--border-default), var(--elevation-segment);
+  --thumb-shadow: var(--elevation-thumb);
+  --elevation-sm: var(--elevation-composer);
+  --elevation-md: var(--elevation-popover);
+  --elevation-lg: var(--elevation-popover);
+}

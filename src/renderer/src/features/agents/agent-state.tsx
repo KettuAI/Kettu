@@ -23,34 +23,34 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
               <span role="img" aria-label={t('state.ready')} className={cn(base, 'h-4 px-1')} />
             }
           >
-            <span className="size-1.5 rounded-full bg-success" />
+            <span className="size-1.5 rounded-full bg-current text-tertiary" />
           </TooltipTrigger>
           <TooltipContent>{t('state.ready')}</TooltipContent>
         </Tooltip>
       )
     case 'sign-in':
       return (
-        <span className={cn(base, 'text-attention-text')}>
-          <span aria-hidden className="size-1.5 rounded-full bg-attention" />
+        <span className={cn(base, 'text-secondary')}>
+          <span aria-hidden className="size-1.5 rounded-full bg-current text-tertiary" />
           {t('state.signIn')}
         </span>
       )
     case 'installing':
     case 'starting':
       return (
-        <span className={cn(base, 'text-muted-foreground')}>
+        <span className={cn(base, 'text-tertiary')}>
           <Spinner className="size-3" />
           {t(`state.${r.kind}`)}
         </span>
       )
     case 'failed':
       return (
-        <span className={cn(base, 'text-destructive')}>
+        <span className={cn(base, 'text-danger')}>
           <CircleAlertIcon className="size-3.5" />
           {t('state.failed')}
         </span>
       )
     case 'missing':
-      return <span className={cn(base, 'text-muted-foreground')}>{t('state.notAvailable')}</span>
+      return <span className={cn(base, 'text-tertiary')}>{t('state.notAvailable')}</span>
   }
 }

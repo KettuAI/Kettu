@@ -29,7 +29,7 @@ function middleTruncate(text: string, max: number): string {
 }
 
 const segment =
-  'app-region-no-drag inline-flex h-control items-center gap-1 rounded-lg px-1.5 text-xs whitespace-nowrap text-muted-foreground tabular outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-accent'
+  'app-region-no-drag inline-flex h-control items-center gap-1 rounded-lg px-1.5 text-xs whitespace-nowrap text-secondary tabular outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring aria-expanded:bg-hover'
 
 /** The project's repository at a glance: branch, sync, changes, operation, pull request. */
 export function GitStatusCluster({ projectPath }: { projectPath: string }) {
@@ -87,7 +87,7 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
           className={cn(segment, 'shrink-0')}
         >
           <PrIcon state={pr.state} size={14} />
-          <span className="text-foreground">#{pr.number}</span>
+          <span className="text-secondary">#{pr.number}</span>
           <ChecksIcon state={pr.checks.state} />
         </a>
       )}
@@ -125,7 +125,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
       {/* The branch takes a quarter of the bar at most and truncates first; below 720 px
           "Not published" keeps only its icon, so the title keeps room. */}
       <span
-        className="min-w-0 max-w-[25cqw] truncate font-mono text-xs text-foreground @max-[520px]/top-bar:max-w-24"
+        className="min-w-0 max-w-[25cqw] truncate font-mono text-xs text-secondary @max-[520px]/top-bar:max-w-24"
         title={head.branch ?? undefined}
       >
         {head.detached
@@ -153,7 +153,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
           )}
           {upstream && upstream.ahead > 0 && (
             <span
-              className="ml-1 inline-flex animate-in items-center gap-px text-foreground animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
+              className="ml-1 inline-flex animate-in items-center gap-px text-secondary animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
               key={`a${upstream.ahead}`}
             >
               <ArrowUpIcon className="size-3" />
@@ -175,13 +175,13 @@ function BranchSummary({ status }: { status: GitStatus }) {
         </>
       )}
       {operation && (
-        <span className="ml-1 font-medium text-attention-text">
+        <span className="ml-1 font-medium text-secondary">
           {t(OPERATION_KEY[operation.kind])}
           {operation.step && ` ${operation.step[0]}/${operation.step[1]}`}
         </span>
       )}
       {changes.conflicted > 0 ? (
-        <span className="ml-1 inline-flex items-center gap-[3px] font-medium text-destructive">
+        <span className="ml-1 inline-flex items-center gap-[3px] font-medium text-danger">
           <TriangleAlertIcon className="size-[13px]" />
           {changes.conflicted}
         </span>

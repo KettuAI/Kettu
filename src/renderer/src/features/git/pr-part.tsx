@@ -21,31 +21,16 @@ import { prStateText } from './pr-text'
 import { pullRequestHead, pushTargetOf } from './sync'
 import { Part, ROW } from './timeline'
 
-const STATE_COLOR = {
-  open: 'text-success-text',
-  draft: 'text-muted-foreground',
-  merged: 'text-merged',
-  closed: 'text-destructive',
-} as const
-
 const RUN_STATE = { passed: 'passing', failed: 'failing', pending: 'pending' } as const
 
 const REVIEW = {
-  approved: { Icon: CircleCheckIcon, color: 'text-success', key: 'pr.review.approved' },
-  changes_requested: {
-    Icon: CircleAlertIcon,
-    color: 'text-destructive',
-    key: 'pr.review.changesRequested',
-  },
-  review_required: {
-    Icon: CircleDotIcon,
-    color: 'text-attention',
-    key: 'pr.review.reviewRequired',
-  },
+  approved: { Icon: CircleCheckIcon, key: 'pr.review.approved' },
+  changes_requested: { Icon: CircleAlertIcon, key: 'pr.review.changesRequested' },
+  review_required: { Icon: CircleDotIcon, key: 'pr.review.reviewRequired' },
 } as const
 
 /** Text aligned with a row's label, past its 16 px icon. */
-const UNDER = 'pr-2 pl-8 text-xs text-muted-foreground'
+const UNDER = 'pr-2 pl-8 text-xs text-tertiary'
 
 /** The branch's pull request, or how to get one; only for a GitHub remote. */
 export function PullRequestPart({
@@ -79,7 +64,7 @@ export function PullRequestPart({
   if (gh === 'not-installed') {
     return (
       <Part>
-        <div className="flex items-center gap-2 py-2 pr-2 pl-3.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 py-2 pr-2 pl-3.5 text-xs text-secondary">
           <span className="flex-1">
             <Trans
               t={t}
@@ -90,7 +75,7 @@ export function PullRequestPart({
                     href="https://cli.github.com"
                     target="_blank"
                     rel="noreferrer"
-                    className="underline underline-offset-2 hover:text-foreground"
+                    className="underline underline-offset-2 hover:text-primary"
                   />
                 ),
               }}
@@ -114,9 +99,9 @@ export function PullRequestPart({
   if (gh === 'signed-out') {
     return (
       <Part>
-        <div className="flex items-center gap-2 py-2 pr-2 pl-3.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 py-2 pr-2 pl-3.5 text-xs text-secondary">
           <span className="flex-1">{t('prPart.signInGh')}</span>
-          <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-meta text-foreground">
+          <code className="rounded-sm bg-subtle px-1.5 py-0.5 font-mono text-meta text-primary">
             gh auth login
           </code>
           <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />
@@ -128,14 +113,14 @@ export function PullRequestPart({
     if (status.head.detached || !branch || !target) return null
     return (
       <Part>
-        <p className="px-3.5 py-2.5 text-xs text-muted-foreground">{t('prPart.publishFirst')}</p>
+        <p className="px-3.5 py-2.5 text-xs text-secondary">{t('prPart.publishFirst')}</p>
       </Part>
     )
   }
   if (head === null) return null
   return (
     <Part>
-      <div className="flex items-center gap-2 py-1.5 pr-1.5 pl-3.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 py-1.5 pr-1.5 pl-3.5 text-xs text-secondary">
         <span className="flex-1">{t('prPart.none')}</span>
         <Button
           variant="quiet"
@@ -172,8 +157,8 @@ function PullRequestDetails({ pr }: { pr: PullRequest }) {
       >
         <PrIcon state={pr.state} size={16} />
         <span className="min-w-0 flex-1 truncate font-medium">{pr.title}</span>
-        <span className="shrink-0 font-mono text-xs text-muted-foreground">#{pr.number}</span>
-        <ExternalLinkIcon aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-mono text-xs text-tertiary">#{pr.number}</span>
+        <ExternalLinkIcon aria-hidden className="size-3 shrink-0 text-icon" />
       </a>
       <div className={cn(UNDER, '-mt-1 pb-1.5 tabular')}>
         <Trans
@@ -181,7 +166,7 @@ function PullRequestDetails({ pr }: { pr: PullRequest }) {
           i18nKey="prPart.meta"
           values={{ state: prStateText(pr.state), when: longAgo(pr.updatedAt, now) }}
           components={{
-            state: <span className={STATE_COLOR[pr.state]} />,
+            state: <span className="text-secondary" />,
             head: <span className="font-mono text-meta">{pr.head}</span>,
             base: <span className="font-mono text-meta">{pr.base}</span>,
           }}
@@ -220,7 +205,7 @@ function PullRequestDetails({ pr }: { pr: PullRequest }) {
             <ChevronRightIcon
               aria-hidden
               className={cn(
-                'size-3 shrink-0 text-muted-foreground transition-transform duration-(--duration-fast) motion-reduce:transition-none',
+                'size-3 shrink-0 text-icon transition-transform duration-(--duration-fast) motion-reduce:transition-none',
                 checksOpen && 'rotate-90',
               )}
             />
@@ -232,7 +217,12 @@ function PullRequestDetails({ pr }: { pr: PullRequest }) {
       )}
       {!done && pr.review && <ReviewRow review={pr.review} />}
       {blocked && (
-        <div className="flex h-row items-center gap-2 px-2 text-muted-foreground">
+        <div
+          className={cn(
+            'flex h-row items-center gap-2 px-2',
+            blocked === 'prPart.blocked.conflicts' ? 'text-danger' : 'text-tertiary',
+          )}
+        >
           <CircleSlashIcon aria-hidden className="size-3.5 w-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-xs" title={t(blocked, { base: pr.base })}>
             {t(blocked, { base: pr.base })}
@@ -258,7 +248,7 @@ function CheckRow({ run, now }: { run: CheckRun; now: number }) {
       <span className="w-4 shrink-0" />
       <ChecksIcon state={RUN_STATE[run.outcome]} size={12} />
       <span className="min-w-0 flex-1 truncate text-xs">{run.name}</span>
-      {took && <span className="shrink-0 text-xs text-muted-foreground tabular">{took}</span>}
+      {took && <span className="shrink-0 text-xs text-tertiary tabular">{took}</span>}
     </>
   )
   if (!run.url) {
@@ -280,10 +270,10 @@ function CheckRow({ run, now }: { run: CheckRun; now: number }) {
 
 function ReviewRow({ review }: { review: NonNullable<PullRequest['review']> }) {
   const { t } = useTranslation('git')
-  const { Icon, color, key } = REVIEW[review]
+  const { Icon, key } = REVIEW[review]
   return (
     <div className="flex h-row items-center gap-2 px-2">
-      <Icon aria-hidden className={cn('size-3.5 w-4 shrink-0', color)} />
+      <Icon aria-hidden className="size-3.5 w-4 shrink-0 text-icon" />
       <span className="min-w-0 flex-1 truncate">{t(key)}</span>
     </div>
   )

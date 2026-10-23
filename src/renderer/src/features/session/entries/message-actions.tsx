@@ -186,7 +186,7 @@ export const ReplyFooter = memo(
           )}
         </div>
         {error && (
-          <span className="ml-2 min-w-0 truncate text-destructive" title={error}>
+          <span className="ml-2 min-w-0 truncate text-danger" title={error}>
             {error}
           </span>
         )}

@@ -137,26 +137,24 @@ export function ImportSessionsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="-mx-1 flex min-h-0 flex-col gap-4 overflow-y-auto px-1">
-          {agents.length === 0 && (
-            <p className="text-ui text-muted-foreground">{t('import.noAgents')}</p>
-          )}
+          {agents.length === 0 && <p className="text-ui text-secondary">{t('import.noAgents')}</p>}
           {agents.map((agent) => {
             const list = lists[agent.id]
             return (
               <section key={agent.id} className="flex flex-col gap-1">
-                <h3 className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <h3 className="flex items-center gap-2 text-xs font-medium text-tertiary">
                   <AgentMark agent={agent.id} size={13} />
                   {agent.name}
                 </h3>
                 {list?.error ? (
-                  <p className="text-ui text-destructive">{list.error}</p>
+                  <p className="text-ui text-danger">{list.error}</p>
                 ) : !list || (list.loading && !list.sessions.length) ? (
                   <div className="flex flex-col gap-1.5 py-1">
                     <Skeleton className="h-3 w-3/4" />
                     <Skeleton className="h-3 w-1/2" />
                   </div>
                 ) : list.sessions.length === 0 ? (
-                  <p className="text-ui text-muted-foreground">{t('import.noSessions')}</p>
+                  <p className="text-ui text-secondary">{t('import.noSessions')}</p>
                 ) : (
                   <ul className="flex flex-col gap-px">
                     {list.sessions.map((s) => {
@@ -165,26 +163,23 @@ export function ImportSessionsDialog({
                       return (
                         <li
                           key={s.acpSessionId}
-                          className="flex h-8 items-center gap-2.5 rounded-lg px-2 hover:bg-accent"
+                          className="flex h-8 items-center gap-2.5 rounded-lg px-2 hover:bg-hover"
                         >
                           <span className="min-w-0 flex-1 truncate">
                             {s.title ?? t('common:untitledSession')}
                           </span>
                           {failed && (
-                            <span
-                              className="max-w-40 truncate text-xs text-destructive"
-                              title={failed}
-                            >
+                            <span className="max-w-40 truncate text-xs text-danger" title={failed}>
                               {failed}
                             </span>
                           )}
                           {s.updatedAt && (
-                            <span className="text-[11.5px] text-muted-foreground tabular">
+                            <span className="text-[11.5px] text-tertiary tabular">
                               {shortAgo(Date.parse(s.updatedAt))}
                             </span>
                           )}
                           {state === 'done' ? (
-                            <span className="inline-flex w-[62px] items-center justify-end gap-1 text-xs text-muted-foreground">
+                            <span className="inline-flex w-[62px] items-center justify-end gap-1 text-xs text-tertiary">
                               <CheckIcon className="size-3.5" />
                               {t('import.added')}
                             </span>
@@ -210,7 +205,7 @@ export function ImportSessionsDialog({
                       <Button
                         variant="ghost"
                         size="xs"
-                        className="self-start text-muted-foreground"
+                        className="self-start text-tertiary"
                         disabled={list.loading}
                         onClick={() => list.nextCursor && loadMore(agent.id, list.nextCursor)}
                       >

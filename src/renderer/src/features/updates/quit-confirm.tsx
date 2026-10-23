@@ -75,30 +75,28 @@ export function QuitConfirm() {
           </AlertDialogDescription>
         </AlertDialogHeader>
         {busy && (
-          <ul className="rounded-[9px] bg-muted py-0.5 text-ui">
+          <ul className="rounded-[9px] bg-subtle py-0.5 text-ui">
             {request?.sessions.map((s) => (
               <li key={s.sessionId} className="flex h-8 items-center gap-2 px-2.5">
                 <AgentMark agent={s.agentId} size={14} />
                 <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
-                <span className="text-xs text-muted-foreground">{t('quit.working')}</span>
+                <span className="text-xs text-tertiary">{t('quit.working')}</span>
               </li>
             ))}
             {request?.terminals.map((terminal) => (
               <li key={terminal.id} className="flex h-8 items-center gap-2 px-2.5">
-                <SquareTerminalIcon className="size-3.5 text-muted-foreground" />
+                <SquareTerminalIcon className="size-3.5 text-icon" />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs">{terminal.title}</span>
-                <span className="text-xs text-muted-foreground">{t('quit.terminal')}</span>
+                <span className="text-xs text-tertiary">{t('quit.terminal')}</span>
               </li>
             ))}
           </ul>
         )}
         {busy && unsaved.length > 0 && (
-          <p className="text-[12.5px] leading-normal text-muted-foreground">
-            {t('quit.unsavedFiles')}
-          </p>
+          <p className="text-[12.5px] leading-normal text-secondary">{t('quit.unsavedFiles')}</p>
         )}
         {unsaved.length > 0 && (
-          <ul className="rounded-[9px] bg-muted py-0.5 text-ui">
+          <ul className="rounded-[9px] bg-subtle py-0.5 text-ui">
             {unsaved.map((file) => (
               <li
                 key={`${file.projectPath}\0${file.path}`}
@@ -108,20 +106,18 @@ export function QuitConfirm() {
                 <FileTypeIcon path={file.path} className="size-3.5" />
                 <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
                   <span className="shrink-0">{nameOf(file.path)}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {folderOf(file.path)}
-                  </span>
+                  <span className="truncate text-xs text-tertiary">{folderOf(file.path)}</span>
                 </span>
-                <span className="text-xs text-muted-foreground">{t('quit.unsaved')}</span>
+                <span className="text-xs text-tertiary">{t('quit.unsaved')}</span>
               </li>
             ))}
           </ul>
         )}
         {saveFailed ? (
-          <p className="text-[12.5px] leading-normal text-destructive">{t('quit.saveFailed')}</p>
+          <p className="text-[12.5px] leading-normal text-danger">{t('quit.saveFailed')}</p>
         ) : (
           busy && (
-            <p className="text-[12.5px] leading-normal text-muted-foreground">
+            <p className="text-[12.5px] leading-normal text-secondary">
               {reason === 'update' ? t('quit.comeBackUpdate') : t('quit.comeBackQuit')}
             </p>
           )

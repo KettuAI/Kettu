@@ -74,7 +74,7 @@ export function AppSidebar() {
       </div>
       <div className="flex shrink-0 flex-col gap-px px-2 pt-0.5 pb-2.5">
         <NavRow
-          icon={<PlusIcon className="text-muted-foreground" />}
+          icon={<PlusIcon className="text-icon" />}
           label={t('nav.newSession')}
           shortcut="Mod+N"
           current={drafting}
@@ -84,7 +84,7 @@ export function AppSidebar() {
           {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
           <TooltipTrigger render={<span className="flex" />}>
             <NavRow
-              icon={<ShapesIcon className="text-muted-foreground" />}
+              icon={<ShapesIcon className="text-icon" />}
               label={t('nav.artifacts')}
               disabled
             />
@@ -97,7 +97,7 @@ export function AppSidebar() {
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
         <SidebarGroup role="group" aria-label={t('nav.projects')} className="gap-0.5 p-0">
           {!loaded && loadError ? (
-            <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
+            <p className="px-2 py-1 text-xs leading-normal text-secondary">
               {t('nav.unavailable')}
             </p>
           ) : !loaded ? (
@@ -111,9 +111,7 @@ export function AppSidebar() {
           ) : (
             <>
               {projects.length === 0 ? (
-                <p className="px-2 py-1 text-xs leading-normal text-muted-foreground">
-                  {t('nav.empty')}
-                </p>
+                <p className="px-2 py-1 text-xs leading-normal text-secondary">{t('nav.empty')}</p>
               ) : (
                 projects.map((project) => (
                   <ProjectGroup key={project.path} project={project} onImport={importSessions} />
@@ -167,7 +165,7 @@ export function NavRow({
       <span className="flex-1">{label}</span>
       {extra ??
         (shortcut && (
-          <Kbd className="h-auto bg-transparent p-0 text-[11px] font-normal text-muted-foreground">
+          <Kbd className="h-auto bg-transparent p-0 text-[11px] font-normal text-tertiary group-data-active/menu-button:text-secondary">
             {formatShortcut(shortcut)}
           </Kbd>
         ))}
@@ -182,7 +180,7 @@ function UsageNavRow() {
   const end = useSettingsStore((s) => s.settings.usage.sidebar)
   return (
     <NavRow
-      icon={<ChartNoAxesColumnIcon className="text-muted-foreground" />}
+      icon={<ChartNoAxesColumnIcon className="text-icon" />}
       label={t('nav.usage')}
       current={current}
       onClick={openUsage}
@@ -200,7 +198,7 @@ function TodayTokens() {
   // Quiet until there is something to count.
   if (!today) return null
   return (
-    <span className="text-xs font-normal text-muted-foreground tabular-nums">
+    <span className="text-xs font-normal text-tertiary tabular-nums group-data-active/menu-button:text-secondary">
       <span aria-hidden>{tokens(today)}</span>
       <span className="sr-only">{t('nav.today', { tokens: tokens(today) })}</span>
     </span>
@@ -233,11 +231,13 @@ function TightestLimit() {
   if (!tightest) return null
   const { agent, limit } = tightest
   const percent = `${Math.round(limit.usedPercent ?? 0)}%`
+  const tone = usageTone(limit)
   return (
     <span
       className={cn(
-        'flex min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground tabular-nums',
-        USAGE_TONE_TEXT[usageTone(limit)],
+        'flex min-w-0 items-center gap-1 text-xs font-normal tabular-nums',
+        USAGE_TONE_TEXT[tone],
+        tone === 'success' && 'group-data-active/menu-button:text-secondary',
       )}
     >
       <AgentMark agent={agent.id} size={12} />
@@ -303,14 +303,14 @@ function ProjectGroup({
         'gap-1 font-medium',
         // Room for the More button before the +, so the name never runs under it.
         project && !project.missing && 'group-has-data-[sidebar=menu-action]/menu-item:pr-13',
-        project?.missing && 'text-muted-foreground',
+        project?.missing ? 'text-disabled' : 'text-tertiary',
       )}
     >
       <span className="min-w-0 truncate">{name}</span>
       {/* A folded group always shows its chevron; an open one only under the pointer. */}
       <span
         className={cn(
-          'grid size-3.5 shrink-0 place-items-center text-muted-foreground transition-opacity duration-(--duration-fast)',
+          'grid size-3.5 shrink-0 place-items-center text-icon transition-opacity duration-(--duration-fast)',
           open &&
             'opacity-0 group-hover/menu-item:opacity-100 group-has-focus-visible/menu-item:opacity-100',
         )}
@@ -318,7 +318,7 @@ function ProjectGroup({
         {open ? <ChevronDownIcon className="size-3!" /> : <ChevronRightIcon className="size-3!" />}
       </span>
       {project?.missing && (
-        <span className="ml-auto text-[11.5px] font-normal text-muted-foreground">
+        <span className="ml-auto text-[11.5px] font-normal text-tertiary">
           {t('project.missing')}
         </span>
       )}
@@ -363,7 +363,7 @@ function ProjectGroup({
                         tabIndex={-1}
                         aria-label={t('row.more')}
                         className={cn(
-                          'top-1 text-muted-foreground [&>svg]:size-3.5',
+                          'top-1 text-icon [&>svg]:size-3.5',
                           !project.missing && 'right-6.5',
                         )}
                       />
@@ -388,7 +388,7 @@ function ProjectGroup({
                     project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')
                   }
                   onClick={() => newSession(projectPath, !project)}
-                  className="top-1 text-muted-foreground [&>svg]:size-3.5"
+                  className="top-1 text-icon [&>svg]:size-3.5"
                 />
               }
             >

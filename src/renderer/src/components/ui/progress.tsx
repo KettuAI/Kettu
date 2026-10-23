@@ -2,11 +2,11 @@ import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
 import { cn } from 'cn'
 
 const TONE = {
-  default: 'bg-primary',
-  success: 'bg-success',
-  checked: 'bg-checked',
-  attention: 'bg-attention',
-  destructive: 'bg-destructive',
+  default: 'bg-current text-tertiary',
+  success: 'bg-current text-tertiary',
+  checked: 'bg-current text-tertiary',
+  attention: 'bg-current text-warning',
+  destructive: 'bg-danger',
 }
 
 function Progress({

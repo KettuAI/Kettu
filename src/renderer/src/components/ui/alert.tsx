@@ -11,13 +11,13 @@ const alertVariants = cva(
         destructive:
           'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
         warning:
-          'bg-attention-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-attention-text',
-        // Something to decide or a task under way, such as an agent update: tinted, no ring.
-        info: 'bg-checked-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-checked-text',
+          'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-icon',
+        // Something to decide or a task under way, such as an agent update: neutral, no ring.
+        info: 'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-icon',
         success:
-          'bg-success-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-success-text',
+          'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-icon',
         error:
-          'bg-destructive-tint text-foreground shadow-none *:data-[slot=alert-description]:text-muted-foreground *:[svg]:text-destructive',
+          'bg-danger-tint text-primary shadow-[inset_0_0_0_var(--hairline)_var(--danger-border)] *:data-[slot=alert-description]:text-secondary *:[svg]:text-danger',
       },
     },
     defaultVariants: {
@@ -59,7 +59,7 @@ function AlertDescription({ className, ...props }: React.ComponentProps<'div'>) 
     <div
       data-slot="alert-description"
       className={cn(
-        'text-sm text-balance text-muted-foreground md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4',
+        'text-sm text-balance text-secondary md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4',
         className,
       )}
       {...props}

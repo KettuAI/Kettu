@@ -106,7 +106,7 @@ describe('runSummary', () => {
         run('execute'),
       ]),
     ).toEqual({
-      parts: [{ text: 'Ran 3 commands' }, { text: 'Read a.ts, b.ts' }],
+      parts: [{ text: 'Ran 3 commands' }, { text: 'Read a.ts, b.ts', names: 'a.ts, b.ts' }],
       failed: 0,
       running: false,
     })
@@ -153,8 +153,8 @@ describe('runSummary', () => {
     ).toEqual({
       parts: [
         { text: 'Thought for 8 s' },
-        { text: 'Created offload.py', diffs: [created, later] },
-        { text: 'Edited ui.md', diffs: [edited] },
+        { text: 'Created offload.py', names: 'offload.py', diffs: [created, later] },
+        { text: 'Edited ui.md', names: 'ui.md', diffs: [edited] },
         { text: 'Searched once' },
       ],
       failed: 0,
@@ -177,9 +177,9 @@ describe('runSummary', () => {
       permissionResult: null,
     }
     expect(runSummary([toolStep(patch), run('read', '/repo/a.ts')]).parts).toEqual([
-      { text: 'Created new.py', diffs: [added] },
-      { text: 'Edited old.ts', diffs: hunks },
-      { text: 'Read a.ts' },
+      { text: 'Created new.py', names: 'new.py', diffs: [added] },
+      { text: 'Edited old.ts', names: 'old.ts', diffs: hunks },
+      { text: 'Read a.ts', names: 'a.ts' },
     ])
   })
 

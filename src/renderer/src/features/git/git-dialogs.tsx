@@ -149,7 +149,7 @@ function PublishForm({ status, onClose }: { status: GitStatus; onClose: () => vo
             )}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2 rounded-lg bg-muted py-1 pr-1 pl-3">
+        <div className="flex items-center gap-2 rounded-lg bg-subtle py-1 pr-1 pl-3">
           <code className="flex-1 font-mono text-xs">gh auth login</code>
           <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />
         </div>
@@ -195,7 +195,7 @@ function PublishForm({ status, onClose }: { status: GitStatus; onClose: () => vo
         )}
       </Field>
       {failed && (
-        <p className="text-xs leading-normal text-destructive [overflow-wrap:anywhere]">
+        <p className="text-xs leading-normal text-danger [overflow-wrap:anywhere]">
           {t(`failure.${failed.busy ? 'busy' : failureOf(failed.log)}`, {
             operation: t('failure.operation.publish'),
             detail: lastLine(failed.log),
@@ -257,7 +257,7 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
             t={t}
             i18nKey="dialog.createPr.description"
             values={{ head, repo: github ? `${github.owner}/${github.repo}` : '' }}
-            components={{ branch: <span className="font-mono text-control text-foreground" /> }}
+            components={{ branch: <span className="font-mono text-control text-primary" /> }}
           />
         </DialogDescription>
       </DialogHeader>
@@ -312,7 +312,7 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
 
 function FailureText({ log }: { log: string }) {
   return (
-    <p className="text-xs leading-normal text-destructive [overflow-wrap:anywhere]" title={log}>
+    <p className="text-xs leading-normal text-danger [overflow-wrap:anywhere]" title={log}>
       {lastLine(log)}
     </p>
   )
@@ -340,7 +340,7 @@ function LogView({ projectPath }: { projectPath: string }) {
       </DialogHeader>
       <pre
         data-selectable=""
-        className="max-h-96 overflow-auto rounded-lg bg-muted p-3 font-mono text-xs leading-normal whitespace-pre-wrap [overflow-wrap:anywhere]"
+        className="max-h-96 overflow-auto rounded-lg bg-subtle p-3 font-mono text-xs leading-normal whitespace-pre-wrap [overflow-wrap:anywhere]"
       >
         {log || t('dialog.log.empty')}
       </pre>

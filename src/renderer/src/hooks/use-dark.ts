@@ -4,11 +4,11 @@ const root = document.documentElement
 
 function subscribe(onChange: () => void): () => void {
   const observer = new MutationObserver(onChange)
-  observer.observe(root, { attributes: true, attributeFilter: ['class'] })
+  observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
   return () => observer.disconnect()
 }
 
-const isDark = (): boolean => root.classList.contains('dark')
+const isDark = (): boolean => root.dataset.theme === 'dark'
 
 /** Whether the app shows its dark theme now, for libraries that take the theme as a value. */
 export function useDark(): boolean {

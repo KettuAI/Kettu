@@ -61,7 +61,7 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
         void saveFile(projectPath)
       }}
     >
-      <div className="flex h-row shrink-0 items-center gap-1 border-b border-border-soft pr-1 pl-3 text-xs">
+      <div className="flex h-row shrink-0 items-center gap-1 border-b border-subtle pr-1 pl-3 text-xs">
         <FileTypeIcon path={file.path} className="mr-1 size-4" />
         <span className="flex min-w-0 flex-1 items-baseline gap-1.5" title={file.path}>
           <span className="shrink-0 font-medium">{nameOf(file.path)}</span>
@@ -69,10 +69,10 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
             <span
               role="img"
               aria-label={t('preview.unsaved')}
-              className="size-1.5 shrink-0 self-center rounded-full bg-foreground"
+              className="size-1.5 shrink-0 self-center rounded-full bg-primary"
             />
           )}
-          {folder && <span className="truncate text-muted-foreground">{folder}</span>}
+          {folder && <span className="truncate text-tertiary">{folder}</span>}
         </span>
         {file.dirty && (
           <PanelButton
@@ -130,7 +130,7 @@ function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
   const { t } = useTranslation('files')
   if (file.changedOnDisk) {
     return (
-      <Bar tone="attention">
+      <Bar tone="notice">
         <span className="min-w-0 flex-1">{t('preview.changedOnDisk')}</span>
         <Button
           size="xs"
@@ -179,15 +179,15 @@ function backToEditor(from: HTMLElement): void {
   from.closest('[data-file-preview]')?.querySelector<HTMLElement>('.cm-content')?.focus()
 }
 
-function Bar({ tone, children }: { tone: 'attention' | 'error' | 'muted'; children: ReactNode }) {
+function Bar({ tone, children }: { tone: 'notice' | 'error' | 'muted'; children: ReactNode }) {
   return (
     <div
       role={tone === 'muted' ? undefined : 'status'}
       className={cn(
-        'flex min-h-row shrink-0 items-center gap-1.5 border-b border-border-soft py-1 pr-1.5 pl-3 text-xs',
-        tone === 'attention' && 'bg-attention-tint text-attention-text',
-        tone === 'error' && 'bg-destructive-tint text-destructive',
-        tone === 'muted' && 'text-muted-foreground',
+        'flex min-h-row shrink-0 items-center gap-1.5 border-b border-subtle py-1 pr-1.5 pl-3 text-xs',
+        tone === 'notice' && 'bg-subtle text-secondary',
+        tone === 'error' && 'bg-danger-tint text-danger',
+        tone === 'muted' && 'text-tertiary',
       )}
     >
       {children}
@@ -282,10 +282,10 @@ function Picture({ content }: { content: Extract<FileContent, { kind: 'image' }>
             })
           }
           onError={() => setFailed(true)}
-          className="max-h-full max-w-full checkerboard object-contain shadow-[0_0_0_var(--hairline)_var(--border)]"
+          className="max-h-full max-w-full checkerboard object-contain shadow-[0_0_0_var(--hairline)_var(--border-default)]"
         />
       </div>
-      <p className="shrink-0 pb-3 text-center text-xs text-muted-foreground tabular">
+      <p className="shrink-0 pb-3 text-center text-xs text-tertiary tabular">
         {natural && `${natural.width} × ${natural.height} · `}
         {bytes(content.size)}
       </p>

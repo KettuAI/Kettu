@@ -21,21 +21,21 @@ export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLi
 export type UsageTone = 'success' | 'attention' | 'destructive'
 
 /**
- * A window's usage level, as the design system's usage levels give it: plenty below 60% used,
- * getting close from 60%, nearly gone from 90% or once the limit is reached.
+ * A window's usage level, as the design system's usage levels give it: plenty below 80% used,
+ * getting close from 80%, nearly gone from 95% or once the limit is reached.
  */
 export function usageTone(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): UsageTone {
   const used = limit.usedPercent ?? 0
-  if (limit.state === 'reached' || used >= 90) return 'destructive'
-  if (used >= 60) return 'attention'
+  if (limit.state === 'reached' || used >= 95) return 'destructive'
+  if (used >= 80) return 'attention'
   return 'success'
 }
 
-/** A percentage's text color at each usage level; with plenty left it keeps its own. */
+/** A percentage's text color at each usage level. */
 export const USAGE_TONE_TEXT: Record<UsageTone, string> = {
-  success: '',
-  attention: 'text-attention-text',
-  destructive: 'text-destructive',
+  success: 'text-tertiary',
+  attention: 'text-warning',
+  destructive: 'text-danger',
 }
 
 /** Time left in its two largest units: "42m", "5h 12m", "1d 5h"; null once it has passed. */

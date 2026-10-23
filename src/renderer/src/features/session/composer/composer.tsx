@@ -222,7 +222,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   placeholder={placeholder}
                   disabled={starting}
                   onKeyDown={onKeyDown}
-                  className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-[15px] pr-1 pl-4 text-prose leading-[22px] placeholder:text-muted-foreground md:text-prose"
+                  className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-[15px] pr-1 pl-4 text-prose leading-[22px] placeholder:text-placeholder md:text-prose"
                 />
               }
             />
@@ -232,7 +232,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 className="pointer-events-none absolute inset-0 overflow-hidden py-[15px] pr-1 pl-4 text-prose leading-[22px] whitespace-pre"
               >
                 <span className="invisible">{text}</span>
-                <span className="text-muted-foreground">{hint}</span>
+                <span className="text-placeholder">{hint}</span>
               </div>
             )}
           </div>
@@ -336,7 +336,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       {/* Holds the row's height while the agent starts, so nothing jumps when the options arrive. */}
       <div className="flex min-h-row flex-col">
         {error && (
-          <p className="animate-in px-2 pt-1 text-xs text-destructive fade-in" role="alert">
+          <p className="animate-in px-2 pt-1 text-xs text-danger fade-in" role="alert">
             {error}
           </p>
         )}

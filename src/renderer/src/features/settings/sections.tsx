@@ -55,7 +55,8 @@ import { useApply } from './use-apply'
 const useSettings = () => useSettingsStore((s) => s.settings)
 
 // The recessed panel behind a live preview: text size, terminal font, notification banner.
-const PREVIEW_BOX = 'rounded-xl bg-sidebar shadow-[inset_0_0_0_var(--hairline)_var(--border-soft)]'
+const PREVIEW_BOX =
+  'rounded-xl bg-sidebar shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]'
 
 // A block row's first line: the row's text on the left, its control on the right.
 const BLOCK_LINE = 'flex min-h-7 items-center gap-6'
@@ -99,7 +100,7 @@ export function DefaultAgent() {
     {
       value: 'ask',
       label: t('general.defaultAgent.askEachTime'),
-      icon: <CircleHelpIcon className="size-3.5 text-muted-foreground" />,
+      icon: <CircleHelpIcon className="size-3.5 text-icon" />,
     },
     ...AGENT_IDS.filter((id) => id !== 'fake-agent').map((id) => {
       const absent = missing.includes(id)
@@ -194,10 +195,10 @@ export function ThemeTiles() {
           <ToggleGroupItem
             key={theme}
             value={theme}
-            className="items-stretch gap-2 hover:[&>[data-tile]]:ring-border-strong aria-pressed:[&>[data-tile]]:ring-checked"
+            className="items-stretch gap-2 hover:[&>[data-tile]]:ring-border-strong"
           >
             <ThemePreview kind={theme} />
-            <span className="flex items-center gap-2 pl-0.5 text-small text-foreground">
+            <span className="flex items-center gap-2 pl-0.5 text-small text-primary">
               <RadioDot />
               {t(`appearance.theme.${theme}`)}
             </span>
@@ -214,9 +215,9 @@ function RadioDot() {
   return (
     <span
       aria-hidden
-      className="grid size-3.5 shrink-0 place-items-center rounded-full ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-checked group-aria-pressed/toggle:ring-0"
+      className="grid size-3.5 shrink-0 place-items-center rounded-full ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-primary group-aria-pressed/toggle:ring-0"
     >
-      <span className="size-1.5 scale-0 rounded-full bg-background transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100 dark:bg-foreground" />
+      <span className="size-1.5 scale-0 rounded-full bg-background transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100" />
     </span>
   )
 }
@@ -236,28 +237,28 @@ function ThemePreview({ kind }: { kind: Theme }) {
 }
 
 function MiniLine({ className }: { className?: string }) {
-  return <span className={cn('block h-1.25 rounded-full bg-muted-foreground/20', className)} />
+  return <span className={cn('block h-1.25 rounded-full bg-border', className)} />
 }
 
-// The wrapper's class makes the tokens inside resolve for that theme, whatever the app shows.
+// The wrapper's theme makes the tokens inside resolve for it, whatever the app shows.
 function MiniWindow({ dark, cut }: { dark: boolean; cut?: boolean }) {
   return (
     <span
+      data-theme={dark ? 'dark' : 'light'}
       className={cn(
-        dark ? 'dark' : 'light',
         'absolute inset-0 flex bg-background',
         cut && '[clip-path:polygon(62%_0,100%_0,100%_100%,38%_100%)]',
       )}
     >
-      <span className="flex w-1/3 flex-col gap-1.5 border-r border-border-soft bg-sidebar px-2 py-3">
-        <span className="block h-2 rounded-sm bg-sidebar-accent" />
+      <span className="flex w-1/3 flex-col gap-1.5 border-r border-subtle bg-sidebar px-2 py-3">
+        <span className="block h-2 rounded-sm bg-selected" />
         <MiniLine />
         <MiniLine className="w-3/4" />
         <MiniLine className="w-5/6" />
       </span>
       <span className="flex flex-1 flex-col gap-1.5 px-3 pt-3.5 pb-2.5">
-        <MiniLine className="w-2/5 bg-muted-foreground/40" />
-        <span className="block h-3 w-1/2 self-end rounded-md bg-muted-foreground/20" />
+        <MiniLine className="w-2/5 bg-border-strong" />
+        <span className="block h-3 w-1/2 self-end rounded-md bg-subtle" />
         <MiniLine className="w-11/12" />
         <MiniLine className="w-2/3" />
         <span className="mt-auto block h-5 rounded-md bg-card shadow-card" />
@@ -367,16 +368,16 @@ export function TextSize({ label }: { label: ReactNode }) {
         />
       </div>
       <div aria-hidden className={cn(PREVIEW_BOX, 'flex flex-col gap-3 px-4 py-4 text-prose')}>
-        <div className="max-w-4/5 self-end rounded-xl bg-muted px-3 py-1.5 leading-relaxed">
+        <div className="max-w-4/5 self-end rounded-xl bg-subtle px-3 py-1.5 leading-relaxed">
           {t('appearance.textSize.previewUser')}
         </div>
-        <p className="text-foreground/90">
+        <p className="text-primary">
           <Trans
             t={t}
             i18nKey="appearance.textSize.previewAgent"
             components={{
               code: (
-                <code className="rounded-sm bg-muted px-[0.35em] py-[0.1em] font-mono text-[0.85em]" />
+                <code className="rounded-sm bg-subtle px-[0.35em] py-[0.1em] font-mono text-[0.85em]" />
               ),
             }}
           />
@@ -478,8 +479,7 @@ function TestFile({ name, detail }: { name: string; detail: string }) {
   return (
     <div className="whitespace-pre">
       {' '}
-      <Ansi color="green">{'\u2713'}</Ansi> {name}{' '}
-      <span className="text-muted-foreground">{detail}</span>
+      <Ansi color="green">{'\u2713'}</Ansi> {name} <span className="text-tertiary">{detail}</span>
     </div>
   )
 }
@@ -489,8 +489,7 @@ function TestTotal({ name, count }: { name: string; count: number }) {
     <div className="whitespace-pre">
       <Ansi color="cyan">{name}</Ansi>
       {'  '}
-      <Ansi color="green">{count} passed</Ansi>{' '}
-      <span className="text-muted-foreground">({count})</span>
+      <Ansi color="green">{count} passed</Ansi> <span className="text-tertiary">({count})</span>
     </div>
   )
 }
@@ -536,22 +535,14 @@ export function FontSize({ label }: { label: ReactNode }) {
 
 // ---- Git
 
-function StatusDot({ tone }: { tone: 'success' | 'attention' }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'size-1.5 shrink-0 rounded-full',
-        tone === 'success' ? 'bg-success' : 'bg-attention',
-      )}
-    />
-  )
+function StatusDot() {
+  return <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current text-tertiary" />
 }
 
 function ToolsPending() {
   const { t } = useTranslation()
   const error = useGitStore((s) => s.toolsError)
-  if (!error) return <Spinner className="size-3.5 text-muted-foreground" />
+  if (!error) return <Spinner className="size-3.5 text-tertiary" />
   return (
     <span className="flex items-center gap-2">
       <ControlError error={error} />
@@ -570,7 +561,7 @@ export function GitTool() {
   if (!found) return <Badge variant="neutral">{t('git.git.notFound')}</Badge>
   return (
     <Badge variant="success" className="gap-1.5">
-      <StatusDot tone="success" />
+      <StatusDot />
       {version ? (
         <>
           <span className="sr-only">{t('git.git.found')}</span>
@@ -594,7 +585,7 @@ export function GhTool() {
         href="https://cli.github.com"
         target="_blank"
         rel="noreferrer"
-        className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        className="text-xs text-tertiary underline underline-offset-2 hover:text-primary"
       >
         {t('git.gh.install')}
       </a>
@@ -604,10 +595,12 @@ export function GhTool() {
     return (
       <span className="flex items-center gap-1.5">
         <Badge variant="warning" className="gap-1.5">
-          <StatusDot tone="attention" />
+          <StatusDot />
           {t('git.gh.signedOut')}
         </Badge>
-        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-meta">gh auth login</code>
+        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-meta">
+          gh auth login
+        </code>
         <CopyAction text="gh auth login" label={t('git.gh.copyCommand')} />
       </span>
     )
@@ -618,7 +611,7 @@ export function GhTool() {
       title={gh.version ? `gh ${gh.version}` : undefined}
       className="gap-1.5 overflow-visible"
     >
-      <StatusDot tone="success" />
+      <StatusDot />
       {t('git.gh.signedIn')}
       {gh.account && (
         <span className="font-normal">
@@ -686,7 +679,7 @@ export function NotificationPreview() {
               <span className="min-w-0 flex-1 truncate font-semibold">
                 {t('notifications.previewTitle')}
               </span>
-              <span className="shrink-0 text-meta text-muted-foreground">
+              <span className="shrink-0 text-meta text-tertiary">
                 {t('notifications.previewTime')}
               </span>
             </div>
@@ -722,7 +715,7 @@ export function TestNotification() {
   return (
     <>
       {unsupported && (
-        <span role="status" className="text-xs text-muted-foreground">
+        <span role="status" className="text-xs text-secondary">
           {t('notifications.testUnsupported')}
         </span>
       )}
@@ -751,7 +744,7 @@ export function TestNotification() {
 // "1-4" is a range of keys, not a chord.
 const KEY_RANGE = /^(\d)-(\d)$/
 
-const KEYCAP = 'h-5.5 min-w-5.5 rounded-md bg-card px-1.5 text-foreground shadow-outline'
+const KEYCAP = 'h-5.5 min-w-5.5 rounded-md bg-card px-1.5 text-primary shadow-outline'
 
 export function ShortcutKeys({ keys }: { keys: string }) {
   const range = KEY_RANGE.exec(keys)
@@ -760,7 +753,7 @@ export function ShortcutKeys({ keys }: { keys: string }) {
       {range ? (
         <>
           <Kbd className={KEYCAP}>{range[1]}</Kbd>
-          <span aria-hidden className="self-center text-xs text-muted-foreground">
+          <span aria-hidden className="self-center text-xs text-tertiary">
             {'–'}
           </span>
           <Kbd className={KEYCAP}>{range[2]}</Kbd>
@@ -828,7 +821,7 @@ export function Proxy({ label }: { label: ReactNode }) {
       </div>
       {custom && (
         <div className="grid animate-in grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 fade-in animation-duration-(--duration-base)">
-          <label htmlFor="proxy-url" className="text-xs text-muted-foreground">
+          <label htmlFor="proxy-url" className="text-xs text-tertiary">
             {t('advanced.proxy.url')}
           </label>
           <Input
@@ -842,7 +835,7 @@ export function Proxy({ label }: { label: ReactNode }) {
             onKeyDown={(e) => e.key === 'Enter' && save()}
             className="h-control font-mono text-xs"
           />
-          <label htmlFor="proxy-no" className="text-xs text-muted-foreground">
+          <label htmlFor="proxy-no" className="text-xs text-tertiary">
             {t('advanced.proxy.noProxyFor')}
           </label>
           <Input
@@ -855,7 +848,7 @@ export function Proxy({ label }: { label: ReactNode }) {
             className="h-control font-mono text-xs"
           />
           {invalid && (
-            <p className="col-start-2 text-xs text-destructive">{t('advanced.proxy.invalid')}</p>
+            <p className="col-start-2 text-xs text-danger">{t('advanced.proxy.invalid')}</p>
           )}
         </div>
       )}
@@ -887,7 +880,7 @@ export function Diagnostics() {
         <span
           className={cn(
             'max-w-56 min-w-0 truncate text-xs',
-            'error' in note ? 'text-destructive' : 'text-muted-foreground',
+            'error' in note ? 'text-danger' : 'text-tertiary',
           )}
           title={noteText ?? undefined}
         >

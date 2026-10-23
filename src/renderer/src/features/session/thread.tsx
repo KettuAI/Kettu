@@ -137,7 +137,7 @@ export const Thread = memo(function Thread({
       <ScrollOnSend sent={sent} />
       {/* The viewport's bottom fade would mask a focus ring of its own, so the scroller draws it on
           top, inset, for keyboard focus only. */}
-      <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay after:pointer-events-none after:absolute after:inset-0 after:opacity-0 after:ring-2 after:ring-ring/50 after:ring-inset has-[>[data-slot=message-scroller-viewport]:focus-visible]:after:opacity-100">
+      <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay after:pointer-events-none after:absolute after:inset-0 after:opacity-0 after:ring-2 after:ring-focus after:ring-inset has-[>[data-slot=message-scroller-viewport]:focus-visible]:after:opacity-100">
         <MessageScrollerViewport
           ref={viewport}
           onScroll={nearStart}

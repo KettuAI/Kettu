@@ -22,7 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
-import { levelsOf, splitName, tierOf, tierText, type SelectOption } from './levels'
+import { levelsOf, splitName, tierOf, type SelectOption } from './levels'
 import { UsageButton } from './usage'
 
 /** Asks the agent to change an option; resolves to whether it did. */
@@ -114,7 +114,7 @@ export function ControlRow({
         <OptionMenu key={o.id} option={o} onSelect={set} />
       ))}
       <span
-        className="min-w-0 flex-1 truncate px-1.5 text-xs text-destructive"
+        className="min-w-0 flex-1 truncate px-1.5 text-xs text-danger"
         title={error ?? undefined}
       >
         {error}
@@ -129,7 +129,7 @@ export function ControlRow({
               <span className="animate-in px-1.5 text-xs font-medium fade-in animation-duration-(--duration-fast)" />
             }
           >
-            <span className="text-effort-max">Ultracode</span>
+            <span className="text-secondary">Ultracode</span>
           </TooltipTrigger>
           <TooltipContent>
             {ultracodeOn ? t('controls.ultracodeOn') : t('controls.ultracodeNext')}
@@ -308,12 +308,12 @@ function ModelMenu({
         }
       >
         {model && (
-          <span className="truncate text-foreground">
+          <span className="truncate text-secondary">
             {splitName(choiceName(model, modelValue))[1]}
           </span>
         )}
         {effort && !(model && level?.usesDefault) && (
-          <span className="shrink-0">{choiceName(effort, effortValue)}</span>
+          <span className="shrink-0 text-secondary">{choiceName(effort, effortValue)}</span>
         )}
         {!model && !effort && <span>{t('controls.options')}</span>}
         <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
@@ -471,20 +471,8 @@ export function EffortSegments({
         <SegmentedControl
           aria-labelledby={labelId}
           value={shown ?? ''}
-          segments={levels.map((c) => {
-            const levelTier = tierOf(effort, c.value)
-            return {
-              value: c.value,
-              label: (active: boolean) =>
-                active && levelTier ? (
-                  <span className={tierText[levelTier]}>{c.name}</span>
-                ) : (
-                  c.name
-                ),
-            }
-          })}
+          segments={levels.map((c) => ({ value: c.value, label: c.name }))}
           onChange={onPick}
-          thumbClassName={(v) => (tierOf(effort, v) === 'max' ? 'shadow-effort-max' : undefined)}
           thumb={
             tier === 'max' &&
             sweeps > 0 && (

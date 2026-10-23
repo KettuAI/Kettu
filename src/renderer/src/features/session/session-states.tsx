@@ -61,7 +61,7 @@ export function StartingAgent({ agentId }: { agentId: AgentId }) {
         </span>
       </span>
       {progress.length > 0 && (
-        <div className="flex max-w-[560px] flex-col gap-0.5 font-mono text-[11.5px] text-muted-foreground/80">
+        <div className="flex max-w-[560px] flex-col gap-0.5 font-mono text-[11.5px] text-tertiary">
           {progress.slice(-3).map((line, i) => (
             <span
               key={`${i}-${line}`}
@@ -113,7 +113,7 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
         {progress && (
           <span
             key={progress}
-            className="truncate font-mono text-[11.5px] text-muted-foreground/80 animate-in fade-in animation-duration-(--duration-base)"
+            className="truncate font-mono text-[11.5px] text-tertiary animate-in fade-in animation-duration-(--duration-base)"
           >
             {progress}
           </span>
@@ -152,7 +152,7 @@ export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string
           {progress.slice(-3).map((line, i) => (
             <span
               key={`${i}-${line}`}
-              className="truncate font-mono text-[11.5px] text-muted-foreground/80 animate-in fade-in animation-duration-(--duration-base)"
+              className="truncate font-mono text-[11.5px] text-tertiary animate-in fade-in animation-duration-(--duration-base)"
             >
               {line}
             </span>
@@ -196,7 +196,7 @@ export function FailedState({
       role="alert"
     >
       <div className="flex items-start gap-2">
-        <CircleAlertIcon className="mt-px size-4 shrink-0 text-destructive" />
+        <CircleAlertIcon className="mt-px size-4 shrink-0 text-danger" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-ui font-medium">{title}</span>
           <span className="text-ui text-muted-foreground" data-selectable="">

@@ -42,16 +42,14 @@ export function UpdateNotice() {
       size="icon-xs"
       aria-label={t('notice.dismiss')}
       onClick={dismiss}
-      className="absolute -top-1.5 -right-1.5 size-4 rounded-full text-muted-foreground opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-foreground"
+      className="absolute -top-1.5 -right-1.5 size-4 rounded-full text-icon opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-primary"
     >
       <XIcon className="size-2.5" />
     </Button>
   )
 
   const version = (
-    <span className="shrink-0 font-mono text-meta text-muted-foreground tabular">
-      {notice.version}
-    </span>
+    <span className="shrink-0 font-mono text-meta text-tertiary tabular">{notice.version}</span>
   )
 
   const row = (
@@ -60,9 +58,9 @@ export function UpdateNotice() {
       className="group/update relative flex min-h-9 animate-in items-center gap-2 rounded-[8px] bg-card pr-1 pl-2.5 text-xs shadow-card animation-duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1"
     >
       {notice.kind === 'updated' ? (
-        <CircleCheckIcon className="size-[15px] shrink-0 text-success" />
+        <CircleCheckIcon className="size-[15px] shrink-0 text-icon" />
       ) : (
-        <CircleArrowUpIcon className="size-[15px] shrink-0" />
+        <CircleArrowUpIcon className="size-[15px] shrink-0 text-icon" />
       )}
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (

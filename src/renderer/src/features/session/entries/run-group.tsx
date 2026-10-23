@@ -82,7 +82,7 @@ export const RunGroup = memo(function RunGroup({
       onOpenChange={(next) => setUserOpen(next)}
       className={cn('min-w-0', animation)}
     >
-      <CollapsibleTrigger className="group/run -mx-1.5 flex h-6 max-w-[calc(100%+0.75rem)] items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group/run -mx-1.5 flex h-6 max-w-[calc(100%+0.75rem)] items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring">
         <ChevronRightIcon
           aria-hidden
           className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"
@@ -96,7 +96,7 @@ export const RunGroup = memo(function RunGroup({
         {running && <Spinner aria-label={t('status.running')} className="size-3 shrink-0" />}
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
-        <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-border pl-3.5">
+        <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-subtle pl-3.5">
           {items.map((item) =>
             item.type === 'group' ? (
               <ToolGroup
@@ -144,16 +144,29 @@ function Summary({
       {parts.map((part, i) => (
         <span key={i}>
           {i > 0 && t('summary.separator')}
-          {part.text}
+          <PartText part={part} plain={plain} />
           {part.diffs && <PartStats diffs={part.diffs} plain={plain} />}
         </span>
       ))}
       {failed > 0 && (
-        <span className={cn(!plain && 'text-destructive')}>
+        <span className={cn(!plain && 'text-danger')}>
           {t('summary.separator')}
           {t('summary.failed', { failed })}
         </span>
       )}
+    </>
+  )
+}
+
+/** A part's words, its file names in the primary text color. */
+function PartText({ part, plain }: { part: SummaryPart; plain: boolean }) {
+  const at = part.names ? part.text.indexOf(part.names) : -1
+  if (plain || !part.names || at < 0) return part.text
+  return (
+    <>
+      {part.text.slice(0, at)}
+      <span className="text-primary">{part.names}</span>
+      {part.text.slice(at + part.names.length)}
     </>
   )
 }
@@ -164,8 +177,8 @@ function PartStats({ diffs, plain }: { diffs: ToolContent[]; plain: boolean }) {
   if (!stats || (stats.insertions === 0 && stats.deletions === 0)) return null
   return (
     <span className="ml-1.5 font-mono text-meta tabular">
-      <span className={cn(!plain && 'text-success-text')}>+{stats.insertions}</span>{' '}
-      <span className={cn(!plain && 'text-destructive')}>−{stats.deletions}</span>
+      <span className={cn(!plain && 'text-success')}>+{stats.insertions}</span>{' '}
+      <span className={cn(!plain && 'text-danger')}>−{stats.deletions}</span>
     </span>
   )
 }

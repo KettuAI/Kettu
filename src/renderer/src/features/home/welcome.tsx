@@ -38,7 +38,7 @@ export function Welcome() {
             <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em]">
               OverBench
             </h1>
-            <p className="text-sm leading-relaxed text-balance text-muted-foreground">
+            <p className="text-sm leading-relaxed text-balance text-secondary">
               {t('welcome.tagline')}
             </p>
           </div>
@@ -53,10 +53,7 @@ export function Welcome() {
           </div>
           <section aria-label={t('welcome.agentsLabel')} className="flex w-full flex-col gap-2">
             <h2
-              className={cn(
-                'w-fit px-0.5 text-xs font-medium text-muted-foreground',
-                heading.className,
-              )}
+              className={cn('w-fit px-0.5 text-xs font-medium text-tertiary', heading.className)}
               style={heading.style}
             >
               {t('welcome.agentsHeading')}
@@ -92,7 +89,7 @@ export function Welcome() {
                             <span className="font-medium">{status.name}</span>
                             <span
                               className={cn(
-                                'truncate text-muted-foreground',
+                                'truncate text-tertiary',
                                 r.kind === 'missing' ? 'text-xs' : 'font-mono text-[11.5px]',
                               )}
                             >

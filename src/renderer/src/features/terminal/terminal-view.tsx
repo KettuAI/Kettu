@@ -171,8 +171,8 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
         </ContextMenuContent>
       </ContextMenu>
       {(exited || stopped) && (
-        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-border-soft px-3 text-xs text-muted-foreground fade-in animation-duration-(--duration-base)">
-          <span className={cn(stopped && 'text-destructive')}>
+        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-subtle px-3 text-xs text-tertiary fade-in animation-duration-(--duration-base)">
+          <span className={cn(stopped && 'text-danger')}>
             {stopped ? t('view.stopped') : t('view.exited', { code: terminal.exitCode })}
           </span>
           <Button

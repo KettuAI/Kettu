@@ -102,7 +102,7 @@ export function ProjectMenu({
             : (project?.name ?? t('newSession.chooseProjectShort'))}
         </span>
         {project?.missing && !noProject && (
-          <span className="shrink-0 text-destructive">{t('newSession.missing')}</span>
+          <span className="shrink-0 text-danger">{t('newSession.missing')}</span>
         )}
       </ComboboxTrigger>
       <ComboboxContent sideOffset={6} className="max-w-80">

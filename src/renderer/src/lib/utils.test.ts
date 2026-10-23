@@ -10,6 +10,13 @@ describe('cn', () => {
     expect(cn('text-sm', 'text-ui')).toBe('text-ui')
   })
 
+  it("merges the palette's own names as colors, not sizes", () => {
+    expect(cn('text-xs', 'text-tertiary')).toBe('text-xs text-tertiary')
+    expect(cn('text-muted-foreground', 'text-secondary')).toBe('text-secondary')
+    expect(cn('bg-sidebar-accent', 'bg-selected')).toBe('bg-selected')
+    expect(cn('border-border', 'border-subtle')).toBe('border-subtle')
+  })
+
   it('merges the theme shadows as shadows, not colors', () => {
     expect(cn('shadow-sm', 'shadow-card')).toBe('shadow-card')
     expect(cn('shadow-card', 'shadow-black/10')).toBe('shadow-card shadow-black/10')

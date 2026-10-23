@@ -19,10 +19,11 @@ const limit = (window: string, usedPercent: number | null, over: Partial<PlanLim
   }) satisfies PlanLimit
 
 describe('usageTone', () => {
-  it('reads plenty below 60%, close from 60% and nearly gone from 90% or once reached', () => {
-    expect(usageTone(limit('five_hour', 59.9))).toBe('success')
-    expect(usageTone(limit('five_hour', 60))).toBe('attention')
-    expect(usageTone(limit('five_hour', 90))).toBe('destructive')
+  it('reads plenty below 80%, close from 80% and nearly gone from 95% or once reached', () => {
+    expect(usageTone(limit('five_hour', 79.9))).toBe('success')
+    expect(usageTone(limit('five_hour', 80))).toBe('attention')
+    expect(usageTone(limit('five_hour', 94.9))).toBe('attention')
+    expect(usageTone(limit('five_hour', 95))).toBe('destructive')
     expect(usageTone(limit('five_hour', 12, { state: 'reached' }))).toBe('destructive')
     expect(usageTone(limit('five_hour', null))).toBe('success')
   })
