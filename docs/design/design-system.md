@@ -158,7 +158,7 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 
 - **Series** take the agents' own colors, like their [marks](#agent-marks), so a bar is recognized without the legend.
 - **Amount** is one hue that deepens, never a rainbow: more reads as more without a key of colors. The tokens-by-type table keys its rows with the same steps, and output with `--foreground` at 80%.
-- Bars have a 2 px top radius (`rounded-t-xs`) and a 1 px gap; heatmap cells are `rounded-xs` squares with a 2 px gap. Days outside the chosen range are dimmed to 35% opacity rather than recolored, and the hovered or focused cell takes a 1 px `--foreground` ring.
+- Bars have a 2 px top radius (`rounded-t-xs`) and a 1 px gap; heatmap cells are `rounded-xs` squares with a 2 px gap. Days outside the chosen range, and the hours still to come in a one-day trend, are dimmed to 35% opacity rather than recolored, and the hovered or focused cell takes a 1 px `--foreground` ring.
 
 ## Borders and elevation
 

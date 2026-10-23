@@ -62,7 +62,7 @@ export function TrendChart({
   const [chosen, setChosen] = useState<number | null>(null)
   const max = Math.max(1, ...bars.map((b) => b.total))
   const busiest = bars.reduce((best, b, i) => (b.total > (bars[best]?.total ?? 0) ? i : best), 0)
-  const shown = chosen !== null && chosen < bars.length ? chosen : bars.length ? busiest : null
+  const shown = chosen !== null && chosen < begun ? chosen : bars.length ? busiest : null
   const shownBar = shown === null ? null : (bars[shown] ?? null)
   useLayoutEffect(() => onShow(shownBar), [shownBar, onShow])
 

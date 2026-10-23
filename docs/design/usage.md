@@ -164,7 +164,7 @@ CREATE INDEX cursors_by_agent ON cursors (agent_id);
 | `usage.reimport`    | `{ agentId }`                    | none           | Forgets the agent's imported rows and cursors, then scans it                            |
 | `usage.clearRecord` | none                             | none           | Deletes OverBench's own record                                                          |
 
-- `dayStarts` are the local midnights the renderer works out, ascending, at most 50 years of them, so days stay right across daylight saving time. For the trend of a one-day range, a second request passes its hour starts instead, which step real hours from the local midnight, so a day when the clocks change has 23 or 25 hours and the starts still ascend; `scope` is `computer` or `overbench`. The host validates both like every request.
+- `dayStarts` are the local midnights the renderer works out, ascending, at most 50 years of them, so days stay right across daylight saving time. For the trend of a one-day range, a second request passes its local hour starts instead, sent once the range is known (for **All time**, after the first answer names its first day). An hour the clocks skip is left out and one they repeat counts twice, so such a day has 23 or 25 hours and the starts still ascend; after a change of half an hour, as on Lord Howe Island, the hours start on the local hour again; `scope` is `computer` or `overbench`. The host validates both like every request.
 - A summary also names the agents with usage under either scope at any time, which the page's agent filter offers under both.
 - `usage.changed` (no payload) says the figures changed; `usage.status` carries the new `UsageStatus` whenever the setting, a scan's progress or a reader's state changes. Both go to all ports.
 
@@ -195,7 +195,7 @@ A **Usage** screen of its own, laid out as a dashboard. Of the three mockups (a 
 - **Activity** and **Tokens by type** side by side: the heatmap, and a table of the parts (reasoning only when an agent reported it) and their sum with exact counts and shares.
 - **By model** and **By project** side by side: the six largest in the range, with exact counts and shares; a model in the mono face, a project by its folder name with the path in a tooltip. Sessions without a project count as one row, "No project".
 - **Layout**: a centred column of at most 960 px. Container queries put the figures four in a row and the panels side by side from 48 rem, and stack them below it.
-- The filters are kept in the usage store while the app runs, and reset to the defaults on launch. The page and its calendar load with dynamic `import()` the first time it opens.
+- The filters are kept in the usage store while the app runs, and reset to the defaults on launch. Every range ends today, so the page reads its figures again when the day turns while it shows, as the sidebar's today does. The page and its calendar load with dynamic `import()` the first time it opens.
 
 **Custom** opens a `Popover` holding the range picker:
 

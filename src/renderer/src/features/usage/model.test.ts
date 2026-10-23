@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DayUsage } from '@shared/usage'
 import {
   addDays,
+  clocksChange,
   dayOf,
   dayStarts,
   dayTotals,
@@ -172,23 +173,38 @@ describe('hours', () => {
   describe('when the clocks change', () => {
     // Restored by name: on Windows, removing TZ again leaves the stubbed zone in place.
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    beforeAll(() => {
-      vi.stubEnv('TZ', 'America/New_York')
-    })
-    afterAll(() => {
+    afterEach(() => {
       vi.stubEnv('TZ', zone)
     })
+    const hoursOf = (date: number) => hourStarts({ from: date, to: addDays(date, 1) })
+    // The host takes only ascending boundaries on quarter hours.
+    const valid = (starts: number[]) =>
+      starts.every((start, i) => start % 900_000 === 0 && (i === 0 || start > starts[i - 1]!))
 
     it('has 23 hours on the day they spring forward and 25 on the day they fall back', () => {
+      vi.stubEnv('TZ', 'America/New_York')
       for (const [date, hours] of [
         [day(2026, 3, 8), 23],
         [day(2026, 11, 1), 25],
       ] as const) {
-        const starts = hourStarts({ from: date, to: addDays(date, 1) })
+        const starts = hoursOf(date)
         expect(starts).toHaveLength(hours + 1)
-        // The host takes only ascending boundaries on quarter hours.
+        expect(valid(starts)).toBe(true)
         for (let i = 1; i < starts.length; i++) expect(starts[i]! - starts[i - 1]!).toBe(HOUR)
-        expect(starts.every((start) => start % 900_000 === 0)).toBe(true)
+        expect(clocksChange(starts)).toBe(true)
+      }
+      expect(clocksChange(hoursOf(day(2026, 11, 2)))).toBe(false)
+    })
+
+    it('starts on the local hour again after a change of half an hour', () => {
+      vi.stubEnv('TZ', 'Australia/Lord_Howe')
+      for (const date of [day(2026, 4, 5), day(2026, 10, 4)]) {
+        const starts = hoursOf(date)
+        expect(valid(starts)).toBe(true)
+        // Only the half hour the clocks move by starts off the hour.
+        const minutes = starts.slice(0, -1).map((start) => new Date(start).getMinutes())
+        expect(minutes.filter((m) => m !== 0)).toEqual([30])
+        expect(starts.slice(1).every((start, i) => start - starts[i]! <= HOUR)).toBe(true)
       }
     })
   })

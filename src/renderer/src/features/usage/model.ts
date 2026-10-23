@@ -95,14 +95,32 @@ export function oneDay(range: DayRange): boolean {
 }
 
 /**
- * The hour starts of [from, to), and `to` itself. It steps real hours, since local ones repeat or
- * vanish when the clocks change: such a day has 25 or 23 hours, and the starts always ascend.
+ * The local hour starts of [from, to), and `to` itself, always ascending. An hour the clocks skip
+ * is left out and one they repeat is counted twice, so such a day has 23 or 25; after a change of
+ * half an hour, the hours start on the local hour again.
  */
 export function hourStarts(range: DayRange): number[] {
-  const starts: number[] = []
-  for (let hour = range.from; hour < range.to; hour += HOUR_MS) starts.push(hour)
-  starts.push(range.to)
+  const date = new Date(range.from)
+  const starts = [range.from]
+  let last = range.from
+  for (let hour = 1; last < range.to; hour++) {
+    const local = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour).getTime()
+    const next = Math.min(local, range.to)
+    // An hour the clocks repeat leaves a gap of more than one, filled with real hours.
+    for (; next - last > HOUR_MS; last += HOUR_MS) starts.push(last + HOUR_MS)
+    // One they skip lands on the next hour.
+    if (next > last) {
+      starts.push(next)
+      last = next
+    }
+  }
   return starts
+}
+
+/** Whether the clocks change during the hours, which then name their time zones. */
+export function clocksChange(starts: readonly number[]): boolean {
+  const offset = (at: number) => new Date(at).getTimezoneOffset()
+  return offset(starts[0]!) !== offset(starts[starts.length - 1]!)
 }
 
 /** The hours of a one-day range begun by `now`, as the range its figures cover. */

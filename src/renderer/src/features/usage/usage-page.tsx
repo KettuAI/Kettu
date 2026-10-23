@@ -26,7 +26,7 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { basename, bytes, exactCount, longAgo, percent, tokens } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
-import { useNow } from '@renderer/lib/use-now'
+import { useClock, useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -35,6 +35,7 @@ import {
   refreshLimits,
   setUsageFilters,
   syncUsage,
+  usageDayTurned,
   usagePageShown,
   useUsageStore,
   type UsagePage as PageData,
@@ -44,6 +45,8 @@ import {
   addDays,
   AGENT_FILL,
   agentsWithUsage,
+  clocksChange,
+  dayOf,
   dayTotals,
   figures,
   heatmapRange,
@@ -64,6 +67,8 @@ import { RangePicker } from './range-picker'
 interface HourTotals {
   totals: DayTotal[]
   starts: number[]
+  /** The clocks change that day, so its hours name their time zones. */
+  zoned: boolean
 }
 
 /** The usage page: a dashboard of the tokens the agents used, for a chosen agent and range. */
@@ -304,9 +309,13 @@ function Dashboard({ page }: { page: PageData }) {
       page.hours && {
         totals: dayTotals(page.hours.summary, page.hours.starts, agent),
         starts: page.hours.starts,
+        zoned: clocksChange(page.hours.starts),
       },
     [page.hours, agent],
   )
+  // Every range ends today, so a new day reads them again, whether or not usage arrives.
+  const day = useClock(dayOf)
+  useEffect(() => usageDayTurned(day), [day])
   const agents = useMemo(() => agentsWithUsage(summary, AGENT_IDS), [summary])
   const shownAgents = agent === 'all' ? agents : [agent]
   // A chosen agent stays a choice once its usage is gone, as after clearing the record.
@@ -452,21 +461,20 @@ function useRangeText(): (from: number, to: number) => string {
   )
 }
 
-/** "3:00 PM – 4:00 PM" for an hour, naming the zones across a change of the clocks. */
-function useHourText(): (from: number, to: number) => string {
+/** "3:00 PM – 4:00 PM" for an hour, with the time zones when `zoned`. */
+function useHourText(zoned: boolean): (from: number, to: number) => string {
   const { t, i18n } = useTranslation('usage')
   return useCallback(
     (from: number, to: number) => {
-      const shifted = new Date(from).getTimezoneOffset() !== new Date(to).getTimezoneOffset()
       const time = new Intl.DateTimeFormat(i18n.language, {
         hour: 'numeric',
         minute: '2-digit',
-        ...(shifted ? { timeZoneName: 'short' } : {}),
+        ...(zoned ? { timeZoneName: 'short' } : {}),
       })
       // Not formatRange, which adds both dates to the day's last hour.
       return t('trend.hour', { from: time.format(from), to: time.format(to) })
     },
-    [t, i18n.language],
+    [t, i18n.language, zoned],
   )
 }
 
@@ -525,11 +533,12 @@ function Figures({
   rangeLabel: string
 }) {
   const { t } = useTranslation('usage')
-  const hourText = useHourText()
-  const now = useNow()
+  const hourText = useHourText(hours?.zoned ?? false)
+  // Re-renders as an hour begins, not on every tick of the clock.
+  const begun = useClock((now) => (hours ? hoursSoFar(hours.starts, now).to : 0))
   const hourly = useMemo(
-    () => hours && figures(hours.totals, hoursSoFar(hours.starts, now)),
-    [hours, now],
+    () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }),
+    [hours, begun],
   )
   const hourEnd = (start: number) => hours?.starts[hours.starts.indexOf(start) + 1] ?? start
   const figure = (label: string, value: ReactNode, note: string) => (
@@ -597,8 +606,7 @@ function TrendCard({
 }) {
   const { t } = useTranslation('usage')
   const rangeText = useRangeText()
-  const hourText = useHourText()
-  const now = useNow()
+  const hourText = useHourText(hours?.zoned ?? false)
   const { weekly, bars } = useMemo(
     () =>
       hours
@@ -606,6 +614,8 @@ function TrendCard({
         : trend(days, page.range, page.firstDay),
     [hours, days, page.range, page.firstDay],
   )
+  // Re-renders as an hour begins; a range of days never does.
+  const future = useClock((now) => (hours ? bars.filter((bar) => bar.from > now).length : 0))
   const [shown, setShown] = useState<TrendBar | null>(null)
   const title = hours ? t('trend.hourly') : weekly ? t('trend.weekly') : t('trend.daily')
   const describe = (bar: TrendBar) =>
@@ -640,13 +650,7 @@ function TrendCard({
           </span>
         }
       />
-      <TrendChart
-        bars={bars}
-        agents={agents}
-        label={title}
-        future={hours ? bars.filter((bar) => bar.from > now).length : 0}
-        onShow={setShown}
-      />
+      <TrendChart bars={bars} agents={agents} label={title} future={future} onShow={setShown} />
       {/* A slot per bar, as wide as its bar, so each label sits under the bar it names. */}
       <div
         className="flex justify-center gap-px text-xs text-muted-foreground tabular-nums"

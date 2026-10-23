@@ -380,8 +380,8 @@ export class UsageDb {
   }
 
   /**
-   * Sums per day and agent over `dayStarts` (n days take n + 1 ascending boundaries, each on a
-   * quarter hour), and per model and per project over [from, to).
+   * Sums per period and agent over `dayStarts`, local days or a day's hours (n periods take n + 1
+   * ascending boundaries, each on a quarter hour), and per model and per project over [from, to).
    */
   summary(dayStarts: readonly number[], from: number, to: number, sources: SourceMap): DbSummary {
     return this.guard(

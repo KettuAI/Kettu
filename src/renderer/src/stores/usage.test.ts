@@ -9,10 +9,14 @@ const {
   loadUsagePage,
   setUsageFilters,
   usageChanged,
+  usageDayTurned,
   usagePageShown,
   useUsageStore,
 } = await import('./usage')
 const { addDays, dayOf, hourStarts } = await import('@renderer/features/usage/model')
+
+// A one-day range's hour read has at most 26 boundaries; the day read holds the 53 weeks.
+const hourRead = (params: { dayStarts: number[] }) => params.dayStarts.length <= 26
 
 const empty: UsageSummary = {
   days: [],
@@ -31,14 +35,18 @@ describe('usage store', () => {
 
   it('reads the page once more after changes that arrive while it loads', async () => {
     const answers: ((summary: UsageSummary) => void)[] = []
-    request.mockImplementation((method: string) =>
-      method === 'usage.summary'
-        ? new Promise((resolve) => answers.push(resolve))
-        : Promise.resolve(method === 'usage.total' ? { total: 0 } : undefined),
+    // The day sums wait for the test; the hours of All time's one day answer at once.
+    request.mockImplementation((method: string, params: { dayStarts: number[] }) =>
+      method !== 'usage.summary'
+        ? Promise.resolve(method === 'usage.total' ? { total: 0 } : undefined)
+        : hourRead(params)
+          ? Promise.resolve(empty)
+          : new Promise((resolve) => answers.push(resolve)),
     )
-    const summaries = () => request.mock.calls.filter(([method]) => method === 'usage.summary')
-    // Longer than a day, so each read is one request.
-    useUsageStore.setState({ filters: { ...DEFAULT_FILTERS, range: { kind: '7' } } })
+    const summaries = () =>
+      request.mock.calls.filter(
+        ([method, params]) => method === 'usage.summary' && !hourRead(params),
+      )
     usagePageShown(true)
     await vi.waitFor(() => expect(answers).toHaveLength(1))
     // A scan sends a change notice every 200 ms; reading for each would pile up in the worker.
@@ -64,6 +72,8 @@ describe('usage store', () => {
     expect(page.range).toEqual({ from: addDays(today, -40), to: addDays(today, 1) })
     const asked = request.mock.calls.filter(([method]) => method === 'usage.summary')
     expect(asked.at(-1)![1]).toMatchObject({ from: addDays(today, -40) })
+    // The first pass took all time for today alone, until the answer named the first day.
+    expect(asked.filter(([, params]) => hourRead(params))).toHaveLength(0)
   })
 
   it('reads all time again from the new first day when the scope changes', async () => {
@@ -100,6 +110,34 @@ describe('usage store', () => {
     setUsageFilters({ range: { kind: '7' } })
     await vi.waitFor(() => expect(useUsageStore.getState().page?.range.from).not.toBe(today))
     expect(useUsageStore.getState().page?.hours).toBeNull()
+  })
+
+  it('reads the page again once the day turns while it shows', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const evening = new Date(2026, 9, 22, 23, 59).getTime()
+    const tomorrow = addDays(dayOf(evening), 1)
+    try {
+      vi.setSystemTime(evening)
+      request.mockImplementation((method: string) =>
+        Promise.resolve(method === 'usage.summary' ? empty : undefined),
+      )
+      useUsageStore.setState({ filters: { ...DEFAULT_FILTERS, range: { kind: '1' } } })
+      usagePageShown(true)
+      await vi.waitFor(() => expect(useUsageStore.getState().loading).toBe(false))
+      expect(useUsageStore.getState().page?.today).toBe(dayOf(evening))
+      const reads = () => request.mock.calls.filter(([method]) => method === 'usage.summary')
+      const before = reads().length
+      usageDayTurned(dayOf(evening))
+      expect(reads()).toHaveLength(before)
+
+      vi.setSystemTime(evening + 2 * 60_000)
+      usageDayTurned(dayOf(Date.now()))
+      await vi.waitFor(() => expect(useUsageStore.getState().page?.today).toBe(tomorrow))
+      expect(useUsageStore.getState().page?.hours?.starts[0]).toBe(tomorrow)
+    } finally {
+      usagePageShown(false)
+      vi.useRealTimers()
+    }
   })
 
   it('keeps the last 53 weeks for the heatmap whatever the range', async () => {
