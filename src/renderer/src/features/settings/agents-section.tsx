@@ -199,6 +199,7 @@ function currentLimits(limits: PlanLimit[], now: number): PlanLimit[] {
 /** The agent's own version: for a package agent the CLI its adapter runs, never the adapter's. */
 function useAgentVersion(status: AgentStatus): string | null {
   const details = useAgentsStore((s) => s.details[status.id])
+  if (status.cli?.runs === 'installed') return status.cli.installed?.version ?? null
   return details?.cliVersion ?? (status.package ? null : status.version)
 }
 

@@ -98,6 +98,7 @@ interface AgentDefinition {
     | { kind: 'node-script'; script: string } // the fake agent, on Electron's Node.js
   requiresNode?: string
   install: { hint: string; url: string }
+  cli?: AdapterCli // the CLI a package agent's adapter runs, which the user may have installed
 }
 ```
 
@@ -108,6 +109,7 @@ interface AgentDefinition {
 | `opencode`    | `opencode`   | binary `opencode`, args `['acp']`                                 | none           |
 
 - Package versions are pinned to the ACP Registry entries and bumped deliberately, after a pass with the fake agent and the real agent. OverBench [installs](#installing-adapters) the pinned version on first use. The pin is the oldest version that runs: a newer one the user installed through an [update](#checking-for-updates) runs instead.
+- Claude Code and Codex name their CLI (`cli`): the command the user's own copy answers to, `claude` or `codex`, and the variable its adapter reads to run that copy, `CLAUDE_CODE_EXECUTABLE` or `CODEX_PATH` ([using the installed CLI](#using-the-installed-cli)).
 - `opencode` is looked up on `PATH` unless the user picked a binary in settings. When it is missing, OverBench can [install it](#installing-binary-agents) by one of its vendor's routes; the catalog holds those routes (`installs`).
 - In development builds only, the catalog adds `fake-agent`, which runs `tools/fake-agent/main.ts` with Electron's own Node.js (see [testing](./testing.md#fake-agent)). It exists exactly when `host:init` carries a `fakeAgentPath`; the host runs `<electronPath> <fakeAgentPath>` with `ELECTRON_RUN_AS_NODE=1`, so it needs no Node.js on the machine.
 - Both pinned packages were checked to exist on npm with `npm view` on 2026-10-20.
@@ -133,7 +135,7 @@ Apps started from the Dock, Finder, a desktop launcher or the Start menu do not 
 Detection never starts an agent, so it is cheap enough to run at host startup and whenever Settings › Agents asks.
 
 - **Finding a command**: the host walks the resolved `PATH` itself. On Windows it also tries each `PATHEXT` extension, so `node` resolves to `node.exe`, `npm` to `npm.cmd` and `opencode` to `opencode.exe`.
-- **Package agents**: `node` must be found, and `node --version` must satisfy `requiresNode`. Otherwise the status is `node-missing` or `node-outdated`, with the install hint. Detection also reports whether the pinned version is [installed](#installing-adapters). Until it is, `npm` must be found too, or the status is `not-installed` with "npm was not found" as `detail`; an installed adapter runs without npm.
+- **Package agents**: `node` must be found, and `node --version` must satisfy `requiresNode`. Otherwise the status is `node-missing` or `node-outdated`, with the install hint. Detection also reports whether the pinned version is [installed](#installing-adapters). Until it is, `npm` must be found too, or the status is `not-installed` with "npm was not found" as `detail`; an installed adapter runs without npm. Detection also looks for the agent's own CLI and decides which one the adapter runs ([using the installed CLI](#using-the-installed-cli)).
 - **Binary agents**: the command or the user's chosen binary must exist and be executable. Otherwise the status is `not-installed`. Detection also lists the agent's [install routes](#installing-binary-agents) as `installMethods`, each `available` when the tool it needs is on `PATH`.
 
 An agent that passes detection is `available`. It becomes `ready` only after a successful `initialize`.
@@ -161,6 +163,30 @@ The approach follows Zed's registry agents (`agent_server_store.rs`), which inst
 - **Reinstall**: Settings › Agents offers **Reinstall** for an installed adapter (`agents.reinstall`), for an install damaged on disk. It is refused while a session uses the agent or an install or update runs; otherwise it stops the agent, deletes the install a start runs and installs that version again at once. It claims the agent before its first step, so a start asked for meanwhile waits and then runs the new install.
 - **Measured** on 2026-10-21 (macOS arm64, npm 11.19.1, with npm's cache filled by earlier `npx` runs): installing took 11.4 s for Claude Code and 8.5 s for Codex, mostly npm revalidating package metadata with the registry, and about 3 s once the cache was current. The first start after an install takes longer once, 2 to 6 s for Codex, likely macOS checking the new native binary on its first run; later starts initialize in about 0.2 s.
 - **Disk**: each adapter takes about 330 MB (2026-10-21), almost all of it the native binary. The copies under `~/.npm/_npx` that earlier builds' `npx` left belong to npm and are left alone.
+
+## Using the installed CLI
+
+Claude Code and Codex do not speak ACP, so their adapters always run, but the CLI inside each adapter is often on the machine already: claude-agent-acp brings Claude Code as `@anthropic-ai/claude-agent-sdk-<platform>` (256 MB) and codex-acp brings Codex as `@openai/codex-<platform>` (318 MB), both optional dependencies. When the user has `claude` or `codex` and it is new enough, the adapter runs it. The copy the adapter brings is the fallback. `src/agent-host/installed-cli.ts` does the work; detection runs it for each package agent with a `cli`.
+
+- **Finding**: a variable the agent environment already sets (`CLAUDE_CODE_EXECUTABLE`, `CODEX_PATH`) names the program and decides on its own: OverBench passes nothing and the adapter reads it. Otherwise the command is looked up on `PATH` as any [command](#detecting-agents) is.
+- **Resolving**: the adapter starts the program without a shell, so it must be a file that runs that way.
+  - On macOS and Linux the path stays as found, so a CLI that updates itself by moving a symbolic link keeps working.
+  - On Windows an `.exe` is used as found. A `.cmd` or `.bat` is read as the shim npm or pnpm writes: the last path it quotes after `%dp0%\` or `%~dp0\`, other than `node.exe`, taken from the shim's folder. A shim whose target is an `.exe`, such as the one for `@anthropic-ai/claude-code`, resolves to it. Any other file, such as a `.ps1`, a script of the user's own or a shim with no such path, is not used and the copy runs.
+  - Codex installed from npm is the package's `bin/codex.js`, a Node.js wrapper that only finds the platform's binary and starts it, on every platform. A program whose real path ends in `@openai/codex/bin/codex.js` resolves to that binary, looked up from the package the way the wrapper does ([spawning](#spawning)), with the variables the wrapper sets for an npm install, `CODEX_MANAGED_BY_NPM=1` and `CODEX_MANAGED_PACKAGE_ROOT`. Claude Code's adapter calls its CLI with `execFile`, so on Windows a script target is not used for it.
+- **Version**: `<program> --version` with the agent environment, from the home directory, never through a shell, with a 10 s limit; the first `x.y.z` in what it prints is the version (`2.1.304 (Claude Code)`, `codex-cli 0.163.0`). The answer is kept per path, size and modification time until **Reload environment**, so a CLI that updated itself is asked again and an unchanged one costs a `stat`. A program that cannot be started, exits with another code than 0, times out or prints no version counts as one that fails to start.
+- **Minimum**: read from the install a start runs, never invented:
+
+  | Agent         | Read from                                                                                                                  | Observed on 2026-10-22                      |
+  | ------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+  | `claude-code` | `claudeCodeVersion` of `@anthropic-ai/claude-agent-sdk`, which the adapter pins exactly: the CLI the SDK was built against | 2.1.303 for claude-agent-acp 0.94.0         |
+  | `codex`       | The lower bound of codex-acp's `@openai/codex` dependency                                                                  | `^0.160.1`, so 0.160.1, for codex-acp 2.2.2 |
+
+  The upper bound of a caret range is not applied: codex-acp talks to `codex app-server`, which newer Codex releases keep (0.163.0 initialized with codex-acp 2.2.2). A range whose lower bound cannot be read (`*`, `||`, a URL) gives no minimum, and the copy runs. Before the adapter is installed the minimum is not known yet.
+
+- **Which runs**: the installed program, when it was found and resolved, its version was read, it meets the minimum, and no start with it has failed. Otherwise the copy. Before the first install, a program whose version was read counts as usable. The status says which runs and why (`AgentStatus.cli`, [host protocol](./host-protocol.md#requests)).
+- **Launching**: the launch's `env` sets the variable to the resolved path, plus Codex's two variables when they apply, so the launch command shown in Settings and the [terminal sign-in](#sign-in) command run the same CLI.
+- **Failing to start**: a start that ran the installed program and whose `initialize` failed or timed out, or whose adapter exited first, is retried once with the copy, and that program is not used again until the environment is reloaded. codex-acp starts `codex app-server` while it initializes, so a broken Codex shows there (`CODEX_PATH=/usr/bin/false` failed `initialize` with "Codex process has exited with code 1"); claude-agent-acp starts its CLI only for a session, so for Claude Code the version check is what catches it.
+- **Settings**: Settings › Agents shows the version of the CLI that runs ([interface](./ui.md#settings--agents)).
 
 ## Checking for updates
 
@@ -238,7 +264,7 @@ spawn(command, args, {
 ```
 
 - **Package agents** run `<node> <entry>`, both absolute paths ([installing adapters](#installing-adapters)).
-- **Codex** is started by codex-acp, by default through npm's `codex.js`, a Node.js process that only finds Codex's binary for the platform and forwards signals to it. The host finds that binary in the install the way `codex.js` does and passes it as `CODEX_PATH`, which codex-acp starts directly, with the two variables `codex.js` sets, `CODEX_MANAGED_BY_NPM=1` and `CODEX_MANAGED_PACKAGE_ROOT`, so Codex still knows npm installed it. A `CODEX_PATH` in the user's environment wins, and when the binary is not where npm puts it, codex-acp goes through `codex.js` as before. Measured on 2026-10-22 with codex-acp 2.2.2 and Codex 0.160.1 on macOS: one process of 34 to 46 MB less, and `initialize` in 107 to 127 ms against 140 to 397 ms.
+- **Codex**, when the adapter runs its own copy, is started by codex-acp, by default through npm's `codex.js`, a Node.js process that only finds Codex's binary for the platform and forwards signals to it. The host finds that binary in the install the way `codex.js` does and passes it as `CODEX_PATH`, which codex-acp starts directly, with the two variables `codex.js` sets, `CODEX_MANAGED_BY_NPM=1` and `CODEX_MANAGED_PACKAGE_ROOT`, so Codex still knows npm installed it. A `CODEX_PATH` in the user's environment wins, and when the binary is not where npm puts it, codex-acp goes through `codex.js` as before. Measured on 2026-10-22 with codex-acp 2.2.2 and Codex 0.160.1 on macOS: one process of 34 to 46 MB less, and `initialize` in 107 to 127 ms against 140 to 397 ms.
 - **Working directory**: the process runs in the home directory. Each session's project folder reaches the agent as `cwd` in `session/new`, `session/load` and `session/resume`.
 - **Process groups**: on macOS and Linux, `detached: true` puts the agent in a process group of its own, which the processes it spawns join unless they start their own; Claude Code's CLIs stay in it, but the commands they run do not ([process trees](#process-trees)).
 - **Windows `.cmd` shims**: Node.js refuses to spawn `.cmd` and `.bat` files without a shell (CVE-2024-27980), so `needsShell` is true only for a resolved `.cmd` file, such as `npm.cmd` during an install or an `opencode.cmd` shim. That is safe because every argument comes from the catalog; nothing the user or an agent typed ever reaches the command line.
@@ -320,7 +346,7 @@ Settings › Agents shows, in its list and on each agent's page, which CLI versi
 
 - **Variables** come from the [resolved agent environment](#resolving-the-environment), not from the host's own, so they match what the agent sees. A blank value counts as unset, and a relative one is taken from the home directory, where agents are spawned. Each item's `env` names the variable that set that exact path, so a moved folder says so while the files inside it, which only follow the folder, carry none; `OPENCODE_CONFIG` names the settings file itself.
 - **Existence** is one `stat` per place, following symbolic links: the folder must be a directory and the others files. A missing path, or one below a file, is `exists: false`. Any other error also gives `exists: false` and a warning in the host log. For OpenCode, when neither settings file exists the item shows `opencode.json`.
-- **CLI version** is read from the installed adapter's dependencies, never by running the CLI: the install's `node_modules/` plus the file below, for the install in use: the one a start picks, or the fallback until the pinned one installs, as for diagnostics. After an update, that is the new install, which the next start runs. The answer is `null` while no adapter is installed, which is normal before the agent's first start, and for an agent with no bundled CLI; a file that does not parse or lacks the field is also `null`, with a warning in the host log. OpenCode is its own CLI, so its version is the `version` of its status.
+- **CLI version**: while the user's own CLI runs, Settings shows the version it reported ([using the installed CLI](#using-the-installed-cli)). The version of the adapter's copy, which `agents.details` answers, is read from the installed adapter's dependencies, never by running the CLI: the install's `node_modules/` plus the file below, for the install in use: the one a start picks, or the fallback until the pinned one installs, as for diagnostics. After an update, that is the new install, which the next start runs. The answer is `null` while no adapter is installed, which is normal before the agent's first start, and for an agent with no bundled CLI; a file that does not parse or lacks the field is also `null`, with a warning in the host log. OpenCode is its own CLI, so its version is the `version` of its status.
 
   | Agent         | File                                          | Field               | What it names                                                   |
   | ------------- | --------------------------------------------- | ------------------- | --------------------------------------------------------------- |
@@ -349,18 +375,19 @@ Settings › Agents shows, in its list and on each agent's page, which CLI versi
 
 ## Platform differences
 
-| Concern                   | macOS                                                                   | Linux                        | Windows                                                       |
-| ------------------------- | ----------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------- |
-| Environment at launch     | Minimal `PATH`; resolve the login shell                                 | Same as macOS                | Inherited user and system environment                         |
-| Finding commands          | `PATH`                                                                  | `PATH`                       | `PATH` with `PATHEXT` (`node.exe`, `npm.cmd`, `opencode.exe`) |
-| Spawning                  | Direct                                                                  | Direct                       | `.cmd` shims through a shell, with catalog-only arguments     |
-| Process tree              | Own process group (`detached`); trees listed with `ps`                  | Same as macOS                | No groups; parent links listed through CIM, `taskkill /T`     |
-| Stopping                  | EOF, `SIGTERM`, `SIGKILL` to every group in the tree                    | Same as macOS                | EOF, then `taskkill /T /F`                                    |
-| Path comparison           | Canonicalize with `fs.realpath.native`; volumes may be case-insensitive | Canonicalize; case-sensitive | Canonicalize; case-insensitive, drive letters and UNC paths   |
-| Line endings from tools   | LF                                                                      | LF                           | Often CRLF; normalized before rendering                       |
-| Data directory            | `~/Library/Application Support/OverBench`                               | `~/.config/OverBench`        | `%APPDATA%\OverBench`                                         |
-| Shell quoting for display | POSIX single quotes                                                     | POSIX single quotes          | `cmd.exe` double quotes                                       |
-| Installing OpenCode       | Homebrew, the install script, then npm                                  | Same as macOS                | npm only                                                      |
+| Concern                         | macOS                                                                   | Linux                        | Windows                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
+| Environment at launch           | Minimal `PATH`; resolve the login shell                                 | Same as macOS                | Inherited user and system environment                                    |
+| Finding commands                | `PATH`                                                                  | `PATH`                       | `PATH` with `PATHEXT` (`node.exe`, `npm.cmd`, `opencode.exe`)            |
+| Spawning                        | Direct                                                                  | Direct                       | `.cmd` shims through a shell, with catalog-only arguments                |
+| Installed Claude Code and Codex | As found on `PATH`; npm's `codex.js` becomes its binary                 | Same as macOS                | An `.exe`, or the target an npm or pnpm `.cmd` shim names; else the copy |
+| Process tree                    | Own process group (`detached`); trees listed with `ps`                  | Same as macOS                | No groups; parent links listed through CIM, `taskkill /T`                |
+| Stopping                        | EOF, `SIGTERM`, `SIGKILL` to every group in the tree                    | Same as macOS                | EOF, then `taskkill /T /F`                                               |
+| Path comparison                 | Canonicalize with `fs.realpath.native`; volumes may be case-insensitive | Canonicalize; case-sensitive | Canonicalize; case-insensitive, drive letters and UNC paths              |
+| Line endings from tools         | LF                                                                      | LF                           | Often CRLF; normalized before rendering                                  |
+| Data directory                  | `~/Library/Application Support/OverBench`                               | `~/.config/OverBench`        | `%APPDATA%\OverBench`                                                    |
+| Shell quoting for display       | POSIX single quotes                                                     | POSIX single quotes          | `cmd.exe` double quotes                                                  |
+| Installing OpenCode             | Homebrew, the install script, then npm                                  | Same as macOS                | npm only                                                                 |
 
 Paths are always compared after canonicalizing with `path.resolve` and `fs.realpath.native`, never as raw strings. On Windows only drive paths (`C:\…`) and UNC paths count as absolute; a path such as `\src` depends on the host's current drive and is refused.
 

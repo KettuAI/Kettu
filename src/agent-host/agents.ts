@@ -57,6 +57,7 @@ import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
+import { CliVersions, type CliProbe } from './installed-cli'
 import { formatCommand } from './quote'
 import {
   hiddenRemoval,
@@ -174,6 +175,8 @@ export interface AgentManagerDeps {
   fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
   /** Runs a binary agent's install route, and `npm prefix -g` after one. */
   runProgram?(options: ProgramOptions): Promise<ProgramRun>
+  /** Asks the user's own Claude Code or Codex its version. */
+  probeCli?: CliProbe
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
   processes(processes: AgentProcess[]): void
@@ -223,6 +226,8 @@ class Slot {
   installedCli: string | null = null
   /** A binary agent's install routes, found at detection. */
   installPlans: InstallPlan[] = []
+  /** The user's CLI a start failed with; the copy runs until the environment is reloaded. */
+  cliFailure: { path: string; reason: string } | null = null
   /** An install or update the user asked for, which runs beside the agent's own lifecycle. */
   task: Omit<AgentTask, 'progress'> | null = null
   taskRun: Promise<void> | null = null
@@ -310,6 +315,7 @@ export class AgentManager {
   private updateAbort: AbortController | null = null
   private updateTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
+  private readonly cliVersions: CliVersions
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
     agentExited: () => {},
@@ -320,6 +326,7 @@ export class AgentManager {
 
   constructor(private readonly deps: AgentManagerDeps) {
     this.timings = { ...AGENT_TIMINGS, ...deps.timings }
+    this.cliVersions = new CliVersions({ platform: deps.platform })
     for (const def of deps.catalog) this.slots.set(def.id, new Slot(def))
   }
 
@@ -362,6 +369,9 @@ export class AgentManager {
       node,
       adaptersDir: this.deps.adaptersDir,
       isExecutable,
+      probeCli:
+        this.deps.probeCli ?? ((program, cliEnv) => this.cliVersions.probe(program, cliEnv)),
+      cliFailure: slot.cliFailure,
     })
     const adapter = detection.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
@@ -399,6 +409,8 @@ export class AgentManager {
 
   async reloadEnvironment(): Promise<AgentStatus[]> {
     await this.deps.env.reload()
+    this.cliVersions.clear()
+    for (const slot of this.slots.values()) slot.cliFailure = null
     await Promise.all([...this.slots.values()].map((slot) => this.detect(slot)))
     return this.statuses()
   }
@@ -451,9 +463,25 @@ export class AgentManager {
     return this.start(slot, detection.spec)
   }
 
-  /** Launches `spec`, or installs the pinned adapter first when it is null. */
+  /**
+   * Launches `spec`, or installs the pinned adapter first when it is null. A launch with the
+   * user's own CLI that fails is tried once more with the adapter's copy.
+   */
   private async start(slot: Slot, spec: LaunchSpec | null): Promise<AgentRuntime> {
-    const run = (async () => this.launch(slot, spec ?? (await this.installPackage(slot))))()
+    const run = (async () => {
+      const first = spec ?? (await this.installPackage(slot))
+      try {
+        return await this.launch(slot, first)
+      } catch (error) {
+        if (!first.cli) throw error
+        const reason = (error as Error).message
+        slot.cliFailure = { path: first.cli, reason }
+        this.deps.diagnostics.event(slot.def.id, 'cli failed', `${first.cli}: ${reason}`)
+        await this.detect(slot)
+        const copy = slot.detection?.state === 'available' ? slot.detection.spec : null
+        return this.launch(slot, copy ?? (await this.installPackage(slot)))
+      }
+    })()
     slot.starting = run
     try {
       const runtime = await run
@@ -1670,6 +1698,14 @@ export class AgentManager {
         command,
         available,
       })),
+      cli:
+        adapter?.cli && slot.def.cli
+          ? {
+              command: slot.def.cli.command,
+              runs: adapter.cli.runs,
+              installed: adapter.cli.installed,
+            }
+          : null,
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
         listSessions: capabilities?.listSessions ?? false,

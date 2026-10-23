@@ -6,16 +6,31 @@ import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { AgentStatus, AgentUpdate } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import type {
-  InstalledAdapter,
-  InstallOptions,
-  ProgramOptions,
-  ProgramRun,
+import {
+  compareInstalls,
+  type InstalledAdapter,
+  type InstallOptions,
+  type ProgramOptions,
+  type ProgramRun,
 } from './adapter-install'
-import { AgentManager, type AgentManagerDeps, type AgentTimings } from './agents'
-import { CLAUDE_CODE, detectAgent, fakeAgent, OPENCODE, type AgentDefinition } from './catalog'
+import {
+  AgentManager,
+  type AgentLauncher,
+  type AgentManagerDeps,
+  type AgentTimings,
+} from './agents'
+import {
+  CLAUDE_CODE,
+  detectAgent,
+  fakeAgent,
+  OPENCODE,
+  type AgentDefinition,
+  type DetectContext,
+  type LaunchSpec,
+} from './catalog'
 import { Diagnostics } from './diagnostics'
 import type { Env } from './find-command'
+import type { AdapterCli } from './installed-cli'
 import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
 import type { AgentsFile, AgentUpdatesFile } from './storage'
@@ -47,6 +62,8 @@ function manager(
       | 'fetchLatest'
       | 'runProgram'
       | 'rememberUpdates'
+      | 'launcher'
+      | 'probeCli'
     >
   > = {},
 ) {
@@ -85,6 +102,8 @@ function manager(
     reportsDir: path.join(os.tmpdir(), 'overbench-agent-reports'),
     adaptersDir: path.join(os.tmpdir(), 'overbench-no-adapters'),
     detect: detectAgent,
+    // The tests never ask the machine's own claude or codex.
+    probeCli: async () => ({ error: 'not asked in tests' }),
     ...extra,
     timings,
     status: (status) => statuses.push(status),
@@ -528,6 +547,153 @@ describe('AgentManager with an installed adapter', () => {
       message: 'Fake agent could not be installed. The install was stopped.',
     })
     expect(m.launcher.launches).toBe(0)
+  })
+})
+
+/** A CLI the user installed on PATH, which an adapter runs from version 1.0.0 on. */
+const FAKE_CLI: AdapterCli = {
+  command: 'fake-cli',
+  variable: 'FAKE_CLI_PATH',
+  resolve: async (found) => ({ path: found, env: {} }),
+  minimum: async () => '1.0.0',
+}
+
+function cliFound(version: string): Partial<DetectContext> {
+  return {
+    env: { PATH: path.resolve('/bin') },
+    isExecutable: async (file) => /fake-cli(\.exe)?$/.test(file),
+    probeCli: async () => ({ version }),
+  }
+}
+
+/** The fake agent as a package agent whose adapter can run FAKE_CLI; installs stay in memory. */
+function cliManager(
+  options: {
+    installed?: InstalledAdapter[]
+    cli?: string
+    minimum?: string
+    /** The adapter exits before it initializes when it runs the installed CLI. */
+    failWithCli?: boolean
+  } = {},
+) {
+  const def: AgentDefinition = {
+    ...fakeAgent(FAKE_AGENT_MAIN),
+    launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
+    cli: { ...FAKE_CLI, minimum: async () => options.minimum ?? '1.0.0' },
+  }
+  const adapters = [...(options.installed ?? [])]
+  const installs: InstallOptions[] = []
+  const launches: LaunchSpec[] = []
+  const base = inProcessLauncher(module)
+  const launcher: AgentLauncher = {
+    launch: (d, spec, env, output) => {
+      launches.push(spec)
+      const launched = base.launch(d, spec, env, output)
+      if (!options.failWithCli || !spec.env.FAKE_CLI_PATH) return launched
+      return {
+        pid: null,
+        startedAt: launched.startedAt,
+        transport: launched.transport,
+        exited: Promise.resolve({ code: 1, signal: null }),
+        hasExited: true,
+        stop: () => launched.stop(),
+      }
+    },
+  }
+  const m = manager(
+    {},
+    { progressMs: 1 },
+    {
+      catalog: [def],
+      launcher,
+      detect: (d, ctx) =>
+        detectAgent(d, {
+          ...ctx,
+          node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
+          installed: async () => adapters.toSorted((a, b) => compareInstalls(b, a)),
+          ...cliFound(options.cli ?? '2.0.0'),
+        }),
+      install: async (request) => {
+        installs.push(request)
+        const install: InstalledAdapter = {
+          version: request.version,
+          dir: `/a/${request.version}~${installs.length}`,
+          entry: `/a/${request.version}/index.js`,
+          installedAt: installs.length + 1,
+        }
+        adapters.push(install)
+        return install
+      },
+    },
+  )
+  return { ...m, installs, launches, status: () => m.agents.status('fake-agent') }
+}
+
+describe('the CLI the user installed', () => {
+  const installedAt = (version: string) => ({
+    version,
+    dir: `/a/${version}`,
+    entry: `/a/${version}/index.js`,
+    installedAt: 1,
+  })
+
+  it('runs the installed CLI when it is new enough', async () => {
+    const m = cliManager({ installed: [installedAt('2.0.0')] })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs).toEqual([])
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH)).toEqual([
+      expect.stringContaining('fake-cli'),
+    ])
+    expect(m.status()).toMatchObject({
+      state: 'ready',
+      cli: {
+        command: 'fake-cli',
+        runs: 'installed',
+        installed: { version: '2.0.0', problem: null },
+      },
+    })
+    await m.agents.stopAll()
+  })
+
+  it('runs the copy when the CLI is older than the adapter needs', async () => {
+    const m = cliManager({ installed: [installedAt('2.0.0')], minimum: '3.0.0' })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH)).toEqual([undefined])
+    expect(m.status()).toMatchObject({
+      state: 'ready',
+      cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '3.0.0' } } },
+    })
+    await m.agents.stopAll()
+  })
+
+  it('runs the copy when a start with the installed CLI fails, and keeps to it', async () => {
+    const m = cliManager({ installed: [installedAt('2.0.0')], failWithCli: true })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH !== undefined)).toEqual([true, false])
+    expect(m.installs).toEqual([])
+    expect(m.status()).toMatchObject({
+      state: 'ready',
+      detail: null,
+      cli: {
+        runs: 'bundled',
+        installed: { problem: { kind: 'failed', reason: expect.any(String) } },
+      },
+    })
+    await m.agents.stopAll()
+    await m.agents.ensureReady('fake-agent')
+    expect(m.launches.at(-1)?.env.FAKE_CLI_PATH).toBeUndefined()
+    await m.agents.stopAll()
+  })
+
+  it('installs the adapter, then runs the installed CLI', async () => {
+    const m = cliManager()
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs.map((i) => i.version)).toEqual(['2.0.0'])
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH)).toEqual([
+      expect.stringContaining('fake-cli'),
+    ])
+    expect(m.status()).toMatchObject({ state: 'ready', cli: { runs: 'installed' } })
+    await m.agents.stopAll()
   })
 })
 
