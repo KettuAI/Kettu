@@ -37,6 +37,7 @@ export default function ArtifactViewer({ id }: { id: string }) {
   const [shown, setShown] = useState<Shown | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reloads, setReloads] = useState(0)
+  const [stopped, setStopped] = useState(false)
   const connected = useConnectionStore((s) => s.agentHost === 'connected')
 
   // The window may frame the artifact's origin only between open and close, so close waits for
@@ -86,6 +87,14 @@ export default function ArtifactViewer({ id }: { id: string }) {
   }, [id, connected, attempt])
 
   useEffect(() => {
+    if (!url) return
+    const origin = url.slice(0, -1)
+    return window.overbench.artifacts.onStopped((event) => {
+      if (event.origin === origin) setStopped(true)
+    })
+  }, [url])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Keys typed in the page stay there; Esc goes back only from the app's own page.
       if (event.key !== 'Escape' || event.defaultPrevented || isEditable(event.target)) return
@@ -96,10 +105,20 @@ export default function ArtifactViewer({ id }: { id: string }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // A frame starts with no reloads, or it would load its page twice.
   const retry = (): void => {
     setError(null)
     setUrl(null)
+    setStopped(false)
+    setReloads(0)
     setAttempt((count) => count + 1)
+  }
+
+  // A stopped page comes back in a new frame: Chromium shows a page reloaded into the old one in
+  // the light theme, whatever the app's.
+  const restart = (): void => {
+    setStopped(false)
+    setReloads(0)
   }
 
   return (
@@ -121,7 +140,10 @@ export default function ArtifactViewer({ id }: { id: string }) {
         <span className="flex-1" />
         {url && !error && (
           <NoDrag>
-            <TopBarButton label={t('viewer.reload')} onClick={() => setReloads((n) => n + 1)}>
+            <TopBarButton
+              label={t('viewer.reload')}
+              onClick={() => (stopped ? restart() : setReloads((n) => n + 1))}
+            >
               <RefreshCwIcon />
             </TopBarButton>
           </NoDrag>
@@ -143,6 +165,18 @@ export default function ArtifactViewer({ id }: { id: string }) {
               </Button>
             </EmptyContent>
           </Empty>
+        ) : stopped ? (
+          <Empty className="h-full">
+            <EmptyHeader>
+              <EmptyTitle>{t('viewer.stoppedTitle')}</EmptyTitle>
+              <EmptyDescription>{t('viewer.stoppedDescription')}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant="outline" size="compact" onClick={restart}>
+                {t('viewer.reload')}
+              </Button>
+            </EmptyContent>
+          </Empty>
         ) : (
           url && <ArtifactFrame key={url} url={url} title={shown?.title ?? ''} reloads={reloads} />
         )}
@@ -160,7 +194,6 @@ function ArtifactFrame({ url, title, reloads }: { url: string; title: string; re
   const frame = useRef<HTMLIFrameElement>(null)
   const [loaded, setLoaded] = useState(false)
   const [waiting, setWaiting] = useState(false)
-  const [stopped, setStopped] = useState(false)
   const [blocked, setBlocked] = useState<string | null>(null)
   const origin = url.slice(0, -1)
 
@@ -173,27 +206,20 @@ function ArtifactFrame({ url, title, reloads }: { url: string; title: string; re
     }
   }, [])
 
-  useEffect(() => {
-    const offBlocked = window.overbench.artifacts.onBlocked((event) => {
-      if (event.origin !== origin) return
-      setBlocked(event.url)
-      // The page's own frame left for an error page; it comes back, though its state is gone.
-      if (event.reload && frame.current) frame.current.src = url
-    })
-    const offStopped = window.overbench.artifacts.onStopped((event) => {
-      if (event.origin === origin) setStopped(true)
-    })
-    return () => {
-      offBlocked()
-      offStopped()
-    }
-  }, [origin, url])
+  useEffect(
+    () =>
+      window.overbench.artifacts.onBlocked((event) => {
+        if (event.origin !== origin) return
+        setBlocked(event.url)
+        // The page's own frame left for an error page; it comes back, though its state is gone.
+        if (event.reload && frame.current) frame.current.src = url
+      }),
+    [origin, url],
+  )
 
   // Reloads in place: the frame keeps the old page until the new one commits.
   useEffect(() => {
-    if (reloads === 0 || !frame.current) return
-    setStopped(false)
-    frame.current.src = url
+    if (reloads > 0 && frame.current) frame.current.src = url
   }, [reloads, url])
 
   const blockedHost = blocked ? URL.parse(blocked)?.host : null
@@ -211,7 +237,6 @@ function ArtifactFrame({ url, title, reloads }: { url: string; title: string; re
         className={cn(
           'absolute inset-0 size-full border-0 opacity-0 transition-opacity duration-(--duration-fast)',
           loaded && 'opacity-100',
-          stopped && 'invisible',
         )}
       />
       {!loaded && waiting && (
@@ -219,27 +244,7 @@ function ArtifactFrame({ url, title, reloads }: { url: string; title: string; re
           <Spinner className="text-muted-foreground" aria-label={t('viewer.loading')} />
         </div>
       )}
-      {stopped && (
-        <Empty className="absolute inset-0">
-          <EmptyHeader>
-            <EmptyTitle>{t('viewer.stoppedTitle')}</EmptyTitle>
-            <EmptyDescription>{t('viewer.stoppedDescription')}</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button
-              variant="outline"
-              size="compact"
-              onClick={() => {
-                setStopped(false)
-                if (frame.current) frame.current.src = url
-              }}
-            >
-              {t('viewer.reload')}
-            </Button>
-          </EmptyContent>
-        </Empty>
-      )}
-      {blocked && blockedHost && !stopped && (
+      {blocked && blockedHost && (
         <div
           role="status"
           className="absolute inset-x-3 top-2.5 flex items-center gap-2.5 rounded-2xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"

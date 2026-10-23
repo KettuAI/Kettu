@@ -193,7 +193,7 @@ interface ProbeResult {
   inputs: { key: string; inArtifact: boolean }[]
   theme: { dark: boolean; light: boolean }
   stopped: boolean
-  reloaded: boolean
+  reloaded: { shown: boolean; dark: boolean }
   events: { channel: string; payload: Record<string, unknown> }[]
   trustedAfterProbe: boolean
   refused: Record<string, { waits: (number | string)[]; revoked: boolean; revocations: number }>
@@ -381,9 +381,9 @@ describe.each([
     expect(result.theme).toEqual({ dark: true, light: false })
   })
 
-  it('tells the app when the page stopped, and loads it again', () => {
+  it('tells the app when the page stopped, and loads it again in the theme', () => {
     expect(result.stopped).toBe(true)
-    expect(result.reloaded).toBe(true)
+    expect(result.reloaded).toEqual({ shown: true, dark: true })
   })
 
   it.each([

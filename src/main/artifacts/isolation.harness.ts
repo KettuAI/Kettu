@@ -209,16 +209,26 @@ async function run(): Promise<unknown> {
     return (await frameOf(config.probe)!.executeJavaScript(query)) === true
   }
   const theme = { dark: await darkIn('dark'), light: await darkIn('light') }
-  nativeTheme.themeSource = 'system'
 
-  // The page's process stops, and the frame loads again.
+  // The page's process stops, and the frame loads again, still in the app's theme.
+  nativeTheme.themeSource = 'dark'
   process.kill(frameOf(config.probe)!.osProcessId, 'SIGKILL')
   const stopped = await until(async () => {
     const events = await page<{ channel: string }[]>('overbench.events()')
     return events.some((e) => e.channel === 'artifact:stopped') || null
   }, 5_000).catch(() => false)
-  await page(`(() => { const f = document.querySelector('iframe'); f.src = f.src })()`)
-  const reloaded = await ready(config.probe)
+  // A new frame, as the viewer makes: a page loaded into the old one would be light.
+  await page(
+    `(() => { const f = document.querySelector('iframe'); f.replaceWith(f.cloneNode()) })()`,
+  )
+  const reloaded = {
+    shown: await ready(config.probe),
+    dark:
+      (await frameOf(config.probe)
+        ?.executeJavaScript(`matchMedia('(prefers-color-scheme: dark)').matches`)
+        .catch(() => null)) === true,
+  }
+  nativeTheme.themeSource = 'system'
   const events = await page<unknown[]>('overbench.events()')
   const trustedAfterProbe = !isRevoked(contents) && revocations === 0
 
