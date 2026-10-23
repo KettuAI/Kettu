@@ -269,7 +269,8 @@ describe('runTool', () => {
           '-e',
           `require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`,
         ]
-    const limitMs = windows ? 4_000 : 500
+    // PowerShell's cold start on a loaded runner can pass 4 s; the limit must outlast it.
+    const limitMs = windows ? 15_000 : 500
     const readPid = async () => Number((await readFile(pidFile, 'utf8').catch(() => '')).trim())
     try {
       const started = Date.now()
@@ -299,7 +300,8 @@ describe('runTool', () => {
       if (pid > 0 && alive(pid)) process.kill(pid, 'SIGKILL')
       await rm(dir, { recursive: true, force: true })
     }
-  })
+    // Windows runs the whole limit, so the test needs more than the suite's default timeout.
+  }, 45_000)
 })
 
 describe('a real process tree', () => {
