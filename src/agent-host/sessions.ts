@@ -2124,14 +2124,18 @@ export class SessionManager {
     await this.applyStartOptions(live, runtime.connection, settings, { fork: true })
     // Deleted, or its project removed, meanwhile: closing it already closed the agent's session.
     if (live.closing || this.live.get(live.id) !== live) throw notFound(`No session ${live.id}`)
-    const notice = lostValuesNotice(lostValues(carried, live.thread.session.config))
+    // The agent can exit while the values are set, which leaves the fork stored and closed. Its
+    // values were not refused, only not set, so there is nothing to say; the next attach reports them.
+    const attached = live.connection !== null
+    const notice = attached
+      ? lostValuesNotice(lostValues(carried, live.thread.session.config))
+      : null
     if (notice) {
       this.emit(live, [
         { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
       ])
     }
-    // The agent can exit while the values are set, which leaves the fork stored and closed.
-    this.update(live, { status: live.connection ? 'ready' : 'closed' })
+    this.update(live, { status: attached ? 'ready' : 'closed' })
     this.save(live)
     this.touch(live.id)
     return this.summary(live.id)

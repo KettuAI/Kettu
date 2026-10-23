@@ -744,6 +744,8 @@ describe('forking with the source config', () => {
       const listed = await port.request('sessions.list', {})
       expect(listed.find((s) => s.id === forkId)?.status).toBe('closed')
       await port.open(forkId)
+      // Its values were not refused, only not set yet, so the thread says nothing.
+      expect(port.entries(forkId).filter((entry) => entry.kind === 'notice')).toEqual([])
     })
   })
 })

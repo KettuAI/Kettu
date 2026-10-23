@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConfigOption } from '@shared/thread'
-import { lostValues, lostValuesNotice, valueName } from './config-notice'
+import { lostValues, lostValuesNotice, valueName, type LostValue } from './config-notice'
 import { setLocale } from './i18n'
 
 afterEach(() => {
@@ -56,15 +56,22 @@ describe('lostValues', () => {
       [level('low'), fast(false), model('b'), mode('agent')],
     )
     expect(lost).toEqual([
-      { option: 'Mode', wanted: 'Read-only', actual: 'Auto review' },
-      { option: 'Model', wanted: 'Model A', actual: 'Model B' },
-      { option: 'Fast mode', wanted: 'on', actual: 'off' },
+      { type: 'select', option: 'Mode', wanted: 'Read-only', actual: 'Auto review' },
+      { type: 'select', option: 'Model', wanted: 'Model A', actual: 'Model B' },
+      { type: 'boolean', option: 'Fast mode', wanted: true, actual: false },
     ])
   })
 
   it('has no actual value for an option the session does not have', () => {
-    expect(lostValues([level('low')], [model('a')])).toEqual([
-      { option: 'Reasoning', wanted: 'Low', actual: null },
+    expect(lostValues([level('low'), fast(true)], [model('a')])).toEqual([
+      { type: 'boolean', option: 'Fast mode', wanted: true, actual: null },
+      { type: 'select', option: 'Reasoning', wanted: 'Low', actual: null },
+    ])
+  })
+
+  it('treats an option of another type as missing', () => {
+    expect(lostValues([fast(true)], [{ ...level('low'), id: 'fast' }])).toEqual([
+      { type: 'boolean', option: 'Fast mode', wanted: true, actual: null },
     ])
   })
 
@@ -74,10 +81,17 @@ describe('lostValues', () => {
 })
 
 describe('lostValuesNotice', () => {
-  const lost = [
-    { option: 'Mode', wanted: 'Read-only', actual: 'Auto review' },
-    { option: 'Reasoning', wanted: 'Low', actual: null },
+  const lost: LostValue[] = [
+    { type: 'select', option: 'Mode', wanted: 'Read-only', actual: 'Auto review' },
+    { type: 'select', option: 'Reasoning', wanted: 'Low', actual: null },
   ]
+  const switches: LostValue[] = [
+    { type: 'boolean', option: 'Fast mode', wanted: true, actual: false },
+    { type: 'boolean', option: 'Fast mode', wanted: false, actual: true },
+    { type: 'boolean', option: 'Fast mode', wanted: true, actual: null },
+  ]
+  const lines = (notice: ReturnType<typeof lostValuesNotice>) =>
+    notice?.description.split('\n').slice(0, -1)
 
   it('says nothing when nothing was lost', () => {
     expect(lostValuesNotice([])).toBeNull()
@@ -106,5 +120,28 @@ describe('lostValuesNotice', () => {
         '可以在输入框中修改。',
       ].join('\n'),
     })
+  })
+
+  it('gives a switch a whole sentence of its own, in English', () => {
+    expect(lines(lostValuesNotice(switches))).toEqual([
+      'Fast mode is off instead of on.',
+      'Fast mode is on instead of off.',
+      'This fork has no Fast mode option, so it cannot be turned on.',
+    ])
+  })
+
+  it('gives a switch a whole sentence of its own, in Chinese', () => {
+    setLocale('zh-CN')
+    expect(lines(lostValuesNotice(switches))).toEqual([
+      'Fast mode 已关闭，而不是开启。',
+      'Fast mode 已开启，而不是关闭。',
+      '这个分叉没有 Fast mode 选项，无法开启。',
+    ])
+  })
+
+  it('has no line for a missing switch that was off, since nothing is lost', () => {
+    const off: LostValue = { type: 'boolean', option: 'Fast mode', wanted: false, actual: null }
+    expect(lostValuesNotice([off])).toBeNull()
+    expect(lines(lostValuesNotice([off, ...lost]))).toHaveLength(2)
   })
 })

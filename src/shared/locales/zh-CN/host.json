@@ -49,9 +49,10 @@
       "title": "这个分叉没能沿用全部设置",
       "differs": "{{option}} 为 {{actual}}，而不是 {{wanted}}。",
       "missing": "这个分叉没有 {{option}} 选项，无法使用 {{wanted}}。",
-      "next": "可以在输入框中修改。",
-      "on": "开启",
-      "off": "关闭"
+      "isOff": "{{option}} 已关闭，而不是开启。",
+      "isOn": "{{option}} 已开启，而不是关闭。",
+      "cannotTurnOn": "这个分叉没有 {{option}} 选项，无法开启。",
+      "next": "可以在输入框中修改。"
     }
   },
   "attention": {
