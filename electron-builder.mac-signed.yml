@@ -1,0 +1,19 @@
+# The macOS build signed with the Developer ID, which the Release workflow uses when the signing
+# secrets are set (docs/design/updates.md#macos-signing). Everything else is electron-builder.yml.
+extends: electron-builder.yml
+mac:
+  # Squirrel.Mac installs updates from the zip.
+  target:
+    - dmg
+    - zip
+  # Names the zip by architecture, as the dmg is; the dmg keeps its own artifactName.
+  artifactName: ${productName}-${version}-${arch}-mac.${ext}
+  # Empty instead of '-': electron-builder signs with the Developer ID Application identity it
+  # imports from CSC_LINK.
+  identity: ''
+  # A certificate that signs nothing fails the build instead of shipping an unsigned app.
+  forceCodeSigning: true
+  # Notarization requires the hardened runtime; build/entitlements.mac.plist lets V8 run under it.
+  hardenedRuntime: true
+  # Notarizes and staples the app with the credentials in the environment.
+  notarize: true
