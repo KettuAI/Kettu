@@ -26,9 +26,10 @@ publish:
 
 mac:
   category: public.app-category.developer-tools
+  # Squirrel.Mac installs updates from a zip, which needs a Developer ID first; until then the
+  # update links to the release and the dmg is all a release needs.
   target:
     - dmg
-    - zip
   entitlementsInherit: build/entitlements.mac.plist
   # No Developer ID yet. Left unsigned, a downloaded build is reported as damaged; an ad-hoc
   # signature keeps the bundle valid, so Gatekeeper offers Open Anyway instead. The hardened
@@ -47,7 +48,7 @@ win:
   files:
     - '!node_modules/node-pty/prebuilds/darwin-*{,/**/*}'
 nsis:
-  artifactName: ${productName}-${version}-setup.${ext}
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
 

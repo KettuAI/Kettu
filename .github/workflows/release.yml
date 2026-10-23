@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # A run started by hand builds and tests every installer and joins the update files, without
+  # touching a release.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,21 +15,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     name: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # Each architecture builds on its own runner, so node-pty is compiled or picked for the
+        # machine that tests it.
         include:
           - os: macos-latest
-            target: --mac
+            target: --mac --arm64
             # Without a Developer ID, macOS builds cannot replace themselves; the update links to the release.
             update_mode: link
+          - os: macos-15-intel
+            target: --mac --x64
+            update_mode: link
           - os: windows-latest
-            target: --win
+            target: --win --x64
+            update_mode: install
+          - os: windows-11-arm
+            target: --win --arm64
             update_mode: install
           - os: ubuntu-24.04
-            target: --linux
+            target: --linux --x64
+            update_mode: install
+          - os: ubuntu-24.04-arm
+            target: --linux --arm64
             update_mode: install
     runs-on: ${{ matrix.os }}
     steps:
@@ -37,6 +51,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - name: Check that the tag matches package.json
+        if: github.ref_type == 'tag'
         shell: bash
         run: |
           version="v$(node -p "require('./package.json').version")"
@@ -49,9 +64,59 @@ jobs:
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
-      - name: Package and upload to the draft release
-        run: pnpm exec electron-builder ${{ matrix.target }} --publish always
+      - name: Package
+        run: pnpm exec electron-builder ${{ matrix.target }} --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # No signing identity yet; keep electron-builder from picking one from the keychain.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # Only the installer and the update file leave the runner; blockmaps and unpacked apps do not.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*-setup.exe
+            dist/*.AppImage
+            dist/latest*.yml
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Join the update files
+        run: |
+          mkdir release
+          cp artifacts/*/*.dmg artifacts/*/*-setup.exe artifacts/*/*.AppImage release/
+          # Each build wrote the update file for its own architecture. macOS and Windows clients read
+          # one file that lists both, so the file lists are joined; Linux has a file per architecture.
+          for feed in latest.yml:2 latest-mac.yml:2 latest-linux.yml:1 latest-linux-arm64.yml:1; do
+            name="${feed%:*}"
+            yq eval-all '. as $item ireduce ({}; . *+ $item)' artifacts/*/"$name" > "release/$name"
+            count="$(yq '.files | length' "release/$name")"
+            if [ "$count" != "${feed#*:}" ]; then
+              echo "$name lists $count files, expected ${feed#*:}" >&2
+              exit 1
+            fi
+          done
+          ls -l release
+          tail -n +1 release/*.yml
+      - name: Upload to a draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ -z "$draft" ]; then
+            gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag \
+              --title "OverBench ${GITHUB_REF_NAME#v}" --notes ''
+          elif [ "$draft" = true ]; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            echo "Release $GITHUB_REF_NAME is published; turn it back into a draft to rebuild it" >&2
+            exit 1
+          fi

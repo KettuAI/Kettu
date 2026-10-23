@@ -33,9 +33,9 @@ with readable threads, clear approvals, git and a terminal beside every session.
 
 Download the installer for your system from [Releases](https://github.com/overbench/overbench/releases/latest). Preview builds are not signed by Apple or Microsoft yet, so your system asks once before the first launch.
 
-- **macOS** (Apple silicon): open `OverBench-<version>-arm64.dmg` and drag OverBench to Applications. When macOS says it cannot verify the app, open System Settings › Privacy & Security and choose **Open Anyway**. Builds for Intel Macs are not available yet.
-- **Windows** (x64): run `OverBench-<version>-setup.exe`. When SmartScreen says it protected your PC, choose **More info**, then **Run anyway**.
-- **Linux** (x64): make `OverBench-<version>-x86_64.AppImage` executable with `chmod +x`, then run it. AppImages need FUSE 2: `libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later.
+- **macOS**: open `OverBench-<version>-arm64.dmg` on Apple silicon or `OverBench-<version>-x64.dmg` on an Intel Mac, and drag OverBench to Applications. When macOS says it cannot verify the app, open System Settings › Privacy & Security and choose **Open Anyway**.
+- **Windows**: run `OverBench-<version>-x64-setup.exe`, or `OverBench-<version>-arm64-setup.exe` on Arm. When SmartScreen says it protected your PC, choose **More info**, then **Run anyway**.
+- **Linux**: make `OverBench-<version>-x86_64.AppImage`, or `OverBench-<version>-arm64.AppImage` on Arm, executable with `chmod +x`, then run it. AppImages need FUSE 2: `libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later.
 
 On Windows and Linux, new versions download in the background and install when OverBench restarts; on macOS, OverBench links to the download until its builds are signed.
 
