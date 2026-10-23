@@ -228,7 +228,7 @@ A row is the unit of every list: the sidebar, menus, Settings, the Files tree, t
 
 ### Pages and columns
 
-- A page's content sits in one centred column with a maximum width: 42em for prose, 560 px for Settings, 960 px for the usage dashboard and the Artifacts page. It never stretches to the window. An artifact's viewer is the exception: the page it shows fills the area, since its layout is the page's own.
+- A page's content sits in one centred column with a maximum width: 50em for prose, 560 px for Settings, 960 px for the usage dashboard and the Artifacts page. It never stretches to the window. An artifact's viewer is the exception: the page it shows fills the area, since its layout is the page's own.
 - A page starts with its title at the page title role; groups inside it are introduced by group labels, not by cards or headings of their own. A dashboard of figures is the one exception: the [usage page](./usage.md#interface) sets each figure, chart and table on a card with its title inside, so panels side by side read as separate (decided while the maintainer was away; to be reviewed).
 - Containers adapt to their own width with container queries ([layout behavior](./design-system.md#layout-behavior)); what gives way first in a crowded bar is written in [Interface](./ui.md) for that bar, the least important part first.
 

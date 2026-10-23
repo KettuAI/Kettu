@@ -42,7 +42,7 @@ function useShownFrom(total: number): number {
 function stepIds(order: string[], signature: string): Set<string> {
   const ids = new Set<string>()
   order.forEach((id, i) => {
-    if ('hgt'.includes(signature[i] ?? '-')) ids.add(id)
+    if ('hgtw'.includes(signature[i] ?? '-')) ids.add(id)
   })
   return ids
 }

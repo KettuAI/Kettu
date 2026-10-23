@@ -13,6 +13,7 @@ import type {
 import {
   BASIC_DONE,
   CHINESE_ANSWER,
+  REPORT_ANSWER,
   BASIC_NOTE,
   BASIC_REPLY,
   CLOCK_AFTER,
@@ -1169,6 +1170,92 @@ const chinese: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+const report: Scenario = async (turn) => {
+  let n = 0
+  const id = () => `report-${turn.session.turns}-${n++}`
+  const say = (text: string) =>
+    stream(turn, text, { messageId: turn.messageId(), chunks: [text], delayMs: 0 })
+  const command = async (command: string, description: string, output = 'ok\n') => {
+    const toolCallId = id()
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: command,
+      kind: 'execute',
+      status: 'pending',
+      rawInput: { command, description },
+    })
+    await turn.send({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      status: 'completed',
+      content: [{ type: 'content', content: { type: 'text', text: '```\n' + output + '```' } }],
+      rawOutput: { exitCode: 0 },
+    })
+  }
+  const read = async (relative: string) => {
+    const toolCallId = id()
+    const path = filePath(turn, relative)
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: `Read ${relative}`,
+      kind: 'read',
+      status: 'completed',
+      locations: [{ path }],
+      rawInput: { path },
+    })
+  }
+  const edit = async (relative: string, oldText: string, newText: string) => {
+    const toolCallId = id()
+    const path = filePath(turn, relative)
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: `Edit ${relative}`,
+      kind: 'edit',
+      status: 'completed',
+      locations: [{ path }],
+      rawInput: { path },
+      content: [{ type: 'diff', path, oldText, newText }],
+    })
+  }
+  const lines = (count: number, prefix: string) =>
+    Array.from({ length: count }, (_, i) => `${prefix} ${i + 1}\n`).join('')
+
+  await command('pnpm format:check', 'Check formatting')
+  await command('pnpm lint', 'Lint')
+  await command('pnpm typecheck', 'Type-check')
+  await command('pnpm test', 'Run the tests')
+  await command('pnpm build', 'Build the app')
+  await say('检查都通过了。推送分支并开一个 draft PR。')
+  await command(
+    'git push -u origin feat/login && gh pr create --draft --base main --title "fix(login): read the clock once"',
+    'Publish the branch and open a draft PR',
+    'https://github.com/acme/demo/pull/57\n',
+  )
+  await say('PR 已开：https://github.com/acme/demo/pull/57 （draft）。再补一条回归测试，然后汇报。')
+  await edit('src/clock.test.ts', '', lines(14, '// case'))
+  await command('pnpm test src/clock.test.ts', 'Run the clock test')
+  await say(
+    '测试覆盖了整秒边界（`Date.now()` 正好跨过一秒时）、时钟回拨和并发请求三种情况，都能稳定通过。现在看一下截图。',
+  )
+  await read('shots/login-light.png')
+  await read('shots/login-dark.png')
+  await say(
+    '深色主题下错误提示的图标贴着文字，需要修：在图标和文字之间留出和其余提示一样的间距，而不是让它们挤在一起。先看其余截图。',
+  )
+  await edit('src/login.tsx', lines(7, '// before'), lines(10, '// after'))
+  await command('node tools/screenshots/capture.mjs --out shots', 'Capture the login screen again')
+  await read('shots/login-narrow-light.png')
+  await read('shots/login-narrow-dark.png')
+  await say(
+    '深浅主题和窄窗口下都正常：图标和文字的间距一致，窄窗口下提示会换行而不是被截断。接下来把这些写进说明，并对照检查清单逐项核对。',
+  )
+  await say(REPORT_ANSWER)
+  return 'end_turn'
+}
+
 export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'basic-turn': basicTurn,
   'long-stream': longStream,
@@ -1196,6 +1283,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   attachments,
   chinese,
   artifacts,
+  report,
 }
 
 export const compact: Scenario = async (turn) => {

@@ -122,7 +122,7 @@ export function PrChip({ url, className }: { url: string; className?: string }) 
       )}
     >
       <PrIcon state={pr?.state ?? null} size={13} />
-      <span className="font-mono text-xs whitespace-nowrap">
+      <span className="whitespace-nowrap">
         {owner}/{repo}#{number}
       </span>
       {title && <span className="min-w-0 truncate text-tertiary">{title}</span>}

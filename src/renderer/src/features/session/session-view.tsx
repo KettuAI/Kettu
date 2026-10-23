@@ -136,7 +136,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       <ProjectPathContext value={summary.projectPath}>
         <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </ProjectPathContext>
-      <div className="mx-auto flex w-full max-w-[760px] flex-col gap-2 px-6 pb-3">
+      <div className="mx-auto flex w-full max-w-thread flex-col gap-2 px-6 pb-3">
         {session && status === 'failed' && (
           <FailedState
             title={t('view.stopped', { agent: name })}

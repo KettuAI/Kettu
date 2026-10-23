@@ -246,6 +246,17 @@ async function run() {
   )
   log('captured session-scrolling')
 
+  // Chinese notes between runs of work; the pointer rests beside the column, so no reply row shows.
+  await prompt('/report')
+  await waitFor(`document.body.textContent.includes('还没做的')`, 'the report', 60_000)
+  await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to end', 120_000)
+  const beside = await cdp.evaluate(
+    `(() => { const r = document.querySelector('[data-slot=message-scroller-viewport]').getBoundingClientRect(); return { x: r.left + 8, y: r.top + r.height / 2 } })()`,
+  )
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...beside })
+  await sleep(800)
+  await shoot('session-report')
+
   await click(`return document.querySelector('button[aria-label=Model]')`, 'the model button')
   await waitFor(`document.querySelector('[role=menu]')`, 'the model menu')
   await sleep(400)
