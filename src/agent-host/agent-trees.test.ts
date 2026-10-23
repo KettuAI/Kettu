@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentTrees } from './agent-trees'
 import type { ProcessControl, ProcessRow } from './process-tree'
 import { agentProcessesFile } from './storage'
@@ -19,16 +19,22 @@ afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true })
 })
 
-async function setup(platform: ProcessControl['platform'], rows: ProcessRow[][]) {
+async function setup(
+  platform: ProcessControl['platform'],
+  rows: ProcessRow[][],
+  { closeWaitMs }: { closeWaitMs?: number } = {},
+) {
   dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-trees-'))
   const calls: string[] = []
   const logs: string[] = []
   let listed = 0
   let release: () => void = () => {}
+  let held: Promise<void> | null = null
   const control: ProcessControl = {
     platform,
     list: async () => {
       listed++
+      if (held) await held
       const next = rows.shift()
       if (!next) throw new Error('ps failed')
       return next
@@ -47,6 +53,7 @@ async function setup(platform: ProcessControl['platform'], rows: ProcessRow[][])
     control,
     graceMs: 3000,
     noteMs: 5,
+    ...(closeWaitMs !== undefined ? { closeWaitMs } : {}),
     log: (_l, m) => logs.push(m),
   })
   const stored = async () => {
@@ -57,10 +64,30 @@ async function setup(platform: ProcessControl['platform'], rows: ProcessRow[][])
     // When each was last seen running moves with the clock.
     return processes.map(({ pid, startedAt }) => ({ pid, startedAt }))
   }
-  return { trees, calls, logs, stored, file, endGrace: () => release(), listed: () => listed }
+  // Holds the listings until the returned function is called, as a slow PowerShell would.
+  const holdListing = (): (() => void) => {
+    let open: () => void = () => {}
+    held = new Promise((resolve) => (open = resolve))
+    return () => {
+      held = null
+      open()
+    }
+  }
+  return {
+    trees,
+    calls,
+    logs,
+    stored,
+    file,
+    endGrace: () => release(),
+    listed: () => listed,
+    holdListing,
+  }
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+// For tests that hold a stop on purpose, so a slow runner never reaches the deadline.
+const NO_DEADLINE = 60_000
 
 describe('AgentTrees', () => {
   const root = { pid: 100, startedAt: T + 100 }
@@ -151,5 +178,95 @@ describe('AgentTrees', () => {
     await settle()
     expect(calls).toEqual(['taskkill 102'])
     expect(await stored()).toEqual([])
+  })
+
+  it('on Windows, finishes a stop running in the background before it closes', async () => {
+    // The agent, and a command it started detached that outlives it.
+    const running = [row(100, 1, 100), row(101, 100, 101)]
+    const after = [row(101, 100, 101)]
+    const { trees, calls, file, stored, holdListing } = await setup('win32', [running, after], {
+      closeWaitMs: NO_DEADLINE,
+    })
+    await trees.load()
+    trees.launched(root)
+    await trees.note(root)
+    const release = holdListing()
+    // Resolves at once on Windows, before the listing that finds what is left.
+    await trees.reap(root, 'Fake agent')
+    let closed = false
+    const closing = trees.close().then(() => (closed = true))
+    // Every write so far has landed, so a close that only wrote what was pending is done.
+    await file.flush()
+    await settle()
+    expect(closed).toBe(false)
+    release()
+    await closing
+    expect(calls).toEqual(['taskkill 101'])
+    expect(await stored()).toEqual([])
+  })
+
+  it('on Windows, finishes stopping what the last run left before it closes', async () => {
+    const { trees, calls, file, stored, holdListing } = await setup(
+      'win32',
+      [[row(100, 1, 100), row(101, 100, 101)]],
+      { closeWaitMs: NO_DEADLINE },
+    )
+    await mkdir(path.dirname(file.file), { recursive: true })
+    await writeFile(file.file, JSON.stringify({ version: 1, processes: [root] }))
+    await trees.load()
+    const release = holdListing()
+    const stopping = trees.stopLeftovers()
+    let closed = false
+    const closing = trees.close().then(() => (closed = true))
+    await file.flush()
+    await settle()
+    expect(closed).toBe(false)
+    release()
+    await Promise.all([stopping, closing])
+    expect(calls).toEqual(['taskkill 100 101'])
+    expect(await stored()).toEqual([])
+  })
+
+  it('stops waiting at its deadline, leaving what it was stopping to the next host', async () => {
+    const running = [row(100, 1, 100), row(101, 100, 101)]
+    const after = [row(101, 100, 101)]
+    const { trees, calls, file, stored, logs, holdListing } = await setup(
+      'win32',
+      [running, after],
+      { closeWaitMs: 20 },
+    )
+    await trees.load()
+    trees.launched(root)
+    await trees.note(root)
+    const release = holdListing()
+    await trees.reap(root, 'Fake agent')
+    // Resolves while the listing never answers.
+    await trees.close()
+    expect(logs.some((line) => line.includes('Stopped waiting'))).toBe(true)
+    const saves = vi.spyOn(file, 'save')
+    expect(await stored()).toEqual(expect.arrayContaining([root, { pid: 101, startedAt: T + 101 }]))
+    // The stop goes on if the host does, but the record is no longer written.
+    release()
+    await settle()
+    expect(calls).toEqual(['taskkill 101'])
+    expect(saves).not.toHaveBeenCalled()
+    expect(await stored()).toEqual(expect.arrayContaining([root, { pid: 101, startedAt: T + 101 }]))
+  })
+
+  it('writes nothing once closed, leaving what is in its grace to the next host', async () => {
+    const running = [row(100, 1, 100), row(101, 100, 100)]
+    const after = [row(101, 1, 100)]
+    const { trees, calls, file, stored, endGrace } = await setup('linux', [running, after])
+    await trees.load()
+    trees.launched(root)
+    await trees.note(root)
+    await trees.reap(root, 'Fake agent')
+    await trees.close()
+    const saves = vi.spyOn(file, 'save')
+    endGrace()
+    await settle()
+    expect(calls).toContain('kill -100 SIGKILL')
+    expect(saves).not.toHaveBeenCalled()
+    expect(await stored()).toEqual(expect.arrayContaining([root, { pid: 101, startedAt: T + 101 }]))
   })
 })

@@ -366,7 +366,7 @@ export class AgentHost {
         this.sessions.flush(),
         this.remembered.flush(),
         this.updates.flush(),
-        this.trees.flush(),
+        this.trees.close(),
         this.agentOptions.flush(),
         this.threads?.close(),
         this.usage.close(),
