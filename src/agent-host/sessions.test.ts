@@ -613,6 +613,72 @@ describe('forking with the source config', () => {
     )
   })
 
+  describe('when a value cannot be kept', () => {
+    const notices = (port: TestPort, sessionId: string) =>
+      port.entries(sessionId).filter((entry) => entry.kind === 'notice')
+
+    it('names the refused mode in one notice in the fork', async () => {
+      const { port, forkId } = await forked({ FAKE_AGENT_FORK_CONFIG: 'locked' }, undefined, {
+        mode: 'code',
+      })
+      expect(values(port, forkId)).toMatchObject({ mode: 'ask' })
+      expect(notices(port, forkId)).toEqual([
+        {
+          kind: 'notice',
+          id: expect.any(String),
+          severity: 'warning',
+          title: 'This fork could not keep all of its settings',
+          description: 'Mode is Ask instead of Code.\nYou can change them in the composer.',
+        },
+      ])
+    })
+
+    it('lists the mode first, then the model, the level and the rest', async () => {
+      const { port, forkId } = await forked({ FAKE_AGENT_FORK_CONFIG: 'locked' })
+      const [notice] = notices(port, forkId)
+      expect(notice).toMatchObject({
+        description: [
+          'Mode is Ask instead of Code.',
+          'Model is Fake Balanced instead of Fake Deep.',
+          'Fast mode is off instead of on.',
+          'Reasoning is Medium instead of High.',
+          'You can change them in the composer.',
+        ].join('\n'),
+      })
+    })
+
+    it.each([['keep'], ['reset']])(
+      'says nothing when the fork has every value (%s)',
+      async (mode) => {
+        const { port, forkId } = await forked({ FAKE_AGENT_FORK_CONFIG: mode })
+        expect(values(port, forkId)).toMatchObject(chosen)
+        expect(notices(port, forkId)).toEqual([])
+      },
+    )
+
+    it('keeps the notice with the thread across a restart of the host', async () => {
+      const first = await startTestHost({ agentEnv: { FAKE_AGENT_FORK_CONFIG: 'locked' } })
+      let port = first.connect()
+      const sessionId = await newSession(first, port)
+      await port.request('sessions.setConfigOption', { sessionId, optionId: 'mode', value: 'code' })
+      const fork = await port.request('sessions.fork', { sessionId })
+      await port.open(fork.id)
+      expect(notices(port, fork.id)).toHaveLength(1)
+      await first.host.shutdown()
+
+      current = await startTestHost({ userDataPath: first.dir })
+      port = current.connect()
+      const snapshot = await port.open(fork.id)
+      expect(snapshot.session.status).toBe('closed')
+      expect(snapshot.entries.filter((entry) => entry.kind === 'notice')).toMatchObject([
+        {
+          severity: 'warning',
+          description: expect.stringContaining('Mode is Ask instead of Code.'),
+        },
+      ])
+    })
+  })
+
   it('sends the model again to bring up a level the fork lists only after it', async () => {
     const { t, port, sessionId, forkId } = await forked(
       { FAKE_AGENT_FORK_CONFIG: 'reset' },
@@ -678,6 +744,8 @@ describe('forking with the source config', () => {
       const listed = await port.request('sessions.list', {})
       expect(listed.find((s) => s.id === forkId)?.status).toBe('closed')
       await port.open(forkId)
+      // Its values were not refused, only not set yet, so the thread says nothing.
+      expect(port.entries(forkId).filter((entry) => entry.kind === 'notice')).toEqual([])
     })
   })
 })

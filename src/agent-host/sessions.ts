@@ -57,6 +57,7 @@ import {
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
+import { lostValues, lostValuesNotice } from './config-notice'
 import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
@@ -2116,16 +2117,25 @@ export class SessionManager {
       usage: cut ? null : source.thread.session.usage,
     })
     // Not every agent carries the source's settings over to a fork, such as its model.
-    const settings = Object.fromEntries(
-      source.thread.session.config
-        .filter((option) => option.id !== ULTRACODE_OPTION_ID)
-        .map((option) => [option.id, option.value]),
+    const carried = source.thread.session.config.filter(
+      (option) => option.id !== ULTRACODE_OPTION_ID,
     )
+    const settings = Object.fromEntries(carried.map((option) => [option.id, option.value]))
     await this.applyStartOptions(live, runtime.connection, settings, { fork: true })
     // Deleted, or its project removed, meanwhile: closing it already closed the agent's session.
     if (live.closing || this.live.get(live.id) !== live) throw notFound(`No session ${live.id}`)
-    // The agent can exit while the values are set, which leaves the fork stored and closed.
-    this.update(live, { status: live.connection ? 'ready' : 'closed' })
+    // The agent can exit while the values are set, which leaves the fork stored and closed. Its
+    // values were not refused, only not set, so there is nothing to say; the next attach reports them.
+    const attached = live.connection !== null
+    const notice = attached
+      ? lostValuesNotice(lostValues(carried, live.thread.session.config))
+      : null
+    if (notice) {
+      this.emit(live, [
+        { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
+      ])
+    }
+    this.update(live, { status: attached ? 'ready' : 'closed' })
     this.save(live)
     this.touch(live.id)
     return this.summary(live.id)
