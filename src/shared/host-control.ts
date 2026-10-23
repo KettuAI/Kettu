@@ -34,7 +34,15 @@ export type MainToHost =
   | { type: 'host:settings'; settings: HostSettings }
   | { type: 'host:busy-request'; requestId: number }
   | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
+  // `artifact.content`: the file of a version, the latest when `version` is null.
+  | { type: 'host:artifact-content-request'; requestId: number; id: string; version: number | null }
   | { type: 'host:shutdown' }
+
+/** The host's answer to `host:artifact-content-request`. */
+export type ArtifactContentResult =
+  | { kind: 'found'; path: string; version: number } // `path` lies in artifacts/content/
+  | { kind: 'not_found' }
+  | { kind: 'failed' }
 
 /** An agent process the host runs; its start time tells it apart from a later one with its pid. */
 export interface AgentProcess {
@@ -58,6 +66,7 @@ export type HostToMain =
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
   | { type: 'host:granted'; requestId: number }
+  | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }
   | { type: 'host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'host:stopped' }
 

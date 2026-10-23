@@ -51,6 +51,9 @@ function systemLocale(): Locale {
   return isLocale(value) ? value : 'en'
 }
 const onUpdateChanged = subscribe('update:changed')
+const onShortcut = subscribe('app:shortcut')
+const onArtifactBlocked = subscribe('artifact:blocked')
+const onArtifactStopped = subscribe('artifact:stopped')
 
 const api: OverbenchApi = {
   platform: process.platform,
@@ -77,6 +80,13 @@ const api: OverbenchApi = {
     reportInteractive: () => send('perf:interactive'),
     setUnsaved: (files) => send('app:set-unsaved', files),
     perfMetrics: () => invoke('perf:metrics'),
+    onShortcut,
+  },
+  artifacts: {
+    open: (id) => invoke('artifact:open', id),
+    close: (url) => invoke('artifact:close', url),
+    onBlocked: onArtifactBlocked,
+    onStopped: onArtifactStopped,
   },
   settings: {
     get: () => invoke('settings:get'),

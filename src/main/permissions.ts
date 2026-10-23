@@ -27,17 +27,18 @@ export function isPermissionAllowed(
 
 /**
  * Denies every permission the app does not need. Electron grants all of them to a session that
- * has no handler, and the check handler is the one the web APIs ask first. A page that has had a
- * subframe gets nothing.
+ * has no handler, and the check handler is the one the web APIs ask first. A page the frame guard
+ * does not trust now, as while a new frame is pending, gets nothing; nor does an artifact's frame,
+ * which is never the app's page.
  */
 export function restrictPermissions(
   session: Session,
   isOwnUrl: (url: string | undefined) => boolean,
-  hasSubframe: (webContents: WebContents) => boolean,
+  isFramed: (webContents: WebContents) => boolean,
 ): void {
   session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
-      !hasSubframe(webContents) &&
+      !isFramed(webContents) &&
         isPermissionAllowed(
           permission,
           { url: details.requestingUrl, isMainFrame: details.isMainFrame },
@@ -48,7 +49,7 @@ export function restrictPermissions(
   session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     return (
       webContents !== null &&
-      !hasSubframe(webContents) &&
+      !isFramed(webContents) &&
       isPermissionAllowed(
         permission,
         { url: details.requestingUrl ?? requestingOrigin, isMainFrame: details.isMainFrame },

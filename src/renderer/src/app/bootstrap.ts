@@ -7,6 +7,7 @@ import {
   usePendingSession,
 } from '@renderer/app/actions'
 import { launchTarget } from '@renderer/app/restore'
+import { installArtifactDevTools } from '@renderer/features/artifacts/dev'
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
@@ -128,6 +129,7 @@ export function bootstrap(): Promise<unknown> {
   // Platform styles, such as the Windows scrollbars, key off this.
   document.documentElement.dataset.platform = platform
   installPerfCounters()
+  if (import.meta.env.DEV) installArtifactDevTools()
   const agents = window.overbench.agents
   agents.onEvent(onHostEvent)
   agents.onConnection((state) => {

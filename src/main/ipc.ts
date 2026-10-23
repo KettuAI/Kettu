@@ -19,6 +19,7 @@ import type {
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
 import { grantPaths } from './attachments'
+import type { Artifacts } from './artifacts'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
@@ -27,7 +28,7 @@ import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
-import { hasSubframe } from './subframes'
+import { framesSettled, isRevoked } from './subframes'
 import type { TerminalHost } from './terminal-host'
 import type { Updater } from './updater'
 
@@ -37,6 +38,7 @@ export interface IpcDeps {
   settings: SettingsStore
   agentHost: AgentHost
   terminalHost: TerminalHost
+  artifacts: Artifacts
   updater: Updater
   quit: QuitFlow
   /** Started with --overbench-perf. */
@@ -48,16 +50,27 @@ interface Caller {
   event: IpcMainInvokeEvent | IpcMainEvent
 }
 
-/** Only the app's own pages, in its own windows and with no subframe, may call main. */
+/**
+ * Only the app's own pages, in its own windows and with no frame the frame guard refused, may call
+ * main.
+ */
 export function isTrusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const frame = event.senderFrame
   return (
     frame !== null &&
     frame === event.sender.mainFrame &&
     isRendererUrl(frame.url) &&
-    !hasSubframe(event.sender) &&
+    !isRevoked(event.sender) &&
     BrowserWindow.fromWebContents(event.sender) !== null
   )
+}
+
+/** `isTrusted`, once every frame the page is creating has committed, which holds the call till then. */
+export async function isTrustedOnceSettled(
+  event: IpcMainInvokeEvent | IpcMainEvent,
+): Promise<boolean> {
+  await framesSettled(event.sender)
+  return isTrusted(event)
 }
 
 function handle<C extends IpcInvokeChannel>(
@@ -65,8 +78,10 @@ function handle<C extends IpcInvokeChannel>(
   arity: number,
   handler: (caller: Caller, ...args: unknown[]) => IpcInvokeResult<C> | Promise<IpcInvokeResult<C>>,
 ): void {
-  ipcMain.handle(channel, (event, ...args: unknown[]) => {
-    if (!isTrusted(event)) throw new Error(`Rejected "${channel}" call from untrusted sender`)
+  ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+    if (!(await isTrustedOnceSettled(event))) {
+      throw new Error(`Rejected "${channel}" call from untrusted sender`)
+    }
     if (args.length !== arity) {
       throw new Error(`"${channel}" takes ${arity} argument(s), got ${args.length}`)
     }
@@ -79,11 +94,17 @@ function on<C extends keyof IpcSendContract>(
   handler: (event: IpcMainEvent, ...args: unknown[]) => void,
 ): void {
   ipcMain.on(channel, (event, ...args: unknown[]) => {
-    if (!isTrusted(event)) {
-      log.warn(`Rejected "${channel}" message from untrusted sender`)
-      return
+    const run = (): void => {
+      if (!isTrusted(event)) {
+        log.warn(`Rejected "${channel}" message from untrusted sender`)
+        return
+      }
+      handler(event, ...args)
     }
-    handler(event, ...args)
+    // Held messages run in the order they came, before any that arrives after the frames settle.
+    const settling = framesSettled(event.sender)
+    if (settling) void settling.then(run)
+    else run()
   })
 }
 
@@ -156,6 +177,7 @@ export function registerIpcHandlers({
   settings,
   agentHost,
   terminalHost,
+  artifacts,
   updater,
   quit,
   perf,
@@ -276,6 +298,11 @@ export function registerIpcHandlers({
       })),
     }
   })
+
+  handle('artifact:open', 1, async ({ event }, id) => ({
+    url: await artifacts.open(event.sender, id),
+  }))
+  handle('artifact:close', 1, ({ event }, url) => artifacts.close(event.sender, url))
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))

@@ -76,6 +76,16 @@ describe('isPermissionAllowed', () => {
     expect(isPermissionAllowed('clipboard-sanitized-write', frame, isOwnUrl)).toBe(false)
   })
 
+  it('denies every permission to an artifact, in its frame or alone', () => {
+    const artifact = 'overbench-artifact://0123456789abcdef0123456789/'
+    for (const permission of [...DENIED, 'clipboard-read', 'clipboard-sanitized-write']) {
+      for (const isMainFrame of [false, true]) {
+        const context = { url: artifact, isMainFrame }
+        expect(isPermissionAllowed(permission, context, isOwnUrl)).toBe(false)
+      }
+    }
+  })
+
   it('denies a request that has no URL', () => {
     const unknown = { url: undefined, isMainFrame: true }
     expect(isPermissionAllowed('clipboard-read', unknown, isOwnUrl)).toBe(false)
@@ -88,14 +98,14 @@ interface Handlers {
   device: () => boolean
 }
 
-function installed(hasSubframe: (webContents: WebContents) => boolean = () => false): Handlers {
+function installed(isFramed: (webContents: WebContents) => boolean = () => false): Handlers {
   const handlers: Partial<Handlers> = {}
   const session = {
     setPermissionRequestHandler: (handler: Handlers['request']) => (handlers.request = handler),
     setPermissionCheckHandler: (handler: Handlers['check']) => (handlers.check = handler),
     setDevicePermissionHandler: (handler: Handlers['device']) => (handlers.device = handler),
   }
-  restrictPermissions(session as unknown as Session, isOwnUrl, hasSubframe)
+  restrictPermissions(session as unknown as Session, isOwnUrl, isFramed)
   return handlers as Handlers
 }
 
@@ -133,7 +143,19 @@ describe('restrictPermissions', () => {
     expect(installed().device()).toBe(false)
   })
 
-  it('denies everything to a page that has had a subframe', () => {
+  it("denies every request and check from an artifact's frame", () => {
+    const { request, check } = installed()
+    const artifact = 'overbench-artifact://0123456789abcdef0123456789/'
+    const details = { isMainFrame: false, requestingUrl: artifact }
+    const answers: boolean[] = []
+    for (const permission of [...DENIED, 'clipboard-read', 'clipboard-sanitized-write']) {
+      request(webContents, permission, (granted: boolean) => answers.push(granted), details)
+      answers.push(check(webContents, permission, artifact.slice(0, -1), details))
+    }
+    expect(answers.every((granted) => !granted)).toBe(true)
+  })
+
+  it('denies everything to a page the frame guard does not trust', () => {
     const framed = {}
     const { request, check } = installed((contents) => contents === (framed as WebContents))
     const details = { isMainFrame: true, requestingUrl: APP_URL }

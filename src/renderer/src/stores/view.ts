@@ -3,7 +3,7 @@ import type { AgentId } from '@shared/thread'
 import { markSwitchStart } from '@renderer/app/perf'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
-export type MainView =
+type PageView =
   // At launch, until the last session or New session replaces it.
   | { kind: 'launch' }
   | { kind: 'session'; sessionId: string }
@@ -12,6 +12,9 @@ export type MainView =
   // of that session, in its project.
   | { kind: 'new'; agentId: AgentId | null; noProject: boolean; parentId?: string }
   | { kind: 'usage' } // the usage page, opened from the sidebar
+
+// An artifact in the viewer, which Back leaves for what the main area showed before.
+export type MainView = PageView | { kind: 'artifact'; id: string; back: PageView }
 
 // The No project group's key in `collapsedProjects`, which no folder's path can take.
 export const NO_PROJECT_GROUP = 'no-project'
@@ -113,6 +116,19 @@ export function openUsage(): void {
     main: { kind: 'usage' },
     settings: { ...s.settings, open: false },
   }))
+}
+
+/** Shows an artifact in the viewer, in place of what the main area shows. */
+export function openArtifact(id: string): void {
+  useViewStore.setState((s) => ({
+    main: { kind: 'artifact', id, back: s.main.kind === 'artifact' ? s.main.back : s.main },
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** The viewer's Back: to what the main area showed before the artifact. */
+export function closeArtifact(): void {
+  useViewStore.setState((s) => (s.main.kind === 'artifact' ? { main: s.main.back } : s))
 }
 
 /**

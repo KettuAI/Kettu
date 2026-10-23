@@ -1,0 +1,15 @@
+{
+  "viewer": {
+    "back": "返回",
+    "version": "v{{version}}",
+    "reload": "重新加载",
+    "loading": "正在加载页面",
+    "blocked": "此页面试图打开 {{host}}",
+    "openInBrowser": "在浏览器中打开",
+    "dismiss": "关闭",
+    "stoppedTitle": "页面已停止",
+    "stoppedDescription": "它的进程已结束。重新加载即可再次显示。",
+    "errorTitle": "无法打开此 Artifact",
+    "retry": "重试"
+  }
+}

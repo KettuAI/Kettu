@@ -4,6 +4,12 @@
 export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/
 
 export const ARTIFACT_TITLE_CHARS = 120
+
+/**
+ * The viewer's frame: the page runs scripts on its own origin and may offer a download, but opens
+ * no window, never moves the app's frame and cannot block on alert().
+ */
+export const ARTIFACT_FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-downloads'
 /** How long a deleted artifact stays in Recently deleted before the purge removes it. */
 export const ARTIFACT_KEEP_DELETED_MS = 30 * 24 * 60 * 60 * 1000
 

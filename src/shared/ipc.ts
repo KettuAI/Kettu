@@ -51,6 +51,28 @@ export type AppCommand =
   | { kind: 'toggle-sidebar' }
   | { kind: 'open-session'; sessionId: string }
 
+/** A frame of an artifact tried to leave its origin for an http(s) address, which never loads. */
+export interface ArtifactBlockedEvent {
+  origin: string // the artifact's, as `artifact:open` gave it, without the path
+  url: string
+  /** The frame the app holds tried it, and shows an error page now, so the app loads it again. */
+  reload: boolean
+}
+
+/** The process of an artifact's frame stopped, so the frame shows nothing until it reloads. */
+export interface ArtifactStoppedEvent {
+  origin: string
+}
+
+/** An app shortcut typed while a page's frame had focus, which main passes to the app's page. */
+export interface ForwardedKey {
+  key: string
+  code: string
+  shiftKey: boolean
+  ctrlKey: boolean
+  metaKey: boolean
+}
+
 /** Request/response contract of every `ipcRenderer.invoke` channel, keyed by channel name. */
 export interface IpcInvokeContract {
   'app:get-info': { args: []; result: AppInfo }
@@ -80,6 +102,8 @@ export interface IpcInvokeContract {
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
   'perf:metrics': { args: []; result: PerfMetrics }
+  'artifact:open': { args: [id: string]; result: { url: string } }
+  'artifact:close': { args: [url: string]; result: void }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -92,6 +116,9 @@ export interface IpcEventContract {
   'update:changed': UpdateStatus
   'app:confirm-quit': QuitRequest
   'app:command': AppCommand
+  'app:shortcut': ForwardedKey
+  'artifact:blocked': ArtifactBlockedEvent
+  'artifact:stopped': ArtifactStoppedEvent
 }
 
 export type IpcEventChannel = keyof IpcEventContract
@@ -137,6 +164,16 @@ export interface OverbenchApi {
     reportInteractive(): void
     /** Only answers in a perf run; rejects otherwise. */
     perfMetrics(): Promise<PerfMetrics>
+    /** App shortcuts typed in an artifact's frame, which the page itself never sees. */
+    onShortcut(listener: (key: ForwardedKey) => void): () => void
+  }
+  artifacts: {
+    /** Lets the window frame the artifact; resolves to its origin's URL, without a query. */
+    open(id: string): Promise<{ url: string }>
+    /** Undoes one `open`, once the frame is gone. */
+    close(url: string): Promise<void>
+    onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
+    onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
   }
   settings: {
     get(): Promise<SettingsFile>

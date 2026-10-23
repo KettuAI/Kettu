@@ -105,6 +105,9 @@ parentPort.on('message', ({ data, ports }) => {
         withHost((h) => h.grant(message.requestId, message.grants.filter(isGrant)))
       }
       break
+    case 'host:artifact-content-request':
+      withHost((h) => h.artifactContent(message.requestId, message.id, message.version))
+      break
     case 'host:shutdown':
       if (!host) {
         send({ type: 'host:stopped' })

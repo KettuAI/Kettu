@@ -1,7 +1,12 @@
 import { join } from 'node:path'
 import { app, type WebContents } from 'electron'
 import type { AttachmentGrant } from '@shared/attachments'
-import type { BusySession, HostToMain, MainToHost } from '@shared/host-control'
+import type {
+  ArtifactContentResult,
+  BusySession,
+  HostToMain,
+  MainToHost,
+} from '@shared/host-control'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
@@ -29,12 +34,27 @@ const MAX_STRING = 8192
 const GRACE_MS = 2_000
 /** How long the host gets to take a grant before the attachment counts as not added. */
 const GRANT_TIMEOUT_MS = 5_000
+/** How long the protocol waits for the host to name a version's file. */
+const CONTENT_TIMEOUT_MS = 10_000
 
 function isStringList(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.length <= MAX_LIST &&
     value.every((item) => typeof item === 'string' && item.length <= MAX_STRING)
+  )
+}
+
+function isContentResult(value: unknown): value is ArtifactContentResult {
+  if (typeof value !== 'object' || value === null) return false
+  const { kind, path, version } = value as Record<string, unknown>
+  if (kind === 'not_found' || kind === 'failed') return true
+  return (
+    kind === 'found' &&
+    typeof path === 'string' &&
+    path.length <= MAX_STRING &&
+    Number.isSafeInteger(version) &&
+    (version as number) >= 1
   )
 }
 
@@ -58,6 +78,8 @@ export class AgentHost {
     GRANT_TIMEOUT_MS,
     () => new Error(t('attachments.hostDown')),
   )
+  private readonly contentRequests = new Map<number, (result: ArtifactContentResult) => void>()
+  private nextContentId = 1
 
   constructor(private readonly deps: AgentHostDeps) {
     this.host = new UtilityHost<MainToHost, HostToMain>({
@@ -149,6 +171,27 @@ export class AgentHost {
     )
   }
 
+  /** The file of an artifact's version, the latest when `version` is null; `failed` without a host. */
+  artifactContent(id: string, version: number | null): Promise<ArtifactContentResult> {
+    if (this.host.state !== 'ready') return Promise.resolve({ kind: 'failed' })
+    const requestId = this.nextContentId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.contentRequests.delete(requestId)
+        log.warn(`No artifact content answer within ${CONTENT_TIMEOUT_MS} ms`)
+        resolve({ kind: 'failed' })
+      }, CONTENT_TIMEOUT_MS)
+      this.contentRequests.set(requestId, (result) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      if (!this.host.post({ type: 'host:artifact-content-request', requestId, id, version })) {
+        this.contentRequests.get(requestId)?.({ kind: 'failed' })
+        this.contentRequests.delete(requestId)
+      }
+    })
+  }
+
   stop(): Promise<void> {
     return this.host.stop()
   }
@@ -186,6 +229,13 @@ export class AgentHost {
       case 'host:granted':
         this.grants.answered(message.requestId)
         break
+      case 'host:artifact-content': {
+        const resolve = this.contentRequests.get(message.requestId)
+        if (!resolve) break
+        this.contentRequests.delete(message.requestId)
+        resolve(isContentResult(message.result) ? message.result : { kind: 'failed' })
+        break
+      }
       case 'host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
         if (message.level === 'error') log.error(text)
@@ -202,6 +252,8 @@ export class AgentHost {
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
     this.grants.failAll()
+    for (const resolve of this.contentRequests.values()) resolve({ kind: 'failed' })
+    this.contentRequests.clear()
     this.deps.onBadge(0)
     const roots = this.agentProcesses
     this.agentProcesses = []

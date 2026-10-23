@@ -1,8 +1,11 @@
+import { join } from 'node:path'
 import { app, BrowserWindow, powerMonitor, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AgentHost } from './agent-host'
+import { Artifacts } from './artifacts'
+import { registerArtifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { broadcast } from './events'
@@ -16,7 +19,7 @@ import { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
-import { hasSubframe, watchSubframes } from './subframes'
+import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { TerminalHost } from './terminal-host'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
@@ -56,6 +59,8 @@ if (devUserData) {
   log.info(`Development run: data in ${devUserData}`)
 }
 
+registerArtifactScheme()
+
 async function start(): Promise<void> {
   const perf = process.argv.includes('--overbench-perf')
   const userDataPath = app.getPath('userData')
@@ -72,7 +77,11 @@ async function start(): Promise<void> {
 
   await app.whenReady()
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
-  restrictPermissions(session.defaultSession, isRendererUrl, hasSubframe)
+  restrictPermissions(
+    session.defaultSession,
+    isRendererUrl,
+    (contents) => isRevoked(contents) || hasPendingFrame(contents),
+  )
   const [settings, windowState, appState] = await loading
 
   // The system's languages are read once; macOS and Windows ask for a restart to change them.
@@ -94,6 +103,11 @@ async function start(): Promise<void> {
     onProjects: (paths) => terminalHost.setProjects(paths),
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
   })
+  const artifacts = new Artifacts({
+    content: (id, version) => agentHost.artifactContent(id, version),
+    contentDir: join(userDataPath, 'artifacts', 'content'),
+  })
+  artifacts.install(session.defaultSession)
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,
@@ -137,7 +151,15 @@ async function start(): Promise<void> {
     updater.settingsChanged(next, changed)
   })
 
-  registerIpcHandlers({ settings, agentHost, terminalHost, updater, quit: quitFlow, perf })
+  registerIpcHandlers({
+    settings,
+    agentHost,
+    terminalHost,
+    artifacts,
+    updater,
+    quit: quitFlow,
+    perf,
+  })
   installMenu(menuDeps)
 
   app.on('browser-window-created', (_, window) => {
@@ -145,10 +167,14 @@ async function start(): Promise<void> {
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })
     quitFlow.watchWindow(window)
-    watchSubframes(window.webContents, () => {
-      agentHost.revoke(window.webContents)
-      terminalHost.revoke(window.webContents)
+    watchSubframes(window.webContents, {
+      isOpenedArtifact: (url) => artifacts.origins.isOpenedIn(window.webContents, url),
+      onRevoked: () => {
+        agentHost.revoke(window.webContents)
+        terminalHost.revoke(window.webContents)
+      },
     })
+    artifacts.watchWindow(window.webContents)
     window.once('show', () => applyBadgeTo(window))
     window.on('session-end', () => {
       quitFlow.systemShutdown()

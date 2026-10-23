@@ -1,0 +1,15 @@
+{
+  "viewer": {
+    "back": "Back",
+    "version": "v{{version}}",
+    "reload": "Reload",
+    "loading": "Loading the page",
+    "blocked": "This page tried to open {{host}}",
+    "openInBrowser": "Open in browser",
+    "dismiss": "Dismiss",
+    "stoppedTitle": "The page stopped",
+    "stoppedDescription": "Its process ended. Reload to show it again.",
+    "errorTitle": "Could not open this artifact",
+    "retry": "Retry"
+  }
+}
