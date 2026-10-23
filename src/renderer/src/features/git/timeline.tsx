@@ -23,7 +23,7 @@ import { loadCommit, useChanges, useCommit, useIncoming } from './use-git-data'
 
 /** A row of the popover: menu-family height, padding and highlight, one for pointer and keys. */
 export const ROW =
-  'flex h-row w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:bg-accent data-[popup-open]:bg-accent'
+  'flex h-row w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:bg-hover data-[popup-open]:bg-hover'
 
 /** A part of the popover, under a separator; a part with nothing to show is left out whole. */
 export function Part({ children }: { children: ReactNode }) {
@@ -100,8 +100,8 @@ function RefPill({ name, strong }: { name: string; strong?: boolean }) {
       className={cn(
         'inline-flex h-4.5 shrink-0 items-center rounded-md px-1.5 font-mono text-meta whitespace-nowrap',
         strong
-          ? 'bg-muted text-foreground'
-          : 'text-muted-foreground shadow-[inset_0_0_0_var(--hairline)_var(--border)]',
+          ? 'bg-subtle text-primary'
+          : 'text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
       )}
     >
       {name}
@@ -114,7 +114,7 @@ function Chevron({ open }: { open: boolean }) {
     <ChevronRightIcon
       aria-hidden
       className={cn(
-        'size-3 shrink-0 text-muted-foreground transition-transform duration-(--duration-fast) motion-reduce:transition-none',
+        'size-3 shrink-0 text-icon transition-transform duration-(--duration-fast) motion-reduce:transition-none',
         open && 'rotate-90',
       )}
     />
@@ -132,14 +132,14 @@ function disclosureKeys(open: boolean, toggle: () => void) {
 }
 
 const STATUS_LETTER: Record<ChangedFile['status'], { letter: string; className: string }> = {
-  added: { letter: 'A', className: 'text-success-text' },
-  untracked: { letter: 'U', className: 'text-success-text' },
-  modified: { letter: 'M', className: 'text-attention-text' },
-  renamed: { letter: 'R', className: 'text-attention-text' },
-  copied: { letter: 'C', className: 'text-attention-text' },
-  typechange: { letter: 'T', className: 'text-attention-text' },
-  deleted: { letter: 'D', className: 'text-destructive' },
-  conflicted: { letter: '!', className: 'text-destructive' },
+  added: { letter: 'A', className: 'text-tertiary' },
+  untracked: { letter: 'U', className: 'text-tertiary' },
+  modified: { letter: 'M', className: 'text-tertiary' },
+  renamed: { letter: 'R', className: 'text-tertiary' },
+  copied: { letter: 'C', className: 'text-tertiary' },
+  typechange: { letter: 'T', className: 'text-tertiary' },
+  deleted: { letter: 'D', className: 'text-danger' },
+  conflicted: { letter: '!', className: 'text-danger' },
 }
 
 function LineCounts({
@@ -152,9 +152,9 @@ function LineCounts({
   if (insertions === null || deletions === null) return null
   return (
     <span className="shrink-0 font-mono text-meta tabular">
-      {insertions > 0 && <span className="text-success-text">+{insertions}</span>}
+      {insertions > 0 && <span className="text-success">+{insertions}</span>}
       {insertions > 0 && deletions > 0 && ' '}
-      {deletions > 0 && <span className="text-destructive">−{deletions}</span>}
+      {deletions > 0 && <span className="text-danger">−{deletions}</span>}
     </span>
   )
 }
@@ -203,7 +203,7 @@ function FileRow({
       </span>
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="shrink-0 truncate">{name}</span>
-        {folder && <span className="min-w-0 truncate text-xs text-muted-foreground">{folder}</span>}
+        {folder && <span className="min-w-0 truncate text-xs text-tertiary">{folder}</span>}
       </span>
       <LineCounts insertions={file.insertions} deletions={file.deletions} />
     </button>
@@ -222,7 +222,7 @@ function LoadingRows({ lane, count = 2 }: { lane: Segment; count?: number }) {
 
 function ErrorRow({ lane, message }: { lane: Segment; message: string }) {
   return (
-    <div className="flex h-row items-center gap-2 px-2 text-xs text-destructive" title={message}>
+    <div className="flex h-row items-center gap-2 px-2 text-xs text-danger" title={message}>
       <Lane top={lane} bottom={lane} node={null} />
       <span className="min-w-0 truncate">{message.split('\n')[0]}</span>
     </div>
@@ -232,7 +232,7 @@ function ErrorRow({ lane, message }: { lane: Segment; message: string }) {
 function LogRows({ commits, lane }: { commits: LogCommit[]; lane: Segment }) {
   const now = useNow()
   return commits.map((c) => (
-    <div key={c.oid} className="flex h-row items-center gap-2 px-2 text-muted-foreground">
+    <div key={c.oid} className="flex h-row items-center gap-2 px-2 text-tertiary">
       <Lane top={lane} bottom={lane} node={null} />
       <span className="w-13 shrink-0 font-mono text-meta">{c.oid.slice(0, 7)}</span>
       <span className="min-w-0 flex-1 truncate" title={c.subject}>
@@ -398,7 +398,7 @@ function IncomingPart({
         <Lane top={top} bottom={bottom} node="incoming" />
         <RefPill name={status.remote?.name ?? 'origin'} />
         <span className="min-w-0 flex-1 truncate">{t('timeline.incoming', { count: behind })}</span>
-        <span className="inline-flex shrink-0 items-center gap-px text-xs text-foreground tabular">
+        <span className="inline-flex shrink-0 items-center gap-px text-xs text-secondary tabular">
           <ArrowDownIcon className="size-3" />
           {behind}
         </span>
@@ -448,7 +448,7 @@ function ChangesPart({
       >
         <Lane top={top} bottom={bottom} node="work" />
         <span className="min-w-0 flex-1 truncate">{t('timeline.uncommitted')}</span>
-        <span className="shrink-0 text-xs text-muted-foreground tabular">
+        <span className="shrink-0 text-xs text-tertiary tabular">
           {t('timeline.files', { count: files })}
         </span>
         <LineCounts insertions={insertions} deletions={deletions} />
@@ -539,15 +539,15 @@ function CommitPart({
               <Lane top={top} bottom={bottom} node={commit.pushed ? 'pushed' : 'unpushed'} />
               <span
                 className={cn(
-                  'w-13 shrink-0 font-mono text-meta text-muted-foreground',
-                  copied && 'text-success-text',
+                  'w-13 shrink-0 font-mono text-meta text-tertiary',
+                  copied && 'text-secondary',
                 )}
               >
                 {copied ? t('timeline.copied') : short}
               </span>
               <span className="min-w-0 flex-1 truncate">{commit.subject}</span>
               {upstreamTip && status.remote && <RefPill name={status.remote.name} />}
-              <span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular">
+              <span className="w-6 shrink-0 text-right text-xs text-tertiary tabular">
                 {shortAgo(commit.authoredAt, now)}
               </span>
             </HoverCardTrigger>
@@ -625,26 +625,26 @@ function CommitCard({ status, commit }: { status: GitStatus; commit: CommitSumma
         {data?.body && (
           <p
             data-selectable=""
-            className="max-h-40 overflow-y-auto leading-5 whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]"
+            className="max-h-40 overflow-y-auto leading-5 whitespace-pre-wrap text-secondary [overflow-wrap:anywhere]"
           >
             {data.body}
           </p>
         )}
         {!data && !error && <Skeleton className="h-3 w-40" />}
-        <span className="text-muted-foreground">
+        <span className="text-tertiary">
           {data ? `${data.authorName} · ` : ''}
           {fullTime(commit.authoredAt)} · {where}
         </span>
       </div>
       <div className="h-px bg-border-soft" />
-      <div className="flex items-center gap-2 text-muted-foreground tabular">
+      <div className="flex items-center gap-2 text-tertiary tabular">
         <span className="flex-1">
           {data ? t('timeline.files', { count: data.files.length }) : error ? error : ' '}
         </span>
         {data && <LineCounts insertions={insertions} deletions={deletions} />}
       </div>
       <div className="-mr-1.5 -mb-1 flex items-center gap-1">
-        <span data-selectable="" className="flex-1 font-mono text-meta text-muted-foreground">
+        <span data-selectable="" className="flex-1 font-mono text-meta text-tertiary">
           {commit.oid.slice(0, 12)}
         </span>
         <CopyButton text={commit.oid} label={t('timeline.copyId')} />
@@ -666,12 +666,7 @@ function MoreRow({
 }) {
   const { t } = useTranslation('git')
   return (
-    <button
-      type="button"
-      data-git-row=""
-      className={cn(ROW, 'text-muted-foreground')}
-      onClick={onShow}
-    >
+    <button type="button" data-git-row="" className={cn(ROW, 'text-tertiary')} onClick={onShow}>
       <Lane top={top} bottom={bottom} node={null} />
       <span className="text-xs">{t('timeline.more', { count })}</span>
     </button>
@@ -697,7 +692,7 @@ function BasePart({
     <>
       <Lane top={top} bottom={null} node="base" />
       <RefPill name={name} strong />
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate text-tertiary">
         {behind > 0 ? t('timeline.baseAhead', { count: behind }) : t('timeline.baseEven')}
       </span>
     </>
@@ -715,7 +710,7 @@ function BasePart({
         onKeyDown={disclosureKeys(open, toggle)}
       >
         {label}
-        <span className="inline-flex shrink-0 items-center gap-px text-xs text-muted-foreground tabular">
+        <span className="inline-flex shrink-0 items-center gap-px text-xs text-tertiary tabular">
           <ArrowDownIcon className="size-3" />
           {behind}
         </span>

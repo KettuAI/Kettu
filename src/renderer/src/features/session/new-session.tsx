@@ -225,10 +225,7 @@ function DraftComposer({
           <ModeMenu agentId={agentId} />
         </div>
         {(projectError || (project?.missing && !inScratch)) && (
-          <p
-            className="truncate px-3.5 pt-1 text-xs text-destructive"
-            title={projectError ?? undefined}
-          >
+          <p className="truncate px-3.5 pt-1 text-xs text-danger" title={projectError ?? undefined}>
             {projectError ?? t('newSession.missingLine')}
           </p>
         )}
@@ -253,7 +250,7 @@ function DraftComposer({
                   ? t('newSession.askAgent', { agent: name })
                   : t('newSession.describeTask')
             }
-            className="max-h-[min(40svh,24rem)] min-h-(--composer-min) pt-2 pr-1 pb-[15px] pl-3.5 text-prose leading-[22px] placeholder:text-muted-foreground md:text-prose"
+            className="max-h-[min(40svh,24rem)] min-h-(--composer-min) pt-2 pr-1 pb-[15px] pl-3.5 text-prose leading-[22px] placeholder:text-placeholder md:text-prose"
           />
           <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
             <Tooltip>
@@ -324,7 +321,7 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
           {scratch ? t('newSession.noProject') : project?.name}
         </span>
         {project?.missing && !scratch && (
-          <span className="shrink-0 text-destructive">{t('newSession.missing')}</span>
+          <span className="shrink-0 text-danger">{t('newSession.missing')}</span>
         )}
       </TooltipTrigger>
       <TooltipContent>{t('newSession.subSessionProject')}</TooltipContent>
@@ -409,7 +406,7 @@ function RecentSessions() {
           key={summary.id}
           type="button"
           onClick={() => openSession(summary.id, summary.projectPath)}
-          className="flex min-h-row items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-h-row items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
         >
           <AgentMark agent={summary.agentId} size={14} />
           <span className="min-w-0 flex-1 truncate">{sessionTitle(summary)}</span>

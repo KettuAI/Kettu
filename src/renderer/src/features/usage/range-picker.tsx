@@ -151,7 +151,7 @@ export function RangePicker({
         <div
           role="group"
           aria-label={t('picker.label')}
-          className="flex w-32 shrink-0 flex-col gap-px border-r border-border-soft p-1.5"
+          className="flex w-32 shrink-0 flex-col gap-px border-r border-subtle p-1.5"
         >
           {presetList.map((preset: Preset) => (
             <Button
@@ -159,7 +159,7 @@ export function RangePicker({
               variant="ghost"
               size="sm"
               aria-pressed={draft.from === preset.from && draft.to === preset.to}
-              className="justify-start font-normal aria-pressed:bg-accent aria-pressed:text-foreground"
+              className="justify-start font-normal aria-pressed:bg-selected aria-pressed:text-primary"
               onClick={() => reset(preset.from, preset.to)}
             >
               {t(`picker.presets.${preset.id}`)}
@@ -187,7 +187,7 @@ export function RangePicker({
             }}
             className="bg-transparent p-3"
           />
-          <div className="flex items-center gap-2 border-t border-border-soft px-3 py-2.5">
+          <div className="flex items-center gap-2 border-t border-subtle px-3 py-2.5">
             <DateField
               label={t('picker.start')}
               value={typed.from ?? (lo !== null ? iso(lo) : '')}
@@ -195,7 +195,7 @@ export function RangePicker({
               onChange={(text) => type('from', text)}
               onBlur={() => setLeft((v) => ({ ...v, from: true }))}
             />
-            <span className="text-muted-foreground">–</span>
+            <span className="text-tertiary">–</span>
             <DateField
               label={t('picker.end')}
               value={typed.to ?? (hi !== null && draft.to !== null ? iso(hi) : '')}
@@ -207,7 +207,7 @@ export function RangePicker({
               aria-live="polite"
               className={cn(
                 'min-w-14 text-xs tabular-nums',
-                fields.error ? 'text-destructive' : 'text-muted-foreground',
+                fields.error ? 'text-danger' : 'text-tertiary',
               )}
             >
               {fields.error
@@ -253,7 +253,7 @@ function DateField({
   onBlur: () => void
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <label className="flex items-center gap-1.5 text-xs text-tertiary">
       {label}
       <Input
         value={value}

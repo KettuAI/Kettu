@@ -289,7 +289,7 @@ function Tree({
               <>
                 <ChevronRightIcon
                   className={cn(
-                    'size-3 shrink-0 text-muted-foreground transition-transform duration-(--duration-fast)',
+                    'size-3 shrink-0 text-icon transition-transform duration-(--duration-fast)',
                     isOpen && 'rotate-90',
                   )}
                 />
@@ -362,7 +362,7 @@ function FilteredList({
         )}
       </VirtualRows>
       {more > 0 && (
-        <p className="shrink-0 border-t border-border-soft px-3 py-1.5 text-xs text-muted-foreground">
+        <p className="shrink-0 border-t border-subtle px-3 py-1.5 text-xs text-tertiary">
           {t('browser.moreMatches', { count: more })}
         </p>
       )}
@@ -391,7 +391,7 @@ function FileRow({
         <span className="shrink-0">
           {[...path.slice(nameStart)].map((char, i) =>
             marked.has(nameStart + i) ? (
-              <mark key={i} className="bg-transparent font-semibold text-foreground">
+              <mark key={i} className="bg-transparent font-semibold text-primary">
                 {char}
               </mark>
             ) : (
@@ -399,7 +399,11 @@ function FileRow({
             ),
           )}
         </span>
-        {folder && <span className="truncate text-xs text-muted-foreground">{folder}</span>}
+        {folder && (
+          <span className={cn('truncate text-xs', selected ? 'text-secondary' : 'text-tertiary')}>
+            {folder}
+          </span>
+        )}
       </span>
     </Row>
   )
@@ -481,7 +485,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
               title={row.text}
               onClick={() => openFile(projectPath, row.path, row.line)}
             >
-              <span className="w-8 shrink-0 text-right font-mono text-[11.5px] text-muted-foreground tabular">
+              <span className="w-8 shrink-0 text-right font-mono text-[11.5px] text-tertiary tabular">
                 {row.line}
               </span>
               <span className="truncate font-mono text-xs">
@@ -492,7 +496,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
         }}
       </VirtualRows>
       {state.result.truncated && (
-        <p className="shrink-0 border-t border-border-soft px-3 py-1.5 text-xs text-muted-foreground">
+        <p className="shrink-0 border-t border-subtle px-3 py-1.5 text-xs text-tertiary">
           {t('browser.truncated', { count: state.result.matches.length })}
         </p>
       )}
@@ -506,9 +510,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, at)}
-      <mark className="rounded-xs bg-attention/25 text-foreground">
-        {text.slice(at, at + query.length)}
-      </mark>
+      <mark className="rounded-xs bg-mark text-primary">{text.slice(at, at + query.length)}</mark>
       {text.slice(at + query.length)}
     </>
   )
@@ -537,10 +539,8 @@ function Row({
       {...aria}
       style={{ paddingLeft: 8 + depth * 12 }}
       className={cn(
-        'flex h-row w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-ui outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-        selected
-          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-          : 'hover:bg-sidebar-accent/70',
+        'flex h-row w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-ui outline-none focus-ring',
+        selected ? 'bg-selected text-primary' : 'hover:bg-hover',
       )}
     >
       {children}
@@ -553,7 +553,7 @@ function Message({ tone, children }: { tone?: 'error'; children: ReactNode }) {
     <p
       className={cn(
         'flex items-center gap-2 px-3 py-3 text-xs leading-normal',
-        tone === 'error' ? 'text-destructive' : 'text-muted-foreground',
+        tone === 'error' ? 'text-danger' : 'text-secondary',
       )}
     >
       {children}

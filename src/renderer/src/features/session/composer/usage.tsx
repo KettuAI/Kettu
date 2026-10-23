@@ -15,7 +15,7 @@ import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { USAGE_TONE_TEXT, usageTone } from '@renderer/features/sidebar/plan-usage'
+import { USAGE_TONE_TEXT, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import { fullTime, limitLabel, longAgo, money, resetTime, tokens } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -27,8 +27,12 @@ import {
   type ContextReport,
 } from '@renderer/stores/usage'
 
-/** From this share of the context the ring turns to --attention and shows the percentage. */
+/** From this share of the context the button shows the percentage, in the usage level's color. */
 const CONTEXT_WARNING = 0.8
+
+/** The context's usage level, by the same thresholds as a plan's windows. */
+const contextTone = (share: number): UsageTone =>
+  usageTone({ usedPercent: share * 100, state: 'ok' })
 
 const SHORT_WINDOW = {
   five_hour: 'usage.shortWindow.five_hour',
@@ -52,9 +56,9 @@ function warningLimit(limits: PlanLimit[]): PlanLimit | null {
 
 const RING_TONE = {
   muted: ['stroke-track', 'stroke-muted-foreground'],
-  attention: ['stroke-attention/45', 'stroke-attention'],
-  success: ['stroke-success/45', 'stroke-success'],
-  destructive: ['stroke-destructive/45', 'stroke-destructive'],
+  success: ['stroke-track', 'stroke-muted-foreground'],
+  attention: ['stroke-warning/45', 'stroke-warning'],
+  destructive: ['stroke-danger/45', 'stroke-danger'],
 } as const
 
 /** A pie inside a ring: a filling wedge, which a short arc would not be, cannot read as a spinner. */
@@ -114,6 +118,7 @@ export function UsageButton({
   if (!usage && !warning) return null
   const share = usage && usage.size > 0 ? usage.used / usage.size : 0
   const full = share >= CONTEXT_WARNING
+  const tone = contextTone(share)
   const onOpenChange = (open: boolean) => {
     if (!open) return
     refreshLimits(agentId).catch((error: unknown) =>
@@ -142,7 +147,7 @@ export function UsageButton({
             key={`${warning.window}-${warning.usedPercent}`}
             className={cn(
               'animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)',
-              warning.state === 'reached' ? 'text-destructive' : 'text-attention-text',
+              USAGE_TONE_TEXT[usageTone(warning)],
             )}
           >
             {isShortWindow(warning.window) ? t(SHORT_WINDOW[warning.window]) : limitLabel(warning)}{' '}
@@ -152,12 +157,15 @@ export function UsageButton({
         {usage && full && (
           <span
             key={Math.round(share * 100)}
-            className="animate-in text-attention-text fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
+            className={cn(
+              'animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)',
+              USAGE_TONE_TEXT[tone],
+            )}
           >
             {Math.round(share * 100)}%
           </span>
         )}
-        {usage && <Ring share={share} tone={full ? 'attention' : 'muted'} />}
+        {usage && <Ring share={share} tone={tone} />}
       </PopoverTrigger>
       <PopoverContent side="top" align="end" sideOffset={6} className="w-[320px] gap-0 p-0">
         {usage && (
@@ -192,17 +200,18 @@ function ContextPart({
   const { t } = useTranslation('composer')
   const report = useUsageStore((s) => s.context[sessionId])
   const totals = usage.tokens
+  const tone = contextTone(share)
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
       <div className="flex items-baseline justify-between text-ui">
         <span className="font-medium">{t('usage.context.title')}</span>
-        <span className={cn('tabular', full && 'text-attention-text')}>
+        <span className={cn('tabular', full && USAGE_TONE_TEXT[tone])}>
           {Math.round(share * 100)}%
         </span>
       </div>
       <Progress
         value={Math.min(100, share * 100)}
-        tone={full ? 'attention' : 'default'}
+        tone={tone === 'success' ? 'default' : tone}
         aria-label={t('usage.context.used')}
       />
       <p className="text-xs text-muted-foreground tabular">
@@ -316,7 +325,7 @@ function Breakdown({ report }: { report: ContextReport }) {
 function ListPart({ list }: { list: ContextList }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group/list flex items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group/list flex items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-ring">
         <ChevronRightIcon className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90" />
         {list.name}
         <span className="tabular">{list.items.length}</span>

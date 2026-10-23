@@ -71,7 +71,7 @@ export const SessionRow = memo(function SessionRow({
   const subagent = summary.origin === 'subagent'
 
   const lead = subagent ? (
-    <BotIcon className="text-muted-foreground" />
+    <BotIcon className="text-icon" />
   ) : (
     <span className="relative grid size-3.5 shrink-0 place-items-center">
       <AgentMark
@@ -88,7 +88,7 @@ export const SessionRow = memo(function SessionRow({
             event.stopPropagation()
             setExpanded(!expanded)
           }}
-          className="absolute inset-0 grid place-items-center text-muted-foreground opacity-0 group-hover/menu-button:opacity-100"
+          className="absolute inset-0 grid place-items-center text-icon opacity-0 group-hover/menu-button:opacity-100"
         >
           {expanded ? (
             <ChevronDownIcon className="size-3!" />
@@ -134,14 +134,17 @@ export const SessionRow = memo(function SessionRow({
       <span className="min-w-0 flex-1 truncate">
         {sessionTitle(summary)}
         {subagent && summary.description && (
-          <span className="font-normal text-muted-foreground"> · {summary.description}</span>
+          <span className="font-normal text-tertiary group-data-active/menu-button:text-secondary">
+            {' '}
+            · {summary.description}
+          </span>
         )}
       </span>
       {summary.pr && <PrIcon state={summary.pr.state} size={13} />}
       {hasChildren && !expanded && (
         <span
           aria-label={t('row.subSessions', { count: children.length })}
-          className="inline-flex items-center gap-0.5 text-[11.5px] text-muted-foreground tabular"
+          className="inline-flex items-center gap-0.5 text-[11.5px] text-tertiary tabular group-data-active/menu-button:text-secondary"
         >
           <CornerDownRightIcon className="size-[11px]!" />
           {children.length}
@@ -178,13 +181,13 @@ export const SessionRow = memo(function SessionRow({
             size="row"
             isActive={current}
             style={{ paddingLeft: pad }}
-            className="bg-sidebar-accent pr-2 text-sidebar-accent-foreground data-active:font-medium"
+            className="bg-selected pr-2 text-primary data-active:font-medium"
           >
             {lead}
             <SessionTitleField
               summary={summary}
               onDone={rename.finish}
-              className="h-full flex-1 bg-transparent aria-invalid:text-destructive"
+              className="h-full flex-1 bg-transparent aria-invalid:text-danger"
             />
           </SidebarMenuButton>
         ) : (
@@ -222,7 +225,7 @@ export const SessionRow = memo(function SessionRow({
                     type="button"
                     tabIndex={-1}
                     aria-label={t('row.more')}
-                    className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-foreground data-popup-open:opacity-100 [&_svg]:size-3.5"
+                    className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-primary data-popup-open:opacity-100 [&_svg]:size-3.5"
                   />
                 }
               >

@@ -7,12 +7,6 @@ export type SelectOption = ConfigOption & {
 
 export type EffortTier = 'high' | 'max'
 
-/** The gradient a costly level's name takes, in the menu and on the model button. */
-export const tierText: Record<EffortTier, string> = {
-  high: 'text-effort-high',
-  max: 'text-effort-max',
-}
-
 // Agents name their levels freely; these names mark the top ones, compared without case or dashes.
 const EFFORT_TIERS: Record<string, EffortTier> = {
   xhigh: 'high',

@@ -62,7 +62,7 @@ export function SyncLogs() {
   return (
     <>
       {scanning && scanning.bytes > 0 && (
-        <span role="status" className="text-xs text-muted-foreground tabular-nums">
+        <span role="status" className="text-xs text-tertiary tabular-nums">
           {t('page.importing', { done: bytes(scanning.doneBytes), total: bytes(scanning.bytes) })}
         </span>
       )}
@@ -143,7 +143,7 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
               <RowText
                 name={name}
                 description={
-                  <span className={cn(shownError && 'text-destructive')}>
+                  <span className={cn(shownError && 'text-danger')}>
                     {shownError ?? facts.join(' · ')}
                   </span>
                 }

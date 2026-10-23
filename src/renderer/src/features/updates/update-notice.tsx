@@ -45,7 +45,7 @@ export function UpdateNotice() {
             size="icon-xs"
             aria-label={t('notice.dismiss')}
             onClick={dismiss}
-            className="absolute -top-2 -right-1.5 size-4 rounded-full text-muted-foreground opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-foreground focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+            className="absolute -top-2 -right-1.5 size-4 rounded-full text-icon opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-primary focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
           />
         }
       >
@@ -56,18 +56,16 @@ export function UpdateNotice() {
   )
 
   const version = (
-    <span className="shrink-0 font-mono text-meta text-muted-foreground tabular">
-      {notice.version}
-    </span>
+    <span className="shrink-0 font-mono text-meta text-tertiary tabular">{notice.version}</span>
   )
 
   // The words hide whole once the label cannot hold them beside the version.
   const card = (
     <div className="flex min-h-9 items-center gap-2 rounded-[8px] bg-card pr-1.5 pl-2.5 text-xs shadow-card">
       {notice.kind === 'updated' ? (
-        <CircleCheckIcon className="size-[15px] shrink-0 text-success" />
+        <CircleCheckIcon className="size-[15px] shrink-0 text-icon" />
       ) : (
-        <CircleArrowUpIcon className="size-[15px] shrink-0" />
+        <CircleArrowUpIcon className="size-[15px] shrink-0 text-icon" />
       )}
       <span className="@container/notice flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (

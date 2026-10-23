@@ -59,7 +59,7 @@ export function SubagentBar({
             />
           )}
         </p>
-        {error && <p className="truncate text-xs text-destructive">{error}</p>}
+        {error && <p className="truncate text-xs text-danger">{error}</p>}
       </div>
       {canStop && (
         <Button variant="outline" size="compact" disabled={stopping} onClick={() => void stop()}>

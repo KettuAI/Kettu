@@ -155,7 +155,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           </Alert>
         )}
         {(actionError || queueError) && (
-          <p role="alert" className="animate-in px-1 text-xs text-destructive fade-in">
+          <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
             {actionError ?? queueError}
           </p>
         )}

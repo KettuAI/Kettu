@@ -137,15 +137,15 @@ async function run() {
   }
   const platform =
     process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux'
-  // Each screen in the light theme, then the dark one; the theme class is what Settings sets.
+  // Each screen in the light theme, then the dark one; the theme attribute is what Settings sets.
   const shoot = async (name) => {
     for (const theme of ['light', 'dark']) {
-      await cdp.evaluate(`document.documentElement.classList.toggle('dark', ${theme === 'dark'})`)
+      await cdp.evaluate(`document.documentElement.dataset.theme = '${theme}'`)
       await sleep(400)
       const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
       writeFileSync(join(out, `${platform}-${name}-${theme}.png`), Buffer.from(shot.data, 'base64'))
     }
-    await cdp.evaluate(`document.documentElement.classList.remove('dark')`)
+    await cdp.evaluate(`document.documentElement.dataset.theme = 'light'`)
     log(`captured ${name}`)
   }
   const byText = (selector, text) =>

@@ -9,12 +9,11 @@ import { parseWindowState, placeWindow, type SavedWindowState } from './window-b
 
 const log = createLogger('window')
 
-// Must match --background in the renderer theme, oklch(0.991 0 0) and oklch(0.196 0 0),
-// or the window flashes on load.
-const BACKGROUND_COLOR = { light: '#fcfcfc', dark: '#151515' }
+// Must match --bg-app in the renderer's tokens.css, or the window flashes on load.
+const BACKGROUND_COLOR = { light: '#fdfdfc', dark: '#1b1b1a' }
 
-// The symbols of the Windows and Linux window controls: --foreground of each theme.
-const SYMBOL_COLOR = { light: '#0a0a0a', dark: '#fafafa' }
+// The symbols of the Windows and Linux window controls: --text-primary of each theme.
+const SYMBOL_COLOR = { light: '#262626', dark: '#ececea' }
 
 const TITLE_BAR_HEIGHT = 40
 // The traffic lights' height; at 100% they sit at { x: 16, y: 14 }, centred in the top bar.

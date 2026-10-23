@@ -29,12 +29,16 @@ import {
   levelsOf,
   splitName,
   tierOf,
-  tierText,
   type SelectOption,
 } from '@renderer/features/session/composer/levels'
 import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
-import { countdown, tightestLimit, usageTone } from '@renderer/features/sidebar/plan-usage'
+import {
+  countdown,
+  tightestLimit,
+  USAGE_TONE_TEXT,
+  usageTone,
+} from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -62,12 +66,6 @@ const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
 function menuOrder(statuses: AgentStatus[]): AgentStatus[] {
   return [...statuses.filter(listedInstalled), ...statuses.filter((s) => !listedInstalled(s))]
 }
-
-const TONE_TEXT = {
-  success: 'text-success-text',
-  attention: 'text-attention-text',
-  destructive: 'text-destructive',
-} as const
 
 /**
  * The composer's agent-and-model button and its menu: the agents on a rail, the shown agent's
@@ -267,7 +265,6 @@ function AgentButtonLabel({ agentId }: { agentId: AgentId | null }) {
     ? (model.choices.find((c) => c.value === model.value)?.name ?? String(model.value))
     : null
   const level = isSelect(effort) ? levelsOf(effort, String(effort.value)) : null
-  const tier = isSelect(effort) ? tierOf(effort, String(effort.value)) : null
   const levelName = isSelect(effort)
     ? effort.choices.find((c) => c.value === effort.value)?.name
     : undefined
@@ -276,12 +273,12 @@ function AgentButtonLabel({ agentId }: { agentId: AgentId | null }) {
       <AgentMark agent={agentId} size={14} />
       <span className="shrink-0 font-medium text-foreground">{agentName(agentId)}</span>
       {modelName && (
-        <span className="min-w-0 truncate" title={modelName}>
+        <span className="min-w-0 truncate text-secondary" title={modelName}>
           {splitName(modelName)[1]}
         </span>
       )}
       {levelName && !(modelName && level?.usesDefault) && (
-        <span className={cn('shrink-0', tier && tierText[tier])}>{levelName}</span>
+        <span className="shrink-0 text-secondary">{levelName}</span>
       )}
     </>
   )
@@ -330,7 +327,10 @@ function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number
       <TooltipTrigger
         render={
           <span
-            className={cn('flex shrink-0 items-center gap-1 pl-2 text-xs tabular', TONE_TEXT[tone])}
+            className={cn(
+              'flex shrink-0 items-center gap-1 pl-2 text-xs tabular',
+              USAGE_TONE_TEXT[tone],
+            )}
           />
         }
       >
@@ -593,7 +593,7 @@ function Notice({
 }) {
   return (
     <div className="flex flex-col items-start gap-2 px-3.5 pt-2.5 pb-1.5">
-      <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{text}</p>
+      <p className={cn('text-xs', error ? 'text-danger' : 'text-muted-foreground')}>{text}</p>
       {children}
     </div>
   )
@@ -605,7 +605,7 @@ function SwitchRow({ agentId, option }: { agentId: AgentId; option: ConfigOption
   return (
     <label
       htmlFor={id}
-      className="flex min-h-row cursor-default items-center gap-2 rounded-lg px-2 py-1 text-ui hover:bg-accent"
+      className="flex min-h-row cursor-default items-center gap-2 rounded-lg px-2 py-1 text-ui hover:bg-hover"
     >
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-medium">{option.name}</span>

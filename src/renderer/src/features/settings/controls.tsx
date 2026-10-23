@@ -21,7 +21,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 export function ControlError({ error }: { error: string | null }) {
   if (!error) return null
   return (
-    <span className="max-w-48 truncate text-xs text-destructive" title={error}>
+    <span className="max-w-48 truncate text-xs text-danger" title={error}>
       {error}
     </span>
   )
@@ -104,7 +104,7 @@ export function SettingSelect<T extends string>({
             <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
               {o.icon}
               {o.label}
-              {o.hint && <span className="text-muted-foreground">{o.hint}</span>}
+              {o.hint && <span className="text-tertiary">{o.hint}</span>}
             </SelectItem>
           ))}
         </SelectGroup>
@@ -159,7 +159,7 @@ export function CopyAction({ text, label }: { text: string | (() => string); lab
       }}
     >
       {copied ? (
-        <CheckIcon className="animate-in text-success animation-duration-(--duration-fast) fade-in zoom-in-75" />
+        <CheckIcon className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75" />
       ) : (
         <CopyIcon />
       )}
@@ -202,7 +202,7 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
     <span
       title={path}
       data-selectable=""
-      className="flex min-w-0 text-xs leading-normal whitespace-nowrap text-muted-foreground"
+      className="flex min-w-0 text-xs leading-normal whitespace-nowrap text-tertiary"
     >
       {parts.length > 0 && (
         <span className="min-w-0 truncate">
@@ -214,9 +214,7 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
           ))}
         </span>
       )}
-      <span
-        className={cn('max-w-full shrink-0 truncate', !missing && 'font-medium text-foreground')}
-      >
+      <span className={cn('max-w-full shrink-0 truncate', !missing && 'font-medium text-primary')}>
         {name}
       </span>
     </span>
@@ -248,7 +246,7 @@ export function Masked({ children }: { children: string }) {
             aria-pressed={revealed}
             aria-label={revealed ? undefined : t('agents.hidden')}
             onClick={() => setRevealed((shown) => !shown)}
-            className="pointer-events-auto -mx-1 inline-block rounded-sm px-1 outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="pointer-events-auto -mx-1 inline-block rounded-sm px-1 outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
           />
         }
       >

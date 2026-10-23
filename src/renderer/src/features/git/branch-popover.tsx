@@ -51,7 +51,7 @@ function Header({ status, branch }: { status: GitStatus; branch: string }) {
         </span>
         <CopyButton text={branch} label={t('popover.copyBranch')} />
       </div>
-      <span className="pl-6 text-xs text-muted-foreground">
+      <span className="pl-6 text-xs text-tertiary">
         {head.detached ? (
           t('popover.detached')
         ) : !head.oid ? (

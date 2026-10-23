@@ -45,7 +45,7 @@ export function HostBanner() {
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0, transition: { duration: 0.2 } }}
             exit={fadeExit}
-            className="app-region-no-drag pointer-events-auto flex h-[26px] items-center gap-1.5 rounded-full bg-popover pr-1 pl-3 text-xs text-muted-foreground shadow-menu"
+            className="app-region-no-drag pointer-events-auto flex h-[26px] items-center gap-1.5 rounded-full bg-popover pr-1 pl-3 text-xs text-secondary shadow-menu"
           >
             {state === 'reconnecting' ? (
               <>
@@ -54,8 +54,8 @@ export function HostBanner() {
               </>
             ) : (
               <>
-                <CircleAlertIcon className="size-3.5 text-destructive" />
-                <span className={error ? 'text-destructive' : undefined}>
+                <CircleAlertIcon className="size-3.5 text-danger" />
+                <span className={error ? 'text-danger' : undefined}>
                   {error ?? t('hostBanner.stopped')}
                 </span>
                 <Button

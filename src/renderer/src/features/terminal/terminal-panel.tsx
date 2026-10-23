@@ -136,7 +136,7 @@ export function TerminalPanel({
               />
             ))}
             {creating && (
-              <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground">
+              <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-tertiary">
                 <Spinner className="size-3" />
                 {t('panel.starting')}
               </span>
@@ -152,7 +152,7 @@ export function TerminalPanel({
         </PanelButton>
         <span className="min-w-2 flex-1" />
         {error && (
-          <span className="max-w-[40%] truncate text-xs text-destructive" title={error}>
+          <span className="max-w-[40%] truncate text-xs text-danger" title={error}>
             {error}
           </span>
         )}
@@ -175,7 +175,7 @@ export function TerminalPanel({
           <TerminalView key={active.id} terminal={active} />
         ) : (
           !creating && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-ui text-muted-foreground">
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-ui text-secondary">
               <span>{t('panel.empty')}</span>
               <Button variant="outline" size="compact" onClick={() => void newTerminal()}>
                 <SquareTerminalIcon data-icon="inline-start" />
@@ -194,9 +194,7 @@ export function TerminalPanel({
                 t={t}
                 i18nKey="closeDialog.body"
                 components={{
-                  title: (
-                    <span className="font-mono text-xs text-foreground">{closing?.title}</span>
-                  ),
+                  title: <span className="font-mono text-xs text-primary">{closing?.title}</span>,
                 }}
               />
             </AlertDialogDescription>
@@ -278,11 +276,11 @@ function TerminalTab({
         className={cn(
           'group/tab relative flex h-6 max-w-48 min-w-20 items-center rounded-md text-xs transition-[color,background-color,box-shadow] duration-(--duration-fast)',
           editing
-            ? 'bg-background text-foreground ring-2 ring-ring/50'
+            ? 'bg-background text-primary focus-ring-within'
             : // The selected tab is raised like a segmented control's thumb, apart from the hover fill.
               selected || isDragging
-              ? 'bg-segment-thumb text-foreground shadow-segment'
-              : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
+              ? 'bg-segment-thumb text-primary shadow-segment'
+              : 'text-tertiary hover:bg-hover hover:text-primary',
         )}
       >
         {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
@@ -297,14 +295,14 @@ function TerminalTab({
           onDoubleClick={() => setEditing(true)}
           onAuxClick={(e) => e.button === 1 && onClose()}
           className={cn(
-            'flex h-full min-w-0 items-center gap-1.5 rounded-md pr-6 pl-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            'flex h-full min-w-0 items-center gap-1.5 rounded-md pr-6 pl-2 outline-none focus-ring',
             editing && 'invisible',
           )}
         >
           <SquareTerminalIcon className="size-3.5 shrink-0" />
           <span className="truncate">{name}</span>
           {exited && (
-            <span className={cn('shrink-0 tabular', terminal.exitCode !== 0 && 'text-destructive')}>
+            <span className={cn('shrink-0 tabular', terminal.exitCode !== 0 && 'text-danger')}>
               {terminal.exitCode}
             </span>
           )}
@@ -312,7 +310,7 @@ function TerminalTab({
             <span
               role="img"
               aria-label={t('tab.newOutput')}
-              className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
+              className="size-1.5 shrink-0 rounded-full bg-current text-tertiary"
             />
           )}
         </button>
@@ -324,7 +322,7 @@ function TerminalTab({
             aria-label={t('tab.close', { name })}
             onClick={onClose}
             className={cn(
-              'absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-muted-foreground opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-background/60 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/tab:opacity-100',
+              'absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-background/60 hover:text-primary focus-visible:opacity-100 focus-ring group-hover/tab:opacity-100',
               selected && 'opacity-100',
             )}
           >

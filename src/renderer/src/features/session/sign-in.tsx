@@ -140,7 +140,7 @@ export function SignIn({
             {t('common:actions.retry')}
           </Button>
         )}
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </EmptyContent>
     </Empty>
   )

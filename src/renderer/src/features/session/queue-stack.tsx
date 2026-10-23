@@ -46,9 +46,9 @@ function promptText(item: QueuedPrompt): string {
     .trim()
 }
 
-/** A card's fill: the composer's surface at the front, fading toward `--queue-back` behind. */
+/** A card's fill: the composer's surface at the front, darkening toward `--queue-back` behind. */
 function fill(depth: number): CSSProperties['backgroundColor'] {
-  return `color-mix(in oklab, var(--popover), var(--queue-back) ${Math.round(depth * 100)}%)`
+  return `color-mix(in oklab, var(--bg-surface), var(--queue-back) ${Math.round(depth * 100)}%)`
 }
 
 // A menu, dialog or list open over the session takes Esc first.
@@ -360,12 +360,12 @@ function QueueCard({
       style={{
         zIndex: pose.z,
         originY: 1,
-        backgroundColor: shown ? 'var(--popover)' : fill(pose.depth),
+        backgroundColor: shown ? 'var(--bg-surface)' : fill(pose.depth),
       }}
       className={cn(
-        'absolute inset-x-2 bottom-0 h-11 rounded-xl shadow-composer transition-[background-color] duration-(--duration-base)',
+        'absolute inset-x-2 bottom-0 h-11 rounded-xl shadow-queue transition-[background-color] duration-(--duration-base)',
         (!pose.interactive || !present) && 'pointer-events-none',
-        ringed && 'outline-2 outline-ring/50',
+        ringed && 'outline-2 outline-offset-2 outline-focus',
       )}
     >
       <div

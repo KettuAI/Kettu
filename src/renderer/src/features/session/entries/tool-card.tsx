@@ -205,7 +205,7 @@ function ToolHeader({
   const stats = useDiffStats(entry.content)
   const content = (
     <>
-      <span className="relative flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
+      <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
         <Icon
           className={cn(
             'size-3.5 transition-opacity duration-(--duration-fast)',
@@ -228,8 +228,8 @@ function ToolHeader({
       </span>
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
         <span className="shrink-0 animate-in font-mono text-[11.5px] tabular animation-duration-(--duration-base) fade-in">
-          <span className="text-success-text">+{stats.insertions}</span>{' '}
-          <span className="text-destructive">−{stats.deletions}</span>
+          <span className="text-success">+{stats.insertions}</span>{' '}
+          <span className="text-danger">−{stats.deletions}</span>
         </span>
       )}
       {!entry.permission && entry.permissionResult && (
@@ -247,8 +247,8 @@ function ToolHeader({
     <CollapsibleTrigger
       className={cn(
         row,
-        'cursor-default transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
-        framed ? 'rounded-[inherit] hover:bg-accent/60' : 'hover:bg-accent',
+        'cursor-default transition-colors duration-(--duration-fast) focus-ring',
+        framed ? 'rounded-[inherit] hover:bg-hover' : 'hover:bg-hover',
       )}
     >
       {content}
@@ -288,8 +288,8 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   const { t } = useTranslation('session')
   if (entry.permission) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-attention-text">
-        <span aria-hidden className="size-1.5 rounded-full bg-attention" />
+      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-attention">
+        <span aria-hidden className="size-1.5 rounded-full bg-attention-dot" />
         {t('status.needsApproval')}
       </span>
     )
@@ -302,16 +302,12 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
           key="pending"
           role="img"
           aria-label={t('status.pending')}
-          className={cn(icon, 'text-muted-foreground/70')}
+          className={cn(icon, 'text-disabled')}
         />
       )
     case 'in_progress':
       return (
-        <Spinner
-          key="running"
-          aria-label={t('status.running')}
-          className={cn(icon, 'text-muted-foreground')}
-        />
+        <Spinner key="running" aria-label={t('status.running')} className={cn(icon, 'text-icon')} />
       )
     case 'completed':
       return (
@@ -319,7 +315,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
           key="done"
           role="img"
           aria-label={t('status.done')}
-          className={cn(icon, 'zoom-in-75 text-success')}
+          className={cn(icon, 'zoom-in-75 text-icon')}
         />
       )
     case 'failed':
@@ -328,7 +324,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
           key="failed"
           role="img"
           aria-label={t('status.failed')}
-          className={cn(icon, 'text-destructive')}
+          className={cn(icon, 'text-danger')}
         />
       )
     case 'cancelled':
@@ -337,7 +333,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
           key="cancelled"
           role="img"
           aria-label={t('status.cancelled')}
-          className={cn(icon, 'text-muted-foreground/70')}
+          className={cn(icon, 'text-disabled')}
         />
       )
   }
@@ -348,7 +344,7 @@ function CommandBlock({ command, framed }: { command: string; framed: boolean })
     <pre
       data-selectable=""
       className={cn(
-        'overflow-x-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]',
+        'overflow-x-auto rounded-lg bg-code-block shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] px-2.5 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]',
         framed && 'mx-3 mt-2.5 mb-0.5',
       )}
     >
@@ -386,7 +382,7 @@ function ContentBlock({
             'flex flex-col',
             framed
               ? 'mx-(--hairline) last:mb-(--hairline)'
-              : 'overflow-hidden rounded-lg border border-border',
+              : 'overflow-hidden rounded-lg border border-subtle',
           )}
         >
           <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
@@ -411,11 +407,12 @@ function ContentBlock({
   }
 }
 
-const OPTION_VARIANT: Record<PermissionKind, 'default' | 'outline' | 'destructive'> = {
+// Rejecting is neither a failure nor a deletion, so it stays neutral beside the attention ring.
+const OPTION_VARIANT: Record<PermissionKind, 'default' | 'outline'> = {
   allow_once: 'default',
   allow_always: 'outline',
-  reject_once: 'destructive',
-  reject_always: 'destructive',
+  reject_once: 'outline',
+  reject_always: 'outline',
 }
 
 function PermissionPrompt({
@@ -485,7 +482,7 @@ function PermissionPrompt({
           </Button>
         ))}
       </div>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   )
 }
@@ -504,7 +501,7 @@ function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissio
     <span
       className={cn(
         'shrink-0 animate-in text-xs text-muted-foreground animation-duration-(--duration-base) fade-in',
-        rejected && 'text-destructive',
+        rejected && 'text-secondary',
       )}
     >
       {text}

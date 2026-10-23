@@ -91,6 +91,8 @@ export function toolStep(entry: ToolEntry): RunStep {
 /** A part of a fold line, with the diffs whose stats follow it. */
 export interface SummaryPart {
   text: string
+  /** The file names inside `text`, which the fold line sets apart. */
+  names?: string
   diffs?: Diff[]
 }
 
@@ -133,11 +135,11 @@ function unitsOf(step: RunStep, created: Set<string>): Unit[] {
 }
 
 /** "Read a.ts", "Read a.ts, b.ts and 6 more", or "Read 3 files" when none has a path. */
-function filesText(part: FilePart, paths: (string | undefined)[]): string {
+function filesText(part: FilePart, paths: (string | undefined)[]): SummaryPart {
   const known = [...new Set(paths.filter((p) => p !== undefined))]
   // Files, not calls: the same file read twice counts once.
   const files = known.length + paths.filter((p) => p === undefined).length
-  if (known.length === 0) return i18n.t(`session:summary.${part}`, { count: files })
+  if (known.length === 0) return { text: i18n.t(`session:summary.${part}`, { count: files }) }
   const shown = known.slice(0, 2)
   // Two shown files that share a name add the folders that tell them apart.
   const hints = nameHints(shown)
@@ -148,9 +150,11 @@ function filesText(part: FilePart, paths: (string | undefined)[]): string {
     })
     .join(i18n.t('session:summary.nameSeparator'))
   const more = files - shown.length
-  return more === 0
-    ? i18n.t(`session:summary.${part}Named`, { names })
-    : i18n.t(`session:summary.${part}More`, { names, more })
+  const text =
+    more === 0
+      ? i18n.t(`session:summary.${part}Named`, { names })
+      : i18n.t(`session:summary.${part}More`, { names, more })
+  return { text, names }
 }
 
 /**
@@ -206,12 +210,12 @@ export function runSummary(steps: RunStep[]): {
       case 'other':
         return [{ text: i18n.t('session:summary.tool', { count: n }) }]
       default: {
-        const text = filesText(
+        const files = filesText(
           part,
           units.map((u) => u.path),
         )
-        if (part !== 'create' && part !== 'edit') return [{ text }]
-        return [{ text, diffs: units.flatMap((u) => u.diffs ?? []) }]
+        if (part !== 'create' && part !== 'edit') return [files]
+        return [{ ...files, diffs: units.flatMap((u) => u.diffs ?? []) }]
       }
     }
   })

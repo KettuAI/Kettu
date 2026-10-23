@@ -107,12 +107,12 @@ export const ThoughtEntry = memo(function ThoughtEntry({ sessionId, entryId }: E
       : t('thought.done')
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={animation}>
-      <CollapsibleTrigger className="group/thought -mx-1 flex h-6 items-center gap-1 rounded-md px-1 text-ui text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group/thought -mx-1 flex h-6 items-center gap-1 rounded-md px-1 text-ui text-muted-foreground outline-none hover:text-primary focus-ring">
         <span className={cn(entry.streaming && 'shimmer')}>{label}</span>
         <ChevronRightIcon className="size-3.5 transition-transform duration-(--duration-fast) group-data-panel-open/thought:rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
-        <div className="mt-1 border-l border-border pl-3 text-muted-foreground" data-selectable="">
+        <div className="mt-1 border-l border-subtle pl-3 text-muted-foreground" data-selectable="">
           <Markdown
             markdown={entry.markdown}
             streaming={entry.streaming}
@@ -348,8 +348,8 @@ function CommitId({ oid }: { oid: string }) {
         })
       }}
       className={cn(
-        'rounded-[4px] px-0.5 font-mono text-xs outline-none transition-colors duration-(--duration-fast) hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50',
-        copied && 'text-success-text',
+        'rounded-[4px] px-0.5 font-mono text-xs outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring',
+        copied && 'text-primary',
       )}
     >
       {oid.slice(0, 7)}
@@ -373,13 +373,13 @@ export function PlanList({ items }: { items: PlanItem[] }) {
   return (
     <ul className="flex flex-col gap-0.5">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 py-0.5 text-ui leading-5">
+        <li key={i} className="flex items-start gap-2 py-0.5 text-ui leading-5 text-tertiary">
           <span className="flex h-5 items-center">
             {item.status === 'completed' ? (
               <CircleCheckIcon
                 role="img"
                 aria-label={t('status.done')}
-                className="size-3.5 text-muted-foreground"
+                className="size-3.5 text-icon"
               />
             ) : item.status === 'in_progress' ? (
               <span
@@ -387,22 +387,21 @@ export function PlanList({ items }: { items: PlanItem[] }) {
                 aria-label={t('plan.inProgress')}
                 className="flex size-3.5 items-center justify-center"
               >
-                <span className="size-2 rounded-full bg-foreground" />
+                <span className="size-2 rounded-full bg-current text-primary" />
               </span>
             ) : (
               <CircleIcon
                 role="img"
                 aria-label={t('plan.todo')}
-                className="size-3.5 text-muted-foreground/70"
+                className="size-3.5 text-disabled"
               />
             )}
           </span>
           <span
             className={cn(
               'min-w-0 flex-1',
-              item.status === 'completed' &&
-                'text-muted-foreground line-through decoration-border-strong',
-              item.status === 'in_progress' && 'font-medium',
+              item.status === 'completed' && 'line-through decoration-border-strong',
+              item.status === 'in_progress' && 'font-medium text-primary',
             )}
           >
             {item.content}

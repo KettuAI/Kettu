@@ -36,7 +36,7 @@ export function GroupLabel({ group }: { group: GroupDef }) {
     <div
       className={cn(
         'flex h-7.5 items-center gap-1.5 px-1 text-xs font-medium',
-        group.tone === 'danger' ? 'text-destructive' : 'text-muted-foreground',
+        group.tone === 'danger' ? 'text-danger' : 'text-tertiary',
       )}
     >
       <h3>{group.label}</h3>
@@ -79,10 +79,7 @@ export function RowShell({
 }) {
   const flash = useContext(FlashContext)
   return (
-    <div
-      data-setting-row={id}
-      className={cn('relative border-t border-border-soft', !plain && 'px-1')}
-    >
+    <div data-setting-row={id} className={cn('relative border-t border-subtle', !plain && 'px-1')}>
       {id && (
         <span
           aria-hidden
@@ -102,9 +99,7 @@ export function RowText({ name, description }: { name: ReactNode; description?: 
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-ui font-medium">{name}</span>
       {description && (
-        <span className="text-xs leading-normal text-pretty text-muted-foreground">
-          {description}
-        </span>
+        <span className="text-xs leading-normal text-pretty text-secondary">{description}</span>
       )}
     </div>
   )

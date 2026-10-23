@@ -162,7 +162,7 @@ export default function SettingsPage() {
                     setQuery('')
                     search.current?.focus()
                   }}
-                  className="flex size-5 items-center justify-center rounded-md hover:bg-accent hover:text-foreground"
+                  className="flex size-5 items-center justify-center rounded-md hover:bg-hover hover:text-primary"
                 >
                   <XIcon className="size-3" />
                 </button>
@@ -249,7 +249,7 @@ export function PageHeader({
       <h2 id={id} className="text-title font-semibold text-balance">
         {title}
       </h2>
-      {children && <p className="text-small text-pretty text-muted-foreground">{children}</p>}
+      {children && <p className="text-small text-pretty text-secondary">{children}</p>}
     </header>
   )
 }
@@ -275,26 +275,24 @@ function NavRow({
       aria-current={selected ? 'page' : undefined}
       onClick={onChoose}
       className={cn(
-        'group flex h-8 shrink-0 items-center gap-2.5 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-visible:ring-2 focus-visible:ring-ring/50',
+        'group flex h-8 shrink-0 items-center gap-2.5 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-ring',
         selected
-          ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-          : 'text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground',
+          ? 'bg-selected font-medium text-primary'
+          : 'text-secondary hover:bg-hover hover:text-primary',
         dim && 'pointer-events-none opacity-40',
       )}
     >
       <Icon
         className={cn(
           'size-4 shrink-0 transition-colors duration-(--duration-fast)',
-          selected
-            ? 'text-sidebar-accent-foreground'
-            : 'text-muted-foreground group-hover:text-sidebar-foreground',
+          selected ? 'text-primary' : 'text-icon group-hover:text-primary',
         )}
       />
       <span className="min-w-0 flex-1 truncate">{section.title}</span>
       {count !== null ? (
         <span
           key={count}
-          className="animate-in text-xs text-muted-foreground tabular fade-in animation-duration-(--duration-base)"
+          className="animate-in text-xs text-tertiary tabular fade-in animation-duration-(--duration-base)"
         >
           {count}
         </span>
@@ -304,7 +302,7 @@ function NavRow({
             role="img"
             aria-label={section.mark}
             title={section.mark}
-            className="size-1.5 shrink-0 rounded-full bg-checked"
+            className="size-1.5 shrink-0 rounded-full bg-current text-secondary"
           />
         )
       )}
@@ -341,11 +339,9 @@ function AppFooter() {
       type="button"
       title={t('footer.about')}
       onClick={() => openSettings('about')}
-      className="group mx-2 mb-2.5 flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-left text-xs text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="group mx-2 mb-2.5 flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-left text-xs text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
     >
-      <span className="font-medium text-sidebar-foreground/85 group-hover:text-sidebar-foreground">
-        OverBench
-      </span>
+      <span className="font-medium text-secondary group-hover:text-primary">OverBench</span>
       <span className="font-mono text-meta">{status.current}</span>
       <span className="ml-auto flex min-w-0 items-center">{end}</span>
     </button>
@@ -368,7 +364,7 @@ function SearchResults({
     return (
       <Empty className="pt-16">
         <EmptyHeader>
-          <SearchIcon className="size-4 text-muted-foreground" />
+          <SearchIcon className="size-4 text-icon" />
           <EmptyTitle>{t('page.noMatch', { query })}</EmptyTitle>
           <EmptyDescription>{t('page.noMatchHint')}</EmptyDescription>
         </EmptyHeader>
@@ -385,28 +381,28 @@ function SearchResults({
           (section) =>
             section.rows.length > 0 && (
               <section key={section.id} aria-label={section.title} className="flex flex-col">
-                <div className="flex h-7.5 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
+                <div className="flex h-7.5 items-center gap-1.5 px-1 text-xs font-medium text-tertiary">
                   <h3>{section.title}</h3>
                   <span className="font-normal tabular">{section.rows.length}</span>
                 </div>
                 {section.rows.map((row) => (
-                  <div key={row.id} className="border-t border-border-soft">
+                  <div key={row.id} className="border-t border-subtle">
                     <button
                       type="button"
                       onClick={() => onGo(section, row)}
-                      className="-mx-2 flex w-[calc(100%+--spacing(4))] items-center gap-4 rounded-lg px-3 py-3 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
+                      className="-mx-2 flex w-[calc(100%+--spacing(4))] items-center gap-4 rounded-lg px-3 py-3 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
                     >
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="text-ui font-medium">
                           <Marked text={row.name} query={query} />
                         </span>
                         {row.description && (
-                          <span className="text-xs leading-normal text-muted-foreground">
+                          <span className="text-xs leading-normal text-secondary">
                             <Marked text={row.description} query={query} />
                           </span>
                         )}
                       </span>
-                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                      <ChevronRightIcon className="size-4 shrink-0 text-icon" />
                     </button>
                   </div>
                 ))}

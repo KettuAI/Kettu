@@ -46,7 +46,7 @@ export function FileTypeIcon({
   )
   if (!url) {
     const Fallback = folder ? (open ? FolderOpenIcon : FolderIcon) : FileIcon
-    return <Fallback aria-hidden className={cn('shrink-0 text-muted-foreground', className)} />
+    return <Fallback aria-hidden className={cn('shrink-0 text-icon', className)} />
   }
   return (
     <img

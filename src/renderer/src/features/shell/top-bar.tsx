@@ -20,7 +20,7 @@ export function TopBar({ children, className }: { children: ReactNode; className
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 pr-2.5 pl-5',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-2.5 pl-5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
         collapsed && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
         !isMac &&
           !besidePanel &&
@@ -59,10 +59,7 @@ export function SidebarToggle({ className }: { className?: string }) {
             size="icon-xs"
             aria-label={label}
             onClick={toggleSidebar}
-            className={cn(
-              'app-region-no-drag relative text-muted-foreground hover:text-foreground',
-              className,
-            )}
+            className={cn('app-region-no-drag relative text-icon hover:text-primary', className)}
           />
         }
       >
@@ -70,7 +67,7 @@ export function SidebarToggle({ className }: { className?: string }) {
         {updateReady && (
           <span
             aria-hidden
-            className="absolute top-[3px] right-[3px] size-1.5 rounded-full bg-foreground ring-2 ring-background"
+            className="absolute top-[3px] right-[3px] size-1.5 rounded-full bg-primary ring-2 ring-background"
           />
         )}
       </TooltipTrigger>

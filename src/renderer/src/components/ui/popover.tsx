@@ -67,7 +67,7 @@ function PopoverDescription({ className, ...props }: PopoverPrimitive.Descriptio
   return (
     <PopoverPrimitive.Description
       data-slot="popover-description"
-      className={cn('text-muted-foreground', className)}
+      className={cn('text-secondary', className)}
       {...props}
     />
   )

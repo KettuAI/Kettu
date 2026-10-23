@@ -55,11 +55,11 @@ export function PlanBar({
         hidden && '-translate-y-1 opacity-0 motion-reduce:translate-y-0',
       )}
     >
-      <CollapsibleTrigger className="flex h-row w-full items-center gap-2.5 rounded-lg px-4 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
+      <CollapsibleTrigger className="flex h-row w-full items-center gap-2.5 rounded-lg px-4 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
         <ChevronRightIcon
           aria-hidden
           className={cn(
-            'size-3 shrink-0 text-muted-foreground transition-transform duration-(--duration-fast) motion-reduce:transition-none',
+            'size-3 shrink-0 text-icon transition-transform duration-(--duration-fast) motion-reduce:transition-none',
             open && 'rotate-90',
           )}
         />
@@ -76,7 +76,7 @@ export function PlanBar({
         {current && !open && (
           <span
             key={current.content}
-            className="min-w-0 flex-1 animate-in truncate text-small font-medium fade-in animation-duration-(--duration-base)"
+            className="min-w-0 flex-1 animate-in truncate text-small font-medium text-primary fade-in animation-duration-(--duration-base)"
           >
             {current.content}
           </span>
@@ -103,9 +103,9 @@ function Segments({ items }: { items: PlanItem[] }) {
             'h-1 rounded-full transition-colors duration-(--duration-base)',
             crowded ? 'min-w-px flex-1' : 'w-3.5',
             item.status === 'completed'
-              ? 'bg-muted-foreground'
+              ? 'bg-current text-secondary'
               : item.status === 'in_progress'
-                ? 'bg-muted-foreground/55'
+                ? 'bg-current text-tertiary'
                 : 'bg-border',
           )}
         />

@@ -23,11 +23,9 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
       <h2 id="settings-about" className="text-title font-semibold">
         OverBench
       </h2>
-      <p className="text-small text-pretty text-muted-foreground">
-        {t('about.version.description')}
-      </p>
+      <p className="text-small text-pretty text-secondary">{t('about.version.description')}</p>
       {info ? (
-        <p data-selectable="" className="font-mono text-meta text-muted-foreground">
+        <p data-selectable="" className="font-mono text-meta text-tertiary">
           {`${info.version} · ${info.platform} ${info.arch}`}
         </p>
       ) : (
@@ -50,7 +48,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
     return (
       <div className="flex min-h-7 items-center gap-6">
         <div className="min-w-0 flex-1">{label}</div>
-        <Spinner className="size-3.5 text-muted-foreground" />
+        <Spinner className="size-3.5 text-tertiary" />
       </div>
     )
   }
@@ -85,7 +83,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
         key="checked"
         className="inline-flex animate-in items-center gap-1.5 fade-in animation-duration-(--duration-base)"
       >
-        <CircleCheckIcon className="size-3 text-success" />
+        <CircleCheckIcon className="size-3 text-icon" />
         {t('about.updates.upToDateShort')}
       </span>
     )
@@ -109,11 +107,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
               {t('about.updates.downloading', { version: state.version })}
               <span>{Math.round(state.percent)}%</span>
             </span>
-            <Progress
-              value={state.percent}
-              tone="checked"
-              aria-label={t('about.updates.downloadProgress')}
-            />
+            <Progress value={state.percent} aria-label={t('about.updates.downloadProgress')} />
           </span>
         )
         break
@@ -154,7 +148,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
       case 'error':
         text = (
           <span className="flex flex-col">
-            <span className="text-destructive">{t('about.updates.failed')}</span>
+            <span className="text-danger">{t('about.updates.failed')}</span>
             <span data-selectable="">{state.message}</span>
           </span>
         )
@@ -179,7 +173,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
     <div className="flex min-h-7 items-center gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {label}
-        <span className="text-xs leading-normal text-muted-foreground">{text}</span>
+        <span className="text-xs leading-normal text-secondary">{text}</span>
       </div>
       <ControlError error={error} />
       {action && <span className="flex shrink-0 items-center gap-1.5">{action}</span>}
@@ -229,7 +223,7 @@ export function CopyVersions({ info }: { info: AppInfo }) {
       {copied ? (
         <CheckIcon
           data-icon="inline-start"
-          className="animate-in text-success animation-duration-(--duration-fast) fade-in zoom-in-75"
+          className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75"
         />
       ) : (
         <CopyIcon data-icon="inline-start" />
@@ -242,7 +236,7 @@ export function CopyVersions({ info }: { info: AppInfo }) {
 export function RuntimeFact({ value }: { value: string | undefined }) {
   if (value === undefined) return <Skeleton className="h-4 w-24" />
   return (
-    <span data-selectable="" className="font-mono text-meta text-muted-foreground">
+    <span data-selectable="" className="font-mono text-meta text-tertiary">
       {value}
     </span>
   )
@@ -258,15 +252,15 @@ export function LinkRow({ name, url, detail }: { name: string; url: string; deta
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="group -mx-2 flex items-center gap-3 rounded-lg px-3 py-3 outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="group -mx-2 flex items-center gap-3 rounded-lg px-3 py-3 outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
     >
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-ui font-medium">{name}</span>
-        <span className="truncate text-xs text-muted-foreground">
+        <span className="truncate text-xs text-tertiary">
           {detail ?? url.replace(/^https?:\/\//, '')}
         </span>
       </span>
-      <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-(--duration-fast) group-hover:text-foreground" />
+      <ExternalLinkIcon className="size-3.5 shrink-0 text-icon transition-colors duration-(--duration-fast) group-hover:text-primary" />
     </a>
   )
 }

@@ -71,7 +71,7 @@ export function TrendChart({
       role="group"
       tabIndex={0}
       aria-label={label}
-      className="flex h-40 items-end justify-center gap-px rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="flex h-40 items-end justify-center gap-px rounded-md outline-none focus-ring"
       onPointerLeave={() => setChosen(null)}
       onBlur={() => setChosen(null)}
       onKeyDown={(event) => {
@@ -212,7 +212,7 @@ export function Heatmap({
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1">
       <span />
       <div
-        className="grid text-xs tabular-nums text-muted-foreground"
+        className="grid text-xs tabular-nums text-tertiary"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         aria-hidden
       >
@@ -226,7 +226,7 @@ export function Heatmap({
           </span>
         ))}
       </div>
-      <div className="grid grid-rows-7 text-xs tabular-nums text-muted-foreground" aria-hidden>
+      <div className="grid grid-rows-7 text-xs tabular-nums text-tertiary" aria-hidden>
         {[0, 1, 2, 3, 4, 5, 6].map((row) => {
           const day = addDays(weekStart, row)
           return (
@@ -241,7 +241,7 @@ export function Heatmap({
         role="group"
         tabIndex={0}
         aria-label={label}
-        className="relative grid grid-flow-col grid-rows-7 gap-0.5 rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="relative grid grid-flow-col grid-rows-7 gap-0.5 rounded-xs outline-none focus-ring"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         onPointerOver={(event) => {
           const index = (event.target as HTMLElement).dataset.i
@@ -275,7 +275,7 @@ export function Heatmap({
 /** The heatmap's scale, from none to the top quartile. */
 export function HeatLegend({ less, more }: { less: string; more: string }) {
   return (
-    <span className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
+    <span className="flex items-center gap-1 text-xs tabular-nums text-tertiary">
       {less}
       {HEAT_FILL.map((fill) => (
         <span key={fill} aria-hidden className={cn('size-2.5 rounded-xs', fill)} />

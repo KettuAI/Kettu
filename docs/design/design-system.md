@@ -26,90 +26,109 @@ The first desktop version benchmarks the Claude Desktop app, through the analysi
 
 ## Color
 
-### Surfaces
+Every color, line color and shadow color in the renderer is a token in `src/renderer/src/styles/tokens.css`, the only file there that may hold a color literal. The palette is the maintainer's, set on 2026-10-23 ([#39](https://github.com/overbench/overbench/issues/39)): warm neutrals a trace off pure grey, and color only where it means something, by the rules in [visual style: color](./visual-style.md#color). Two checks in `pnpm lint` guard it ([color checks](./testing.md#color-checks)): no color literal outside the token file, and every text token at 4.5:1 on the surfaces it sits on.
 
-Four surface steps, mapped onto the shadcn tokens so that shadcn components pick them up unchanged:
+- **Themes**: light values sit on `:root`, dark ones on `[data-theme='dark']`, which the settings store sets on `<html>`, and under `prefers-color-scheme: dark` until it has; the two dark blocks are identical, and the contrast check fails if they drift. A subtree can take a theme of its own with `data-theme`, as the theme tiles in Settings do. Tailwind's `dark:` variant follows `data-theme`.
+- **Utilities**: Tailwind reads the tokens through `@theme inline` in `globals.css`: `bg-app`, `bg-sidebar`, `bg-surface`, `bg-subtle`, `bg-hover`, `bg-selected`, `bg-code-inline`, `bg-code-block`; `border-default`, `border-subtle`, `border-strong`; `text-primary`, `text-secondary`, `text-tertiary`, `text-placeholder`, `text-disabled`, `text-icon`; and `attention`, `attention-dot`, `danger`, `success`, `warning`, `link` and `focus` in every color utility. A fill in a text color is `bg-current` with that text utility.
+- `BACKGROUND_COLOR` in `src/main/window.ts` is `--bg-app` of each theme, so the first frame does not flash; the Windows and Linux window controls draw their symbols in `--text-primary`.
 
-| Step | Used for                                   | Token          | Light              | Dark               |
-| ---- | ------------------------------------------ | -------------- | ------------------ | ------------------ |
-| 0    | Sidebar and the window around the thread   | `--sidebar`    | `oklch(0.982 0 0)` | `oklch(0.15 0 0)`  |
-| 1    | Thread canvas                              | `--background` | `oklch(0.991 0 0)` | `oklch(0.196 0 0)` |
-| 2    | Cards: tool calls, code blocks, diffs      | `--card`       | `oklch(1 0 0)`     | `oklch(0.217 0 0)` |
-| 3    | Raised: composer, popovers, menus, dialogs | `--popover`    | `oklch(1 0 0)`     | `oklch(0.243 0 0)` |
+### Palette
 
-- The lightness steps match the reference. Its surfaces carry a trace of warmth (chroma about 0.002); OverBench keeps shadcn's pure neutral.
-- A queued message's card in the [queue stack](./ui.md#composer) fades from surface 3 toward `--queue-back` the further back it sits: `oklch(0.96 0 0)` light, a grey step like `--muted`, and `oklch(0.196 0 0)` dark, surface 1, so a card further back recedes in both themes.
-- `BACKGROUND_COLOR` in `src/main/window.ts` follows `--background` in both themes, so the first frame does not flash.
-- `--canvas` is `oklch(1 0 0)` in both themes: the page an [SVG code block](./ui.md#markdown)'s picture is drawn on. An SVG with no background of its own is drawn for a white page, so its dark strokes and text would vanish on a dark card.
+| Token                              | Light                        | Dark                   | Used for                                                                                                                                                             |
+| ---------------------------------- | ---------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--bg-app`                         | `#FDFDFC`                    | `#1B1B1A`              | The main area and the top bar                                                                                                                                        |
+| `--bg-sidebar`                     | `#F9F9F8`                    | `#171716`              | The sidebar, Settings' column, the side panel                                                                                                                        |
+| `--bg-surface`                     | `#FFFFFF`                    | `#232322`              | Inputs, the composer, cards, menus, popovers, dialogs                                                                                                                |
+| `--bg-subtle`                      | `#F2F2F0`                    | `#2B2B29`              | The user's bubble, chips, neutral pills, tracks and tiles                                                                                                            |
+| `--bg-code-inline`                 | `#F0F0EE`                    | `#2E2E2C`              | Inline code                                                                                                                                                          |
+| `--bg-code-block`                  | `#F7F7F5`                    | `#20201F`              | Code blocks, diffs, commands, table headers                                                                                                                          |
+| `--bg-hover`                       | `#F0F0EE`                    | `#2A2A28`              | A hovered row or button                                                                                                                                              |
+| `--bg-selected`                    | `#EDEDEB`                    | `#33332F`              | The current session, a chosen item, a pressed toggle                                                                                                                 |
+| `--border-default`                 | `#E3E3E1`                    | `#3A3A37`              | Inputs, cards, the composer, menus                                                                                                                                   |
+| `--border-subtle`                  | `#ECECEA`                    | `#2F2F2C`              | Dividers, table lines, the top bar's and sidebar's edges                                                                                                             |
+| `--border-strong`                  | `#D6D6D3`                    | `#474743`              | A hovered or focused field, an outline button                                                                                                                        |
+| `--text-primary`                   | `#262626`                    | `#ECECEA`              | Body text and titles                                                                                                                                                 |
+| `--text-secondary`                 | `#525252`                    | `#B5B4AF`              | Descriptions, the top bar's information, model names, levels                                                                                                         |
+| `--text-tertiary`                  | `#6B6B6B`                    | `#9A9994`              | Fold lines, times, meta                                                                                                                                              |
+| `--text-placeholder`               | `#737373`                    | `#8F8E89`              | Placeholders in inputs                                                                                                                                               |
+| `--text-disabled`                  | `#A3A3A3`                    | `#6B6A66`              | Unavailable items                                                                                                                                                    |
+| `--icon-default`                   | `#6B6B6B`                    | `#9A9994`              | Icons at rest; `--text-primary` under the pointer                                                                                                                    |
+| `--attention`                      | `#C2410C`, its dot `#EA580C` | `#FB923C`              | Waiting for your approval                                                                                                                                            |
+| `--danger`                         | `#B42318`                    | `#F87171`              | Failure, deletion, a diff's deleted lines                                                                                                                            |
+| `--success`                        | `#15803D`                    | `#4ADE80`              | A diff's added lines, nothing else                                                                                                                                   |
+| `--warning`                        | `#B45309`                    | `#FBBF24`              | Usage from 80%                                                                                                                                                       |
+| `--link`                           | `#2563EB`, hover `#1D4ED8`   | `#60A5FA`              | Links                                                                                                                                                                |
+| `--focus`                          | `rgba(37,99,235,.55)`        | `rgba(96,165,250,.6)`  | The keyboard focus ring                                                                                                                                              |
+| `--selection`                      | `rgba(37,99,235,.18)`        | `rgba(96,165,250,.28)` | Selected text, in the thread and the terminal                                                                                                                        |
+| `--danger-tint`, `--danger-border` | `#FDF6F5`, `#F1D5D1`         | `#2A1D1B`, `#4A2C28`   | The error notice and the line that ends a cut turn                                                                                                                   |
+| `--queue-back`                     | `#F4F4F2`                    | `#1E1E1D`              | What a queued card darkens toward, from `--bg-surface`                                                                                                               |
+| `--scrollbar-thumb`                | `rgba(0,0,0,.18)`            | `rgba(255,255,255,.2)` | Scrollbar thumbs, on a transparent track                                                                                                                             |
+| `--canvas`                         | `#FFFFFF`                    | `#FFFFFF`              | The page under an [SVG code block](./ui.md#markdown)'s picture: an SVG with no background is drawn for a white page, so its dark strokes would vanish on a dark card |
 
-### Lines
+- `--border-strong` and the dark `--link-hover`, which is `--link` itself, are the two values the palette did not give; they were derived here and wait for the maintainer's confirmation.
+- Lines are opaque and keep their hairline width (`--hairline`: 1 px, 0.5 px on 2× displays and 1/3 px on 3×), so a line is one device pixel of its color on every display.
+- Neither theme uses pure black or white for text.
+- The surface steps other documents name are these tokens: surface 0 is `--bg-sidebar`, surface 1 `--bg-app`, and surfaces 2 (cards) and 3 (the composer, menus, dialogs) are both `--bg-surface`, told apart by their shadows.
 
-| Token             | Light                | Dark                 | Used for                                              |
-| ----------------- | -------------------- | -------------------- | ----------------------------------------------------- |
-| `--border`        | `oklch(0 0 0 / 16%)` | `oklch(1 0 0 / 14%)` | Container rings: cards, the composer, menus           |
-| `--border-soft`   | `oklch(0 0 0 / 9%)`  | `oklch(1 0 0 / 8%)`  | Dividers inside a container, the ring of an icon tile |
-| `--border-strong` | `oklch(0 0 0 / 28%)` | `oklch(1 0 0 / 24%)` | Outline buttons, hovered and focused containers       |
+### shadcn names
 
-Lines are translucent, so one token reads the same on every surface step. The alphas are set for the 0.5 px hairline of a 2× display; on a 1× display, where the hairline is 1 px, they are halved, so a line keeps the same visual weight.
+shadcn/ui's components use their own names, which `tokens.css` points at the palette, so they need no changes:
 
-### Meaning
+| shadcn and OverBench names                                                                                 | Palette token      |
+| ---------------------------------------------------------------------------------------------------------- | ------------------ |
+| `--background`                                                                                             | `--bg-app`         |
+| `--sidebar`, `--terminal-background`                                                                       | `--bg-sidebar`     |
+| `--card`, `--popover`, `--primary-foreground`, `--segment-thumb` (light)                                   | `--bg-surface`     |
+| `--muted`, `--secondary`, `--tile`, `--segment-track`                                                      | `--bg-subtle`      |
+| `--accent`, `--sidebar-accent`                                                                             | `--bg-hover`       |
+| `--pressed`                                                                                                | `--bg-selected`    |
+| `--foreground`, `--card-foreground`, `--popover-foreground`, `--primary` and the other `-foreground` names | `--text-primary`   |
+| `--muted-foreground`                                                                                       | `--text-tertiary`  |
+| `--border`, `--input`, `--track`                                                                           | `--border-default` |
+| `--border-soft`, `--sidebar-border`                                                                        | `--border-subtle`  |
+| `--destructive`                                                                                            | `--danger`         |
+| `--ring`, `--sidebar-ring`                                                                                 | `--focus`          |
 
-- `--primary` stays shadcn's neutral: near black in the light theme, near white in the dark one. OverBench has no brand accent, so color is left for meaning.
-- `--attention` (amber, with `--attention-foreground`): permission requests and anything else waiting for the user, such as the dot at the end of a sidebar row, which carries a 1 px inset ring in `--attention-text` so its edge reaches 3:1 on the light sidebar. It is the loudest color in the app.
-- `--success` (green): completed checks.
-- **Tints** are a meaning color at a low alpha, the fill of a status pill or a notice, with the color's text step on top: `--success-tint` with `--success-text`; `--checked-tint` with `--checked-text` (`oklch(0.47 0.16 255)` light, `oklch(0.8 0.1 255)` dark) for information and an action on offer, such as an agent update; `--attention-tint` with `--attention-text`; `--destructive-tint` with `--destructive`. A pill that is a button deepens its tint on hover (`--checked-tint-hover`, `--destructive-tint-hover`). Light tints are 9 to 13% and dark ones 13 to 22%, so they read the same on surfaces 0 and 1.
-- `--mark` (a soft yellow, `oklch(0.88 0.15 90 / 55%)` light and `oklch(0.8 0.14 85 / 32%)` dark): the text a search matched, and the brief flash on the row a search result jumps to. It is no state, so it never appears outside search.
-- **Usage levels**: a bar of plan usage takes `--success` below 60% used, `--attention` from 60% and `--destructive` from 90% or once the limit is reached, and its percentage the matching text step, so how much is left reads before the number does. Progress that is not usage, such as a download, stays `--checked`.
-- `--checked` (blue): a control that is on or chosen, today the switch's track. It is the blue macOS, Windows and GNOME tint their own controls with, so the state reads at a glance.
-- `--destructive` is a brick red, `oklch(0.5 0.17 27)` light and `oklch(0.7 0.16 22)` dark, calmer than shadcn's saturated red. It marks errors, conflicts and deletion in text and icons and tints destructive buttons, so a loud red would shout from every one of them; the darker light value still reaches 5.9:1 on surface 0. `--ring` stays shadcn's.
-- `--muted-foreground` in the light theme is `oklch(0.53 0 0)` instead of shadcn's 0.556, which reaches only 4.49:1 on surface 0, just under WCAG AA.
-- `--sidebar-accent`, the fill of hovered and selected sidebar rows, is `oklch(0.945 0 0)` light and `oklch(0.25 0 0)` dark; shadcn's 0.97 barely shows on surface 0.
-- `--muted` (the user bubble, inline code, a disabled send button) is `oklch(0.96 0 0)` light, so the bubble stays visible on surface 1. `--accent` (hovered rows on surface 1, the highlighted menu item, an open selector) is `oklch(0.962 0 0)` light and `oklch(0.27 0 0)` dark.
-- `--input`, the track of an unchecked `Switch`, is `oklch(0.9 0 0)` light instead of shadcn's 0.922, so an unchecked switch still reads on a card, and `oklch(1 0 0 / 16%)` dark.
+- `--segment-thumb` is `--bg-surface` in the light theme and `--bg-selected` in the dark one, so the thumb stays lighter than its track in both. `--pressed-hover` is `--bg-selected` with 5% of `--text-primary`.
+- The derived meaning tokens: `--diff-add` is `--success` at 9% and `--diff-del` `--danger` at 8%; `--destructive-tint` is `--danger-tint` and `--destructive-tint-hover` `--danger` at 13%; `--attention-ring` and `--attention-halo` are `--attention` at 80% and 20%; `--attention-foreground`, a count on an attention fill, is `--bg-surface`.
+- `--mark` (a soft yellow, `oklch(0.88 0.15 90 / 55%)` light and `oklch(0.8 0.14 85 / 32%)` dark), the text a search matched, keeps its value until the maintainer decides it; `--scrim`, black at 10% behind a dialog, likewise.
 
-### Reasoning levels
+### Usage levels
 
-The top reasoning levels cost the most time and tokens, so their names carry a warm gradient where a level is chosen: in the model menu, the agent menu and New session's route line. The session's model button, in the control row, shows the name in its own color ([interface](./ui.md#composer)). It is the one gradient in the interface, and it marks a cost, so it still carries meaning. Which levels are on top is recognised by name ([interface](./ui.md#composer)).
+A usage hint, a plan window's percentage such as "7 days 57%" or the context's, is `--text-tertiary` below 80% used, `--warning` from 80% and `--danger` from 95% or once the limit is reached. Its bar and its ring take the same step, with a neutral `--text-tertiary` fill below 80%. Progress that is not usage, such as a download, stays neutral.
 
-| Token                        | Light                                                               | Dark                                                                   | Used for                                                                                                  |
-| ---------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `--effort-high-1`, `-2`      | `oklch(0.6 0.14 70)` → `oklch(0.56 0.18 40)`                        | `oklch(0.86 0.12 82)` → `oklch(0.78 0.15 52)`                          | The high tier's name (`text-effort-high`)                                                                 |
-| `--effort-max-1`, `-2`, `-3` | `oklch(0.6 0.15 60)` → `oklch(0.56 0.2 18)` → `oklch(0.52 0.2 300)` | `oklch(0.86 0.12 78)` → `oklch(0.76 0.16 22)` → `oklch(0.75 0.15 305)` | The max tier's name (`text-effort-max`), the middle stop at 55%                                           |
-| `--effort-max-ring`          | `oklch(0.6 0.18 30 / 32%)`                                          | `oklch(0.76 0.16 30 / 40%)`                                            | The 1 px ring of the max tier's thumb (`shadow-effort-max`), with a 3 px (4 px dark) glow of the same hue |
-| `--sheen`                    | `oklch(0.72 0.17 35 / 26%)`                                         | `oklch(0.82 0.13 45 / 24%)`                                            | The light that sweeps once across the thumb when the max tier is chosen (`animate-sheen`)                 |
+### Model names and reasoning levels
 
-- The light stops sit near lightness 0.6, so a 12 px name keeps its contrast on the white thumb; the dark stops are lighter for the same reason.
-- The gradient runs across the name itself (`background-clip: text`), so a short name such as "Max" still shows all of it.
+A model's name and its reasoning level are `--text-secondary` wherever they show: the composer's model button, New session's route line and the Ultracode label. The model menu's reasoning level is a [segmented control](#segmented-controls) like any other, with no color of its own; the top tier's thumb still plays its one-time sheen when chosen, in a neutral light (`--sheen`, `--text-primary` at 6%), to be reviewed.
 
 ### Repository state
 
-Git and pull request states reuse the meaning colors and add one, `--merged`, because a merged pull request is neither a success nor waiting. The mapping follows GitHub's, which every developer already reads at a glance; each color always comes with its own Lucide icon.
+Git and pull request states are neutral, except what failed. Each state keeps its own Lucide icon, so the shape tells them apart.
 
-| State                            | Icon                                  | Color                                                                 |
-| -------------------------------- | ------------------------------------- | --------------------------------------------------------------------- |
-| Open pull request                | `GitPullRequest`                      | `--success`                                                           |
-| Draft                            | `GitPullRequestDraft`                 | `--muted-foreground`                                                  |
-| Merged                           | `GitMerge`                            | `--merged`: `oklch(0.55 0.19 300)` light, `oklch(0.72 0.15 300)` dark |
-| Closed                           | `GitPullRequestClosed`                | `--destructive`                                                       |
-| Checks passing, failing, pending | `CircleCheck`, `CircleX`, `CircleDot` | `--success`, `--destructive`, `--attention`                           |
-| Commits not pushed               | `ArrowUp` with the count              | `--foreground`; pushed and in sync is `--muted-foreground`            |
-| Conflicts, a rebase in progress  | `TriangleAlert`                       | `--destructive` for conflicts, `--attention` for the operation        |
+| State                                      | Icon                                                                        | Color                                                     |
+| ------------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Open, draft, merged or closed pull request | `GitPullRequest`, `GitPullRequestDraft`, `GitMerge`, `GitPullRequestClosed` | `--icon-default`, the state word `--text-secondary`       |
+| Checks passing or pending                  | `CircleCheck`, `CircleDot`                                                  | `--icon-default`                                          |
+| Checks failing                             | `CircleX`                                                                   | `--danger`                                                |
+| Commits not pushed                         | `ArrowUp` with the count                                                    | `--text-primary`; pushed and in sync is `--text-tertiary` |
+| Conflicts                                  | `TriangleAlert`                                                             | `--danger`; a rebase in progress is neutral               |
+| Lines added and removed                    | `+N`, `−N`                                                                  | `--success`, `--danger`                                   |
 
-- Branch names and commit ids are monospace, at 12 px, with ids cut to 7 characters.
-- Pull request chips are neutral: `--muted` fill with a `--border-soft` ring and `--foreground` text, so only the state icon carries color. Hover takes `--accent`.
+- Branch names and commit ids are monospace, at 12 px, with ids cut to 7 characters; in the top bar the branch and the change counts are `--text-secondary`.
+- Pull request chips are neutral: `--muted` fill with a `--border-soft` ring and `--foreground` text.
 
 ### Terminal
 
 The terminal sits in the side panel on surface 0, like the sidebar, so the thread on surface 1 stays the one canvas, framed by a quieter surface on each side. Its colors are tokens read by xterm.js:
 
-| Token                   | Light                | Dark                 |
-| ----------------------- | -------------------- | -------------------- |
-| `--terminal-background` | `--sidebar`          | `--sidebar`          |
-| `--terminal-foreground` | `--foreground`       | `--foreground`       |
-| `--terminal-cursor`     | `--foreground`       | `--foreground`       |
-| `--terminal-selection`  | `oklch(0 0 0 / 12%)` | `oklch(1 0 0 / 20%)` |
+| Token                   | Value            |
+| ----------------------- | ---------------- |
+| `--terminal-background` | `--bg-sidebar`   |
+| `--terminal-foreground` | `--text-primary` |
+| `--terminal-cursor`     | `--text-primary` |
+| `--terminal-selection`  | `--selection`    |
 
-The 16 ANSI colors are VS Code's defaults for its light and dark themes (MIT), tuned there for contrast on light and dark backgrounds:
+The 16 ANSI colors are VS Code's defaults for its light and dark themes (MIT), tuned there for contrast on light and dark backgrounds. They color the programs' own output, so the palette's rules leave them as they are until the maintainer decides otherwise:
 
 | Color   | Light normal | Light bright | Dark normal | Dark bright |
 | ------- | ------------ | ------------ | ----------- | ----------- |
@@ -132,7 +151,7 @@ Each agent is shown with its official mark in its own colors. They are the only 
 | Codex       | The Codex mark, a vertical gradient `#B1A7FF` → `#7A9DFF` → `#3941FF`                              | [`@lobehub/icons`](https://github.com/lobehub/lobe-icons) (MIT)              |
 | OpenCode    | The two-tone OpenCode mark: frame `#17181C` and fill `#E6E5E6` light, `#FFFFFF` and `#5A5858` dark | [sst/opencode](https://github.com/sst/opencode) `packages/identity` (MIT)    |
 
-- Sizes: 14 px in sidebar and list rows and before the session title in the top bar, 17 px on a 32 px tile in cards. The tile is `--tile` (`oklch(0.965 0 0)` light, `oklch(0.27 0 0)` dark) with an inset `--border-soft` ring and an 8 px radius.
+- Sizes: 14 px in sidebar and list rows and before the session title in the top bar, 17 px on a 32 px tile in cards. The tile is `--tile` (`--bg-subtle`) with an inset `--border-soft` ring and an 8 px radius.
 - An agent that is not installed shows its mark in one color, `--muted-foreground`.
 - The marks ship as SVG files with their license notices; the gradient and the two OpenCode colors are tokens, so they follow the theme.
 
@@ -146,7 +165,7 @@ Files and folders show their type's icon from [Material Icon Theme](https://gith
 
 ### Data graphics
 
-The [usage page](./usage.md#interface) draws amounts. Its colors carry two meanings, kept apart so one chart never mixes them:
+The [usage page](./usage.md#interface) draws amounts. Its colors carry two meanings, kept apart so one chart never mixes them. They predate the palette's rule that brand colors stay on the agent marks, and wait for the maintainer's decision; until then they keep their values, the heatmap's blue as `--heat-hue`:
 
 | Token                                  | Light                                                                | Dark                            | Used for                                                                |
 | -------------------------------------- | -------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
@@ -154,8 +173,8 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 | `--agent-opencode`                     | `oklch(0.6 0 0)`                                                     | `oklch(0.72 0 0)`               | OpenCode's series; its mark is black and white, so a mid grey stands in |
 | `--agent-other`                        | `oklch(0.78 0 0)`                                                    | `oklch(0.45 0 0)`               | An agent without a mark                                                 |
 | `--heat-0`                             | `oklch(0 0 0 / 5.5%)`                                                | `oklch(1 0 0 / 6.5%)`           | A day without usage in the activity heatmap                             |
-| `--heat-1`, `--heat-2`, `--heat-3`     | `--checked` mixed at 26%, 48% and 74% with transparent               | the same, over the dark surface | The heatmap's quartiles of the days with usage, lowest first            |
-| `--heat-4`                             | `--checked`                                                          | `--checked`                     | The top quartile                                                        |
+| `--heat-1`, `--heat-2`, `--heat-3`     | `--heat-hue` mixed at 26%, 48% and 74% with transparent              | the same, over the dark surface | The heatmap's quartiles of the days with usage, lowest first            |
+| `--heat-4`                             | `--heat-hue`: `oklch(0.6 0.17 255)`                                  | `oklch(0.66 0.15 255)`          | The top quartile                                                        |
 
 - **Series** take the agents' own colors, like their [marks](#agent-marks), so a bar is recognized without the legend.
 - **Amount** is one hue that deepens, never a rainbow: more reads as more without a key of colors. The tokens-by-type table keys its rows with the same steps, and output with `--foreground` at 80%.
@@ -170,23 +189,25 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 | Composer, tool call cards, code blocks, diffs, attachments, dialogs, menus, popovers | Agent text, the user bubble (a fill only), sidebar rows, buttons inside a container |
 
 - Inside a bordered container, parts are separated by a hairline `Separator` or a surface step, never by a second border.
-- The sidebar and the side panel, on surface 0, meet the thread's surface 1 at a `--border-soft` hairline, drawn by the resizable handle between them at rest, which turns `--border-strong` on hover and drag. The reference draws the same line, measured at about 6% black on a 2× display; the surface step alone, 1% apart, read as an edge that was missing. A collapsed sidebar takes its line with it.
+- The sidebar and the side panel, on `--bg-sidebar`, meet the thread's `--bg-app` at a `--border-subtle` hairline, drawn by the resizable handle between them at rest, which turns `--border-strong` on hover and drag; the top bar's lower edge is the same hairline. The surface step alone read as an edge that was missing. A collapsed sidebar takes its line with it.
 - Borders are drawn as an inset ring (`box-shadow`, Tailwind's `ring-inset`). A ring takes no layout space, follows the radius exactly, and can change on hover without moving anything.
 - `--hairline` is 1 px, 0.5 px on 2× displays and 1/3 px on 3× displays (`@media (resolution >= 2x)`), so lines are as fine as the display allows.
 
 ### Elevation
 
-| Tier | Shadow                                         | Used for                             |
-| ---- | ---------------------------------------------- | ------------------------------------ |
-| none |                                                | Everything on the canvas at rest     |
-| `sm` | A tight contact shadow and an 8 px ambient one | The composer at rest                 |
-| `md` | Contact and a 24 px ambient shadow             | Popovers, menus and floating buttons |
-| `lg` | Contact and a 28 px ambient shadow             | Dialogs                              |
+| Tier     | Light                                                                | Used for                                                |
+| -------- | -------------------------------------------------------------------- | ------------------------------------------------------- |
+| none     |                                                                      | Everything on the canvas at rest, list rows always      |
+| composer | `0 6px 20px rgba(20,20,19,.06)` and `0 -3px 10px rgba(20,20,19,.04)` | The composer (`shadow-sm` is the same)                  |
+| queue    | `0 1px 6px rgba(20,20,19,.05)`                                       | Queued message cards (`shadow-queue`)                   |
+| popover  | `0 8px 24px rgba(20,20,19,.10)`                                      | Menus, popovers, dialogs, floating buttons (`md`, `lg`) |
 
-- Dark-theme shadows are several times stronger (opacity 0.4 to 0.65), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge (`oklch(1 0 0 / 5%)`), which reads as an edge catching the light. In the light theme, outline buttons get a 1 px contact shadow instead.
-- **Composer** (the `composer` variant of `InputGroup`): a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft shadow (20 px light, 24 px dark). Only color and shadow change, so focusing never moves the text.
-- **Attention**: a card waiting for the user replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20% (75% and 16% in the dark theme).
-- **Focus rings** are shadcn's `focus-visible` ring everywhere. The reference uses a thinner ring with a glow in its brand color; a glow in a neutral color looks smudged, so OverBench keeps shadcn's ring.
+- In the dark theme every tier takes the same offsets and blurs in `rgba(0,0,0,.4)`, because a shadow on a dark surface barely shows. Raised surfaces there also keep a 1 px inset highlight along the top edge (`--highlight`, white at 5%), which reads as an edge catching the light.
+- Small raised controls keep their contact shadows (`--elevation-button` under an outline button, `--elevation-thumb` under a switch's thumb, `--elevation-segment` under a segment's thumb), which the palette did not cover; they wait for the maintainer's confirmation.
+- **Composer** (the `composer` variant of `InputGroup`): a `--border-default` hairline ring and the composer shadow at rest; a `--border-strong` ring on hover; on focus the `--border-strong` ring and the focus ring around the whole box. Only color, shadow and outline change, so focusing never moves the text.
+- **Queued cards** (the [queue stack](./ui.md#composer)): `--bg-surface` with a `--border-default` hairline and the queue shadow; a card further back darkens toward `--queue-back`, from `#FFFFFF` to `#F4F4F2` light and from `#232322` to `#1E1E1D` dark.
+- **Attention**: a card waiting for your approval replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20%.
+- **Focus rings**: the `focus-ring` utility, a 2 px `--focus` outline 2 px outside the element, on every control that takes keyboard focus; `focus-ring-within` draws it on a field, such as the composer, whose control has focus. The thread's scroller draws its ring 2 px inset instead, because its faded edges would hide one outside.
 
 ## Density and sizing
 
@@ -278,15 +299,16 @@ Every size in the interface is one of these steps. Line heights sit on a 4 px gr
 
 The message body, from the typography spec of [problem 43](../milestones/m0-feedback.md#43-the-message-body-needs-a-typography-pass-to-a-given-spec), all under the `.markdown` class in `globals.css`. Sizes are in em of the prose size, so **Text size** scales them; the pixel values below are those of the default 15 px. Colors come only from the existing tokens, so the dark theme follows without values of its own.
 
-- **Column**: 42em (630 px), about 42 Chinese characters a line, at a 1.7 line height. Text in `--foreground` at 90% opacity; bold and headings at full `--foreground`, so the step in lightness carries the hierarchy. Paragraphs `text-wrap: pretty`, long paths and URLs `overflow-wrap: anywhere`, no letter spacing for Chinese.
+- **Column**: 42em (630 px), about 42 Chinese characters a line, at a 1.7 line height. Text, bold and headings in `--text-primary`; weight and size carry the hierarchy. Paragraphs `text-wrap: pretty`, long paths and URLs `overflow-wrap: anywhere`, no letter spacing for Chinese.
 - **Headings**: more space above than below, so each sits on its content. h1 20 px with `1.8em 0 0.4em`, h2 17 px with `1.75em 0 0.4em`, h3 15 px with `1.5em 0 0.3em`, h4 and below 15 px in `--muted-foreground`; all at the semibold weight, `text-wrap: balance`, none above the first block.
 - **Paragraphs and emphasis**: `margin: 0 0 0.75em`; bold at the semibold weight, never 700; emphasis italic, except in Chinese text, where it is the medium weight upright (`data-cjk-emphasis`, set when the emphasis holds a Han character).
 - **Lists**: `padding-left: 1.25em`, items 0.3em apart, markers in `--muted-foreground`, ordered numbers `tabular-nums`, nested lists 0.25em above and below, and no margin on a paragraph inside an item, so loose lists keep the spacing of tight ones.
-- **Inline code**: mono at 0.85em on `--muted`, `padding: 0.1em 0.35em`, radius 4 px, no border and no colored text.
-- **Code blocks**: `--muted` at 60%, a 1 px `--border`, radius 8 px, 13 px at 1.6, padding 0 14px 12px under a 32 px header with the language at 12 px in `--muted-foreground` and the copy button as a ghost button; a block scrolls sideways and never wraps; 1em above and below. An `svg` block's picture replaces the text under the same header: centred, `0 14px 12px` from the frame, on a `--canvas` page with 12 px of page around it and `rounded-md` corners, so a shape with round corners keeps them.
-- **Links**: `--foreground` with an underline in `--muted-foreground` at 40%, 3 px below the text, turning `--foreground` on hover.
+- **Inline code**: mono at 0.85em in `--text-primary` on `--bg-code-inline`, `padding: 0.1em 0.35em`, radius 4 px, no border and no colored text.
+- **Code blocks**: `--bg-code-block`, a 1 px `--border-subtle`, radius 8 px, 13 px at 1.6, padding 0 14px 12px under a 32 px header with the language at 12 px in `--muted-foreground` and the copy button as a ghost button; a block scrolls sideways and never wraps; 1em above and below. An `svg` block's picture replaces the text under the same header: centred, `0 14px 12px` from the frame, on a `--canvas` page with 12 px of page around it and `rounded-md` corners, so a shape with round corners keeps them.
+- **Links**: `--link` with an underline in `--link` at 40%, 3 px below the text; on hover the text turns `--link-hover` and the underline full.
+- **Syntax highlighting** keeps GitHub's themes (`github-light-default`, `github-dark-default` in Shiki, `@uiw/codemirror-theme-github` in the editor) until the maintainer picks the low-saturation theme the palette asks for; its comments must reach 4.5:1 on `--bg-code-block`, which GitHub's light comment, at 4.24:1, does not.
 - **File chips**: `inline-flex`, 20 px high, `vertical-align: 1px`; the file icon and 3 px; 6 px of padding each side, radius 5 px; mono 11.5 px in `--muted-foreground` on `--muted`, no wrapping; 4 px from what comes before; `--accent` and `--foreground` on hover.
-- **Blockquotes**: a 2 px `--border` rule on the left, 12 px in, `--muted-foreground`, no fill. **Tables**: no frame, in a wrapper that scrolls sideways; 14 px with `tabular-nums`; header cells at the medium weight in `--muted-foreground` over a `--border` line; cells `8px 12px` over a `--border` line at 60%, none under the last row. **Rules**: 1 px `--border`, 1.5em above and below.
+- **Blockquotes**: a 2 px `--border` rule on the left, 12 px in, `--muted-foreground`, no fill. **Tables**: no frame, in a wrapper that scrolls sideways; 14 px with `tabular-nums`; a `--bg-code-block` header row with its cells at the medium weight in `--muted-foreground`; cells `8px 12px`, every line `--border-subtle`, none under the last row, and no zebra stripes. **Rules**: 1 px `--border`, 1.5em above and below.
 - The user's bubble, the tool call rows and the thread's spacing are in [Interface: thread](./ui.md#thread).
 
 ## Components
@@ -308,12 +330,12 @@ A choice among two to six ordered or exclusive values, such as the theme in Sett
 
 ### Switches and selects
 
-| Part          | Look                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Switch        | A 28 × 16 px pill (24 × 14 px at `size="sm"`, inside menus) with a 12 px (10 px) thumb inset 2 px. On, the track is `--checked`; off, `--input` with the card ring, so it reads as a recess. The thumb is `--background` in the light theme and `--foreground` in the dark one, with `--thumb-shadow` (a 2 px contact shadow and a hairline) so it sits on the track rather than in it |
-| Switch motion | The thumb slides with `translate` over `--duration-base` and `--ease-out-quart`, and the track's color changes over `--duration-fast`; while pressed, the thumb stretches 3 px toward where it will go, as the platform's switches do. Reduce motion keeps the color change only                                                                                                       |
-| Select        | The trigger is an outline control at `--control-height`, 12.5 px text, with a 14 px chevron in `--muted-foreground`. Its list is a menu: it opens below the trigger, at least as wide as it and never over it, with the menu's surface, radius, padding, labels, separators and `rounded-lg` items, and a 14 px `Check` on the chosen item                                             |
-| Quiet select  | `SelectTrigger` `variant="quiet"`, for Settings rows: no fill, ring or shadow at rest, the `--accent` fill under the pointer and while open, the value at the interface size. A page of rows then reads as settings, not as a form. An item can carry a muted hint after its name and be disabled ("Not installed")                                                                    |
+| Part          | Look                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Switch        | A 28 × 16 px pill (24 × 14 px at `size="sm"`, inside menus) with a 12 px (10 px) thumb inset 2 px. On, the track is `--text-primary` and the thumb `--bg-surface`, neutral like the rest of the chrome; off, the track is `--input` with the card ring, so it reads as a recess, and the thumb `--background` in the light theme and `--foreground` in the dark one, with `--thumb-shadow` (a 2 px contact shadow and a hairline) so it sits on the track rather than in it |
+| Switch motion | The thumb slides with `translate` over `--duration-base` and `--ease-out-quart`, and the track's color changes over `--duration-fast`; while pressed, the thumb stretches 3 px toward where it will go, as the platform's switches do. Reduce motion keeps the color change only                                                                                                                                                                                            |
+| Select        | The trigger is an outline control at `--control-height`, 12.5 px text, with a 14 px chevron in `--muted-foreground`. Its list is a menu: it opens below the trigger, at least as wide as it and never over it, with the menu's surface, radius, padding, labels, separators and `rounded-lg` items, and a 14 px `Check` on the chosen item                                                                                                                                  |
+| Quiet select  | `SelectTrigger` `variant="quiet"`, for Settings rows: no fill, ring or shadow at rest, the `--accent` fill under the pointer and while open, the value at the interface size. A page of rows then reads as settings, not as a form. An item can carry a muted hint after its name and be disabled ("Not installed")                                                                                                                                                         |
 
 ### Status pills
 
@@ -321,19 +343,20 @@ A state shown in a row, such as "Signed in", "Not found on PATH" or an agent's u
 
 | Variant   | Fill and text                               | Used for                                               |
 | --------- | ------------------------------------------- | ------------------------------------------------------ |
-| `success` | `--success-tint`, `--success-text`          | Found, signed in, updated                              |
-| `info`    | `--checked-tint`, `--checked-text`          | Something on offer or under way: an update, an install |
-| `warning` | `--attention-tint`, `--attention-text`      | Something to do: not signed in                         |
-| `error`   | `--destructive-tint`, `--destructive`       | A failure, with its retry                              |
+| `success` | `--bg-subtle`, `--text-secondary`           | Found, signed in, updated                              |
+| `info`    | `--bg-subtle`, `--text-secondary`           | Something on offer or under way: an update, an install |
+| `warning` | `--bg-subtle`, `--text-secondary`           | Something to do: not signed in                         |
+| `error`   | `--danger-tint`, `--danger`                 | A failure, with its retry                              |
 | `neutral` | `--muted`, `--muted-foreground`, weight 400 | A plain value, such as the shell in use                |
 
 - A pill can be the action itself, rendered as a `button` (`render`), and then keeps its states inside it: the offer, a `Spinner` with a small × that cancels, the failure with `RotateCw`, and the result. The row around it never changes its layout ([Settings › Agents](./ui.md#settings--agents)).
 - A pill never shows a percentage it does not have: a task with no measured progress shows the `Spinner` and its words.
-- The notices that go with pills are `Alert`s with the same tints and no ring, so Settings keeps to no cards and no shadows: `info` (`--checked-tint`), `success` (`--success-tint`), `warning` (`--attention-tint`) and `error` (`--destructive-tint`). The `destructive` variant, a card, stays for surfaces that have cards. A log or a command inside a notice sits on `--card` with no ring.
+- `success`, `info` and `warning` keep their names, so a caller says what a pill means, but share one neutral look: only a failure is colored. The icon in the leading slot tells them apart.
+- The notices that go with pills are `Alert`s with no shadow, so Settings keeps to no cards and no shadows: `info`, `success` and `warning` on `--bg-subtle` with the icon in `--icon-default`, and `error` on `--danger-tint` with a `--danger-border` hairline and the icon in `--danger`, the text `--text-primary` and the description `--text-secondary`; the line that ends a cut turn is this notice. The `destructive` variant, a card, stays for surfaces that have cards. A log or a command inside a notice sits on `--card` with no ring.
 
 ### Toggle buttons
 
-An icon button that stays on, such as a side pane's toggle in the top bar, says so with `aria-pressed`, and the `quiet` button shows it sunk into its bar: a `--pressed` fill (black 8% in light, white 10% in dark), a hairline `--border` edge inside it, and the icon in `--foreground`; hover deepens the fill to `--pressed-hover`. The reference marks the same state with a blue tint. OverBench keeps to its neutral palette and makes the state plain through the fill and the edge, so it reads at a glance without a color of its own; an open menu's trigger keeps the lighter `--accent`.
+An icon button that stays on, such as a side pane's toggle in the top bar, says so with `aria-pressed`, and the `quiet` button shows it sunk into its bar: a `--pressed` fill (`--bg-selected`), a hairline `--border` edge inside it, and the icon in `--foreground`; hover deepens the fill to `--pressed-hover`. The reference marks the same state with a blue tint. OverBench keeps to its neutral palette and makes the state plain through the fill and the edge, so it reads at a glance without a color of its own; an open menu's trigger keeps the lighter `--accent`.
 
 ### Menus and dialogs
 
@@ -355,7 +378,7 @@ Every menu, the dropdown menus and the context menus alike, shares one set of me
 
 - The session menus, the title menu and the row's context menu, hold **New sub-session**, **Close**, a separator and **Delete…**.
 - The two-pane menu was decided while the maintainer was away (2026-10-22); to be reviewed. Its rail fits its widest row.
-- **Dialogs** (`Dialog`, `AlertDialog`): surface 3, `rounded-3xl`, 20 px padding and 16 px between parts, at most 384 px wide, with the `lg` shadow. The title is 16 px at weight 500, the description 13 px with a relaxed line height in `--muted-foreground`. The buttons sit right-aligned at the end, 8 px apart, at the `default` size; the footer has no band or rule of its own. A destructive action uses `Button`'s `destructive` variant.
+- **Dialogs** (`Dialog`, `AlertDialog`): surface 3, `rounded-3xl`, 20 px padding and 16 px between parts, at most 384 px wide, with the `lg` shadow. The title is 16 px at weight 500, the description 13 px with a relaxed line height in `--text-secondary`. The buttons sit right-aligned at the end, 8 px apart, at the `default` size; the footer has no band or rule of its own. A destructive action uses `Button`'s `destructive` variant.
 
 ## Motion
 
@@ -430,5 +453,5 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 ## Layout behavior
 
 - Components adapt to their container with container queries (`@container`), not viewport media queries, because panels resize independently of the window.
-- Scrollbars are the platform's, thinned with `scrollbar-width: thin` and tinted `--border-strong` through `scrollbar-color`. On macOS they are overlay scrollbars unless the system setting shows them always. On Linux the main process switches on Chromium's `OverlayScrollbar` feature, because Chromium would otherwise draw classic scrollbars with arrow buttons there. On Windows that switch has no effect from the app's code, since the native theme reads it before the main script runs, and Chromium draws Fluent scrollbars with arrow buttons whenever `scrollbar-width` or `scrollbar-color` is set. So on Windows (`data-platform="win32"` on the root) both are reset to `auto` and the `::-webkit-scrollbar` pseudo-elements draw the scrollbar: a 4 px `--border-strong` pill in a `--scrollbar-size` (10 px) gutter, inset by `--scrollbar-inset`, widening by 2 px under the pointer, with no track or buttons, and hidden while `MessageScroller` follows output. Lists that hide their scrollbar use `no-scrollbar`, which keeps working there. No layout depends on a scrollbar's width: scrollers that must not shift use `scrollbar-gutter: stable`.
+- Scrollbars are the platform's, thinned with `scrollbar-width: thin` and tinted `--scrollbar-thumb` on a transparent track through `scrollbar-color`. On macOS they are overlay scrollbars unless the system setting shows them always. On Linux the main process switches on Chromium's `OverlayScrollbar` feature, because Chromium would otherwise draw classic scrollbars with arrow buttons there. On Windows that switch has no effect from the app's code, since the native theme reads it before the main script runs, and Chromium draws Fluent scrollbars with arrow buttons whenever `scrollbar-width` or `scrollbar-color` is set. So on Windows (`data-platform="win32"` on the root) both are reset to `auto` and the `::-webkit-scrollbar` pseudo-elements draw the scrollbar: a 4 px `--scrollbar-thumb` pill in a `--scrollbar-size` (10 px) gutter, inset by `--scrollbar-inset`, widening by 2 px under the pointer, with no track or buttons, and hidden while `MessageScroller` follows output. Lists that hide their scrollbar use `no-scrollbar`, which keeps working there. No layout depends on a scrollbar's width: scrollers that must not shift use `scrollbar-gutter: stable`.
 - A list that acts as one control, such as the sidebar, a menu or a set of permission options, has one Tab stop and moves focus with the arrow keys (roving focus).

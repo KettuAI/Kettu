@@ -26,9 +26,9 @@ export function PrDetails({ pr }: { pr: PullRequest }) {
       <div className="flex items-start gap-2">
         <PrIcon state={pr.state} size={15} className="mt-px" />
         <span className="min-w-0 flex-1 leading-[1.35] font-medium">{pr.title}</span>
-        <span className="font-mono text-xs text-muted-foreground">#{pr.number}</span>
+        <span className="font-mono text-xs text-tertiary">#{pr.number}</span>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-[23px] text-xs text-muted-foreground tabular">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-[23px] text-xs text-tertiary tabular">
         <span>
           <Trans
             t={t}
@@ -59,7 +59,7 @@ export function PrDetails({ pr }: { pr: PullRequest }) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 pl-[23px] text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 pl-[23px] text-xs text-tertiary">
         <span className="flex-1">
           {pr.review
             ? t('pr.reviewUpdated', { review: t(REVIEW_KEY[pr.review]), when })
@@ -117,7 +117,7 @@ export function PrChip({ url, className }: { url: string; className?: string }) 
       target="_blank"
       rel="noreferrer"
       className={cn(
-        'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-[6px] bg-muted pr-2 pl-1.5 align-[-5px] text-[12.5px] leading-none text-foreground no-underline shadow-[inset_0_0_0_var(--hairline)_var(--border-soft)] transition-colors duration-(--duration-fast) hover:bg-accent hover:shadow-[inset_0_0_0_var(--hairline)_var(--border)]',
+        'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-[6px] bg-subtle pr-2 pl-1.5 align-[-5px] text-[12.5px] leading-none text-primary no-underline shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] transition-colors duration-(--duration-fast) hover:bg-hover hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
         className,
       )}
     >
@@ -125,7 +125,7 @@ export function PrChip({ url, className }: { url: string; className?: string }) 
       <span className="font-mono text-xs whitespace-nowrap">
         {owner}/{repo}#{number}
       </span>
-      {title && <span className="min-w-0 truncate text-muted-foreground">{title}</span>}
+      {title && <span className="min-w-0 truncate text-tertiary">{title}</span>}
       {pr && <ChecksIcon state={pr.checks.state} size={12} />}
     </a>
   )

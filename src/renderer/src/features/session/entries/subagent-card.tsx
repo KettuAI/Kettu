@@ -47,7 +47,7 @@ export const SubagentCard = memo(function SubagentCard({
       disabled={!child}
       onClick={() => child && openSession(child.id, child.projectPath)}
       className={cn(
-        'group/subagent flex w-full flex-col overflow-hidden rounded-xl bg-card text-left text-ui text-card-foreground shadow-card outline-none transition-colors duration-(--duration-fast) hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/50',
+        'group/subagent flex w-full flex-col overflow-hidden rounded-xl bg-card text-left text-ui text-card-foreground shadow-card outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring',
         waiting && 'shadow-attention',
         animation,
       )}
@@ -55,7 +55,7 @@ export const SubagentCard = memo(function SubagentCard({
       {/* One line is as tall as a tool card's header; the icon and status center on that line. */}
       <span className="flex w-full items-start gap-2 px-3 py-[calc((var(--card-header)-1lh)/2)]">
         <span className="flex h-lh shrink-0 items-center">
-          <BotIcon className="size-3.5 text-muted-foreground" />
+          <BotIcon className="size-3.5 text-icon" />
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex min-w-0 items-baseline gap-1.5">
@@ -80,12 +80,12 @@ export const SubagentCard = memo(function SubagentCard({
         </span>
         <span className="flex h-lh shrink-0 items-center gap-1.5 text-muted-foreground">
           {waiting ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-attention-text">
-              <span aria-hidden className="size-1.5 rounded-full bg-attention" />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-attention">
+              <span aria-hidden className="size-1.5 rounded-full bg-attention-dot" />
               {t('status.needsApproval')}
             </span>
           ) : failed ? (
-            <span className="inline-flex items-center gap-1 text-xs text-destructive">
+            <span className="inline-flex items-center gap-1 text-xs text-danger">
               <CircleAlertIcon className="size-3.5" />
               {t('status.failed')}
             </span>

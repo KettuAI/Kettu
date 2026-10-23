@@ -29,14 +29,14 @@ type TextContent = Extract<FileContent, { kind: 'text' }>
 
 // GitHub's colours, as the thread's Shiki theme, on the pane's own surface.
 const surface = {
-  background: 'var(--background)',
-  gutterBackground: 'var(--background)',
-  gutterForeground: 'color-mix(in oklab, var(--muted-foreground) 70%, transparent)',
+  background: 'var(--bg-app)',
+  gutterBackground: 'var(--bg-app)',
+  gutterForeground: 'var(--text-disabled)',
   gutterBorder: 'transparent',
-  lineHighlight: 'color-mix(in oklab, var(--accent) 70%, transparent)',
+  lineHighlight: 'var(--bg-hover)',
 }
 const light = githubLightInit({ settings: surface })
-const dark = githubDarkInit({ settings: { ...surface, foreground: '#e6edf3' } })
+const dark = githubDarkInit({ settings: { ...surface, foreground: 'var(--text-primary)' } })
 
 // The search panel's rules match CodeMirror's own `.cm-panel.cm-search` so they win over it.
 const chrome = EditorView.theme({
@@ -52,7 +52,7 @@ const chrome = EditorView.theme({
   '.cm-lineNumbers .cm-gutterElement': { padding: '0 8px 0 4px', minWidth: '28px' },
   '.cm-activeLineGutter': { color: 'var(--foreground)' },
   '.cm-foldGutter .cm-gutterElement': { width: '14px', color: 'var(--muted-foreground)' },
-  '.cm-marked-line': { backgroundColor: 'var(--attention-tint)' },
+  '.cm-marked-line': { backgroundColor: 'var(--bg-selected)' },
   '.cm-panels': { backgroundColor: 'var(--background)', color: 'var(--foreground)' },
   '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border-soft)' },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border-soft)' },
@@ -88,7 +88,7 @@ const chrome = EditorView.theme({
     color: 'var(--foreground)',
     fontSize: '12px',
   },
-  '.cm-textfield:focus': { outline: 'none', borderColor: 'var(--ring)' },
+  '.cm-textfield:focus': { outline: 'none', borderColor: 'var(--focus)' },
   '.cm-button': {
     height: '24px',
     margin: 0,

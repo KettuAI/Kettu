@@ -56,7 +56,7 @@ import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { countdown, usageTone } from '@renderer/features/sidebar/plan-usage'
+import { countdown, USAGE_TONE_TEXT, usageTone } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -152,8 +152,8 @@ function PillClose({
       title={label}
       onClick={onClick}
       className={cn(
-        'grid size-4 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-        tone === 'info' ? 'hover:bg-checked-tint-hover' : 'hover:bg-destructive-tint-hover',
+        'grid size-4 place-items-center rounded-full outline-none focus-ring',
+        tone === 'info' ? 'hover:bg-hover' : 'hover:bg-destructive-tint-hover',
       )}
     >
       <XIcon className="size-2.5" />
@@ -207,8 +207,6 @@ function useAgentVersion(status: AgentStatus): string | null {
   return details?.cliVersion ?? (status.package ? null : status.version)
 }
 
-const TONE_TEXT = { success: '', attention: 'text-attention-text', destructive: 'text-destructive' }
-
 function percent(limit: PlanLimit): string {
   return limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`
 }
@@ -246,7 +244,7 @@ function AgentPill({ status }: { status: AgentStatus }) {
           data-retry=""
           title={task.error ?? undefined}
           onClick={() => retryTask(status.id, task)}
-          className="inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="inline-flex items-center gap-1 rounded-sm outline-none focus-ring"
         >
           <RotateCwIcon className="size-3" />
           {t(updating ? 'agents.update.failed' : 'agents.install.failed')}
@@ -355,9 +353,9 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
     ) : status.state === 'installing' ? (
       (status.progress.at(-1) ?? t('agents.install.installing'))
     ) : status.task?.state === 'failed' ? (
-      <span className="text-destructive">{status.task.error}</span>
+      <span className="text-danger">{status.task.error}</span>
     ) : taskError ? (
-      <span className="text-destructive">{taskError.message}</span>
+      <span className="text-danger">{taskError.message}</span>
     ) : !installed && canInstall(status) ? (
       status.package ? (
         t('agents.install.missingLineAdapter')
@@ -374,7 +372,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
         {account.email && (
           <>
             {' · '}
-            <span className="text-foreground">
+            <span className="text-primary">
               <Masked>{account.email}</Masked>
             </span>
           </>
@@ -388,21 +386,21 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
   const usage = !installed ? null : limits.length > 0 ? (
     <UsageMeters limits={limits} />
   ) : status.capabilities.reports ? (
-    <span className="text-xs text-muted-foreground">
+    <span className="text-xs text-tertiary">
       {t(reading ? 'agents.readingUsage' : 'agents.usageOnceRunning')}
     </span>
   ) : (
-    <span className="text-xs text-muted-foreground">{t('agents.noUsage')}</span>
+    <span className="text-xs text-tertiary">{t('agents.noUsage')}</span>
   )
   return (
-    <div className="relative -mx-2 rounded-lg px-3 py-3 transition-colors duration-(--duration-fast) has-[>[data-row-hit]:hover]:bg-accent">
+    <div className="relative -mx-2 rounded-lg px-3 py-3 transition-colors duration-(--duration-fast) has-[>[data-row-hit]:hover]:bg-hover">
       {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
       <button
         type="button"
         data-row-hit=""
         aria-label={status.name}
         onClick={() => openAgentSettings(status.id)}
-        className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="absolute inset-0 rounded-lg outline-none focus-ring"
       />
       <div className="pointer-events-none relative flex items-start gap-3">
         <AgentTile agent={status.id} mono={!installed} />
@@ -410,20 +408,20 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
           <div className="flex h-5 min-w-0 items-center gap-2">
             <span className="truncate text-ui font-medium">{status.name}</span>
             {version && (
-              <span className="shrink-0 font-mono text-meta text-muted-foreground">{version}</span>
+              <span className="shrink-0 font-mono text-meta text-tertiary">{version}</span>
             )}
             <span className="pointer-events-auto flex shrink-0">
               <AgentPill status={status} />
             </span>
           </div>
           {summary && (
-            <span className="truncate text-xs leading-normal text-muted-foreground">{summary}</span>
+            <span className="truncate text-xs leading-normal text-secondary">{summary}</span>
           )}
           {usage}
         </div>
         <div className="flex h-8 shrink-0 items-center gap-2">
           {installed && <AgentStateLine status={status} />}
-          <ChevronRightIcon className="size-4 text-muted-foreground" />
+          <ChevronRightIcon className="size-4 text-icon" />
         </div>
       </div>
     </div>
@@ -442,10 +440,10 @@ function UsageMeters({ limits }: { limits: PlanLimit[] }) {
         return (
           <div key={limit.window} className="flex min-w-0 flex-col gap-1.5 text-xs tabular">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-muted-foreground">{limitLabel(limit)}</span>
-              <span className={cn('font-medium', TONE_TEXT[tone])}>{percent(limit)}</span>
+              <span className="text-tertiary">{limitLabel(limit)}</span>
+              <span className={cn('font-medium', USAGE_TONE_TEXT[tone])}>{percent(limit)}</span>
               {left && (
-                <span className="ml-auto truncate text-muted-foreground">
+                <span className="ml-auto truncate text-tertiary">
                   {t('agents.resetsIn', { time: left })}
                 </span>
               )}
@@ -474,7 +472,7 @@ export function AgentsGroupActions() {
   const lastAt = Math.max(0, ...agents.map((a) => a.updateCheckedAt ?? 0)) || null
   const pending = agents.filter((a) => a.update).length
   const meta: ReactNode = check.running ? null : check.error ? (
-    <span className="text-destructive" title={check.error}>
+    <span className="text-danger" title={check.error}>
       {t('agents.update.checkFailed')}
     </span>
   ) : check.finishedAt && now - check.finishedAt < JUST_CHECKED_MS ? (
@@ -488,7 +486,7 @@ export function AgentsGroupActions() {
   ) : null
   return (
     <>
-      {meta && <span className="mr-1 text-muted-foreground">{meta}</span>}
+      {meta && <span className="mr-1 text-tertiary">{meta}</span>}
       {checkable && (
         <Button
           variant="quiet"
@@ -584,7 +582,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           <h2 className="flex min-w-0 text-title font-semibold">
             <AgentPicker status={status} />
           </h2>
-          <p className="flex items-center gap-2 text-small text-muted-foreground">
+          <p className="flex items-center gap-2 text-small text-secondary">
             {installed && <AgentStateLine status={status} />}
             {connection}
           </p>
@@ -632,7 +630,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
 
       <div className="flex flex-col gap-7">
         {r.kind !== 'failed' && r.kind !== 'missing' && status.detail && (
-          <p className="-mt-4 px-1 text-xs text-attention-text" data-selectable="">
+          <p className="-mt-4 px-1 text-xs text-secondary" data-selectable="">
             {status.detail}
           </p>
         )}
@@ -640,7 +638,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           <p
             className={cn(
               '-mt-4 px-1 text-xs',
-              r.kind === 'failed' ? 'text-destructive' : 'text-muted-foreground',
+              r.kind === 'failed' ? 'text-danger' : 'text-secondary',
             )}
             data-selectable=""
           >
@@ -679,7 +677,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             </AlertDescription>
           </Alert>
         )}
-        {error && <p className="-mt-4 px-1 text-xs text-destructive">{error}</p>}
+        {error && <p className="-mt-4 px-1 text-xs text-danger">{error}</p>}
 
         <TaskNotice status={status} version={version} installed={installed} />
         {!installed && <InstallNotice status={status} />}
@@ -712,7 +710,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
 
         {installed && (
           <Collapsible>
-            <CollapsibleTrigger className="group/advanced flex h-7.5 w-full items-center gap-1 px-1 text-left text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+            <CollapsibleTrigger className="group/advanced flex h-7.5 w-full items-center gap-1 px-1 text-left text-xs font-medium text-tertiary outline-none hover:text-primary focus-ring">
               <ChevronRightIcon className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/advanced:rotate-90" />
               {t('agents.advanced')}
             </CollapsibleTrigger>
@@ -785,10 +783,7 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
     <>
       <span
         aria-hidden
-        className={cn(
-          'mr-1.5 inline-block size-1.5 rounded-full align-[0.1em]',
-          status.update ? 'bg-checked' : 'bg-success',
-        )}
+        className="mr-1.5 inline-block size-1.5 rounded-full bg-current align-[0.1em] text-tertiary"
       />
       {status.update
         ? t(
@@ -813,7 +808,7 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
             name={
               <span className="flex items-baseline gap-2">
                 {t('agents.currentVersion')}
-                <span className="font-mono text-meta font-normal text-muted-foreground">
+                <span className="font-mono text-meta font-normal text-tertiary">
                   {version ?? t('agents.notReported')}
                 </span>
               </span>
@@ -1051,7 +1046,7 @@ function InstallNotice({ status }: { status: AgentStatus }) {
         )}
         {method && (
           <code
-            className="block truncate rounded-lg bg-card px-3 py-2 font-mono text-code text-foreground"
+            className="block truncate rounded-lg bg-card px-3 py-2 font-mono text-code text-primary"
             data-selectable=""
             title={method.command}
           >
@@ -1093,7 +1088,7 @@ function Log({ lines, error }: { lines: string[]; error?: boolean }) {
       data-selectable=""
       className={cn(
         'max-h-40 overflow-auto rounded-lg bg-card px-3 py-2 font-mono text-meta whitespace-pre-wrap',
-        error ? 'text-destructive' : 'text-muted-foreground',
+        error ? 'text-danger' : 'text-tertiary',
       )}
     >
       {lines.join('\n')}
@@ -1140,7 +1135,7 @@ function UsageGroup({
     status.limits.length > 0 && limitsReadable(status) ? (
       <>
         {observed && (
-          <span className="text-muted-foreground">
+          <span className="text-tertiary">
             {t('agents.usageUpdated', { ago: longAgo(observed, now) })}
           </span>
         )}
@@ -1183,7 +1178,10 @@ function UsageGroup({
                 aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
               />
               <span
-                className={cn('w-10 text-right text-small font-medium tabular', TONE_TEXT[tone])}
+                className={cn(
+                  'w-10 text-right text-small font-medium tabular',
+                  USAGE_TONE_TEXT[tone],
+                )}
               >
                 {percent(limit)}
               </span>
@@ -1192,7 +1190,7 @@ function UsageGroup({
         })
       ) : reading && status.capabilities.reports ? (
         <RowShell>
-          <p className="py-3 text-xs text-muted-foreground">{t('agents.readingUsage')}</p>
+          <p className="py-3 text-xs text-tertiary">{t('agents.readingUsage')}</p>
         </RowShell>
       ) : limitsReadable(status) && !running ? (
         <RowFrame text={<RowText name={t('agents.planLimits')} />}>
@@ -1209,13 +1207,13 @@ function UsageGroup({
         </RowFrame>
       ) : (
         <RowShell>
-          <p className="py-3 text-xs text-muted-foreground">
+          <p className="py-3 text-xs text-secondary">
             {t('agents.usageNotReported', { name: status.name })}
           </p>
         </RowShell>
       )}
       {error && status.limits.length > 0 && (
-        <p className="px-1 pt-1 text-xs text-destructive">{error}</p>
+        <p className="px-1 pt-1 text-xs text-danger">{error}</p>
       )}
     </section>
   )
@@ -1231,7 +1229,7 @@ function Fact({ name, mono, children }: { name: string; mono?: boolean; children
           {children}
         </span>
       ) : (
-        <span className="text-xs text-muted-foreground">{t('agents.notReported')}</span>
+        <span className="text-xs text-tertiary">{t('agents.notReported')}</span>
       )}
     </RowFrame>
   )
@@ -1283,7 +1281,7 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
       ))}
       {details && details.config.length === 0 && status.id !== 'opencode' && (
         <RowShell>
-          <p className="py-3 text-xs text-muted-foreground">{t('agents.noConfig')}</p>
+          <p className="py-3 text-xs text-secondary">{t('agents.noConfig')}</p>
         </RowShell>
       )}
     </>
@@ -1334,17 +1332,17 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
             {cli.runs === 'installed' && installed ? (
               <PathText path={installed.path} />
             ) : (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-tertiary">
                 {t(missing ? 'agents.cli.notDownloaded' : 'agents.cli.bundledLine')}
               </span>
             )}
             {version && !missing && (
-              <span className="shrink-0 font-mono text-meta text-muted-foreground">{version}</span>
+              <span className="shrink-0 font-mono text-meta text-tertiary">{version}</span>
             )}
           </span>
           {note && (
             <span
-              className={cn('text-xs', attention ? 'text-attention-text' : 'text-muted-foreground')}
+              className={cn('text-xs', attention ? 'text-secondary' : 'text-tertiary')}
               data-selectable=""
             >
               {note}
@@ -1352,18 +1350,16 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
           )}
           {cli.runs === 'bundled' && installed && <PathText path={installed.path} />}
           {problem?.kind === 'failed' && (
-            <span className="text-xs text-muted-foreground" data-selectable="">
+            <span className="text-xs text-tertiary" data-selectable="">
               {problem.reason}
             </span>
           )}
           {missing && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-tertiary">
               {t('agents.cli.downloadsNext', { size: cli.copyMegabytes })}
             </span>
           )}
-          {pending && (
-            <span className="text-xs text-muted-foreground">{t('agents.cli.nextStart')}</span>
-          )}
+          {pending && <span className="text-xs text-tertiary">{t('agents.cli.nextStart')}</span>}
         </div>
       }
     >
@@ -1407,9 +1403,7 @@ function ConfigRow({ item }: { item: AgentConfigItem }) {
           <span className="text-ui font-medium">{t(`agents.config.${item.id}`)}</span>
           <PathText path={item.path} missing={!item.exists} />
           {item.env && (
-            <span className="text-xs text-muted-foreground">
-              {t('agents.setBy', { env: item.env })}
-            </span>
+            <span className="text-xs text-tertiary">{t('agents.setBy', { env: item.env })}</span>
           )}
         </div>
       }
@@ -1420,7 +1414,7 @@ function ConfigRow({ item }: { item: AgentConfigItem }) {
           <RevealAction path={item.path} />
         </>
       ) : (
-        <span className="text-xs text-muted-foreground">{t('agents.notCreated')}</span>
+        <span className="text-xs text-tertiary">{t('agents.notCreated')}</span>
       )}
     </RowFrame>
   )
@@ -1442,7 +1436,7 @@ function AgentPicker({ status }: { status: AgentStatus }) {
       itemToStringLabel={name}
       filter={(id: AgentId, query: string) => contains(name(id), query)}
     >
-      <ComboboxTrigger className="-ml-1.5 flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-popup-open:bg-accent">
+      <ComboboxTrigger className="-ml-1.5 flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring data-popup-open:bg-hover">
         <span className="truncate">{status.name}</span>
       </ComboboxTrigger>
       <ComboboxContent className="w-72">
@@ -1461,7 +1455,7 @@ function AgentPicker({ status }: { status: AgentStatus }) {
                 <ComboboxItem key={id} value={id}>
                   <AgentMark agent={id} size={14} mono={!isInstalled(agent)} />
                   <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                  <AgentStateLine status={agent} className="shrink-0 text-muted-foreground" />
+                  <AgentStateLine status={agent} className="shrink-0 text-tertiary" />
                 </ComboboxItem>
               )
             )
@@ -1494,12 +1488,12 @@ export function EnvironmentFooter() {
           : t('agents.environment.fallback')
   return (
     <div className="flex flex-col gap-1 px-1 pt-5">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs text-tertiary">
         <span
           aria-hidden
           className={cn(
-            'size-1.5 shrink-0 rounded-full',
-            source === 'login-shell' ? 'bg-success' : 'bg-muted-foreground',
+            'size-1.5 shrink-0 rounded-full bg-current',
+            source === 'login-shell' ? 'text-secondary' : 'text-tertiary',
           )}
         />
         <span className="min-w-0 flex-1">{text}</span>
@@ -1513,8 +1507,8 @@ export function EnvironmentFooter() {
           {t('agents.environment.reload')}
         </Button>
       </div>
-      {environment?.warning && <p className="text-xs text-attention-text">{environment.warning}</p>}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {environment?.warning && <p className="text-xs text-secondary">{environment.warning}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   )
 }

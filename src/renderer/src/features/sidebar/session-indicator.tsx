@@ -27,7 +27,7 @@ export function SessionIndicator({
       <span
         role="img"
         aria-label={t('indicator.waiting', { count: permissionCount })}
-        className="size-2 rounded-full bg-attention inset-ring-1 inset-ring-attention-text"
+        className="size-2 rounded-full bg-attention-dot"
       />
     )
   } else if (summary.attention === 'error' || summary.status === 'failed') {
@@ -35,19 +35,19 @@ export function SessionIndicator({
       <CircleAlertIcon
         role="img"
         aria-label={t('indicator.error')}
-        className="size-3.5 text-destructive"
+        className="size-3.5 text-danger"
       />
     )
   } else if (running) {
-    mark = <Spinner aria-label={t('indicator.running')} className="size-3 text-muted-foreground" />
+    mark = <Spinner aria-label={t('indicator.running')} className="size-3 text-secondary" />
   } else if (summary.status === 'starting') {
-    mark = <Spinner aria-label={t('indicator.starting')} className="size-3 text-muted-foreground" />
+    mark = <Spinner aria-label={t('indicator.starting')} className="size-3 text-secondary" />
   } else if (summary.attention === 'unread') {
     mark = (
       <span
         role="img"
         aria-label={t('indicator.unread')}
-        className="size-2 rounded-full bg-muted-foreground"
+        className="size-2 rounded-full bg-current text-tertiary"
       />
     )
   }

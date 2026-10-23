@@ -28,7 +28,7 @@ export function CopyButton({
       className={cn('shrink-0 rounded-[6px]', className)}
     >
       {copied ? (
-        <CheckIcon className="size-3.5 animate-in text-success animation-duration-(--duration-fast) fade-in zoom-in-75" />
+        <CheckIcon className="size-3.5 animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75" />
       ) : (
         <CopyIcon className="size-3.5" />
       )}
