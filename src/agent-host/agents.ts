@@ -83,8 +83,8 @@ export interface LaunchedAgent {
   readonly exited: Promise<ExitInfo>
   readonly hasExited: boolean
   stop(tools?: ToolOptions): Promise<ExitInfo>
-  /** Kills what is left of it now, for a quit that cannot wait for `stop` any longer. */
-  kill(): void
+  /** Ends it now, for a quit that cannot wait for `stop` any longer. */
+  kill(): Promise<void>
 }
 
 export interface LaunchOutput {
@@ -130,7 +130,7 @@ export interface AgentTimings {
   /** How often updates are checked while the host runs. */
   updateIntervalMs: number
   /**
-   * How long a quit waits for the agents to stop before it kills what is left and writes its
+   * How long a quit waits for the agents to stop before it kills what still runs and writes its
    * state: main kills the host 6 s after `host:shutdown`, and docs/design/agent-host.md has the sum.
    */
   quitStopMs: number
@@ -148,7 +148,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   updateViewMs: 20_000,
   updateDelayMs: 60_000,
   updateIntervalMs: 24 * 60 * 60_000,
-  quitStopMs: 4_000,
+  quitStopMs: 3_500,
 }
 
 export interface AgentRuntime {
@@ -539,6 +539,7 @@ export class AgentManager {
   private async launch(slot: Slot, spec: LaunchSpec): Promise<AgentRuntime> {
     const { diagnostics } = this.deps
     const agentId = slot.def.id
+    if (this.stopped) throw new Error(`${slot.def.name} was not started: the host is stopping.`)
     slot.state = 'starting'
     slot.detail = null
     slot.progress.clear()
@@ -668,6 +669,9 @@ export class AgentManager {
     slot: Slot,
     request: { version?: string; alongside?: boolean; fallback?: boolean } = {},
   ): Promise<LaunchSpec> {
+    if (this.stopped) {
+      throw new InstallCancelled(`${slot.def.name} was not installed: the host is stopping.`)
+    }
     const detection = slot.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     if (!detection || detection.state !== 'available' || !adapter) {
@@ -1376,8 +1380,8 @@ export class AgentManager {
 
   /**
    * Stops every agent in parallel, with the documented sequence, and every task and check, for a
-   * quit. After `quitStopMs` it stops waiting and kills what still runs, which the process record
-   * keeps for the next host, so that the host still writes its state before main kills it.
+   * quit. After `quitStopMs` it kills what still runs instead, so that the host still writes its
+   * state before main kills it; what that misses stays in the process record for the next host.
    */
   async stopAll(): Promise<void> {
     this.stopped = true
@@ -1398,15 +1402,17 @@ export class AgentManager {
     const stopped = await Promise.race([stops, late])
     clearTimeout(timer)
     if (stopped) return
-    for (const slot of slots) {
-      const launched = slot.launched
-      if (!launched || launched.hasExited) continue
-      launched.kill()
-      this.deps.diagnostics.log(
-        'warn',
-        `${slot.def.name} had not stopped ${this.timings.quitStopMs / 1000} s into the quit; the next run stops what is left of it`,
-      )
-    }
+    await Promise.all(
+      slots.map((slot) => {
+        const launched = slot.launched
+        if (!launched || launched.hasExited) return
+        this.deps.diagnostics.log(
+          'warn',
+          `${slot.def.name} had not stopped ${this.timings.quitStopMs / 1000} s into the quit; killing it`,
+        )
+        return launched.kill()
+      }),
+    )
   }
 
   // Sign-in, account and limits.

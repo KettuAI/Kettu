@@ -31,6 +31,10 @@ export interface StopTimings {
 
 export const STOP_TIMINGS: StopTimings = { eofMs: 2_000, termMs: 3_000 }
 
+// How long a quit's kill waits for the exit, so that the reap of what is left starts before the
+// record's last write: docs/design/agent-host.md has the sum.
+const KILL_WAIT_MS = 500
+
 export interface SpawnedAgent {
   readonly pid: number | null
   /** When it was spawned, which names it apart from a later process with its pid. */
@@ -44,10 +48,11 @@ export interface SpawnedAgent {
    */
   stop(tools?: ToolOptions): Promise<ExitInfo>
   /**
-   * `SIGKILL` now to the groups its stop listed, else to its own, for a quit that cannot wait for
-   * the stop any longer. On Windows the stop's `taskkill /F` is already the hardest there is.
+   * Ends it now, for a quit that cannot wait for `stop` any longer, wherever the stop has got to:
+   * `SIGKILL` to the groups its stop listed, else to its own, or `taskkill /T /F` with the quit's
+   * limit on Windows. Resolves once it has exited, or after KILL_WAIT_MS.
    */
-  kill(): void
+  kill(): Promise<void>
 }
 
 export interface SpawnOptions {
@@ -160,11 +165,19 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
     return stopping
   }
 
-  const kill = (): void => {
-    if (hasExited || !child.pid || platform === 'win32') return
-    options.onEvent?.('SIGKILL')
-    if (terminated) killSurvivors(control, terminated)
-    else signalGroup(control, child.pid, 'SIGKILL')
+  const kill = async (): Promise<void> => {
+    if (hasExited || !child.pid) return
+    if (platform === 'win32') {
+      options.onEvent?.('taskkill')
+      void control.taskkill([child.pid], { quitting: true }).catch((error: unknown) => {
+        options.onEvent?.('taskkill failed', (error as Error).message)
+      })
+    } else {
+      options.onEvent?.('SIGKILL')
+      if (terminated) killSurvivors(control, terminated)
+      else signalGroup(control, child.pid, 'SIGKILL')
+    }
+    await waitForExit(exited, KILL_WAIT_MS)
   }
 
   return {

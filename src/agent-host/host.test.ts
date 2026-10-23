@@ -145,7 +145,7 @@ describe('main messages', () => {
       launch: (def, spec, env, output) =>
         Object.assign(base.launch(def, spec, env, output), {
           stop: () => new Promise<never>(() => {}),
-          kill: () => {},
+          kill: async () => {},
         }),
     }
     const { t, port } = await setup({ launcher, agentTimings: { quitStopMs: 100 } })

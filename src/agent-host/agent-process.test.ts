@@ -184,23 +184,69 @@ describe('spawnAgent', () => {
   )
 
   it.skipIf(process.platform === 'win32')(
-    'kills the tree at once for a quit that cannot wait for the stop',
+    'kills the groups its SIGTERM listed for a quit that cannot wait for the stop',
     async () => {
-      const { agent, stderr, events } = start(
-        { FAKE_AGENT_IGNORE_EOF: '1', FAKE_AGENT_IGNORE_SIGTERM: '1', FAKE_AGENT_SPAWN_CHILD: '1' },
+      const { agent, stderr } = start(
+        {
+          FAKE_AGENT_IGNORE_EOF: '1',
+          FAKE_AGENT_IGNORE_SIGTERM: '1',
+          FAKE_AGENT_SPAWN_CHILD: 'detached',
+        },
         { eofMs: 200, termMs: 30_000 },
       )
       expect(await until(() => /child pid (\d+)/.test(stderr()), 10_000)).toBe(true)
       const childPid = Number(/child pid (\d+)/.exec(stderr())![1])
-      const stopping = agent.stop({ quitting: true })
-      expect(await until(() => events.includes('SIGTERM'), 5_000)).toBe(true)
-      const started = Date.now()
-      agent.kill()
-      expect(await stopping).toMatchObject({ signal: 'SIGKILL' })
-      expect(Date.now() - started).toBeLessThan(3_000)
-      expect(await until(() => !alive(childPid), 3_000)).toBe(true)
+      try {
+        const stopping = agent.stop({ quitting: true })
+        // The SIGTERM reached it, so the listing that sent it found the child's own group.
+        expect(await until(() => stderr().includes('ignoring SIGTERM'), 5_000)).toBe(true)
+        const started = Date.now()
+        await agent.kill()
+        expect(agent.hasExited).toBe(true)
+        expect(Date.now() - started).toBeLessThan(1_000)
+        expect(await stopping).toMatchObject({ signal: 'SIGKILL' })
+        expect(await until(() => !alive(childPid), 3_000)).toBe(true)
+      } finally {
+        if (alive(childPid)) process.kill(childPid, 'SIGKILL')
+      }
     },
   )
+})
+
+describe('a quit that cannot wait for the stop', () => {
+  it('runs taskkill on Windows with the quit limit while the stop still waits for EOF', async () => {
+    // The Windows stop, through a control whose taskkill ends the agent, on every platform.
+    const taskkills: boolean[] = []
+    const control: ProcessControl = {
+      platform: 'win32',
+      list: async () => [],
+      kill: () => {},
+      taskkill: async (pids, options) => {
+        taskkills.push(options?.quitting ?? false)
+        for (const pid of pids) process.kill(pid, 'SIGKILL')
+      },
+      delay: () => Promise.resolve(),
+    }
+    let stderr = ''
+    const agent = spawnAgent(spec({ FAKE_AGENT_IGNORE_EOF: '1' }), {
+      platform: 'win32',
+      env: process.env,
+      cwd: process.cwd(),
+      onStderr: (text) => (stderr += text),
+      timings: { eofMs: 30_000, termMs: 30_000 },
+      control,
+    })
+    try {
+      expect(await until(() => stderr.includes('ready'), 10_000)).toBe(true)
+      const stopping = agent.stop({ quitting: true })
+      await agent.kill()
+      expect(agent.hasExited).toBe(true)
+      expect(taskkills).toEqual([true])
+      expect(await stopping).toMatchObject({ signal: 'SIGKILL' })
+    } finally {
+      if (agent.pid && alive(agent.pid)) process.kill(agent.pid, 'SIGKILL')
+    }
+  })
 })
 
 describe('a process tool that times out', () => {

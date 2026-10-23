@@ -439,9 +439,9 @@ describe('quitting', () => {
         return Object.assign(launched, {
           // An agent that ignores EOF and every signal the stop sends.
           stop: () => new Promise<never>(() => {}),
-          kill: () => {
+          kill: async () => {
             kills++
-            void stop()
+            await stop()
           },
         })
       },
@@ -482,6 +482,16 @@ describe('quitting', () => {
     expect(m.state()).toBe('available')
     expect(stops.length).toBeGreaterThan(0)
     expect(stops.every((quitting) => quitting)).toBe(true)
+  })
+
+  it('starts nothing once the quit has begun', async () => {
+    const m = manager()
+    await m.agents.stopAll()
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    expect(m.launcher.launches).toBe(0)
+    expect(m.state()).toBe('available')
   })
 })
 
@@ -783,7 +793,7 @@ describe('the CLI the user installed', () => {
         installed: { problem: { kind: 'failed', reason: expect.any(String) } },
       },
     })
-    await m.agents.stopAll()
+    await m.agents.stop('fake-agent')
     await m.agents.ensureReady('fake-agent')
     expect(m.launches.at(-1)?.env.FAKE_CLI_PATH).toBeUndefined()
     await m.agents.stopAll()
@@ -911,7 +921,7 @@ describe('the CLI the user installed', () => {
     await change('installed')
     expect(m.status().cli).toMatchObject({ runs: 'installed', active: 'installed' })
     await change('bundled')
-    await m.agents.stopAll()
+    await m.agents.stop('fake-agent')
     expect(m.status().cli).toMatchObject({ runs: 'bundled', active: null })
     await m.agents.ensureReady('fake-agent')
     expect(m.status().cli).toMatchObject({ runs: 'bundled', active: 'bundled' })
@@ -937,7 +947,7 @@ describe('the CLI the user installed', () => {
     }
     const m = cliManager(options)
     await m.agents.ensureReady('fake-agent')
-    await m.agents.stopAll()
+    await m.agents.stop('fake-agent')
     const failed = { runs: 'bundled', installed: { problem: { kind: 'failed' } } }
     expect(m.status().cli).toMatchObject(failed)
     // A change elsewhere keeps the failure.
@@ -1519,7 +1529,7 @@ describe('updates', () => {
     expect(await m.dirs()).toEqual(['2.0.0', fresh])
     expect(m.status().launchCommand).toContain(old.entry)
 
-    await m.agents.stopAll()
+    await m.agents.stop('codex')
     await m.agents.ensureReady('codex')
     expect(m.status().launchCommand).toContain(path.join(m.root, 'codex', fresh!))
     let left: string[] = []
