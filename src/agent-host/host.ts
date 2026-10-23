@@ -11,7 +11,7 @@ import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
-import { ArtifactService } from './artifacts/service'
+import { ArtifactService, SERVICE_NAME, sessionServiceName } from './artifacts/service'
 import { ArtifactStore, versionSummary } from './artifacts/store'
 import {
   AgentManager,
@@ -243,7 +243,14 @@ export class AgentHost {
       threads: this.threads,
       attachments: this.attachments,
       mcp: {
-        servers: (sessionId, record) => this.artifactService.servers(sessionId, record.projectPath),
+        servers: (sessionId, record) =>
+          this.artifactService.servers(
+            sessionId,
+            record.projectPath,
+            this.agents.mcpServersByName(record.agentId)
+              ? sessionServiceName(sessionId)
+              : SERVICE_NAME,
+          ),
         detached: (sessionId) => {
           this.artifactService.revoke(sessionId)
           this.artifacts.stopEditing(sessionId)

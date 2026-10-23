@@ -30,8 +30,16 @@ The surface keeps the isolation the issue asked of "its own partition" by other 
 - **Where it runs.** The agent host serves the MCP server `overbench` with Node's `http` on `127.0.0.1`, on a port the system picks when the host starts, at `/mcp`. It answers in Streamable HTTP's plain JSON form: every tool call returns at once, so the service opens no event stream. It is built on the official MCP TypeScript SDK's `Server` and its Node Streamable HTTP transport (`@modelcontextprotocol/sdk`), without sessions of MCP's own: each request gets a server and a transport of its own, bound to the session its token names.
 - **What it refuses**, before any tool runs, each with a JSON-RPC error: a request that carries `Origin`, or a `Host` other than `127.0.0.1:<port>`, gets 403; a path other than `/mcp` 404; a method other than `POST` 405, with `Allow: POST`, since there is no event stream to open with `GET` and no session to end with `DELETE`; a request without a known token 401, before its body is read. The SDK's transport then answers 415 to a body that is not `application/json`, 413 to one over 6 MiB, and 400 to one that is not JSON.
 - **How a session gets it.** Every request that attaches a session to its agent, `session/new`, `session/load`, `session/resume` and `session/fork`, passes `mcpServers: [{ type: 'http', name: 'overbench', url, headers: [{ name: 'Authorization', value: 'Bearer <token>' }] }]` ([session lifecycle](./session-model.md#session-lifecycle)). An agent that does not advertise `mcpCapabilities.http` gets no service; all three advertise it ([agents](../architecture.md#agents)). The hidden sessions the host opens for itself, such as the one that reads an agent's options and the fork that reads `/context`, get none.
-- **Tokens.** Each attach makes a token of 32 random bytes, in base64url, which the host maps to the session and its project, and which replaces the session's last one. The host looks a token up by its SHA-256 and compares it with `timingSafeEqual`. It ends when the session leaves the host's memory, as it closes or is released or deleted, and when the host stops, so a restarted host hands out new ones as sessions attach again. A request without a known token gets HTTP 401.
-- **One connection per session.** An agent process serves many sessions, each with its own token. The build checks, for each agent, that two sessions in two projects keep their own connection; an adapter that registers MCP servers by name for its whole process would mix the tokens, and then gets a name per session (`overbench-` and the first 4 hex characters of the session id).
+- **Tokens.** A session's first attach makes a token of 32 random bytes, in base64url, which the host maps to the session and its project. Later attaches pass the same token while the session stays in the host's memory, since Codex ignores new servers when it resumes a session it still holds open. The host looks a token up by its SHA-256 and compares it with `timingSafeEqual`. It ends when the session leaves the host's memory, as it closes or is released or deleted, and when the host stops, so the next attach, or a restarted host, hands out a new one. A request without a known token gets HTTP 401.
+- **One connection per session.** An agent process serves many sessions, each with its own token. Read in each adapter's code on 2026-10-23:
+
+  | Agent                                  | Keeps MCP servers                                                                         | Name                                     |
+  | -------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------- |
+  | Claude Code (claude-agent-acp 0.94.0)  | Per session: each session is a CLI process of its own, made again when its servers change | `overbench`                              |
+  | Codex (codex-acp 2.2.2, codex 0.163.0) | Per session, in each thread's config; a resume of an open thread keeps its old servers    | `overbench`                              |
+  | OpenCode 2.0.32                        | Per folder, by name: an attach with a name already there replaces its connection          | `overbench-` and 4 hex of the session id |
+
+  OpenCode's name per session keeps each session's token, but a session there sees the servers of the other sessions in its folder, all of the same project, and OpenCode keeps them until it exits; a call through another session's server counts as that session's. Telling the session from the `_meta["ai.opencode/sessionID"]` OpenCode puts on each call, with one token per folder, would avoid both, and is not built.
 
 ### Tools
 
@@ -45,14 +53,14 @@ The surface keeps the isolation the issue asked of "its own partition" by other 
 | `list_artifact_versions`   | `id`                                                                                             | `{ versions: { version, created_at, author, note, size }[] }`         |
 | `restore_artifact_version` | `id`, `version`, `base_version`                                                                  | `{ id, version }`                                                     |
 
-- **Schemas.** Each tool declares an input and an output JSON Schema; a result carries the structured value and one line of text that says what happened ("Created art_01J… version 1, a canvas of 5 pages"). Each output schema also admits the `{ code }` of a tool error, since the official client checks a tool error's structured value against it too.
+- **Schemas.** Each tool declares an input and an output JSON Schema; a result carries the structured value and one line of text that says what happened ("Created art_01J… version 1, a canvas of 5 pages"). All three agents show the model the structured value, not the text, when there is one. Each output schema also admits the `{ code, message }` of a tool error, since the official client's 1.x generation checks a tool error's structured value against it too.
 - **Annotations.** `read_artifact`, `list_artifacts` and `list_artifact_versions` are marked read-only, `delete_artifact` destructive, so an agent's own permission settings can tell them apart.
 - **One kind of update at a time**: `html`, `edits` or `title`. `html` and `edits` make a version from `base_version`, which they need; a title alone renames the artifact, and a `base_version` or note beside it is not used.
 - **Edits** apply in order; each `old_text` must occur exactly once in the HTML as the edits before it left it, or the update fails as a whole.
 - **Lists** are newest first, without Recently deleted; `query` matches titles, case- and accent-insensitively. `session` and `author` are a session's title, `"Untitled session"` for one without a title, `"Deleted session"` for one no longer in the index, or `"user"`. Times (`updated_at`, `created_at`, `purge_at`) are ISO 8601 in UTC.
 - **Limits**: a title of 1 to 120 characters, a note of at most 200, HTML of at most 5 MiB of UTF-8, at most 50 edits, a query of at most 200 characters, a request body of at most 6 MiB, and 60 writes a minute per session. Creating, updating, renaming, deleting and restoring are writes; reading and listing are not.
 
-Errors come back as tool errors whose text says what to do next, with a `code` in the structured value:
+Errors come back as tool errors whose text says what to do next, with the `code` and the same text as `message` in the structured value:
 
 | Code             | When                                            | Text, for example                                                                            |
 | ---------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -64,7 +72,7 @@ Errors come back as tool errors whose text says what to do next, with a `code` i
 | `invalid`        | An argument does not fit its schema             | The schema's message                                                                         |
 | `rate_limited`   | Over 60 writes in a minute                      | "Too many changes in a minute. Wait 20 s."                                                   |
 
-A request over 6 MiB never reaches a tool: the transport answers it with HTTP 413. An unknown tool is a JSON-RPC error, as MCP has it.
+A request over 6 MiB never reaches a tool: the transport answers it with HTTP 413. An unknown tool is a JSON-RPC error, as MCP has it, and so is an unknown method: Claude Code first sends `server/discover`, of a newer MCP version, and falls back to `initialize` on the answer, but fails the connection when none comes within 5 s.
 
 ### What agents are told
 

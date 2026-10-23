@@ -86,7 +86,9 @@ function setup() {
 
 function refused(result: CallToolResult, code: string): void {
   expect(result.isError).toBe(true)
-  expect(result.structuredContent).toEqual({ code })
+  // The agents show the model the structured value, so it carries the text as well.
+  const text = (result.content[0] as { text: string }).text
+  expect(result.structuredContent).toEqual({ code, message: text })
 }
 
 describe('the artifacts tools', () => {

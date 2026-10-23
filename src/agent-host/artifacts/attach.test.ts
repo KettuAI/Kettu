@@ -182,6 +182,18 @@ describe('the artifacts service in sessions', () => {
     )
   })
 
+  it('names the service per session for an agent that keeps one server of a name per folder', async () => {
+    const { t, port, create } = await setup()
+    vi.spyOn(t.host.agents, 'mcpServersByName').mockReturnValue(true)
+    const sessionId = await create()
+    await run(port, sessionId, '/artifacts')
+    const name = `overbench-${sessionId.replace(/-/g, '').slice(0, 4)}`
+    const tool = port
+      .entries(sessionId)
+      .find((entry) => entry.kind === 'tool' && entry.title.includes('create_artifact'))
+    expect(tool).toMatchObject({ title: `mcp__${name}__create_artifact`, status: 'completed' })
+  })
+
   it('passes nothing to an agent without MCP over HTTP', async () => {
     const { port, attached, create } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'mcp' } })
     const sessionId = await create()

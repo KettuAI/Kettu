@@ -391,7 +391,7 @@ A session's own thread store keeps its attachments, so reopening one shows them 
 | Import                     | `session/list` with `cwd`, following `nextCursor` | Sessions started elsewhere, such as in the CLI, can be added to the index and opened.                |
 | Fork                       | `session/fork`, when the agent advertises it      | A new session in the same project that starts from the whole history, or from a reply; see below.    |
 
-Every request that attaches a session, `session/new`, `session/load`, `session/resume` and `session/fork`, passes `mcpServers`: the [artifacts service](./artifacts.md#connecting), with a token made for this attach, to an agent that advertises `mcpCapabilities.http`, and nothing otherwise. A fork's token is its own. The token ends when the session leaves the host's memory. The host's hidden sessions pass none.
+Every request that attaches a session, `session/new`, `session/load`, `session/resume` and `session/fork`, passes `mcpServers`: the [artifacts service](./artifacts.md#connecting), with the session's own token, to an agent that advertises `mcpCapabilities.http`, and nothing otherwise. The token lasts while the session stays in the host's memory, so a fork gets one of its own and a session attached again after it was let go gets a new one. The host's hidden sessions pass none.
 
 ### Recovering after a crash
 

@@ -118,7 +118,11 @@ const ERROR_CODES: ToolErrorCode[] = [
   'rate_limited',
 ]
 
-const ERROR = object({ code: { type: 'string', enum: ERROR_CODES } }, ['code'])
+// The message too, since the agents give the model the structured value rather than the text.
+const ERROR = object({ code: { type: 'string', enum: ERROR_CODES }, message: { type: 'string' } }, [
+  'code',
+  'message',
+])
 
 /** A result is the tool's value, or the code of a tool error, which its text explains. */
 function output(properties: Record<string, Schema>): Tool['outputSchema'] {
@@ -446,7 +450,7 @@ function result(text: string, value: Record<string, unknown>): CallToolResult {
 function failure(error: ToolError): CallToolResult {
   return {
     content: [{ type: 'text', text: error.message }],
-    structuredContent: { code: error.code },
+    structuredContent: { code: error.code, message: error.message },
     isError: true,
   }
 }

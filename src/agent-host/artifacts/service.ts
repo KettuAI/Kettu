@@ -32,9 +32,14 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
 }
 
 interface Grant {
-  token: Buffer
+  token: string
   sessionId: string
   project: string
+}
+
+/** A name of the session's own, for an agent that keeps one server of each name per folder. */
+export function sessionServiceName(sessionId: string): string {
+  return `${SERVICE_NAME}-${sessionId.replace(/-/g, '').slice(0, 4).toLowerCase()}`
 }
 
 function digest(token: string): string {
@@ -113,18 +118,24 @@ export class ArtifactService {
   }
 
   /**
-   * What an attach of the session passes in `mcpServers`: the service with a new token, which
-   * replaces the session's last one. `name` is for an agent that keys its servers by name for the
-   * whole process. Empty while the service is not running.
+   * What an attach of the session passes in `mcpServers`: the service with the session's token,
+   * made at its first attach and kept while it stays in memory, since Codex ignores new servers
+   * when it resumes a session it still holds open. Empty while the service is not running.
    */
   servers(sessionId: string, project: string, name = SERVICE_NAME): McpServer[] {
     const url = this.url
     if (!url) return []
-    this.revoke(sessionId)
-    const token = randomBytes(TOKEN_BYTES).toString('base64url')
-    const key = digest(token)
-    this.grants.set(key, { token: Buffer.from(token), sessionId, project })
-    this.sessions.set(sessionId, key)
+    const held = this.sessions.get(sessionId)
+    let grant = held === undefined ? undefined : this.grants.get(held)
+    if (grant?.project !== project) {
+      this.revoke(sessionId)
+      const token = randomBytes(TOKEN_BYTES).toString('base64url')
+      grant = { token, sessionId, project }
+      const key = digest(token)
+      this.grants.set(key, grant)
+      this.sessions.set(sessionId, key)
+    }
+    const { token } = grant
     return [
       {
         type: 'http',
@@ -150,7 +161,8 @@ export class ArtifactService {
     const grant = this.grants.get(digest(token))
     if (!grant) return null
     const given = Buffer.from(token)
-    return given.length === grant.token.length && timingSafeEqual(given, grant.token) ? grant : null
+    const known = Buffer.from(grant.token)
+    return given.length === known.length && timingSafeEqual(given, known) ? grant : null
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

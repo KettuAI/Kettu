@@ -7,7 +7,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { afterEach, describe, expect, it } from 'vitest'
 import { inThreadWorker } from '../testing/thread-worker'
 import { ThreadStore } from '../threads/store'
-import { ArtifactService, BODY_BYTES } from './service'
+import { ArtifactService, BODY_BYTES, sessionServiceName } from './service'
 import { ArtifactStore } from './store'
 import { INSTRUCTIONS } from './tools'
 
@@ -122,6 +122,17 @@ describe('the artifacts service', () => {
     expect(service.servers('s3', '/p', 'overbench-1a2b')[0]).toMatchObject({
       name: 'overbench-1a2b',
     })
+    expect(sessionServiceName('1A2B3C4D-0000-4000-8000-000000000000')).toBe('overbench-1a2b')
+  })
+
+  it('keeps a session token while the session stays, and makes a new one after', async () => {
+    const { service } = await setup()
+    const token = (sessionId: string) =>
+      (service.servers(sessionId, '/p')[0] as { headers: { value: string }[] }).headers[0]!.value
+    const first = token('s1')
+    expect(token('s1')).toBe(first)
+    service.revoke('s1')
+    expect(token('s1')).not.toBe(first)
   })
 
   it('tells agents what it is for and serves the seven tools', async () => {
@@ -199,13 +210,12 @@ describe('the artifacts service', () => {
       expect(reply.status).toBe(401)
       expect(reply.headers['www-authenticate']).toBe('Bearer')
     }
-    // A new attach replaces the session's token.
-    const [next] = service.servers('s1', '/p')
+    service.revoke('s1')
     expect((await send(url, { headers: headers(token), body: LIST })).status).toBe(401)
+    const [next] = service.servers('s1', '/p')
     const nextToken = (next as { headers: { value: string }[] }).headers[0]!.value.slice(7)
     expect((await send(url, { headers: headers(nextToken), body: LIST })).status).toBe(200)
-    service.revoke('s1')
-    expect((await send(url, { headers: headers(nextToken), body: LIST })).status).toBe(401)
+    expect((await send(url, { headers: headers(token), body: LIST })).status).toBe(401)
   })
 
   it('refuses web pages, other hosts, other methods and other paths', async () => {
@@ -275,6 +285,27 @@ describe('the artifacts service', () => {
     expect(JSON.parse(html.body)).toMatchObject({
       result: { isError: true, structuredContent: { code: 'too_large' } },
     })
+  })
+
+  it('answers a probe for a newer protocol at once, so the client falls back', async () => {
+    const { service, connect } = await setup()
+    const { token } = await connect('s1', '/p')
+    const discover = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 9,
+      method: 'server/discover',
+      params: {},
+    })
+    const legacy = await send(service.url!, { headers: headers(token), body: discover })
+    expect(legacy.status).toBe(200)
+    expect(JSON.parse(legacy.body)).toMatchObject({ id: 9, error: { code: -32601 } })
+    // Claude Code sends the probe with the version it would speak.
+    const newer = await send(service.url!, {
+      headers: headers(token, { 'MCP-Protocol-Version': '2026-07-28' }),
+      body: discover,
+    })
+    expect(newer.status).toBeGreaterThanOrEqual(400)
+    expect(JSON.parse(newer.body)).toMatchObject({ error: { code: expect.any(Number) } })
   })
 
   it('ends every token when it stops', async () => {
