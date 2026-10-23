@@ -285,7 +285,7 @@ Opening a card shows its artifact in the main area, in place of the page, with *
 ```
 
 - **The surface** is surface 0 (`--sidebar`), so white pages stand off it in both themes. Each page is a frame at its own size with square corners, so the page's edge shows exactly, and a hairline `--border` ring. A selected page's ring is 2 px of `--checked`.
-- **Labels**: the page's name above it and the group's title above the row, at the caption role, the group's at weight 500 in `--foreground`. They keep their screen size at every zoom: a page's name hides when the page is narrower than 56 px on screen, and a group's title when its row is narrower than 80 px.
+- **Labels**: the page's name above it and the group's title above the row, at the caption role, the group's at weight 500 in `--foreground`. They keep their screen size at every zoom: a page's name hides when the page is narrower than 56 px on screen, and a group's title when its row is narrower than 80 px. A row's labels make room for the row above it: when the gap between the two is under 44 px on screen, the row's page names hide and its group's title moves down to their place, and under 22 px the title hides too.
 - **Opening** fits every page in view, never above 100%, and selects the first page.
 - **In the overview pages are not interactive**: a pane over them takes the pointer, and their frames take no focus. Their scripts keep running, so animations show.
 
