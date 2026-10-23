@@ -16,6 +16,7 @@
     "allShort": "全部",
     "range": "时间范围",
     "ranges": {
+      "1": "1 天",
       "7": "7 天",
       "30": "30 天",
       "90": "90 天",
@@ -35,6 +36,9 @@
     "average": "日均",
     "active_other": "{{count}} 天中有 {{active}} 天有用量",
     "peak": "用量最多的一天",
+    "hourlyAverage": "每小时平均",
+    "activeHours_other": "{{count}} 小时中有 {{active}} 小时有用量",
+    "peakHour": "用量最多的一小时",
     "cacheShare": "缓存读取占比",
     "cacheShareNote": "占全部输入的比例，含缓存",
     "none": "无用量"
@@ -42,6 +46,8 @@
   "trend": {
     "daily": "每日用量",
     "weekly": "每周用量",
+    "hourly": "每小时用量",
+    "hour": "{{from}}–{{to}}",
     "label": "{{date}}：{{tokens}} token"
   },
   "limits": {

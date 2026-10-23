@@ -357,7 +357,7 @@ export interface HostContract {
     params: { projectPath: string; path: string; text: string; version: string | null }
     result: FileWritten
   }
-  // `dayStarts`: the local days to sum, as n + 1 ascending boundaries for n days.
+  // `dayStarts`: the periods to sum, local days or a day's hours, as n + 1 ascending boundaries.
   'usage.summary': {
     params: { dayStarts: number[]; from: number; to: number; scope: UsageScope }
     result: UsageSummary

@@ -4,7 +4,7 @@
 import type { AgentId } from '@shared/thread'
 import { partsTotal, type TokenParts, type UsageSummary } from '@shared/usage'
 
-export type RangeKind = '7' | '30' | '90' | '365' | 'all'
+export type RangeKind = '1' | '7' | '30' | '90' | '365' | 'all'
 /** A custom range holds local day starts, both ends included. */
 export type RangeChoice = { kind: RangeKind } | { kind: 'custom'; from: number; to: number }
 export type AgentFilter = AgentId | 'all'
@@ -15,11 +15,13 @@ export interface DayRange {
   to: number
 }
 
-export const RANGE_KINDS: readonly RangeKind[] = ['7', '30', '90', '365', 'all']
+export const RANGE_KINDS: readonly RangeKind[] = ['1', '7', '30', '90', '365', 'all']
 export const HEATMAP_WEEKS = 53
 /** Up to this many days the trend has a bar per day, beyond it one per week. */
 export const DAILY_BARS = 92
 export const BREAKDOWN_ROWS = 6
+
+const HOUR_MS = 3_600_000
 
 const ZERO: TokenParts = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
 
@@ -87,7 +89,48 @@ export function dayStarts(range: DayRange): number[] {
   return starts
 }
 
+/** Whether the range is one local day, which the trend shows by the hour. */
+export function oneDay(range: DayRange): boolean {
+  return addDays(range.from, 1) === range.to
+}
+
+/**
+ * The local hour starts of [from, to), and `to` itself, always ascending. An hour the clocks skip
+ * is left out and one they repeat is counted twice, so such a day has 23 or 25; after a change of
+ * half an hour, the hours start on the local hour again.
+ */
+export function hourStarts(range: DayRange): number[] {
+  const date = new Date(range.from)
+  const starts = [range.from]
+  let last = range.from
+  for (let hour = 1; last < range.to; hour++) {
+    const local = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour).getTime()
+    const next = Math.min(local, range.to)
+    // An hour the clocks repeat leaves a gap of more than one, filled with real hours.
+    for (; next - last > HOUR_MS; last += HOUR_MS) starts.push(last + HOUR_MS)
+    // One they skip lands on the next hour.
+    if (next > last) {
+      starts.push(next)
+      last = next
+    }
+  }
+  return starts
+}
+
+/** Whether the clocks change during the hours, which then name their time zones. */
+export function clocksChange(starts: readonly number[]): boolean {
+  const offset = (at: number) => new Date(at).getTimezoneOffset()
+  return offset(starts[0]!) !== offset(starts[starts.length - 1]!)
+}
+
+/** The hours of a one-day range begun by `now`, as the range its figures cover. */
+export function hoursSoFar(starts: readonly number[], now: number): DayRange {
+  const end = starts.find((start, i) => i > 0 && start > now) ?? starts[starts.length - 1]!
+  return { from: starts[0]!, to: end }
+}
+
 export interface DayTotal {
+  /** The day's start, or the hour's when summed over `hourStarts`. */
   day: number
   total: number
   parts: TokenParts
@@ -193,6 +236,16 @@ export function trend(
     }
   }
   return { weekly, bars }
+}
+
+/** A bar per hour, from the totals `dayTotals` sums over `hourStarts`. */
+export function hourBars(hours: readonly DayTotal[], starts: readonly number[]): TrendBar[] {
+  return hours.map((hour, i) => ({
+    from: hour.day,
+    to: starts[i + 1]!,
+    total: hour.total,
+    byAgent: hour.byAgent,
+  }))
 }
 
 /**

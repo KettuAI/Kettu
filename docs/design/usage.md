@@ -2,7 +2,7 @@
 
 > Status: Implemented · Part of the [architecture](../architecture.md) · Not in M0 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, cc-switch at `7da2553`
 
-How much have I used my agents? The usage page answers that across every agent and for any time range: the tokens in total and per day or week, the busiest day, which agents, models and projects took the most, and, next to that, each plan's limits as they stand now.
+How much have I used my agents? The usage page answers that across every agent and for any time range: the tokens in total and per hour, day or week, the busiest day, which agents, models and projects took the most, and, next to that, each plan's limits as they stand now.
 
 The numbers come from two sources:
 
@@ -164,7 +164,7 @@ CREATE INDEX cursors_by_agent ON cursors (agent_id);
 | `usage.reimport`    | `{ agentId }`                    | none           | Forgets the agent's imported rows and cursors, then scans it                            |
 | `usage.clearRecord` | none                             | none           | Deletes OverBench's own record                                                          |
 
-- `dayStarts` are the local midnights the renderer works out, ascending, at most 50 years of them, so days stay right across daylight saving time; `scope` is `computer` or `overbench`. The host validates both like every request.
+- `dayStarts` are the local midnights the renderer works out, ascending, at most 50 years of them, so days stay right across daylight saving time. For the trend of a one-day range, a second request passes its local hour starts instead, sent once the range is known (for **All time**, after the first answer names its first day). An hour the clocks skip is left out and one they repeat counts twice, so such a day has 23 or 25 hours and the starts still ascend; after a change of half an hour, as on Lord Howe Island, the hours start on the local hour again; `scope` is `computer` or `overbench`. The host validates both like every request.
 - A summary also names the agents with usage under either scope at any time, which the page's agent filter offers under both.
 - `usage.changed` (no payload) says the figures changed; `usage.status` carries the new `UsageStatus` whenever the setting, a scan's progress or a reader's state changes. Both go to all ports.
 
@@ -173,8 +173,8 @@ CREATE INDEX cursors_by_agent ON cursors (agent_id);
 The figures, for the agent, time range and source chosen (all agents, all time and this computer by default):
 
 - **Tokens**: the total, then its parts: input, output, cache read, cache write, and the cache's share of the input side. cc-switch and the agents count cache reads in the total too; on the development Mac measured above they are 98.6% of it, so the parts always sit next to the total.
-- **Days**: the active days in the range (a local day with any usage), the daily average over them, and the peak day with its tokens.
-- **Trend**: the tokens per day, or per week for a range longer than 92 days, split by agent.
+- **Days**: the active days in the range (a local day with any usage), the daily average over them, and the peak day with its tokens. For a one-day range, the same by the hour: the active hours among those begun so far, the hourly average over them, and the busiest hour.
+- **Trend**: the tokens per hour for a one-day range, per day, or per week for a range longer than 92 days, split by agent. A one-day range shows all of its hours, the ones still to come dimmed, as the heatmap dims days outside the range.
 - **Breakdowns** by model and by project, with each one's tokens and share of the range; by agent through the agent filter and the trend.
 - **Activity**: the last 53 weeks as a heatmap, a column per week, whatever the range; the days outside it are dimmed. A day's shade is its quartile among the days with usage (cc-switch), so a few peak days do not wash out the rest. The week starts on the locale's first day, and the rows of Monday, Wednesday and Friday are labeled with the locale's short names ("Mon", "周一"), as GitHub labels its graph. One pointer listener on the grid names the day under the pointer, its date and tokens, in the panel's header, and only an outline moves, so hovering re-renders no cell of the 371; the grid is one Tab stop with arrow keys between days (left and right a week, up and down a day). Without a chosen day, the header names the busiest one.
 - **Plan limits**: each agent's windows as they stand, from the existing [plan limits](./session-model.md#plan-limits), with nothing new to read.
@@ -189,13 +189,13 @@ A **Usage** screen of its own, laid out as a dashboard. Of the three mockups (a 
 - **Filters**, one row that every panel follows, in two groups that wrap as [the interface](./ui.md#usage) describes, what is counted on the left and when on the right:
   - the agent: **All**, or one agent by its mark, with its name in a tooltip; the same agents under both sources, every one with usage in either of them at any time, so the row stays as it is when the source changes and the figures show "—" for an agent with none in the chosen one; shown once two agents have usage, since with one, **All** is the only choice;
   - the source: **This computer** or **OverBench only**, shown only while **Usage on this computer** is on;
-  - the range: **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied.
-- **Figures**: four cards, total tokens with the range's dates and length, the daily average with how many of the range's days were active, the busiest day, and the cache share. Each number is compact with the exact value in a tooltip.
-- **Trend** and **Plan limits** side by side. The trend is a bar chart, stacked by agent with a legend when all are shown; the busiest bar, or the one under the pointer or chosen with the arrow keys, puts its date (or week) and tokens in the panel's header, and its date labels name the year when the bars cross one. Plan limits give one block per agent with its plan, the [plan limits](./session-model.md#plan-limits) rows and when they were read, which is the better place [problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place) asks for; the page reads them afresh when it opens.
+  - the range: **1 day**, **7 days**, **30 days**, **90 days**, **A year** and **All time** (from the first day with usage), then **Custom**, which shows the chosen dates once applied. Each counts whole calendar days up to now, so **1 day** is today since midnight and **7 days** is today and the six before it.
+- **Figures**: four cards, total tokens with the range's dates and length, the daily average with how many of the range's days were active, the busiest day, and the cache share. Any one-day range, **1 day** or a single day picked under **Custom**, shows the hourly average with how many of the hours begun so far were active, and the busiest hour, in their place. Each number is compact with the exact value in a tooltip.
+- **Trend** and **Plan limits** side by side. The trend is a bar chart, stacked by agent with a legend when all are shown; the busiest bar, or the one under the pointer or chosen with the arrow keys, puts its date (or week) and tokens in the panel's header, and its date labels name the year when the bars cross one. By the hour, the header names the hour ("1:00 PM – 2:00 PM", with the zones on a day when the clocks change) and the labels are times; the arrow keys and the pointer stop at the hour under way. Plan limits give one block per agent with its plan, the [plan limits](./session-model.md#plan-limits) rows and when they were read, which is the better place [problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place) asks for; the page reads them afresh when it opens.
 - **Activity** and **Tokens by type** side by side: the heatmap, and a table of the parts (reasoning only when an agent reported it) and their sum with exact counts and shares.
 - **By model** and **By project** side by side: the six largest in the range, with exact counts and shares; a model in the mono face, a project by its folder name with the path in a tooltip. Sessions without a project count as one row, "No project".
 - **Layout**: a centred column of at most 960 px. Container queries put the figures four in a row and the panels side by side from 48 rem, and stack them below it.
-- The filters are kept in the usage store while the app runs, and reset to the defaults on launch. The page and its calendar load with dynamic `import()` the first time it opens.
+- The filters are kept in the usage store while the app runs, and reset to the defaults on launch. Every range ends today, so the page reads its figures again when the day turns while it shows, as the sidebar's today does. The page and its calendar load with dynamic `import()` the first time it opens.
 
 **Custom** opens a `Popover` holding the range picker:
 
@@ -232,7 +232,7 @@ Measured on the development Mac (2026-10-22, macOS arm64, production build), wit
 ## Testing
 
 - Each reader is tested against fixture logs that cover the cases cc-switch's tests pin down: for Claude Code, repeated lines per message, half-written messages, resumed files, workflow subagents and rewritten files; for Codex, interleaved running totals, repeats, compaction records, forks with missing or conflicting parents, continuation pages, `.zst` files and archived files; for OpenCode, incomplete messages, compactions and both database layouts.
-- The database (buckets, grown rows, local days, cursors, damage, a newer schema), line reading and resuming, the record's rows, the page's model (ranges, weeks, trend, heat levels, breakdowns, presets), the token formatter and the store's coalesced reads have unit tests.
+- The database (buckets, grown rows, local days, cursors, damage, a newer schema), line reading and resuming, the record's rows, the page's model (ranges, weeks, hours across a change of the clocks, trend, heat levels, breakdowns, presets), the token formatter and the store's coalesced reads have unit tests.
 - The record is tested through the fake agent, which reports usage per turn with `model_usage`, from the turn to `usage.summary` and `usage.status`.
 - **Not built yet**: the performance script's generated log corpus, to time a first import and a scan with nothing new in CI. The figures above were measured by hand.
 

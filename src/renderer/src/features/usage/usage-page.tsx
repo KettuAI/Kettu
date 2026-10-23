@@ -26,7 +26,7 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { basename, bytes, exactCount, longAgo, percent, tokens } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
-import { useNow } from '@renderer/lib/use-now'
+import { useClock, useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -35,6 +35,7 @@ import {
   refreshLimits,
   setUsageFilters,
   syncUsage,
+  usageDayTurned,
   usagePageShown,
   useUsageStore,
   type UsagePage as PageData,
@@ -44,9 +45,13 @@ import {
   addDays,
   AGENT_FILL,
   agentsWithUsage,
+  clocksChange,
+  dayOf,
   dayTotals,
   figures,
   heatmapRange,
+  hourBars,
+  hoursSoFar,
   modelRows,
   projectRows,
   RANGE_KINDS,
@@ -57,6 +62,14 @@ import {
   type TrendBar,
 } from './model'
 import { RangePicker } from './range-picker'
+
+/** A one-day range's totals per hour, and the hour starts they were summed over. */
+interface HourTotals {
+  totals: DayTotal[]
+  starts: number[]
+  /** The clocks change that day, so its hours name their time zones. */
+  zoned: boolean
+}
 
 /** The usage page: a dashboard of the tokens the agents used, for a chosen agent and range. */
 export default function UsagePage() {
@@ -291,6 +304,18 @@ function Dashboard({ page }: { page: PageData }) {
     () => (agent === 'all' ? allDays : dayTotals(summary, starts, agent)),
     [agent, allDays, summary, starts],
   )
+  const hours = useMemo<HourTotals | null>(
+    () =>
+      page.hours && {
+        totals: dayTotals(page.hours.summary, page.hours.starts, agent),
+        starts: page.hours.starts,
+        zoned: clocksChange(page.hours.starts),
+      },
+    [page.hours, agent],
+  )
+  // Every range ends today, so a new day reads them again, whether or not usage arrives.
+  const day = useClock(dayOf)
+  useEffect(() => usageDayTurned(day), [day])
   const agents = useMemo(() => agentsWithUsage(summary, AGENT_IDS), [summary])
   const shownAgents = agent === 'all' ? agents : [agent]
   // A chosen agent stays a choice once its usage is gone, as after clearing the record.
@@ -364,10 +389,16 @@ function Dashboard({ page }: { page: PageData }) {
         </div>
       </div>
 
-      <Figures facts={facts} rangeLabel={rangeText(range.from, range.to)} />
+      <Figures facts={facts} hours={hours} rangeLabel={rangeText(range.from, range.to)} />
 
       <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TrendCard days={days} page={page} agents={shownAgents} legend={agent === 'all'} />
+        <TrendCard
+          days={days}
+          hours={hours}
+          page={page}
+          agents={shownAgents}
+          legend={agent === 'all'}
+        />
         <LimitsCard />
       </div>
 
@@ -430,6 +461,23 @@ function useRangeText(): (from: number, to: number) => string {
   )
 }
 
+/** "3:00 PM – 4:00 PM" for an hour, with the time zones when `zoned`. */
+function useHourText(zoned: boolean): (from: number, to: number) => string {
+  const { t, i18n } = useTranslation('usage')
+  return useCallback(
+    (from: number, to: number) => {
+      const time = new Intl.DateTimeFormat(i18n.language, {
+        hour: 'numeric',
+        minute: '2-digit',
+        ...(zoned ? { timeZoneName: 'short' } : {}),
+      })
+      // Not formatRange, which adds both dates to the day's last hour.
+      return t('trend.hour', { from: time.format(from), to: time.format(to) })
+    },
+    [t, i18n.language, zoned],
+  )
+}
+
 function yearOf(day: number): number {
   return new Date(day).getFullYear()
 }
@@ -475,8 +523,24 @@ function Count({ value, className }: { value: number; className?: string }) {
   )
 }
 
-function Figures({ facts, rangeLabel }: { facts: ReturnType<typeof figures>; rangeLabel: string }) {
+function Figures({
+  facts,
+  hours,
+  rangeLabel,
+}: {
+  facts: ReturnType<typeof figures>
+  hours: HourTotals | null
+  rangeLabel: string
+}) {
   const { t } = useTranslation('usage')
+  const hourText = useHourText(hours?.zoned ?? false)
+  // Re-renders as an hour begins, not on every tick of the clock.
+  const begun = useClock((now) => (hours ? hoursSoFar(hours.starts, now).to : 0))
+  const hourly = useMemo(
+    () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }),
+    [hours, begun],
+  )
+  const hourEnd = (start: number) => hours?.starts[hours.starts.indexOf(start) + 1] ?? start
   const figure = (label: string, value: ReactNode, note: string) => (
     <Card className="gap-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -492,16 +556,28 @@ function Figures({ facts, rangeLabel }: { facts: ReturnType<typeof figures>; ran
         facts.total > 0 ? <Count value={facts.total} /> : none,
         t('figures.days', { range: rangeLabel, count: facts.days }),
       )}
-      {figure(
-        t('figures.average'),
-        facts.average !== null ? <Count value={Math.round(facts.average)} /> : none,
-        t('figures.active', { active: facts.activeDays, count: facts.days }),
-      )}
-      {figure(
-        t('figures.peak'),
-        facts.peak ? <Count value={facts.peak.total} /> : none,
-        facts.peak ? dayText(facts.peak.day) : t('figures.none'),
-      )}
+      {hourly
+        ? figure(
+            t('figures.hourlyAverage'),
+            hourly.average !== null ? <Count value={Math.round(hourly.average)} /> : none,
+            t('figures.activeHours', { active: hourly.activeDays, count: hourly.days }),
+          )
+        : figure(
+            t('figures.average'),
+            facts.average !== null ? <Count value={Math.round(facts.average)} /> : none,
+            t('figures.active', { active: facts.activeDays, count: facts.days }),
+          )}
+      {hourly
+        ? figure(
+            t('figures.peakHour'),
+            hourly.peak ? <Count value={hourly.peak.total} /> : none,
+            hourly.peak ? hourText(hourly.peak.day, hourEnd(hourly.peak.day)) : t('figures.none'),
+          )
+        : figure(
+            t('figures.peak'),
+            facts.peak ? <Count value={facts.peak.total} /> : none,
+            facts.peak ? dayText(facts.peak.day) : t('figures.none'),
+          )}
       {figure(
         t('figures.cacheShare'),
         facts.cacheShare !== null ? (
@@ -517,25 +593,38 @@ function Figures({ facts, rangeLabel }: { facts: ReturnType<typeof figures>; ran
 
 function TrendCard({
   days,
+  hours,
   page,
   agents,
   legend,
 }: {
   days: DayTotal[]
+  hours: HourTotals | null
   page: PageData
   agents: AgentId[]
   legend: boolean
 }) {
   const { t } = useTranslation('usage')
   const rangeText = useRangeText()
+  const hourText = useHourText(hours?.zoned ?? false)
   const { weekly, bars } = useMemo(
-    () => trend(days, page.range, page.firstDay),
-    [days, page.range, page.firstDay],
+    () =>
+      hours
+        ? { weekly: false, bars: hourBars(hours.totals, hours.starts) }
+        : trend(days, page.range, page.firstDay),
+    [hours, days, page.range, page.firstDay],
   )
+  // Re-renders as an hour begins; a range of days never does.
+  const future = useClock((now) => (hours ? bars.filter((bar) => bar.from > now).length : 0))
   const [shown, setShown] = useState<TrendBar | null>(null)
+  const title = hours ? t('trend.hourly') : weekly ? t('trend.weekly') : t('trend.daily')
   const describe = (bar: TrendBar) =>
     t('trend.label', {
-      date: weekly ? rangeText(bar.from, bar.to) : dayText(bar.from),
+      date: hours
+        ? hourText(bar.from, bar.to)
+        : weekly
+          ? rangeText(bar.from, bar.to)
+          : dayText(bar.from),
       tokens: tokens(bar.total),
     })
   const first = bars[0]
@@ -543,27 +632,25 @@ function TrendCard({
   const last = bars[bars.length - 1]
   // The axis names the year only when the bars cross one.
   const years = first && last && yearOf(first.from) !== yearOf(addDays(last.to, -1))
-  const short = new Intl.DateTimeFormat(currentLocale(), {
-    month: 'short',
-    day: 'numeric',
-    ...(years ? { year: 'numeric' } : {}),
-  })
+  const short = new Intl.DateTimeFormat(
+    currentLocale(),
+    hours
+      ? { hour: 'numeric', minute: '2-digit' }
+      : { month: 'short', day: 'numeric', ...(years ? { year: 'numeric' } : {}) },
+  )
+  const labelOf = (bar: TrendBar, end: boolean) =>
+    short.format(hours || !end ? bar.from : addDays(bar.to, -1))
   return (
     <Card>
       <CardHead
-        title={weekly ? t('trend.weekly') : t('trend.daily')}
+        title={title}
         aside={
           <span aria-live="polite" className="truncate text-xs text-muted-foreground tabular-nums">
             {shown ? describe(shown) : ''}
           </span>
         }
       />
-      <TrendChart
-        bars={bars}
-        agents={agents}
-        label={weekly ? t('trend.weekly') : t('trend.daily')}
-        onShow={setShown}
-      />
+      <TrendChart bars={bars} agents={agents} label={title} future={future} onShow={setShown} />
       {/* A slot per bar, as wide as its bar, so each label sits under the bar it names. */}
       <div
         className="flex justify-center gap-px text-xs text-muted-foreground tabular-nums"
@@ -581,7 +668,7 @@ function TrendCard({
                 bars.length > 1 && end && 'justify-end',
               )}
             >
-              {shown && short.format(end ? addDays(bar.to, -1) : bar.from)}
+              {shown && labelOf(bar, end)}
             </span>
           )
         })}

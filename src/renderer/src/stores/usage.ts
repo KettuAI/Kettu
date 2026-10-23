@@ -8,6 +8,8 @@ import {
   dayStarts,
   firstDayOfWeek,
   heatmapRange,
+  hourStarts,
+  oneDay,
   rangeOf,
   type AgentFilter,
   type DayRange,
@@ -39,6 +41,8 @@ export interface UsagePage {
   starts: number[]
   range: DayRange
   summary: UsageSummary
+  /** A one-day range's sums per hour, for its trend; null for a longer range. */
+  hours: { starts: number[]; summary: UsageSummary } | null
 }
 
 interface UsageStore {
@@ -142,20 +146,37 @@ export async function loadUsagePage(): Promise<void> {
         from: Math.min(range.from, heat.from),
         to: Math.max(range.to, heat.to),
       })
-      const summary = await host('usage.summary', {
-        dayStarts: starts,
-        from: range.from,
-        to: range.to,
-        scope: filters.scope,
-      })
+      const hourly = oneDay(range) ? hourStarts(range) : null
+      const read = (boundaries: number[]) =>
+        host('usage.summary', {
+          dayStarts: boundaries,
+          from: range.from,
+          to: range.to,
+          scope: filters.scope,
+        })
+      // All time starts at the first day with usage of this scope, known only from the answer, so
+      // its hours are read after it; any other range's along with it.
+      const settled = filters.range.kind !== 'all'
+      const [summary, early] = await Promise.all([
+        read(starts),
+        settled && hourly ? read(hourly) : null,
+      ])
       if (id !== request) return
-      // All time starts at the first day with usage of this scope, known only from the answer.
       if (pass === 0 && rangeOf(filters.range, today, summary.first).from !== range.from) {
         first = summary.first
         continue
       }
+      const hours = hourly && (early ?? (await read(hourly)))
+      if (id !== request) return
       useUsageStore.setState({
-        page: { today, firstDay, starts, range, summary },
+        page: {
+          today,
+          firstDay,
+          starts,
+          range,
+          summary,
+          hours: hourly && hours ? { starts: hourly, summary: hours } : null,
+        },
         loading: false,
         error: null,
       })
@@ -164,6 +185,12 @@ export async function loadUsagePage(): Promise<void> {
   } catch (error) {
     if (id === request) useUsageStore.setState({ loading: false, error: errorMessage(error) })
   }
+}
+
+/** The day turned while the page shows: its ranges end today, so they are read again. */
+export function usageDayTurned(day: number): void {
+  const { page } = useUsageStore.getState()
+  if (pageOpen && page && page.today !== day) readPage()
 }
 
 export async function loadUsageStatus(): Promise<void> {

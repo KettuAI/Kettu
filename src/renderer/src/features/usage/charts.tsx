@@ -47,18 +47,22 @@ export function TrendChart({
   bars,
   agents,
   label,
+  future = 0,
   onShow,
 }: {
   bars: TrendBar[]
   /** The series to stack, bottom first. */
   agents: AgentId[]
   label: string
+  /** How many of the last bars are still to come: dimmed, and never chosen. */
+  future?: number
   onShow: (bar: TrendBar | null) => void
 }) {
+  const begun = bars.length - future
   const [chosen, setChosen] = useState<number | null>(null)
   const max = Math.max(1, ...bars.map((b) => b.total))
   const busiest = bars.reduce((best, b, i) => (b.total > (bars[best]?.total ?? 0) ? i : best), 0)
-  const shown = chosen !== null && chosen < bars.length ? chosen : bars.length ? busiest : null
+  const shown = chosen !== null && chosen < begun ? chosen : bars.length ? busiest : null
   const shownBar = shown === null ? null : (bars[shown] ?? null)
   useLayoutEffect(() => onShow(shownBar), [shownBar, onShow])
 
@@ -71,7 +75,7 @@ export function TrendChart({
       onPointerLeave={() => setChosen(null)}
       onBlur={() => setChosen(null)}
       onKeyDown={(event) => {
-        const next = moveIndex(event, shown ?? 0, bars.length, 1, 0)
+        const next = begun > 0 ? moveIndex(event, shown ?? 0, begun, 1, 0) : null
         if (next !== null) setChosen(next)
       }}
     >
@@ -82,8 +86,9 @@ export function TrendChart({
             // A few days stay bars, not blocks across the chart.
             'flex h-full max-w-12 min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
             shown !== null && shown !== i && chosen !== null && 'opacity-60',
+            i >= begun && 'opacity-35',
           )}
-          onPointerEnter={() => setChosen(i)}
+          onPointerEnter={i < begun ? () => setChosen(i) : undefined}
         >
           {bar.total === 0 ? (
             <span className="h-px w-full bg-heat-0" />

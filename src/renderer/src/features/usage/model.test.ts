@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DayUsage } from '@shared/usage'
 import {
   addDays,
+  clocksChange,
   dayOf,
   dayStarts,
   dayTotals,
@@ -9,7 +10,11 @@ import {
   firstDayOfWeek,
   heatLevels,
   heatmapRange,
+  hourBars,
+  hourStarts,
+  hoursSoFar,
   modelRows,
+  oneDay,
   presets,
   projectRows,
   rangeOf,
@@ -21,6 +26,7 @@ import {
 
 const day = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
 const TODAY = day(2026, 10, 22) // a Thursday
+const HOUR = 3_600_000
 
 function usage(dayIndex: number, agentId: DayUsage['agentId'], output: number): DayUsage {
   return { day: dayIndex, agentId, input: 0, output, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
@@ -116,6 +122,90 @@ describe('figures', () => {
       from: day(2026, 10, 19),
       to: day(2026, 10, 23),
       total: 2,
+    })
+  })
+})
+
+describe('hours', () => {
+  it('shows one day, from the preset or picked, by the hour', () => {
+    const range = rangeOf({ kind: '1' }, TODAY, null)
+    expect(range).toEqual({ from: TODAY, to: day(2026, 10, 23) })
+    expect(oneDay(range)).toBe(true)
+    const yesterday = addDays(TODAY, -1)
+    expect(oneDay(rangeOf({ kind: 'custom', from: yesterday, to: yesterday }, TODAY, null))).toBe(
+      true,
+    )
+    expect(oneDay(rangeOf({ kind: 'custom', from: yesterday, to: TODAY }, TODAY, null))).toBe(false)
+    expect(oneDay(rangeOf({ kind: 'all' }, TODAY, TODAY + 9 * HOUR))).toBe(true)
+    expect(oneDay(rangeOf({ kind: '7' }, TODAY, null))).toBe(false)
+  })
+
+  it('draws a bar per hour and counts the hours begun so far', () => {
+    const range = rangeOf({ kind: '1' }, TODAY, null)
+    const starts = hourStarts(range)
+    expect(starts).toHaveLength(25)
+    expect(starts[13]).toBe(TODAY + 13 * HOUR)
+    const summary = {
+      days: [usage(9, 'codex', 30), usage(9, 'claude-code', 10), usage(2, 'codex', 5)],
+    }
+    const hours = dayTotals(summary, starts, 'all')
+    const bars = hourBars(hours, starts)
+    expect(bars).toHaveLength(24)
+    expect(bars[9]).toEqual({
+      from: TODAY + 9 * HOUR,
+      to: TODAY + 10 * HOUR,
+      total: 40,
+      byAgent: { codex: 30, 'claude-code': 10 },
+    })
+
+    const soFar = hoursSoFar(starts, TODAY + 10.5 * HOUR)
+    expect(soFar).toEqual({ from: TODAY, to: TODAY + 11 * HOUR })
+    expect(figures(hours, soFar)).toMatchObject({
+      total: 45,
+      days: 11,
+      activeDays: 2,
+      average: 22.5,
+      peak: { day: TODAY + 9 * HOUR, total: 40 },
+    })
+    expect(hoursSoFar(starts, day(2026, 10, 24))).toEqual(range)
+  })
+
+  describe('when the clocks change', () => {
+    // Restored by name: on Windows, removing TZ again leaves the stubbed zone in place.
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    afterEach(() => {
+      vi.stubEnv('TZ', zone)
+    })
+    const hoursOf = (date: number) => hourStarts({ from: date, to: addDays(date, 1) })
+    // The host takes only ascending boundaries on quarter hours.
+    const valid = (starts: number[]) =>
+      starts.every((start, i) => start % 900_000 === 0 && (i === 0 || start > starts[i - 1]!))
+
+    it('has 23 hours on the day they spring forward and 25 on the day they fall back', () => {
+      vi.stubEnv('TZ', 'America/New_York')
+      for (const [date, hours] of [
+        [day(2026, 3, 8), 23],
+        [day(2026, 11, 1), 25],
+      ] as const) {
+        const starts = hoursOf(date)
+        expect(starts).toHaveLength(hours + 1)
+        expect(valid(starts)).toBe(true)
+        for (let i = 1; i < starts.length; i++) expect(starts[i]! - starts[i - 1]!).toBe(HOUR)
+        expect(clocksChange(starts)).toBe(true)
+      }
+      expect(clocksChange(hoursOf(day(2026, 11, 2)))).toBe(false)
+    })
+
+    it('starts on the local hour again after a change of half an hour', () => {
+      vi.stubEnv('TZ', 'Australia/Lord_Howe')
+      for (const date of [day(2026, 4, 5), day(2026, 10, 4)]) {
+        const starts = hoursOf(date)
+        expect(valid(starts)).toBe(true)
+        // Only the half hour the clocks move by starts off the hour.
+        const minutes = starts.slice(0, -1).map((start) => new Date(start).getMinutes())
+        expect(minutes.filter((m) => m !== 0)).toEqual([30])
+        expect(starts.slice(1).every((start, i) => start - starts[i]! <= HOUR)).toBe(true)
+      }
     })
   })
 })
