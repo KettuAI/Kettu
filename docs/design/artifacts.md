@@ -1,6 +1,6 @@
 # Artifacts
 
-> Status: Draft · Core design in [architecture](../architecture.md#artifacts) · Issue [#11](https://github.com/overbench/overbench/issues/11), milestone v0.0.3 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, Electron 44.9.2 (Chromium 152); `@agentclientprotocol/sdk` 2.0.0 checked on 2026-10-23
+> Status: Accepted · Core design in [architecture](../architecture.md#artifacts) · Issue [#11](https://github.com/overbench/overbench/issues/11), milestone v0.0.3 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, Electron 44.9.2 (Chromium 152); `@agentclientprotocol/sdk` 2.0.0 checked on 2026-10-23
 
 This document holds the details of artifacts. What an artifact is, its model, its interface, the rules that always hold and the decisions behind them are the [core design](../architecture.md#artifacts), and are not repeated here.
 
@@ -302,7 +302,7 @@ A page may offer a file to save, such as an exported image. With `allow-download
 
 ## Interface
 
-The rules this follows are the [visual style](./visual-style.md) and the [UX guidelines](./ux-guidelines.md); [Interface](./ui.md#artifacts) points here. The [hi-fi canvas](https://claude.ai/artifact/WWbEoYtY9zcczsB6tzcQrx) of 2026-10-23 draws every part below. Its two bottom rows, drawn after the service on the same day, wait for the maintainer's review: the version history, Recently deleted, importing, presence and the thread's rows for the service.
+The rules this follows are the [visual style](./visual-style.md) and the [UX guidelines](./ux-guidelines.md); [Interface](./ui.md#artifacts) points here. The [hi-fi canvas](https://claude.ai/artifact/WWbEoYtY9zcczsB6tzcQrx) of 2026-10-23 draws every part below, and the maintainer accepted it that day, the parts the service added included: the version history, Recently deleted, importing, presence and the thread's rows for the service.
 
 ### Artifacts page
 
@@ -462,13 +462,15 @@ Main and the agent host: `artifact.content` with `{ id, version? }` returns the 
 
 ## Building it
 
-The design is larger than one pull request, so the build splits into sub-issues of #11, each useful on its own:
+The design is larger than one pull request, so the build splits into sub-issues of #11, each one pull request; the later ones wait on the ones they name:
 
-1. The store and the service: the new schema version, the content files, the MCP server and its tokens, the seven tools with their errors and limits, Recently deleted and the purge; unit tests over every tool, the scope and the limits, and a process test per agent that creates, updates and reads an artifact from two sessions in two projects.
-2. The surface: the protocol from the store, the policy, main's request filter, handlers and navigation guard, the frame guard's exception, the single-page viewer, and the probe as a process test, run once more with the policy removed.
-3. The Artifacts page and thumbnails, rename, delete and Recently deleted, import and export, and the sidebar row turned on; the [UX guidelines](./ux-guidelines.md#structure) then lose the disabled row as their example of a feature shown before it is built.
-4. The canvas viewer and the version history.
-5. Opening from a session, and presence.
+1. **The store**: the new schema version, the content files, versions and their rules, Recently deleted and the purge, and the host's requests and events for the interface ([IPC](#ipc-and-host-protocol)); unit tests over versions, conflicts, the scope and the purge.
+2. **The service**, after 1: the MCP server and its tokens, `mcpServers` on every attach, the seven tools with their errors and limits, and what agents are told; unit tests over every tool and limit, and a process test per agent that creates, updates and reads an artifact from two sessions in two projects.
+3. **The surface**, after 1: the protocol from the store, the policy, main's request filter, handlers and navigation guard, the frame guard's exception, the single-page viewer, and the probe as a process test, run once more with the policy removed.
+4. **The Artifacts page**, after 3: the cards, grouping and sorting, the filter, thumbnails, the page's states, and the sidebar row turned on; the [UX guidelines](./ux-guidelines.md#structure) then lose the disabled row as their example of a feature shown before it is built.
+5. **Managing artifacts**, after 4: rename, delete, Recently deleted with the permanent delete, import, export and open in browser.
+6. **The canvas and the version history**, after 4: the canvas viewer, focusing a page, and the history column with restoring.
+7. **Opening from a session and presence**, after 2 and 3: the thread's rows for the service with **Open**, the side panel pane, and presence on cards and in the viewer.
 
 ## Alternatives considered
 

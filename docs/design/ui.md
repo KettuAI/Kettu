@@ -170,7 +170,7 @@ The usage page, opened from the sidebar's **Usage** row, is designed in [usage s
 
 ### Artifacts
 
-> Draft for [issue #11](https://github.com/overbench/overbench/issues/11), reworked on 2026-10-23; not built yet.
+> Accepted for [issue #11](https://github.com/overbench/overbench/issues/11) on 2026-10-23; not built yet.
 
 The pages agents hand the user through OverBench's [artifacts](../architecture.md#artifacts) service, designed in [artifacts](./artifacts.md#interface):
 
