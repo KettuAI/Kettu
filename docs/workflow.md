@@ -99,7 +99,7 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 - **At most one a day.** A count or time release comes at least 24 hours after the previous release, so a burst of merges ships as one update. Urgent and asked releases go out at once.
 - **The numbers**: 10 changes are about what one look at the release notes can take in, and 7 days is the longest a fix waits when little is merging. Both get revisited once a few releases show how fast work lands.
 - **Checked by CI**: a `Release check` workflow runs on every push to `main` and once a day. When a trigger has fired and no release is open, it opens a Task issue, "Release vX.Y.Z", that names the trigger. An agent takes it through the steps below; an asked release starts the same way, from the maintainer's words.
-- **Versions**: a patch by default. When a milestone's last issue has closed, the release is that milestone's minor version. Before 1.0, a minor version completes a design milestone (`v0.1.0` completes [M0](./milestones/m0.md), `v0.2.0` will be M1), and the patches in between are previews.
+- **Versions**: minor versions carry the big plans, and patch versions are the small iterations toward them. `v0.1.0` is the full release: it completes [M0](./milestones/m0.md) and adds artifacts, the built-in browser, attachments, media and Routines. The iterations before it are `v0.0.2`, `v0.0.3` and on, and those after it `v0.1.1`, `v0.1.2` and on. A release takes the version of the earliest open patch milestone, and that milestone's unfinished issues move to the next one; once nothing is left before the minor's own milestone and its last issue has closed, the release is the minor.
 - **How**: an agent opens `chore(release): vX.Y.Z`, which bumps `package.json`; its description is the release notes, grouped by type and drafted from the squash commits since the last tag. After it merges come CI and Screenshots green on all three platforms for that commit, the tag, the [Release workflow](../.github/workflows/release.yml)'s draft, which the maintainer can install and try, and then publishing. The notes live on the GitHub release only.
 
 ## Gates
@@ -176,7 +176,7 @@ Say the core problem and stop. Many issues are one sentence and a screenshot; no
 
 ### Milestones
 
-One milestone per version, as in [release](#6-release). Its description names the design milestone and links its document. An open issue without a milestone is in the backlog.
+Each planned version has a milestone, as in [release](#6-release): one per patch version, with about five issues and planned two or three ahead, and one per minor version for its big features, whose description says what the version completes. The current milestone is the earliest open one. An open issue without a milestone is in the backlog.
 
 Discussions stay off for now, so issues are the one place to report. When outside traffic makes the issue list noisy, ideas and questions move to Discussions and the accepted ones are promoted to issues.
 
