@@ -130,6 +130,7 @@ Four levels, from quiet to loud. A signal takes the lowest level that is true.
 - **Same interface for every agent.** A control the current agent cannot back is hidden, as **Fork** is without `session/fork`; a control that applies but cannot act right now is disabled, with the reason in its tooltip.
 - **The agent's names stand.** Models, reasoning levels and commands show as the agent names them; OverBench does not relabel them ([problem 4](../milestones/m0-feedback.md#4-the-model-menu-does-not-look-polished)).
 - **Before it acts, show what it will do.** A permission request shows the exact command or change and answers with one key.
+- **A routine acts only within what it was given.** The user chooses a routine's permissions when creating it; its runs do that much without asking, record each step they allowed in the thread, and stop to ask for anything more ([routines](./routines.md#permission-scope-on-acp); pending the maintainer's pick).
 - **Stop is always one key away** while a turn runs: `Esc`, or the Stop button.
 - **Never spend the user's quota unasked.** What OverBench reads for display, such as usage, limits and titles, comes from what costs no model call.
 - **Output streams.** The agent's text and tool calls appear as they arrive, never held back until the turn ends.

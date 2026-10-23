@@ -41,8 +41,9 @@ interface SessionView {
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
-  origin: 'user' | 'subagent'
+  origin: 'user' | 'subagent' | 'routine'
   subagent: SubagentInfo | null // set when origin is 'subagent'
+  routine: RoutineRef | null // set when origin is 'routine'
   queue: QueuedPrompt[] // prompts waiting for the running turn, oldest first
   queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
 }
@@ -74,6 +75,13 @@ interface SubagentInfo {
   canCancel: boolean // the child's `capabilities.cancel`
   stateKnown: boolean // false after an `unknown` state, until a known one arrives
   stopReason: string | null // from the last `idle` state
+}
+
+interface RoutineRef {
+  routineId: string
+  runId: string
+  trigger: 'schedule' | 'catch-up' | 'manual'
+  scheduledFor: number | null // the scheduled time the run stands for; null for Run now
 }
 
 interface ConfigOption {
@@ -160,7 +168,11 @@ interface ToolEntry {
   content: ToolContent[]
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null
-  permissionResult: { optionId: string; kind: PermissionKind } | 'cancelled' | 'withdrawn' | null
+  permissionResult:
+    | { optionId: string; kind: PermissionKind; by?: 'routine' } // by: answered within a routine's scope
+    | 'cancelled'
+    | 'withdrawn'
+    | null
 }
 
 type ToolContent =
@@ -297,7 +309,7 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 - A session can have several pending requests at once, one per tool entry.
 - `permissions.respond(sessionId, requestId, optionId)` must name an option of that request, or it fails with `invalid_params`. The host answers the agent with `{ outcome: { outcome: 'selected', optionId } }`, clears `permission` and records `permissionResult`. With nothing else pending, the session goes back to `running`.
 - If the agent withdraws a request (the SDK aborts the handler's `signal`), the host clears it with `permissionResult: 'withdrawn'`.
-- OverBench passes "always" options through unchanged; remembering them is the agent's job. It never answers a request on the user's behalf.
+- OverBench passes "always" options through unchanged; remembering them is the agent's job. It never answers a request on the user's behalf, except in a routine's run, inside the scope the user gave the routine (pending the maintainer's pick): there the host answers `allow_once` and records `by: 'routine'`, and anything beyond the scope waits for the user as here ([routines](./routines.md#permission-scope-on-acp)).
 
 ## Cancellation
 
@@ -365,6 +377,15 @@ Some work needs an agent but none of your folders, so New session offers **No pr
 The title comes from `session_info_update`. Until the agent sends one, the host uses the first line of the first user message, cut to 60 characters. It is persisted in the index.
 
 The user can rename a session (`sessions.rename`). ACP has no rename, so the user's title lives in the index only, as `customTitle`, and wins over the agent's: the summary and notifications show it, while the thread's own `title` keeps following the agent. Renaming to an empty title removes it, and the agent's title shows again.
+
+### Routine runs
+
+A [routine](./routines.md)'s run is a session of its own, top-level, with `origin: 'routine'` and `routine` naming the routine and the run:
+
+- The host creates it, as `sessions.create` does, sets the mode the routine's scope names and sends the routine's prompt as its first prompt ([starting its session](./routines.md#starting-its-session)).
+- It belongs to its routine, not to its project's list: `sessions.list` leaves it out, and `routines.runs` returns it with its run. The index keeps `routine` with it.
+- Its first turn's end is the run's end; its `turn-ended` attention is the routine's `routine-ended` ([notifications](./routines.md#notifications)).
+- Otherwise it is a session like any other: it opens from its stored thread, attaches and releases its agent by the rules above, and can be continued, renamed, forked and deleted. A fork is an ordinary session in the routine's project, with no `routine`.
 
 ## Sub-sessions
 

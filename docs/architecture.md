@@ -12,6 +12,7 @@ This document is the overview. Each subsystem has a detailed design:
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | [Agent host](./design/agent-host.md)       | Startup and supervision, the agent catalog, environments, launching and stopping agents, sign-in, diagnostics, platform differences |
 | [Session model](./design/session-model.md) | The thread model, patches and snapshots, the ACP v1 mapping, prompts, permissions, cancellation, session lifecycle                  |
+| [Routines](./design/routines.md)           | Prompts that run on a schedule: routines and runs, the scheduler, missed runs and permission scopes                                 |
 | [Host protocol](./design/host-protocol.md) | The preload API, requests, events and validation between the renderer and the agent host                                            |
 | [Persistence](./design/persistence.md)     | What is stored on disk, how it is written, versioned and recovered                                                                  |
 | [Git](./design/git.md)                     | Repository status, pull requests through `gh`, and git events in the thread                                                         |
@@ -45,7 +46,7 @@ flowchart LR
 | ------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Main          | Electron main                       | App lifecycle, windows, menus, native dialogs and notifications, agent host supervision, [updates](./design/updates.md) |
 | Renderer      | Sandboxed Chromium                  | UI, view state, a replica of each session it shows                                                                      |
-| Agent host    | Electron `utilityProcess` (Node.js) | ACP connections, agent processes, live session state, persistence                                                       |
+| Agent host    | Electron `utilityProcess` (Node.js) | ACP connections, agent processes, live session state, [routines](./design/routines.md#the-scheduler), persistence       |
 | Terminal host | Electron `utilityProcess` (Node.js) | Pseudo-terminals for the built-in [terminal](./design/terminal.md), started on first use                                |
 | Agent process | One per agent, spawned by the host  | The agent itself: model calls, tools, auth, conversation storage                                                        |
 
@@ -62,7 +63,7 @@ Alternatives considered:
 - **Renderer to main**: the typed `ipcRenderer.invoke` contract in `src/shared/ipc.ts`, for what only main can do: folder and file pickers, saving diagnostics, window controls.
 - **Renderer to agent host**: a `MessagePort` per page, created by main. The preload keeps it in the isolated world and exposes `window.overbench.agents`, so session traffic skips main and page scripts never hold a raw channel. See [host protocol](./design/host-protocol.md).
 - **Renderer to terminal host**: a second `MessagePort` per page, exposed as `window.overbench.terminals`, so terminal output never shares a queue with session patches. See [terminal](./design/terminal.md#host-protocol).
-- **Main to agent host**: `utilityProcess` messages for startup, port handoff, binary overrides, notifications and shutdown. See [agent host](./design/agent-host.md#main-and-host-messages).
+- **Main to agent host**: `utilityProcess` messages for startup, port handoff, binary overrides, notifications, power events and shutdown. See [agent host](./design/agent-host.md#main-and-host-messages).
 - **Agent host to agents**: ACP over each agent's stdin and stdout as newline-delimited JSON-RPC, through the official [`@agentclientprotocol/sdk`](https://github.com/agentclientprotocol/typescript-sdk).
 
 ### Cross-platform
@@ -190,7 +191,7 @@ OverBench drives agents that edit files and run commands, so every layer assumes
 - **The renderer cannot run commands, except in the terminal.** The agent host has no API that takes a command line. Agent launch specs come from the catalog, and binary and shell overrides come from a native dialog in main. The built-in terminal is the one deliberate exception: what the user types there runs in a shell, so its safety rests on the renderer's integrity, and no agent output is ever written into a terminal ([terminal security](./design/terminal.md#security)).
 - **Git is read-only.** The git service runs status commands and `git fetch` only; it never commits, pushes or rewrites anything, and pull requests come through the user's own `gh` sign-in ([git](./design/git.md)).
 - **Every request to the host is validated**, including that a project folder is an absolute path to an existing directory. See [validation](./design/host-protocol.md#validation).
-- **Permission requests are shown faithfully.** OverBench never answers one without the user, and never switches an agent into a bypass or full-auto mode by default.
+- **Permission requests are shown faithfully.** OverBench never answers one without the user, and never switches an agent into a bypass or full-auto mode by default. A [routine](./design/routines.md#permission-scope-on-acp) is the one exception, pending the maintainer's pick: its run answers, once at a time, what the scope the user gave it covers, records each answer in the thread, and pauses on the rest.
 - **No credentials.** OverBench stores no API keys or tokens; agents keep their own.
 - **Diagnostics stay local** until the user exports them, and the export leaves out environment variables that could hold secrets.
 - The renderer keeps `sandbox`, `contextIsolation` and the narrow preload API, as described in [AGENTS.md](../AGENTS.md#security-rules).

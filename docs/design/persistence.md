@@ -16,13 +16,14 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 | `state/agents.json`          | Agent host | The account, plan limits and capabilities each agent last reported, kept until it reports again ([sign-in](./agent-host.md#sign-in))               |
 | `state/agent-options.json`   | Agent host | Each agent's config options from its last new session, and the values last chosen, for [New session](./session-model.md#config-options)            |
 | `state/agent-updates.json`   | Agent host | What the last [update check](./agent-host.md#checking-for-updates) found for each package agent, shown after a restart                             |
-| `state/threads.db`           | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                             |
+| `state/threads.db`           | Agent host | Every session's thread, read a page at a time ([threads](#threads)), and [routine runs](./routines.md#storage), with `-wal` and `-shm` files       |
 | `state/usage.db`             | Agent host | The token usage OverBench recorded and imported from the agents' logs, in its own worker ([usage statistics](./usage.md#storage))                  |
+| `state/routines.json`        | Agent host | The [routines](./routines.md#storage): their prompts, schedules, scopes and the times each has accounted for                                       |
 | `settings.json`              | Main       | [Settings](#settings)                                                                                                                              |
 | `window-state.json`          | Main       | Window size, position and maximized state                                                                                                          |
 | `app-state.json`             | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
 | `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and install                                                     |
-| `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
+| `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project and per routine with none, never removed |
 | `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts
@@ -63,7 +64,8 @@ interface SessionsFile {
     updatedAt: number
     lastViewedAt: number | null
     parentId: string | null // for sub-sessions
-    origin: 'user' | 'subagent'
+    origin: 'user' | 'subagent' | 'routine'
+    routine?: RoutineRef // a routine's run, see routines
     description: string | null // a subagent's purpose, as its parent described it
     branch: string | null // checked out when its last turn ended, for its pull request
     queue?: { id: string; content: UserContent[]; at: number }[] // prompts still waiting
@@ -89,6 +91,7 @@ interface SettingsFile {
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
     restoreLastSession: boolean
     confirmQuitWhileRunning: boolean
+    openAtLogin: boolean // so routines run after login; see routines
   }
   appearance: {
     theme: 'system' | 'light' | 'dark'
@@ -100,6 +103,7 @@ interface SettingsFile {
     permission: boolean
     turnEnded: boolean
     error: boolean
+    routines: boolean // a routine's run ended, or its routines paused at a plan limit
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
   }
@@ -119,7 +123,7 @@ interface SettingsFile {
 }
 ```
 
-- Defaults: the system's language, no default agent, Enter sends, restore and confirm on, the system theme, the default text size, 100% zoom, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, updates downloaded and installed automatically, accounts shown, the agents' logs not read, and today's tokens in the sidebar.
+- Defaults: the system's language, no default agent, Enter sends, restore and confirm on, not opening at login, the system theme, the default text size, 100% zoom, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, updates downloaded and installed automatically, accounts shown, the agents' logs not read, and today's tokens in the sidebar.
 - The renderer reads them with `settings:get` and changes them with `settings:update`, which takes a partial object (`SettingsPatch`). Main validates it against the schema (`src/main/settings-schema.ts`), rejects unknown keys and values, writes the file and sends `settings:changed` to every window. A patch with any problem is rejected whole, with an error naming each bad key, and changes nothing. Sections merge key by key; `proxy` is replaced whole, and a custom proxy URL must be an `http`, `https` or `socks` URL with a host.
 - Executable paths, `agents.<id>.binaryPath` and `terminal.shellPath`, can only be cleared from the renderer, with `null`. Setting one goes through `dialog:choose-agent-binary` or `dialog:choose-shell`, which show a native file dialog in main and store the picked program.
 - The renderer applies appearance settings as attributes on `<html>` (`data-theme`, `data-text-size`, `data-reduce-motion`) and the zoom as `--zoom`, so tokens switch in CSS without re-rendering components. Main applies the zoom to every window ([Interface: zoom](./ui.md#zoom)).

@@ -105,6 +105,9 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Publish a branch or repository                                    | `CloudUpload`            |                                   |
 | Subagent; the agents, as in Settings › Agents                     | `Bot`                    |                                   |
 | Notifications, send a test notification                           | `Bell`                   |                                   |
+| A routine, the Routines page                                      | `CalendarClock`          | `AlarmClock`, `Timer`, `Clock`    |
+| Run now: start a routine at once                                  | `Play`                   |                                   |
+| Skipped, cancelled: a run that did not finish                     | `CircleSlash`            | `Ban`, `CircleX`                  |
 | Keyboard shortcuts                                                | `Keyboard`               |                                   |
 | Advanced settings                                                 | `Wrench`                 |                                   |
 | Sign in, sign out                                                 | `LogIn`, `LogOut`        |                                   |
