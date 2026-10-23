@@ -19,7 +19,7 @@ The first desktop version benchmarks the Claude Desktop app, through the analysi
 
 1. **Quiet chrome, loud content.** Surfaces are told apart by small lightness steps, not by lines. The agent's work is the highest-contrast thing on screen.
 2. **One line per surface.** A surface has at most one enclosing border ([below](#one-line-per-surface)).
-3. **Compact by default.** OverBench is a desktop tool for long sessions: 24 px controls and 28 px rows show more of the work without feeling cramped.
+3. **The reference's density.** 32 px rows and controls, 20 px chrome icons and a 15 px composer, measured from the reference on 2026-10-23 ([#127](https://github.com/overbench/overbench/issues/127)); the compact density shipped until then read cramped beside it.
 4. **Micro-interactions run on the compositor.** Hover, press, focus and looping indicators are CSS, so they cost no JavaScript per frame. Motion handles springs, layout, exits and gestures ([motion](#css-or-motion)).
 5. **The stack first.** What shadcn/ui, Base UI, Tailwind or tw-animate-css already provides is used as it is, styled through the tokens; a custom implementation needs a reason written here.
 6. **Every value is a token.** Colors, radii, sizes, durations and curves come from `globals.css`; components never hard-code them.
@@ -36,18 +36,18 @@ Every color, line color and shadow color in the renderer is a token in `src/rend
 
 | Token                              | Light                        | Dark                   | Used for                                                     |
 | ---------------------------------- | ---------------------------- | ---------------------- | ------------------------------------------------------------ |
-| `--bg-app`                         | `#FDFDFC`                    | `#1B1B1A`              | The main area and the top bar                                |
-| `--bg-sidebar`                     | `#F9F9F8`                    | `#171716`              | The sidebar, Settings' column, the side panel                |
+| `--bg-app`                         | `#FFFFFF`                    | `#1B1B1A`              | The main area and the top bar                                |
+| `--bg-sidebar`                     | `#FAFAFA`                    | `#171716`              | The sidebar, Settings' column, the side panel                |
 | `--bg-surface`                     | `#FFFFFF`                    | `#232322`              | Inputs, the composer, cards, menus, popovers, dialogs        |
-| `--bg-subtle`                      | `#F2F2F0`                    | `#2B2B29`              | The user's bubble, chips, neutral pills, tracks and tiles    |
-| `--bg-code-inline`                 | `#F0F0EE`                    | `#2E2E2C`              | Inline code                                                  |
-| `--bg-code-block`                  | `#F7F7F5`                    | `#20201F`              | Code blocks, diffs, commands, table headers                  |
-| `--bg-hover`                       | `#F0F0EE`                    | `#2A2A28`              | A hovered row or button                                      |
-| `--bg-selected`                    | `#EDEDEB`                    | `#33332F`              | The current session, a chosen item, a pressed toggle         |
-| `--border-default`                 | `#E3E3E1`                    | `#3A3A37`              | Inputs, cards, the composer, menus                           |
-| `--border-subtle`                  | `#ECECEA`                    | `#2F2F2C`              | Dividers, table lines, the top bar's and sidebar's edges     |
-| `--border-strong`                  | `#D6D6D3`                    | `#474743`              | A hovered or focused field, an outline button                |
-| `--text-primary`                   | `#262626`                    | `#ECECEA`              | Body text and titles                                         |
+| `--bg-subtle`                      | `#F2F2F2`                    | `#2B2B29`              | The user's bubble, chips, neutral pills, tracks and tiles    |
+| `--bg-code-inline`                 | `#F0F0F0`                    | `#2E2E2C`              | Inline code                                                  |
+| `--bg-code-block`                  | `#F7F7F7`                    | `#20201F`              | Code blocks, diffs, commands, table headers                  |
+| `--bg-hover`                       | `#EEEEEE`                    | `#2A2A28`              | A hovered row or button                                      |
+| `--bg-selected`                    | `#E0E0E0`                    | `#33332F`              | The current session, a chosen item, a pressed toggle         |
+| `--border-default`                 | `#E7E7E7`                    | `#3A3A37`              | Inputs, cards, the composer, menus                           |
+| `--border-subtle`                  | `#EFEFEF`                    | `#2F2F2C`              | Dividers, table lines, the top bar's and sidebar's edges     |
+| `--border-strong`                  | `#D6D6D6`                    | `#474743`              | A hovered or focused field, an outline button                |
+| `--text-primary`                   | `#141414`                    | `#ECECEA`              | Body text and titles                                         |
 | `--text-secondary`                 | `#525252`                    | `#B5B4AF`              | Descriptions, the top bar's information, model names, levels |
 | `--text-tertiary`                  | `#6B6B6B`                    | `#9A9994`              | Fold lines, times, meta                                      |
 | `--text-placeholder`               | `#737373`                    | `#8F8E89`              | Placeholders in inputs                                       |
@@ -61,10 +61,11 @@ Every color, line color and shadow color in the renderer is a token in `src/rend
 | `--focus`                          | `rgba(37,99,235,.55)`        | `rgba(96,165,250,.6)`  | The keyboard focus ring                                      |
 | `--selection`                      | `rgba(37,99,235,.18)`        | `rgba(96,165,250,.28)` | Selected text, in the thread and the terminal                |
 | `--danger-tint`, `--danger-border` | `#FDF6F5`, `#F1D5D1`         | `#2A1D1B`, `#4A2C28`   | The error notice and the line that ends a cut turn           |
-| `--queue-back`                     | `#F4F4F2`                    | `#1E1E1D`              | What a queued card darkens toward, from `--bg-surface`       |
+| `--queue-back`                     | `#F4F4F4`                    | `#1E1E1D`              | What a queued card darkens toward, from `--bg-surface`       |
 | `--scrollbar-thumb`                | `rgba(0,0,0,.18)`            | `rgba(255,255,255,.2)` | Scrollbar thumbs, on a transparent track                     |
 
 - `--border-strong` and the dark `--link-hover`, which is `--link` itself, are the two values the palette did not give; they were derived here and wait for the maintainer's confirmation.
+- The light theme was moved onto the reference's neutral greys on 2026-10-23 ([#127](https://github.com/overbench/overbench/issues/127)), sampled from its screenshots: a pure white canvas, a `#FAFAFA` sidebar, a `#E0E0E0` current row and text at `#141414`. The text steps below primary, the meaning colors and the dark theme keep the palette's values; the reference's lighter greys would fall under AA. The dark theme has no reference screenshot yet.
 - Lines are opaque and keep their hairline width (`--hairline`: 1 px, 0.5 px on 2× displays and 1/3 px on 3×), so a line is one device pixel of its color on every display.
 - Neither theme uses pure black or white for text.
 - The surface steps other documents name are these tokens: surface 0 is `--bg-sidebar`, surface 1 `--bg-app`, and surfaces 2 (cards) and 3 (the composer, menus, dialogs) are both `--bg-surface`, told apart by their shadows.
@@ -194,53 +195,56 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 
 ### Elevation
 
-| Tier     | Light                                                                | Used for                                                |
-| -------- | -------------------------------------------------------------------- | ------------------------------------------------------- |
-| none     |                                                                      | Everything on the canvas at rest, list rows always      |
-| composer | `0 6px 20px rgba(20,20,19,.06)` and `0 -3px 10px rgba(20,20,19,.04)` | The composer (`shadow-sm` is the same)                  |
-| queue    | `0 1px 6px rgba(20,20,19,.05)`                                       | Queued message cards (`shadow-queue`)                   |
-| popover  | `0 8px 24px rgba(20,20,19,.10)`                                      | Menus, popovers, dialogs, floating buttons (`md`, `lg`) |
+| Tier     | Light                                                     | Used for                                                |
+| -------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| none     |                                                           | Everything on the canvas at rest, list rows always      |
+| composer | `0 4px 20px rgba(0,0,0,.06)`, measured from the reference | The composer (`shadow-sm` is the same)                  |
+| queue    | `0 1px 6px rgba(20,20,19,.05)`                            | Queued message cards (`shadow-queue`)                   |
+| popover  | `0 8px 24px rgba(20,20,19,.10)`                           | Menus, popovers, dialogs, floating buttons (`md`, `lg`) |
 
 - In the dark theme every tier takes the same offsets and blurs in `rgba(0,0,0,.4)`, because a shadow on a dark surface barely shows. Raised surfaces there also keep a 1 px inset highlight along the top edge (`--highlight`, white at 5%), which reads as an edge catching the light.
 - Small raised controls keep their contact shadows (`--elevation-button` under an outline button, `--elevation-thumb` under a switch's thumb, `--elevation-segment` under a segment's thumb), which the palette did not cover; they wait for the maintainer's confirmation.
-- **Composer** (the `composer` variant of `InputGroup`): a `--border-default` hairline ring and the composer shadow at rest; a `--border-strong` ring on hover; on focus the `--border-strong` ring and the focus ring around the whole box. Only color, shadow and outline change, so focusing never moves the text.
+- **Composer** (the `composer` variant of `InputGroup`, `rounded-4xl`): a 1 px `--border-default` ring and the composer shadow at rest; a 1 px `--border-strong` ring on hover and while it has focus, with no outline, as in the reference, where the caret and the darker line show where typing goes. The line is a full pixel, the one exception to the hairline, because the reference's composer line measures one CSS pixel. Only color and shadow change, so focusing never moves the text.
 - **Queued cards** (the [queue stack](./ui.md#composer)): `--bg-surface` with a `--border-default` hairline and the queue shadow; a card further back darkens toward `--queue-back`, from `#FFFFFF` to `#F4F4F2` light and from `#232322` to `#1E1E1D` dark.
 - **Attention**: a card waiting for your approval replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20%.
-- **Focus rings**: the `focus-ring` utility, a 2 px `--focus` outline 2 px outside the element, on every control that takes keyboard focus; `focus-ring-within` draws it on a field, such as the composer, whose control has focus. The thread's scroller draws its ring 2 px inset instead, because its faded edges would hide one outside.
+- **Focus rings**: the `focus-ring` utility, a 2 px `--focus` outline 2 px outside the element, on every control that takes keyboard focus; `focus-ring-within` draws it on a field whose control has focus. The thread's scroller draws its ring 2 px inset instead, because its faded edges would hide one outside.
 
 ## Density and sizing
 
-M0 ships the compact density only. The comfortable values are recorded so that a later density setting switches tokens, not components. Sizes in this document are CSS pixels at 100% [zoom](./ui.md#zoom), the level the window opens at.
+One density, the reference's, measured from its screenshots on 2026-10-23 ([#127](https://github.com/overbench/overbench/issues/127)). Until then OverBench shipped a compact density (7 px radius, 26 px controls, 28 px rows, 16 px icons, 12.5 px control text), which read cramped beside the reference. Sizes in this document are CSS pixels at 100% [zoom](./ui.md#zoom), the level the window opens at.
 
-| Token                 | Used for                                                           | Compact (M0)               | Comfortable (later)  |
-| --------------------- | ------------------------------------------------------------------ | -------------------------- | -------------------- |
-| `--radius`            | The base of shadcn's radius scale                                  | 7 px                       | 8 px                 |
-| `--control-height`    | Buttons and selectors                                              | 26 px                      | 32 px                |
-| `--control-height-sm` | Small inline buttons, icon buttons in the title bar                | 24 px                      | 28 px                |
-| `--row-height`        | Sidebar rows, menu items, the plan row, the composer's control row | 28 px                      | to be measured       |
-| `--card-header`       | Card headers, such as a permission request's                       | 30 px                      | 36 px                |
-| `--composer-min`      | The composer with one line of text                                 | 52 px                      | 56 px                |
-| `--icon-size`         | UI icons; 14 px inside cards and controls                          | 16 px                      | 20 px                |
-| Icon stroke           | Every Lucide icon, set once with `LucideProvider` in `main.tsx`    | 1 px at every size         | 1 px at every size   |
-| Spacing steps         | Gaps between and around components                                 | 4, 6, 8, 10, 12, 16, 28 px | 8, 12, 16, 28, 40 px |
+| Token                 | Used for                                                           | Value                      |
+| --------------------- | ------------------------------------------------------------------ | -------------------------- |
+| `--radius`            | The base of shadcn's radius scale                                  | 8 px                       |
+| `--control-height`    | Buttons and selectors, the top bar's icon buttons                  | 32 px                      |
+| `--control-height-sm` | Small inline buttons                                               | 28 px                      |
+| `--row-height`        | Sidebar rows, menu items, the plan row, the composer's control row | 32 px                      |
+| `--card-header`       | Card headers, such as a permission request's                       | 36 px                      |
+| `--composer-min`      | The composer with one line of text                                 | 56 px                      |
+| `--icon-size`         | Chrome icons: the sidebar's nav rows, the top bar's buttons        | 20 px                      |
+| Icon stroke           | Every Lucide icon, set once with `LucideProvider` in `main.tsx`    | 1 px at every size         |
+| Spacing steps         | Gaps between and around components                                 | 4, 6, 8, 10, 12, 16, 28 px |
 
+- Measured on the reference, at one CSS pixel to 1.56 screenshot pixels (calibrated on its 288 px sidebar): sidebar rows 32 px with 2 px between them and an 8 px radius, 20 px icons 8 px in from the row's edge, a 20 px composer radius, a composer about 114 px tall on its start screen, 14 px control text.
+- The reference's icon strokes measure about 1.2 px; OverBench keeps the 1 px chosen on 2026-10-22 until the maintainer decides otherwise.
 - The icon stroke is 1 screen pixel whatever the icon's size: `LucideProvider` sets `strokeWidth={1}` with `nonScalingStroke`, which draws the stroke with `vector-effect: non-scaling-stroke`. Lucide's own `absoluteStrokeWidth` scales the width by the `size` prop, which OverBench never passes because sizes come from classes, so it would draw a 16 px icon at 0.67 px. Chosen 2026-10-22 on the Settings canvas from 0.65, 0.8 and 1 px side by side, replacing the relative 1.5, which drew 14 and 12 px icons thinner than 16 px ones ([problem 37](../milestones/m0-feedback.md#37-icons-look-heavy-use-thin-line-icons-from-a-library)).
 
 The radius scale is shadcn's, derived from `--radius`, so shadcn components follow it without new tokens:
 
-| Utility        | Compact | Used for                                 |
+| Utility        | Value   | Used for                                 |
 | -------------- | ------- | ---------------------------------------- |
-| `rounded-md`   | 5.6 px  | Segments and their thumb                 |
-| `rounded-lg`   | 7 px    | Buttons, inputs, rows, menu items        |
-| `rounded-xl`   | 9.8 px  | Cards, the user bubble                   |
-| `rounded-2xl`  | 12.6 px | The composer, menus and popovers         |
-| `rounded-3xl`  | 15.4 px | Dialogs                                  |
+| `rounded-md`   | 6.4 px  | Segments and their thumb                 |
+| `rounded-lg`   | 8 px    | Buttons, inputs, rows, menu items        |
+| `rounded-xl`   | 11.2 px | Cards, the user bubble                   |
+| `rounded-2xl`  | 14.4 px | Menus and popovers                       |
+| `rounded-3xl`  | 17.6 px | Dialogs                                  |
+| `rounded-4xl`  | 20.8 px | The composer, the reference's 20 px      |
 | `rounded-full` |         | The send button, counts and status pills |
 
 - Where OverBench's look differs from a shadcn component's default, the difference is a variant added to that component with `cva`, such as `InputGroup` `variant="composer"`, `Card` `variant="tool"` and a `Button` `size="compact"` bound to `--control-height`. Call sites never restyle a component with `className`; they use it for layout only.
 - The compact spacing steps are Tailwind's `1`, `1.5`, `2`, `2.5`, `3`, `4` and `7`.
-- Menu items are `rounded-lg` because they sit 6 px inside a `rounded-2xl` menu: 12.6 − 6 ≈ 6.6, so the item's corner follows the menu's. Segments sit inside their track the same way.
-- shadcn's `xs` button (24 px) is the small size; `default` (32 px) is kept for dialogs, empty states and the Welcome screen, where a larger target helps. When the comfortable density arrives, these sizes are bound to the comfortable tokens.
+- Menu items are `rounded-lg` because they sit 6 px inside a `rounded-2xl` menu: 14.4 − 6 ≈ 8, so the item's corner follows the menu's. Segments sit inside their track the same way.
+- shadcn's `xs` button (24 px) is the small size; `compact` and `default` are both 32 px, `compact` bound to `--control-height` with 14 px text.
 
 ## Typography
 
@@ -251,36 +255,38 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 | Latin letters, digits and punctuation  | Inter Variable, with its optical-size axis                                                                 | Bundled: `@fontsource-variable/inter`, 73 KB for the Latin file             |
 | Chinese                                | The platform's interface face: PingFang SC on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC on Linux | The system; a Chinese face runs to several megabytes, so none is bundled    |
 | Code, commands and other text set mono | JetBrains Mono Variable, the same on every platform                                                        | Bundled: `@fontsource-variable/jetbrains-mono` (OFL-1.1), chosen 2026-10-22 |
+| The New session heading                | Source Serif 4 Variable, with its optical-size axis                                                        | Bundled: `@fontsource-variable/source-serif-4` (OFL-1.1), chosen 2026-10-23 |
 
 - Inter comes first in the stack (`--font-sans`), so in a Chinese sentence the Latin words, digits and punctuation are Inter and only the Chinese characters fall through to the platform face. `system-ui` ends the stack.
 - Inter is the nearest open typeface to the reference's own sans at interface sizes: the same tall x-height, width and rhythm, where Geist read a size smaller and a shade lighter (chosen 2026-10-21 from a six-way render in the real build).
 - With `font-optical-sizing: auto`, Inter takes its text design at interface sizes and its display design at title sizes by itself; no second family is loaded for headings.
 - JetBrains Mono was chosen on 2026-10-22 over the platform's own monospace, Geist Mono and IBM Plex Mono, from a side-by-side render of code, diffs, branch names and look-alike characters in both themes. It keeps code, diffs and the terminal identical on macOS, Windows and Linux, where the platform faces differ in width and weight, and its tall x-height sits well beside Inter from 11.5 to 13 px. It is a renderer-only dependency, so it goes in `devDependencies`; only its Latin weight file is loaded, and it is added when the code is aligned with this scale.
 - `--font-mono` is JetBrains Mono Variable, then `ui-monospace`, SF Mono, Cascadia Code, Menlo and Consolas as fallbacks; Chinese in mono text falls through to the platform's Chinese face. The terminal and the Files editor read `--font-mono`, so they follow it. xterm.js measures its cells when a terminal opens, so the face is loaded (`document.fonts.load`) before the first terminal opens, or the cells take the fallback's width.
-- No other typeface: no serif, no display face, no icon font.
+- Source Serif 4 sets the New session heading and nothing else (`font-serif`), as the reference sets its start screen's greeting in a serif; chosen by the maintainer on 2026-10-23 ([#127](https://github.com/overbench/overbench/issues/127)). Its optical-size axis gives the display design at the greeting's size; the Latin file is 122 KB and loads only when the heading shows. Chinese falls through to the platform's sans face, as in the reference. No other typeface: no display face, no icon font.
 
 ### Type scale
 
 Every size in the interface is one of these steps. Line heights sit on a 4 px grid, except prose and the small step, whose ratios come from the [prose](#prose) spec.
 
-| Step      | Utility        | Size    | Line height | Weight | Tracking | Family |
-| --------- | -------------- | ------- | ----------- | ------ | -------- | ------ |
-| Display   | `text-display` | 28 px   | 36 px       | 600    | −2%      | Sans   |
-| Title     | `text-title`   | 22 px   | 28 px       | 600    | −1.5%    | Sans   |
-| Heading   | `text-heading` | 16 px   | 24 px       | 500    | 0        | Sans   |
-| Prose     | `text-prose`   | 15 px   | 1.7         | 400    | 0        | Sans   |
-| Interface | `text-ui`      | 14 px   | 20 px       | 400    | 0        | Sans   |
-| Small     | `text-small`   | 13 px   | 1.6         | 400    | 0        | Sans   |
-| Control   | `text-control` | 12.5 px | 16 px       | 500    | 0        | Sans   |
-| Caption   | `text-xs`      | 12 px   | 16 px       | 400    | 0        | Sans   |
-| Code      | `text-code`    | 12 px   | 18 px       | 400    | 0        | Mono   |
-| Meta      | `text-meta`    | 11.5 px | 16 px       | 400    | 0        | Mono   |
+| Step      | Utility         | Size    | Line height | Weight | Tracking | Family |
+| --------- | --------------- | ------- | ----------- | ------ | -------- | ------ |
+| Greeting  | `text-greeting` | 34 px   | 40 px       | 400    | −1%      | Serif  |
+| Display   | `text-display`  | 28 px   | 36 px       | 600    | −2%      | Sans   |
+| Title     | `text-title`    | 22 px   | 28 px       | 600    | −1.5%    | Sans   |
+| Heading   | `text-heading`  | 16 px   | 24 px       | 500    | 0        | Sans   |
+| Prose     | `text-prose`    | 15 px   | 1.7         | 400    | 0        | Sans   |
+| Interface | `text-ui`       | 14 px   | 20 px       | 400    | 0        | Sans   |
+| Small     | `text-small`    | 13 px   | 1.6         | 400    | 0        | Sans   |
+| Control   | `text-control`  | 14 px   | 20 px       | 500    | 0        | Sans   |
+| Caption   | `text-xs`       | 12 px   | 16 px       | 400    | 0        | Sans   |
+| Code      | `text-code`     | 12 px   | 18 px       | 400    | 0        | Mono   |
+| Meta      | `text-meta`     | 11.5 px | 16 px       | 400    | 0        | Mono   |
 
 - `--prose-size` is 15 px; **Text size** sets 14, 15 or 16 px. Prose keeps 1.7 instead of the reference's 1.43 because CJK text needs the extra leading.
 - `--ui-size` is the reference's interface size, 14 px. The root stays 16 px, so Tailwind's rem scale is unchanged.
-- Tracking is negative only on the two steps that use Inter's display design, and never positive: there are no uppercase or letter-spaced labels.
+- Tracking is negative only on the greeting and the two steps that use Inter's display design, and never positive: there are no uppercase or letter-spaced labels.
 - 11.5 px is the smallest text in the interface. A count in a pill, a badge or a chart label takes the meta step, never less.
-- `text-title`, `text-heading`, `text-prose`, `text-ui`, `text-small`, `text-control`, `text-xs`, `text-code` and `text-meta` are in `globals.css`, each with its line height and tracking; `text-display` is added with its first use.
+- `text-greeting`, `text-title`, `text-heading`, `text-prose`, `text-ui`, `text-small`, `text-control`, `text-xs`, `text-code` and `text-meta` are in `globals.css`, each with its line height and tracking; `text-display` is added with its first use.
 
 ### Weights
 
