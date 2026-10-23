@@ -1,8 +1,7 @@
-import { useCallback, useSyncExternalStore } from 'react'
 import { ChevronRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
-import { cachePhase, nextPhaseIn, type CacheExpiry, type CachePhase } from '@shared/prompt-cache'
+import type { CacheExpiry, CachePhase } from '@shared/prompt-cache'
 import type { AgentId, SessionUsage } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
@@ -36,6 +35,7 @@ import {
   useUsageStore,
   type ContextReport,
 } from '@renderer/stores/usage'
+import { useCachePhase } from './cache-phase'
 
 /** From this share of the context the button shows the percentage, in the usage level's color. */
 const CONTEXT_WARNING = 0.8
@@ -127,29 +127,6 @@ export function Ring({
         )}
       />
     </svg>
-  )
-}
-
-/**
- * The cache's phase, which re-renders the component only when it changes: once a minute before
- * the cache expires, and as it does.
- */
-function useCachePhase(expiresAt: number | null): CachePhase | null {
-  const subscribe = useCallback(
-    (changed: () => void) => {
-      if (expiresAt === null) return () => {}
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const arm = () => {
-        const wait = nextPhaseIn(expiresAt, Date.now())
-        if (wait !== null) timer = setTimeout(() => (changed(), arm()), wait)
-      }
-      arm()
-      return () => clearTimeout(timer)
-    },
-    [expiresAt],
-  )
-  return useSyncExternalStore(subscribe, () =>
-    expiresAt === null ? null : cachePhase(expiresAt, Date.now()),
   )
 }
 

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import type { AgentAccount } from './agent-host'
 import { cacheExpiry, cachePhase, nextPhaseIn } from './prompt-cache'
 import type { ConfigOption, SessionView } from './thread'
 
 const MINUTE = 60_000
+
+const chatGpt: AgentAccount = { kind: 'account', label: 'ChatGPT Plus', email: null }
 
 const model = (value: string): ConfigOption => ({
   id: 'model',
@@ -27,15 +30,22 @@ function session(
 
 describe('cacheExpiry', () => {
   it('is unknown before the first request', () => {
-    expect(cacheExpiry(session('claude-code', undefined))).toBeNull()
-    expect(cacheExpiry({ agentId: 'codex', config: [], usage: null })).toBeNull()
+    expect(cacheExpiry(session('claude-code', undefined), null)).toBeNull()
+    expect(cacheExpiry({ agentId: 'codex', config: [], usage: null }, chatGpt)).toBeNull()
   })
 
   it("adds the lifetime the agent's transcript gave to the last request", () => {
-    expect(cacheExpiry(session('claude-code', { lastRequestAt: 1_000, ttl: 60 * MINUTE }))).toEqual(
-      { lastRequestAt: 1_000, ttl: 60 * MINUTE, expiresAt: 1_000 + 60 * MINUTE, estimate: false },
-    )
-    expect(cacheExpiry(session('claude-code', { lastRequestAt: 1_000, ttl: 5 * MINUTE }))).toEqual({
+    expect(
+      cacheExpiry(session('claude-code', { lastRequestAt: 1_000, ttl: 60 * MINUTE }), null),
+    ).toEqual({
+      lastRequestAt: 1_000,
+      ttl: 60 * MINUTE,
+      expiresAt: 1_000 + 60 * MINUTE,
+      estimate: false,
+    })
+    expect(
+      cacheExpiry(session('claude-code', { lastRequestAt: 1_000, ttl: 5 * MINUTE }), null),
+    ).toEqual({
       lastRequestAt: 1_000,
       ttl: 5 * MINUTE,
       expiresAt: 1_000 + 5 * MINUTE,
@@ -44,7 +54,7 @@ describe('cacheExpiry', () => {
   })
 
   it('guesses nothing for Claude Code when its transcript gave no lifetime', () => {
-    expect(cacheExpiry(session('claude-code', { lastRequestAt: 1_000, ttl: null }))).toEqual({
+    expect(cacheExpiry(session('claude-code', { lastRequestAt: 1_000, ttl: null }), null)).toEqual({
       lastRequestAt: 1_000,
       ttl: null,
       expiresAt: null,
@@ -53,14 +63,25 @@ describe('cacheExpiry', () => {
   })
 
   it("estimates Codex's from OpenAI's shortest documented retention", () => {
-    expect(
-      cacheExpiry(session('codex', { lastRequestAt: 1_000, ttl: null }, [model('gpt-5.5')])),
-    ).toEqual({
-      lastRequestAt: 1_000,
-      ttl: 5 * MINUTE,
-      expiresAt: 1_000 + 5 * MINUTE,
+    const codex = session('codex', { lastRequestAt: 1_000, ttl: null }, [model('gpt-5.5')])
+    const estimate = { lastRequestAt: 1_000, ttl: 5 * MINUTE, expiresAt: 1_000 + 5 * MINUTE }
+    expect(cacheExpiry(codex, chatGpt)).toEqual({ ...estimate, estimate: true })
+    expect(cacheExpiry(codex, { kind: 'api_key', label: 'OpenAI API key', email: null })).toEqual({
+      ...estimate,
       estimate: true,
     })
+  })
+
+  it('estimates nothing for Codex on another provider, or before it names its account', () => {
+    const codex = session('codex', { lastRequestAt: 1_000, ttl: null }, [model('gpt-oss:20b')])
+    const none = { lastRequestAt: 1_000, ttl: null, expiresAt: null, estimate: false }
+    for (const account of [
+      { kind: 'gateway' as const, label: 'Custom model gateway', email: null },
+      { kind: 'external' as const, label: 'AWS Bedrock', email: null },
+      null,
+    ]) {
+      expect(cacheExpiry(codex, account)).toEqual(none)
+    }
   })
 
   it("estimates OpenCode's only for a provider that documents one", () => {
@@ -70,7 +91,7 @@ describe('cacheExpiry', () => {
       'anthropic/claude-sonnet-5',
       'Anthropic/claude-opus-5',
     ]) {
-      expect(cacheExpiry(session('opencode', at, [model(value)]))).toMatchObject({
+      expect(cacheExpiry(session('opencode', at, [model(value)]), null)).toMatchObject({
         ttl: 5 * MINUTE,
         expiresAt: 1_000 + 5 * MINUTE,
         estimate: true,
@@ -82,7 +103,7 @@ describe('cacheExpiry', () => {
       [model('gpt-5.5')],
       [],
     ]) {
-      expect(cacheExpiry(session('opencode', at, config))).toEqual({
+      expect(cacheExpiry(session('opencode', at, config), null)).toEqual({
         lastRequestAt: 1_000,
         ttl: null,
         expiresAt: null,
@@ -92,7 +113,9 @@ describe('cacheExpiry', () => {
   })
 
   it('estimates nothing for an agent without a known provider', () => {
-    expect(cacheExpiry(session('fake-agent', { lastRequestAt: 1_000, ttl: null }))).toMatchObject({
+    expect(
+      cacheExpiry(session('fake-agent', { lastRequestAt: 1_000, ttl: null }), null),
+    ).toMatchObject({
       expiresAt: null,
       estimate: false,
     })

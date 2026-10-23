@@ -179,6 +179,24 @@ describe('findClaudeTranscript', () => {
     expect(await findClaudeTranscript(projects, link, 's1')).toBe(path.join(folder, 's1.jsonl'))
   })
 
+  it('names the folder from the NFC form of the path, as Claude Code does on every platform', async () => {
+    const projects = path.join(dir, 'projects')
+    const project = path.join(dir, 'cafe\u0301')
+    await mkdir(project)
+    const real = await realpath(project)
+    // Both folders hold the session, so only the direct path decides which one is found.
+    const composed = path.join(projects, claudeProjectFolder(real.normalize('NFC')))
+    const decomposed = path.join(projects, claudeProjectFolder(real.normalize('NFD')))
+    expect(composed).not.toBe(decomposed)
+    for (const folder of [composed, decomposed]) {
+      await mkdir(folder, { recursive: true })
+      await writeFile(path.join(folder, 's3.jsonl'), oneHour + '\n')
+    }
+    expect(await findClaudeTranscript(projects, project, 's3')).toBe(
+      path.join(composed, 's3.jsonl'),
+    )
+  })
+
   it('looks in the other folders when the project folder has no such session', async () => {
     const projects = path.join(dir, 'projects')
     const elsewhere = path.join(projects, 'renamed-folder')

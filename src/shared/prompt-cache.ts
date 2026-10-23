@@ -1,6 +1,7 @@
 // When a session's prompt cache expires: from the lifetime the agent's own transcript gives,
 // else estimated from the shortest retention the agent's provider documents.
 
+import type { AgentAccount } from './agent-host'
 import type { AgentId, ConfigOption, SessionView } from './thread'
 
 const MINUTE = 60_000
@@ -29,9 +30,19 @@ export interface CacheExpiry {
 
 export type CachePhase = 'warm' | 'ending' | 'expired'
 
-/** The provider whose retention applies: OpenAI for Codex, the model's prefix for OpenCode. */
-function providerOf(agentId: AgentId, config: readonly ConfigOption[]): string | null {
-  if (agentId === 'codex') return 'openai'
+/**
+ * The provider whose retention applies. codex-acp reports a model provider other than OpenAI as a
+ * gateway account, and Bedrock as an external one, so Codex is OpenAI only on a ChatGPT account
+ * or an OpenAI API key. OpenCode names the provider in the model.
+ */
+function providerOf(
+  agentId: AgentId,
+  config: readonly ConfigOption[],
+  account: AgentAccount | null,
+): string | null {
+  if (agentId === 'codex') {
+    return account?.kind === 'account' || account?.kind === 'api_key' ? 'openai' : null
+  }
   if (agentId !== 'opencode') return null
   const model = config.find((option) => option.category === 'model')?.value
   if (typeof model !== 'string') return null
@@ -39,14 +50,16 @@ function providerOf(agentId: AgentId, config: readonly ConfigOption[]): string |
   return slash > 0 ? model.slice(0, slash).toLowerCase() : null
 }
 
+/** `account` is the one the session's agent last reported. */
 export function cacheExpiry(
   session: Pick<SessionView, 'agentId' | 'config' | 'usage'>,
+  account: AgentAccount | null,
 ): CacheExpiry | null {
   const cache = session.usage?.cache
   if (!cache) return null
   const { lastRequestAt, ttl } = cache
   if (ttl !== null) return { lastRequestAt, ttl, expiresAt: lastRequestAt + ttl, estimate: false }
-  const provider = providerOf(session.agentId, session.config)
+  const provider = providerOf(session.agentId, session.config, account)
   const documented =
     provider !== null && Object.hasOwn(DOCUMENTED_TTL, provider) ? DOCUMENTED_TTL[provider]! : null
   if (documented === null) return { lastRequestAt, ttl: null, expiresAt: null, estimate: false }

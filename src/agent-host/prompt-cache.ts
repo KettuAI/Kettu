@@ -1,6 +1,6 @@
 // How long a Claude Code session's prompt cache lasts, from the end of the session's own
 // transcript. Claude Code splits each request's cache writes by lifetime, five minutes or an
-// hour; only those fields of the main thread's API messages are read.
+// hour; only those fields of the main thread's API messages are used.
 
 import { open, readdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
@@ -130,22 +130,17 @@ async function isFile(file: string): Promise<boolean> {
 
 /**
  * A session's transcript: in its project's folder, named from the real path of its working
- * folder, or else in any folder, since a setting can rename the project's.
+ * folder in NFC form, or else in any folder, since a setting can rename the project's.
  */
 export async function findClaudeTranscript(
   root: string,
   cwd: string,
   sessionId: string,
-  platform: Platform = process.platform,
 ): Promise<string | null> {
   if (!SESSION_ID.test(sessionId)) return null
   const name = `${sessionId}.jsonl`
   const real = await realpath(cwd).catch(() => cwd)
-  const direct = path.join(
-    root,
-    claudeProjectFolder(platform === 'darwin' ? real.normalize('NFC') : real),
-    name,
-  )
+  const direct = path.join(root, claudeProjectFolder(real.normalize('NFC')), name)
   if (await isFile(direct)) return direct
   const folders = await readdir(root, { withFileTypes: true }).catch(() => [])
   const found = await Promise.all(
@@ -171,8 +166,7 @@ export function claudeCacheTtl(deps: {
     let file = found.get(acpSessionId)
     if (!file || !(await isFile(file))) {
       const root = projectsFolder(await deps.env(), deps.home, deps.platform)
-      file =
-        (await findClaudeTranscript(root, projectPath, acpSessionId, deps.platform)) ?? undefined
+      file = (await findClaudeTranscript(root, projectPath, acpSessionId)) ?? undefined
       if (!file) return null
       found.delete(acpSessionId)
       found.set(acpSessionId, file)

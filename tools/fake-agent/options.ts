@@ -17,6 +17,7 @@ export const SCENARIOS = [
   'subagent',
   'plan',
   'background',
+  'requests',
   'thinking',
   'svg',
   'usage',
@@ -65,6 +66,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   background: {
     description: 'Starts a command in the background, as Claude Code does with run_in_background',
   },
+  requests: {
+    description: "Reports a request's usage as claude-agent-acp does, then the result's",
+    hint: '--hold <ms before the turn ends> --then <ms until it answers by itself>',
+  },
   thinking: { description: 'A long thought, then an answer' },
   svg: { description: 'A reply with svg code blocks: a diagram, a badge and bare path data' },
   usage: {
@@ -87,6 +92,8 @@ export interface ScenarioOptions {
   entries: number // large-history: the entries its replay synthesizes
   plain: boolean // usage: Claude Code's own text, as the adapter forwards it when its report fails
   stepMs: number // plan: how long each step's tool call runs
+  holdMs: number // requests: how long the turn stays open after its request, not scaled
+  thenMs: number | null // requests: when it answers by itself after the turn, not scaled
 }
 
 export interface ScenarioChoice {
@@ -168,6 +175,8 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     entries: historyEntries(env, parseNumber(flagValue(args, 'entries'))),
     plain: flagValue(args, 'plain') !== undefined,
     stepMs: parseNumber(flagValue(args, 'step')) ?? 300,
+    holdMs: parseNumber(flagValue(args, 'hold')) ?? 0,
+    thenMs: parseNumber(flagValue(args, 'then')),
   }
   return { scenario, options, text }
 }

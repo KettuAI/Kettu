@@ -844,6 +844,70 @@ const background: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/** Waits without the delay scale, for time that has to pass; false once the turn is cancelled. */
+function waitUnscaled(ms: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve(false)
+    const done = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', done)
+      resolve(!signal.aborted)
+    }
+    const timer = setTimeout(done, ms)
+    signal.addEventListener('abort', done)
+  })
+}
+
+/**
+ * One of Claude Code's requests as claude-agent-acp reports it: `usage_update` as its message
+ * starts and again as it ends, the context grown each time.
+ */
+async function answerWithUsage(turn: Turn, text: string): Promise<void> {
+  const session = turn.session
+  const report = async (tokens: number) => {
+    session.usedTokens = Math.min(200_000, session.usedTokens + tokens)
+    await turn.send({ sessionUpdate: 'usage_update', used: session.usedTokens, size: 200_000 })
+  }
+  await report(900)
+  await stream(turn, text, { messageId: turn.messageId() })
+  await report(120)
+}
+
+/** The usage claude-agent-acp sends with each result: the last count again, with the cost. */
+async function resultUsage(turn: Turn): Promise<void> {
+  const used = turn.session.usedTokens
+  const amount = Math.round(used * 0.3) / 100_000
+  await turn.send({
+    sessionUpdate: 'usage_update',
+    used,
+    size: 200_000,
+    cost: { amount, currency: 'USD' },
+  })
+}
+
+/**
+ * A request and the result's usage, as claude-agent-acp reports them for Claude Code. `--hold`
+ * keeps the turn open after the request, as the adapter does while background subagents run;
+ * a cancel then still sends the result's usage first, as the adapter does. `--then` answers
+ * again by itself that long after the turn, as Claude Code does when a background task ends.
+ */
+const requests: Scenario = async (turn) => {
+  await answerWithUsage(turn, 'One request answers this, and its usage arrives as it streams.')
+  const held = await waitUnscaled(turn.options.holdMs, turn.signal)
+  await resultUsage(turn)
+  if (!held) return 'cancelled'
+  const thenMs = turn.options.thenMs
+  if (thenMs !== null) {
+    setTimeout(() => {
+      // The client may have gone by then.
+      void answerWithUsage(turn, 'The background task finished, so I looked at its output.')
+        .then(() => resultUsage(turn))
+        .catch(() => {})
+    }, thenMs)
+  }
+  return 'end_turn'
+}
+
 const thinking: Scenario = async (turn) => {
   if (
     !(await stream(turn, THOUGHT_TEXT, {
@@ -1073,6 +1137,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   subagent,
   plan,
   background,
+  requests,
   thinking,
   svg,
   usage,

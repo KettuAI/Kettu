@@ -152,7 +152,7 @@ export function ControlRow({
         idle={session.status === 'ready'}
         running={running}
         usage={session.usage}
-        cache={cacheExpiry(session)}
+        cache={cacheExpiry(session, agent?.account ?? null)}
         limits={agent?.limits ?? []}
         account={agent?.account ?? null}
         onCompact={onCompact}

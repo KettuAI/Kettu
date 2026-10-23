@@ -221,7 +221,7 @@ They are stored as `usage.fromComputer` and `usage.sidebar` in [settings](./pers
 
 The readers take token counts, model names, times, session ids and working folders, and nothing of what was said. Nothing leaves the computer. Reading another program's files waits for the user to turn the setting on (cc-switch reads them from its first launch without asking).
 
-One read does not wait for it: for a Claude Code session OverBench runs, the agent host reads the end of that session's own transcript for how long its prompt cache lasts, and only the cache fields of its API messages, so the usage popover can say when the cache expires ([prompt cache](./session-model.md#prompt-cache)). It reads no other session's transcript, and keeps nothing but the lifetime.
+One read does not wait for it: for a Claude Code session OverBench runs, the agent host reads the end of that session's own transcript, at most 1 MiB, and uses only the cache fields of its API messages, for how long its prompt cache lasts, so the usage popover can say when the cache expires ([prompt cache](./session-model.md#prompt-cache)). It reads no other session's transcript, and keeps nothing but the lifetime.
 
 ## Performance
 

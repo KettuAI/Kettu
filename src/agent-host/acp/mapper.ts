@@ -642,14 +642,15 @@ export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
 }
 
 /**
- * Whether a `usage_update` reports a request of the session's own thread. Claude Code also sends
- * one with each plan limit report, repeating its last count, and an agent may repeat the
- * context's size between turns, as on a resume, without asking the model.
+ * Whether a `usage_update` reports a request of the session's own thread: each request reports
+ * the context it read, so one that repeats the last count asked the model nothing. claude-agent-acp
+ * repeats it with each turn's result, which comes after the stopped work on a cancel and after the
+ * wait of a turn held open for background subagents, and with each plan limit report; an agent
+ * may also repeat the context's size between turns, as on a resume.
  */
 function isRequest(ctx: MapperContext, used: number, rateLimit: boolean): boolean {
   if (ctx.replaying || rateLimit) return false
-  const { status, usage } = ctx.thread.session
-  return status === 'running' || status === 'awaiting_permission' || used !== usage?.used
+  return used !== ctx.thread.session.usage?.used
 }
 
 const ACCOUNT_KINDS: ReadonlySet<string> = new Set([

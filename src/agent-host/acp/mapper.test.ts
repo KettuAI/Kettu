@@ -581,18 +581,34 @@ describe('session-level updates', () => {
 })
 
 describe('prompt cache', () => {
-  const usage = (used: number, meta?: Record<string, unknown>): SessionUpdate => ({
+  const usage = (
+    used: number,
+    extra: { meta?: Record<string, unknown>; cost?: number } = {},
+  ): SessionUpdate => ({
     sessionUpdate: 'usage_update',
     used,
     size: 200_000,
-    ...(meta ? { _meta: meta } : {}),
+    ...(extra.cost !== undefined ? { cost: { amount: extra.cost, currency: 'USD' } } : {}),
+    ...(extra.meta ? { _meta: extra.meta } : {}),
   })
   const known = { used: 900, size: 200_000, cost: null, tokens: null }
 
-  it("takes each request's usage during a turn as the time of the last request", () => {
-    const { thread, effects } = run([usage(900), usage(900), usage(1_500)])
+  it("takes each request's usage as the time of the last request", () => {
+    const { thread, effects } = run([usage(900), usage(1_200), usage(1_500)])
     expect(thread.session.usage?.cache).toEqual({ lastRequestAt: 1_200, ttl: null })
     expect(effects).toEqual([{ kind: 'request' }, { kind: 'request' }, { kind: 'request' }])
+  })
+
+  it("does not take the count a turn's result repeats as a request, also after a cancel", () => {
+    // claude-agent-acp sends the result's usage with its cost, whenever the turn ends.
+    const { thread, effects } = run([usage(900), usage(1_500), usage(1_500, { cost: 0.42 })])
+    expect(thread.session.usage).toEqual({
+      ...known,
+      used: 1_500,
+      cost: { amount: 0.42, currency: 'USD' },
+      cache: { lastRequestAt: 1_100, ttl: null },
+    })
+    expect(effects).toEqual([{ kind: 'request' }, { kind: 'request' }])
   })
 
   it('keeps the lifetime already known', () => {
@@ -617,7 +633,7 @@ describe('prompt cache', () => {
     const limit = {
       '_claude/rateLimit': { status: 'allowed', rateLimitType: 'five_hour', utilization: 0.2 },
     }
-    expect(run([usage(1_500, limit)]).thread.session.usage?.cache).toBeUndefined()
+    expect(run([usage(1_500, { meta: limit })]).thread.session.usage?.cache).toBeUndefined()
     const replay = run([usage(1_500)], { replaying: true })
     expect(replay.thread.session.usage).toEqual({ ...known, used: 1_500 })
     expect(replay.effects).toEqual([])
