@@ -100,6 +100,9 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Maximize, restore                                                 | `Maximize2`, `Minimize2` |                                   |
 | Fork                                                              | `GitFork`                |                                   |
 | Branch                                                            | `GitBranch`              |                                   |
+| Pull, commits to pull                                             | `ArrowDown`              |                                   |
+| Push, commits not pushed                                          | `ArrowUp`                |                                   |
+| Publish a branch or repository                                    | `CloudUpload`            |                                   |
 | Subagent; the agents, as in Settings › Agents                     | `Bot`                    |                                   |
 | Notifications, send a test notification                           | `Bell`                   |                                   |
 | Keyboard shortcuts                                                | `Keyboard`               |                                   |

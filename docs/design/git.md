@@ -4,7 +4,7 @@
 
 Almost every project an agent works on is a git repository, and what the agent leaves behind is commits, pushes and pull requests. OverBench shows that state wherever you look at a session: the branch and its sync state in the top bar, the full picture in a branch popover, commits and pushes as they happen in the thread, and pull requests as live chips. The interface is in [ui.md](./ui.md#git-in-the-top-bar).
 
-M0 only reads. Committing, pushing and opening pull requests stay with the agent and the [terminal](./terminal.md); OverBench offers no staging area or commit form. The one write it performs is **Fetch**, which updates remote-tracking refs and nothing else.
+OverBench reads the repository and performs a few writes that move work between the machine and its remote: **Fetch**, **Pull** (fast-forward only), **Push** (never forced), publishing a branch or a whole repository, and creating a pull request ([operations](#operations)). Staging, committing, rebasing and merging stay with the agent and the [terminal](./terminal.md); OverBench offers no staging area or commit form. The writes were added on 2026-10-22 for [problem 13](../milestones/m0-feedback.md#13-the-git-popover-only-displays-and-repeats-the-terminal-toggle), decided while the maintainer was away; to be reviewed.
 
 ## Where it runs
 
@@ -41,10 +41,25 @@ interface GitStatus {
   operation: { kind: 'merge' | 'rebase' | 'cherry-pick' | 'revert'; step?: [number, number] } | null
   commits: CommitSummary[] // on HEAD but not on the base, newest first, at most 20
   remote: { name: string; url: string; github: { owner: string; repo: string } | null } | null
+  defaultBranch: string | null // the base's branch name, such as "main", also when HEAD is on it
+  push: PushTarget | null // null when HEAD is not on a branch with a commit
   lastFetchedAt: number | null
   updatedAt: number
   stale: boolean // the last refresh failed; the values are the previous ones
 }
+
+type PushTarget =
+  | {
+      kind: 'remote'
+      remote: string
+      github: { owner: string; repo: string } | null
+      branch: string // the branch on the remote, without refs/heads/
+      setUpstream: boolean // the branch has no upstream yet, so the push sets one
+    }
+  | { kind: 'noRemote' } // the repository has no remote at all
+  | { kind: 'unknownRemote' } // several remotes and nothing says which one
+  | { kind: 'localUpstream' } // the upstream is a branch of this repository
+  | { kind: 'otherName'; upstream: string } // push.default refuses an upstream of another name
 
 interface CommitSummary {
   oid: string
@@ -70,7 +85,9 @@ One refresh runs these, and skips what a previous answer makes pointless. Indepe
 - **`upstream`** is `null` when the branch has none, and also when the configured upstream branch no longer exists (deleted on the remote and pruned); git reports no counts for it.
 - The **base** is the remote's default branch, from the `refs/remotes/<remote>/HEAD` symbolic ref. Without it, `<remote>/main`, then `main`, then `<remote>/master`, then `master`, whichever exists first; with none, `base` is `null`. One `git for-each-ref` call answers all of it, so nothing needs caching.
 - **`commits`** come from `<base>..HEAD`. With no base, or with `HEAD` on the base branch itself (working on `main`), there is no base comparison and the list holds the commits not pushed: `<upstream>..HEAD`, or the latest ones when there is no upstream either. `pushed` is true for a commit reachable from the upstream; the unpushed set is read with `--max-count=1000`.
-- The **remote** is the upstream's remote (`branch.<name>.remote`), else `origin`, read from the repository's config with one `git config --local --get-regexp` call that is cached until the config file changes. A `github.com` URL, in HTTPS, `ssh://` or `git@github.com:owner/repo` form, fills `github`; any other host leaves it `null`, and pull requests are not shown. `url.<base>.insteadOf` rewrites are not applied.
+- The **remote** is the upstream's remote (`branch.<name>.remote`), else `origin`, else the only remote, read with one `git config --get-regexp` call for the remotes' URLs, the branches' `remote`, `merge` and `pushRemote`, `remote.pushDefault` and `push.default`. It reads the user's own config too, since `push.default` usually lives there, and is cached until the repository's config file or the user's (`~/.gitconfig`, `$XDG_CONFIG_HOME/git/config`, or `GIT_CONFIG_GLOBAL`) changes. A `github.com` URL, in HTTPS, `ssh://` or `git@github.com:owner/repo` form, fills `github`; any other host leaves it `null`, and pull requests are not shown. `url.<base>.insteadOf` rewrites are not applied.
+- **`defaultBranch`** is the base's branch name without its remote (`origin/main` gives `main`), so the interface can tell when a push goes to the default branch.
+- **`push`** is where Push sends the branch, by git's own rules, so the interface asks about and shows the push that happens. The remote is `branch.<name>.pushRemote`, then `remote.pushDefault`, then the upstream's remote, then `origin` or the only remote. When the upstream is on that remote, the branch goes to the upstream's branch if `push.default` is `upstream`, or to its own name if the names match or `push.default` is `current`; otherwise git would refuse (`simple`, the default), and so does OverBench: `otherName`. A first push, or one to another remote than the upstream's, goes to the branch's own name, and only a first push sets the upstream. An upstream remote of `.` is a branch of this repository: `localUpstream`. With no remote at all, `noRemote`; with several and none named, `unknownRemote`. `git for-each-ref`'s `%(push)` atoms were tried first; they leave the remote branch empty in these cases, so the rules are applied here.
 - **`operation`**: `rebase-merge/` or `rebase-apply/` is a rebase (the step is `msgnum` of `end`, or `next` of `last`); `rebase-apply/` with `applying` is `git am`, which is not shown. Then `MERGE_HEAD`, `CHERRY_PICK_HEAD` and `REVERT_HEAD`. `lastFetchedAt` is the newest `FETCH_HEAD` modification time in the git dir and the common dir.
 
 ### When it refreshes
@@ -108,6 +125,7 @@ interface PullRequest {
     passed: number
     failed: number
     pending: number
+    runs: CheckRun[] // each check, failing first, then pending, then passed, by name
   }
   review: 'approved' | 'changes_requested' | 'review_required' | null
   mergeable: 'clean' | 'conflicting' | 'blocked' | 'unknown'
@@ -115,10 +133,84 @@ interface PullRequest {
 }
 ```
 
+- `runs` keeps each entry of `statusCheckRollup` as `{ name, outcome: 'passed' | 'failed' | 'pending', url, startedAt, completedAt }`: the name is a check run's `name` (with its `workflowName` in front when there is one, as GitHub shows it) or a status context's `context`, the URL its `detailsUrl` or `targetUrl` when it is an `https://` link, the times in milliseconds or null.
 - `checks` sums `statusCheckRollup`: any failure is `failing`, else any pending run is `pending`, else `passing`; no checks at all is `none`. Entries are either check runs (`status` and `conclusion`) or status contexts (`state`). A check run counts as passed with the conclusion `SUCCESS`, `NEUTRAL` or `SKIPPED`, as pending until its status is `COMPLETED`, and as failed with any other conclusion (`FAILURE`, `TIMED_OUT`, `CANCELLED`, `STARTUP_FAILURE`, `ACTION_REQUIRED`, `STALE`). A status context counts as passed with `SUCCESS`, failed with `FAILURE` or `ERROR`, and pending otherwise.
 - `state` is `draft` for an open draft; `MERGED` and `CLOSED` win over the draft flag. `review` maps `APPROVED`, `CHANGES_REQUESTED` and `REVIEW_REQUIRED`; an empty decision is `null`. `mergeable` maps `mergeStateStatus`: `CLEAN`, `HAS_HOOKS` and `UNSTABLE` (mergeable, with checks that are not required failing) are `clean`, `DIRTY` is `conflicting`, `BLOCKED`, `BEHIND` and `DRAFT` are `blocked`, anything else is `unknown`.
 - The details for a chip are cached for a minute per URL, and simultaneous requests share one lookup. The URL must match the GitHub pull request pattern before anything runs.
 - GitHub API rate limits are far above this schedule (one or two calls per shown repository per minute at most). A `gh` failure keeps the last value and marks it stale.
+
+## Details on demand
+
+The popover asks for what the status does not carry when it needs it, and asks again while it is open when the status changes. Paths are relative to the repository root, as git prints them; reading a file of the working tree joins the path to `repo.root` and refuses one that leaves it.
+
+| Request        | Command                                                                                                                                                      | Gives                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `git.commit`   | `git show -s --format=%H%x00%an%x00%ae%x00%at%x00%B <oid>`, with `git show -z -M --diff-merges=first-parent --name-status <oid>` and `--numstat` in parallel | The full message, author, date and changed files with their added and removed lines |
+| `git.changes`  | `git status --porcelain=v2 -z --untracked-files=all` and `git diff --numstat -z HEAD`                                                                        | The working tree's changed files, at most 500                                       |
+| `git.incoming` | `git log -n 20 --format=… HEAD..<upstream>` or `HEAD..<base>`                                                                                                | The commits to pull, or the base's commits since the branch started                 |
+| `git.fileDiff` | `git cat-file -s` then `git cat-file blob <rev>:<path>` for each side; the working tree's side read from disk                                                | The two texts of one file's change, for the diff view                               |
+
+- **`git.fileDiff`** compares `HEAD` with the working tree when `ref` is null, and a commit with its first parent otherwise; a file that is new on one side has `null` text there. A side over 1 MB, or with a NUL byte in its first 8 KB, is not sent: the result says `tooLarge` or `binary` instead.
+- Against the working tree, `HEAD`'s side comes from `git cat-file --filters`, as a checkout writes it, so `core.autocrlf` on Windows does not make every line differ. `GIT_LFS_SKIP_SMUDGE=1` keeps an LFS file a pointer there rather than downloading it; such a file shows as changed.
+- **The working tree's side** follows no link out of the repository: the folder holding the file is resolved with `realpath` and must lie inside the repository's real path, as for [project files](./agent-host.md#project-files); the file itself is read with `lstat` and opened with `O_NOFOLLOW`, and a symbolic link shows as its target's text, as git shows it.
+- A commit id must be 4 to 64 hexadecimal characters; a path is checked as for [project files](./agent-host.md#project-files).
+
+```ts
+interface ChangedFile {
+  path: string // relative to the repository root
+  oldPath: string | null // the path before a rename or copy
+  status:
+    | 'added'
+    | 'modified'
+    | 'deleted'
+    | 'renamed'
+    | 'copied'
+    | 'typechange'
+    | 'untracked'
+    | 'conflicted'
+  insertions: number | null // null for a binary file or an untracked one
+  deletions: number | null
+}
+
+interface CommitDetails {
+  oid: string
+  subject: string
+  body: string // the message after the subject line, trimmed
+  authorName: string
+  authorEmail: string
+  authoredAt: number
+  files: ChangedFile[]
+}
+
+interface FileDiff {
+  path: string
+  oldText: string | null
+  newText: string | null
+  binary: boolean
+  tooLarge: boolean
+}
+```
+
+## Operations
+
+The writes OverBench performs, each from the popover. They run in the project folder like every other command, with the same environment, so `GIT_TERMINAL_PROMPT=0` makes a push that needs a password fail at once with git's message rather than wait. One operation runs per project at a time; a second request while one runs is refused with `busy`. Every operation ends with a status refresh, and its result carries git's output, which the interface keeps for **Show log**.
+
+| Operation           | Command                                                                                                        | Timeout | When it is offered                                                   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------- |
+| Fetch               | `git fetch --prune`                                                                                            | 60 s    | A remote exists                                                      |
+| Pull                | `git pull --ff-only --no-rebase`                                                                               | 60 s    | The upstream is ahead and the branch is not                          |
+| Push                | `git push --porcelain <remote> refs/heads/<branch>:refs/heads/<target>`, from `push`                           | 60 s    | `push` is a remote; to the upstream, ahead and not behind            |
+| Publish branch      | The same with `--set-upstream`, to the branch's own name                                                       | 60 s    | `push` is a remote and the branch has no upstream                    |
+| Publish repository  | `gh repo create <name> --private` or `--public`, `--source <root> --remote origin --push`                      | 120 s   | The repository has no remote at all, `gh` ready                      |
+| Create pull request | `gh pr create --repo <owner/repo> --head <branch or owner:branch> --base <base> --title --body`, `--draft` too | 60 s    | The branch is pushed to GitHub, is not the base, has no pull request |
+
+- **Never forced, never merged by OverBench.** A branch that is both ahead and behind its upstream has diverged: pull and push are both refused, and the interface says to rebase or merge first, in the terminal or by asking the agent. `--ff-only` makes a pull that would need a merge fail instead.
+- **Where a push goes** is the status's `push`, and the request names it: `git.push` carries the remote and branch the interface showed, and the service refuses when a fresh refresh gives another, so neither a config change nor a checkout in between sends it elsewhere. The branch is pushed by its ref, never `HEAD`.
+- **The default branch.** The service performs a push to the default branch like any other; asking first, whenever `push.branch` is the default branch, is the interface's part ([branch popover](./ui.md#branch-popover)). Behind the upstream refuses a push only when the push goes to the upstream itself; a push to a fork goes ahead.
+- **Publishing a repository** runs in `repo.root`, names the repository after the folder unless the user changes it, and is refused when a remote already exists. The name may hold letters, digits, `.`, `-` and `_`, at most 100 characters.
+- **A pull request** is created on the status's remote's repository, named with `--repo`; its head is `push.branch`, as `owner:branch` when `push` is another repository, a fork. The title is required and at most 256 characters, the body at most 65,536. It runs under the project's lock like the other writes. On success the service polls gh at once, so the new pull request shows without waiting for the next poll; when `gh pr view` cannot find it yet, the result is what creating it told: number, title, branches and draft or open, with no checks.
+- **A timeout** ends the command and what it started, such as the `git push` under `gh repo create --push`: `taskkill /T /F` on Windows, and elsewhere its descendants, listed from `ps` while it still runs, since they share the agent host's process group.
+- **A failure** rejects with `git_error` and git's or gh's own output as the message (the last 64 KB), which the interface shows in its log. `gh` missing or signed out rejects with `git_error` before anything runs, saying which.
 
 ## Sessions and branches
 
@@ -150,14 +242,24 @@ When the repository changes while a session's tool call runs, the thread says so
 
 Requests and events on the agent host port ([host protocol](./host-protocol.md)):
 
-| Method or event   | Params or payload                          | Result        | Notes                                                         |
-| ----------------- | ------------------------------------------ | ------------- | ------------------------------------------------------------- |
-| `git.status`      | `{ projectPath }`                          | `GitStatus`   | Also starts keeping the project live for this port            |
-| `git.unwatch`     | `{ projectPath }`                          | none          |                                                               |
-| `git.fetch`       | `{ projectPath }`                          | `GitStatus`   | `git fetch --prune`; fails with `git_error` and git's message |
-| `git.pullRequest` | `{ url }`                                  | `PullRequest` | For chips; the URL must match the GitHub pull request pattern |
-| `git.changed`     | `GitStatus`                                |               | Event, to ports keeping that project live                     |
-| `git.pr`          | `{ projectPath, pr: PullRequest \| null }` |               | Event, the current branch's pull request                      |
+| Method or event         | Params or payload                           | Result            | Notes                                                         |
+| ----------------------- | ------------------------------------------- | ----------------- | ------------------------------------------------------------- |
+| `git.status`            | `{ projectPath }`                           | `GitStatus`       | Also starts keeping the project live for this port            |
+| `git.unwatch`           | `{ projectPath }`                           | none              |                                                               |
+| `git.fetch`             | `{ projectPath }`                           | `GitOperation`    | `git fetch --prune`; fails with `git_error` and git's message |
+| `git.pull`              | `{ projectPath }`                           | `GitOperation`    | [Operations](#operations)                                     |
+| `git.push`              | `{ projectPath, remote, branch }`           | `GitOperation`    | To the status's `push`, which must still be `remote`/`branch` |
+| `git.publish`           | `{ projectPath, name, visibility }`         | `GitOperation`    | `visibility` is `private` or `public`                         |
+| `git.createPullRequest` | `{ projectPath, title, body, base, draft }` | `PullRequest`     |                                                               |
+| `git.commit`            | `{ projectPath, oid }`                      | `CommitDetails`   | [Details on demand](#details-on-demand)                       |
+| `git.changes`           | `{ projectPath }`                           | `ChangedFile[]`   |                                                               |
+| `git.incoming`          | `{ projectPath, from }`                     | `CommitSummary[]` | `from` is `upstream` or `base`                                |
+| `git.fileDiff`          | `{ projectPath, path, oldPath, ref }`       | `FileDiff`        | `ref` null: the working tree against `HEAD`                   |
+| `git.pullRequest`       | `{ url }`                                   | `PullRequest`     | For chips; the URL must match the GitHub pull request pattern |
+| `git.changed`           | `GitStatus`                                 |                   | Event, to ports keeping that project live                     |
+| `git.pr`                | `{ projectPath, pr: PullRequest \| null }`  |                   | Event, the current branch's pull request                      |
+
+`GitOperation` is `{ status: GitStatus; log: string }`, the status after the refresh and git's output. Every request but `git.pullRequest` acts only on a registered project or a scratch folder.
 
 `SessionSummary` gains `branch: string | null` and `pr: { number: number; state: PullRequest['state']; url: string } | null` for the sidebar.
 

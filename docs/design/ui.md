@@ -426,7 +426,7 @@ The right side of the top bar shows the project's repository at a glance. Everyt
 ```
 
 - **Branch**: `GitBranch` and the branch name in monospace, middle-truncated at 200 px. A detached `HEAD` shows the short commit id; an unborn branch shows its name and "no commits".
-- **Sync**: `ArrowUp` with the number of commits not pushed, in `--foreground`; `ArrowDown` with the number behind the upstream, in `--muted-foreground`. In sync, nothing shows. A branch with no upstream shows `CloudUpload` and "Not published".
+- **Sync**: `ArrowUp` with the number of commits not pushed, in `--foreground`; `ArrowDown` with the number behind the upstream, in `--muted-foreground`. In sync, nothing shows. A branch with no upstream shows `CloudUpload` and "Not published". While a pull, push or publish runs, a `Spinner` takes the arrows' place.
 - **Crowded top bar**: the top bar is a container (`@container/top-bar`), so it adapts to its own width, not the window's. The session title keeps priority at every width: the git status shrinks a thousand times faster (`shrink-1000`), so the branch name truncates first, then the status gives way down to its branch icon, and only then does the title truncate, with its full text in the title button's tooltip. The branch name takes at most a quarter of the bar (`25cqw`), and 96 px below 520 px; "Not published" keeps only its icon below 720 px. The pane toggles always stay.
 - **Changes**: `FileDiff` with the number of changed files, staged, unstaged and untracked together. Conflicts replace it with `TriangleAlert` and their count in `--destructive`; a merge or rebase in progress adds "Rebasing 2/5" in `--attention`.
 - **Pull request**: the current branch's pull request as a chip, `#42` with its state icon and its checks icon. It opens the pull request in the browser; the rest of the cluster opens the branch popover.
@@ -434,37 +434,73 @@ The right side of the top bar shows the project's repository at a glance. Everyt
 
 ### Branch popover
 
+> Redesigned on 2026-10-22 for [problem 13](../milestones/m0-feedback.md#13-the-git-popover-only-displays-and-repeats-the-terminal-toggle) from direction A of the [design canvas](https://claude.ai/artifact/Fs2QaHsAFB26RnwPtfvQWp) (a timeline of rows), with Pull and Push always present and the pull request in full, as the maintainer asked after seeing it, and B's state-picked next action. Decided while the maintainer was away; to be reviewed.
+
 ```text
-┌────────────────────────────────────────────────┐
-│ ⎇ fix/flaky-login                            ⧉ │
-│ from main · tracking origin/fix/flaky-login    │
-│                                                │
-│ main ──●────────────────────●─ ⇣3              │
-│         ╲                                      │
-│          ●────●────●────◉────◌                 │
-│          pushed        ⇡2 not pushed   3 files │
-│                                                │
-│ 3f2a1c1  fix(auth): read the clock once   ⇡ 2m │
-│ 9be04d7  test(auth): freeze time in login ⇡ 8m │
-│ 51c8a20  refactor(auth): extract clock      1h │
-│                                                │
-│ 3 files changed  +24 −6 · 1 staged · 1 new     │
-├────────────────────────────────────────────────┤
-│ ⊙ Fix flaky login test                    #42  │
-│   Open · into main · ✓ 3 passed · ◌ 1 pending  │
-│   Review required              Open on GitHub  │
-├────────────────────────────────────────────────┤
-│ Fetched 12 min ago                     Fetch   │
-└────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ ⎇ fix/flaky-login                              ⧉ │  header
+│   from main · tracking origin/fix/flaky-login    │
+├──────────────────────────────────────────────────┤
+│ ○ origin  1 new commit to pull             ↓1  › │  incoming
+│ ◌ Uncommitted changes        3 files +24 −6    › │
+│ ○ 3f2a1c1 fix(auth): read the clock once     2m  │  ring: not pushed
+│ ○ 9be04d7 test(auth): freeze time in tests   8m  │
+│ ● 51c8a20 refactor(auth): extract  [origin]  1h  │  filled: pushed
+│ • main  3 new commits since branching     ↓3   › │  base
+├──────────────────────────────────────────────────┤
+│ ⊙ Fix flaky login test                    #42  ↗ │  pull request
+│   Open · fix/flaky-login → main · updated 5m     │
+│ ◌ 3 passed · 1 pending                         › │
+│ ◉ Review required                                │
+├──────────────────────────────────────────────────┤
+│ origin/fix/flaky-login · fetched 12 min ago    ⟳ │  sync
+│ [ ↓ Pull 1 ]               [ ↑ Push 2 ]          │
+│ Diverged: rebase or merge first, then push.      │
+└──────────────────────────────────────────────────┘
 ```
 
-- A shadcn `Popover`, 360 px wide.
-- **Header**: the branch name (monospace, wrapping rather than truncating) with a copy button, and under it the base and the upstream.
-- **Branch lane**: a small SVG drawing of the branch against its base. The top line is the base branch; dots after the fork point are the base's new commits, labelled with how far behind the branch is. The lower line is the branch: filled dots for pushed commits, `--foreground` rings for commits not pushed, and a dashed ring at the tip when the working tree has changes. A small tick marks the upstream's position. More than eight commits collapse into a gap with their count. The lane has a text alternative that says the same in words ("5 commits ahead of main, 2 not pushed, 3 behind").
-- **Commits**: the branch's newest commits, five at first and up to twenty with a scroll: id in monospace, subject, relative time, and `ArrowUp` on those not pushed.
-- **Working tree**: files changed with added and removed lines in `tabular-nums`, then the staged, untracked and conflicted counts.
-- **Pull request**: state icon and title, number, base, checks summary and review state, and **Open on GitHub**. A published branch without one offers **Create pull request**, which opens GitHub's compare page in the browser. Without `gh`, a muted line says "Install the GitHub CLI to see pull requests"; signed out, it shows `gh auth login` with a copy button.
-- **Footer**: when the remote was last fetched, and **Fetch** (a spinner while it runs, git's message inline if it fails). A terminal opens from the top bar's toggle only.
+- A shadcn `Popover`, 392 px wide (`w-98` on the spacing scale) and no taller than the room Base UI measures (`--available-height`), scrolling inside, every line a menu-family row: `--row-height`, `rounded-lg`, 8 px of padding inside a 6 px pad, one highlight that follows the pointer and the arrow keys alike. Its text is not selectable, as nothing in chrome is; the log and a commit's message in its card are.
+- **Header**: `GitBranch`, the branch name in monospace (wrapping rather than truncating) and **Copy branch name**; under it, "from main · tracking origin/x", or "not published". Detached: the short id and "Detached HEAD". Unborn: "No commits yet".
+- **Timeline**: the branch's history as one lane down the rows' leading column, newest first. The lane is drawn per row (a 16 × 28 px SVG); it replaces the branch lane drawing.
+  - **Incoming**, when the upstream has commits the branch does not: an `origin` ref pill, "1 new commit to pull" and `ArrowDown` with the count. It expands to those commits, muted, with their author.
+  - **Uncommitted changes**, with a dashed ring: the number of files and the added and removed lines. It expands to the files: the status letter (A added and U untracked in `--success-text`; M, R, C and T in `--attention-text`; D deleted and ! conflicted in `--destructive`, after the [repository state](./design-system.md#repository-state) colors), the name, its folder in `--muted-foreground`, and the line counts. A file opens its diff in the [Files](#files) pane.
+  - **Commits**: a `--foreground` ring for a commit not pushed, a `--muted-foreground` dot for one pushed; the short id (meta), the subject and the relative time. An `origin` ref pill marks the newest pushed commit. At most twenty, then "N more" opens the rest in place.
+    - **Hover** shows a card beside the popover after 500 ms; once one shows, moving to another commit moves it at once. The card holds the subject, the rest of the message (selectable), the author and the date, the number of files and lines, and the id with **Copy**.
+    - **Click**, `→` or `Enter` expands the commit to its changed files, each opening its diff at that commit.
+    - **Right-click** or `Shift+F10` opens a context menu: **Copy commit id**, **Copy message**, then **Open on GitHub** when the commit is pushed and the remote is GitHub.
+  - **Base**: the base branch as a ref pill and "N new commits since branching" with `ArrowDown`, expanding to those commits. On the default branch itself the row is left out.
+- **Pull request** (a GitHub remote only):
+  - With one: its state icon and title in medium weight, the number and `ExternalLink`; the row opens it in the browser. Under it the state word in its color (Open, Draft, Merged, Closed), head → base and when it was updated. Then **Checks**: an icon for the worst state and "3 passed · 1 pending · 1 failed", the words the pull request chip already uses, expanding to each check with its state, name and duration (or "Queued"), each opening its page. Then **Review**: Approved, Changes requested or Review required. Then why it cannot merge yet, when it cannot: conflicts, checks, a review. A merged or closed pull request keeps the title row and its state line only.
+  - Without one, on a branch pushed to a GitHub remote that is not the base itself: "No pull request" and **Create pull request…**, which opens the [create dialog](#create-pull-request). Unpublished: "Publish the branch to open a pull request", muted.
+  - `gh` not installed: "Install the GitHub CLI to see and create pull requests" with the link, and **Open on GitHub** for GitHub's own compare page. Signed out: "Sign in to the GitHub CLI" with `gh auth login` and **Copy**.
+- **Sync**, the popover's last part: the upstream and "fetched 12 min ago" (or "never fetched", or "No remote") with **Fetch** (`RefreshCw`) at the right; then **Pull** and **Push**, two equal `outline` buttons, always both there. The one that is the next step takes the `default` look:
+
+| State                                   | Pull                   | Push                   | Next step, said under the buttons when it needs words                 |
+| --------------------------------------- | ---------------------- | ---------------------- | --------------------------------------------------------------------- |
+| No remote at all                        | Disabled               | **Publish…**           | Publish creates a GitHub repository and pushes this branch            |
+| A remote, no upstream                   | Disabled               | **Publish branch**     | Publish the branch to push it and open a pull request                 |
+| Several remotes, none set for it        | By the upstream        | Disabled               | Push from the terminal, naming the remote                             |
+| The upstream is a local branch          | By the upstream        | Disabled               | A push has nowhere to go                                              |
+| The upstream has another name           | By the upstream        | Disabled               | git would not push it; push from the terminal, naming where it goes   |
+| Pushes to a fork (`pushRemote`)         | By the upstream        | **Push**, no count     |                                                                       |
+| Ahead only                              | Disabled               | **Push ↑N**, next step |                                                                       |
+| Behind only                             | **Pull ↓N**, next step | Disabled               |                                                                       |
+| Ahead and behind (diverged)             | Disabled               | Disabled               | "Diverged from origin/x: rebase or merge in the terminal, then push." |
+| In sync                                 | Disabled               | Disabled               | Up to date with origin/x                                              |
+| A merge, rebase or conflict in progress | Disabled               | Disabled               | "Finish the rebase first."                                            |
+
+- Where Push goes is the status's [push target](./git.md#repository-status), git's own rules for `pushRemote`, `remote.pushDefault` and `push.default`, never a guess from the branch's name; the request carries it, and the host refuses if it has changed since.
+- A disabled button keeps its label and says why in its tooltip; each enabled one's tooltip is the git command it runs, with the same refspec: `git push origin fix:fix`.
+- **While it runs** the button keeps its place, swaps its icon for a `Spinner` and its label for "Pulling…", "Pushing…" or "Publishing…" with the seconds so far; the other buttons wait. The top bar's sync arrows give way to the spinner too, so the popover can close.
+- **When it fails**, a `--destructive` line under the buttons says what failed in one sentence ("Push was rejected: the remote has new commits.") with **Show log**, which opens a dialog with git's whole output in mono, selectable, and **Copy**. The line stays until the next operation.
+- **Pushing to the default branch** asks first, whenever the push lands on it, whichever branch is checked out, in an `AlertDialog`: "Push to main?", "2 commits go straight to main, the default branch, without a pull request.", **Cancel** and **Push to main**.
+- **Publish…** opens a dialog: the repository name (the folder's name), **Private** or **Public** as a segmented control, the account it goes to, then **Cancel** and **Publish**. It needs `gh`; without it the dialog says how to install or sign in instead.
+- **Keyboard**: the popover focuses its first row when it opens. `↑` `↓` move through the rows, `→` or `Enter` expands or opens, `←` folds, `Mod+C` copies the highlighted commit's id (or the branch name), `Esc` closes the card, then the popover.
+- **Freshness**: opening the popover refreshes the status and the pull request; while open, the lists it expanded load again when the status changes.
+
+#### Create pull request
+
+A `Dialog` from **Create pull request…**, saying where it goes: "From fix/login into acme/app", or `me:fix/login` from a fork. **Title** (the newest commit's subject when the branch has one commit, else the branch name made readable), **Description** (the commits' subjects as a list), **Base** (the default branch), **Draft** as a switch, then **Cancel** and **Create**. Creating runs `gh pr create`; the dialog shows the spinner on its button, keeps the form on failure with gh's message under it, and closes on success, after which the pull request shows in the popover and the top bar.
 
 ### Pull requests
 
@@ -499,6 +535,7 @@ The Files pane, in the side panel, shows the project's files beside the one that
 - **Saving** sends the text with the version it was read at (`files.write`, [project files](./agent-host.md#project-files)). A failed save keeps the edits and shows the error in a bar under the header.
 - **Changes on disk**: without unsaved edits, a reload replaces the editor's text, keeping the cursor and scroll where they still fit. With unsaved edits it does not: if the file changed on disk, a bar under the header says "This file changed on disk." with **Reload**, which drops the edits, and **Keep mine**, after which the next save overwrites the disk. A save of a file that changed since it was read is refused (`conflict`) and shows the same bar, so an agent's edit is never overwritten unseen. A change made outside the app's notice, such as by an editor in another window, shows when the window gains focus or at the latest when you save.
 - **Freshness**: the list and the open file reload when the project's git status changes, which follows edits on disk, and when the window gains focus.
+- **Diffs**: a file opened from the [branch popover](#branch-popover) shows its change in the preview's place, read-only: the header holds its name, its folder and what it compares ("Uncommitted" or the commit's short id), with **Open file**, which shows the file itself, and **Close diff**, which returns to the file that was open, its unsaved edits untouched. The change shows in the thread's unified diff, highlighted off the main thread; a binary file or one over 1 MB shows an `Empty` saying so. Added 2026-10-22, decided while the maintainer was away; to be reviewed.
 - The tree and the preview split the pane with a resize handle; the tree defaults to 220 px.
 
 ## Terminal
