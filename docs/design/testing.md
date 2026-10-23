@@ -68,37 +68,37 @@ React components have no automated tests in M0; they are checked by running the 
 | `status`               | The `/status` report as codex-acp formats it, with the windows of `usage` and a credits line                                                                                                                                                                    |
 | `context`              | The `/context` report as Claude Code writes it, twice under two message ids as Claude Code sends it, for the session's tokens                                                                                                                                   |
 | `recall`               | Answers with the previous prompt in the session's history, so a test can tell where a fork cut it                                                                                                                                                               |
-| `attachments`          | Lists the images, files and links the prompt carried, one per line, so a test can tell how each attachment was sent                                                                                                                                             |
+| `attachments`          | Lists the images, files and links the prompt carried, one per line with their type, size and URI, so a test can tell how each attachment was sent                                                                                                               |
 
 Without a scenario it plays `basic-turn`. `/compact` streams a compaction with its summary. Replies stream with tens of milliseconds between chunks, like a real agent.
 
 Environment variables, read when the agent starts:
 
-| Variable                             | Effect                                                                                                 |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `FAKE_AGENT_SCENARIO`                | The scenario for prompts that name none; `slow-start` also delays `initialize`                         |
-| `FAKE_AGENT_RATE`, `_SIZE`, `_COUNT` | Defaults for `--rate`, `--size` (such as `200k`) and `--count`                                         |
-| `FAKE_AGENT_DELAY_SCALE`             | Multiplies every delay; `0` runs scenarios as fast as possible, which the tests use                    |
-| `FAKE_AGENT_SLOW_START_MS`           | Delays `initialize` by this long, printing progress                                                    |
-| `FAKE_AGENT_AUTH=required`           | Starts signed out                                                                                      |
-| `FAKE_AGENT_LEGACY_MODES=1`          | Reports modes through the legacy `modes` field instead of a mode config option                         |
-| `FAKE_AGENT_HISTORY_ENTRIES`         | The size of the synthesized `large-history` replay (default 1,000)                                     |
-| `FAKE_AGENT_LIST_PAGE`               | The `session/list` page size (default 50), to exercise `nextCursor`                                    |
-| `FAKE_AGENT_RESUME_UNKNOWN=fail`     | `session/resume` of a session it does not know fails, as Claude Code's does                            |
-| `FAKE_AGENT_NEW_SESSION_MS`          | Delays every `session/new` answer by this long, unscaled, for a slow hidden session                    |
-| `FAKE_AGENT_WITHOUT`                 | Session capabilities to leave out, comma-separated, such as `close`, or `image` for no image input     |
-| `FAKE_AGENT_IGNORE_EOF=1`            | Keeps running after stdin closes, for the forced-stop process test                                     |
-| `FAKE_AGENT_IGNORE_SIGTERM=1`        | Ignores `SIGTERM`, so a stop has to escalate to `SIGKILL`                                              |
-| `FAKE_AGENT_SPAWN_CHILD=1`           | Starts a long-running child process and prints its pid to stderr, for process-tree cleanup             |
-| `FAKE_AGENT_SPAWN_CHILD=detached`    | The same child in a process group of its own, as Claude Code runs a command                            |
-| `FAKE_AGENT_SPAWN_CHILD=nested`      | A child in the agent's group that starts a grandchild in a group of its own, as Claude Code's CLI does |
-| `FAKE_AGENT_LOGIN_MARKER`            | Where `main.ts --login` writes its sign-in marker (default: the temp directory)                        |
-| `FAKE_AGENT_NAME`                    | The name in `agentInfo` (default `fake-agent`), to play an adapter that cannot fork at a message       |
-| `FAKE_AGENT_FORK_CONFIG=reset`       | A fork starts at the defaults and lists no level until a model is set, as codex-acp's does             |
-| `FAKE_AGENT_FORK_CONFIG=locked`      | A fork starts at the defaults and refuses every setting, to test a value the agent will not take       |
-| `FAKE_AGENT_SET_CONFIG_MS`           | Delays each `session/set_config_option` and `session/set_mode` answer by this long, unscaled           |
-| `FAKE_AGENT_RESUME_CONFIG=reset`     | `session/resume` and `session/load` answer at the defaults, as codex-acp's do                          |
-| `FAKE_AGENT_RESUME_CONFIG=locked`    | The same, and the session then refuses every setting                                                   |
+| Variable                             | Effect                                                                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `FAKE_AGENT_SCENARIO`                | The scenario for prompts that name none; `slow-start` also delays `initialize`                                            |
+| `FAKE_AGENT_RATE`, `_SIZE`, `_COUNT` | Defaults for `--rate`, `--size` (such as `200k`) and `--count`                                                            |
+| `FAKE_AGENT_DELAY_SCALE`             | Multiplies every delay; `0` runs scenarios as fast as possible, which the tests use                                       |
+| `FAKE_AGENT_SLOW_START_MS`           | Delays `initialize` by this long, printing progress                                                                       |
+| `FAKE_AGENT_AUTH=required`           | Starts signed out                                                                                                         |
+| `FAKE_AGENT_LEGACY_MODES=1`          | Reports modes through the legacy `modes` field instead of a mode config option                                            |
+| `FAKE_AGENT_HISTORY_ENTRIES`         | The size of the synthesized `large-history` replay (default 1,000)                                                        |
+| `FAKE_AGENT_LIST_PAGE`               | The `session/list` page size (default 50), to exercise `nextCursor`                                                       |
+| `FAKE_AGENT_RESUME_UNKNOWN=fail`     | `session/resume` of a session it does not know fails, as Claude Code's does                                               |
+| `FAKE_AGENT_NEW_SESSION_MS`          | Delays every `session/new` answer by this long, unscaled, for a slow hidden session                                       |
+| `FAKE_AGENT_WITHOUT`                 | Capabilities to leave out, comma-separated: a session one such as `close`, or `image` or `embeddedContext` for the prompt |
+| `FAKE_AGENT_IGNORE_EOF=1`            | Keeps running after stdin closes, for the forced-stop process test                                                        |
+| `FAKE_AGENT_IGNORE_SIGTERM=1`        | Ignores `SIGTERM`, so a stop has to escalate to `SIGKILL`                                                                 |
+| `FAKE_AGENT_SPAWN_CHILD=1`           | Starts a long-running child process and prints its pid to stderr, for process-tree cleanup                                |
+| `FAKE_AGENT_SPAWN_CHILD=detached`    | The same child in a process group of its own, as Claude Code runs a command                                               |
+| `FAKE_AGENT_SPAWN_CHILD=nested`      | A child in the agent's group that starts a grandchild in a group of its own, as Claude Code's CLI does                    |
+| `FAKE_AGENT_LOGIN_MARKER`            | Where `main.ts --login` writes its sign-in marker (default: the temp directory)                                           |
+| `FAKE_AGENT_NAME`                    | The name in `agentInfo` (default `fake-agent`), to play an adapter that cannot fork at a message                          |
+| `FAKE_AGENT_FORK_CONFIG=reset`       | A fork starts at the defaults and lists no level until a model is set, as codex-acp's does                                |
+| `FAKE_AGENT_FORK_CONFIG=locked`      | A fork starts at the defaults and refuses every setting, to test a value the agent will not take                          |
+| `FAKE_AGENT_SET_CONFIG_MS`           | Delays each `session/set_config_option` and `session/set_mode` answer by this long, unscaled                              |
+| `FAKE_AGENT_RESUME_CONFIG=reset`     | `session/resume` and `session/load` answer at the defaults, as codex-acp's do                                             |
+| `FAKE_AGENT_RESUME_CONFIG=locked`    | The same, and the session then refuses every setting                                                                      |
 
 A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise, and a session resumed or loaded in the same process keeps its own unless `FAKE_AGENT_RESUME_CONFIG` does. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
 

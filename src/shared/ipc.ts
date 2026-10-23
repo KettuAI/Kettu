@@ -1,4 +1,5 @@
 import type { AgentsApi, DiagnosticsBundle } from './agent-host'
+import type { GrantedAttachment } from './attachments'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
 import type { Platform } from './platform'
@@ -59,6 +60,14 @@ export interface IpcInvokeContract {
   'dialog:open-project': { args: []; result: string | null }
   'dialog:choose-agent-binary': { args: [agentId: AgentId]; result: string | null }
   'dialog:choose-shell': { args: []; result: string | null }
+  // `defaultPath`: the folder the dialog opens in, the session's; an empty list when cancelled.
+  'dialog:add-attachments': {
+    args: [kind: 'files' | 'folder', defaultPath: string | null]
+    result: GrantedAttachment[]
+  }
+  // Paths the preload read off dropped or pasted files, granted as the dialog's are; in their
+  // order, null for one that is neither a file nor a folder.
+  'attachments:grant': { args: [paths: string[]]; result: (GrantedAttachment | null)[] }
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
@@ -159,6 +168,13 @@ export interface OverbenchApi {
     restart(): Promise<void>
     dismiss(): Promise<void>
     onChanged(listener: (status: UpdateStatus) => void): () => void
+  }
+  /** What the user chose to attach, granted to the agent host by main; never a path. */
+  attachments: {
+    /** Shows the system's file or folder dialog, opening in `defaultPath`. */
+    pick(kind: 'files' | 'folder', defaultPath: string | null): Promise<GrantedAttachment[]>
+    /** Dropped or pasted files, in their order; null for one with no file on disk behind it. */
+    fromFiles(files: File[]): Promise<(GrantedAttachment | null)[]>
   }
   agents: AgentsApi
   terminals: TerminalsApi

@@ -242,6 +242,14 @@ export function attachmentStub(
 const HASH = /^[0-9a-f]{64}$/
 const THUMB = /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/
 
+/** A thumbnail the renderer made: an image data URL, or null. */
+function thumbnail(o: Fields): string | null {
+  if (o.thumb === null) return null
+  const thumb = string(o, 'thumb', THUMB_CHARS)
+  if (!THUMB.test(thumb)) throw invalidParams('thumb must be an image data URL')
+  return thumb
+}
+
 /** Bytes a renderer hands over, not empty and not too large. */
 function bytes(o: Fields, key: string, max: number): ArrayBuffer {
   const value = o[key]
@@ -546,19 +554,31 @@ export function createValidators(platform: Platform): Validators {
     'attachments.add': (params) => {
       const o = fields(params)
       const source = fields(o.source)
-      const thumb = o.thumb === null ? null : string(o, 'thumb', THUMB_CHARS)
-      if (thumb !== null && !THUMB.test(thumb))
-        throw invalidParams('thumb must be an image data URL')
       return {
-        source: {
-          bytes: bytes(source, 'bytes', ATTACHMENT_BYTES),
-          mimeType: string(source, 'mimeType', ID_CHARS),
-          name: string(source, 'name', TEXT_CHARS),
-        },
-        thumb,
+        source:
+          source.grantId !== undefined
+            ? { grantId: string(source, 'grantId', ID_CHARS) }
+            : {
+                bytes: bytes(source, 'bytes', ATTACHMENT_BYTES),
+                mimeType: string(source, 'mimeType', ID_CHARS),
+                name: string(source, 'name', TEXT_CHARS),
+              },
+        thumb: thumbnail(o),
       }
     },
     'attachments.read': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
+    'attachments.update': (params) => {
+      const o = fields(params)
+      let scaled = null
+      if (o.scaled !== null) {
+        const image = fields(o.scaled)
+        scaled = {
+          bytes: bytes(image, 'bytes', ATTACHMENT_BYTES),
+          mimeType: string(image, 'mimeType', ID_CHARS),
+        }
+      }
+      return { id: string(o, 'id', ID_CHARS), thumb: thumbnail(o), scaled }
+    },
     'attachments.remove': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
     'files.list': project,
     'files.read': (params) => {

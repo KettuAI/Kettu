@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, type WebContents } from 'electron'
+import type { AttachmentGrant } from '@shared/attachments'
 import type { BusySession, HostToMain, MainToHost } from '@shared/host-control'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
@@ -7,6 +8,8 @@ import agentHostPath from '../agent-host/index?modulePath'
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
 import usageWorkerPath from '../agent-host/usage/worker?modulePath'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
+import { GrantRequests } from './grant-requests'
+import { t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
 
@@ -24,6 +27,8 @@ const MAX_LIST = 10_000
 const MAX_STRING = 8192
 /** How long an agent's tree gets between SIGTERM and SIGKILL after its host died. */
 const GRACE_MS = 2_000
+/** How long the host gets to take a grant before the attachment counts as not added. */
+const GRANT_TIMEOUT_MS = 5_000
 
 function isStringList(value: unknown): value is string[] {
   return (
@@ -49,6 +54,10 @@ export class AgentHost {
   private agentProcesses: ProcessId[] = []
   private readonly busyRequests = new Map<number, (sessions: BusySession[]) => void>()
   private nextBusyId = 1
+  private readonly grants = new GrantRequests(
+    GRANT_TIMEOUT_MS,
+    () => new Error(t('attachments.hostDown')),
+  )
 
   constructor(private readonly deps: AgentHostDeps) {
     this.host = new UtilityHost<MainToHost, HostToMain>({
@@ -128,6 +137,18 @@ export class AgentHost {
     })
   }
 
+  /**
+   * Hands the host the paths behind attachment grants and waits until it holds them, so the
+   * renderer, which hears of a grant only after this, never asks for one the host lacks.
+   */
+  grant(grants: AttachmentGrant[]): Promise<void> {
+    if (grants.length === 0) return Promise.resolve()
+    if (this.host.state !== 'ready') return Promise.reject(new Error(t('attachments.hostDown')))
+    return this.grants.request((requestId) =>
+      this.host.post({ type: 'host:grant', requestId, grants }),
+    )
+  }
+
   stop(): Promise<void> {
     return this.host.stop()
   }
@@ -162,6 +183,9 @@ export class AgentHost {
         resolve(Array.isArray(message.sessions) ? message.sessions.filter(isBusySession) : [])
         break
       }
+      case 'host:granted':
+        this.grants.answered(message.requestId)
+        break
       case 'host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
         if (message.level === 'error') log.error(text)
@@ -177,6 +201,7 @@ export class AgentHost {
   private exited(clean: boolean): void {
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
+    this.grants.failAll()
     this.deps.onBadge(0)
     const roots = this.agentProcesses
     this.agentProcesses = []

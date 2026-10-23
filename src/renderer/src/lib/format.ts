@@ -129,6 +129,30 @@ export function dirname(path: string): string {
   return i < 0 ? '' : path.slice(0, i + 1)
 }
 
+/** The local path of a `file://` URI, in the platform's form, without a trailing separator; else null. */
+export function fileUrlPath(uri: string, platform: string): string | null {
+  let url: URL
+  try {
+    url = new URL(uri)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'file:') return null
+  let path: string
+  try {
+    path = decodeURIComponent(url.pathname)
+  } catch {
+    return null
+  }
+  if (platform === 'win32') {
+    path = url.hostname
+      ? `\\\\${url.hostname}${path.replace(/\//g, '\\')}`
+      : path.replace(/^\/([a-z]:)/i, '$1').replace(/\//g, '\\')
+    return path.length > 3 ? path.replace(/\\+$/, '') : path
+  }
+  return path.length > 1 ? path.replace(/\/+$/, '') : path
+}
+
 /** A path relative to the project when it is inside it. */
 export function relativePath(path: string, projectPath: string): string {
   const root = projectPath.replace(/[\\/]+$/, '')

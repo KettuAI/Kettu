@@ -3,7 +3,7 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -78,6 +78,165 @@ describe('attachments', () => {
     const ref = user?.kind === 'user' ? user.content.find((c) => c.type === 'ref')?.ref : undefined
     return ref?.kind === 'attachment' ? ref.attachment : null
   }
+
+  /** A file or folder in the project, granted the way main grants a pick or a drop. */
+  async function granted(
+    t: TestHost,
+    name: string,
+    data: string | Uint8Array | null,
+  ): Promise<{ file: string; grantId: string }> {
+    const file = path.join(t.project, name)
+    if (data === null) await mkdir(file, { recursive: true })
+    else await writeFile(file, data)
+    const grantId = `grant-${name}`
+    t.host.grant(1, [{ grantId, path: file, kind: data === null ? 'folder' : 'file' }])
+    return { file, grantId }
+  }
+  const addGranted = (port: TestPort, grantId: string) =>
+    port.request('attachments.add', { source: { grantId }, thumb: null })
+  async function sendWith(port: TestPort, sessionId: string, ...ids: string[]) {
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: [
+        { type: 'text', text: '/attachments' },
+        ...ids.map((id) => ({
+          type: 'ref' as const,
+          ref: { kind: 'attachment' as const, attachment: { id } as Attachment },
+        })),
+      ],
+    })
+    await port.untilStatus(sessionId, 'ready')
+  }
+
+  it('sends a picked text file with its contents as they are when it goes', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const { file, grantId } = await granted(t, 'notes.md', '# Notes\n')
+    const added = await addGranted(port, grantId)
+    await writeFile(file, '# Notes, longer now\n')
+    await sendWith(port, sessionId, added.id)
+    const uri = pathToFileURL(file).href
+    expect(reply(port, sessionId)).toContain(`- resource ${uri} text/markdown, 20 characters`)
+    expect(sentAttachment(port, sessionId)).toEqual({
+      ...added,
+      uri,
+      sent: 'embedded',
+      size: 20,
+    })
+    // Nothing of a file is kept: the agent holds the text, and the file is on disk.
+    await expect(port.request('attachments.read', { id: added.id })).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('links a text file for an agent without embedded context', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'embeddedContext' } })
+    const sessionId = await newSession(t, port)
+    const { file, grantId } = await granted(t, 'notes.md', '# Notes\n')
+    const added = await addGranted(port, grantId)
+    await sendWith(port, sessionId, added.id)
+    const uri = pathToFileURL(file).href
+    expect(reply(port, sessionId)).toContain(
+      `- resource_link notes.md ${uri} (text/markdown, 8 bytes)`,
+    )
+    expect(sentAttachment(port, sessionId)).toMatchObject({ sent: 'linked', uri, size: 8 })
+  })
+
+  it('links large and binary files and folders, and embeds nothing of them', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const big = await granted(t, 'big.log', 'x'.repeat(256 * 1024 + 1))
+    const binary = await granted(t, 'data.bin', new Uint8Array([1, 0, 2]))
+    const folder = await granted(t, 'src', null)
+    const ids = [
+      (await addGranted(port, big.grantId)).id,
+      (await addGranted(port, binary.grantId)).id,
+      (await addGranted(port, folder.grantId)).id,
+    ]
+    await sendWith(port, sessionId, ...ids)
+    const text = reply(port, sessionId)
+    expect(text).toContain(
+      `- resource_link big.log ${pathToFileURL(big.file).href} (text/plain, 262145 bytes)`,
+    )
+    expect(text).toContain(
+      `- resource_link data.bin ${pathToFileURL(binary.file).href} (application/octet-stream, 3 bytes)`,
+    )
+    // A folder's link carries neither a type nor a size.
+    expect(text.split('\n')).toContain(`- resource_link src ${pathToFileURL(folder.file).href}/`)
+    expect(text).not.toContain('- resource ')
+    const user = port.entries(sessionId).findLast((entry) => entry.kind === 'user')
+    const sent =
+      user?.kind === 'user' ? user.content.flatMap((c) => (c.type === 'ref' ? [c.ref] : [])) : []
+    expect(
+      sent.map((ref) => ref.kind === 'attachment' && [ref.attachment.type, ref.attachment.sent]),
+    ).toEqual([
+      ['file', 'linked'],
+      ['file', 'linked'],
+      ['folder', 'linked'],
+    ])
+  })
+
+  it('sends a picked image with its original URI, or a link to the original', async () => {
+    const PNG_FILE = new Uint8Array([...PNG.slice(0, 8), 7, 7])
+    for (const without of ['', 'image']) {
+      const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: without } })
+      const sessionId = await newSession(t, port)
+      const { file, grantId } = await granted(t, 'shot.png', PNG_FILE)
+      const added = await addGranted(port, grantId)
+      await sendWith(port, sessionId, added.id)
+      const uri = pathToFileURL(file).href
+      expect(reply(port, sessionId)).toContain(
+        without
+          ? `- resource_link shot.png ${uri} (image/png, 10 bytes)`
+          : `- image image/png, 10 bytes from ${uri}`,
+      )
+      expect(sentAttachment(port, sessionId)).toMatchObject({
+        type: 'image',
+        sent: without ? 'linked' : 'image',
+        uri,
+        blob: sha(PNG_FILE),
+      })
+      // The thread keeps the image, so it still opens after the file is gone.
+      await rm(file)
+      const blob = await port.request('sessions.blob', { sessionId, hash: sha(PNG_FILE) })
+      expect(new Uint8Array(blob.bytes)).toEqual(PNG_FILE)
+      // A link goes to the original, so no copy is made.
+      expect(existsSync(path.join(t.dir, 'attachments', 'sent'))).toBe(false)
+      await current?.stop()
+      current = null
+    }
+  })
+
+  it('counts a text file again as it goes, since it may have grown', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const { file, grantId } = await granted(t, 'notes.md', 'x')
+    const added = await addGranted(port, grantId)
+    await writeFile(file, 'y'.repeat(200_000))
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: [
+        { type: 'text', text: 'z'.repeat(10 * 1024 * 1024 - 100_000) },
+        { type: 'ref', ref: { kind: 'attachment', attachment: { id: added.id } as Attachment } },
+      ],
+    })
+    await port.untilStatus(sessionId, 'ready')
+    const notice = port.entries(sessionId).find((entry) => entry.kind === 'notice')
+    expect(notice?.kind === 'notice' && notice.description).toMatch(/10 MB/)
+    expect(sentAttachment(port, sessionId)?.sent).toBeNull()
+  })
+
+  it('fails the turn when a picked file is gone by the time it is sent', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const { file, grantId } = await granted(t, 'notes.md', 'x')
+    const added = await addGranted(port, grantId)
+    await rm(file)
+    await sendWith(port, sessionId, added.id)
+    const notice = port.entries(sessionId).find((entry) => entry.kind === 'notice')
+    expect(notice?.kind === 'notice' && notice.description).toMatch(/notes\.md/)
+    expect(sentAttachment(port, sessionId)?.sent).toBeNull()
+  })
 
   it('sends a pasted image as an image and keeps it with the thread', async () => {
     const { t, port } = await setup()

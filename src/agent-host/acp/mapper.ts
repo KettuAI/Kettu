@@ -1033,7 +1033,10 @@ export function mapPermissionOptions(
   }))
 }
 
-export function promptBlocks(content: readonly UserContent[]): acp.ContentBlock[] {
+/** A content block of a prompt as it goes to the agent. */
+export type PromptBlock = acp.ContentBlock
+
+export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
   return content.map((item): acp.ContentBlock => {
     if (item.type === 'text') return { type: 'text', text: item.text }
     const ref = item.ref

@@ -406,6 +406,54 @@ describe('attachments', () => {
     )
   })
 
+  it('takes a grant by its id alone, never a path', () => {
+    const thumb = 'data:image/webp;base64,AAAA'
+    expect(
+      posix['attachments.add']({ source: { grantId: 'g1', path: '/etc/passwd' }, thumb: null }),
+    ).toEqual({ source: { grantId: 'g1' }, thumb: null })
+    expect(
+      posix['attachments.add']({
+        source: { grantId: 'g1', bytes: new Uint8Array([1]).buffer },
+        thumb,
+      }),
+    ).toEqual({ source: { grantId: 'g1' }, thumb })
+    rejects(() => posix['attachments.add']({ source: { grantId: 7 }, thumb: null }))
+    rejects(() => posix['attachments.add']({ source: { path: '/etc/passwd' }, thumb: null }))
+  })
+
+  it('checks what attachments.update is handed', () => {
+    const bytes = new Uint8Array([1, 2, 3]).buffer
+    const thumb = 'data:image/webp;base64,AAAA'
+    expect(posix['attachments.update']({ id: 'a1', thumb, scaled: null })).toEqual({
+      id: 'a1',
+      thumb,
+      scaled: null,
+    })
+    expect(
+      posix['attachments.update']({
+        id: 'a1',
+        thumb: null,
+        scaled: { bytes, mimeType: 'image/jpeg', path: '/x' },
+      }),
+    ).toEqual({ id: 'a1', thumb: null, scaled: { bytes, mimeType: 'image/jpeg' } })
+    rejects(() => posix['attachments.update']({ id: 'a1', thumb }))
+    rejects(() => posix['attachments.update']({ id: 'a1', thumb: 'x', scaled: null }))
+    rejects(() =>
+      posix['attachments.update']({
+        id: 'a1',
+        thumb,
+        scaled: { bytes: [1], mimeType: 'image/png' },
+      }),
+    )
+    rejects(() =>
+      posix['attachments.update']({
+        id: 'a1',
+        thumb,
+        scaled: { bytes: new ArrayBuffer(20 * 1024 * 1024 + 1), mimeType: 'image/png' },
+      }),
+    )
+  })
+
   it('reads a sent blob only by its SHA-256', () => {
     const hash = 'ab'.repeat(32)
     expect(posix['sessions.blob']({ sessionId: 's', hash })).toEqual({ sessionId: 's', hash })

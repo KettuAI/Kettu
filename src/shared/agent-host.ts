@@ -405,11 +405,24 @@ export interface HostContract {
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
   'git.tools': { params: void; result: GitTools }
   // A draft's attachment, kept until it is sent or removed; see attachments in the session model.
+  // `grantId`: a file or folder main granted for a pick or a drop.
   'attachments.add': {
-    params: { source: { bytes: ArrayBuffer; mimeType: string; name: string }; thumb: string | null }
+    params: {
+      source: { bytes: ArrayBuffer; mimeType: string; name: string } | { grantId: string }
+      thumb: string | null
+    }
     result: Attachment
   }
   'attachments.read': { params: { id: string }; result: AttachmentBytes }
+  // An image's thumbnail, and its bytes scaled to fit when it was too large: `scaled` null keeps them.
+  'attachments.update': {
+    params: {
+      id: string
+      thumb: string | null
+      scaled: { bytes: ArrayBuffer; mimeType: string } | null
+    }
+    result: Attachment
+  }
   'attachments.remove': { params: { id: string }; result: void }
   'files.list': { params: { projectPath: string }; result: FileList }
   'files.read': { params: { projectPath: string; path: string }; result: FileContent }
@@ -520,6 +533,7 @@ export const HOST_METHODS = [
   'git.tools',
   'attachments.add',
   'attachments.read',
+  'attachments.update',
   'attachments.remove',
   'files.list',
   'files.read',

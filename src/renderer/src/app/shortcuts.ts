@@ -61,6 +61,9 @@ export function useKeyboardShortcuts(): void {
         if (key === ',') return run(event, () => openSettings())
         if (key === 'b') return run(event, toggleSidebar)
       }
+      if (key === 'u' && !event.shiftKey && view.main.kind === 'session' && !view.settings.open) {
+        return run(event, () => emitAppEvent({ kind: 'add-attachments' }))
+      }
       if (key === 'l' && !event.shiftKey) {
         return run(event, () =>
           emitAppEvent({ kind: inTerminal ? 'ask-selection' : 'focus-composer' }),

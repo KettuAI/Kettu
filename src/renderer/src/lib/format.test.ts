@@ -3,6 +3,7 @@ import {
   countdown,
   duration,
   exactCount,
+  fileUrlPath,
   limitLabel,
   longAgo,
   percent,
@@ -73,5 +74,18 @@ describe('token counts', () => {
     expect(percent(0.9853)).toBe('98.5%')
     await i18n.changeLanguage('zh-CN')
     expect([41_000, 274_500_000].map(tokens)).toEqual(['4.1万', '2.7亿'])
+  })
+})
+
+describe('fileUrlPath', () => {
+  it('reads a file URI as a path in the platform form, without a trailing separator', () => {
+    expect(fileUrlPath('file:///Users/a/My%20notes.md', 'darwin')).toBe('/Users/a/My notes.md')
+    expect(fileUrlPath('file:///home/a/src/', 'linux')).toBe('/home/a/src')
+    expect(fileUrlPath('file:///', 'linux')).toBe('/')
+    expect(fileUrlPath('file:///C:/Users/a/src/', 'win32')).toBe('C:\\Users\\a\\src')
+    expect(fileUrlPath('file:///C:/', 'win32')).toBe('C:\\')
+    expect(fileUrlPath('file://server/share/a.txt', 'win32')).toBe('\\\\server\\share\\a.txt')
+    expect(fileUrlPath('https://example.com/a', 'darwin')).toBeNull()
+    expect(fileUrlPath('not a uri', 'darwin')).toBeNull()
   })
 })

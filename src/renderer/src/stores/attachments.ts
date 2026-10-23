@@ -6,6 +6,8 @@ export interface DraftAttachment {
   /** The composer's own key, stable while the host's record is still being made. */
   key: string
   name: string
+  /** What it is, known before the host's record is: from the paste, the grant or the name. */
+  kind: Attachment['type']
   status: 'adding' | 'ready' | 'failed'
   /** The host's record, once added. */
   attachment: Attachment | null

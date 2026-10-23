@@ -24,6 +24,8 @@
     "promptTooLarge": "The message is over 10 MB with its attachments. Remove some to send.",
     "attachmentGone": "{{name}} is no longer available. Remove it and add it again.",
     "attachmentMissing": "An attachment is no longer available. Remove it and add it again.",
+    "attachmentUnreadable": "OverBench can't read {{name}}.",
+    "attachmentDenied": "OverBench isn't allowed to read {{name}}.",
     "subagent": {
       "noPrompt": "A subagent session takes its instructions from its parent",
       "noFork": "A subagent session cannot be forked",
