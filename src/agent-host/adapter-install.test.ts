@@ -23,12 +23,17 @@ let npm: string
 let env: Env
 const tarballs = new Map<string, string>()
 
-async function packFixture(version: string, bin: unknown = { [PACKAGE]: 'index.js' }) {
-  const dir = path.join(tmp, `fixture-${version}`)
+async function packFixture(
+  version: string,
+  bin: unknown = { [PACKAGE]: 'index.js' },
+  extra: Record<string, unknown> = {},
+  name = PACKAGE,
+) {
+  const dir = path.join(tmp, `fixture-${name}-${version}`)
   await mkdir(dir, { recursive: true })
   await writeFile(
     path.join(dir, 'package.json'),
-    JSON.stringify({ name: PACKAGE, version, bin, files: ['index.js'] }),
+    JSON.stringify({ name, version, bin, files: ['index.js'], ...extra }),
   )
   await writeFile(path.join(dir, 'index.js'), `#!/usr/bin/env node\nconsole.log('${version}')\n`)
   const packed = await runNpm({
@@ -40,7 +45,10 @@ async function packFixture(version: string, bin: unknown = { [PACKAGE]: 'index.j
     timeoutMs: 60_000,
   })
   expect(packed.code).toBe(0)
-  tarballs.set(version, path.join(tmp, `${PACKAGE}-${version}.tgz`))
+  tarballs.set(
+    name === PACKAGE ? version : `${name}@${version}`,
+    path.join(tmp, `${name}-${version}.tgz`),
+  )
 }
 
 function options(root: string, version: string, extra: Partial<InstallOptions> = {}) {
@@ -71,6 +79,11 @@ beforeAll(async () => {
   env = { ...process.env, npm_config_offline: 'true', npm_config_cache: path.join(tmp, 'cache') }
   await packFixture('1.0.0')
   await packFixture('2.0.0')
+  // The adapters bring their CLI as optional platform packages, like this one.
+  await packFixture('1.0.0', { 'fake-cli': 'index.js' }, {}, 'fake-cli')
+  await packFixture('3.0.0', undefined, {
+    optionalDependencies: { 'fake-cli': `file:${tarballs.get('fake-cli@1.0.0')}` },
+  })
 }, 120_000)
 
 afterAll(async () => {
@@ -94,6 +107,17 @@ describe('installAdapter', () => {
     expect(installed.installedAt).toBe(record.installedAt)
     expect(await readInstall(installed.dir, PACKAGE)).toEqual(installed)
     expect(await readInstall(installed.dir, 'other-package')).toBeNull()
+  }, 60_000)
+
+  it('leaves out the CLI the adapter brings when asked, and records it', async () => {
+    const root = await mkdtemp(path.join(tmp, 'root-'))
+    const full = await installAdapter(options(root, '3.0.0'))
+    expect(await readdir(path.join(full.dir, 'node_modules'))).toContain('fake-cli')
+    expect(full.withoutCli).toBeUndefined()
+    const bare = await installAdapter(options(root, '3.0.0', { alongside: true, withoutCli: true }))
+    expect(await readdir(path.join(bare.dir, 'node_modules'))).not.toContain('fake-cli')
+    expect(bare.withoutCli).toBe(true)
+    expect(await readInstall(bare.dir, PACKAGE)).toEqual(bare)
   }, 60_000)
 
   it('leaves nothing behind and reports npm when the install fails', async () => {

@@ -19,6 +19,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type {
+  AgentCli,
+  AgentCliPreference,
   AgentConfigItem,
   AgentInstallMethod,
   AgentStatus,
@@ -75,6 +77,7 @@ import {
   Masked,
   PathText,
   RevealAction,
+  Segmented,
   SettingSelect,
 } from './controls'
 import { GroupLabel, RowFrame, RowShell, RowText } from './rows'
@@ -199,6 +202,7 @@ function currentLimits(limits: PlanLimit[], now: number): PlanLimit[] {
 /** The agent's own version: for a package agent the CLI its adapter runs, never the adapter's. */
 function useAgentVersion(status: AgentStatus): string | null {
   const details = useAgentsStore((s) => s.details[status.id])
+  if (status.cli?.runs === 'installed') return status.cli.installed?.version ?? null
   return details?.cliVersion ?? (status.package ? null : status.version)
 }
 
@@ -1001,9 +1005,16 @@ function InstallNotice({ status }: { status: AgentStatus }) {
       <AlertTitle>{t('agents.install.title', { name: status.name })}</AlertTitle>
       <AlertDescription className="flex flex-col gap-2.5">
         <span>
-          {status.package
-            ? t('agents.install.adapterBody', { package: status.package.name })
-            : t('agents.install.body')}
+          {status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
+            ? t('agents.install.adapterBodyCli', {
+                package: status.package.name,
+                command: status.cli.command,
+                version: status.cli.installed.version,
+                name: status.name,
+              })
+            : status.package
+              ? t('agents.install.adapterBody', { package: status.package.name })
+              : t('agents.install.body')}
         </span>
         {!status.package && (
           <span className="flex items-center gap-3">
@@ -1215,6 +1226,7 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
   const [act, , error] = useAction()
   return (
     <>
+      {status.cli && <CliRow status={status} cli={status.cli} />}
       {status.id === 'opencode' && (
         <RowFrame
           text={
@@ -1258,6 +1270,82 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
         </RowShell>
       )}
     </>
+  )
+}
+
+/** The CLI an adapter runs, why when it is not the installed one, and the choice between them. */
+function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
+  const { t } = useTranslation('settings')
+  const [apply, error] = useApply()
+  const version = useAgentVersion(status)
+  const installed = cli.installed
+  const { command } = cli
+  const problem = installed?.problem
+  const note = !installed
+    ? t('agents.cli.notFound', { command })
+    : installed.variable
+      ? t('agents.setBy', { env: installed.variable })
+      : problem?.kind === 'too-old'
+        ? t('agents.cli.tooOld', { command, version: installed.version, minimum: problem.minimum })
+        : problem?.kind === 'failed'
+          ? t('agents.cli.failed', { command, reason: problem.reason })
+          : problem?.kind === 'unsupported'
+            ? t('agents.cli.unsupported', { path: installed.path })
+            : problem?.kind === 'no-minimum'
+              ? t('agents.cli.noMinimum', { name: status.name })
+              : cli.runs === 'bundled'
+                ? t('agents.cli.found', {
+                    command,
+                    version: installed.version,
+                    path: installed.path,
+                  })
+                : null
+  return (
+    <RowFrame
+      text={
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-ui font-medium">{t('agents.program')}</span>
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            {cli.runs === 'installed' && installed ? (
+              <PathText path={installed.path} />
+            ) : (
+              <span className="text-xs text-muted-foreground">{t('agents.cli.bundledLine')}</span>
+            )}
+            {version && (
+              <span className="shrink-0 font-mono text-meta text-muted-foreground">{version}</span>
+            )}
+          </span>
+          {note && (
+            <span
+              className={cn(
+                'text-xs',
+                problem && cli.prefer === 'installed'
+                  ? 'text-attention-text'
+                  : 'text-muted-foreground',
+              )}
+              data-selectable=""
+            >
+              {note}
+            </span>
+          )}
+        </div>
+      }
+    >
+      <ControlError error={error} />
+      {installed && !installed.variable && (
+        <Segmented
+          label={t('agents.cli.choose', { name: status.name })}
+          value={cli.prefer}
+          options={[
+            { value: 'installed', label: t('agents.cli.installed') },
+            { value: 'bundled', label: t('agents.cli.bundled') },
+          ]}
+          onChange={(choice: AgentCliPreference) =>
+            apply({ agents: { [status.id]: { cli: choice } } })
+          }
+        />
+      )}
+    </RowFrame>
   )
 }
 

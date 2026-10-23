@@ -92,6 +92,29 @@ export interface AgentTask {
   error: string | null // why it failed, in the user's terms
 }
 
+/** Which CLI a Claude Code or Codex adapter runs: the user's own, or the copy it brings. */
+export interface AgentCli {
+  command: string // looked up on PATH, such as claude
+  prefer: AgentCliPreference // the setting: the installed program when it can run, or always the copy
+  runs: AgentCliPreference // what a start runs now
+  installed: InstalledCli | null // null: none found
+}
+
+export type AgentCliPreference = 'installed' | 'bundled'
+
+export interface InstalledCli {
+  path: string // as the adapter runs it, after resolving shims
+  version: string | null
+  variable: string | null // set by this variable in the environment, which then decides alone
+  problem: InstalledCliProblem | null // why the copy runs instead
+}
+
+export type InstalledCliProblem =
+  | { kind: 'unsupported' } // cannot run without a shell
+  | { kind: 'failed'; reason: string } // its version could not be read, or a start with it failed
+  | { kind: 'too-old'; minimum: string }
+  | { kind: 'no-minimum' } // the adapter names no version it needs
+
 /** A way OverBench can install a binary agent such as OpenCode, in the order it prefers them. */
 export interface AgentInstallMethod {
   id: 'brew' | 'npm' | 'script'
@@ -119,6 +142,7 @@ export interface AgentStatus {
   updateCheckedAt: number | null // when that check finished; always null for binary agents
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
+  cli: AgentCli | null // which CLI a Claude Code or Codex adapter runs; null for the others
   capabilities: {
     loadSession: boolean
     listSessions: boolean

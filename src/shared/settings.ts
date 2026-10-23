@@ -1,3 +1,4 @@
+import type { AgentCliPreference } from './agent-host'
 import type { LanguageSetting, Locale } from './locale'
 import type { AgentId } from './thread'
 
@@ -23,7 +24,7 @@ export interface SettingsFile {
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
   }
-  agents: Partial<Record<AgentId, { binaryPath?: string }>>
+  agents: Partial<Record<AgentId, { binaryPath?: string; cli?: AgentCliPreference }>>
   proxy: ProxySettings
   terminal: {
     shellPath?: string // picked in a native dialog; the platform default when absent
@@ -82,7 +83,7 @@ export interface SettingsPatch {
   general?: Partial<SettingsFile['general']>
   appearance?: Partial<SettingsFile['appearance']>
   notifications?: Partial<SettingsFile['notifications']>
-  agents?: Partial<Record<AgentId, { binaryPath: null }>>
+  agents?: Partial<Record<AgentId, { binaryPath?: null; cli?: AgentCliPreference }>>
   proxy?: ProxySettings
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>

@@ -2,6 +2,7 @@
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
+import type { AgentCliPreference } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
@@ -9,6 +10,17 @@ import type { BinaryInstalls } from './binary-install'
 import { codexLaunchEnv, type AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
 import { t, type HostKey } from './i18n'
+import {
+  CLAUDE_CLI,
+  CLI_FILES,
+  CODEX_CLI,
+  decideCli,
+  findInstalledCli,
+  type AdapterCli,
+  type CliDecision,
+  type CliFiles,
+  type CliProbe,
+} from './installed-cli'
 import { satisfiesNode, type NodeProbe } from './shell-env'
 import { compareVersions } from './versions'
 
@@ -38,6 +50,8 @@ export interface AgentDefinition {
   launchEnv?(lookup: AdapterLookup): Promise<Record<string, string>>
   /** How OverBench can install a binary agent for the user. */
   installs?: BinaryInstalls
+  /** The CLI a package agent's adapter runs, which the user may have installed themselves. */
+  cli?: AdapterCli
 }
 
 const NODE_INSTALL: AgentDefinition['install'] = {
@@ -53,6 +67,7 @@ export const CLAUDE_CODE: AgentDefinition = {
   requiresNode: '>=22',
   install: NODE_INSTALL,
   reportsAccount: true,
+  cli: CLAUDE_CLI,
 }
 
 export const CODEX: AgentDefinition = {
@@ -65,6 +80,7 @@ export const CODEX: AgentDefinition = {
   reportsAccount: true,
   progressNotes: true,
   launchEnv: codexLaunchEnv,
+  cli: CODEX_CLI,
 }
 
 export const OPENCODE: AgentDefinition = {
@@ -122,6 +138,8 @@ export interface LaunchSpec {
   /** True only for a resolved `.cmd` or `.bat` on Windows. */
   shell: boolean
   display: CommandWords
+  /** The user's own CLI this launch passes to the adapter; a start that fails with it runs the copy. */
+  cli?: string
 }
 
 /** Where a package agent's pinned version lives once installed, before detection says more. */
@@ -166,6 +184,11 @@ export interface AdapterPlan {
   npm: string | null
   /** The newest install below the pin, run when the pinned one cannot be installed. */
   fallback: { version: string; dir: string; spec: LaunchSpec } | null
+  /**
+   * Which CLI the adapter runs, for an agent with a `cli`. `needsCopy`: the install a start runs
+   * has no CLI of its own, which the copy needs, so the start installs it again with one.
+   */
+  cli: (CliDecision & { needsCopy: boolean }) | null
 }
 
 export type Detection =
@@ -213,6 +236,12 @@ export interface DetectContext {
   isFile?(file: string): Promise<boolean>
   realpath?(file: string): Promise<string>
   installed?(agentId: AgentId, packageName: string): Promise<InstalledAdapter[]>
+  /** Asks a CLI its version; without it, no installed CLI is looked for. */
+  probeCli?: CliProbe
+  cliFiles?: CliFiles
+  cliPreference?: AgentCliPreference
+  /** The installed CLI a start failed with, which is not used again until this is cleared. */
+  cliFailure?: { path: string; reason: string } | null
 }
 
 async function isFile(file: string): Promise<boolean> {
@@ -268,9 +297,43 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         ...(ctx.isFile ? { isFile: ctx.isFile } : {}),
         ...(ctx.realpath ? { realpath: ctx.realpath } : {}),
       }
+      const files = ctx.cliFiles ?? CLI_FILES
+      const found =
+        def.cli && ctx.probeCli
+          ? await findInstalledCli(def.cli, { ...ctx, files, probe: ctx.probeCli })
+          : null
+      const decision = def.cli
+        ? decideCli({
+            prefer: ctx.cliPreference ?? 'installed',
+            found: found?.installed ?? null,
+            minimum:
+              found && current
+                ? await def.cli.minimum(current.dir, launch.package, files)
+                : undefined,
+            failure: ctx.cliFailure ?? null,
+          })
+        : null
+      // A program the environment names reaches the adapter by itself.
+      const passed =
+        def.cli && decision?.runs === 'installed' && found && !found.installed.variable
+          ? found
+          : null
+      const specFor = async (install: InstalledAdapter): Promise<LaunchSpec | null> => {
+        if (passed && def.cli) {
+          const env = { ...passed.env, [def.cli.variable]: passed.installed.path }
+          return {
+            ...packageSpec(nodePath, install.entry, ctx.platform, env),
+            cli: passed.installed.path,
+          }
+        }
+        if (install.withoutCli && decision?.runs !== 'installed') return null
+        return installedSpec(def, nodePath, install, lookup)
+      }
+      const spec = current ? await specFor(current) : null
+      const fallbackSpec = other ? await specFor(other) : null
       return {
         state: 'available',
-        spec: current ? await installedSpec(def, nodePath, current, lookup) : null,
+        spec,
         adapter: {
           package: launch.package,
           version: launch.version,
@@ -279,13 +342,11 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           node: nodePath,
           nodeVersion,
           npm: npmPath,
-          fallback: other
-            ? {
-                version: other.version,
-                dir: other.dir,
-                spec: await installedSpec(def, nodePath, other, lookup),
-              }
-            : null,
+          fallback:
+            other && fallbackSpec
+              ? { version: other.version, dir: other.dir, spec: fallbackSpec }
+              : null,
+          cli: decision ? { ...decision, needsCopy: !!current && !spec } : null,
         },
       }
     }

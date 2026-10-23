@@ -103,7 +103,7 @@ interface SettingsFile {
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
   }
-  agents: Partial<Record<AgentId, { binaryPath?: string }>>
+  agents: Partial<Record<AgentId, { binaryPath?: string; cli?: 'installed' | 'bundled' }>> // cli: Claude Code's and Codex's own CLI when it can run, or always the adapter's copy
   proxy: { mode: 'environment' } | { mode: 'custom'; url: string; noProxy: string }
   terminal: {
     shellPath?: string // picked in a native dialog; the platform default when absent
@@ -119,7 +119,7 @@ interface SettingsFile {
 }
 ```
 
-- Defaults: the system's language, no default agent, Enter sends, restore and confirm on, the system theme, the default text size, 100% zoom, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the proxy from the environment, the default shell at 13 px, no background fetch, updates downloaded and installed automatically, accounts shown, the agents' logs not read, and today's tokens in the sidebar.
+- Defaults: the system's language, no default agent, Enter sends, restore and confirm on, the system theme, the default text size, 100% zoom, reduce motion following the system, every notification on except sound, the badge on, no binary overrides, the installed Claude Code and Codex where they can run, the proxy from the environment, the default shell at 13 px, no background fetch, updates downloaded and installed automatically, accounts shown, the agents' logs not read, and today's tokens in the sidebar.
 - The renderer reads them with `settings:get` and changes them with `settings:update`, which takes a partial object (`SettingsPatch`). Main validates it against the schema (`src/main/settings-schema.ts`), rejects unknown keys and values, writes the file and sends `settings:changed` to every window. A patch with any problem is rejected whole, with an error naming each bad key, and changes nothing. Sections merge key by key; `proxy` is replaced whole, and a custom proxy URL must be an `http`, `https` or `socks` URL with a host.
 - Executable paths, `agents.<id>.binaryPath` and `terminal.shellPath`, can only be cleared from the renderer, with `null`. Setting one goes through `dialog:choose-agent-binary` or `dialog:choose-shell`, which show a native file dialog in main and store the picked program.
 - The renderer applies appearance settings as attributes on `<html>` (`data-theme`, `data-text-size`, `data-reduce-motion`) and the zoom as `--zoom`, so tokens switch in CSS without re-rendering components. Main applies the zoom to every window ([Interface: zoom](./ui.md#zoom)).

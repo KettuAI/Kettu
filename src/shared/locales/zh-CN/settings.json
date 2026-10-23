@@ -247,6 +247,18 @@
     "programOnPath": "PATH 中的 opencode",
     "reset": "重置",
     "chooseBinary": "选择可执行文件…",
+    "cli": {
+      "choose": "运行哪个 {{name}}",
+      "installed": "已安装",
+      "bundled": "内置",
+      "bundledLine": "适配器内置",
+      "found": "已安装的 {{command}} {{version}}，位于 {{path}}",
+      "notFound": "PATH 中没有找到 {{command}}。",
+      "tooOld": "你的 {{command}} 是 {{version}}，适配器需要 {{minimum}} 或更高版本。",
+      "failed": "你的 {{command}} 无法启动：{{reason}}",
+      "unsupported": "{{path}} 需要通过 Shell 才能运行。",
+      "noMinimum": "适配器没有说明它需要哪个版本的 {{name}}。"
+    },
     "environment": {
       "pending": "正在读取你的环境…",
       "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}} ms。",
@@ -339,6 +351,7 @@
       "title": "安装 {{name}}",
       "body": "OverBench 在后台装好它，装完这一页会直接变成已安装的状态。",
       "adapterBody": "OverBench 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行。",
+      "adapterBodyCli": "OverBench 会把 {{package}} 装进自己的数据目录，用你的 Node.js 和你的 {{command}} {{version}} 运行，不会再下载一份 {{name}}。",
       "method": "安装方式",
       "methods": {
         "brew": "Homebrew",

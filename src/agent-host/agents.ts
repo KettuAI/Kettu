@@ -29,6 +29,7 @@ import {
 import {
   installAdapter,
   NPM_INSTALL_ARGS,
+  OMIT_CLI_ARG,
   programFailure,
   readInstallFiles,
   removeInstall,
@@ -57,6 +58,7 @@ import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
+import { CliVersions, type CliProbe } from './installed-cli'
 import { formatCommand } from './quote'
 import { limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
@@ -160,6 +162,8 @@ export interface AgentManagerDeps {
   fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
   /** Runs a binary agent's install route, and `npm prefix -g` after one. */
   runProgram?(options: ProgramOptions): Promise<ProgramRun>
+  /** Asks the user's own Claude Code or Codex its version. */
+  probeCli?: CliProbe
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
   processes(processes: AgentProcess[]): void
@@ -209,6 +213,8 @@ class Slot {
   installedCli: string | null = null
   /** A binary agent's install routes, found at detection. */
   installPlans: InstallPlan[] = []
+  /** The user's CLI a start failed with; the copy runs until the setting or environment changes. */
+  cliFailure: { path: string; reason: string } | null = null
   /** An install or update the user asked for, which runs beside the agent's own lifecycle. */
   task: Omit<AgentTask, 'progress'> | null = null
   taskRun: Promise<void> | null = null
@@ -274,6 +280,7 @@ export class AgentManager {
   private updateAbort: AbortController | null = null
   private updateTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
+  private readonly cliVersions: CliVersions
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
     agentExited: () => {},
@@ -282,6 +289,7 @@ export class AgentManager {
 
   constructor(private readonly deps: AgentManagerDeps) {
     this.timings = { ...AGENT_TIMINGS, ...deps.timings }
+    this.cliVersions = new CliVersions({ platform: deps.platform })
     for (const def of deps.catalog) this.slots.set(def.id, new Slot(def))
   }
 
@@ -312,7 +320,7 @@ export class AgentManager {
 
   private async detect(slot: Slot): Promise<void> {
     const platform = this.deps.platform
-    const override = this.deps.settings().agents[slot.def.id]?.binaryPath ?? null
+    const agentSettings = this.deps.settings().agents[slot.def.id]
     const env = this.deps.env.agentEnv()
     const node = this.deps.env.nodeProbe()
     const isExecutable = (file: string): Promise<boolean> => isExecutableFile(file, platform)
@@ -320,10 +328,14 @@ export class AgentManager {
       platform,
       env,
       electronPath: this.deps.electronPath,
-      binaryOverride: override,
+      binaryOverride: agentSettings?.binaryPath ?? null,
       node,
       adaptersDir: this.deps.adaptersDir,
       isExecutable,
+      probeCli:
+        this.deps.probeCli ?? ((program, cliEnv) => this.cliVersions.probe(program, cliEnv)),
+      cliPreference: agentSettings?.cli ?? 'installed',
+      cliFailure: slot.cliFailure,
     })
     const adapter = detection.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
@@ -361,17 +373,26 @@ export class AgentManager {
 
   async reloadEnvironment(): Promise<AgentStatus[]> {
     await this.deps.env.reload()
+    this.cliVersions.clear()
+    for (const slot of this.slots.values()) slot.cliFailure = null
     await Promise.all([...this.slots.values()].map((slot) => this.detect(slot)))
     return this.statuses()
   }
 
-  /** Binary overrides changed: detect the affected agents again. */
+  /** Binary overrides or the choice of CLI changed: detect the affected agents again. */
   async settingsChanged(previous: HostSettings, next: HostSettings): Promise<void> {
+    const before = (slot: Slot) => previous.agents[slot.def.id]
+    const after = (slot: Slot) => next.agents[slot.def.id]
+    // Choosing again tries the installed CLI again, after a start with it failed.
+    for (const slot of this.slots.values()) {
+      if (before(slot)?.cli !== after(slot)?.cli) slot.cliFailure = null
+    }
     // Detecting again rewrites each idle agent's guidance in the new language.
     const changed = [...this.slots.values()].filter(
       (slot) =>
         previous.locale !== next.locale ||
-        previous.agents[slot.def.id]?.binaryPath !== next.agents[slot.def.id]?.binaryPath,
+        before(slot)?.binaryPath !== after(slot)?.binaryPath ||
+        before(slot)?.cli !== after(slot)?.cli,
     )
     await Promise.all(changed.map((slot) => this.detect(slot)))
   }
@@ -413,9 +434,25 @@ export class AgentManager {
     return this.start(slot, detection.spec)
   }
 
-  /** Launches `spec`, or installs the pinned adapter first when it is null. */
+  /**
+   * Launches `spec`, or installs the pinned adapter first when it is null. A launch with the
+   * user's own CLI that fails is tried once more with the adapter's copy.
+   */
   private async start(slot: Slot, spec: LaunchSpec | null): Promise<AgentRuntime> {
-    const run = (async () => this.launch(slot, spec ?? (await this.installPackage(slot))))()
+    const run = (async () => {
+      const first = spec ?? (await this.installPackage(slot))
+      try {
+        return await this.launch(slot, first)
+      } catch (error) {
+        if (!first.cli) throw error
+        const reason = (error as Error).message
+        slot.cliFailure = { path: first.cli, reason }
+        this.deps.diagnostics.event(slot.def.id, 'cli failed', `${first.cli}: ${reason}`)
+        await this.detect(slot)
+        const copy = slot.detection?.state === 'available' ? slot.detection.spec : null
+        return this.launch(slot, copy ?? (await this.installPackage(slot)))
+      }
+    })()
     slot.starting = run
     try {
       const runtime = await run
@@ -581,7 +618,10 @@ export class AgentManager {
     }
     const { diagnostics, platform } = this.deps
     const agentId = slot.def.id
-    const version = request.version ?? adapter.version
+    // The copy is needed where the install a start runs has none: that version again, with it.
+    const copy = adapter.cli?.needsCopy ? adapter.current : null
+    const version = request.version ?? copy?.version ?? adapter.version
+    const withoutCli = !copy && adapter.cli?.runs === 'installed'
     slot.state = 'installing'
     slot.detail = null
     slot.progress.clear()
@@ -604,12 +644,18 @@ export class AgentManager {
         timeoutMs: this.timings.installMs,
         signal: abort.signal,
         onOutput: (text) => this.onProgress(slot, text),
-        ...(request.alongside ? { alongside: true } : {}),
+        ...(request.alongside || copy ? { alongside: true } : {}),
+        ...(withoutCli ? { withoutCli: true } : {}),
       })
       diagnostics.event(agentId, 'installed', `${version} in ${Date.now() - started} ms`)
       slot.adapterNote = null
       await this.detect(slot)
-      const spec = slot.detection?.state === 'available' ? slot.detection.spec : null
+      const detected = slot.detection?.state === 'available' ? slot.detection : null
+      // The user's CLI turned out older than the adapter just installed needs: the copy comes too.
+      if (withoutCli && !detected?.spec && detected?.adapter?.cli?.needsCopy) {
+        return this.installPackage(slot, request.fallback === false ? { fallback: false } : {})
+      }
+      const spec = detected?.spec ?? null
       if (!spec) throw new Error(`${adapter.package} ${version} is incomplete on disk.`)
       return spec
     } catch (error) {
@@ -739,10 +785,17 @@ export class AgentManager {
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
     if (!adapter || !running) return null
-    const offered = decideUpdate(slot.latest, {
+    let offered = decideUpdate(slot.latest, {
       version: running.version,
       cliVersion: slot.installedCli,
     })
+    // While the user's own CLI runs, only a newer adapter is an update; its CLI would not run.
+    if (offered && adapter.cli?.runs === 'installed') {
+      offered =
+        compareVersions(offered.adapterVersion, running.version) > 0
+          ? { adapterVersion: offered.adapterVersion, cliVersion: null }
+          : null
+    }
     if (adapter.current) return offered
     return offered && compareVersions(offered.adapterVersion, adapter.version) >= 0
       ? offered
@@ -889,7 +942,8 @@ export class AgentManager {
     }
     const { platform, diagnostics } = this.deps
     const version = update.adapterVersion
-    const [, ...flags] = NPM_INSTALL_ARGS
+    const withoutCli = adapter.cli?.runs === 'installed'
+    const [, ...flags] = withoutCli ? [...NPM_INSTALL_ARGS, OMIT_CLI_ARG] : NPM_INSTALL_ARGS
     const command = formatCommand(
       { command: npm, args: ['install', `${launch.package}@${version}`, ...flags] },
       platform,
@@ -914,6 +968,7 @@ export class AgentManager {
           signal,
           onOutput,
           alongside: true,
+          ...(withoutCli ? { withoutCli: true } : {}),
         })
         diagnostics.event(agentId, 'updated', `${installed.version} in ${Date.now() - started} ms`)
         await this.detect(slot)
@@ -1531,6 +1586,15 @@ export class AgentManager {
         command,
         available,
       })),
+      cli:
+        adapter?.cli && slot.def.cli
+          ? {
+              command: slot.def.cli.command,
+              prefer: this.deps.settings().agents[slot.def.id]?.cli ?? 'installed',
+              runs: adapter.cli.runs,
+              installed: adapter.cli.installed,
+            }
+          : null,
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
         listSessions: capabilities?.listSessions ?? false,
