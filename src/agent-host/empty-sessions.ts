@@ -19,9 +19,10 @@ export function mayBeEmpty(record: SessionRecord): boolean {
 }
 
 /**
- * A stored thread whose latest page is the whole of it and holds only OverBench's own notices:
- * no message of the user's and nothing from the agent.
+ * A stored thread with no entries at all: the latest page of one with any holds at least one.
+ * Even a notice keeps the session, since the agent sends notices of its own and one from
+ * `session/resume` says the agent holds history OverBench did not store.
  */
 export function holdsNothing(page: ThreadPage): boolean {
-  return page.older === null && page.entries.every((entry) => entry.kind === 'notice')
+  return page.entries.length === 0
 }

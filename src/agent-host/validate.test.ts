@@ -53,6 +53,18 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.snapshot']({ sessionId: 's', from: '3' }))
   })
 
+  it('takes the session ids the removal of empty sessions keeps', () => {
+    expect(posix['sessions.removeEmpty']({ keep: [] })).toEqual({ keep: [] })
+    expect(posix['sessions.removeEmpty']({ keep: ['a', 'b'], other: 1 })).toEqual({
+      keep: ['a', 'b'],
+    })
+    rejects(() => posix['sessions.removeEmpty']({}))
+    rejects(() => posix['sessions.removeEmpty']({ keep: 'a' }))
+    rejects(() => posix['sessions.removeEmpty']({ keep: [''] }))
+    rejects(() => posix['sessions.removeEmpty']({ keep: [3] }))
+    rejects(() => posix['sessions.removeEmpty']({ keep: ['x'.repeat(257)] }))
+  })
+
   it('forks at an entry only when one is named', () => {
     expect(posix['sessions.fork']({ sessionId: 's' })).toEqual({ sessionId: 's' })
     expect(posix['sessions.fork']({ sessionId: 's', entryId: 'm:msg_1' })).toEqual({

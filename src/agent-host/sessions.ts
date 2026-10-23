@@ -294,7 +294,7 @@ export class SessionManager {
   private stopped = false
   /** The sessions in the index at launch: the only ones `removeEmpty` may remove. */
   private readonly atLaunch = new Set<string>()
-  /** When `removeEmpty` last went through the whole index, kept in it; null before that. */
+  /** When `removeEmpty` ran, kept in the index; null before that. */
   private emptySessionsRemovedAt: number | null = null
   private emptyRemoval: Promise<void> | null = null
 
@@ -2749,31 +2749,31 @@ export class SessionManager {
   }
 
   /**
-   * `removeEmpty` at the first launch after New sub-session began to create sessions with their
-   * first message, for the sessions it left with none; never again once the index records it.
+   * The one-time removal of the sessions New sub-session left with no message, before it opened
+   * New session: `removeEmpty`, unless the index records that it ran. The renderer asks for it
+   * once it has connected, with `keep`, the sessions that hold an unsent draft.
    */
-  removeEmptyOnce(): Promise<void> {
+  removeEmptyOnce(keep: readonly string[] = []): Promise<void> {
     // The run records itself before it removes the threads, so a caller meanwhile waits for it.
     if (!this.emptyRemoval && this.emptySessionsRemovedAt === null && !this.deps.file.readOnly) {
-      this.emptyRemoval = this.removeEmpty()
+      this.emptyRemoval = this.removeEmpty(new Set(keep))
     }
     return this.emptyRemoval ?? Promise.resolve()
   }
 
   /**
    * Removes from the index, with their stored threads, the sessions that were in it at launch and
-   * hold no message (`mayBeEmpty`, with a stored thread that `holdsNothing`), unless one is live,
-   * shown or watched, or has a sub-session that stays. The agents' own histories are left alone:
-   * the index does not say which sessions OverBench created and which it imported. It records
-   * that it ran unless a thread could not be read, so the next launch tries again.
+   * hold no message (`mayBeEmpty`, with a stored thread that `holdsNothing`), unless one is in
+   * `keep`, in use, or has a sub-session that stays. One whose thread cannot be read stays. The
+   * agents' own histories are left alone: the index does not say which sessions OverBench
+   * created and which it imported.
    */
-  async removeEmpty(): Promise<void> {
+  private async removeEmpty(keep: ReadonlySet<string>): Promise<void> {
     const store = this.deps.threads
     if (!store) return
     const candidates = [...this.records.values()].filter(
       (record) => this.atLaunch.has(record.id) && mayBeEmpty(record),
     )
-    let complete = true
     const empty = new Set<string>()
     await Promise.all(
       candidates.map(async (record) => {
@@ -2781,10 +2781,9 @@ export class SessionManager {
           const page = await store.page(record.id)
           if (page && this.isCurrent(record, page.head) && holdsNothing(page)) empty.add(record.id)
         } catch (error) {
-          complete = false
           this.deps.diagnostics.log(
             'warn',
-            `Could not read the thread of session ${record.id}: ${(error as Error).message}`,
+            `Could not read the thread of session ${record.id}, so it stays: ${(error as Error).message}`,
           )
         }
       }),
@@ -2800,25 +2799,40 @@ export class SessionManager {
         !!record &&
         empty.has(id) &&
         mayBeEmpty(record) &&
-        !this.live.has(id) &&
-        !this.inFront(id) &&
-        !this.watchers.has(id) &&
-        !this.reviving.has(id) &&
-        !this.releasing.has(id) &&
+        !keep.has(id) &&
+        !this.inUse(id) &&
         this.children(id).every((child) => removable(child.id))
       decided.set(id, yes)
       return yes
     }
     const removed = [...empty].filter(removable)
     for (const id of removed) this.forget(id)
-    if (complete) this.emptySessionsRemovedAt = this.now()
+    this.emptySessionsRemovedAt = this.now()
     this.saveIndex()
-    // The index goes first: a session whose thread went before it would never count as empty.
-    await this.deps.file.flush()
+    // While the index on disk still lists a session, its empty thread is what lets a later run
+    // remove it, so the threads go only once the index is written.
+    if (!(await this.deps.file.flushWritten())) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not write the index without ${removed.length} sessions that held no message; their threads stay and the next launch tries again`,
+      )
+      return
+    }
     this.removeThreads(removed)
     this.deps.diagnostics.log(
       'info',
       `Removed ${removed.length} session${removed.length === 1 ? '' : 's'} that held no message; this runs once`,
+    )
+  }
+
+  /** Live, shown or watched by a port, or being brought back or let go. */
+  private inUse(sessionId: string): boolean {
+    return (
+      this.live.has(sessionId) ||
+      this.inFront(sessionId) ||
+      this.watchers.has(sessionId) ||
+      this.reviving.has(sessionId) ||
+      this.releasing.has(sessionId)
     )
   }
 

@@ -2,6 +2,7 @@ import type { SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import {
   clearDraft,
+  draftedSessions,
   NEW_SESSION_DRAFT,
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
@@ -229,6 +230,25 @@ export async function deleteSession(sessionId: string): Promise<void> {
   forgetSession(sessionId)
   clearDraft(sessionId)
   useSessionsStore.getState().remove(sessionId)
+}
+
+/** A session the host removed: off the list, its replica dropped and its draft cleared. */
+export function sessionRemoved(sessionId: string): void {
+  useSessionsStore.getState().remove(sessionId)
+  forgetSession(sessionId)
+  clearDraft(sessionId)
+}
+
+/**
+ * Asks the host for its one-time removal of the sessions left with no message, keeping those
+ * with an unsent draft, which only the renderer knows of.
+ */
+export async function removeEmptySessions(): Promise<void> {
+  try {
+    await host('sessions.removeEmpty', { keep: draftedSessions() })
+  } catch (error) {
+    console.warn(`Could not remove the sessions with no message: ${errorMessage(error)}`)
+  }
 }
 
 /** After the shown session goes: New session where it ran, with No project for a scratch one. */

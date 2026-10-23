@@ -16,11 +16,13 @@ const {
   newSession,
   newSessionInPlace,
   openProjectDialog,
+  removeEmptySessions,
   retryPendingSession,
+  sessionRemoved,
   startNewSession,
   usePendingSession,
 } = await import('./actions')
-const { NEW_SESSION_DRAFT, readDraft, writeDraft } =
+const { clearDraft, draftedSessions, NEW_SESSION_DRAFT, readDraft, writeDraft } =
   await import('@renderer/features/session/composer/drafts')
 const { pickOption, useAgentOptionsStore } = await import('@renderer/stores/agent-options')
 const { useProjectsStore } = await import('@renderer/stores/projects')
@@ -523,5 +525,31 @@ describe('New sub-session', () => {
       agentId: 'opencode',
       noProject: false,
     })
+  })
+})
+
+describe('sessions the host removes', () => {
+  beforeEach(() => {
+    request.mockReset()
+    request.mockResolvedValue(undefined)
+    for (const id of draftedSessions()) clearDraft(id)
+  })
+
+  it('asks for the one-time removal keeping the sessions with a draft', async () => {
+    writeDraft('d1', 'Fix the build')
+    writeDraft('d2', ' \n ')
+    writeDraft(NEW_SESSION_DRAFT, 'Something new')
+    await removeEmptySessions()
+    expect(request).toHaveBeenCalledWith('sessions.removeEmpty', { keep: ['d1'] })
+  })
+
+  it('takes one off the list with its replica and its draft', () => {
+    useSessionsStore.setState({ byId: { s1: summary } })
+    useThreadsStore.setState({ replicas: { s1: { ...replica, seq: 2 } } })
+    writeDraft('s1', 'Unsent')
+    sessionRemoved('s1')
+    expect(useSessionsStore.getState().byId.s1).toBeUndefined()
+    expect(useThreadsStore.getState().replicas.s1).toBeUndefined()
+    expect(readDraft('s1')).toBe('')
   })
 })

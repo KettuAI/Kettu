@@ -158,6 +158,20 @@ describe('JsonFile', () => {
     expect(store.status).toBe('corrupt')
   })
 
+  it('says whether the last write reached the disk', async () => {
+    const file = path.join(dir, 'doc.json')
+    const store = make(file, 10_000)
+    store.save({ version: 1, value: 1 })
+    expect(await store.flushWritten()).toBe(true)
+    await mkdir(`${file}.tmp`)
+    store.save({ version: 1, value: 2 })
+    expect(await store.flushWritten()).toBe(false)
+    expect(await store.flushWritten()).toBe(false)
+    await rm(`${file}.tmp`, { recursive: true })
+    store.save({ version: 1, value: 3 })
+    expect(await store.flushWritten()).toBe(true)
+  })
+
   it('never writes over a file from a newer version', async () => {
     const file = path.join(dir, 'doc.json')
     const newer = JSON.stringify({ version: 9, value: 1, future: true })

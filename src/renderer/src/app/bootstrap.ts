@@ -1,5 +1,11 @@
 import type { HostEvent } from '@shared/agent-host'
-import { followShownSession, newSessionInPlace, usePendingSession } from '@renderer/app/actions'
+import {
+  followShownSession,
+  newSessionInPlace,
+  removeEmptySessions,
+  sessionRemoved,
+  usePendingSession,
+} from '@renderer/app/actions'
 import { launchTarget } from '@renderer/app/restore'
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
@@ -18,7 +24,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { initTerminals } from '@renderer/stores/terminals'
-import { forgetSession, receiveBatch, rewatchAll } from '@renderer/stores/threads'
+import { receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { initUpdates } from '@renderer/stores/updates'
 import {
   loadToday,
@@ -38,8 +44,7 @@ function onHostEvent(event: HostEvent): void {
       useSessionsStore.getState().upsert(event.summary)
       break
     case 'session.removed':
-      useSessionsStore.getState().remove(event.sessionId)
-      forgetSession(event.sessionId)
+      sessionRemoved(event.sessionId)
       break
     case 'agent.status':
       useAgentsStore.getState().setOne(event.status)
@@ -134,6 +139,8 @@ export function bootstrap(): Promise<unknown> {
     }
     if (!wasDisconnected) return
     wasDisconnected = false
+    // A host that stopped before it recorded the removal runs it now; one that did does nothing.
+    void removeEmptySessions()
     void loadHostState()
     rewatchAll()
     showFront(true)
@@ -149,6 +156,8 @@ export function bootstrap(): Promise<unknown> {
   const settingsReady = initSettings()
   void initUpdates()
   initTerminals()
+  // Asked first, so the host reads the threads before the ones the launch opens.
+  void removeEmptySessions()
   const sessionState = loadSessionState()
   void loadGitTools()
   // Leaving the launch view waits for the session list, not for git tools, whose

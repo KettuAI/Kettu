@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
+import {
+  clearDraft,
+  draftedSessions,
+  flushDraft,
+  NEW_SESSION_DRAFT,
+  readDraft,
+  writeDraft,
+} from './drafts'
 
 class MemoryStorage {
   items = new Map<string, string>()
@@ -13,6 +20,12 @@ class MemoryStorage {
   }
   removeItem(key: string) {
     this.items.delete(key)
+  }
+  get length() {
+    return this.items.size
+  }
+  key(index: number) {
+    return [...this.items.keys()][index] ?? null
   }
 }
 
@@ -63,5 +76,29 @@ describe('drafts', () => {
     expect(storage.getItem('draft:s5')).toBeNull()
     expect(readDraft('s5')).toBe('kept')
     expect(console.warn).toHaveBeenCalled()
+  })
+})
+
+describe('draftedSessions', () => {
+  // Drafts the tests above left in memory.
+  beforeEach(() => {
+    for (const id of draftedSessions()) clearDraft(id)
+  })
+
+  it('lists the sessions whose saved or unsaved draft is more than white space', () => {
+    storage.setItem('draft:saved', 'Fix the build')
+    storage.setItem('draft:blank', '  \n\t')
+    storage.setItem('draft:new', 'A session still to start')
+    storage.setItem('view:v1', '{}')
+    writeDraft('typing', 'Half a thought')
+    writeDraft('spaces', '   ')
+    writeDraft(NEW_SESSION_DRAFT, 'Another')
+    expect(draftedSessions()).toEqual(['saved', 'typing'])
+  })
+
+  it('takes the text being typed over the one saved before', () => {
+    storage.setItem('draft:saved', 'Fix the build')
+    writeDraft('saved', '')
+    expect(draftedSessions()).toEqual([])
   })
 })

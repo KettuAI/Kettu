@@ -315,6 +315,8 @@ export interface HostContract {
   'sessions.rename': { params: { sessionId: string; title: string | null }; result: void }
   'sessions.close': { params: { sessionId: string }; result: void }
   'sessions.delete': { params: { sessionId: string }; result: void }
+  // Once per index: the sessions left with no message go, except `keep`, those with a draft.
+  'sessions.removeEmpty': { params: { keep: string[] }; result: void }
   'sessions.removeAll': { params: void; result: void }
   'permissions.respond': {
     params: { sessionId: string; requestId: string; optionId: string }
@@ -422,6 +424,7 @@ export const HOST_METHODS = [
   'sessions.rename',
   'sessions.close',
   'sessions.delete',
+  'sessions.removeEmpty',
   'sessions.removeAll',
   'permissions.respond',
   'diagnostics.collect',
