@@ -66,7 +66,7 @@ import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
-import { CONTEXT_REPORT, hasContextReport, runReport } from './reports'
+import { CONTEXT_REPORT, hasContextReport, hiddenSessionMeta, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
 import {
@@ -1984,7 +1984,7 @@ export class SessionManager {
             await runtime.connection.forkSession(
               record.acpSessionId,
               record.projectPath,
-              sessionMeta(record),
+              hiddenSessionMeta(record.agentId, sessionMeta(record)),
             )
           ).acpSessionId,
         CONTEXT_REPORT,
