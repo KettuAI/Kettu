@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'tools/**/*.test.ts'],
+    // Vitest empties every stylesheet unless told otherwise; tests read them as text with ?raw.
+    css: { include: [/\.css\?raw$/] },
     // Process tests spawn real child processes, which is slow on Windows runners.
     testTimeout: 20_000,
   },
