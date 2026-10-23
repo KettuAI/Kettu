@@ -57,7 +57,7 @@ import {
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
-import { lostValues, lostValuesNotice } from './config-notice'
+import { lostValues, lostValuesNotice, type LostValue } from './config-notice'
 import type { Diagnostics } from './diagnostics'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import { HostError, invalidParams, notFound } from './errors'
@@ -1792,6 +1792,8 @@ export class SessionManager {
     if (live.connection) return Promise.resolve(live.connection)
     live.attaching ??= this.attachStored(live).finally(() => {
       live.attaching = null
+      // A turn that ended while it attached, cancelled or held back, armed no release.
+      this.refreshRelease(live)
     })
     return live.attaching
   }
@@ -1804,7 +1806,7 @@ export class SessionManager {
    */
   private async attachStored(live: Live): Promise<AgentConnection> {
     const { record } = live
-    const values = agentValues(live.thread.session.config)
+    const own = live.thread.session.config.filter((option) => option.id !== ULTRACODE_OPTION_ID)
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     const caps = runtime.init.capabilities
     const { connection } = runtime
@@ -1834,7 +1836,7 @@ export class SessionManager {
       )
     }
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
-    config = await this.applyStartOptions(live, connection, values, {
+    config = await this.applyStartOptions(live, connection, agentValues(own), {
       restore: true,
       from: config,
       stop: () => gone() || connection.isClosed,
@@ -1862,7 +1864,41 @@ export class SessionManager {
       }
     }
     this.deps.agents.signedIn(record.agentId)
+    // The mode decides what the agent may do unasked, so the session must not run in another
+    // one unseen.
+    const modes = own.filter((option) => option.category === 'mode')
+    if (lostValues(modes, config).length > 0) this.modeLost(live, lostValues(own, config))
     return connection
+  }
+
+  /**
+   * A session attached in another mode than its own: the thread says so, and a prompt that waited
+   * for the attach is not sent. It goes back to the front of the queue, paused, so the user can
+   * check the settings and resume it, and the session shows the error until its next turn.
+   */
+  private modeLost(live: Live, lost: LostValue[]): void {
+    const turn = live.turn?.ended === false ? live.turn : null
+    const notice = lostValuesNotice(lost, { subject: 'session', held: turn !== null })
+    if (!notice) return
+    this.emit(live, [
+      { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
+    ])
+    if (!turn) return
+    this.finishTurn(live, turn, null)
+    const now = this.now()
+    this.update(live, {
+      status: 'ready',
+      turnStartedAt: null,
+      turnStartUsed: null,
+      updatedAt: now,
+      error: { message: notice.title },
+      queue: [{ id: randomUUID(), content: turn.content, at: now }, ...live.thread.session.queue],
+      queuePaused: true,
+    })
+    this.persist(live)
+    this.touch(live.id)
+    this.deps.events.attention(live.id, 'error', this.titleOf(live), notice.title)
+    this.checkpoint(live)
   }
 
   /** A loaded or resumed session's options, which New session also learns from. */

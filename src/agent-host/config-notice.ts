@@ -1,5 +1,5 @@
 // The notice a session shows when it could not keep values it was meant to have, such as a fork
-// whose agent refused its source's mode.
+// whose agent refused its source's mode, or a session whose agent would not take its own back.
 
 import type { ConfigOption } from '@shared/thread'
 import { t } from './i18n'
@@ -61,29 +61,40 @@ export function lostValues(
   return lost.sort((a, b) => a.rank - b.rank).map(({ value }) => value)
 }
 
+/** What the notice speaks of: a new fork, or a session that attached to its agent again. */
+export type NoticeSubject = 'fork' | 'session'
+
 // A switch has a sentence for each case, not its value in a slot: "on" and "off" would be
 // translated words glued into the sentence. A switch that was off and is missing lost nothing.
-function line(lost: LostValue): string | null {
+function line(lost: LostValue, subject: NoticeSubject): string | null {
   const { option } = lost
   if (lost.type === 'boolean') {
     if (lost.actual === null)
-      return lost.wanted ? t('notice.lostValues.cannotTurnOn', { option }) : null
+      return lost.wanted ? t(`notice.lostValues.${subject}.cannotTurnOn`, { option }) : null
     return t(lost.wanted ? 'notice.lostValues.isOff' : 'notice.lostValues.isOn', { option })
   }
   return lost.actual === null
-    ? t('notice.lostValues.missing', { option, wanted: lost.wanted })
+    ? t(`notice.lostValues.${subject}.missing`, { option, wanted: lost.wanted })
     : t('notice.lostValues.differs', { option, wanted: lost.wanted, actual: lost.actual })
 }
 
-/** The notice entry's text for the values a session could not keep; null when it kept them all. */
+/**
+ * The notice entry's text for the values a session could not keep; null when it kept them all.
+ * With `held`, it also says that the message the session was to send waits in its queue.
+ */
 export function lostValuesNotice(
   lost: readonly LostValue[],
+  { subject = 'fork', held = false }: { subject?: NoticeSubject; held?: boolean } = {},
 ): { severity: 'warning'; title: string; description: string } | null {
-  const lines = lost.map(line).filter((text) => text !== null)
+  const lines = lost.map((value) => line(value, subject)).filter((text) => text !== null)
   if (lines.length === 0) return null
   return {
     severity: 'warning',
-    title: t('notice.lostValues.title'),
-    description: [...lines, t('notice.lostValues.next')].join('\n'),
+    title: t(`notice.lostValues.${subject}.title`),
+    description: [
+      ...lines,
+      t('notice.lostValues.next'),
+      ...(held ? [t('notice.lostValues.held')] : []),
+    ].join('\n'),
   }
 }
