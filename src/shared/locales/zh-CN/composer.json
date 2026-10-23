@@ -108,6 +108,7 @@
     "sentLinkedFolder": "以文件夹链接发送",
     "dropTitle": "松手即可添加",
     "dropHint": "文件、照片或文件夹 · 最多 20 个",
-    "slashNeedsEmpty": "仅限空消息"
+    "slashNeedsEmpty": "仅限空消息",
+    "notOnDisk": "它不是磁盘上的文件，无法添加。"
   }
 }

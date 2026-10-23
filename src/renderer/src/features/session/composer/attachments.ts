@@ -158,8 +158,17 @@ export async function attachFiles(draft: string, files: readonly File[]): Promis
   }
   added.forEach((item, i) => {
     const grant = granted[i]
-    if (grant) void addGranted(draft, item, grant, taken[i]!)
-    else patchDraftAttachment(draft, item.key, { status: 'failed', error: null })
+    const file = taken[i]!
+    if (grant) {
+      void addGranted(draft, item, grant, file)
+    } else if (file.type.startsWith('image/')) {
+      // An image dragged out of a page has no file on disk; it is added as a pasted one is.
+      patchDraftAttachment(draft, item.key, { kind: 'image' })
+      void addImage(draft, item, file)
+    } else {
+      const error = i18n.t('composer:attachments.notOnDisk')
+      patchDraftAttachment(draft, item.key, { status: 'failed', error })
+    }
   })
   return files.length - taken.length
 }

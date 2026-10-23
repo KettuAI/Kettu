@@ -112,6 +112,7 @@
     "sentLinkedFolder": "Sent as a link to the folder",
     "dropTitle": "Drop to attach",
     "dropHint": "Files, photos or folders · up to 20",
-    "slashNeedsEmpty": "In an empty message"
+    "slashNeedsEmpty": "In an empty message",
+    "notOnDisk": "It isn't a file on disk, so it can't be attached."
   }
 }

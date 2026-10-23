@@ -303,8 +303,9 @@ export class Attachments {
    */
   private async addGranted(grantId: string, thumb: string | null): Promise<Attachment> {
     const grant = this.grants.get(grantId)
-    if (!grant) throw invalidParams(`No grant ${grantId}`)
     this.grants.delete(grantId)
+    if (!grant || grant.at < this.now() - GRANT_MAX_AGE_MS)
+      throw invalidParams(`No grant ${grantId}`)
     const name = path.basename(grant.path) || grant.path
     const resolved = await resolvePath(grant.path, grant.kind, name)
     const base = { id: randomUUID(), name, path: grant.path, thumb: null, addedAt: this.now() }
@@ -615,6 +616,20 @@ export async function embedFile(
     }
   }
   return { block: linkBlock(uri, name, mimeType, size), sent: 'linked', size }
+}
+
+/** A block's share of `PROMPT_BYTES`, as the host counts a prompt: text, base64 and embedded text. */
+export function blockBytes(block: PromptBlock): number {
+  switch (block.type) {
+    case 'text':
+      return Buffer.byteLength(block.text, 'utf8')
+    case 'image':
+      return block.data.length
+    case 'resource':
+      return 'text' in block.resource ? Buffer.byteLength(block.resource.text, 'utf8') : 0
+    default:
+      return 0
+  }
 }
 
 /** A `resource_link`, with the type and size when they are known. */

@@ -9,15 +9,7 @@ import {
   type RefObject,
 } from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
-import {
-  ArrowUpIcon,
-  FolderIcon,
-  ListPlusIcon,
-  PaperclipIcon,
-  PlusIcon,
-  SquareIcon,
-  SquareSlashIcon,
-} from 'lucide-react'
+import { ArrowUpIcon, ListPlusIcon, PlusIcon, SquareIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import type { SessionView, SlashCommand, UserContent } from '@shared/thread'
@@ -543,12 +535,10 @@ function AddMenu({
       </Tooltip>
       <DropdownMenuContent side="top" sideOffset={6} className="w-60" finalFocus={textarea}>
         <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
-          <PaperclipIcon />
           {t('attachments.addFiles')}
           <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
-          <FolderIcon />
           {t('attachments.addFolder')}
           {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
         </DropdownMenuItem>
@@ -556,7 +546,6 @@ function AddMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled={!emptyDraft} onClick={onSlash}>
-              <SquareSlashIcon />
               {t('attachments.slashCommands')}
               <DropdownMenuShortcut>
                 {emptyDraft ? '/' : t('attachments.slashNeedsEmpty')}

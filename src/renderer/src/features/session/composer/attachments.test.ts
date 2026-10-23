@@ -240,7 +240,8 @@ describe('picked and dropped files', () => {
   beforeEach(() => {
     vi.stubGlobal('window', { overbench: { attachments: { pick, fromFiles } } })
     request.mockImplementation((async (method: string, params: Record<string, unknown>) => {
-      const source = params.source as { grantId: string } | undefined
+      const source = params.source as { grantId: string; name?: string } | undefined
+      if (method === 'attachments.add' && source?.name) return record('pasted', source.name)
       if (method === 'attachments.add') {
         const name = source!.grantId.slice(2)
         return hostRecord(name, /\.png$/.test(name) ? 'image' : name === 'src' ? 'folder' : 'file')
@@ -328,7 +329,22 @@ describe('picked and dropped files', () => {
     ])
     await adding
     await settled()
-    expect(draftAttachments(DRAFT).map((i) => i.status)).toEqual(['ready', 'failed'])
+    expect(draftAttachments(DRAFT).map((i) => [i.status, i.error])).toEqual([
+      ['ready', null],
+      ['failed', "It isn't a file on disk, so it can't be attached."],
+    ])
+  })
+
+  it('adds an image dragged out of a page, with no file on disk, as a pasted one', async () => {
+    fromFiles.mockResolvedValue([null])
+    const image = png('photo.png')
+    await attachFiles(DRAFT, [image])
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+    expect(prepare).toHaveBeenCalledWith(image)
+    expect(request).toHaveBeenCalledWith('attachments.add', {
+      source: { bytes: expect.any(ArrayBuffer), mimeType: 'image/jpeg', name: 'photo.png' },
+      thumb: 'data:image/webp;base64,AAAA',
+    })
   })
 
   it('grants no more than fit, and says how many did not', async () => {

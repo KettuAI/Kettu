@@ -64,6 +64,7 @@ import {
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
 import {
+  blockBytes,
   embedFile,
   linkBlock,
   resolvePath,
@@ -2220,6 +2221,10 @@ export class SessionManager {
         type: 'ref',
         ref: { kind: 'attachment', attachment: { ...store.view(record.id), ...sent.changes } },
       })
+    }
+    // A text file is read again as it goes, so it may have grown since the prompt was counted.
+    if (wire.reduce((sum, block) => sum + blockBytes(block), 0) > PROMPT_BYTES) {
+      throw invalidParams(t('session.promptTooLarge'))
     }
     return { wire, shown, blobs, ids }
   }

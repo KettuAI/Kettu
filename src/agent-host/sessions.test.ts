@@ -207,6 +207,25 @@ describe('attachments', () => {
     }
   })
 
+  it('counts a text file again as it goes, since it may have grown', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const { file, grantId } = await granted(t, 'notes.md', 'x')
+    const added = await addGranted(port, grantId)
+    await writeFile(file, 'y'.repeat(200_000))
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: [
+        { type: 'text', text: 'z'.repeat(10 * 1024 * 1024 - 100_000) },
+        { type: 'ref', ref: { kind: 'attachment', attachment: { id: added.id } as Attachment } },
+      ],
+    })
+    await port.untilStatus(sessionId, 'ready')
+    const notice = port.entries(sessionId).find((entry) => entry.kind === 'notice')
+    expect(notice?.kind === 'notice' && notice.description).toMatch(/10 MB/)
+    expect(sentAttachment(port, sessionId)?.sent).toBeNull()
+  })
+
   it('fails the turn when a picked file is gone by the time it is sent', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)

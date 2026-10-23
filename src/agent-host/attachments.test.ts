@@ -212,9 +212,28 @@ describe('granted files and folders', () => {
     await writeFile(notes, 'x')
     const attachments = store()
     const stale = grant(attachments, notes)
-    now += 11 * 60 * 1000
     const fresh = grant(attachments, notes)
+    now += 10 * 60 * 1000 + 1
     await expect(attachments.add({ grantId: stale }, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    // A later grant still clears the old ones it finds.
+    const later = grant(attachments, notes)
+    await expect(attachments.add({ grantId: fresh }, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    await expect(attachments.add({ grantId: later }, null)).resolves.toMatchObject({
+      name: 'notes.md',
+    })
+  })
+
+  it('takes a grant used within ten minutes', async () => {
+    const notes = path.join(files, 'notes.md')
+    await writeFile(notes, 'x')
+    const attachments = store()
+    const fresh = grant(attachments, notes)
+    now += 10 * 60 * 1000 - 1
+    await expect(attachments.add({ grantId: 'unknown' }, null)).rejects.toMatchObject({
       code: 'invalid_params',
     })
     await expect(attachments.add({ grantId: fresh }, null)).resolves.toMatchObject({

@@ -3,6 +3,7 @@ import { HOST_METHODS, type AgentsApi, type HostEvent } from '@shared/agent-host
 import type { AppCommand, OverbenchApi, QuitRequest } from '@shared/ipc'
 import { isLocale, type Locale } from '@shared/locale'
 import { TERMINAL_METHODS, type TerminalEvent, type TerminalsApi } from '@shared/terminal-host'
+import { filePaths } from './attachments'
 import { hostTransport, invoke, send, subscribe } from './ipc'
 import { PortClient } from './port-client'
 
@@ -101,7 +102,7 @@ const api: OverbenchApi = {
     pick: (kind, defaultPath) => invoke('dialog:add-attachments', kind, defaultPath),
     // Only a drop, a paste or a file input yields a File with a path, so a page names none itself.
     fromFiles: async (files) => {
-      const paths = files.map((file) => webUtils.getPathForFile(file))
+      const paths = filePaths(files, (file) => webUtils.getPathForFile(file))
       const granted = await invoke(
         'attachments:grant',
         paths.filter((path) => path !== ''),

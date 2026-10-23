@@ -337,7 +337,7 @@ Files, images and folders the user adds to a prompt. The renderer sends each as 
 - A folder is never read: the link is all that is sent. One outside the session's folder is linked the same way, and the agent asks before reading there, as it does for any path outside its folder.
 - `audio` blocks wait until an agent advertises them; audio files go as links.
 - An agent can still refuse what it advertised, as codex-acp refuses images for a model without image input. The turn then fails as any turn does, with the agent's error, and the message keeps its tiles in the thread, which still open. Only a prompt the host refuses before it goes, such as one past the limits or naming an attachment no longer held, stays in the composer with its attachments.
-- Limits, checked in the composer and again by the host: at most 20 attachments in a prompt, and 10 MB in all of what is sent ([validation](./host-protocol.md#validation)).
+- Limits, checked in the composer and again by the host: at most 20 attachments in a prompt, and 10 MB in all of what is sent ([validation](./host-protocol.md#validation)). The host counts once more as the prompt goes, since a text file is read then and may have grown; a prompt over the limit then fails its turn.
 
 ### Only what the user chose
 

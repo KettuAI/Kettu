@@ -8,6 +8,7 @@ import agentHostPath from '../agent-host/index?modulePath'
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
 import usageWorkerPath from '../agent-host/usage/worker?modulePath'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
+import { GrantRequests } from './grant-requests'
 import { t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
@@ -53,8 +54,10 @@ export class AgentHost {
   private agentProcesses: ProcessId[] = []
   private readonly busyRequests = new Map<number, (sessions: BusySession[]) => void>()
   private nextBusyId = 1
-  private readonly grantRequests = new Map<number, (error: Error | null) => void>()
-  private nextGrantId = 1
+  private readonly grants = new GrantRequests(
+    GRANT_TIMEOUT_MS,
+    () => new Error(t('attachments.hostDown')),
+  )
 
   constructor(private readonly deps: AgentHostDeps) {
     this.host = new UtilityHost<MainToHost, HostToMain>({
@@ -141,20 +144,9 @@ export class AgentHost {
   grant(grants: AttachmentGrant[]): Promise<void> {
     if (grants.length === 0) return Promise.resolve()
     if (this.host.state !== 'ready') return Promise.reject(new Error(t('attachments.hostDown')))
-    const requestId = this.nextGrantId++
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => settle(new Error(t('attachments.hostDown'))), GRANT_TIMEOUT_MS)
-      const settle = (error: Error | null) => {
-        clearTimeout(timer)
-        this.grantRequests.delete(requestId)
-        if (error) reject(error)
-        else resolve()
-      }
-      this.grantRequests.set(requestId, settle)
-      if (!this.host.post({ type: 'host:grant', requestId, grants })) {
-        settle(new Error(t('attachments.hostDown')))
-      }
-    })
+    return this.grants.request((requestId) =>
+      this.host.post({ type: 'host:grant', requestId, grants }),
+    )
   }
 
   stop(): Promise<void> {
@@ -192,7 +184,7 @@ export class AgentHost {
         break
       }
       case 'host:granted':
-        this.grantRequests.get(message.requestId)?.(null)
+        this.grants.answered(message.requestId)
         break
       case 'host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
@@ -209,8 +201,7 @@ export class AgentHost {
   private exited(clean: boolean): void {
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
-    for (const settle of [...this.grantRequests.values()])
-      settle(new Error(t('attachments.hostDown')))
+    this.grants.failAll()
     this.deps.onBadge(0)
     const roots = this.agentProcesses
     this.agentProcesses = []
