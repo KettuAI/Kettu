@@ -1,8 +1,10 @@
 # M0 acceptance feedback
 
-> Status: Collecting · [M0](./m0.md) · [All docs](../README.md)
+> Status: Accepted · [M0](./m0.md) · [All docs](../README.md)
 
 Problems the maintainer found while using M0 by hand. Each one is recorded as reported, with where it lives today; fixes are planned together once the list is complete, and the design docs change with them.
+
+The list is complete and no longer edited: new problems go to [GitHub issues](https://github.com/overbench/overbench/issues), and each open or partly fixed problem below names the issue that holds what is left.
 
 | #   | Problem                                                        | Area           | Status       |
 | --- | -------------------------------------------------------------- | -------------- | ------------ |
@@ -17,8 +19,8 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 | 9   | New session is tied to the selected project                    | Sidebar        | Fixed        |
 | 10  | The welcome screen and the project home lack polish            | Home           | Open         |
 | 11  | No steering or queued messages while a turn runs               | Composer       | Fixed        |
-| 12  | Switching sessions visibly stalls                              | Performance    | Partly fixed |
-| 13  | The git popover only displays, and repeats the terminal toggle | Git            | Partly fixed |
+| 12  | Switching sessions visibly stalls                              | Performance    | Fixed        |
+| 13  | The git popover only displays, and repeats the terminal toggle | Git            | Fixed        |
 | 14  | The terminal panel's own buttons do nothing                    | Terminal       | Fixed        |
 | 15  | Settings selects show names only and keep the default look     | Settings       | Fixed        |
 | 16  | Switches keep shadcn's default look                            | Settings       | Fixed        |
@@ -115,6 +117,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - The details of the Effort list: the sentence on top, a **Recommended** tag, an info icon on the costly level, and **Ultracode** set apart by colour. A tag and an explanation need the agent's metadata or an OverBench rule; the level names are the agent's own, so showing "Extra" where Claude Code says Xhigh would be a relabel.
     - The check's colour: the reference checks in blue, while [problem 22](#22-the-new-session-project-and-agent-menus-look-crude) kept the menus' neutral check. This ties to the prose palette question in [problem 6](#6-markdown-looks-plain-and-file-references-do-not-stand-out).
     - What the model button shows, and the rule rewritten in [Interface: model menu](../design/ui.md#composer), with before and after screenshots in both themes as in the menus pass.
+- **Tracked**: what is left is in [#28](https://github.com/overbench/overbench/issues/28).
 
 ## 5. Messages have no action row
 
@@ -143,6 +146,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
     - The type: the Chinese face and its weight and size next to Inter, the spacing where Chinese meets Latin text and digits (CSS `text-autospace` is one route, to check against Electron 44's Chromium), line height, paragraph and list spacing, and the heading scale.
     - Whether the tuning covers only agent replies or also the user's bubbles, tool output and the thinking text.
     - The rule written into [Design system: typography](../design/design-system.md#typography) and [Interface: markdown](../design/ui.md#markdown), with a screenshot comparison in both themes as in the other polish passes.
+- **Tracked**: what is left is in [#29](https://github.com/overbench/overbench/issues/29).
 
 ## 7. The usage popover shows too little and needs a full redesign
 
@@ -156,6 +160,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - A plan-limit window appears only after Claude Code reports it in `usage_update._meta["_claude/rateLimit"]`, which happens when the limit changes, so the weekly windows had not shown up yet, and a window reported without `utilization` shows "—" ([Session model: plan limits](../design/session-model.md#plan-limits)). The current numbers need another source.
 - **To settle when planning**: where the context breakdown and the current plan usage come from for each agent, what the popover shows for agents that offer neither, and the new design, written into the design docs before it is built.
 - **Partly fixed** in `162ddd7` and `074b216`: both sources exist now, for Claude Code. The plan limits come from Claude Code's `/usage`, read when the popover opens, so every window shows its current use and reset ([Session model: reading the limits from `/usage`](../design/session-model.md#reading-the-limits-from-usage)); what fills the context comes from `/context`, run in a throwaway fork of the session ([Session model: context breakdown](../design/session-model.md#context-breakdown)). Neither costs a model call, and both run in sessions the host deletes afterwards. The popover shows the breakdown as rows in its current layout ([Interface: usage popover](../design/ui.md#usage-popover)). Checked against a live Claude Max session: three windows (5-hour, weekly, weekly Fable) with their resets, and the categories with the memory file and 69 skills, each in 3 to 5 s. Still to do: the popover's redesign, and the plan's tier ("Max (5x)"), which neither report gives. Codex's plan limits now come from its `/status` the same way ([Session model: reading Codex's limits from `/status`](../design/session-model.md#reading-codexs-limits-from-status)); checked against a live ChatGPT Free account, whose one window lasts 30 days although the adapter labels it weekly. OpenCode has no such report, and Codex no context breakdown.
+- **Tracked**: what is left is in [#30](https://github.com/overbench/overbench/issues/30).
 
 ## 8. Session rows show their time badly
 
@@ -183,6 +188,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Observed**: the project home, and the welcome screen shown when there are no projects, are neither refined nor beautiful enough. They are the first thing a user sees, and an ugly first screen takes away any wish to keep using the app.
 - **Expected**: both screens are polished with care, as the app's first impression.
 - **Today**: [Interface: welcome](../design/ui.md#welcome) and [project home](../design/ui.md#project-home), built in `src/renderer/src/features/home/welcome.tsx` and `project-home.tsx`. In the screenshot the cards' second lines mix the adapter's version ("v0.94.0") with raw launch commands ("npx -y @agentclientprotocol/…", "opencode acp"); the Fake agent card shows only because the app runs unpackaged. [Problem 9](#9-new-session-is-tied-to-the-selected-project) may change what the project home is for. To settle when planning: the design of both screens, written into the design docs before it is built.
+- **Tracked**: what is left is in [#31](https://github.com/overbench/overbench/issues/31) (the welcome screen) and [#14](https://github.com/overbench/overbench/issues/14) (the project home).
 
 ## 11. No steering or queued messages while a turn runs
 
@@ -203,6 +209,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Partly fixed**: four of the causes found in [M0 feedback findings](./m0-feedback-findings.md#12-switching-sessions) are dealt with. `7dddd70` replays `session/load` in linear time in the agent host, `1365800` mounts a long history in linear time, and `3e26044` restores the last session at launch without waiting for git tools. In `f28120b`, a session that is not live now shows "Starting Claude Code…" while its agent starts, then "Loading the conversation…" over the skeleton until the replay ends ([Interface: states](../design/ui.md#states)). In `6e961aa`, the performance script measures a 4,000-entry reopen, the settled time and long frames of switches, a switch to an evicted session and back to a 4,000-entry one ([M0 performance](../perf/m0.md#2026-10-21-macos-session-switching)). Keeping recent sessions mounted with `<Activity>` was measured and left out: it took a switch back to 4,000 entries from 38 ms to 147 ms to first paint, a single frame the click waits for, to save the 0.9 s that the history takes to fill in after it. Still to decide: agents starting through `npx -y` on every launch, which costs Claude Code 1.1 to 1.4 s, and needs a managed install of each adapter.
 - **Reported again**: 2026-10-22, with a screenshot of a Claude Code session opening: "Loading the conversation…" with a spinner sat above pale blocks at the top of an empty page, with no composer, and read as crude.
 - **Changed**: the skeleton is a message and a reply at their real sizes and spacing and fades in after 200 ms, so a quick load shows nothing; the status moved into the composer's frame, which stands in place with "Starting Claude Code…", then "Loading the conversation…", and the agent's latest line under it, so the composer takes over without a shift ([Interface: states](../design/ui.md#states)).
+- **Fixed**: what was left is done. `npx -y` is gone, since each adapter has a managed install, and [problem 54](#54-opening-a-session-starts-its-agent-and-keeps-it-running) opens a session from SQLite without starting its agent.
 
 ## 13. The git popover only displays, and repeats the terminal toggle
 
@@ -216,6 +223,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - **Today**: in `src/renderer/src/features/git/branch-popover.tsx` a commit row is a plain list item, with no hover or focus state, no click, no tooltip and no copy of its id. The working tree line is a count with its added and removed lines, not a list of files. The lane is a static SVG (`branch-lane.tsx`). The buttons are the copy of the branch name, "more commits", **Fetch** and the pull request part's links; the footer's text for a repository with no remote has no action. The design ([Interface: branch popover](../design/ui.md#branch-popover)) specifies the content and, by intent, no git actions.
   - **To settle when planning**: the interactions, none of them asked for yet and so only candidates: a commit row that copies its id and shows its full message and author, and opens its diff; a files line that expands to the changed files and opens one in the [Files pane](../design/ui.md#files) or a diff; a lane whose nodes show their commit on hover; and what the footer offers with no remote. They depend on the git design above, which is still open. The polish: row and control states (hover, focus, active, disabled), spacing and type sizes, the loading, no-remote, detached and no-changes states, keyboard use, and both themes, checked against the reference's popovers in the way of the menus pass.
 - **Decided**: 2026-10-22. Three directions were drawn on a [design canvas](https://claude.ai/artifact/Fs2QaHsAFB26RnwPtfvQWp) (a timeline of rows, a next-step action first, a native menu); after seeing the first, the maintainer asked that Pull and Push both always be there and that the pull request be shown in detail. The rest was decided while the maintainer was away; to be reviewed: the timeline of rows with the state-picked next action, every row interactive (hover cards, context menus, files that open their diff), the pull request with its checks and review, and OverBench's own fetch, pull, push, publish and create pull request, which brings those writes into M0 ([Interface: branch popover](../design/ui.md#branch-popover), [Git: operations](../design/git.md#operations)).
+- **Fixed** in `0ddd0c2` and `a5f63dd`: the popover is built as decided above. Its docs are still marked to be reviewed by the maintainer.
 
 ## 14. The terminal panel's own buttons do nothing
 
@@ -249,6 +257,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Expected**: the page reworked to show each agent's core facts, starting with how much of Claude Code's subscription quota is left.
 - **Today**: `src/renderer/src/features/settings/agents-section.tsx` follows [Interface: settings](../design/ui.md#settings): status with its next step, the version from `agentInfo`, the launch command, the Node.js version, the account, and its plan limits when the agent reports them. The plan limits come from the same place as the usage popover's, so they share the gap in [problem 7](#7-the-usage-popover-shows-too-little-and-needs-a-full-redesign): only windows Claude Code has pushed, with "—" when `utilization` is missing. To settle when planning: which facts each card shows and where each comes from (subscription usage, the agent's own version besides the adapter's, the account for Codex and OpenCode), solved together with problem 7.
 - **Partly fixed** in `162ddd7`: each Claude Code card shows its plan limits read afresh from `/usage` while it runs, and a stopped one offers **Check plan limits** ([Interface: usage popover](../design/ui.md#usage-popover)). Still to decide with the page's redesign: the other facts each card shows, the agent's own version besides the adapter's, and the account for Codex and OpenCode. The page is now a grouped list with a page per agent ([Interface: Settings › Agents](../design/ui.md#settings--agents)): each row shows the agent's own CLI version, the account or config folder, and its plan windows; each page has Account, Usage, Configuration (where the agent reads its configuration, shown only for now) and a folded Advanced. Still open: which settings each agent's Configuration shows, a Provider fact (the adapters report only the login kind), and OpenCode's version and account before it starts.
+- **Tracked**: what is left is in [#32](https://github.com/overbench/overbench/issues/32).
 
 ## 18. The About page needs redoing
 
@@ -257,6 +266,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Expected**: the page redone, with the app's logo, GitHub, a way to send feedback, and the other things an About page usually holds.
 - **Today**: built in `src/renderer/src/features/settings/about-section.tsx` and the `about` section of `section-defs.tsx` beside it. [Interface: settings](../design/ui.md#settings) also lists a link to the third-party notices, which the page does not show yet. OverBench has no logo or app icon so far: `build/` holds only the macOS entitlements, `electron-builder.yml` names no icon, and the welcome screen shows a text wordmark. To settle when planning: the logo and app icon, which the packaged app needs too; what the page holds (where feedback goes, such as GitHub issues, the license once it is decided, the notices); and its design.
 - **Partly fixed**: 2026-10-22, from the Settings canvas. About opens with "OverBench" in the title role, its description and the version, platform and architecture in mono, then three groups: **Updates**, **Runtime** (Electron, Chromium, Node.js and the system, with **Copy versions**) and **Links** (**Source code**, and **Report an issue**, which opens GitHub issues for feedback) ([Interface: settings](../design/ui.md#settings)). Still open: the logo and app icon, and the license and third-party notices, which wait for the license decision.
+- **Tracked**: what is left is in [#33](https://github.com/overbench/overbench/issues/33).
 
 ## 19. Settings leave too much empty space
 
@@ -343,6 +353,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the **New session** row's `⌘N` goes as well, for consistency. The shortcuts stay findable in Settings › Keyboard shortcuts and in the app menu.
   - The rule written into [Interface: sidebar](../design/ui.md#sidebar), and into the shortcut table if the hints leave the rows.
 - **Partly fixed**: the **Settings** row has no shortcut hint; `Mod+,` stays in the app menu and Settings › Keyboard shortcuts. The **New session** row keeps its `⌘N`. The footer's design as a whole is still open, with the plan usage of [problem 41](#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place).
+- **Tracked**: what is left is in [#34](https://github.com/overbench/overbench/issues/34).
 
 ## 26. Account details cannot be hidden
 
@@ -376,6 +387,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The rule changes in [Agent host: installing adapters](../design/agent-host.md#installing-adapters), where pins are "bumped deliberately", and in [Interface: settings](../design/ui.md#settings--agents).
 - **Decided**: 2026-10-22, on the Settings canvas, at the maintainer's request ("列表里有新版本的 Agent 直接点更新，带进度，和安装一样"). The agent host asks the npm registry through the user's npm, by itself every 24 hours and when **Check for updates** is pressed; the latest adapter is offered, and also the same adapter version when it would carry a newer CLI, with the CLI's version as the one shown. The pinned version becomes the minimum. Updating installs beside the running version, and the agent uses it from its next start, so running sessions keep going and a failed update leaves the agent as it was. In the list the **Update** pill next to the name is the action, with its progress, cancel, failure and result inside it; a separate **Update** button at the row's end was rejected. An agent's page adds a Version group and a notice with the log.
 - **Partly fixed**: the check, the pill and the notice in Settings › Agents, a dot on the Agents section while an update is on offer, and the host's side ([Interface: Settings › Agents](../design/ui.md#settings--agents), [Agent host: checking for updates](../design/agent-host.md#checking-for-updates)). Still open: the notice on the project home's agent cards and the Welcome screen, dismissing a version, and anything for OpenCode.
+- **Tracked**: what is left is in [#35](https://github.com/overbench/overbench/issues/35) and [#14](https://github.com/overbench/overbench/issues/14) (its project-home part).
 
 ## 28. The Ready label next to the status dot is redundant
 
@@ -403,6 +415,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The same split in the places that offer agents, the [project home](../design/ui.md#project-home) cards, the [Welcome](../design/ui.md#welcome) screen and the New session agent menu, and its link with the adapter updates of [problem 27](#27-agent-adapters-have-no-update-check-or-one-click-update).
 - **Decided**: 2026-10-22, on the Settings canvas: OverBench installs the agents itself with one click, because a link to instructions leaves the job unfinished. An adapter agent whose adapter is not installed yet counts as not installed and installs on demand; OpenCode installs through Homebrew, the official script or npm, picked on its page with the command shown. The install shows its progress and log, can be cancelled and retried, and the row moves to Installed when it is done. The action is the same pill as an update, next to the name; an outlined **Install** button at the row's end was rejected.
 - **Partly fixed**: in Settings › Agents ([Interface: Settings › Agents](../design/ui.md#settings--agents), [Agent host: installing binary agents](../design/agent-host.md#installing-binary-agents)). Still open: the same split on the project home, the Welcome screen and the New session agent menu.
+- **Tracked**: what is left is in [#31](https://github.com/overbench/overbench/issues/31) and [#14](https://github.com/overbench/overbench/issues/14) (its project-home part).
 
 ## 30. The session context menu lacks rename, pin and archive
 
@@ -424,6 +437,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The menu's order and grouping, its destructive item last, and the same set in the top bar's title menu.
   - The rule changes in [Interface: sidebar](../design/ui.md#sidebar), [Interface: session](../design/ui.md#session) and the [session lifecycle](../design/session-model.md#session-lifecycle).
 - **Partly fixed**: **Rename…** (a dialog; an empty title returns to the agent's, and the user's title is kept in the index and wins over later titles from the agent, [session model: titles](../design/session-model.md#titles)), and the hover **More** button. The row's context menu, its **More** menu and the top bar's title menu render one shared item list (`SessionMenuItems`); the button shows on hover and keyboard focus, sits over the status slot so the title keeps its width, and the context menu key opens it too. Still open: pin, archive and the rest of the reference's menu (mark as unread, open in, move), which need their places designed.
+- **Tracked**: what is left is in [#36](https://github.com/overbench/overbench/issues/36).
 
 ## 31. Earlier replies show actions only on hover, and no Fork
 
@@ -437,6 +451,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the latest reply's always-visible row against the hover-only rows above it is itself the inconsistency.
 - **Decided**: 2026-10-22, by the maintainer, with a screenshot of an earlier reply's empty band and the latest reply's row: the row shows only while the pointer is over the message, under every reply, the latest one included.
 - **Partly fixed**: the row is hidden under every reply and shows while the pointer is over the reply, from the first entry after the user message to the row, or while it holds keyboard focus; it still holds its place ([Interface: message actions](../design/ui.md#message-actions)). Fork under earlier replies is still open.
+- **Tracked**: what is left is in [#13](https://github.com/overbench/overbench/issues/13).
 
 ## 32. No message outline beside the thread, expanding on hover
 
@@ -453,6 +468,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Room: it needs margin beside the 760 px column, so what happens in a narrow window or with the side panel open, and how it sits against the sidebar and the scroll-edge fades.
   - Opening on hover: the delay before it opens and closes, no shift of the thread, the menu surface and its tokens from the [design system](../design/design-system.md#menus-and-dialogs), a list that scrolls when the turns are many, and keyboard reach (focus opens it, arrow keys move, Enter jumps) with an accessible name.
   - Where the rule is written: [Interface: thread](../design/ui.md#thread).
+- **Tracked**: what is left is in [#37](https://github.com/overbench/overbench/issues/37).
 
 ## 33. Title menu needs polish; agent mark goes before the title
 
@@ -470,6 +486,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the title button's hit area and hover fill include the mark, so it reads as one control.
   - The rule changes in [Interface: session](../design/ui.md#session).
 - **Partly fixed**: the agent's name is gone from the top bar and its mark (14 px) leads the title inside the title button; a subagent's session keeps its `Bot` icon. The button's tooltip gives the full title and the agent. The menu holds the shared items of [problem 30](#30-the-session-context-menu-lacks-rename-pin-and-archive). The panel's polish against the reference is still open.
+- **Tracked**: what is left is in [#36](https://github.com/overbench/overbench/issues/36).
 
 ## 34. The slash command popover looks crude
 
@@ -488,6 +505,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - A list of hundreds of commands from an agent with many skills, and whether it needs more than scrolling behind the fades.
   - The tooltip's delay and placement, keyboard use (arrows, `Enter`, `Tab`, `Esc` as now), and reduce motion.
   - The rule rewritten in [Interface: composer](../design/ui.md#composer).
+- **Tracked**: what is left is in [#38](https://github.com/overbench/overbench/issues/38).
 
 ## 35. The palette is black and grey and reads as cheap
 
@@ -501,6 +519,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Whether the surfaces take a slight tint. The reference's sidebar differs from a pure grey by a few levels; one screenshot is too little to decide, so measure more before changing a surface.
   - Where the cheap feel comes from. Colour is one part; weights, borders, shadows, radii, icon strokes and spacing are others. A side-by-side audit of the main screens against the reference, in both themes, belongs before the tokens change, in the way of the [menus pass](../design/design-system.md#menus-and-dialogs), with before and after screenshots.
   - The rule rewritten in [Design system](../design/design-system.md) and the tokens in `globals.css`, including whether the "neutral palette, no accent" statement stands as written.
+- **Tracked**: what is left is in [#39](https://github.com/overbench/overbench/issues/39).
 
 ## 36. The composer has no + menu, file or image attachments
 
@@ -517,6 +536,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - How it reaches the host safely: the file is read in the main process or the agent host after the path is validated, never by loosening the sandbox; its size and kind are checked there, and nothing is embedded without the user having added it.
   - What it touches in the composer: [drafts](../design/persistence.md#composer-drafts) keep attachments, a queued or steering message carries them, and the placeholder teaches `/` as the reference's does.
   - The rule written into [Interface: composer](../design/ui.md#composer), and M0 and the README's roadmap updated if it comes in.
+- **Tracked**: what is left is in [#40](https://github.com/overbench/overbench/issues/40).
 
 ## 37. Icons look heavy; use thin line icons from a library
 
@@ -586,6 +606,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - A tab's context menu (rename, close and the like) is a candidate that was not asked for.
   - The rule rewritten in [Interface: terminal](../design/ui.md#terminal) and [Terminal](../design/terminal.md).
 - **Partly fixed**: tabs can be renamed (double-click, or **Rename** in a new context menu with **Close**) and dragged into a new order with `@dnd-kit/react`; the keyboard picks a tab up with `Space`. Names and order live in the renderer for the app's run ([Interface: terminal](../design/ui.md#terminal)). Checked on a production build: rename, a click that selects and a drag that reorders. The strip's redesign is still open.
+- **Tracked**: what is left is in [#41](https://github.com/overbench/overbench/issues/41).
 
 ## 40. The Settings pages look crude and their colours are untuned
 
@@ -686,6 +707,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - Candidates talked through: a search icon once session search or a command palette exists (on the roadmap, not built); **New session** as an icon here, which frees a row of the sidebar but is easier to miss. Back and forward buttons were considered and set aside, since the sidebar, Settings' **Back**, a sub-session's parent link and `Mod+Shift+[` / `Mod+Shift+]` already cover the moves.
   - The stretch is where the window is dragged, so part of it stays empty, and any control in it is `app-region-no-drag` ([problem 14](#14-the-terminal-panels-own-buttons-do-nothing)).
   - On Windows and Linux there are no traffic lights on the left and the window controls sit on the right, so the stretch is wider there.
+- **Tracked**: what is left is in [#34](https://github.com/overbench/overbench/issues/34).
 
 ## 45. Sessions without a message stay in the list
 
@@ -700,6 +722,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
   - The empty sessions already in users' indexes.
   - The rule written into [Session model](../design/session-model.md#session-lifecycle) and [Interface: sidebar](../design/ui.md#sidebar).
 - **Partly fixed**: 2026-10-22, decided while the maintainer was away; to be reviewed. The project home's agent cards open [New session](../design/ui.md#new-session) in the project with that agent chosen, so a session is created only with its first message. Sub-sessions started from a menu and the empty sessions already in users' indexes remain.
+- **Tracked**: what is left is in [#42](https://github.com/overbench/overbench/issues/42).
 
 ## 46. A session's error mark stays after it has been seen
 
@@ -762,6 +785,7 @@ Problems the maintainer found while using M0 by hand. Each one is recorded as re
 - **Partly fixed**: an agent message shows its links and other content as labelled chips after its images, as the session model says, through the chip user messages use. The rest is still to be planned.
 - **Reported again**: 2026-10-22, with a screenshot of the Files pane showing "Binary file, 201.6 kB, not shown." for a PNG cover.
 - **Partly fixed**: the Files pane previews images. The host reads a file named as a picture whole, up to 10 MB, and types it by its first bytes; the preview shows it from a `data:` URL, which the CSP already allows, at its own size or fitted, over squares for transparency, with its pixel and file size ([Interface: files](../design/ui.md#files)). SVG still shows as source, and audio, video and the thread's inline media are still to be planned.
+- **Tracked**: what is left is in [#43](https://github.com/overbench/overbench/issues/43).
 
 ## 50. Codex's progress notes read as its answer
 

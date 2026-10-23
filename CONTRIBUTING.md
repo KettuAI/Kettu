@@ -2,17 +2,25 @@
 
 Thanks for helping shape OverBench. For setup and the available scripts, see [Run from source](./README.md#run-from-source).
 
-## Before you open a pull request
+## How to contribute
 
-Make sure these pass:
+OverBench takes issues from outside, not code: fixes and features are written by the project, and pull requests are opened by collaborators only ([why](./docs/workflow.md#outside-contributions)).
+
+- **Bugs and ideas**: open an issue through the [issue forms](https://github.com/overbench/overbench/issues/new/choose), in any language. A screenshot helps.
+- **Security problems**: follow [SECURITY.md](./SECURITY.md); never post them in a public issue.
+
+## Project work
+
+For the maintainer and the coding agents. Every change goes through an issue and a pull request, as [docs/workflow.md](./docs/workflow.md) describes. Before a pull request leaves draft, make sure these pass:
 
 ```bash
 pnpm format:check
 pnpm lint
 pnpm typecheck
+pnpm test
 ```
 
-From M0.1 on, `pnpm test` must pass as well. The design documents in [docs/](./docs/README.md) describe how each part is meant to work; read the one for the part you change. Any UI work follows the [design process](./docs/design/design-process.md) and the rules in [visual style](./docs/design/visual-style.md) and [UX guidelines](./docs/design/ux-guidelines.md).
+The design documents in [docs/](./docs/README.md) describe how each part is meant to work; read the one for the part you change. Any UI work follows the [design process](./docs/design/design-process.md) and the rules in [visual style](./docs/design/visual-style.md) and [UX guidelines](./docs/design/ux-guidelines.md).
 
 ## UI stack
 

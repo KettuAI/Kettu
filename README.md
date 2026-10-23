@@ -97,7 +97,7 @@ Development builds also list a **Fake agent**, which needs no account or network
 
 ## Contributing
 
-Early feedback shapes OverBench the most, and ideas about design and workflow are especially welcome: open an [issue](https://github.com/overbench/overbench/issues) to start the conversation. Before sending code, read [CONTRIBUTING.md](./CONTRIBUTING.md) for the UI stack and project conventions.
+Early feedback shapes OverBench the most, and ideas about design and workflow are especially welcome: open an [issue](https://github.com/overbench/overbench/issues/new/choose) to start the conversation, in any language. OverBench takes issues, not pull requests; [CONTRIBUTING.md](./CONTRIBUTING.md) explains how to contribute.
 
 ---
 

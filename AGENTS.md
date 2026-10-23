@@ -8,6 +8,15 @@ OverBench is an Electron desktop GUI for terminal coding agents: Claude Code, Co
 
 OverBench is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP). Before you build anything, read [docs/architecture.md](./docs/architecture.md), the detailed design for the part you are touching (all of them are listed in [docs/README.md](./docs/README.md)), and the current milestone plan, [docs/milestones/m0.md](./docs/milestones/m0.md). Implement what the design says; when the design turns out wrong or incomplete, update the document in the same change, following the rules in `docs/README.md`.
 
+## Workflow
+
+Every change goes through an issue and a pull request, as [docs/workflow.md](./docs/workflow.md) describes; read it before you start. In short:
+
+- One issue, one session, one worktree, one branch, one pull request. Branch from the latest `origin/main`; the main checkout stays on a clean `main`.
+- Never push to `main`. Open a draft pull request after your first push, and mark it ready once the definition of done holds.
+- Search for an existing issue before you file one. A bug you find on the side becomes its own issue, not part of your pull request.
+- The gates are the maintainer's: accepting, designs, merging, closing without a merged pull request, and releasing. Ask at each, and report every issue, pull request and comment you create, with its link.
+
 ## Core philosophy: beauty is productivity (颜值也是生产力)
 
 OverBench takes the best implementations already proven in leading projects, integrates them into one workbench, and then pushes them further, with performance optimized to the limit and a UI polished to the limit. Judge every change on all three.
@@ -129,7 +138,7 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 - **Comments**: English and ASCII only, and only when they say what the code cannot, such as the reason for a workaround or an edge case. No commented-out code.
 - **Dependencies**: ask the maintainer before adding any. Renderer-only libraries go in `devDependencies` because Vite bundles them; only modules a process loads at runtime instead of from the bundle, such as `node-pty` and `electron-updater`, go in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
 - **Docs**: `README.md` and `README.zh-CN.md` are kept in sync; change both together. Design docs under `docs/` follow the maintenance rules in `docs/README.md`.
-- **Git**: Conventional Commits 1.0.0 in English, with an imperative subject of at most 50 characters and a body that explains why. No tool-generated trailers or attribution lines. Branches are `feat/…`, `fix/…`, `chore/…`, `docs/…` or `refactor/…` in kebab-case.
+- **Git**: Conventional Commits 1.0.0 in English, with an imperative subject of at most 50 characters and a body that explains why. No tool-generated trailers or attribution lines. Branches are `<type>/<issue>-<slug>` in kebab-case, such as `fix/123-model-menu-close`. A pull request's title follows the same subject rules, because the squash merge makes it the commit on `main`; its description is a sentence or two, `Closes #N` and how it was checked, with no headings.
 - **Language**: talk to the maintainer in Simplified Chinese. Everything written into the repository is English (code, comments, commits, pull requests), except Chinese product copy and `README.zh-CN.md`.
 
 ## Gotchas
