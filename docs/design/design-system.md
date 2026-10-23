@@ -152,7 +152,7 @@ Each agent is shown with its official mark in its own colors. They are the only 
 | Codex       | The Codex mark, a vertical gradient `#B1A7FF` → `#7A9DFF` → `#3941FF`                              | [`@lobehub/icons`](https://github.com/lobehub/lobe-icons) (MIT)              |
 | OpenCode    | The two-tone OpenCode mark: frame `#17181C` and fill `#E6E5E6` light, `#FFFFFF` and `#5A5858` dark | [sst/opencode](https://github.com/sst/opencode) `packages/identity` (MIT)    |
 
-- Sizes: 14 px in sidebar and list rows and before the session title in the top bar, 17 px on a 32 px tile in cards (16 px on 30 px in the Welcome list). The tile is `--tile` (`--bg-subtle`) with an inset `--border-soft` ring and an 8 px radius.
+- Sizes: 14 px in sidebar and list rows and before the session title in the top bar, 17 px on a 32 px tile in cards. The tile is `--tile` (`--bg-subtle`) with an inset `--border-soft` ring and an 8 px radius.
 - An agent that is not installed shows its mark in one color, `--muted-foreground`.
 - The marks ship as SVG files with their license notices; the gradient and the two OpenCode colors are tokens, so they follow the theme.
 

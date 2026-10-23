@@ -21,6 +21,17 @@ export function agentNeed(status: AgentStatus): AgentNeed {
 
 export const canStart = (status: AgentStatus): boolean => agentNeed(status) !== 'install'
 
+/**
+ * While no agent can start, the names of those waiting for Node.js, which installing it fixes;
+ * empty when they all need installing. Null once one can start, or while none is known.
+ */
+export function noAgentCanStart(statuses: AgentStatus[]): string[] | null {
+  if (statuses.length === 0 || statuses.some(canStart)) return null
+  return statuses
+    .filter((s) => s.state === 'node-missing' || s.state === 'node-outdated')
+    .map((s) => s.name)
+}
+
 // The categories whose last chosen values carry over to the next session, as the host keeps them.
 const REMEMBERED: ReadonlySet<ConfigOption['category']> = new Set([
   'model',
