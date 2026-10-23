@@ -20,8 +20,14 @@ export interface AgentTreesOptions {
   graceMs: number
   /** How long after an agent's traffic its tree is listed again, at most once in that time. */
   noteMs?: number
+  /** How long `close` waits for the stops in progress; what they have not done is the next host's. */
+  closeWaitMs?: number
   log: LogFn
 }
+
+// Main kills the host 6 s after `host:shutdown`, and the stops before `close` can take the 2 s
+// EOF wait and a listing.
+const CLOSE_WAIT_MS = 2_000
 
 interface Running {
   root: TreeRoot
@@ -182,13 +188,26 @@ export class AgentTrees {
   }
 
   /**
-   * Waits for the stops in progress, writes the record, and writes nothing after: the host exits
-   * next, and a later write could land as it does. What is still in its grace stays recorded for
-   * the next host.
+   * Waits for the stops in progress, up to `closeWaitMs`, writes the record, and writes nothing
+   * after: the host exits next, and a later write could land as it does. What is still in its
+   * grace, or was still being listed, stays recorded for the next host.
    */
   async close(): Promise<void> {
-    await Promise.all([...this.reaping.values(), this.leftoverStop])
+    const waitMs = this.options.closeWaitMs ?? CLOSE_WAIT_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<boolean>(
+      (resolve) => (timer = setTimeout(() => resolve(true), waitMs)),
+    )
+    const stops = Promise.all([...this.reaping.values(), this.leftoverStop]).then(() => false)
+    const timedOut = await Promise.race([stops, late])
+    clearTimeout(timer)
     this.closed = true
+    if (timedOut) {
+      this.options.log(
+        'warn',
+        `Stopped waiting for what the agents left after ${waitMs} ms; the next run stops it`,
+      )
+    }
     await this.options.file.flush()
   }
 
