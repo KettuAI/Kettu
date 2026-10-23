@@ -209,7 +209,8 @@ export class AgentHost {
   private exited(clean: boolean): void {
     for (const resolve of this.busyRequests.values()) resolve([])
     this.busyRequests.clear()
-    for (const settle of [...this.grantRequests.values()]) settle(new Error(t('attachments.hostDown')))
+    for (const settle of [...this.grantRequests.values()])
+      settle(new Error(t('attachments.hostDown')))
     this.deps.onBadge(0)
     const roots = this.agentProcesses
     this.agentProcesses = []

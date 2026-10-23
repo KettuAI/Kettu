@@ -52,8 +52,8 @@ describe('grantPaths', () => {
   it('grants nothing when the host does not take the grants', async () => {
     const file = path.join(dir, 'a.txt')
     await writeFile(file, 'a')
-    await expect(
-      grantPaths([file], () => Promise.reject(new Error('host down'))),
-    ).rejects.toThrow('host down')
+    await expect(grantPaths([file], () => Promise.reject(new Error('host down')))).rejects.toThrow(
+      'host down',
+    )
   })
 })

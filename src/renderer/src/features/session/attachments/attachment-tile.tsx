@@ -1,12 +1,18 @@
 import type { ComponentProps, MouseEvent } from 'react'
 import { CircleAlertIcon, TriangleAlertIcon, XIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import type { Attachment } from '@shared/thread'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { cn } from '@renderer/lib/utils'
+import { cutName } from './cut-name'
 
 /** What a tile shows, the same in the composer and in the thread. */
 export interface TileView {
   name: string
+  kind: Attachment['type']
   thumb: string | null
   status: 'adding' | 'ready' | 'failed'
   /** Under the name of a tile without a picture: its size, or what went wrong. */
@@ -32,7 +38,9 @@ export function AttachmentTile({
   onRemove?: () => void
   removeLabel?: string
 } & ComponentProps<'div'>) {
+  const { t } = useTranslation('composer')
   const picture = view.status !== 'failed' && view.thumb
+  const adding = view.status === 'adding'
   const remove = (event: MouseEvent) => {
     event.stopPropagation()
     onRemove?.()
@@ -57,7 +65,7 @@ export function AttachmentTile({
             draggable={false}
             className="size-full rounded-[inherit] object-cover"
           />
-        ) : view.status === 'adding' ? (
+        ) : adding && view.kind === 'image' ? (
           // Shown only when reading takes a while, so a quick one never flashes.
           <div className="absolute inset-0 animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
             <Skeleton className="size-full rounded-[inherit]" />
@@ -66,20 +74,30 @@ export function AttachmentTile({
           <div className="flex size-full flex-col justify-between p-2.5">
             {view.status === 'failed' ? (
               <CircleAlertIcon className="size-4 text-danger" />
+            ) : adding ? (
+              <Spinner className="size-4 animate-in text-icon fade-in fill-mode-both delay-200 duration-(--duration-fast)" />
+            ) : view.kind === 'file' || view.kind === 'folder' ? (
+              <FileTypeIcon path={view.name} folder={view.kind === 'folder'} className="size-4" />
             ) : (
               <span className="size-4" />
             )}
             <div className="min-w-0">
               <MiddleCutName name={view.name} />
-              {view.detail && (
-                <div
-                  className={cn(
-                    'truncate text-meta tabular',
-                    view.status === 'failed' ? 'text-danger' : 'text-tertiary',
-                  )}
-                >
-                  {view.detail}
+              {adding ? (
+                <div className="truncate text-meta text-tertiary animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
+                  {t('attachments.reading')}
                 </div>
+              ) : (
+                view.detail && (
+                  <div
+                    className={cn(
+                      'truncate text-meta tabular',
+                      view.status === 'failed' ? 'text-danger' : 'text-tertiary',
+                    )}
+                  >
+                    {view.detail}
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -110,14 +128,13 @@ export function AttachmentTile({
   )
 }
 
-/** A name cut in the middle, so its extension stays: `ci-failure-…-1042.log`. */
+/** A name cut in the middle, so its end and extension stay: `ci-failure-…-1042.log`. */
 function MiddleCutName({ name }: { name: string }) {
-  const dot = name.lastIndexOf('.')
-  const [stem, extension] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, '']
+  const [head, tail] = cutName(name)
   return (
     <div className="flex min-w-0 text-xs leading-4 font-medium text-primary">
-      <span className="truncate">{stem}</span>
-      <span className="shrink-0">{extension}</span>
+      <span className="truncate">{head}</span>
+      <span className="max-w-[70%] shrink-0 truncate">{tail}</span>
     </div>
   )
 }

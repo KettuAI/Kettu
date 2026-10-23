@@ -94,6 +94,20 @@
     "limit": "一条消息最多带 20 个附件",
     "tooLarge": "这些附件合计超过 10 MB，移除一些后才能发送。",
     "announceAdded": "已添加 {{name}}",
-    "announceRemoved": "已移除 {{name}}"
+    "announceRemoved": "已移除 {{name}}",
+    "add": "添加文件、照片或文件夹",
+    "addFiles": "添加文件或照片…",
+    "addFolder": "添加文件夹…",
+    "slashCommands": "斜杠命令",
+    "atMost": "最多 20 个附件",
+    "waitForAgent": "等 {{agent}} 启动后再添加",
+    "reading": "正在读取…",
+    "folder": "文件夹",
+    "sentWithContents": "连同内容发送",
+    "sentAsFileLink": "以链接发送，{{agent}} 会用它自己的工具读取。",
+    "sentLinkedFolder": "以文件夹链接发送",
+    "dropTitle": "松手即可添加",
+    "dropHint": "文件、照片或文件夹 · 最多 20 个",
+    "slashNeedsEmpty": "仅限空消息"
   }
 }

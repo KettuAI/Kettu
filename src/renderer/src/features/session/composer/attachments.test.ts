@@ -6,12 +6,15 @@ import {
   setDraftAttachments,
   type DraftAttachment,
 } from '@renderer/stores/attachments'
+import type { GrantedAttachment } from '@shared/attachments'
 import {
+  attachFiles,
   attachImages,
   attachmentContent,
   attachmentsBlock,
   dropAttachments,
   pastedImages,
+  pickAttachments,
   removeAttachment,
   restoreAttachments,
 } from './attachments'
@@ -52,6 +55,7 @@ const record = (id: string, name: string, size = 3): Attachment => ({
 const item = (changes: Partial<DraftAttachment>): DraftAttachment => ({
   key: 'k',
   name: 'Image 1',
+  kind: 'image',
   status: 'ready',
   attachment: null,
   thumb: null,
@@ -183,14 +187,181 @@ describe('attachmentsBlock', () => {
   it('refuses more than 10 MB in all, counted in base64 as the host counts it', () => {
     const mb = 1024 * 1024
     // 3 MB is 4 MB in base64.
-    const images = [item({ size: 3 * mb }), item({ size: 3 * mb })]
-    expect(attachmentsBlock([...images, item({ size: 1.5 * mb })], '')).toBeNull()
-    expect(attachmentsBlock([...images, item({ size: 1.6 * mb })], '')).toEqual({
+    const image = (size: number) => item({ size, attachment: record('i', 'Image', size) })
+    const images = [image(3 * mb), image(3 * mb)]
+    expect(attachmentsBlock([...images, image(1.5 * mb)], '')).toBeNull()
+    expect(attachmentsBlock([...images, image(1.6 * mb)], '')).toEqual({
       message: 'These attachments are over 10 MB in all. Remove some to send.',
       notice: true,
     })
     expect(attachmentsBlock(images, 'x'.repeat(2 * mb))).toBeNull()
     expect(attachmentsBlock(images, 'x'.repeat(2 * mb + 1))?.notice).toBe(true)
+  })
+
+  it('counts a text file sent with its contents, and nothing for a link', () => {
+    const mb = 1024 * 1024
+    const file = (mimeType: string, size: number) =>
+      item({
+        kind: 'file',
+        size,
+        attachment: { ...record('f', 'a'), type: 'file', mimeType, size },
+      })
+    const images = [item({ size: 3 * mb, attachment: record('i', 'Image', 3 * mb) })]
+    // 8 MB of images, then 20 kB of text tips it over; a 2 MB PDF goes as a link and does not.
+    const full = [...images, ...images]
+    expect(
+      attachmentsBlock([...full, file('application/pdf', 2 * mb)], 'x'.repeat(2 * mb - 10)),
+    ).toBeNull()
+    expect(
+      attachmentsBlock([...full, file('text/markdown', 20_000)], 'x'.repeat(2 * mb - 10))?.notice,
+    ).toBe(true)
+  })
+})
+
+describe('picked and dropped files', () => {
+  const pick = vi.fn<(kind: string, folder: string | null) => Promise<GrantedAttachment[]>>()
+  const fromFiles = vi.fn<(files: File[]) => Promise<(GrantedAttachment | null)[]>>()
+  const grant = (name: string, kind: 'file' | 'folder' = 'file', size: number | null = 8) => ({
+    grantId: `g-${name}`,
+    name,
+    kind,
+    size,
+  })
+  const hostRecord = (name: string, type: Attachment['type'], changes: Partial<Attachment> = {}) =>
+    ({
+      ...record(`r-${name}`, name, 8),
+      type,
+      uri: `file:///p/${name}`,
+      mimeType: type === 'image' ? 'image/png' : 'text/markdown',
+      thumb: null,
+      ...changes,
+    }) satisfies Attachment
+
+  beforeEach(() => {
+    vi.stubGlobal('window', { overbench: { attachments: { pick, fromFiles } } })
+    request.mockImplementation((async (method: string, params: Record<string, unknown>) => {
+      const source = params.source as { grantId: string } | undefined
+      if (method === 'attachments.add') {
+        const name = source!.grantId.slice(2)
+        return hostRecord(name, /\.png$/.test(name) ? 'image' : name === 'src' ? 'folder' : 'file')
+      }
+      if (method === 'attachments.read') return { mimeType: 'image/png', bytes: new ArrayBuffer(8) }
+      if (method === 'attachments.update') {
+        const scaled = params.scaled as { bytes: ArrayBuffer; mimeType: string } | null
+        return hostRecord('shot.png', 'image', {
+          thumb: params.thumb as string,
+          ...(scaled ? { mimeType: scaled.mimeType, size: scaled.bytes.byteLength } : {}),
+        })
+      }
+      return undefined
+    }) as typeof host)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('adds what the dialog granted, opening it in the session folder', async () => {
+    pick.mockResolvedValue([grant('notes.md'), grant('src', 'folder', null)])
+    await expect(pickAttachments(DRAFT, 'files', '/p')).resolves.toBe(0)
+    expect(pick).toHaveBeenCalledWith('files', '/p')
+    await settled()
+    expect(draftAttachments(DRAFT).map((i) => [i.kind, i.status, i.attachment?.uri])).toEqual([
+      ['file', 'ready', 'file:///p/notes.md'],
+      ['folder', 'ready', 'file:///p/src'],
+    ])
+    expect(request).toHaveBeenCalledWith('attachments.add', {
+      source: { grantId: 'g-notes.md' },
+      thumb: null,
+    })
+    expect(prepare).not.toHaveBeenCalled()
+  })
+
+  it('makes a picked image its thumbnail from the bytes the host read, and hands back a scaled copy', async () => {
+    pick.mockResolvedValue([grant('shot.png')])
+    await pickAttachments(DRAFT, 'files', '/p')
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+    expect(request).toHaveBeenCalledWith('attachments.read', { id: 'r-shot.png' })
+    expect(request).toHaveBeenCalledWith('attachments.update', {
+      id: 'r-shot.png',
+      thumb: 'data:image/webp;base64,AAAA',
+      scaled: { bytes: expect.any(ArrayBuffer), mimeType: 'image/jpeg' },
+    })
+    expect(draftAttachments(DRAFT)[0]).toMatchObject({
+      kind: 'image',
+      thumb: 'data:image/webp;base64,AAAA',
+      scaled: { width: 2000, height: 1250 },
+      attachment: { mimeType: 'image/jpeg', size: 3 },
+    })
+  })
+
+  it('keeps an image that fits as it is, sending only its thumbnail', async () => {
+    prepare.mockImplementation(async () => ({
+      ...prepared(8),
+      mimeType: 'image/png',
+      scaled: null,
+    }))
+    pick.mockResolvedValue([grant('shot.png')])
+    await pickAttachments(DRAFT, 'files', '/p')
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+    expect(request).toHaveBeenCalledWith('attachments.update', {
+      id: 'r-shot.png',
+      thumb: 'data:image/webp;base64,AAAA',
+      scaled: null,
+    })
+  })
+
+  it('makes a dropped image its thumbnail from the File, not from the host', async () => {
+    const file = png('shot.png')
+    fromFiles.mockResolvedValue([grant('shot.png')])
+    await attachFiles(DRAFT, [file])
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+    expect(prepare).toHaveBeenCalledWith(file)
+    expect(request).not.toHaveBeenCalledWith('attachments.read', expect.anything())
+  })
+
+  it('shows dropped files at once, and fails one with nothing on disk behind it', async () => {
+    fromFiles.mockResolvedValue([grant('notes.md'), null])
+    const adding = attachFiles(DRAFT, [new File(['# x'], 'notes.md'), new File(['x'], 'blob')])
+    expect(draftAttachments(DRAFT).map((i) => [i.name, i.status])).toEqual([
+      ['notes.md', 'adding'],
+      ['blob', 'adding'],
+    ])
+    await adding
+    await settled()
+    expect(draftAttachments(DRAFT).map((i) => i.status)).toEqual(['ready', 'failed'])
+  })
+
+  it('grants no more than fit, and says how many did not', async () => {
+    attachImages(
+      DRAFT,
+      Array.from({ length: 19 }, () => png()),
+    )
+    fromFiles.mockResolvedValue([grant('a.md')])
+    const files = [new File(['a'], 'a.md'), new File(['b'], 'b.md'), new File(['c'], 'c.md')]
+    await expect(attachFiles(DRAFT, files)).resolves.toBe(2)
+    expect(fromFiles).toHaveBeenCalledWith([files[0]])
+    expect(draftAttachments(DRAFT)).toHaveLength(20)
+    pick.mockResolvedValue([grant('x.md'), grant('y.md')])
+    await expect(pickAttachments(DRAFT, 'files', null)).resolves.toBe(2)
+  })
+
+  it('fails the tiles when main cannot grant them', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    fromFiles.mockRejectedValue(new Error("The agent host isn't running."))
+    await attachFiles(DRAFT, [new File(['a'], 'a.md')])
+    expect(draftAttachments(DRAFT)[0]).toMatchObject({
+      status: 'failed',
+      error: "The agent host isn't running.",
+    })
+  })
+
+  it('removes the record of a file removed while it was being added', async () => {
+    pick.mockResolvedValue([grant('notes.md')])
+    await pickAttachments(DRAFT, 'files', '/p')
+    removeAttachment(DRAFT, draftAttachments(DRAFT)[0]!.key)
+    await settled()
+    expect(request).toHaveBeenCalledWith('attachments.remove', { id: 'r-notes.md' })
+    expect(draftAttachments(DRAFT)).toEqual([])
   })
 })
 

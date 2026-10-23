@@ -359,7 +359,8 @@ describe('parseAttachmentsFile', () => {
   })
 
   it('reads an image stored before files could be attached, and checks each kind', () => {
-    const { path: _, ...older } = record
+    const older: Partial<AttachmentRecord> = { ...record }
+    delete older.path
     const file = { ...record, id: 'f1', type: 'file', hash: null, path: '/p/a.md' }
     const folder = { ...file, id: 'd1', type: 'folder', size: null, mimeType: null }
     expect(
