@@ -321,6 +321,11 @@ export class AgentConnection {
     }
   }
 
+  /** Updates for a session OverBench closed wait for its next register again, like early ones. */
+  reopen(acpSessionId: string): void {
+    this.unregistered.delete(acpSessionId)
+  }
+
   get closed(): Promise<void> {
     return this.connection.closed
   }

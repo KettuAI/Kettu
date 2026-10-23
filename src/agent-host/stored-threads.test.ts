@@ -522,6 +522,39 @@ describe('keeping the config across an attach', () => {
     ])
   })
 
+  it('keeps what the agent sends between its answer and the attach', async () => {
+    const { t, port } = await setup({
+      sessionTimings: quick,
+      agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'reset', FAKE_AGENT_SET_CONFIG_MS: '50' },
+    })
+    const sessionId = await chosenSession(t, port)
+    await release(port, sessionId)
+    const from = port.events.length
+    // The fake agent announces its commands just after it answers session/resume.
+    await port.request('sessions.setConfigOption', {
+      sessionId,
+      optionId: 'thought_level',
+      value: 'low',
+    })
+    await port.until(
+      () =>
+        port.events
+          .slice(from)
+          .some(
+            (e) =>
+              e.type === 'session.patches' &&
+              e.batch.sessionId === sessionId &&
+              e.batch.patches.some((p) => p.op === 'session.update' && 'commands' in p.changes),
+          ),
+      2_000,
+    )
+    const acpSessionId = port.thread(sessionId).session.acpSessionId!
+    const ignored = t.host.diagnostics
+      .agentRecords('fake-agent')
+      .events.filter((e) => e.event === 'ignored' && e.detail?.includes(acpSessionId))
+    expect(ignored).toEqual([])
+  })
+
   it('sends nothing more when the agent kept the values itself', async () => {
     const { t, port } = await setup({ sessionTimings: quick })
     const sessionId = await chosenSession(t, port)

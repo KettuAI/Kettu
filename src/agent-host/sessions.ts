@@ -1738,6 +1738,9 @@ export class SessionManager {
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     const caps = runtime.init.capabilities
     const { connection } = runtime
+    // A released session is marked closed on the connection; what the agent sends before the
+    // session attaches waits for it instead of being dropped.
+    connection.reopen(record.acpSessionId)
     let config: ConfigOption[]
     if (caps.resumeSession) {
       try {
@@ -1768,6 +1771,7 @@ export class SessionManager {
     })
     if (gone()) {
       // Closed while it attached: the agent's session closes again rather than stay open unseen.
+      connection.unregister(record.acpSessionId)
       if (caps.closeSession) await connection.closeSession(record.acpSessionId).catch(() => {})
       throw new HostError('busy', t('session.openFirst'))
     }
@@ -1859,6 +1863,8 @@ export class SessionManager {
       )
     } finally {
       connection.unregister(record.acpSessionId, quiet)
+      // Updates after the replay wait for the session, which attaches once its values are set.
+      connection.reopen(record.acpSessionId)
     }
   }
 
