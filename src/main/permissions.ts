@@ -1,4 +1,4 @@
-import type { Session } from 'electron'
+import type { Session, WebContents } from 'electron'
 
 // The only permissions the renderer uses: the clipboard buttons write text and the terminal's
 // paste reads it.
@@ -27,24 +27,28 @@ export function isPermissionAllowed(
 
 /**
  * Denies every permission the app does not need. Electron grants all of them to a session that
- * has no handler, and the check handler is the one the web APIs ask first.
+ * has no handler, and the check handler is the one the web APIs ask first. A page that has had a
+ * subframe gets nothing.
  */
 export function restrictPermissions(
   session: Session,
   isOwnUrl: (url: string | undefined) => boolean,
+  hasSubframe: (webContents: WebContents) => boolean,
 ): void {
-  session.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+  session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
-      isPermissionAllowed(
-        permission,
-        { url: details.requestingUrl, isMainFrame: details.isMainFrame },
-        isOwnUrl,
-      ),
+      !hasSubframe(webContents) &&
+        isPermissionAllowed(
+          permission,
+          { url: details.requestingUrl, isMainFrame: details.isMainFrame },
+          isOwnUrl,
+        ),
     )
   })
   session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     return (
       webContents !== null &&
+      !hasSubframe(webContents) &&
       isPermissionAllowed(
         permission,
         { url: details.requestingUrl ?? requestingOrigin, isMainFrame: details.isMainFrame },

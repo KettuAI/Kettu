@@ -31,9 +31,10 @@ export function makeProject(dir) {
   writeFileSync(join(dir, 'src', 'session.ts'), 'export const session = null\n')
 }
 
-export function launchApp({ port, userData, env = {} }) {
+/** Starts the app; with `onOutput`, its output is still printed and also passed on per chunk. */
+export function launchApp({ port, userData, env = {}, onOutput }) {
   const electron = createRequire(import.meta.url)('electron')
-  return spawn(
+  const app = spawn(
     electron,
     [
       '.',
@@ -50,9 +51,22 @@ export function launchApp({ port, userData, env = {} }) {
         OVERBENCH_FAKE_AGENT: join(root, 'tools', 'fake-agent', 'main.ts'),
         ...env,
       },
-      stdio: ['ignore', 'inherit', 'inherit'],
+      stdio: ['ignore', onOutput ? 'pipe' : 'inherit', onOutput ? 'pipe' : 'inherit'],
     },
   )
+  if (onOutput) {
+    for (const [stream, sink] of [
+      [app.stdout, process.stdout],
+      [app.stderr, process.stderr],
+    ]) {
+      stream.setEncoding('utf8')
+      stream.on('data', (text) => {
+        sink.write(text)
+        onOutput(text, stream)
+      })
+    }
+  }
+  return app
 }
 
 /** Stops an app from `launchApp` and the processes it started, and waits for it to exit. */

@@ -63,6 +63,10 @@ export class TerminalHost {
     this.host.connect(webContents)
   }
 
+  revoke(webContents: WebContents): void {
+    this.host.revoke(webContents)
+  }
+
   restart(): void {
     this.host.restart()
   }
