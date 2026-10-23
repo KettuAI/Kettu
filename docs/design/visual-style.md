@@ -87,12 +87,13 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Warning, conflict                                                 | `TriangleAlert`          |                                   |
 | Information                                                       | `Info`                   |                                   |
 | Help, an unknown value                                            | `CircleHelp`             |                                   |
-| Delete                                                            | `Trash`                  | `Trash2`                          |
+| Delete; Recently deleted                                          | `Trash`                  | `Trash2`                          |
 | Rename, edit                                                      | `Pencil`                 | `SquarePen`                       |
 | A web link, open outside the app                                  | `ExternalLink`           |                                   |
 | A folder, show in the file manager, the Files pane                | `Folder`                 | `FolderOpen`                      |
 | A file                                                            | `File`                   |                                   |
 | Save a file; save a report to disk                                | `Save`; `FileDown`       |                                   |
+| Import a file, such as an HTML file as an artifact                | `FileUp`                 | `Upload`, `Import`                |
 | Terminal                                                          | `SquareTerminal`         | `Terminal`                        |
 | Search, filter                                                    | `Search`                 | `Filter`                          |
 | Settings                                                          | `Settings`               | `Cog`, `SlidersHorizontal`        |
