@@ -2085,11 +2085,11 @@ export class SessionManager {
   }
 
   /**
-   * Claude Code keeps no history for a session nothing was sent to, so it cannot resume one: an
-   * agent that never answered loses nothing when the session starts over.
+   * Claude Code and Codex keep no history for a session nothing was sent to, so they cannot resume
+   * one: an agent that never answered loses nothing when the session starts over.
    */
   private neverAnswered(live: Live, error: unknown): boolean {
-    if (!(error instanceof AgentRequestError) || error.code !== RESOURCE_NOT_FOUND) return false
+    if (!(error instanceof AgentRequestError) || !unknownSession(error)) return false
     return !live.thread.order.some((id) => {
       const kind = live.thread.byId[id]?.kind
       return kind === 'agent' || kind === 'thought' || kind === 'tool' || kind === 'turn_end'
@@ -3524,6 +3524,18 @@ function canSend(status: SessionStatus): boolean {
 
 /** JSON-RPC's code for a session the agent does not have. */
 const RESOURCE_NOT_FOUND = -32002
+const INTERNAL_ERROR = -32603
+// codex-acp 2.2.2 passes Codex's own error on as an internal one, in `data.details`: Codex writes a
+// thread's rollout on its first turn, so a new process cannot resume a thread never prompted.
+const NO_ROLLOUT = 'no rollout found for thread id'
+
+/** The agent does not have the session it was asked to resume. */
+function unknownSession(error: AgentRequestError): boolean {
+  if (error.code === RESOURCE_NOT_FOUND) return true
+  if (error.code !== INTERNAL_ERROR) return false
+  const details = (error.data as { details?: unknown } | undefined)?.details
+  return typeof details === 'string' && details.includes(NO_ROLLOUT)
+}
 
 /** The number in an entry id such as `e:12`, which the session's new ids count on from. */
 function idNumber(id: string): number {

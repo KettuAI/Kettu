@@ -49,7 +49,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     description: 'Thinks, reads, runs commands and edits until you cancel, as the context grows',
   },
   crash: { description: 'Exits mid-turn with a non-zero code', hint: '--code <n>' },
-  error: { description: 'Fails the turn with an internal error' },
+  error: { description: 'Fails the turn with an internal error', hint: '--silent' },
   'auth-required': {
     description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
   },
@@ -97,6 +97,7 @@ export interface ScenarioOptions {
   holdMs: number // requests: how long the turn stays open after its request, not scaled
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
+  silent: boolean // error: fails before writing anything, as a refused model does
 }
 
 export interface ScenarioChoice {
@@ -181,6 +182,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     holdMs: parseNumber(flagValue(args, 'hold')) ?? 0,
     thenMs: parseNumber(flagValue(args, 'then')),
     atEnd: flagValue(args, 'at-end') !== undefined,
+    silent: flagValue(args, 'silent') !== undefined,
   }
   return { scenario, options, text }
 }

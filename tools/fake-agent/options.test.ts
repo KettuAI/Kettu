@@ -56,6 +56,11 @@ describe('chooseScenario', () => {
     expect(chooseScenario('/requests --at-end', {}).options.atEnd).toBe(true)
   })
 
+  it('reads whether error writes anything before it fails', () => {
+    expect(chooseScenario('/error', {}).options.silent).toBe(false)
+    expect(chooseScenario('/error --silent', {}).options.silent).toBe(true)
+  })
+
   it('sizes a large history from --entries, else the environment, else 1,000', () => {
     const env = { FAKE_AGENT_HISTORY_ENTRIES: '2000' }
     expect(chooseScenario('/large-history --entries 4000', env).options.entries).toBe(4000)

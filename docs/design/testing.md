@@ -53,7 +53,7 @@ React components have no automated tests in M0; they are checked by running the 
 | `cancel`               | A long turn that honors `session/cancel`; with `--ignore-cancel` it never confirms                                                                                                                                                                              |
 | `long-turn`            | A turn of rounds that think, read a file, run a command, edit a file and write a note, sending `usage_update` as the context grows, until cancelled or for ten minutes                                                                                          |
 | `crash`                | Exits mid-turn with a non-zero code (`--code`, default 3)                                                                                                                                                                                                       |
-| `error`                | Streams part of a message, then fails the prompt with an internal error                                                                                                                                                                                         |
+| `error`                | Streams part of a message, then fails the prompt with an internal error; `--silent` fails before writing anything                                                                                                                                               |
 | `auth-required`        | Signs the agent out and fails the prompt with `auth_required`; `session/new`, `load`, `resume` and `prompt` then fail until `authenticate` or `main.ts --login`. The same prompt sent again in that session after sign-in answers, as the client's retry should |
 | `large-history`        | Marks the session so that `session/load` replays 1,000 entries (`--entries` sets another size), which OverBench does only for a session it stored no thread of; the importable session `large-history-1` does the same, and importing `history-<n>` gives n     |
 | `slow-start`           | Takes 20 s to answer `initialize`, printing progress to stderr; chosen at launch with `FAKE_AGENT_SCENARIO=slow-start`, since it happens before any prompt                                                                                                      |
@@ -84,7 +84,7 @@ Environment variables, read when the agent starts:
 | `FAKE_AGENT_LEGACY_MODES=1`          | Reports modes through the legacy `modes` field instead of a mode config option                                            |
 | `FAKE_AGENT_HISTORY_ENTRIES`         | The size of the synthesized `large-history` replay (default 1,000)                                                        |
 | `FAKE_AGENT_LIST_PAGE`               | The `session/list` page size (default 50), to exercise `nextCursor`                                                       |
-| `FAKE_AGENT_RESUME_UNKNOWN=fail`     | `session/resume` of a session it does not know fails, as Claude Code's does                                               |
+| `FAKE_AGENT_RESUME_UNKNOWN`          | `session/resume` of a session it does not know fails: `fail` as Claude Code, `no-rollout` as Codex                        |
 | `FAKE_AGENT_NEW_SESSION_MS`          | Delays every `session/new` answer by this long, unscaled, for a slow hidden session                                       |
 | `FAKE_AGENT_DELETE_MS`               | Delays every `session/delete` answer by this long, unscaled, for a delete that outlasts a request                         |
 | `FAKE_AGENT_WITHOUT`                 | Capabilities to leave out, comma-separated: a session one such as `close`, or `image` or `embeddedContext` for the prompt |
@@ -101,7 +101,7 @@ Environment variables, read when the agent starts:
 | `FAKE_AGENT_RESUME_CONFIG=reset`     | `session/resume` and `session/load` answer at the defaults, as codex-acp's do                                             |
 | `FAKE_AGENT_RESUME_CONFIG=locked`    | The same, and the session then refuses every setting                                                                      |
 
-A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise, and a session resumed or loaded in the same process keeps its own unless `FAKE_AGENT_RESUME_CONFIG` does. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
+A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise, and a session resumed or loaded in the same process keeps its own unless `FAKE_AGENT_RESUME_CONFIG` does. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN` is set.
 
 ## Color checks
 

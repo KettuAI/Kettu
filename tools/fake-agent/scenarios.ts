@@ -476,7 +476,8 @@ const crash: Scenario = async (turn) => {
 }
 
 const error: Scenario = async (turn) => {
-  await stream(turn, 'Checking the build. ', { messageId: turn.messageId() })
+  if (!turn.options.silent)
+    await stream(turn, 'Checking the build. ', { messageId: turn.messageId() })
   throw RequestError.internalError(undefined, 'The fake agent failed this turn on purpose')
 }
 

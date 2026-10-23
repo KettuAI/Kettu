@@ -506,6 +506,12 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         if (env.FAKE_AGENT_RESUME_UNKNOWN === 'fail') {
           throw RequestError.resourceNotFound(ctx.params.sessionId)
         }
+        // Like codex-acp after a restart: Codex writes no rollout before a session's first turn.
+        if (env.FAKE_AGENT_RESUME_UNKNOWN === 'no-rollout') {
+          throw RequestError.internalError({
+            details: `no rollout found for thread id ${ctx.params.sessionId}`,
+          })
+        }
         // A real agent resumes a session it already titled, so the next prompt keeps the title.
         session = newSession(ctx.params.sessionId, ctx.params.cwd)
         session.title = 'Restored session'
