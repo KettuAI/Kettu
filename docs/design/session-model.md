@@ -181,7 +181,19 @@ type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: ContentR
 type ContentRef =
   | { kind: 'image'; mimeType: string; data: string }
   | { kind: 'link'; uri: string; name: string }
+  | { kind: 'attachment'; attachment: Attachment } // what the user added, see attachments
   | { kind: 'unsupported'; label: string }
+interface Attachment {
+  id: string // the host's record while a draft or the queue holds it; unique in a thread
+  type: 'image' | 'file' | 'folder' | 'text' // 'text' is a long paste
+  name: string // the file's name, or "Image 1", "Pasted text 1"
+  uri: string | null // the original's file:// URI; null for a pasted image or text
+  mimeType: string | null
+  size: number | null // bytes: what was sent, or the file's when it went as a link
+  sent: 'image' | 'embedded' | 'linked' | 'inline' | null // how it went; null until sent
+  thumb: string | null // an image's thumbnail, a 224 px WebP data URL
+  blob: string | null // SHA-256 of the bytes kept in the thread store: an image or a pasted text
+}
 interface PlanItem {
   content: string
   priority: 'high' | 'medium' | 'low'
@@ -273,14 +285,14 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `session_message_chunk`     | Appends its content block to the `session_message` entry for `messageId`, or adds that entry.                                                                                                                                           |
 | anything else               | Ignored and recorded in diagnostics, so a newer agent never breaks the thread.                                                                                                                                                          |
 
-Content blocks map as follows: `text` to markdown, `image` to an image ref, `resource_link` to a link ref, and `audio` and `resource` to `unsupported` refs. In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
+Content blocks map as follows: `text` to markdown, `image` to an image ref, `resource_link` to a link ref, and `audio` and `resource` to `unsupported` refs. In a user message replayed by `session/load`, the attachments the user sent map back to attachment refs ([replays](#replays)). In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
 
 The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto the same model.
 
 ## Prompt turns
 
 1. `sessions.prompt` is accepted only when the session is `ready`; otherwise it fails with `busy`. M0 runs one turn at a time per session; a prompt sent during a turn waits in the [queue](#queue-and-steering).
-2. The host adds the user entry, sets `status: 'running'`, `turnStartedAt` and `turnStartUsed`, the context's `usage.used` at that moment (`null` before the agent has reported any), and sends `session/prompt` with the content as ACP content blocks. The two clear when the turn ends; the thread's [status line](./ui.md#turn-status) shows the time since the first and how far the context has grown past the second.
+2. The host adds the user entry, sets `status: 'running'`, `turnStartedAt` and `turnStartUsed`, the context's `usage.used` at that moment (`null` before the agent has reported any), and sends `session/prompt` with the content as ACP content blocks, the [attachments](#attachments) built as the agent's prompt capabilities allow. The two clear when the turn ends; the thread's [status line](./ui.md#turn-status) shows the time since the first and how far the context has grown past the second.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
 4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, is added to `usage.tokens` when present: the schema calls its fields totals across the session, but claude-agent-acp 0.94, codex-acp 2.2.2 and opencode 2.0.32 all send the turn's own counts (read in their source on 2026-10-22), so the host sums them. Claude Code's `usage` leaves out its subagents' requests, so where the response's `_meta.quota.model_usage` splits the turn by model (Claude Code and Codex), the totals sum that instead, with the reasoning still taken from `usage` ([usage statistics](./usage.md#overbenchs-own-record)). The same counts become the turn's rows in the usage record. A count no turn has reported stays `null`. A fork starts from its source's totals, as it starts from its thread; a fork from an earlier reply starts with none ([fork from a reply](#how-the-host-keeps-sessions)). The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
 5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready` or `auth_required` depending on the cause, or `closed` when the agent exited. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
@@ -292,6 +304,53 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 - **Queue**: `SessionView.queue` holds the prompts waiting for the running turn, oldest first, and `queuePaused` whether it waits for the user. `sessions.queue` adds one, or sends it at once when the session is `ready` and nothing waits or only a paused queue does; the composer sends everything through it, so a prompt sent before the renderer heard that a turn started is queued instead of refused. When a turn ends with `end_turn`, the host sends the oldest prompt as the next turn. After any other stop reason or a failed turn, the queue pauses until `sessions.resumeQueue`. OverBench never sends a second `session/prompt` during a turn. The queue is saved in the session index and comes back paused after a close or a restart.
 - **Steering**: an agent advertises `_session/steering` in the top-level `_meta.steering.supported` of its `initialize` response. `sessions.steer` sends a queued prompt as `_session/steering` with `{ sessionId, prompt, _meta: { steering: { idleBehavior: 'promptRequired' } } }`. On `injected`, the host adds the user entry with `steered: true` and removes the prompt from the queue; on `promptRequired` the turn is ending, so the prompt stays first in the queue and goes with the next turn. Claude Code's adapter injects the message into the running turn, interrupting the current generation or moving a running tool to the background.
 - **Codex** is left out: codex-acp 2.2.2 advertises steering but ignores `idleBehavior` and starts a turn of its own when none runs, which OverBench would not track (its PR #593 would fix it). `AgentStatus.capabilities.steering` is false for Codex until a version honours it. OpenCode advertises none and rejects a second prompt, so it gets the queue only.
+- **Attachments** wait in the queue with their prompt and go with it, or with its steering; their records stay with the host until then ([attachments](#where-the-bytes-live)).
+
+## Attachments
+
+> Proposed 2026-10-22 for #40, with the [interface](./ui.md#attachments); built once the maintainer has picked an option.
+
+Files, images and folders the user adds to a prompt. The renderer sends each as an attachment ref that names a record the host holds; at send time the host builds its content block from that record and from what the agent advertised in `initialize`'s `promptCapabilities`, which `AgentStatus.capabilities.prompt` passes on (`image`, `audio`, `embeddedContext`). claude-agent-acp 0.94.0, codex-acp 2.2.2 and OpenCode 2.0.32 all advertise `image` and `embeddedContext`, and none `audio` (observed 2026-10-22).
+
+### How each is sent
+
+| Attachment                                                                    | With the capability                                                 | Without it                                                             |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| An image: PNG, JPEG, GIF or WebP                                              | `image`, in base64, with the original's `uri` when it has one       | `resource_link` to the file; a pasted image is saved first to have one |
+| A text file up to 256 KB: valid UTF-8, no NUL in its first 8,000 bytes        | `resource` with `TextResourceContents` (`uri`, `mimeType`, `text`)  | `resource_link`                                                        |
+| Any other file: larger text, PDF, archive, audio, video, another image format | `resource_link` with `name`, `mimeType` and `size`                  | the same                                                               |
+| A folder                                                                      | `resource_link` to its `file://` URI, ending in `/`                 | the same                                                               |
+| A pasted text                                                                 | `resource` with its text, under the `file://` URI of its saved copy | its text, after the message's text and a blank line (`sent: 'inline'`) |
+
+- The message's text goes first, then the attachments in the composer's order.
+- A text file is read when the prompt is sent, so the agent gets it as it is then; an image is read when it is added, since its thumbnail and its size come from that read.
+- Embedding stops at 256 KB, about 64,000 tokens, the most an agent's own file read takes at once. Past that, a link lets the agent read the parts it needs.
+- Never a `BlobResourceContents`: claude-agent-acp 0.94.0 drops a binary resource, and codex-acp 2.2.2 writes it into the model's context as base64 text (observed 2026-10-22 in their sources). A binary file goes as a link, which the agent opens with its own tools as it would a file it found.
+- An image larger than 2,000 px on a side or 3.75 MB (5 MB in base64) is scaled to fit 2,000 px when it is added, and re-encoded as JPEG at 90%, or PNG when it has transparency, so it stays within every model's per-image limits even when a request holds many images. An image file over 20 MB is not read and goes as a link.
+- A folder is never read: the link is all that is sent. One outside the session's folder is linked the same way, and the agent asks before reading there, as it does for any path outside its folder.
+- `audio` blocks wait until an agent advertises them; audio files go as links.
+- An agent can still refuse what it advertised, as codex-acp refuses images for a model without image input. The prompt then fails as any prompt does, and the composer keeps the draft with its attachments.
+- Limits, checked in the composer and again by the host: at most 20 attachments in a prompt, and 10 MB in all of what is sent ([validation](./host-protocol.md#validation)).
+
+### Only what the user chose
+
+The renderer never names a path for the host to read. An attachment comes from one of three sources, and the host reads nothing else:
+
+- **Picked**: **Add files or photos…** and **Add folder…** call `dialog:add-attachments` in main, which shows the system dialog, checks each chosen path with `stat`, and hands the host a grant, `{ grantId, path, kind }`, over its own port (`host:grant`). The renderer receives only the grant ids, names and sizes.
+- **Dropped or pasted files**: the preload turns each `File` into its path with `webUtils.getPathForFile` and passes the paths to main (`attachments:grant`), which grants them the same way. A page script can give the preload only `File` objects, and only a drop, a paste or a file input yields one with a path, so it cannot name a path of its own. A pasted image or text with no file behind it goes to the host as bytes.
+- **Mentioned**: an `@` path is relative to the session's folder and passes the same containment as `files.read` ([project files](./agent-host.md#project-files)).
+- The host resolves a grant with `realpath` when it reads it, checks that it is still a regular file or a directory, and reads that path alone. A grant serves its one attachment and never widens what `files.*` may read.
+
+### Where the bytes live
+
+- **Drafts and the queue**: `attachments.add` makes a record in `state/attachments.json`: its id, type, name, MIME type, size, and the granted path or the hash of saved bytes. Saved bytes, a pasted image or text or a scaled image, go to `attachments/<sha256>` in the data folder. A record stays until its prompt is sent or the user removes it, so a draft or a queued prompt keeps its attachments across a restart; a record older than 30 days is removed when the host starts, and a draft that still names one shows it as failed ("No longer available").
+- **Sent**: the user entry keeps one attachment ref each, with `sent` set. The bytes sent for an image or a pasted text go to the thread store's `blobs` table, once per session ([threads](./persistence.md#threads)), and the ref keeps their hash and the thumbnail. An embedded file's text is not stored: the agent holds it in its context, and the file is on disk. The draft's records and saved bytes are then removed.
+- **Renderer**: names, sizes, states and thumbnails only, never an image's bytes in a store. Thumbnails are made in a renderer worker with `createImageBitmap` and `OffscreenCanvas`: from the `File` of a drop or a paste, or from the bytes `attachments.read` returns for a picked or mentioned image. The same pass scales an image that is too large and hands the result to the host with `attachments.update`. Opening an image reads its bytes (`attachments.read`, or `sessions.blob` once sent) into an `ArrayBuffer` and shows it from a `blob:` URL until the dialog closes.
+- **Forks** copy the refs with the thread, and the blobs they name.
+
+### Replays
+
+A session's own thread store keeps its attachments, so reopening one shows them without its agent. A session with no stored thread, such as an imported one, gets its user messages from the agent's `session/load` replay, in each agent's own form (observed 2026-10-22): claude-agent-acp 0.94.0 replays an image as an image and an embedded file as the text it gave Claude Code, a `[@name](file://…)` link followed by a `<context ref="…">` block; codex-acp 2.2.2 replays an embedded file the same way and an image as a `[@image](data:…)` link in the text; OpenCode 2.0.32 replays files as `resource_link`, `resource` and `image` blocks. In a replayed user message the mapper turns those links and context blocks, and `resource` and `resource_link` blocks with a `file:` URI, into attachment refs (`embedded` or `linked`, a link with no thumbnail), and a `data:` image link into an image ref, so an imported thread shows tiles rather than the files' text. Any other text stays as it is.
 
 ## Permissions
 

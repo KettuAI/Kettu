@@ -25,6 +25,8 @@ An unpackaged run, such as `pnpm dev` or `electron .`, does not use the installe
 | `app-state.json`             | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
 | `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and install                                                     |
 | `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
+| `state/attachments.json`     | Agent host | The attachments of drafts and queued prompts, until sent or removed ([attachments](./session-model.md#where-the-bytes-live))                       |
+| `attachments/`               | Agent host | Their saved bytes by SHA-256: pasted images and text, and images scaled to fit                                                                     |
 | `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts
@@ -160,7 +162,8 @@ interface AppStateFile {
 ## Composer drafts
 
 - Unsent composer text is stored in `localStorage` under `draft:<sessionId>`, written 300 ms after the last keystroke and when you switch sessions. The [New session](./ui.md#new-session) screen keeps its text the same way under `draft:new`, until the session it starts exists; a first message that session cannot take yet moves to that session's draft.
-- Sending a prompt or deleting the session removes the draft, and so does the host removing the session, as with its parent or by the [removal of sessions with no message](./session-model.md#how-the-host-keeps-sessions), which keeps every session with a draft.
+- A draft with [attachments](./session-model.md#attachments) is stored as JSON, `{ text, attachments }`, each attachment with its id, type, name, size and thumbnail; its bytes stay with the host. A draft stored as plain text reads as text alone.
+- Sending a prompt or deleting the session removes the draft, and so does the host removing the session, as with its parent or by the [removal of sessions with no message](./session-model.md#how-the-host-keeps-sessions), which keeps every session with a draft. The host's records of its attachments go with it.
 - A draft larger than 1 MB, or one whose write fails (for example on the storage quota), stays in memory until the app quits, and the failure is logged.
 
 ## Threads
@@ -205,6 +208,7 @@ OverBench keeps its own copy of every session's thread, the entries it shows, so
 - **Turns**: a turn opens at a prompt of the user's own (not one steered into a running turn) and at the entry after a `turn_end`, which also splits a subagent's thread, since it has no prompts. An entry's `turn` is the position of the entry that opened its turn, so a page that starts at a turn is one range of the primary key.
 - **Pages**: a page reaches back at least 60 entries from its cursor, then on to the start of their turn, so the folding of a finished turn's work never sees half a turn; a turn longer than 500 entries is cut. The latest page is read below the end, each earlier one below the first position of the page after it, and `older` is null once a page starts the thread. A page also carries the latest plan when it lies before the page, for the plan above the composer. Measured on 2026-10-22 (Electron 44, macOS arm64, 40 other sessions in the file): 0.3 ms for the latest page of 137, 2,817 or 11,262 entries alike, about 110 KB each.
 - **Images**: an image whose base64 data is longer than 32 KB is stored once per session as bytes in `blobs`, a quarter smaller than its base64, and the entry keeps `{ kind: 'image', mimeType, blob }` in its place. Reading puts the data back, for the entries of that page only.
+- **Attachments**: the bytes sent for an attached image or a pasted text are stored in `blobs` too, but the entry keeps its attachment ref with the hash and a thumbnail, and reading never puts the bytes back: `sessions.blob` reads them when the user opens one ([attachments](./session-model.md#where-the-bytes-live)).
 - **Writing**: a write is one transaction of new and changed entries, with the session view when it changed. A changed entry keeps its position and a new one takes the position given; an entry stored at another position, or a position taken by another entry, fails the write with `conflict` and changes nothing, and the caller then writes the thread whole. Writing whole (`replace`), as after a replay from the agent, drops the session's rows and images first. Deleting a session deletes its rows and images by cascade and returns the space with `incremental_vacuum`.
 - **When the host writes**: what changed is written at most 5 s after it changed, at once when a turn ends, after a replay, when a session closes and when the host shuts down ([checkpoints](./session-model.md#how-the-host-keeps-sessions)). So a crash loses at most the last 5 s of a running turn, which the thread then shows as cut off.
 - **Reading**: every entry read must pass `isThreadEntry` (`src/shared/thread.ts`). A thread with an entry or a session view that does not parse reads as not stored, with an error in the host log, so the session falls back to its agent.
@@ -215,6 +219,7 @@ OverBench keeps its own copy of every session's thread, the entries it shows, so
 ## What is never stored
 
 - The agents' own transcripts. OverBench's copy of a thread ([threads](#threads)) is what the thread shows; the agent keeps the context a session continues from.
+- The text of a file embedded in a prompt; the entry keeps its name, path and size.
 - Credentials, API keys or tokens.
 - The resolved environment.
 - ACP traffic and diagnostics, which stay in memory until the user exports them.
