@@ -38,8 +38,7 @@
     "signInNeeded": "{{agent}} needs you to sign in",
     "turnFailed": "The turn failed",
     "stopped": {
-      "title": "{{agent}} stopped unexpectedly",
-      "description": "The turn ended without an answer. The thread is kept, and your next message starts the agent again."
+      "title": "{{agent}} exited before finishing this turn"
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} did not confirm the cancellation",

@@ -26,6 +26,7 @@ export interface SessionView {
   usage: SessionUsage | null
   error: { message: string; detail?: string } | null
   turnStartedAt: number | null
+  turnStartUsed: number | null // usage.used when the running turn started, for what it adds
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
@@ -107,6 +108,7 @@ export type ThreadEntry =
       severity: 'info' | 'warning' | 'error'
       title: string
       description?: string
+      cause?: 'agent_stopped' // the agent exited mid-turn, so the notice ends the turn
     }
   | {
       kind: 'compaction'
@@ -455,7 +457,11 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
     case 'plan':
       return isListOf(value.items, isRecord)
     case 'notice':
-      return typeof value.severity === 'string' && typeof value.title === 'string'
+      return (
+        typeof value.severity === 'string' &&
+        typeof value.title === 'string' &&
+        (value.cause === undefined || value.cause === 'agent_stopped')
+      )
     case 'compaction':
       return typeof value.status === 'string' && typeof value.summary === 'string'
     case 'turn_end':

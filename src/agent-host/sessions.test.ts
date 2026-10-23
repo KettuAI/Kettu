@@ -845,6 +845,27 @@ describe('a prompt turn', () => {
     })
   })
 
+  it('notes the context at the start of a running turn, for what the turn adds', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_DELAY_SCALE: '0.05' } })
+    const sessionId = await newSession(t, port)
+    const view = () => port.thread(sessionId).session
+    await turn(port, sessionId, '/cancel')
+    // Nothing reported the context before the first turn.
+    expect(view()).toMatchObject({ status: 'running', turnStartUsed: null })
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilStatus(sessionId, 'ready')
+    const used = view().usage!.used
+    expect(used).toBeGreaterThan(0)
+
+    await turn(port, sessionId, '/cancel')
+    expect(view()).toMatchObject({ status: 'running', turnStartUsed: used })
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    expect(view()).toMatchObject({ turnStartedAt: null, turnStartUsed: null })
+  })
+
   it("records each turn's usage per model", async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
@@ -1230,7 +1251,7 @@ describe('opening and recovering', () => {
     expect(port.summary(sessionId)?.attention).toBe('none')
   })
 
-  it('ends a crashed turn: running tools stop and the notice says what follows', async () => {
+  it('ends a crashed turn: running tools stop and the notice marks the cut', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
     await turn(port, sessionId, '/crash')
@@ -1238,11 +1259,25 @@ describe('opening and recovering', () => {
     expect(tools(port, sessionId).map((tool) => tool.status)).toEqual(['cancelled'])
     const notices = port.entries(sessionId).filter((entry) => entry.kind === 'notice')
     expect(notices).toEqual([
-      expect.objectContaining({
-        title: 'Fake agent stopped unexpectedly',
-        description: expect.stringContaining('next message starts the agent again'),
-      }),
+      {
+        kind: 'notice',
+        id: expect.any(String),
+        severity: 'error',
+        cause: 'agent_stopped',
+        title: 'Fake agent exited before finishing this turn',
+      },
     ])
+    // The cut turn is the latest, so it ends the thread.
+    expect(port.entries(sessionId).at(-1)).toBe(notices[0])
+  })
+
+  it('marks no other failed turn as cut', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/error')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+    const notice = port.entries(sessionId).find((entry) => entry.kind === 'notice')
+    expect(notice).not.toHaveProperty('cause')
   })
 
   it('opens a session from the index after a restart of the host', async () => {

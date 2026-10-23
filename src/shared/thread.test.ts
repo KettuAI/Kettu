@@ -27,6 +27,7 @@ const session: SessionView = {
   usage: null,
   error: null,
   turnStartedAt: null,
+  turnStartUsed: null,
   createdAt: 1,
   updatedAt: 1,
   parentId: null,
@@ -243,6 +244,7 @@ describe('isThreadEntry', () => {
     { kind: 'session_message', id: 'sm:1', senderId: null, content: [] },
     { kind: 'plan', id: 'e:2', items: [{ content: 'x', priority: 'low', status: 'pending' }] },
     { kind: 'notice', id: 'e:3', severity: 'info', title: 'x' },
+    { kind: 'notice', id: 'e:5', severity: 'error', title: 'x', cause: 'agent_stopped' },
     { kind: 'compaction', id: 'c:1', status: 'completed', summary: '' },
     { kind: 'turn_end', id: 'e:4', stopReason: 'end_turn', durationMs: 5 },
     { kind: 'git', id: 'g:1', event: 'commit', commits: [{ oid: 'a', subject: 'b' }], more: 0 },
@@ -269,6 +271,9 @@ describe('isThreadEntry', () => {
     ).toBe(false)
     expect(isThreadEntry({ ...valid[3], permission: { requestId: 'p' } })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
+    expect(
+      isThreadEntry({ kind: 'notice', id: 'n', severity: 'error', title: 'x', cause: 'other' }),
+    ).toBe(false)
   })
 })
 
