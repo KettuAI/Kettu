@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CopyButton } from '@renderer/features/git/branch-popover'
 import { longAgo } from '@renderer/lib/format'
@@ -14,7 +15,7 @@ import { useAgentsStore } from '@renderer/stores/agents'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation, useSessionView } from '../use-thread'
-import { stopReasonText } from './helpers'
+import { forkEntry, stopReasonText } from './helpers'
 
 // Rows under messages: hidden until the message is hovered or focused.
 const REVEAL =
@@ -96,8 +97,8 @@ export function UserActions({
 }
 
 /**
- * Under a turn's reply: Copy for the turn's messages, Fork under the latest one, then how the
- * turn ended and when the reply came. It shows while the pointer is over the reply.
+ * Under a turn's reply: Copy for the turn's messages, Fork where the agent can fork from it, then
+ * how the turn ended and when the reply came. It shows while the pointer is over the reply.
  */
 export const ReplyFooter = memo(
   function ReplyFooter({
@@ -122,8 +123,8 @@ export const ReplyFooter = memo(
       return entry?.kind === 'agent' ? entry.at : undefined
     })
     const session = useSessionView(sessionId)
-    const canFork = useAgentsStore(
-      (s) => !!session && !!s.byId[session.agentId]?.capabilities.forkSession,
+    const forkAt = useAgentsStore((s) =>
+      session ? forkEntry({ latest, agentIds }, s.byId[session.agentId]?.capabilities) : null,
     )
     const [forking, setForking] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -143,14 +144,14 @@ export const ReplyFooter = memo(
       setForking(true)
       setError(null)
       try {
-        await forkSession(sessionId)
+        await forkSession(sessionId, forkAt ?? undefined)
       } catch (e) {
         setError(errorMessage(e))
       } finally {
         setForking(false)
       }
     }
-    const showFork = latest && canFork && session?.origin === 'user'
+    const showFork = forkAt !== null && session?.origin === 'user'
 
     return (
       <div
@@ -159,15 +160,21 @@ export const ReplyFooter = memo(
           animation,
         )}
       >
-        <div className={cn('flex min-w-0 items-center gap-0.5', REVEAL, hovered && 'opacity-100')}>
+        <div
+          className={cn(
+            'flex min-w-0 items-center gap-0.5',
+            REVEAL,
+            (hovered || forking) && 'opacity-100',
+          )}
+        >
           <CopyButton text={text} label={t('replyFooter.copyReply')} />
           {showFork && (
             <ActionButton
-              label={t('replyFooter.fork')}
-              disabled={forking || session.status !== 'ready'}
+              label={forking ? t('replyFooter.forking') : t('replyFooter.fork')}
+              disabled={forking || (session.status !== 'ready' && session.status !== 'closed')}
               onClick={() => void fork()}
             >
-              <GitForkIcon />
+              {forking ? <Spinner /> : <GitForkIcon />}
             </ActionButton>
           )}
           {(end || at !== undefined) && (

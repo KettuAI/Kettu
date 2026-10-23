@@ -3,8 +3,9 @@
 // The host uses the SDK's `unstable` entrypoint: its client validates every
 // `session/update` against the schema of the entrypoint before any handler runs, and the
 // stable schema has no `subagent_update` or `session_message`, which sub-sessions need.
-// Only the two unstable features the architecture allows are used (subagents and the
-// prompt response's `usage`); nothing else unstable is advertised or called.
+// Only the unstable features the architecture allows are used (subagents, the prompt
+// response's `usage`, and `session/fork` with its fork point in `_meta`); nothing else
+// unstable is advertised or called.
 
 import { Readable, Writable } from 'node:stream'
 import {
@@ -43,6 +44,7 @@ import {
   type MapperOutput,
   type ModelTokens,
 } from './mapper'
+import { forkPointMeta, forksAtMessage, type ForkPoint } from './fork-point'
 
 /** A message-level stream to an agent, from a process's stdio or an in-process agent. */
 export interface AcpTransport {
@@ -118,6 +120,8 @@ export interface AgentInit {
     closeSession: boolean
     deleteSession: boolean
     forkSession: boolean
+    /** `session/fork` up to a message, which only some adapters take, outside ACP. */
+    forkAtMessage: boolean
     logout: boolean
     /** `_session/steering`, an extension advertised in the response's own `_meta`. */
     steering: boolean
@@ -377,6 +381,7 @@ export class AgentConnection {
         closeSession: session.close != null,
         deleteSession: session.delete != null,
         forkSession: session.fork != null,
+        forkAtMessage: session.fork != null && forksAtMessage(init.agentInfo),
         logout: caps.auth?.logout != null,
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
@@ -446,18 +451,23 @@ export class AgentConnection {
     return { config: mapConfig(response.configOptions, response.modes) }
   }
 
-  /** `session/fork`, from ACP's unstable schema: a new session that starts from this one. */
+  /**
+   * `session/fork`, from ACP's unstable schema: a new session that starts from this one, up to
+   * `point` for an agent with `forkAtMessage`.
+   */
   async forkSession(
     acpSessionId: string,
     cwd: string,
     meta?: Record<string, unknown>,
+    point?: ForkPoint,
   ): Promise<SessionSetup & { acpSessionId: string }> {
+    const forkMeta = point ? { ...meta, ...forkPointMeta(point) } : meta
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.fork, {
         sessionId: acpSessionId,
         cwd,
         mcpServers: [],
-        ...(meta ? { _meta: meta } : {}),
+        ...(forkMeta ? { _meta: forkMeta } : {}),
       }),
     )
     return {

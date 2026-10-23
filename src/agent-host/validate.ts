@@ -338,7 +338,11 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.cancel': session,
     'sessions.retry': session,
-    'sessions.fork': session,
+    'sessions.fork': (params) => {
+      const o = fields(params)
+      const entryId = optionalString(o, 'entryId', ACP_ID_CHARS)
+      return { sessionId: sessionId(o), ...(entryId === undefined ? {} : { entryId }) }
+    },
     'sessions.context': session,
     'sessions.queue': (params) => {
       const o = fields(params)

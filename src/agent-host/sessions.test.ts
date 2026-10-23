@@ -6,7 +6,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import type { ToolEntry } from '@shared/thread'
+import type { ThreadEntry, ToolEntry } from '@shared/thread'
+import { forkCut } from './sessions'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
 import type { LogReader } from './usage/model'
 
@@ -382,6 +383,149 @@ describe('forking', () => {
     await expect(port.request('sessions.fork', { sessionId })).rejects.toMatchObject({
       code: 'busy',
     })
+  })
+
+  async function finishTurn(port: TestPort, sessionId: string, text: string) {
+    const ends = () => port.entries(sessionId).filter((entry) => entry.kind === 'turn_end').length
+    const before = ends()
+    await turn(port, sessionId, text)
+    await port.until(() => ends() > before)
+    await port.untilStatus(sessionId, 'ready')
+  }
+
+  /** The entries of each turn, from its user message to the next. */
+  function turnsOf(entries: ThreadEntry[]): ThreadEntry[][] {
+    const starts = entries.flatMap((entry, i) => (entry.kind === 'user' ? [i] : []))
+    return starts.map((start, n) => entries.slice(start, starts[n + 1]))
+  }
+
+  const last = (reply: ThreadEntry[]) =>
+    reply.findLast((entry) => entry.kind === 'agent') as Extract<ThreadEntry, { kind: 'agent' }>
+
+  it('forks from an earlier reply, up to it in the thread and in the agent', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    for (const text of ['First question', 'Second question', 'Third question']) {
+      await finishTurn(port, sessionId, text)
+    }
+    const source = port.entries(sessionId)
+    const turns = turnsOf(source)
+    // Every reply ends with the same message, so the agent tells them apart by their place.
+    expect(last(turns[0]!).markdown).toBe(last(turns[1]!).markdown)
+
+    for (const [n, said] of [
+      [1, 'First question'],
+      [2, 'Second question'],
+    ] as const) {
+      const fork = await port.request('sessions.fork', {
+        sessionId,
+        entryId: last(turns[n - 1]!).id,
+      })
+      await port.open(fork.id)
+      expect(port.entries(fork.id)).toEqual(turns.slice(0, n).flat())
+      expect(port.thread(fork.id).session.usage).toBeNull()
+      await finishTurn(port, fork.id, '/recall')
+      expect(port.entries(fork.id).at(-2)).toMatchObject({
+        kind: 'agent',
+        markdown: `Your last message was: ${said}`,
+      })
+    }
+    expect(port.entries(sessionId)).toEqual(source)
+  })
+
+  it('forks the whole session from the latest reply', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'First question')
+    await finishTurn(port, sessionId, 'Second question')
+    const source = port.entries(sessionId)
+    const reply = source.findLast((entry) => entry.kind === 'agent')!
+    const fork = await port.request('sessions.fork', { sessionId, entryId: reply.id })
+    await port.open(fork.id)
+    expect(port.entries(fork.id)).toEqual(source)
+    expect(port.thread(fork.id).session.usage).toEqual(port.thread(sessionId).session.usage)
+  })
+
+  it('refuses to fork at an entry that is not a reply', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'First question')
+    await finishTurn(port, sessionId, 'Second question')
+    const [first] = turnsOf(port.entries(sessionId))
+    const notLast = first!.find((entry) => entry.kind === 'agent')!
+    expect(notLast).not.toBe(last(first!))
+    for (const entryId of [first![0]!.id, notLast.id, 'm:missing']) {
+      await expect(port.request('sessions.fork', { sessionId, entryId })).rejects.toMatchObject({
+        code: 'invalid_params',
+      })
+    }
+  })
+
+  it('forks only the latest reply of an agent that cannot fork at a message', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_NAME: 'whole-fork-agent' } })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'First question')
+    await finishTurn(port, sessionId, 'Second question')
+    const [first, second] = turnsOf(port.entries(sessionId)).map(last)
+    await expect(
+      port.request('sessions.fork', { sessionId, entryId: first!.id }),
+    ).rejects.toMatchObject({ code: 'agent_unavailable' })
+    const fork = await port.request('sessions.fork', { sessionId, entryId: second!.id })
+    await port.open(fork.id)
+    expect(port.entries(fork.id)).toEqual(port.entries(sessionId))
+  })
+
+  it('forks a closed session from an earlier reply once it attaches', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'First question')
+    await finishTurn(port, sessionId, 'Second question')
+    const [first] = turnsOf(port.entries(sessionId))
+    await port.request('sessions.close', { sessionId })
+    const fork = await port.request('sessions.fork', { sessionId, entryId: last(first!).id })
+    await port.open(fork.id)
+    expect(port.entries(fork.id)).toEqual(first)
+  })
+
+  it('gives way to a turn that starts while a closed session attaches to fork', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'First question')
+    await port.request('sessions.close', { sessionId })
+    const fork = port.request('sessions.fork', { sessionId })
+    await turn(port, sessionId, 'Second question')
+    await expect(fork).rejects.toMatchObject({ code: 'busy' })
+    expect(await port.request('sessions.list', {})).toHaveLength(1)
+  })
+})
+
+describe('forkCut', () => {
+  const agent = (id: string): ThreadEntry => ({
+    kind: 'agent',
+    id,
+    markdown: 'Done',
+    attachments: [],
+    streaming: false,
+  })
+  const entries: ThreadEntry[] = [
+    { kind: 'user', id: 'e:1', content: [] },
+    agent('m:a'),
+    { kind: 'user', id: 'e:2', content: [], steered: true },
+    { kind: 'turn_end', id: 'e:3', stopReason: 'cancelled', durationMs: 1 },
+    { kind: 'user', id: 'e:4', content: [] },
+    agent('m:b'),
+  ]
+  const thread = {
+    order: entries.map((e) => e.id),
+    byId: Object.fromEntries(entries.map((e) => [e.id, e])),
+  }
+
+  it('cuts past a message steered into the turn, at the next turn', () => {
+    expect(forkCut(thread, 'm:a')).toEqual({
+      entries: entries.slice(0, 4),
+      point: { messageId: 'a', text: 'Done', occurrence: 1 },
+    })
+    expect(forkCut(thread, 'm:b')).toBeNull()
   })
 })
 

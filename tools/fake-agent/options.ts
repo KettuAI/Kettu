@@ -20,6 +20,7 @@ export const SCENARIOS = [
   'usage',
   'status',
   'context',
+  'recall',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -60,6 +61,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   status: { description: "The plan limits, as Codex's /status reports them" },
   context: { description: "What fills the context, as Claude Code's /context reports it" },
+  recall: { description: 'Answers with your previous message, as the agent remembers it' },
 }
 
 export interface ScenarioOptions {

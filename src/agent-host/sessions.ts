@@ -13,6 +13,7 @@ import type { Platform } from '@shared/platform'
 import {
   applyPatchInPlace,
   coalescePatches,
+  entryMessageId,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -40,6 +41,7 @@ import {
   type PermissionRequest,
   type SessionTarget,
 } from './acp/connection'
+import type { ForkPoint } from './acp/fork-point'
 import {
   addTokenTotals,
   isStopReason,
@@ -2030,10 +2032,11 @@ export class SessionManager {
   }
 
   /**
-   * `session/fork`: a new session that starts from this one's history. The agent keeps the
-   * history; the fork shows a copy of this thread until it is replayed on a later open.
+   * `session/fork`: a new session that starts from this one's history, or from the reply that
+   * `entryId` names up to the end of its turn. The agent keeps the history; the fork shows a copy
+   * of this thread until it is replayed on a later open.
    */
-  async fork(sessionId: string): Promise<SessionSummary> {
+  async fork(sessionId: string, entryId?: string): Promise<SessionSummary> {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noFork'))
     }
@@ -2042,6 +2045,7 @@ export class SessionManager {
     if (status !== 'closed' && (status !== 'ready' || !source.connection)) {
       throw busyError(status)
     }
+    const cut = entryId === undefined ? null : forkCut(source.thread, entryId)
     // Not every agent forks a session it does not have open, so a closed one attaches first.
     try {
       await this.attachClosed(source)
@@ -2055,12 +2059,25 @@ export class SessionManager {
         t('session.cannotFork', { agent: this.deps.agents.name(source.record.agentId) }),
       )
     }
+    if (cut && !runtime.init.capabilities.forkAtMessage) {
+      throw new HostError(
+        'agent_unavailable',
+        t('session.cannotForkAt', { agent: this.deps.agents.name(source.record.agentId) }),
+      )
+    }
+    // A closed session takes prompts while it attaches; a turn that started since then wins.
+    if (source.thread.session.status !== 'ready') throw busyError(source.thread.session.status)
+    // Subagent cards point at the source's sub-sessions, which the fork does not have.
+    const entries = (cut?.entries ?? threadEntries(source.thread)).filter(
+      (entry) => entry.kind !== 'subagent',
+    )
     let setup
     try {
       setup = await runtime.connection.forkSession(
         source.record.acpSessionId,
         source.record.projectPath,
         sessionMeta(source.record),
+        cut?.point,
       )
     } catch (error) {
       throw agentError(error)
@@ -2079,8 +2096,6 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'ready')
     live.unread = false
     live.used = true
-    // Subagent cards point at the source's sub-sessions, which the fork does not have.
-    const entries = threadEntries(source.thread).filter((entry) => entry.kind !== 'subagent')
     for (const entry of entries) live.counter = Math.max(live.counter, idNumber(entry.id))
     this.emit(
       live,
@@ -2090,7 +2105,8 @@ export class SessionManager {
     this.update(live, {
       acpSessionId: setup.acpSessionId,
       config: withUltracode(record, mergeConfig(source.thread.session.config, setup.config)),
-      usage: source.thread.session.usage,
+      // Nothing records the context or the totals at an earlier reply.
+      usage: cut ? null : source.thread.session.usage,
     })
     this.save(live)
     this.touch(live.id)
@@ -2834,6 +2850,40 @@ const RESOURCE_NOT_FOUND = -32002
 /** The number in an entry id such as `e:12`, which the session's new ids count on from. */
 function idNumber(id: string): number {
   return Number(/^\w+:(\d+)$/.exec(id)?.[1] ?? 0)
+}
+
+/**
+ * A fork from a reply's agent message: the thread up to the end of its turn, and the fork point
+ * that tells the agent where. Null in the latest turn, where the fork takes the whole session.
+ */
+export function forkCut(
+  thread: Pick<ThreadState, 'order' | 'byId'>,
+  entryId: string,
+): { entries: ThreadEntry[]; point: ForkPoint } | null {
+  const entry = thread.byId[entryId]
+  if (entry?.kind !== 'agent') throw new HostError('invalid_params', t('session.noForkPoint'))
+  const at = thread.order.indexOf(entryId)
+  let end = at + 1
+  while (end < thread.order.length) {
+    const next = thread.byId[thread.order[end]!]
+    if (next?.kind === 'user' && !next.steered) break
+    end++
+  }
+  // Only the message that ends its reply, since Claude Code's adapter forks at the message itself.
+  if (thread.order.slice(at + 1, end).some((id) => thread.byId[id]?.kind === 'agent')) {
+    throw new HostError('invalid_params', t('session.noForkPoint'))
+  }
+  if (end === thread.order.length) return null
+  const messageId = entryMessageId(entryId)
+  if (messageId === null) throw new HostError('invalid_params', t('session.noForkPoint'))
+  const entries = thread.order.slice(0, end).map((id) => thread.byId[id]!)
+  // The adapters fall back to the text, the nth agent message with it, when the id is unknown.
+  const occurrence = entries
+    .slice(0, at + 1)
+    .filter(
+      (e) => e.kind === 'agent' && entryMessageId(e.id) !== null && e.markdown === entry.markdown,
+    ).length
+  return { entries, point: { messageId, text: entry.markdown, occurrence } }
 }
 
 function turnEndText(stopReason: StopReason): string {

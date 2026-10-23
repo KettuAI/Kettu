@@ -3,6 +3,7 @@ import {
   applyPatchInPlace,
   applyPatches,
   coalescePatches,
+  entryMessageId,
   isThreadEntry,
   prependEntries,
   threadEntries,
@@ -268,5 +269,19 @@ describe('isThreadEntry', () => {
     ).toBe(false)
     expect(isThreadEntry({ ...valid[3], permission: { requestId: 'p' } })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
+  })
+})
+
+describe('entryMessageId', () => {
+  it("gives the agent's message id of a message entry", () => {
+    expect(entryMessageId('m:msg_1')).toBe('msg_1')
+    expect(entryMessageId('m:msg_1#agent')).toBe('msg_1')
+    expect(entryMessageId('m:item-3#thought')).toBe('item-3')
+  })
+
+  it('gives null for an entry without one', () => {
+    expect(entryMessageId('e:12')).toBeNull()
+    expect(entryMessageId('t:call_1')).toBeNull()
+    expect(entryMessageId('sm:msg_1')).toBeNull()
   })
 })
