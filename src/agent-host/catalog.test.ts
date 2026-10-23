@@ -81,7 +81,7 @@ describe('detectAgent', () => {
         nodeVersion: 'v24.1.0',
         npm: '/usr/local/bin/npm',
         fallback: null,
-        cli: { runs: 'bundled', installed: null },
+        cli: { runs: 'bundled', installed: null, needsCopy: false },
       },
     })
   })
@@ -229,11 +229,12 @@ describe('detectAgent', () => {
 })
 
 describe('detectAgent with the CLI the user installed', () => {
-  const install = (version: string): InstalledAdapter => ({
+  const install = (version: string, extra: Partial<InstalledAdapter> = {}): InstalledAdapter => ({
     version,
     dir: `/data/agents/claude-code/${version}`,
     entry: `/data/agents/claude-code/${version}/index.js`,
     installedAt: 1,
+    ...extra,
   })
   // `claude` on PATH answering 2.1.304, and installs whose SDK names 2.1.303.
   function withClaude(overrides: Partial<DetectContext> = {}, answer = '2.1.304'): DetectContext {
@@ -264,6 +265,7 @@ describe('detectAgent with the CLI the user installed', () => {
         cli: {
           runs: 'installed',
           installed: { path: '/usr/local/bin/claude', version: '2.1.304', problem: null },
+          needsCopy: false,
         },
       },
     })
@@ -311,7 +313,7 @@ describe('detectAgent with the CLI the user installed', () => {
     expect(await detectAgent(CLAUDE_CODE, withClaude({ installed: async () => [] }))).toMatchObject(
       {
         spec: null,
-        adapter: { installed: false, cli: { runs: 'installed' } },
+        adapter: { installed: false, cli: { runs: 'installed', needsCopy: false } },
       },
     )
   })
@@ -324,6 +326,21 @@ describe('detectAgent with the CLI the user installed', () => {
         fallback: { version: '0.93.0', spec: { env: {} } },
         cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '2.1.303' } } },
       },
+    })
+  })
+
+  it('installs the copy first when it is needed and the install has none', async () => {
+    const bare = async () => [install('0.94.0', { withoutCli: true })]
+    expect(
+      await detectAgent(CLAUDE_CODE, withClaude({ installed: bare }, '2.1.200')),
+    ).toMatchObject({
+      spec: null,
+      adapter: { installed: true, cli: { runs: 'bundled', needsCopy: true } },
+    })
+    // The installed program does not need the copy.
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ installed: bare }))).toMatchObject({
+      spec: { cli: '/usr/local/bin/claude' },
+      adapter: { cli: { runs: 'installed', needsCopy: false } },
     })
   })
 

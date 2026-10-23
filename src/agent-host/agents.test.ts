@@ -556,6 +556,7 @@ const FAKE_CLI: AdapterCli = {
   command: 'fake-cli',
   variable: 'FAKE_CLI_PATH',
   startsAtInitialize: true,
+  pinsVersion: false,
   resolve: async (found) => ({ path: found, env: {} }),
   minimum: async () => '1.0.0',
 }
@@ -637,6 +638,7 @@ function cliManager(
           dir: `/a/${request.version}~${installs.length}`,
           entry: `/a/${request.version}/index.js`,
           installedAt: installs.length + 1,
+          ...(request.withoutCli ? { withoutCli: true as const } : {}),
         }
         adapters.push(install)
         return install
@@ -647,11 +649,12 @@ function cliManager(
 }
 
 describe('the CLI the user installed', () => {
-  const installedAt = (version: string) => ({
+  const installedAt = (version: string, extra: Partial<InstalledAdapter> = {}) => ({
     version,
     dir: `/a/${version}`,
     entry: `/a/${version}/index.js`,
     installedAt: 1,
+    ...extra,
   })
 
   it('runs the installed CLI when it is new enough', async () => {
@@ -773,14 +776,75 @@ describe('the CLI the user installed', () => {
     await m.agents.stopAll()
   })
 
-  it('installs the adapter, then runs the installed CLI', async () => {
+  it('installs the adapter without its own CLI and runs the installed one', async () => {
     const m = cliManager()
     await m.agents.ensureReady('fake-agent')
-    expect(m.installs.map((i) => i.version)).toEqual(['2.0.0'])
+    expect(m.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.0.0', true]])
     expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH)).toEqual([
       expect.stringContaining('fake-cli'),
     ])
-    expect(m.status()).toMatchObject({ state: 'ready', cli: { runs: 'installed' } })
+    expect(m.status()).toMatchObject({
+      state: 'ready',
+      cli: {
+        runs: 'installed',
+        installed: { version: '2.0.0', problem: null },
+      },
+    })
+    await m.agents.stopAll()
+  })
+
+  it('installs the copy after all when the CLI is older than the adapter needs', async () => {
+    const m = cliManager({ minimum: '3.0.0' })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs.map((i) => [i.withoutCli ?? false, i.alongside ?? false])).toEqual([
+      [true, false],
+      [false, true],
+    ])
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH)).toEqual([undefined])
+    expect(m.status()).toMatchObject({
+      state: 'ready',
+      cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '3.0.0' } } },
+    })
+    await m.agents.stopAll()
+  })
+
+  it('does not download the copy over one --version that timed out', async () => {
+    const answers = [true, false]
+    const versions = new CliVersions({
+      platform: process.platform === 'win32' ? 'win32' : 'darwin',
+      run: async () => ({
+        code: 0,
+        signal: null,
+        timedOut: answers.shift() ?? false,
+        aborted: false,
+        output: new TextRing(64),
+        stdout: 'fake-cli 2.0.0\n',
+      }),
+      stat: async () => ({ size: 1, mtimeMs: 1 }),
+    })
+    const m = cliManager({
+      installed: [installedAt('2.0.0', { withoutCli: true })],
+      cliVersions: versions,
+    })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs).toEqual([])
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH)).toEqual([
+      expect.stringContaining('fake-cli'),
+    ])
+    await m.agents.stopAll()
+  })
+
+  it('installs the copy beside an install without it when a start with the CLI fails', async () => {
+    const m = cliManager({
+      installed: [installedAt('2.0.0', { withoutCli: true })],
+      failWithCli: true,
+    })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH !== undefined)).toEqual([true, false])
+    expect(m.installs.map((i) => [i.version, i.alongside, i.withoutCli])).toEqual([
+      ['2.0.0', true, undefined],
+    ])
+    expect(m.status()).toMatchObject({ state: 'ready', cli: { runs: 'bundled' } })
     await m.agents.stopAll()
   })
 })
@@ -996,6 +1060,10 @@ async function updateManager(
     timings?: Partial<AgentTimings>
     npm?: string | null
     latest?: () => Promise<AgentUpdate>
+    /** The version of an installed CLI the adapter runs. */
+    installedCli?: string
+    /** The adapter pins its CLI, so the check's CLI version is the oldest it runs. */
+    pinsVersion?: boolean
   } = {},
 ) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'overbench-updates-'))
@@ -1004,6 +1072,9 @@ async function updateManager(
     id: 'codex',
     name: 'Codex',
     launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
+    ...(options.installedCli
+      ? { cli: { ...FAKE_CLI, pinsVersion: options.pinsVersion ?? false } }
+      : {}),
   }
   const write = async (name: string, version: string, cli: string, installedAt: number) => {
     const dir = path.join(root, 'codex', name)
@@ -1037,6 +1108,7 @@ async function updateManager(
             npmPath: options.npm === undefined ? '/x/npm' : options.npm,
             nodePath: '/x/node',
           },
+          ...(options.installedCli ? cliFound(options.installedCli) : {}),
         }),
       install: async (request) => {
         installs.push(request)
@@ -1110,6 +1182,42 @@ describe('update checks', () => {
       cliVersion: '0.160.3',
     })
     expect(next.checks).toEqual([])
+  })
+
+  it('offers only a newer adapter while the installed CLI runs, and installs it without a CLI', async () => {
+    const same = await updateManager({ installedCli: '2.0.0' })
+    await same.write('2.0.0', '2.0.0', '0.160.1', 1)
+    same.setCli('0.160.3')
+    expect((await same.agents.checkUpdates())[0]).toMatchObject({
+      cli: { runs: 'installed' },
+      update: null,
+    })
+    const newer = await updateManager({
+      installedCli: '2.0.0',
+      latest: async () => ({ adapterVersion: '2.1.0', cliVersion: '0.161.0' }),
+    })
+    await newer.write('2.0.0', '2.0.0', '0.160.1', 1)
+    expect((await newer.agents.checkUpdates())[0]?.update).toEqual({
+      adapterVersion: '2.1.0',
+      cliVersion: null,
+    })
+    await newer.agents.update('codex')
+    expect(newer.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.1.0', true]])
+  })
+
+  it('brings the CLI with an update that needs a newer one than the user has', async () => {
+    const m = await updateManager({
+      installedCli: '2.0.0',
+      pinsVersion: true,
+      latest: async () => ({ adapterVersion: '2.1.0', cliVersion: '2.5.0' }),
+    })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    expect((await m.agents.checkUpdates())[0]?.update).toEqual({
+      adapterVersion: '2.1.0',
+      cliVersion: '2.5.0',
+    })
+    await m.agents.update('codex')
+    expect(m.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.1.0', undefined]])
   })
 
   it('offers nothing when up to date, or before the first install', async () => {

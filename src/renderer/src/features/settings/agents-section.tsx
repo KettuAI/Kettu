@@ -52,6 +52,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
+import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { countdown, usageTone } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
@@ -787,9 +788,12 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
         )}
       />
       {status.update
-        ? t('agents.update.released', {
-            version: status.update.cliVersion ?? status.update.adapterVersion,
-          })
+        ? t(
+            adapterOnlyUpdate(status) ? 'agents.update.adapterReleased' : 'agents.update.released',
+            {
+              version: status.update.cliVersion ?? status.update.adapterVersion,
+            },
+          )
         : t('agents.update.upToDate')}
       {' · '}
       {checkedAt
@@ -899,20 +903,33 @@ function TaskNotice({
   }
   if (status.update) {
     const next = status.update.cliVersion
+    const adapter = adapterOnlyUpdate(status)
     return (
       <Alert variant="info">
         <CircleArrowUpIcon />
         <AlertTitle>
-          {next && next !== version
-            ? t('agents.update.noticeTitle', { name: status.name, version: next })
-            : t('agents.update.noticeTitleAdapter', { name: status.name })}
+          {adapter
+            ? t('agents.update.noticeTitleAdapterOnly', {
+                package: adapter.name,
+                version: status.update.adapterVersion,
+              })
+            : next && next !== version
+              ? t('agents.update.noticeTitle', { name: status.name, version: next })
+              : t('agents.update.noticeTitleAdapter', { name: status.name })}
         </AlertTitle>
         <AlertDescription className="flex flex-col gap-2.5">
           <span>
-            {t('agents.update.noticeBody', {
-              current: version ?? status.package?.version ?? '',
-              name: status.name,
-            })}
+            {adapter
+              ? t('agents.update.noticeBodyAdapterOnly', {
+                  package: adapter.name,
+                  current: adapter.version,
+                  command: status.cli?.command ?? '',
+                  name: status.name,
+                })
+              : t('agents.update.noticeBody', {
+                  current: version ?? status.package?.version ?? '',
+                  name: status.name,
+                })}
           </span>
           <span>
             <Button size="compact" onClick={() => startUpdate(status.id)}>
@@ -1002,9 +1019,16 @@ function InstallNotice({ status }: { status: AgentStatus }) {
       <AlertTitle>{t('agents.install.title', { name: status.name })}</AlertTitle>
       <AlertDescription className="flex flex-col gap-2.5">
         <span>
-          {status.package
-            ? t('agents.install.adapterBody', { package: status.package.name })
-            : t('agents.install.body')}
+          {status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
+            ? t('agents.install.adapterBodyCli', {
+                package: status.package.name,
+                command: status.cli.command,
+                version: status.cli.installed.version,
+                name: status.name,
+              })
+            : status.package
+              ? t('agents.install.adapterBody', { package: status.package.name })
+              : t('agents.install.body')}
         </span>
         {!status.package && (
           <span className="flex items-center gap-3">

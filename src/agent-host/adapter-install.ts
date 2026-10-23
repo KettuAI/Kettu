@@ -27,12 +27,16 @@ export const NPM_INSTALL_ARGS = [
   '--loglevel=http',
 ] as const
 
+/** Leaves out the platform packages that hold the adapter's own CLI, its only optional ones. */
+export const OMIT_CLI_ARG = '--omit=optional'
+
 export interface InstalledRecord {
   package: string
   version: string
   node: string | null
   npm: string | null
   installedAt: number
+  withoutCli?: true
 }
 
 /** An install is named by its `installed.json`, not its directory, so one version can have two. */
@@ -42,6 +46,8 @@ export interface InstalledAdapter {
   /** The absolute path to the package's bin entry. */
   entry: string
   installedAt: number
+  /** Installed without the CLI it brings, which the user's own CLI replaces. */
+  withoutCli?: true
 }
 
 function isRecord(value: unknown): value is InstalledRecord {
@@ -99,7 +105,9 @@ export async function readInstall(
   const record = await readJson(path.join(dir, INSTALLED_FILE))
   if (!isRecord(record) || record.package !== packageName) return null
   const entry = await binEntry(dir, packageName)
-  return entry ? { version: record.version, dir, entry, installedAt: record.installedAt } : null
+  if (!entry) return null
+  const install = { version: record.version, dir, entry, installedAt: record.installedAt }
+  return record.withoutCli === true ? { ...install, withoutCli: true } : install
 }
 
 /** Older first: by version, then by install time, so a later install of one version wins. */
@@ -365,6 +373,8 @@ export interface InstallOptions {
    * update does when a fresh install of the version brings a newer CLI.
    */
   alongside?: boolean
+  /** Leaves out the CLI the adapter brings, since the user's own runs instead. */
+  withoutCli?: boolean
 }
 
 /**
@@ -406,7 +416,8 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
         2,
       )}\n`,
     )
-    const result = await run(NPM_INSTALL_ARGS, options.timeoutMs, true)
+    const args = options.withoutCli ? [...NPM_INSTALL_ARGS, OMIT_CLI_ARG] : NPM_INSTALL_ARGS
+    const result = await run(args, options.timeoutMs, true)
     const failure = programFailure('npm', result, options.timeoutMs)
     if (failure) throw new Error(failure)
     if (!(await binEntry(partial, options.package))) {
@@ -418,6 +429,7 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
       node: options.nodeVersion,
       npm: npmVersion,
       installedAt: Date.now(),
+      ...(options.withoutCli ? { withoutCli: true as const } : {}),
     }
     await writeFile(path.join(partial, INSTALLED_FILE), `${JSON.stringify(record, null, 2)}\n`)
     let target = path.join(agentDir, options.version)

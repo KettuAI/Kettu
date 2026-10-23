@@ -183,8 +183,11 @@ export interface AdapterPlan {
   npm: string | null
   /** The newest install below the pin, run when the pinned one cannot be installed. */
   fallback: { version: string; dir: string; spec: LaunchSpec } | null
-  /** Which CLI the adapter runs, for an agent with a `cli`. */
-  cli: CliDecision | null
+  /**
+   * Which CLI the adapter runs, for an agent with a `cli`. `needsCopy`: the install a start runs
+   * has no CLI of its own, which the copy needs, so the start installs it again with one.
+   */
+  cli: (CliDecision & { needsCopy: boolean }) | null
 }
 
 export type Detection =
@@ -312,7 +315,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         def.cli && decision?.runs === 'installed' && found && !found.installed.variable
           ? found
           : null
-      const specFor = async (install: InstalledAdapter): Promise<LaunchSpec> => {
+      const specFor = async (install: InstalledAdapter): Promise<LaunchSpec | null> => {
         if (passed && def.cli) {
           const env = { ...passed.env, [def.cli.variable]: passed.installed.path }
           return {
@@ -320,11 +323,14 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             cli: passed.installed.path,
           }
         }
+        if (install.withoutCli && decision?.runs !== 'installed') return null
         return installedSpec(def, nodePath, install, lookup)
       }
+      const spec = current ? await specFor(current) : null
+      const fallbackSpec = other ? await specFor(other) : null
       return {
         state: 'available',
-        spec: current ? await specFor(current) : null,
+        spec,
         adapter: {
           package: launch.package,
           version: launch.version,
@@ -333,10 +339,11 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           node: nodePath,
           nodeVersion,
           npm: npmPath,
-          fallback: other
-            ? { version: other.version, dir: other.dir, spec: await specFor(other) }
-            : null,
-          cli: decision,
+          fallback:
+            other && fallbackSpec
+              ? { version: other.version, dir: other.dir, spec: fallbackSpec }
+              : null,
+          cli: decision ? { ...decision, needsCopy: !!current && !spec } : null,
         },
       }
     }
