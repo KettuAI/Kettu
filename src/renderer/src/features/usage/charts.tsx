@@ -1,6 +1,8 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
+import { tokens } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import {
@@ -8,6 +10,7 @@ import {
   AGENT_FILL,
   axisLabels,
   heatLevels,
+  widest,
   type DayRange,
   type DayTotal,
   type TrendBar,
@@ -183,18 +186,37 @@ export const TrendAxis = memo(function TrendAxis({
   )
 })
 
-/** The trend's series as toggle buttons that show or hide each one; the last one shown stays. */
+/**
+ * The trend's series as toggle buttons that show or hide each one, the last one shown staying,
+ * each with its tokens in the bar the header names. A value keeps the room of the widest it takes
+ * in any bar, so moving along the bars never moves a key.
+ */
 export const TrendLegend = memo(function TrendLegend({
+  bars,
+  index,
   series,
   shown,
   label,
   onChange,
 }: {
+  bars: TrendBar[]
+  index: number | null
   series: readonly AgentId[]
   shown: readonly AgentId[]
   label: string
   onChange: (shown: AgentId[]) => void
 }) {
+  const { i18n } = useTranslation()
+  const room = useMemo(
+    () => {
+      const font = `12px ${getComputedStyle(document.body).fontFamily}`
+      const values = (id: AgentId) => bars.map((bar) => tokens(bar.byAgent[id] ?? 0))
+      return new Map(series.map((id) => [id, widest(values(id), (t) => textWidth(t, font))]))
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tokens() follows the language
+    [bars, series, i18n.language],
+  )
+  const bar = index === null ? null : bars[index]
   return (
     <ToggleGroup
       multiple
@@ -204,7 +226,7 @@ export const TrendLegend = memo(function TrendLegend({
       variant="legend"
       size="legend"
       spacing={1}
-      className="-ml-1.5 flex-wrap"
+      className="-mr-1.5 flex-wrap justify-end"
     >
       {series.map((id) => (
         <ToggleGroupItem key={id} value={id}>
@@ -216,6 +238,11 @@ export const TrendLegend = memo(function TrendLegend({
             )}
           />
           {agentName(id)}
+          {/* The header reads the values out; the button's name stays the agent's. */}
+          <span aria-hidden className="grid text-left text-tertiary tabular-nums">
+            <span className="invisible col-start-1 row-start-1">{room.get(id)}</span>
+            <span className="col-start-1 row-start-1">{bar && tokens(bar.byAgent[id] ?? 0)}</span>
+          </span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

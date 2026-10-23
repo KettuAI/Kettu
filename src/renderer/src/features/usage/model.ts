@@ -304,6 +304,17 @@ export function busiest(totals: readonly number[]): number | null {
   return best
 }
 
+/** The widest of `texts` by `measure`, the first of equals; '' for none. */
+export function widest(texts: readonly string[], measure: (text: string) => number): string {
+  let best = ''
+  let size = -1
+  for (const text of texts) {
+    const width = measure(text)
+    if (width > size) [best, size] = [text, width]
+  }
+  return best
+}
+
 /** The trend's bars are at most this wide (its `max-w-12`), and 1 px apart. */
 const BAR_WIDTH = 48
 const BAR_GAP = 1

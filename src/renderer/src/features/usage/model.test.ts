@@ -29,6 +29,7 @@ import {
   typedDay,
   typedRange,
   weekStartOf,
+  widest,
 } from './model'
 
 const day = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
@@ -186,6 +187,14 @@ describe('trend series', () => {
     expect(shownSeries(series, ['codex'])).toEqual(['claude-code', 'opencode'])
     // A series hidden before the figures changed leaves the others shown, or all of them.
     expect(shownSeries(['codex'], ['codex'])).toEqual(['codex'])
+  })
+
+  it('finds the widest value a legend key must keep room for', () => {
+    const measure = (text: string) =>
+      text.replace('.', '').length * 7 + (text.includes('.') ? 3 : 0)
+    expect(widest(['0', '1.2M', '100K', '9.7M'], measure)).toBe('100K')
+    expect(widest(['2.7B', '9.7M'], measure)).toBe('2.7B')
+    expect(widest([], measure)).toBe('')
   })
 })
 

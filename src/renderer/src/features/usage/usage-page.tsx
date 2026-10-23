@@ -44,7 +44,6 @@ import {
 import { HeatLegend, Heatmap, TrendAxis, TrendChart, TrendLegend } from './charts'
 import {
   addDays,
-  AGENT_FILL,
   busiest,
   clocksChange,
   dayOf,
@@ -705,24 +704,33 @@ function TrendCard({
             {bar &&
               !late &&
               t('trend.label', { date: describe(bar), tokens: tokens(totals[index!]!) })}
-          </span>
-        }
-      />
-      <div className="flex flex-col gap-1">
-        {/* The scale's top on the left; with a legend, each shown agent's part of the bar named. */}
-        <div className="flex h-4 justify-between gap-3 text-xs text-tertiary tabular-nums">
-          <span aria-hidden>{!late && max > 0 && tokens(max)}</span>
-          <span aria-live="polite" className="flex min-w-0 gap-2.5 overflow-hidden">
             {bar &&
               !late &&
               series.length > 1 &&
               shown.map((id) => (
-                <span key={id} className="flex shrink-0 items-center gap-1">
-                  <span aria-hidden className={cn('size-2 rounded-xs', AGENT_FILL[id])} />
-                  {t('trend.agent', { agent: agentName(id), tokens: tokens(bar.byAgent[id] ?? 0) })}
+                <span key={id} className="sr-only">
+                  {` ${t('trend.agent', { agent: agentName(id), tokens: tokens(bar.byAgent[id] ?? 0) })}`}
                 </span>
               ))}
           </span>
+        }
+      />
+      <div className="flex flex-col gap-1">
+        {/* The scale's top, and the legend with each agent's part of the bar the header names. */}
+        <div className="flex min-h-(--control-height-sm) items-center justify-between gap-3">
+          <span aria-hidden className="text-xs text-tertiary tabular-nums">
+            {!late && max > 0 && tokens(max)}
+          </span>
+          {!late && series.length > 1 && (
+            <TrendLegend
+              bars={bars}
+              index={index}
+              series={series}
+              shown={shown}
+              label={t('trend.legend')}
+              onChange={toggle}
+            />
+          )}
         </div>
         {late ? (
           <Skeleton className="h-40" />
@@ -753,12 +761,6 @@ function TrendCard({
           />
         )}
       </div>
-      {series.length > 1 &&
-        (late ? (
-          <span className="h-control-sm" />
-        ) : (
-          <TrendLegend series={series} shown={shown} label={t('trend.legend')} onChange={toggle} />
-        ))}
     </Card>
   )
 }
