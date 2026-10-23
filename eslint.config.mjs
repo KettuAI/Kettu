@@ -5,6 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
+import overbench from './tools/lint/eslint-plugin.mjs'
 
 export default defineConfig([
   globalIgnores(['out', 'dist', '.worktrees', 'src/renderer/src/lib/cn-tables.ts']),
@@ -28,6 +29,13 @@ export default defineConfig([
     files: ['src/renderer/**/*.{ts,tsx}'],
     extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
     languageOptions: { globals: globals.browser },
+  },
+  {
+    // Colors live in src/renderer/src/styles/tokens.css; tools/lint/css-colors.mjs covers the CSS.
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
+    plugins: { overbench },
+    rules: { 'overbench/no-color-literals': 'error' },
   },
   {
     // shadcn/ui components export their variant helpers next to the component.

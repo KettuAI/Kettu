@@ -99,6 +99,13 @@ Environment variables, read when the agent starts:
 
 A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise, and a session resumed or loaded in the same process keeps its own unless `FAKE_AGENT_RESUME_CONFIG` does. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
 
+## Color checks
+
+`pnpm lint` also runs two checks on the [color tokens](./design-system.md#color). Neither has dependencies, and their tests sit beside them in `tools/lint/`.
+
+- **No color literals outside `src/renderer/src/styles/tokens.css`.** The ESLint rule `overbench/no-color-literals` (`tools/lint/eslint-plugin.mjs`) reports hex colors, color functions (`rgb(`, `oklch(`, and the others) and Tailwind palette utilities (`bg-red-500`, `text-white`, `shadow-black/10`) in the renderer's string literals and template text, test files excepted. `tools/lint/css-colors.mjs` runs the same finder over the renderer's `.css`, `.html` and `.svg` files, where it also reads CSS named colors in color properties, and prints `path:line:col message` for each hit. A hex color is told apart by what stands before it (`bg-[#fff]`, `: #fff`, a string that is only a color), so `#root` and `url(#id)` pass; text such as `PR #123` is a false hit, which an `eslint-disable` comment settles.
+- **Contrast.** `tools/lint/contrast.mjs` fails when the two dark blocks of `tokens.css` (under `prefers-color-scheme: dark` and `[data-theme='dark']`) differ, and when a foreground and background pair in its `PAIR_GROUPS` list falls below WCAG 2.x AA, 4.5:1, in the light or the dark theme. `--text-disabled` is exempt. A pair whose color is not opaque hex or `rgb()` (an alpha channel, `oklch()`, `var()`) is skipped with a note; every listed token is hex today. `node tools/lint/contrast.mjs --table` prints every pair's ratio.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push to `main` and every pull request. Its `check` job runs on `macos-latest`, `windows-latest` and `ubuntu-24.04`, the Ubuntu that [release builds](./updates.md#releases) use:

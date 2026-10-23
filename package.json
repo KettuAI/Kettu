@@ -24,7 +24,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck:tools": "tsc -p tsconfig.tools.json",
-    "lint": "eslint --cache .",
+    "lint": "eslint --cache . && node tools/lint/css-colors.mjs && node tools/lint/contrast.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "package": "pnpm build && electron-builder --dir",
