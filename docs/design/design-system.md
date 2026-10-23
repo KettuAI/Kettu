@@ -40,6 +40,7 @@ Four surface steps, mapped onto the shadcn tokens so that shadcn components pick
 - The lightness steps match the reference. Its surfaces carry a trace of warmth (chroma about 0.002); OverBench keeps shadcn's pure neutral.
 - A queued message's card in the [queue stack](./ui.md#composer) fades from surface 3 toward `--queue-back` the further back it sits: `oklch(0.96 0 0)` light, a grey step like `--muted`, and `oklch(0.196 0 0)` dark, surface 1, so a card further back recedes in both themes.
 - `BACKGROUND_COLOR` in `src/main/window.ts` follows `--background` in both themes, so the first frame does not flash.
+- `--canvas` is `oklch(1 0 0)` in both themes: the page an [SVG code block](./ui.md#markdown)'s picture is drawn on. An SVG with no background of its own is drawn for a white page, so its dark strokes and text would vanish on a dark card.
 
 ### Lines
 
@@ -282,7 +283,7 @@ The message body, from the typography spec of [problem 43](../milestones/m0-feed
 - **Paragraphs and emphasis**: `margin: 0 0 0.75em`; bold at the semibold weight, never 700; emphasis italic, except in Chinese text, where it is the medium weight upright (`data-cjk-emphasis`, set when the emphasis holds a Han character).
 - **Lists**: `padding-left: 1.25em`, items 0.3em apart, markers in `--muted-foreground`, ordered numbers `tabular-nums`, nested lists 0.25em above and below, and no margin on a paragraph inside an item, so loose lists keep the spacing of tight ones.
 - **Inline code**: mono at 0.85em on `--muted`, `padding: 0.1em 0.35em`, radius 4 px, no border and no colored text.
-- **Code blocks**: `--muted` at 60%, a 1 px `--border`, radius 8 px, 13 px at 1.6, padding 0 14px 12px under a 32 px header with the language at 12 px in `--muted-foreground` and the copy button as a ghost button; a block scrolls sideways and never wraps; 1em above and below.
+- **Code blocks**: `--muted` at 60%, a 1 px `--border`, radius 8 px, 13 px at 1.6, padding 0 14px 12px under a 32 px header with the language at 12 px in `--muted-foreground` and the copy button as a ghost button; a block scrolls sideways and never wraps; 1em above and below. An `svg` block's picture replaces the text under the same header: centred, `0 14px 12px` from the frame, on a `--canvas` page with 12 px of page around it and `rounded-md` corners, so a shape with round corners keeps them.
 - **Links**: `--foreground` with an underline in `--muted-foreground` at 40%, 3 px below the text, turning `--foreground` on hover.
 - **File chips**: `inline-flex`, 20 px high, `vertical-align: 1px`; the file icon and 3 px; 6 px of padding each side, radius 5 px; mono 11.5 px in `--muted-foreground` on `--muted`, no wrapping; 4 px from what comes before; `--accent` and `--foreground` on hover.
 - **Blockquotes**: a 2 px `--border` rule on the left, 12 px in, `--muted-foreground`, no fill. **Tables**: no frame, in a wrapper that scrolls sideways; 14 px with `tabular-nums`; header cells at the medium weight in `--muted-foreground` over a `--border` line; cells `8px 12px` over a `--border` line at 60%, none under the last row. **Rules**: 1 px `--border`, 1.5em above and below.

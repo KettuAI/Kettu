@@ -272,5 +272,10 @@
   "link": {
     "title": "Open this link?",
     "open": "Open in browser"
+  },
+  "svg": {
+    "alt": "SVG image",
+    "showSource": "Show source",
+    "showPreview": "Show preview"
   }
 }

@@ -112,7 +112,7 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | An update on offer, the app's or an agent's                       | `CircleArrowUp`          |                                   |
 | Hide, show account details                                        | `EyeOff`, `Eye`          |                                   |
 | Decrease, increase a stepped value, such as zoom                  | `Minus`, `Plus`          | `ZoomOut`, `ZoomIn`               |
-| Toggle markdown preview and source                                | `BookOpen`, `Code`       |                                   |
+| Toggle a preview and its source: Markdown files, SVG code blocks  | `BookOpen`, `Code`       |                                   |
 | Usage, the usage page                                             | `ChartNoAxesColumn`      | `ChartBar`, `ChartColumn`         |
 | A date or a range of dates                                        | `Calendar`               | `CalendarDays`, `CalendarRange`   |
 

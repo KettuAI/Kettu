@@ -71,6 +71,7 @@
   --color-track: var(--track);
   --color-segment-track: var(--segment-track);
   --color-segment-thumb: var(--segment-thumb);
+  --color-canvas: var(--canvas);
   --color-pressed: var(--pressed);
   --color-pressed-hover: var(--pressed-hover);
   --color-attention: var(--attention);
@@ -186,6 +187,8 @@
   --pressed-hover: oklch(0 0 0 / 11%);
   /* What a queued message's card fades toward as it sits further back in the stack. */
   --queue-back: oklch(0.96 0 0);
+  /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
+  --canvas: oklch(1 0 0);
 
   /* Lines are translucent so one token reads the same on every surface. Alphas are for the
      0.5 px hairline of a 2x display and halved below, so a line keeps its visual weight. */
@@ -383,6 +386,7 @@
   --pressed: oklch(1 0 0 / 10%);
   --pressed-hover: oklch(1 0 0 / 14%);
   --queue-back: oklch(0.196 0 0);
+  --canvas: oklch(1 0 0);
 
   --border: oklch(1 0 0 / 7%);
   --border-soft: oklch(1 0 0 / 4%);

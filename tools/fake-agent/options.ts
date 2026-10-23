@@ -18,6 +18,7 @@ export const SCENARIOS = [
   'plan',
   'background',
   'thinking',
+  'svg',
   'usage',
   'status',
   'context',
@@ -64,6 +65,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     description: 'Starts a command in the background, as Claude Code does with run_in_background',
   },
   thinking: { description: 'A long thought, then an answer' },
+  svg: { description: 'A reply with svg code blocks: a diagram, a badge and bare path data' },
   usage: {
     description: "The plan limits, as Claude Code's /usage reports them",
     hint: '--plain',
