@@ -227,6 +227,7 @@ export interface SessionRecord {
 export interface SessionsFile {
   version: 1
   sessions: SessionRecord[]
+  emptySessionsRemovedAt?: number // when the one-time removal of sessions with no message ran
 }
 
 /**
@@ -373,7 +374,13 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isString(item.customTitle) ? { customTitle: item.customTitle } : {}),
     })
   }
-  return { version: 1, sessions }
+  return {
+    version: 1,
+    sessions,
+    ...(isTime(data.emptySessionsRemovedAt)
+      ? { emptySessionsRemovedAt: data.emptySessionsRemovedAt }
+      : {}),
+  }
 }
 
 // Not 'none': whether a signed-out agent is still signed out is known only once it runs.

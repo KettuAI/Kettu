@@ -9,8 +9,9 @@ export type MainView =
   | { kind: 'welcome' }
   | { kind: 'session'; sessionId: string }
   // The New session screen; the session is created on the first send. With `noProject`, in a
-  // scratch folder of its own rather than the selected project.
-  | { kind: 'new'; agentId: AgentId | null; noProject: boolean }
+  // scratch folder of its own rather than the selected project; with `parentId`, as a sub-session
+  // of that session, in its project.
+  | { kind: 'new'; agentId: AgentId | null; noProject: boolean; parentId?: string }
   | { kind: 'usage' } // the usage page, opened from the sidebar
 
 // The No project group's key in `collapsedProjects`, which no folder's path can take.
@@ -126,6 +127,18 @@ export function openNewSession(
 ): void {
   useViewStore.setState((s) => ({
     ...newSessionView(s, projectPath, agentId, noProject),
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** New session for a sub-session of `parent`, in its project, with the agent the menu chose. */
+export function openNewSubSession(
+  parent: { id: string; projectPath: string },
+  agentId: AgentId,
+): void {
+  useViewStore.setState((s) => ({
+    main: { kind: 'new', agentId, noProject: false, parentId: parent.id },
+    projectPath: parent.projectPath,
     settings: { ...s.settings, open: false },
   }))
 }

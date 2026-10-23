@@ -125,6 +125,26 @@ export async function createSession(
 }
 
 /**
+ * New session's send: creates the session with its first message, as a sub-session when the
+ * screen was opened for one and its parent is still listed.
+ */
+export function startNewSession(
+  agentId: AgentId,
+  projectPath: string | null,
+  prompt: string,
+  options: OptionValues | null,
+): Promise<void> {
+  const { main } = useViewStore.getState()
+  const parent =
+    main.kind === 'new' && main.parentId
+      ? useSessionsStore.getState().byId[main.parentId]
+      : undefined
+  return parent
+    ? createSession(agentId, parent.projectPath, parent.id, prompt, options)
+    : createSession(agentId, projectPath, null, prompt, options)
+}
+
+/**
  * Sends the New session screen's message into the session it started. One the session cannot
  * take yet, as when its agent asks to sign in first, waits in that session's composer.
  */
@@ -219,13 +239,16 @@ function leaveSession(summary: SessionSummary | undefined): void {
 
 /**
  * Leaves a shown session that drops out of the list, deleted here, by the agent host or with its
- * parent, for New session where it ran. Returns the unsubscribe.
+ * parent, for New session where it ran; New session for a sub-session whose parent goes becomes
+ * one for a session of its own. Returns the unsubscribe.
  */
 export function followShownSession(): () => void {
   return useSessionsStore.subscribe((state, previous) => {
     const { main } = useViewStore.getState()
-    if (main.kind !== 'session' || state.byId[main.sessionId]) return
-    const gone = previous.byId[main.sessionId]
+    const shownId =
+      main.kind === 'session' ? main.sessionId : main.kind === 'new' ? main.parentId : undefined
+    if (!shownId || state.byId[shownId]) return
+    const gone = previous.byId[shownId]
     if (gone) leaveSession(gone)
   })
 }

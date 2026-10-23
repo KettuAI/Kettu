@@ -58,6 +58,7 @@ import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import type { Diagnostics } from './diagnostics'
+import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
@@ -291,6 +292,11 @@ export class SessionManager {
   private badgeCount = 0
   /** Set once the host shuts down: the last checkpoints are written and no more follow. */
   private stopped = false
+  /** The sessions in the index at launch: the only ones `removeEmpty` may remove. */
+  private readonly atLaunch = new Set<string>()
+  /** When `removeEmpty` last went through the whole index, kept in it; null before that. */
+  private emptySessionsRemovedAt: number | null = null
+  private emptyRemoval: Promise<void> | null = null
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.timings = { ...SESSION_TIMINGS, ...deps.timings }
@@ -307,7 +313,11 @@ export class SessionManager {
 
   async load(): Promise<void> {
     const file = await this.deps.file.load()
-    for (const record of file.sessions) this.records.set(record.id, record)
+    for (const record of file.sessions) {
+      this.records.set(record.id, record)
+      this.atLaunch.add(record.id)
+    }
+    this.emptySessionsRemovedAt = file.emptySessionsRemovedAt ?? null
   }
 
   flush(): Promise<void> {
@@ -837,7 +847,13 @@ export class SessionManager {
 
   private saveIndex(): void {
     // JsonFile serializes when it writes, so the latest records go out without copies here.
-    this.deps.file.save({ version: 1, sessions: [...this.records.values()] })
+    this.deps.file.save({
+      version: 1,
+      sessions: [...this.records.values()],
+      ...(this.emptySessionsRemovedAt === null
+        ? {}
+        : { emptySessionsRemovedAt: this.emptySessionsRemovedAt }),
+    })
   }
 
   private persist(live: Live): void {
@@ -2730,6 +2746,80 @@ export class SessionManager {
     }
     this.saveIndex()
     this.removeThreads(inProject.map((summary) => summary.id))
+  }
+
+  /**
+   * `removeEmpty` at the first launch after New sub-session began to create sessions with their
+   * first message, for the sessions it left with none; never again once the index records it.
+   */
+  removeEmptyOnce(): Promise<void> {
+    // The run records itself before it removes the threads, so a caller meanwhile waits for it.
+    if (!this.emptyRemoval && this.emptySessionsRemovedAt === null && !this.deps.file.readOnly) {
+      this.emptyRemoval = this.removeEmpty()
+    }
+    return this.emptyRemoval ?? Promise.resolve()
+  }
+
+  /**
+   * Removes from the index, with their stored threads, the sessions that were in it at launch and
+   * hold no message (`mayBeEmpty`, with a stored thread that `holdsNothing`), unless one is live,
+   * shown or watched, or has a sub-session that stays. The agents' own histories are left alone:
+   * the index does not say which sessions OverBench created and which it imported. It records
+   * that it ran unless a thread could not be read, so the next launch tries again.
+   */
+  async removeEmpty(): Promise<void> {
+    const store = this.deps.threads
+    if (!store) return
+    const candidates = [...this.records.values()].filter(
+      (record) => this.atLaunch.has(record.id) && mayBeEmpty(record),
+    )
+    let complete = true
+    const empty = new Set<string>()
+    await Promise.all(
+      candidates.map(async (record) => {
+        try {
+          const page = await store.page(record.id)
+          if (page && this.isCurrent(record, page.head) && holdsNothing(page)) empty.add(record.id)
+        } catch (error) {
+          complete = false
+          this.deps.diagnostics.log(
+            'warn',
+            `Could not read the thread of session ${record.id}: ${(error as Error).message}`,
+          )
+        }
+      }),
+    )
+    // Checked again after the reads, which a renderer may have used to show or use one.
+    const decided = new Map<string, boolean>()
+    const removable = (id: string): boolean => {
+      const known = decided.get(id)
+      if (known !== undefined) return known
+      decided.set(id, false) // a loop of parents keeps them all
+      const record = this.records.get(id)
+      const yes =
+        !!record &&
+        empty.has(id) &&
+        mayBeEmpty(record) &&
+        !this.live.has(id) &&
+        !this.inFront(id) &&
+        !this.watchers.has(id) &&
+        !this.reviving.has(id) &&
+        !this.releasing.has(id) &&
+        this.children(id).every((child) => removable(child.id))
+      decided.set(id, yes)
+      return yes
+    }
+    const removed = [...empty].filter(removable)
+    for (const id of removed) this.forget(id)
+    if (complete) this.emptySessionsRemovedAt = this.now()
+    this.saveIndex()
+    // The index goes first: a session whose thread went before it would never count as empty.
+    await this.deps.file.flush()
+    this.removeThreads(removed)
+    this.deps.diagnostics.log(
+      'info',
+      `Removed ${removed.length} session${removed.length === 1 ? '' : 's'} that held no message; this runs once`,
+    )
   }
 
   async listImportable(

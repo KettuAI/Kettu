@@ -218,6 +218,18 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [session] })
   })
 
+  it('keeps when sessions with no message were removed, and drops a time that does not parse', () => {
+    expect(parseSessionsFile({ sessions: [session], emptySessionsRemovedAt: 7 })).toEqual({
+      version: 1,
+      sessions: [session],
+      emptySessionsRemovedAt: 7,
+    })
+    expect(parseSessionsFile({ sessions: [session], emptySessionsRemovedAt: 'x' })).toEqual({
+      version: 1,
+      sessions: [session],
+    })
+  })
+
   it('validates projects', async () => {
     const project = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
     expect(parseProjectsFile({ projects: [project] })).toEqual({ version: 1, projects: [project] })

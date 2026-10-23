@@ -1,13 +1,16 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { emitAppEvent } from '@renderer/app/events'
 
 /**
  * Renaming a session in place. Enter and Esc hand the focus to `returnFocus` once the field is
  * gone. Rename in a menu waits for the menu to close, and keeps the menu from taking the focus
- * back, which would blur the new field at once.
+ * back, which would blur the new field at once. An item that opens New session (`onLeave`) hands
+ * the focus to its composer instead.
  */
 export function useRenaming(returnFocus: () => HTMLElement | null | undefined) {
   const [renaming, setRenaming] = useState(false)
   const fromMenu = useRef(false)
+  const leaving = useRef(false)
   const refocus = useRef(false)
   const focusBack = useEffectEvent(() => returnFocus()?.focus())
 
@@ -25,10 +28,15 @@ export function useRenaming(returnFocus: () => HTMLElement | null | undefined) {
       onRename: () => {
         fromMenu.current = true
       },
-      onOpenChangeComplete: (open: boolean) => {
-        if (!open && fromMenu.current) setRenaming(true)
+      onLeave: () => {
+        leaving.current = true
       },
-      finalFocus: () => !fromMenu.current,
+      onOpenChangeComplete: (open: boolean) => {
+        if (open) leaving.current = false
+        else if (fromMenu.current) setRenaming(true)
+        else if (leaving.current) emitAppEvent({ kind: 'focus-composer' })
+      },
+      finalFocus: () => !fromMenu.current && !leaving.current,
     },
     finish: (restoreFocus: boolean) => {
       fromMenu.current = false

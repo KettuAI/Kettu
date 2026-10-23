@@ -2,13 +2,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
-import {
-  closeSession,
-  createSession,
-  deleteSession,
-  descendantCount,
-  renameSession,
-} from '@renderer/app/actions'
+import { closeSession, deleteSession, descendantCount, renameSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   AlertDialog,
@@ -32,6 +26,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle } from '@renderer/stores/sessions'
+import { openNewSubSession } from '@renderer/stores/view'
 
 /**
  * A session's actions. A context menu is a Base UI menu, so the same items serve the row's
@@ -40,10 +35,13 @@ import { sessionTitle } from '@renderer/stores/sessions'
 export function SessionMenuItems({
   summary,
   onRename,
+  onNewSubSession,
   onDelete,
 }: {
   summary: SessionSummary
   onRename: () => void
+  /** New session opens for a sub-session, and its composer takes the focus from the menu. */
+  onNewSubSession: () => void
   onDelete: () => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
@@ -60,7 +58,10 @@ export function SessionMenuItems({
                 <DropdownMenuItem
                   key={agent.id}
                   disabled={!isInstalled(agent)}
-                  onClick={() => void createSession(agent.id, summary.projectPath, summary.id)}
+                  onClick={() => {
+                    onNewSubSession()
+                    openNewSubSession(summary, agent.id)
+                  }}
                 >
                   <AgentMark agent={agent.id} size={14} mono={!isInstalled(agent)} />
                   {agent.name}

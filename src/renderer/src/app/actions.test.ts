@@ -17,6 +17,7 @@ const {
   newSessionInPlace,
   openProjectDialog,
   retryPendingSession,
+  startNewSession,
   usePendingSession,
 } = await import('./actions')
 const { NEW_SESSION_DRAFT, readDraft, writeDraft } =
@@ -26,7 +27,8 @@ const { useProjectsStore } = await import('@renderer/stores/projects')
 const { useSessionsStore } = await import('@renderer/stores/sessions')
 const { useSettingsStore } = await import('@renderer/stores/settings')
 const { useThreadsStore } = await import('@renderer/stores/threads')
-const { chooseNewSessionProject, useViewStore } = await import('@renderer/stores/view')
+const { chooseNewSessionProject, openNewSubSession, useViewStore } =
+  await import('@renderer/stores/view')
 
 const summary = { id: 's1', projectPath: '/repo' } as SessionSummary
 const scratch = { id: 'x1', projectPath: '/data/scratch/a', scratch: true } as SessionSummary
@@ -426,6 +428,100 @@ describe('createSession with start values', () => {
     expect(request).toHaveBeenCalledWith('sessions.create', {
       agentId: 'codex',
       projectPath: '/repo',
+    })
+  })
+})
+
+describe('New sub-session', () => {
+  const parent = { id: 'p1', projectPath: '/repo', agentId: 'codex' } as SessionSummary
+  const child = {
+    id: 'c1',
+    projectPath: '/repo',
+    agentId: 'opencode',
+    status: 'ready',
+    parentId: 'p1',
+  } as SessionSummary
+
+  beforeEach(() => {
+    request.mockReset()
+    request.mockResolvedValue(undefined)
+    usePendingSession.setState({ pending: null })
+    useSessionsStore.setState({ byId: { p1: parent } })
+    useViewStore.setState({
+      main: { kind: 'session', sessionId: 'p1' },
+      projectPath: '/other',
+      settings: { open: true, section: 'general', agent: null },
+    })
+  })
+
+  it("opens New session for it in the parent's project, and creates nothing yet", () => {
+    openNewSubSession(parent, 'opencode')
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'opencode', noProject: false, parentId: 'p1' },
+      projectPath: '/repo',
+      settings: { open: false },
+    })
+    expect(request).not.toHaveBeenCalled()
+    expect(usePendingSession.getState().pending).toBeNull()
+  })
+
+  it('takes the agent the menu chose over the one New session shows', () => {
+    useViewStore.setState({ main: { kind: 'new', agentId: 'codex', noProject: true } })
+    openNewSubSession(parent, 'opencode')
+    expect(useViewStore.getState().main).toEqual({
+      kind: 'new',
+      agentId: 'opencode',
+      noProject: false,
+      parentId: 'p1',
+    })
+  })
+
+  it('creates the session under the parent with the first message, then shows it', async () => {
+    openNewSubSession(parent, 'opencode')
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? child : undefined,
+    )
+    await startNewSession('opencode', '/repo', 'Write the tests', null)
+    expect(request).toHaveBeenCalledWith('sessions.create', {
+      agentId: 'opencode',
+      projectPath: '/repo',
+      parentId: 'p1',
+    })
+    expect(request).toHaveBeenCalledWith('sessions.prompt', {
+      sessionId: 'c1',
+      content: [{ type: 'text', text: 'Write the tests' }],
+    })
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'c1' })
+  })
+
+  it('starts a session of its own when New session opens again', async () => {
+    openNewSubSession(parent, 'opencode')
+    newSession('/repo')
+    expect(useViewStore.getState().main).toEqual({
+      kind: 'new',
+      agentId: 'opencode',
+      noProject: false,
+    })
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? { ...child, parentId: null } : undefined,
+    )
+    await startNewSession('opencode', '/repo', 'Write the tests', null)
+    expect(request).toHaveBeenCalledWith('sessions.create', {
+      agentId: 'opencode',
+      projectPath: '/repo',
+    })
+  })
+
+  it('leaves for New session in its project when the parent goes', () => {
+    const unfollow = followShownSession()
+    openNewSubSession(parent, 'opencode')
+    useSessionsStore.getState().remove('p1')
+    unfollow()
+    expect(useViewStore.getState()).toMatchObject({ projectPath: '/repo' })
+    expect(useViewStore.getState().main).toEqual({
+      kind: 'new',
+      agentId: 'opencode',
+      noProject: false,
     })
   })
 })

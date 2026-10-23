@@ -264,6 +264,13 @@ export class AgentHost {
     ])
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
+    // Before the first port asks, so its reads of the threads come first.
+    void host.sessions.removeEmptyOnce().catch((error: unknown) => {
+      host.diagnostics.log(
+        'warn',
+        `Could not remove the sessions with no message: ${(error as Error).message}`,
+      )
+    })
     host.sendFolders()
     host.usage.start()
     options.send({ type: 'host:ready' })
