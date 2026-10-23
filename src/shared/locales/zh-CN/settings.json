@@ -424,8 +424,8 @@
   "footer": {
     "about": "关于 OverBench",
     "upToDate": "已是最新",
-    "available": "{{version}} 可更新",
-    "downloading": "正在下载 {{percent}}%",
-    "restartToUpdate": "重启以更新"
+    "available": "{{version}} 已发布",
+    "downloading": "已下载 {{percent}}%",
+    "restartToUpdate": "重启"
   }
 }

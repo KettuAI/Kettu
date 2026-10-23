@@ -427,8 +427,8 @@
   "footer": {
     "about": "About OverBench",
     "upToDate": "Up to date",
-    "available": "{{version}} available",
-    "downloading": "Downloading {{percent}}%",
-    "restartToUpdate": "Restart to update"
+    "available": "{{version}} is out",
+    "downloading": "{{percent}}% downloaded",
+    "restartToUpdate": "Restart"
   }
 }
