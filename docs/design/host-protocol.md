@@ -167,6 +167,24 @@ interface AgentStatus {
   updateCheckedAt: number | null // when that check finished; always null for binary agents
   task: AgentTask | null // an install or update the user asked for
   installMethods: { id: 'brew' | 'npm' | 'script'; command: string; available: boolean }[] // a binary agent's routes; empty for the others
+  cli: AgentCli | null // which CLI a Claude Code or Codex adapter runs; null for the others and while it cannot run
+}
+
+// See using the installed CLI in the agent host design.
+interface AgentCli {
+  command: string // looked up on PATH: claude or codex
+  runs: 'installed' | 'bundled' // what a start runs now
+  installed: {
+    path: string // as the adapter runs it, after resolving shims
+    version: string | null
+    variable: string | null // CLAUDE_CODE_EXECUTABLE or CODEX_PATH when the environment named it, which then decides alone
+    problem:
+      | { kind: 'unsupported' } // cannot run without a shell
+      | { kind: 'failed'; reason: string } // its version could not be read, or a start with it failed
+      | { kind: 'too-old'; minimum: string }
+      | { kind: 'no-minimum' } // the adapter names no version it needs
+      | null
+  } | null // null: none found
 }
 
 interface AgentTask {

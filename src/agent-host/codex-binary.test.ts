@@ -67,14 +67,37 @@ describe('codexLaunchEnv', () => {
     expect(env.CODEX_PATH).toBe(binary)
   })
 
+  it('looks in its own vendor folder without the platform package, as codex.js does', async () => {
+    const vendored = `${NM}/@openai/codex/vendor/aarch64-apple-darwin/bin/codex`
+    const env = await codexLaunchEnv(lookup([`${NM}/@openai/codex/package.json`, vendored]))
+    expect(env.CODEX_PATH).toBe(vendored)
+  })
+
   it('leaves codex.js to it when the binary is missing', async () => {
     expect(await codexLaunchEnv(lookup(npmInstall.slice(0, 2)))).toEqual({})
     expect(await codexLaunchEnv(lookup([]))).toEqual({})
   })
 
-  it('keeps a CODEX_PATH the user set', async () => {
+  it('keeps a CODEX_PATH the user set, in any case on Windows', async () => {
     expect(
       await codexLaunchEnv(lookup(npmInstall, { env: { CODEX_PATH: '/opt/codex/bin/codex' } })),
+    ).toEqual({})
+    const nm = 'C:\\data\\codex\\node_modules'
+    const windows = lookup(
+      [
+        `${nm}\\@openai\\codex\\package.json`,
+        `${nm}\\@openai\\codex-win32-x64\\package.json`,
+        `${nm}\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe`,
+      ],
+      {
+        platform: 'win32',
+        dir: 'C:\\data\\codex',
+        entry: `${nm}\\@agentclientprotocol\\codex-acp\\dist\\index.js`,
+      },
+    )
+    expect(await codexLaunchEnv(windows)).toMatchObject({ CODEX_MANAGED_BY_NPM: '1' })
+    expect(
+      await codexLaunchEnv({ ...windows, env: { Codex_Path: 'C:\\tools\\codex.exe' } }),
     ).toEqual({})
   })
 })

@@ -8,7 +8,7 @@
 import { realpath as fsRealpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
-import type { Env } from './find-command'
+import { getEnv, type Env } from './find-command'
 
 // Each platform's binaries by architecture; npm installs the one package that fits its Node.js.
 const TARGETS: Partial<Record<Platform, { package: string; triple: string }[]>> = {
@@ -47,12 +47,12 @@ async function isFile(file: string): Promise<boolean> {
   }
 }
 
-/** Node.js's lookup of a package from `from`: each `node_modules` up to the install directory. */
+/** Node.js's lookup of a package from `from`: each `node_modules` up to `top`, or to the root. */
 async function findPackage(
   p: path.PlatformPath,
   name: string,
   from: string,
-  top: string,
+  top: string | null,
   exists: (file: string) => Promise<boolean>,
 ): Promise<string | null> {
   for (let dir = from; ; dir = p.dirname(dir)) {
@@ -64,6 +64,29 @@ async function findPackage(
   }
 }
 
+/** The platform's binary of the `@openai/codex` package at `codex`, as its `codex.js` finds it. */
+export async function codexBinary(
+  codex: string,
+  platform: Platform,
+  top: string | null,
+  isFile: (file: string) => Promise<boolean>,
+): Promise<string | null> {
+  const p = platform === 'win32' ? path.win32 : path.posix
+  const name = platform === 'win32' ? 'codex.exe' : 'codex'
+  for (const target of TARGETS[platform] ?? []) {
+    // Without the platform's package, codex.js looks in its own package's vendor folder.
+    const vendor = (await findPackage(p, target.package, codex, top, isFile)) ?? codex
+    const binary = p.join(vendor, 'vendor', target.triple, 'bin', name)
+    if (await isFile(binary)) return binary
+  }
+  return null
+}
+
+/** What `codex.js` passes to the binary it starts for an npm install, rooted at its real path. */
+export function npmCodexEnv(root: string): Record<string, string> {
+  return { CODEX_MANAGED_BY_NPM: '1', CODEX_MANAGED_PACKAGE_ROOT: root }
+}
+
 /**
  * `CODEX_PATH`, `CODEX_MANAGED_BY_NPM` and `CODEX_MANAGED_PACKAGE_ROOT` for codex-acp, or nothing
  * when the binary is not where npm puts it, and the adapter goes through `codex.js` as before.
@@ -71,23 +94,15 @@ async function findPackage(
 export async function codexLaunchEnv(lookup: AdapterLookup): Promise<Record<string, string>> {
   const targets = TARGETS[lookup.platform]
   // A `CODEX_PATH` the user set wins.
-  if (!targets || lookup.env.CODEX_PATH) return {}
+  if (!targets || getEnv(lookup.env, 'CODEX_PATH', lookup.platform)) return {}
   const p = lookup.platform === 'win32' ? path.win32 : path.posix
   const exists = lookup.isFile ?? isFile
   const codex = await findPackage(p, '@openai/codex', p.dirname(lookup.entry), lookup.dir, exists)
-  if (!codex) return {}
-  const name = lookup.platform === 'win32' ? 'codex.exe' : 'codex'
-  for (const target of targets) {
-    const vendor = await findPackage(p, target.package, codex, lookup.dir, exists)
-    const binary = vendor && p.join(vendor, 'vendor', target.triple, 'bin', name)
-    if (!binary || !(await exists(binary))) continue
-    let root: string
-    try {
-      root = await (lookup.realpath ?? fsRealpath)(codex)
-    } catch {
-      return {}
-    }
-    return { CODEX_PATH: binary, CODEX_MANAGED_BY_NPM: '1', CODEX_MANAGED_PACKAGE_ROOT: root }
+  const binary = codex && (await codexBinary(codex, lookup.platform, lookup.dir, exists))
+  if (!codex || !binary) return {}
+  try {
+    return { CODEX_PATH: binary, ...npmCodexEnv(await (lookup.realpath ?? fsRealpath)(codex)) }
+  } catch {
+    return {}
   }
-  return {}
 }
