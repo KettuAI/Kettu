@@ -1,4 +1,4 @@
-import { app, BrowserWindow, powerMonitor } from 'electron'
+import { app, BrowserWindow, powerMonitor, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
@@ -11,7 +11,9 @@ import { registerIpcHandlers } from './ipc'
 import { createLogger } from './log'
 import { installMenu } from './menu'
 import { notifyAttention } from './notifications'
+import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
+import { isRendererUrl } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { TerminalHost } from './terminal-host'
@@ -54,6 +56,7 @@ async function start(): Promise<void> {
 
   await app.whenReady()
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
+  restrictPermissions(session.defaultSession, isRendererUrl)
   const [settings, windowState, appState] = await loading
 
   // The system's languages are read once; macOS and Windows ask for a restart to change them.

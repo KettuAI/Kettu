@@ -110,6 +110,7 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 - Keep `sandbox: true`, `contextIsolation: true` and `nodeIntegration: false`.
 - Never expose `ipcRenderer` or Node APIs to the renderer; expose narrow, typed methods only.
 - Treat every IPC argument as untrusted input and validate it in the main process.
+- Keep the permission handlers in `src/main/permissions.ts`: the clipboard is the only web permission granted, and only to the app's own page. Add another only with a stated reason.
 - Navigation away from the app and new windows stay blocked; external `http(s)` links open in the system browser.
 - The sandboxed preload can only `require('electron')`. Bundled source and type-only imports from `@shared` are fine; Node built-ins and npm packages are not.
 - Do not loosen the CSP in `src/renderer/index.html` without a stated reason.
