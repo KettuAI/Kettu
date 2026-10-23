@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter/opsz.css';
+@import '@fontsource-variable/source-serif-4/opsz.css';
 @import './tokens.css';
 
 /* Streamdown and its code plugin style their elements with Tailwind classes. */
@@ -33,6 +34,10 @@
     'Inter Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  /* The New session heading only; Chinese falls through to the sans faces, as in the reference. */
+  --font-serif:
+    'Source Serif 4 Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', ui-serif,
+    Georgia, serif;
 
   /* The palette's own names, from tokens.css: bg-app, text-secondary, border-subtle, ... */
   --background-color-app: var(--bg-app);
@@ -157,6 +162,9 @@
   --text-ui: var(--ui-size);
   --text-prose--line-height: 1.7;
   /* The type scale of the design system, used by Settings first. */
+  --text-greeting: 34px;
+  --text-greeting--line-height: 40px;
+  --text-greeting--letter-spacing: -0.01em;
   --text-title: 22px;
   --text-title--line-height: 28px;
   --text-title--letter-spacing: -0.015em;
@@ -164,8 +172,8 @@
   --text-heading--line-height: 24px;
   --text-small: 13px;
   --text-small--line-height: 1.6;
-  --text-control: 12.5px;
-  --text-control--line-height: 16px;
+  --text-control: 14px;
+  --text-control--line-height: 20px;
   --text-code: 12px;
   --text-code--line-height: 18px;
   --text-meta: 11.5px;
@@ -175,16 +183,16 @@
 :root {
   --hairline: 1px;
 
-  /* Density: compact. */
-  --radius: 7px;
-  --control-height: 26px;
-  --control-height-sm: 24px;
-  --row-height: 28px;
+  /* Density: the reference's, measured from its screenshots. */
+  --radius: 8px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --row-height: 32px;
   /* Interface text: the sidebar, menus and controls. Prose has its own size below. */
   --ui-size: 14px;
-  --card-header: 30px;
-  --composer-min: 52px;
-  --icon-size: 16px;
+  --card-header: 36px;
+  --composer-min: 56px;
+  --icon-size: 20px;
   --top-bar: 40px;
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
   --zoom: 1;

@@ -72,9 +72,9 @@ export function AppSidebar() {
         <span className="flex-1" />
         <SidebarToggle />
       </div>
-      <div className="flex shrink-0 flex-col gap-px px-2 pt-0.5 pb-2.5">
+      <div className="flex shrink-0 flex-col gap-0.5 px-2 pt-0.5 pb-2.5">
         <NavRow
-          icon={<PlusIcon className="text-icon" />}
+          icon={<PlusIcon />}
           label={t('nav.newSession')}
           shortcut="Mod+N"
           current={drafting}
@@ -83,11 +83,7 @@ export function AppSidebar() {
         <Tooltip>
           {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
           <TooltipTrigger render={<span className="flex" />}>
-            <NavRow
-              icon={<ShapesIcon className="text-icon" />}
-              label={t('nav.artifacts')}
-              disabled
-            />
+            <NavRow icon={<ShapesIcon />} label={t('nav.artifacts')} disabled />
           </TooltipTrigger>
           <TooltipContent side="right">{t('nav.artifactsLater')}</TooltipContent>
         </Tooltip>
@@ -159,7 +155,7 @@ export function NavRow({
       isActive={current}
       disabled={disabled}
       onClick={onClick}
-      className="[&_svg]:size-[15px] data-active:font-medium"
+      className="[&_svg]:size-5 data-active:font-medium"
     >
       {icon}
       <span className="flex-1">{label}</span>
@@ -180,7 +176,7 @@ function UsageNavRow() {
   const end = useSettingsStore((s) => s.settings.usage.sidebar)
   return (
     <NavRow
-      icon={<ChartNoAxesColumnIcon className="text-icon" />}
+      icon={<ChartNoAxesColumnIcon />}
       label={t('nav.usage')}
       current={current}
       onClick={openUsage}
@@ -300,21 +296,14 @@ function ProjectGroup({
         else if (event.key === 'ArrowLeft' && open) toggle()
       }}
       className={cn(
-        'gap-1 font-medium',
+        'gap-1 text-small font-medium',
         // Room for the More button before the +, so the name never runs under it.
         project && !project.missing && 'group-has-data-[sidebar=menu-action]/menu-item:pr-13',
-        project?.missing ? 'text-disabled' : 'text-tertiary',
+        project?.missing ? 'text-disabled' : 'text-secondary',
       )}
     >
       <span className="min-w-0 truncate">{name}</span>
-      {/* A folded group always shows its chevron; an open one only under the pointer. */}
-      <span
-        className={cn(
-          'grid size-3.5 shrink-0 place-items-center text-icon transition-opacity duration-(--duration-fast)',
-          open &&
-            'opacity-0 group-hover/menu-item:opacity-100 group-has-focus-visible/menu-item:opacity-100',
-        )}
-      >
+      <span className="grid size-3 shrink-0 place-items-center text-icon">
         {open ? <ChevronDownIcon className="size-3!" /> : <ChevronRightIcon className="size-3!" />}
       </span>
       {project?.missing && (
@@ -363,7 +352,7 @@ function ProjectGroup({
                         tabIndex={-1}
                         aria-label={t('row.more')}
                         className={cn(
-                          'top-1 text-icon [&>svg]:size-3.5',
+                          'top-1.5 text-icon [&>svg]:size-3.5',
                           !project.missing && 'right-6.5',
                         )}
                       />
@@ -388,7 +377,7 @@ function ProjectGroup({
                     project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')
                   }
                   onClick={() => newSession(projectPath, !project)}
-                  className="top-1 text-icon [&>svg]:size-3.5"
+                  className="top-1.5 text-icon [&>svg]:size-3.5"
                 />
               }
             >

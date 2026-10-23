@@ -15,7 +15,7 @@ const inputGroupVariants = cva(
           'border border-input has-disabled:bg-input/50 has-[[data-slot=input-group-control]:focus-visible]:border-strong focus-ring-control has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-3 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:bg-input/30 dark:has-disabled:bg-input/80 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40',
         // Raised on surface 3; only color and shadow change on hover and focus, so the text never moves.
         composer:
-          'h-auto min-h-(--composer-min) items-end rounded-2xl bg-popover shadow-composer transition-shadow duration-(--duration-fast) not-focus-within:hover:shadow-composer-hover focus-within:shadow-composer-focus focus-ring-control has-disabled:opacity-100',
+          'h-auto min-h-(--composer-min) items-end rounded-4xl bg-popover shadow-composer transition-shadow duration-(--duration-fast) not-focus-within:hover:shadow-composer-hover focus-within:shadow-composer-focus has-disabled:opacity-100',
       },
     },
     defaultVariants: { variant: 'default' },
@@ -86,7 +86,7 @@ const inputGroupButtonVariants = cva('flex items-center gap-2 text-sm shadow-non
       sm: '',
       'icon-xs': 'size-6 rounded-[calc(var(--radius)-3px)] p-0 has-[>svg]:p-0',
       'icon-sm': 'size-8 p-0 has-[>svg]:p-0',
-      round: "size-7 rounded-full p-0 has-[>svg]:p-0 [&>svg:not([class*='size-'])]:size-4",
+      round: "size-8 rounded-full p-0 has-[>svg]:p-0 [&>svg:not([class*='size-'])]:size-4",
     },
   },
   defaultVariants: {

@@ -56,18 +56,18 @@ export function SidebarToggle({ className }: { className?: string }) {
         render={
           <Button
             variant="ghost"
-            size="icon-xs"
+            size="icon-compact"
             aria-label={label}
             onClick={toggleSidebar}
-            className={cn('app-region-no-drag relative text-icon hover:text-primary', className)}
+            className={cn('app-region-no-drag relative', className)}
           />
         }
       >
-        <PanelLeftIcon className="size-4" />
+        <PanelLeftIcon />
         {updateReady && (
           <span
             aria-hidden
-            className="absolute top-[3px] right-[3px] size-1.5 rounded-full bg-primary ring-2 ring-background"
+            className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary ring-2 ring-background"
           />
         )}
       </TooltipTrigger>

@@ -108,7 +108,7 @@ export function ControlRow({
   }
 
   return (
-    <div className="flex h-row items-center gap-0.5 px-1">
+    <div className="flex h-row items-center gap-0.5 px-2.5">
       {mode && <OptionMenu option={mode} onSelect={set} />}
       {leftOthers.map((o) => (
         <OptionMenu key={o.id} option={o} onSelect={set} />
