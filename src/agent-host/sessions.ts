@@ -66,7 +66,13 @@ import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
-import { CONTEXT_REPORT, hasContextReport, runReport } from './reports'
+import {
+  CONTEXT_REPORT,
+  hasContextReport,
+  hiddenRemoval,
+  removeHiddenSession,
+  runReport,
+} from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
 import {
@@ -1231,7 +1237,8 @@ export class SessionManager {
       await this.startNew(live, options)
     } catch (error) {
       if (!(error instanceof HostError && error.code === 'auth_required')) {
-        this.dropLive(live)
+        // A session closed or deleted while it started is already dropped.
+        if (this.live.get(live.id) === live) this.dropLive(live)
         this.forget(live.id)
         throw error
       }
@@ -1241,38 +1248,73 @@ export class SessionManager {
 
   /**
    * `session/new`, then the start values that differ from the new session's own; on
-   * `auth_required` the session waits in that state and stays live.
+   * `auth_required` the session waits in that state and stays live. It enters the index once
+   * `session/new` answers, so one closed while its values are set stays listed, closed. One
+   * deleted, or whose project is removed, before or while it starts is not saved again, and the
+   * start fails with `not_found`.
    */
   private async startNew(
     live: Live,
     options: Record<string, string | boolean> = {},
   ): Promise<void> {
+    const gone = (): boolean => live.closing || this.live.get(live.id) !== live
+    const removed = (): HostError => notFound(t('session.removedWhileStarting'))
     const runtime = await this.deps.agents.ensureReady(live.record.agentId)
+    if (gone()) throw removed()
+    let setup
     try {
-      const setup = await runtime.connection.newSession(
-        live.record.projectPath,
-        sessionMeta(live.record),
-      )
-      live.record.acpSessionId = setup.acpSessionId
-      this.attach(live, runtime.connection)
-      live.failure = null
-      // As the agent's defaults: ultracode off, whatever this session starts with.
-      this.deps.options?.started(
-        live.record.agentId,
-        withUltracode({ agentId: live.record.agentId }, setup.config),
-      )
-      this.update(live, {
-        acpSessionId: setup.acpSessionId,
-        config: withUltracode(live.record, setup.config),
-        error: null,
-      })
-      await this.applyStartOptions(live, runtime.connection, options)
-      this.update(live, { status: 'ready' })
-      this.deps.agents.signedIn(live.record.agentId)
-      this.save(live)
-      this.touch(live.id)
+      setup = await runtime.connection.newSession(live.record.projectPath, sessionMeta(live.record))
     } catch (error) {
       throw this.failStart(live, error, { action: 'create' })
+    }
+    if (gone()) {
+      // It never reached the index, so the agent's new session goes the way a hidden one does.
+      await this.removeUnlisted(live.id, runtime, setup.acpSessionId)
+      throw removed()
+    }
+    live.record.acpSessionId = setup.acpSessionId
+    this.attach(live, runtime.connection)
+    live.failure = null
+    // As the agent's defaults: ultracode off, whatever this session starts with.
+    this.deps.options?.started(
+      live.record.agentId,
+      withUltracode({ agentId: live.record.agentId }, setup.config),
+    )
+    this.update(live, {
+      acpSessionId: setup.acpSessionId,
+      config: withUltracode(live.record, setup.config),
+      error: null,
+    })
+    this.save(live)
+    await this.applyStartOptions(live, runtime.connection, options, {
+      stop: () => gone() || runtime.connection.isClosed,
+    })
+    if (gone()) {
+      // Closing or deleting it already closed or deleted the agent's session.
+      if (this.has(live.id)) return
+      throw removed()
+    }
+    this.update(live, { status: 'ready' })
+    this.deps.agents.signedIn(live.record.agentId)
+    this.touch(live.id)
+  }
+
+  /** Removes an agent's session that no thread or index entry holds, leaving no trace. */
+  private async removeUnlisted(
+    sessionId: string,
+    runtime: AgentRuntime,
+    acpSessionId: string,
+  ): Promise<void> {
+    const log = (message: string): void =>
+      this.deps.diagnostics.log('warn', `Could not remove the session of ${sessionId}: ${message}`)
+    const removal = hiddenRemoval(runtime.agentId, runtime.init)
+    if (removal) {
+      await removeHiddenSession(runtime, acpSessionId, removal, log)
+    } else if (runtime.init.capabilities.closeSession) {
+      runtime.connection.unregister(acpSessionId)
+      await runtime.connection.closeSession(acpSessionId).catch((error: unknown) => {
+        log((error as Error).message)
+      })
     }
   }
 
@@ -1324,6 +1366,8 @@ export class SessionManager {
         } else {
           next = mergeConfig(config, await connection.setConfigOption(acpSessionId, id, value))
         }
+        // Gone meanwhile: what the agent answered no longer belongs to a session.
+        if (stop?.()) break
         if (held) held = next
         else this.update(live, { config: withUltracode(live.record, next) })
         if (!restore) this.deps.options?.chose(agentId, option, value, next)

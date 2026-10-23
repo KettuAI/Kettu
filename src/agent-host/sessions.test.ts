@@ -1,10 +1,10 @@
 // Integration tests: the session layer, through the host and its port, against the fake agent
 // running in-process.
 
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { ThreadEntry, ToolEntry } from '@shared/thread'
 import { forkCut } from './sessions'
@@ -241,6 +241,84 @@ describe('starting with chosen options', () => {
     expect(summary.status).toBe('ready')
     await port.open(summary.id)
     expect(value(port, summary.id, 'model')).toBe('balanced')
+  })
+
+  describe('while it starts', () => {
+    const sent = (t: TestHost, method: string) =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === method).length
+    // The sessions the fake agent itself still lists in the project.
+    const agentSessions = async (t: TestHost, port: TestPort) =>
+      (
+        await port.request('agents.listSessions', { agentId: 'fake-agent', projectPath: t.project })
+      ).sessions.filter((s) => s.acpSessionId.startsWith('fake-'))
+
+    /** A new session reported `starting`, whose agent takes `env`'s time to open or set it. */
+    async function createInFlight(env: Record<string, string>) {
+      const { t, port } = await setup({ agentEnv: env })
+      const outcome = port
+        .request('sessions.create', {
+          agentId: 'fake-agent',
+          projectPath: t.project,
+          options: { model: 'deep', thought_level: 'high' },
+        })
+        .then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        )
+      await port.until(() => port.events.some((e) => e.type === 'session.summary'))
+      const first = port.events.find((e) => e.type === 'session.summary')
+      if (first?.type !== 'session.summary') throw new Error('No summary')
+      return { t, port, sessionId: first.summary.id, outcome }
+    }
+    const settingValues = { FAKE_AGENT_SET_CONFIG_MS: '200' }
+
+    it('stays out of the list when it is deleted while its values are set', async () => {
+      const { t, port, sessionId, outcome } = await createInFlight(settingValues)
+      await vi.waitFor(() => expect(sent(t, 'session/set_config_option')).toBe(1))
+      await port.request('sessions.delete', { sessionId })
+      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      expect((await port.request('sessions.list', {})).map((s) => s.id)).not.toContain(sessionId)
+      // The values stop with it, and the agent's session goes.
+      expect(sent(t, 'session/set_config_option')).toBe(1)
+      expect(await agentSessions(t, port)).toEqual([])
+      await t.host.sessions.flush()
+      const index = JSON.parse(
+        await readFile(path.join(t.dir, 'state', 'sessions.json'), 'utf8'),
+      ) as { sessions: { id: string }[] }
+      expect(index.sessions.map((s) => s.id)).not.toContain(sessionId)
+    })
+
+    it('stays out of the list when its project is removed while its values are set', async () => {
+      const { t, port, outcome } = await createInFlight(settingValues)
+      await vi.waitFor(() => expect(sent(t, 'session/set_config_option')).toBe(1))
+      await port.request('projects.remove', { path: t.project })
+      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      expect(await port.request('sessions.list', {})).toEqual([])
+    })
+
+    it('stays out of the list when it is deleted before the agent opens it', async () => {
+      const { t, port, sessionId, outcome } = await createInFlight({
+        FAKE_AGENT_NEW_SESSION_MS: '200',
+      })
+      await vi.waitFor(() => expect(sent(t, 'session/new')).toBe(1))
+      await port.request('sessions.delete', { sessionId })
+      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      expect((await port.request('sessions.list', {})).map((s) => s.id)).not.toContain(sessionId)
+      expect(sent(t, 'session/set_config_option')).toBe(0)
+      await vi.waitFor(async () => expect(await agentSessions(t, port)).toEqual([]))
+    })
+
+    it('stays in the list, closed, when it is closed while its values are set', async () => {
+      const { t, port, sessionId, outcome } = await createInFlight(settingValues)
+      await vi.waitFor(() => expect(sent(t, 'session/set_config_option')).toBe(1))
+      await port.request('sessions.close', { sessionId })
+      expect(await outcome).toMatchObject({ value: { id: sessionId, status: 'closed' } })
+      const listed = await port.request('sessions.list', {})
+      expect(listed.find((s) => s.id === sessionId)?.status).toBe('closed')
+      expect(sent(t, 'session/set_config_option')).toBe(1)
+    })
   })
 
   it("remembers a model chosen in a session for the agent's next one", async () => {

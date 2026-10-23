@@ -365,6 +365,26 @@ describe('createSession with a first message', () => {
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
   })
 
+  it('goes back to New session with it when the session is deleted while it starts', async () => {
+    request.mockRejectedValueOnce(
+      Object.assign(new Error('The session was removed before it started'), { code: 'not_found' }),
+    )
+    await createSession('codex', '/repo', null, 'Fix the build')
+    expect(usePendingSession.getState().pending).toBeNull()
+    expect(useViewStore.getState().main).toMatchObject({ kind: 'new' })
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
+  })
+
+  it("leaves it in the session's composer when the session is closed while it starts", async () => {
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('closed') : undefined,
+    )
+    await createSession('codex', '/repo', null, 'Fix the build')
+    expect(request).not.toHaveBeenCalledWith('sessions.prompt', expect.anything())
+    expect(readDraft('n1')).toBe('Fix the build')
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
+  })
+
   it('keeps it when the agent cannot start, and sends it after a retry', async () => {
     request.mockRejectedValueOnce(new Error('spawn failed'))
     await createSession('codex', '/repo', null, 'Fix the build')

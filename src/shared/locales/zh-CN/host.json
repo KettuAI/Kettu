@@ -11,6 +11,7 @@
     },
     "busy": "会话当前状态：{{status}}",
     "openFirst": "请先打开这个会话",
+    "removedWhileStarting": "会话在启动前已被移除",
     "noTurn": "当前没有进行中的对话",
     "cannotLoad": "{{agent}} 不支持加载或恢复会话",
     "cannotSteer": "{{agent}} 不支持在对话进行中接收消息",

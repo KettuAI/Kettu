@@ -11,6 +11,7 @@
     },
     "busy": "The session is {{status}}",
     "openFirst": "Open the session first",
+    "removedWhileStarting": "The session was removed before it started",
     "noTurn": "No turn is running",
     "cannotLoad": "{{agent}} can neither load nor resume sessions",
     "cannotSteer": "{{agent}} cannot take messages during a turn",

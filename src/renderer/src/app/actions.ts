@@ -112,6 +112,15 @@ export async function createSession(
       openSession(summary.id, summary.projectPath)
     }
   } catch (error) {
+    // Deleted, or its project removed, while it started: nothing is left to show, and the first
+    // message is still New session's draft.
+    if (errorCode(error) === 'not_found') {
+      const current = usePendingSession.getState().pending
+      if (current?.agentId === agentId && current.projectPath === projectPath) {
+        usePendingSession.setState({ pending: null })
+      }
+      return
+    }
     usePendingSession.setState({
       pending: {
         agentId,
