@@ -2,6 +2,7 @@
 
 import { Worker } from 'node:worker_threads'
 import type { MessagePortMain } from 'electron'
+import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
 import { createGitService } from './git'
 import { AgentHost } from './host'
@@ -26,6 +27,16 @@ function channel(port: MessagePortMain): PortChannel {
 
 let host: Promise<AgentHost> | null = null
 
+function isGrant(value: unknown): value is AttachmentGrant {
+  if (typeof value !== 'object' || value === null) return false
+  const { grantId, path, kind } = value as Record<string, unknown>
+  return (
+    typeof grantId === 'string' &&
+    typeof path === 'string' &&
+    (kind === 'file' || kind === 'folder')
+  )
+}
+
 function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
   if (host) {
     send({ type: 'host:log', level: 'warn', message: 'host:init arrived twice; ignored' })
@@ -42,8 +53,8 @@ function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
     send,
     git: (deps) => createGitService(deps),
     mirrorTraffic: !message.isPackaged && process.env.OVERBENCH_ACP_LOG === '1',
-    threadWorker: (file) =>
-      nodeThreadWorker(new Worker(message.threadWorkerPath, { workerData: { file } })),
+    threadWorker: (data) =>
+      nodeThreadWorker(new Worker(message.threadWorkerPath, { workerData: data })),
     usageWorker: (file) =>
       nodeUsageWorker(new Worker(message.usageWorkerPath, { workerData: { file } })),
   })
@@ -88,6 +99,11 @@ parentPort.on('message', ({ data, ports }) => {
       break
     case 'host:busy-request':
       withHost((h) => h.busy(message.requestId))
+      break
+    case 'host:grant':
+      if (Array.isArray(message.grants)) {
+        withHost((h) => h.grant(message.requestId, message.grants.filter(isGrant)))
+      }
       break
     case 'host:shutdown':
       if (!host) {

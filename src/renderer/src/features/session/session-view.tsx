@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import { CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
+import { emitAppEvent } from '@renderer/app/events'
 import { markThreadShown } from '@renderer/app/perf'
+import { cn } from '@renderer/lib/utils'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
@@ -66,6 +68,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
 
   usePermissionKeys(sessionId)
   useEscapeToCancel(sessionId, !!session && running, fail)
+  const drop = useFileDrop(
+    session && summary.origin !== 'subagent' ? sessionId : null,
+    status === 'starting',
+  )
 
   let body
   let showsThread = false
@@ -125,7 +131,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   }, [sessionId, showsThread])
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       <SessionHeader summary={summary} />
       <ProjectPathContext value={summary.projectPath}>
         <div className="flex min-h-0 flex-1 flex-col">{body}</div>
@@ -183,6 +189,83 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         </div>
       </div>
       <Announcer summary={summary} name={name} />
+      <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
+    </div>
+  )
+}
+
+/** Whether a drag carries files, so dragging text into the box works as before. */
+const carriesFiles = (event: DragEvent) => event.dataTransfer.types.includes('Files')
+
+/**
+ * Files and folders dropped anywhere on the session's column go to its composer. Drag events
+ * fire on each element the pointer crosses, so a count of entries tells when it has left.
+ */
+function useFileDrop(sessionId: string | null, starting: boolean) {
+  const [over, setOver] = useState(false)
+  const depth = useRef(0)
+  const leave = () => {
+    depth.current = 0
+    setOver(false)
+  }
+  if (!sessionId) return { over: false, handlers: {} }
+  return {
+    over,
+    handlers: {
+      onDragEnter: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
+        event.preventDefault()
+        depth.current += 1
+        setOver(true)
+      },
+      onDragOver: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = starting ? 'none' : 'copy'
+      },
+      onDragLeave: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
+        depth.current = Math.max(0, depth.current - 1)
+        if (depth.current === 0) setOver(false)
+      },
+      onDrop: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
+        event.preventDefault()
+        leave()
+        if (starting) return
+        emitAppEvent({ kind: 'drop-attachments', sessionId, files: [...event.dataTransfer.files] })
+      },
+    },
+  }
+}
+
+/** Says what a drop does while files are dragged over the column; it never takes the pointer. */
+function DropOverlay({
+  shown,
+  starting,
+  agentName,
+}: {
+  shown: boolean
+  starting: boolean
+  agentName: string
+}) {
+  const { t } = useTranslation('composer')
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        'pointer-events-none absolute inset-0 z-30 grid place-items-center bg-app/88 transition-opacity duration-(--duration-fast) ease-out-quart',
+        shown ? 'opacity-100' : 'opacity-0',
+      )}
+    >
+      <div className="rounded-2xl bg-surface px-7 py-5 text-center shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]">
+        <div className="text-heading font-medium text-primary">
+          {starting
+            ? t('attachments.waitForAgent', { agent: agentName })
+            : t('attachments.dropTitle')}
+        </div>
+        {!starting && <div className="text-xs text-tertiary">{t('attachments.dropHint')}</div>}
+      </div>
     </div>
   )
 }

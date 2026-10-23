@@ -5,6 +5,8 @@ export type AppEvent =
   | { kind: 'ask-selection' } // Mod+L with text selected in the terminal
   | { kind: 'new-terminal' }
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
+  | { kind: 'add-attachments' } // Mod+U: the composer's Add files or photos…
+  | { kind: 'drop-attachments'; sessionId: string; files: File[] }
   | { kind: 'run-in-terminal'; projectPath: string; command: string }
   | { kind: 'sign-in-terminal'; projectPath: string; command: string; agentId: string }
   | { kind: 'sign-in-finished'; agentId: string } // the sign-in command's terminal exited

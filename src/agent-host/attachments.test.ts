@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   ATTACHMENT_MAX_AGE_MS,
@@ -11,6 +11,14 @@ import {
   toArrayBuffer,
   type AttachmentRecord,
 } from './attachments'
+
+let grants = 0
+/** Grants a path the way main does, and returns the grant's id. */
+function grant(attachments: Attachments, granted: string, kind: 'file' | 'folder' = 'file') {
+  const grantId = `g${++grants}`
+  attachments.grant([{ grantId, path: granted, kind }])
+  return grantId
+}
 
 const DAY = 24 * 60 * 60 * 1000
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
@@ -149,6 +157,200 @@ describe('Attachments', () => {
   })
 })
 
+describe('granted files and folders', () => {
+  const PNG_FILE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2])
+  let files: string
+
+  beforeEach(async () => {
+    files = await mkdtemp(path.join(tmpdir(), 'overbench-granted-'))
+  })
+  afterEach(async () => {
+    await rm(files, { recursive: true, force: true })
+  })
+
+  it('adds a text file by its grant, reads nothing else, and keeps its path', async () => {
+    const notes = path.join(files, 'notes.md')
+    await writeFile(notes, '# Notes\n')
+    const attachments = store()
+    const added = await attachments.add({ grantId: grant(attachments, notes) }, null)
+    expect(added).toEqual({
+      id: expect.any(String),
+      type: 'file',
+      name: 'notes.md',
+      uri: pathToFileURL(notes).href,
+      mimeType: 'text/markdown',
+      size: 8,
+      sent: null,
+      thumb: null,
+      blob: null,
+    })
+    // Nothing is copied: the file is read again when it is sent.
+    await expect(readdir(path.join(dir, 'attachments'))).rejects.toThrow()
+    await attachments.flush()
+    const reopened = store()
+    await reopened.load()
+    expect(reopened.view(added.id)).toEqual(added)
+    expect(reopened.get(added.id).path).toBe(notes)
+  })
+
+  it('takes each grant once, and only one main gave', async () => {
+    const notes = path.join(files, 'notes.md')
+    await writeFile(notes, 'x')
+    const attachments = store()
+    const grantId = grant(attachments, notes)
+    await attachments.add({ grantId }, null)
+    await expect(attachments.add({ grantId }, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    await expect(attachments.add({ grantId: 'made-up' }, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+  })
+
+  it('forgets a grant left unused for ten minutes', async () => {
+    const notes = path.join(files, 'notes.md')
+    await writeFile(notes, 'x')
+    const attachments = store()
+    const stale = grant(attachments, notes)
+    const fresh = grant(attachments, notes)
+    now += 10 * 60 * 1000 + 1
+    await expect(attachments.add({ grantId: stale }, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    // A later grant still clears the old ones it finds.
+    const later = grant(attachments, notes)
+    await expect(attachments.add({ grantId: fresh }, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    await expect(attachments.add({ grantId: later }, null)).resolves.toMatchObject({
+      name: 'notes.md',
+    })
+  })
+
+  it('takes a grant used within ten minutes', async () => {
+    const notes = path.join(files, 'notes.md')
+    await writeFile(notes, 'x')
+    const attachments = store()
+    const fresh = grant(attachments, notes)
+    now += 10 * 60 * 1000 - 1
+    await expect(attachments.add({ grantId: 'unknown' }, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    await expect(attachments.add({ grantId: fresh }, null)).resolves.toMatchObject({
+      name: 'notes.md',
+    })
+  })
+
+  it('tells text from other files by their bytes, and names large ones by extension', async () => {
+    const attachments = store()
+    const add = async (name: string, data: string | Uint8Array) => {
+      const file = path.join(files, name)
+      await writeFile(file, data)
+      return attachments.add({ grantId: grant(attachments, file) }, null)
+    }
+    expect((await add('Makefile', 'all:\n\ttrue\n')).mimeType).toBe('text/plain')
+    expect((await add('data.json', new Uint8Array([0x7b, 0, 0x7d]))).mimeType).toBe(
+      'application/octet-stream',
+    )
+    expect((await add('report.pdf', new Uint8Array([0x25, 0x50, 0xff, 0]))).mimeType).toBe(
+      'application/pdf',
+    )
+    expect((await add('latin1.txt', new Uint8Array([0x63, 0x61, 0x66, 0xe9]))).mimeType).toBe(
+      'application/octet-stream',
+    )
+    const big = await add('big.log', 'x'.repeat(256 * 1024 + 1))
+    expect(big).toMatchObject({ type: 'file', mimeType: 'text/plain', size: 256 * 1024 + 1 })
+    // Named as a picture but not one: a file.
+    expect(await add('fake.png', 'not a picture')).toMatchObject({ type: 'file' })
+  })
+
+  it('adds a folder as a link-only attachment', async () => {
+    const src = path.join(files, 'src')
+    await mkdir(src)
+    const attachments = store()
+    const added = await attachments.add({ grantId: grant(attachments, src, 'folder') }, null)
+    expect(added).toMatchObject({ type: 'folder', name: 'src', size: null, mimeType: null })
+    expect(added.uri).toBe(`${pathToFileURL(src).href}/`)
+  })
+
+  it('refuses a grant whose path is gone or is no longer what was granted', async () => {
+    const notes = path.join(files, 'notes.md')
+    await mkdir(notes)
+    const attachments = store()
+    await expect(attachments.add({ grantId: grant(attachments, notes) }, null)).rejects.toThrow(
+      /notes\.md/,
+    )
+    await expect(
+      attachments.add({ grantId: grant(attachments, path.join(files, 'gone')) }, null),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('reads a picked image when it is added and keeps a copy, with the original as its URI', async () => {
+    const shot = path.join(files, 'shot.png')
+    await writeFile(shot, PNG_FILE)
+    const attachments = store()
+    const added = await attachments.add({ grantId: grant(attachments, shot) }, null)
+    expect(added).toMatchObject({
+      type: 'image',
+      mimeType: 'image/png',
+      size: PNG_FILE.byteLength,
+      uri: pathToFileURL(shot).href,
+      thumb: null,
+    })
+    // A change to the file after it was added is not what is sent.
+    await writeFile(shot, 'changed')
+    expect(new Uint8Array((await attachments.read(added.id)).bytes)).toEqual(PNG_FILE)
+  })
+
+  it('takes the thumbnail and the scaled copy the renderer made of an image', async () => {
+    const shot = path.join(files, 'shot.png')
+    await writeFile(shot, PNG_FILE)
+    const attachments = store()
+    const added = await attachments.add({ grantId: grant(attachments, shot) }, null)
+    const withThumb = await attachments.update(added.id, THUMB, null)
+    expect(withThumb).toEqual({ ...added, thumb: THUMB })
+
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 9])
+    const scaled = await attachments.update(added.id, THUMB, {
+      bytes: toArrayBuffer(jpeg),
+      mimeType: 'image/jpeg',
+    })
+    expect(scaled).toMatchObject({ mimeType: 'image/jpeg', size: 4, uri: pathToFileURL(shot).href })
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([`${sha(jpeg)}.jpg`])
+    expect(new Uint8Array((await attachments.read(added.id)).bytes)).toEqual(jpeg)
+  })
+
+  it('updates only images, with the types a model takes', async () => {
+    const notes = path.join(files, 'notes.md')
+    await writeFile(notes, 'x')
+    const attachments = store()
+    const file = await attachments.add({ grantId: grant(attachments, notes) }, null)
+    await expect(attachments.update(file.id, THUMB, null)).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    const pasted = await attachments.add(image(), null)
+    await expect(
+      attachments.update(pasted.id, THUMB, { bytes: toArrayBuffer(PNG), mimeType: 'image/tiff' }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+    await expect(attachments.update('nope', THUMB, null)).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('drops a scaled copy whose image was removed while it was written', async () => {
+    const attachments = store()
+    const pasted = await attachments.add(image(), null)
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 7])
+    const updating = attachments.update(pasted.id, THUMB, {
+      bytes: toArrayBuffer(jpeg),
+      mimeType: 'image/jpeg',
+    })
+    await attachments.remove(pasted.id)
+    await expect(updating).rejects.toMatchObject({ code: 'not_found' })
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([])
+  })
+})
+
 describe('parseAttachmentsFile', () => {
   const record: AttachmentRecord = {
     id: 'a1',
@@ -157,6 +359,7 @@ describe('parseAttachmentsFile', () => {
     mimeType: 'image/png',
     size: 7,
     hash: 'c'.repeat(64),
+    path: null,
     thumb: null,
     addedAt: 5,
   }
@@ -172,5 +375,25 @@ describe('parseAttachmentsFile', () => {
       }),
     ).toEqual({ version: 1, attachments: [record] })
     expect(parseAttachmentsFile({ attachments: {} })).toBe('attachments is not a list')
+  })
+
+  it('reads an image stored before files could be attached, and checks each kind', () => {
+    const older: Partial<AttachmentRecord> = { ...record }
+    delete older.path
+    const file = { ...record, id: 'f1', type: 'file', hash: null, path: '/p/a.md' }
+    const folder = { ...file, id: 'd1', type: 'folder', size: null, mimeType: null }
+    expect(
+      parseAttachmentsFile({
+        attachments: [
+          older,
+          file,
+          folder,
+          { ...file, id: 'f2', path: null },
+          { ...file, id: 'f3', hash: 'c'.repeat(64) },
+          { ...folder, id: 'd2', size: 4 },
+          { ...record, id: 'a2', hash: null },
+        ],
+      }),
+    ).toEqual({ version: 1, attachments: [record, file, folder] })
   })
 })

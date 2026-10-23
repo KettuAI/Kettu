@@ -22,13 +22,7 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
 import type { AgentAccount, PromptCapabilities } from '@shared/agent-host'
-import type {
-  ConfigOption,
-  PendingPermission,
-  StopReason,
-  TokenTotals,
-  UserContent,
-} from '@shared/thread'
+import type { ConfigOption, PendingPermission, StopReason, TokenTotals } from '@shared/thread'
 import {
   isStopReason,
   KNOWN_UPDATES,
@@ -39,10 +33,10 @@ import {
   mapPermissionToolCall,
   mapSessionUpdate,
   mapTokenTotals,
-  promptBlocks,
   type MapperContext,
   type MapperOutput,
   type ModelTokens,
+  type PromptBlock,
 } from './mapper'
 import { forkPointMeta, forksAtMessage, type ForkPoint } from './fork-point'
 
@@ -522,12 +516,12 @@ export class AgentConnection {
 
   async prompt(
     acpSessionId: string,
-    content: readonly UserContent[],
+    prompt: readonly PromptBlock[],
   ): Promise<{ stopReason: StopReason; tokens: TokenTotals | null; models: ModelTokens[] }> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.prompt, {
         sessionId: acpSessionId,
-        prompt: promptBlocks(content),
+        prompt: [...prompt],
       }),
     )
     return {
@@ -566,12 +560,12 @@ export class AgentConnection {
    */
   async steer(
     acpSessionId: string,
-    content: readonly UserContent[],
+    prompt: readonly PromptBlock[],
   ): Promise<'injected' | 'promptRequired'> {
     const response = await this.call(() =>
       this.connection.agent.request<{ outcome?: unknown }>('_session/steering', {
         sessionId: acpSessionId,
-        prompt: promptBlocks(content),
+        prompt: [...prompt],
         _meta: { steering: { idleBehavior: 'promptRequired' } },
       }),
     )

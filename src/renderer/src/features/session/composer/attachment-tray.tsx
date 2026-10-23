@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { embedsText } from '@shared/attachments'
 import type { AgentId } from '@shared/thread'
 import { bytes } from '@renderer/lib/format'
-import { host } from '@renderer/lib/host'
+import { errorMessage, host } from '@renderer/lib/host'
 import { useAgentsStore } from '@renderer/stores/agents'
 import {
   selectDraft,
@@ -12,6 +13,7 @@ import {
 } from '@renderer/stores/attachments'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
 import type { ImageDialogTarget } from '../attachments/image-dialog'
+import { openAttachmentPath } from '../attachments/open-attachment'
 import { removeAttachment } from './attachments'
 
 const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const
@@ -24,13 +26,18 @@ export function AttachmentTray({
   draft,
   agentId,
   agentName,
+  projectPath,
   onOpen,
+  onError,
   onLeave,
 }: {
   draft: string
   agentId: AgentId | null
   agentName: string
+  /** The session's folder, whose files open in the Files pane. */
+  projectPath: string | null
   onOpen: (target: ImageDialogTarget) => void
+  onError: (message: string) => void
   /** Focus leaves the row, as when its last tile is removed. */
   onLeave: () => void
 }) {
@@ -38,6 +45,9 @@ export function AttachmentTray({
   const items = useAttachmentsStore(selectDraft(draft))
   const takesImages = useAgentsStore((s) =>
     agentId ? (s.byId[agentId]?.capabilities.prompt?.image ?? null) : null,
+  )
+  const takesText = useAgentsStore((s) =>
+    agentId ? (s.byId[agentId]?.capabilities.prompt?.embeddedContext ?? null) : null,
   )
   const reduceMotion = useReducedMotion()
   const row = useRef<HTMLDivElement>(null)
@@ -84,7 +94,11 @@ export function AttachmentTray({
   const open = (item: DraftAttachment) => {
     const attachment = item.attachment
     if (!attachment || item.status !== 'ready') return
-    onOpen({ name: item.name, read: () => host('attachments.read', { id: attachment.id }) })
+    if (attachment.type === 'image') {
+      onOpen({ name: item.name, read: () => host('attachments.read', { id: attachment.id }) })
+    } else {
+      openAttachmentPath(attachment, projectPath).catch((e: unknown) => onError(errorMessage(e)))
+    }
   }
 
   const remove = (i: number) => {
@@ -127,7 +141,7 @@ export function AttachmentTray({
   }
 
   const view = (item: DraftAttachment): TileView =>
-    draftView(item, takesImages === false, agentName, t)
+    draftView(item, { images: takesImages !== false, text: takesText !== false }, agentName, t)
 
   // The live region stays one node, outside the listbox, whether or not the row shows.
   return (
@@ -182,34 +196,44 @@ export function AttachmentTray({
 
 type T = ReturnType<typeof useTranslation<'composer'>>['t']
 
-function draftView(item: DraftAttachment, noImages: boolean, agentName: string, t: T): TileView {
+function draftView(
+  item: DraftAttachment,
+  takes: { images: boolean; text: boolean },
+  agentName: string,
+  t: T,
+): TileView {
+  const size =
+    item.kind === 'folder' ? t('attachments.folder') : item.size !== null ? bytes(item.size) : null
   const facts = [
     item.name,
-    item.size !== null ? bytes(item.size) : null,
+    size,
     item.pixels ? `${item.pixels.width} × ${item.pixels.height}` : null,
   ]
     .filter(Boolean)
     .join(' · ')
+  const noImages = item.kind === 'image' && !takes.images
   const note =
     item.status === 'failed'
       ? (item.error ?? t('attachments.cannotRead'))
       : item.status === 'adding'
         ? t('attachments.adding')
-        : noImages
-          ? t('attachments.sentAsLink', { agent: agentName })
-          : item.scaled
-            ? t('attachments.sentScaled', { size: `${item.scaled.width} × ${item.scaled.height}` })
-            : t('attachments.sentAsImage')
+        : item.kind !== 'image'
+          ? item.attachment && embedsText(item.attachment) && takes.text
+            ? t('attachments.sentWithContents')
+            : t('attachments.sentAsFileLink', { agent: agentName })
+          : noImages
+            ? t('attachments.sentAsLink', { agent: agentName })
+            : item.scaled
+              ? t('attachments.sentScaled', {
+                  size: `${item.scaled.width} × ${item.scaled.height}`,
+                })
+              : t('attachments.sentAsImage')
   return {
     name: item.name,
+    kind: item.kind,
     thumb: item.thumb,
     status: item.status,
-    detail:
-      item.status === 'failed'
-        ? t('attachments.cannotRead')
-        : item.size !== null
-          ? bytes(item.size)
-          : null,
+    detail: item.status === 'failed' ? t('attachments.cannotRead') : size,
     tooltip: `${facts}\n${note}`,
     warn: item.status === 'ready' && noImages,
   }

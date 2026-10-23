@@ -98,6 +98,21 @@
     "limit": "Only 20 attachments fit in one message",
     "tooLarge": "These attachments are over 10 MB in all. Remove some to send.",
     "announceAdded": "{{name}} attached",
-    "announceRemoved": "{{name}} removed"
+    "announceRemoved": "{{name}} removed",
+    "add": "Add files, photos or a folder",
+    "addFiles": "Add files or photos…",
+    "addFolder": "Add folder…",
+    "slashCommands": "Slash commands",
+    "atMost": "20 attachments at most",
+    "waitForAgent": "Wait for {{agent}} to start",
+    "reading": "Reading…",
+    "folder": "Folder",
+    "sentWithContents": "Sent with its contents",
+    "sentAsFileLink": "Sent as a link. {{agent}} reads it with its own tools.",
+    "sentLinkedFolder": "Sent as a link to the folder",
+    "dropTitle": "Drop to attach",
+    "dropHint": "Files, photos or folders · up to 20",
+    "slashNeedsEmpty": "In an empty message",
+    "notOnDisk": "It isn't a file on disk, so it can't be attached."
   }
 }

@@ -2,6 +2,7 @@
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
+import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS } from '@shared/artifacts'
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
@@ -170,6 +171,27 @@ function sessionId(o: Fields): string {
   return string(o, 'sessionId', ID_CHARS)
 }
 
+function optionalFlag(o: Fields, key: string): boolean | undefined {
+  const value = o[key]
+  if (value !== undefined && typeof value !== 'boolean')
+    throw invalidParams(`${key} must be a boolean`)
+  return value
+}
+
+function artifactId(o: Fields): string {
+  const value = string(o, 'id', ID_CHARS)
+  if (!ARTIFACT_ID.test(value)) throw invalidParams('id is not an artifact id')
+  return value
+}
+
+function version(o: Fields, key: string): number {
+  const value = o[key]
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+    throw invalidParams(`${key} must be a version, a whole number from 1`)
+  }
+  return value
+}
+
 const IMAGE_MIME = /^image\/[a-z0-9][a-z0-9.+-]*$/i
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
 
@@ -219,6 +241,14 @@ export function attachmentStub(
 
 const HASH = /^[0-9a-f]{64}$/
 const THUMB = /^data:image\/(webp|png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/
+
+/** A thumbnail the renderer made: an image data URL, or null. */
+function thumbnail(o: Fields): string | null {
+  if (o.thumb === null) return null
+  const thumb = string(o, 'thumb', THUMB_CHARS)
+  if (!THUMB.test(thumb)) throw invalidParams('thumb must be an image data URL')
+  return thumb
+}
 
 /** Bytes a renderer hands over, not empty and not too large. */
 function bytes(o: Fields, key: string, max: number): ArrayBuffer {
@@ -276,6 +306,7 @@ export function createValidators(platform: Platform): Validators {
     sessionId: sessionId(fields(params)),
   })
   const agent = (params: unknown): { agentId: AgentId } => ({ agentId: agentId(fields(params)) })
+  const artifact = (params: unknown): { id: string } => ({ id: artifactId(fields(params)) })
   const queueItem = (params: unknown): { sessionId: string; itemId: string } => {
     const o = fields(params)
     return { sessionId: sessionId(o), itemId: string(o, 'itemId', ID_CHARS) }
@@ -523,19 +554,31 @@ export function createValidators(platform: Platform): Validators {
     'attachments.add': (params) => {
       const o = fields(params)
       const source = fields(o.source)
-      const thumb = o.thumb === null ? null : string(o, 'thumb', THUMB_CHARS)
-      if (thumb !== null && !THUMB.test(thumb))
-        throw invalidParams('thumb must be an image data URL')
       return {
-        source: {
-          bytes: bytes(source, 'bytes', ATTACHMENT_BYTES),
-          mimeType: string(source, 'mimeType', ID_CHARS),
-          name: string(source, 'name', TEXT_CHARS),
-        },
-        thumb,
+        source:
+          source.grantId !== undefined
+            ? { grantId: string(source, 'grantId', ID_CHARS) }
+            : {
+                bytes: bytes(source, 'bytes', ATTACHMENT_BYTES),
+                mimeType: string(source, 'mimeType', ID_CHARS),
+                name: string(source, 'name', TEXT_CHARS),
+              },
+        thumb: thumbnail(o),
       }
     },
     'attachments.read': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
+    'attachments.update': (params) => {
+      const o = fields(params)
+      let scaled = null
+      if (o.scaled !== null) {
+        const image = fields(o.scaled)
+        scaled = {
+          bytes: bytes(image, 'bytes', ATTACHMENT_BYTES),
+          mimeType: string(image, 'mimeType', ID_CHARS),
+        }
+      }
+      return { id: string(o, 'id', ID_CHARS), thumb: thumbnail(o), scaled }
+    },
     'attachments.remove': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
     'files.list': project,
     'files.read': (params) => {
@@ -564,5 +607,40 @@ export function createValidators(platform: Platform): Validators {
         version: o.version === null ? null : string(o, 'version', ID_CHARS),
       }
     },
+    'artifacts.list': (params) => {
+      const o = params === undefined || params === null ? {} : fields(params)
+      const deleted = optionalFlag(o, 'deleted')
+      return deleted === undefined ? {} : { deleted }
+    },
+    'artifacts.read': (params) => {
+      const o = fields(params)
+      return {
+        id: artifactId(o),
+        ...(o.version === undefined ? {} : { version: version(o, 'version') }),
+      }
+    },
+    'artifacts.versions': artifact,
+    'artifacts.rename': (params) => {
+      const o = fields(params)
+      const title = string(o, 'title', ARTIFACT_TITLE_CHARS)
+      if (title.trim() === '') throw invalidParams('title must not be blank')
+      return { id: artifactId(o), title }
+    },
+    'artifacts.delete': (params) => {
+      const o = fields(params)
+      const permanently = optionalFlag(o, 'permanently')
+      return { id: artifactId(o), ...(permanently === undefined ? {} : { permanently }) }
+    },
+    'artifacts.undelete': artifact,
+    'artifacts.restoreVersion': (params) => {
+      const o = fields(params)
+      return {
+        id: artifactId(o),
+        version: version(o, 'version'),
+        baseVersion: version(o, 'baseVersion'),
+      }
+    },
+    'artifacts.watch': artifact,
+    'artifacts.unwatch': artifact,
   }
 }

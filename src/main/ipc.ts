@@ -8,6 +8,7 @@ import {
   type IpcMainInvokeEvent,
   shell,
 } from 'electron'
+import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import type {
   AppInfo,
   IpcInvokeChannel,
@@ -17,6 +18,7 @@ import type {
 } from '@shared/ipc'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
+import { grantPaths } from './attachments'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
@@ -102,6 +104,14 @@ function absolutePath(value: unknown): string {
   if (value.includes('\0')) throw new Error('A path must not contain a NUL character')
   if (!isAbsolute(value)) throw new Error('A path must be absolute')
   return value
+}
+
+/** Dropped or pasted paths: the renderer passes no more than fit in one message. */
+function attachmentPaths(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > ATTACHMENT_LIMIT) {
+    throw new Error(`Attachments take a list of at most ${ATTACHMENT_LIMIT} paths`)
+  }
+  return value.map(absolutePath)
 }
 
 // One open file per project, so more than this many is not what the renderer sends.
@@ -197,6 +207,29 @@ export function registerIpcHandlers({
     if (path) settings.setShellPath(path)
     return path
   })
+
+  handle('dialog:add-attachments', 2, async ({ window }, kind, defaultPath) => {
+    if (kind !== 'files' && kind !== 'folder') throw new Error('kind must be files or folder')
+    const options: Electron.OpenDialogOptions = {
+      title: t(kind === 'files' ? 'dialogs.addFiles' : 'dialogs.addFolder'),
+      properties: [
+        kind === 'files' ? 'openFile' : 'openDirectory',
+        'multiSelections',
+        'dontAddToRecent',
+      ],
+      ...(defaultPath === null ? {} : { defaultPath: absolutePath(defaultPath) }),
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled) return []
+    const granted = await grantPaths(result.filePaths, (grants) => agentHost.grant(grants))
+    return granted.flatMap((item) => (item ? [item] : []))
+  })
+
+  handle('attachments:grant', 1, (_, paths) =>
+    grantPaths(attachmentPaths(paths), (grants) => agentHost.grant(grants)),
+  )
 
   handle('diagnostics:save', 1, ({ window }, bundle) =>
     saveDiagnostics(

@@ -1,16 +1,27 @@
 import {
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
   type KeyboardEvent,
+  type RefObject,
 } from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
-import { ArrowUpIcon, ListPlusIcon, SquareIcon } from 'lucide-react'
+import { ArrowUpIcon, ListPlusIcon, PlusIcon, SquareIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
+import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import type { SessionView, SlashCommand, UserContent } from '@shared/thread'
-import { onAppEvent } from '@renderer/app/events'
+import { onAppEvent, type AppEvent } from '@renderer/app/events'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import {
   InputGroup,
   InputGroupAddon,
@@ -32,7 +43,14 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { cn } from '@renderer/lib/utils'
 import { ImageDialog, type ImageDialogTarget } from '../attachments/image-dialog'
 import { AttachmentTray } from './attachment-tray'
-import { attachImages, attachmentContent, attachmentsBlock, pastedImages } from './attachments'
+import {
+  attachFiles,
+  attachImages,
+  attachmentContent,
+  attachmentsBlock,
+  pastedImages,
+  pickAttachments,
+} from './attachments'
 import { ControlRow } from './control-row'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
 
@@ -74,9 +92,39 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   useEffect(() => () => flushDraft(sessionId), [sessionId])
 
+  // A pick that is still open, or waiting for its grants, makes a second one a no-op.
+  const picking = useRef(false)
+  const full = attachments.length >= ATTACHMENT_LIMIT
+  const pick = (kind: 'files' | 'folder') => {
+    if (starting || picking.current) return
+    if (full) {
+      setError(t('attachments.limit'))
+      return
+    }
+    picking.current = true
+    pickAttachments(sessionId, kind, session.projectPath)
+      .then(
+        (left) => setError(left > 0 ? t('attachments.limit') : null),
+        (e: unknown) => setError(errorMessage(e)),
+      )
+      .finally(() => {
+        picking.current = false
+      })
+  }
+  const onEvent = useEffectEvent((event: AppEvent) => {
+    if (event.kind === 'add-attachments') pick('files')
+    if (event.kind === 'drop-attachments' && event.sessionId === sessionId && !starting) {
+      attachFiles(sessionId, event.files).then(
+        (left) => setError(left > 0 ? t('attachments.limit') : null),
+        (e: unknown) => setError(errorMessage(e)),
+      )
+    }
+  })
+
   useEffect(
     () =>
       onAppEvent((event) => {
+        onEvent(event)
         if (event.kind === 'focus-composer') textarea.current?.focus()
         if (
           event.kind === 'insert-into-composer' &&
@@ -259,9 +307,27 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             draft={sessionId}
             agentId={session.agentId}
             agentName={agentName}
+            projectPath={session.projectPath}
             onOpen={setViewing}
+            onError={setError}
             onLeave={() => textarea.current?.focus()}
           />
+          {/* After the tiles in the DOM, so they keep the first row when the box wraps. */}
+          <InputGroupAddon align="inline-start" className="order-none self-end pb-3 pl-3">
+            <AddMenu
+              agentName={agentName}
+              starting={starting}
+              full={full}
+              commands={commands.length > 0}
+              emptyDraft={text === ''}
+              textarea={textarea}
+              onPick={pick}
+              onSlash={() => {
+                update('/')
+                textarea.current?.focus()
+              }}
+            />
+          </InputGroupAddon>
           {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
           <div className="relative min-w-0 flex-[1_1_12rem] self-stretch">
             <Autocomplete.Input
@@ -274,14 +340,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   disabled={starting}
                   onKeyDown={onKeyDown}
                   onPaste={onPaste}
-                  className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-4 pr-1 pl-5 text-prose leading-6 placeholder:text-placeholder md:text-prose"
+                  className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-4 pr-1 pl-1.5 text-prose leading-6 placeholder:text-placeholder md:text-prose"
                 />
               }
             />
             {hint && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 overflow-hidden py-4 pr-1 pl-5 text-prose leading-6 whitespace-pre"
+                className="pointer-events-none absolute inset-0 overflow-hidden py-4 pr-1 pl-1.5 text-prose leading-6 whitespace-pre"
               >
                 <span className="invisible">{text}</span>
                 <span className="text-placeholder">{hint}</span>
@@ -411,5 +477,83 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       </div>
       <ImageDialog target={viewing} onClose={() => setViewing(null)} />
     </div>
+  )
+}
+
+/** **+**: adds files, photos or a folder through the system dialog, or starts a slash command. */
+function AddMenu({
+  agentName,
+  starting,
+  full,
+  commands,
+  emptyDraft,
+  textarea,
+  onPick,
+  onSlash,
+}: {
+  agentName: string
+  starting: boolean
+  full: boolean
+  commands: boolean
+  emptyDraft: boolean
+  textarea: RefObject<HTMLTextAreaElement | null>
+  onPick: (kind: 'files' | 'folder') => void
+  onSlash: () => void
+}) {
+  const { t } = useTranslation('composer')
+  const shortcut = formatShortcut('Mod+U')
+  if (starting) {
+    // A disabled button takes no pointer, so the tooltip says why from around it.
+    return (
+      <Tooltip>
+        <TooltipTrigger render={<span />}>
+          <InputGroupButton size="round" variant="quiet" aria-label={t('attachments.add')} disabled>
+            <PlusIcon />
+          </InputGroupButton>
+        </TooltipTrigger>
+        <TooltipContent>{t('attachments.waitForAgent', { agent: agentName })}</TooltipContent>
+      </Tooltip>
+    )
+  }
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={
+                <InputGroupButton size="round" variant="quiet" aria-label={t('attachments.add')} />
+              }
+            />
+          }
+        >
+          <PlusIcon />
+        </TooltipTrigger>
+        <TooltipContent>
+          {t('attachments.add')} <span className="opacity-60">{shortcut}</span>
+        </TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent side="top" sideOffset={6} className="w-60" finalFocus={textarea}>
+        <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
+          {t('attachments.addFiles')}
+          <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
+          {t('attachments.addFolder')}
+          {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
+        </DropdownMenuItem>
+        {commands && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={!emptyDraft} onClick={onSlash}>
+              {t('attachments.slashCommands')}
+              <DropdownMenuShortcut>
+                {emptyDraft ? '/' : t('attachments.slashNeedsEmpty')}
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

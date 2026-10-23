@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { FileIcon, LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Attachment, ContentRef, UserContent } from '@shared/thread'
 import { basename, bytes } from '@renderer/lib/format'
+import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { host } from '@renderer/lib/host'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
 import { ImageDialog, type ImageDialogTarget } from '../attachments/image-dialog'
+import { openAttachmentPath } from '../attachments/open-attachment'
 import { Clamp } from '../clamp'
 
 /** Taller than this, a message collapses behind a fade and Show more. */
@@ -84,7 +86,14 @@ export function SentAttachments({
 }) {
   const { t } = useTranslation('composer')
   const [viewing, setViewing] = useState<ImageDialogTarget | null>(null)
+  const projectPath = useContext(ProjectPathContext)
   const open = (attachment: Attachment) => {
+    if (attachment.type === 'file' || attachment.type === 'folder') {
+      openAttachmentPath(attachment, projectPath).catch((error: unknown) =>
+        console.warn(`Could not open ${attachment.name}`, error),
+      )
+      return
+    }
     const hash = attachment.blob
     setViewing({
       name: attachment.name,
@@ -123,20 +132,31 @@ export function SentAttachments({
 type T = ReturnType<typeof useTranslation<'composer'>>['t']
 
 function sentView(attachment: Attachment, t: T): TileView {
-  const facts = [attachment.name, attachment.size !== null ? bytes(attachment.size) : null]
-    .filter(Boolean)
-    .join(' · ')
+  const size =
+    attachment.type === 'folder'
+      ? t('attachments.folder')
+      : attachment.size !== null
+        ? bytes(attachment.size)
+        : null
+  const facts = [attachment.name, size].filter(Boolean).join(' · ')
   const note =
     attachment.sent === 'image'
       ? t('attachments.sentAsImage')
-      : attachment.sent === 'linked'
-        ? t('attachments.sentLinked')
-        : null
+      : attachment.sent === 'embedded'
+        ? t('attachments.sentWithContents')
+        : attachment.sent === 'linked'
+          ? t(
+              attachment.type === 'folder'
+                ? 'attachments.sentLinkedFolder'
+                : 'attachments.sentLinked',
+            )
+          : null
   return {
     name: attachment.name,
+    kind: attachment.type,
     thumb: attachment.thumb,
     status: 'ready',
-    detail: attachment.size !== null ? bytes(attachment.size) : null,
+    detail: size,
     tooltip: note ? `${facts}\n${note}` : facts,
     warn: attachment.type === 'image' && attachment.sent === 'linked',
   }

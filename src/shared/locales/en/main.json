@@ -43,7 +43,9 @@
     "chooseAgentProgram": "Choose Agent Program",
     "chooseShell": "Choose Shell",
     "exportDiagnostics": "Export Diagnostics",
-    "programs": "Programs"
+    "programs": "Programs",
+    "addFiles": "Add Files or Photos",
+    "addFolder": "Add Folder"
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",
@@ -72,5 +74,8 @@
   "notifications": {
     "testTitle": "OverBench",
     "testBody": "Notifications are on. This is how an agent that needs you will reach you."
+  },
+  "attachments": {
+    "hostDown": "The agent host isn't running. Try again once it has restarted."
   }
 }

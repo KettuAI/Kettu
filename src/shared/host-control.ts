@@ -1,5 +1,6 @@
 // Messages between main and the two utility processes, over `utilityProcess` messaging.
 
+import type { AttachmentGrant } from './attachments'
 import type { Platform } from './platform'
 import type { HostSettings, TerminalSettings } from './settings'
 import type { AgentId } from './thread'
@@ -32,6 +33,7 @@ export type MainToHost =
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list
   | { type: 'host:settings'; settings: HostSettings }
   | { type: 'host:busy-request'; requestId: number }
+  | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
   | { type: 'host:shutdown' }
 
 /** An agent process the host runs; its start time tells it apart from a later one with its pid. */
@@ -55,6 +57,7 @@ export type HostToMain =
     }
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
+  | { type: 'host:granted'; requestId: number }
   | { type: 'host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'host:stopped' }
 

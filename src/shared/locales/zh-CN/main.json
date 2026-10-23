@@ -43,7 +43,9 @@
     "chooseAgentProgram": "选择 Agent 程序",
     "chooseShell": "选择 Shell",
     "exportDiagnostics": "导出诊断信息",
-    "programs": "程序"
+    "programs": "程序",
+    "addFiles": "添加文件或照片",
+    "addFolder": "添加文件夹"
   },
   "quit": {
     "titleQuit": "退出 {{name}}？",
@@ -69,5 +71,8 @@
   "notifications": {
     "testTitle": "OverBench",
     "testBody": "通知已开启。Agent 需要你时，会这样提醒你。"
+  },
+  "attachments": {
+    "hostDown": "Agent 后台进程没有运行，请等它重启后再试。"
   }
 }

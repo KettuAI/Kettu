@@ -44,22 +44,24 @@ On `before-quit`, main delays the quit and runs its quit flow (`src/main/quit.ts
 
 Typed in `src/shared/host-control.ts`.
 
-| Direction   | Message                | Payload                                                                                                                                   |
-| ----------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `electronPath`, `fakeAgentPath`, `threadWorkerPath`, `settings`                   |
-| main → host | `host:connect`         | `windowId`, and the port in the transfer list                                                                                             |
-| main → host | `host:settings`        | `settings`, whenever the agent part or the language changes                                                                               |
-| main → host | `host:busy-request`    | `requestId`, before quitting                                                                                                              |
-| main → host | `host:shutdown`        | none                                                                                                                                      |
-| host → main | `host:ready`           | none                                                                                                                                      |
-| host → main | `host:agent-processes` | `{ agentId, pid, startedAt }[]` for every running agent, whenever that set changes                                                        |
-| host → main | `host:projects`        | The project paths, whenever the list changes; main relays them to the [terminal host](./terminal.md#shells)                               |
-| host → main | `host:auth-commands`   | The terminal sign-in commands it built; main relays them to the terminal host, which runs only these ([terminal](./terminal.md#security)) |
-| host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body`                                                                |
-| host → main | `host:badge`           | `count`: pending permission requests across all sessions, whenever it changes                                                             |
-| host → main | `host:busy`            | `requestId`, and the sessions that are `running` or `awaiting_permission`                                                                 |
-| host → main | `host:log`             | `level`, `message`: every entry of the host log, such as a corrupt state file                                                             |
-| host → main | `host:stopped`         | none; sent just before a clean exit                                                                                                       |
+| Direction   | Message                | Payload                                                                                                                                                       |
+| ----------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| main → host | `host:init`            | `userDataPath`, `appVersion`, `platform`, `isPackaged`, `electronPath`, `fakeAgentPath`, `threadWorkerPath`, `settings`                                       |
+| main → host | `host:connect`         | `windowId`, and the port in the transfer list                                                                                                                 |
+| main → host | `host:settings`        | `settings`, whenever the agent part or the language changes                                                                                                   |
+| main → host | `host:busy-request`    | `requestId`, before quitting                                                                                                                                  |
+| main → host | `host:grant`           | `requestId`, and the `{ grantId, path, kind }` of each file or folder the user picked or dropped ([attachments](./session-model.md#only-what-the-user-chose)) |
+| main → host | `host:shutdown`        | none                                                                                                                                                          |
+| host → main | `host:ready`           | none                                                                                                                                                          |
+| host → main | `host:agent-processes` | `{ agentId, pid, startedAt }[]` for every running agent, whenever that set changes                                                                            |
+| host → main | `host:projects`        | The project paths, whenever the list changes; main relays them to the [terminal host](./terminal.md#shells)                                                   |
+| host → main | `host:auth-commands`   | The terminal sign-in commands it built; main relays them to the terminal host, which runs only these ([terminal](./terminal.md#security))                     |
+| host → main | `host:attention`       | `sessionId`, `kind` (`permission`, `turn-ended`, `error`), `title`, `body`                                                                                    |
+| host → main | `host:badge`           | `count`: pending permission requests across all sessions, whenever it changes                                                                                 |
+| host → main | `host:busy`            | `requestId`, and the sessions that are `running` or `awaiting_permission`                                                                                     |
+| host → main | `host:granted`         | `requestId`, once the host holds the grants; main answers the renderer only then, and gives up after 5 s                                                      |
+| host → main | `host:log`             | `level`, `message`: every entry of the host log, such as a corrupt state file                                                                                 |
+| host → main | `host:stopped`         | none; sent just before a clean exit                                                                                                                           |
 
 `fakeAgentPath` is `tools/fake-agent/main.ts` under the app path in development, and `OVERBENCH_FAKE_AGENT` (or null) in a packaged build.
 

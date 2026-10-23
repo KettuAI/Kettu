@@ -1137,12 +1137,20 @@ const recall: Scenario = async (turn) => {
 const attachments: Scenario = async (turn) => {
   const lines = turn.prompt.flatMap((block) => {
     switch (block.type) {
-      case 'image':
-        return [`- image ${block.mimeType}, ${Buffer.from(block.data, 'base64').byteLength} bytes`]
-      case 'resource_link':
-        return [`- resource_link ${block.name} ${block.uri}`]
-      case 'resource':
-        return [`- resource ${block.resource.uri}`]
+      case 'image': {
+        const size = Buffer.from(block.data, 'base64').byteLength
+        return [`- image ${block.mimeType}, ${size} bytes${block.uri ? ` from ${block.uri}` : ''}`]
+      }
+      case 'resource_link': {
+        const facts = [block.mimeType, block.size != null ? `${block.size} bytes` : null]
+        const known = facts.filter(Boolean).join(', ')
+        return [`- resource_link ${block.name} ${block.uri}${known ? ` (${known})` : ''}`]
+      }
+      case 'resource': {
+        const { resource } = block
+        const text = 'text' in resource ? `, ${resource.text.length} characters` : ''
+        return [`- resource ${resource.uri} ${resource.mimeType ?? ''}${text}`]
+      }
       case 'audio':
         return [`- audio ${block.mimeType}`]
       default:

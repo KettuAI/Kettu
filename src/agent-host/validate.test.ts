@@ -254,6 +254,49 @@ describe('createValidators', () => {
       write({ projectPath: '/p', path: 'a.ts', text: 'x'.repeat(1024 * 1024 + 1), version: null }),
     )
   })
+
+  it('checks the artifact requests', () => {
+    const id = 'art_01JBX3Q0R5K8V2M7N4P6S9T1WZ'
+    expect(posix['artifacts.list'](undefined)).toEqual({})
+    expect(posix['artifacts.list']({ deleted: true, extra: 1 })).toEqual({ deleted: true })
+    rejects(() => posix['artifacts.list']({ deleted: 'yes' }))
+
+    for (const method of ['artifacts.versions', 'artifacts.watch', 'artifacts.undelete'] as const) {
+      expect(posix[method]({ id, extra: 1 })).toEqual({ id })
+      rejects(() => posix[method]({}))
+      rejects(() => posix[method]({ id: 'art_01jbx3q0r5k8v2m7n4p6s9t1wz' }))
+      rejects(() => posix[method]({ id: 'art_01JBX3Q0R5K8V2M7N4P6S9T1W' }))
+      rejects(() => posix[method]({ id: 'art_01JBX3Q0R5K8V2M7N4P6S9T1WI' }))
+      rejects(() => posix[method]({ id: '../art_01JBX3Q0R5K8V2M7N4P6S9T1WZ' }))
+    }
+
+    const read = posix['artifacts.read']
+    expect(read({ id })).toEqual({ id })
+    expect(read({ id, version: 3 })).toEqual({ id, version: 3 })
+    rejects(() => read({ id, version: 0 }))
+    rejects(() => read({ id, version: 1.5 }))
+    rejects(() => read({ id, version: '2' }))
+
+    const rename = posix['artifacts.rename']
+    expect(rename({ id, title: 'Traffic report' })).toEqual({ id, title: 'Traffic report' })
+    expect(rename({ id, title: 'x'.repeat(120) }).title).toHaveLength(120)
+    rejects(() => rename({ id, title: 'x'.repeat(121) }))
+    rejects(() => rename({ id, title: '   ' }))
+    rejects(() => rename({ id }))
+
+    expect(posix['artifacts.delete']({ id })).toEqual({ id })
+    expect(posix['artifacts.delete']({ id, permanently: true })).toEqual({ id, permanently: true })
+    rejects(() => posix['artifacts.delete']({ id, permanently: 1 }))
+
+    const restore = posix['artifacts.restoreVersion']
+    expect(restore({ id, version: 1, baseVersion: 3, extra: 1 })).toEqual({
+      id,
+      version: 1,
+      baseVersion: 3,
+    })
+    rejects(() => restore({ id, version: 1 }))
+    rejects(() => restore({ id, version: -1, baseVersion: 3 }))
+  })
 })
 
 describe('promptContent', () => {
@@ -360,6 +403,54 @@ describe('attachments', () => {
     rejects(() => posix['attachments.add']({ source, thumb: 'data:image/svg+xml;base64,AAAA' }))
     rejects(() =>
       posix['attachments.add']({ source, thumb: `data:image/webp;base64,${'A'.repeat(300_000)}` }),
+    )
+  })
+
+  it('takes a grant by its id alone, never a path', () => {
+    const thumb = 'data:image/webp;base64,AAAA'
+    expect(
+      posix['attachments.add']({ source: { grantId: 'g1', path: '/etc/passwd' }, thumb: null }),
+    ).toEqual({ source: { grantId: 'g1' }, thumb: null })
+    expect(
+      posix['attachments.add']({
+        source: { grantId: 'g1', bytes: new Uint8Array([1]).buffer },
+        thumb,
+      }),
+    ).toEqual({ source: { grantId: 'g1' }, thumb })
+    rejects(() => posix['attachments.add']({ source: { grantId: 7 }, thumb: null }))
+    rejects(() => posix['attachments.add']({ source: { path: '/etc/passwd' }, thumb: null }))
+  })
+
+  it('checks what attachments.update is handed', () => {
+    const bytes = new Uint8Array([1, 2, 3]).buffer
+    const thumb = 'data:image/webp;base64,AAAA'
+    expect(posix['attachments.update']({ id: 'a1', thumb, scaled: null })).toEqual({
+      id: 'a1',
+      thumb,
+      scaled: null,
+    })
+    expect(
+      posix['attachments.update']({
+        id: 'a1',
+        thumb: null,
+        scaled: { bytes, mimeType: 'image/jpeg', path: '/x' },
+      }),
+    ).toEqual({ id: 'a1', thumb: null, scaled: { bytes, mimeType: 'image/jpeg' } })
+    rejects(() => posix['attachments.update']({ id: 'a1', thumb }))
+    rejects(() => posix['attachments.update']({ id: 'a1', thumb: 'x', scaled: null }))
+    rejects(() =>
+      posix['attachments.update']({
+        id: 'a1',
+        thumb,
+        scaled: { bytes: [1], mimeType: 'image/png' },
+      }),
+    )
+    rejects(() =>
+      posix['attachments.update']({
+        id: 'a1',
+        thumb,
+        scaled: { bytes: new ArrayBuffer(20 * 1024 * 1024 + 1), mimeType: 'image/png' },
+      }),
     )
   })
 
