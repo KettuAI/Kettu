@@ -1,6 +1,6 @@
 # Artifacts
 
-> Status: Draft · Part of the [architecture](../architecture.md) · Issue [#11](https://github.com/overbench/overbench/issues/11), milestone v0.1.0 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, Electron 44.9.2 (Chromium 152)
+> Status: Draft · Part of the [architecture](../architecture.md) · Issue [#11](https://github.com/overbench/overbench/issues/11), milestone v0.0.3 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, Electron 44.9.2 (Chromium 152)
 
 Agents often answer with a page instead of a paragraph: a report, a slide deck, a set of design directions. An **artifact** is an HTML file an agent wrote or edited in a session. OverBench finds them in the sessions' threads, lists them on one page for the whole app, grouped by project and then by session, and shows each in a viewer that keeps the page away from the app and the machine. A **canvas** is an artifact whose file marks two or more pages; the viewer lays its pages out side by side on a surface that pans and zooms.
 
@@ -159,7 +159,7 @@ Each page is an `<iframe>` in the app's renderer, pointed at its artifact's orig
 - **Its own process.** The artifact's origin is a different site from the app's, so site isolation runs its frames in a renderer process of their own, sandboxed like the window's: in the prototype, the app's frame and an artifact's ran in different processes, both reported sandboxed. Every page of one artifact shares that one process.
 - **No bridge.** The preload runs in the main frame only (`nodeIntegrationInSubFrames` stays off), so a page has no `window.overbench`, no `require` and no `process`, and the app never listens to `message` events from it: there is no channel from a page to the app.
 - **`allow-same-origin` keeps the page on its own origin**, which is not the app's, so the page has web storage and can fetch its own files; the classic danger of that flag needs the page and its embedder to share an origin, which they never do. Without `allow-popups`, `allow-top-navigation` or `allow-modals`, a page cannot open windows, move the app's frame or block on `alert()`. `allow-downloads` follows the [downloads](#downloads) choice.
-- **The app's own policy** adds `frame-src overbench-artifact:` to `src/renderer/index.html`, its only change, so the app can frame artifacts and nothing else.
+- **The app's own policy** changes `frame-src 'none'` to `frame-src overbench-artifact:` in `src/renderer/index.html`, its only change, so the app can frame artifacts and nothing else; `object-src 'none'` stays. Main's [frame guard](#the-frame-guard) learns the same exception.
 - **The page's theme** is its own. `prefers-color-scheme` inside the page follows the app's effective theme, so a page that supports both themes follows the app; OverBench injects no colors.
 
 The options, measured in the prototype on a canvas of 24 pages of 1280 × 720, each drawing a chart with Chart.js from a CDN, on a 4.2 s scripted camera path (fit, zoom to 50% on the first page, pan to the last, fit) on a 120 Hz display; one fresh app per row, Electron 44.9.2 on macOS arm64, 2026-10-22:
@@ -179,6 +179,8 @@ The options, measured in the prototype on a canvas of 24 pages of 1280 × 720, e
 
 Isolation does not need the partition: the origin, the process, the headers, main's request filter and handlers, and the absent bridge carry it, and the prototype's [probe](#security) held against every attempt. The partition stays where it costs nothing: [thumbnails](#thumbnails) render in offscreen windows in a partition of their own.
 
+A, B and C put frames into the app's page (a `<webview>` is an out-of-process frame too), so each needs the [frame guard](#the-frame-guard)'s exception; D adds none. The prototype predates the guard, so its numbers do not include it.
+
 ## Security
 
 What the page may do, and what keeps it there. OverBench treats every artifact as hostile code, since an agent may have written it from content it read on the web.
@@ -197,11 +199,22 @@ What the page may do, and what keeps it there. OverBench treats every artifact a
 | Block the app with `alert()`                                          | No `allow-modals`: the call returns at once                                                                                        |
 | Write files                                                           | Only through a [download](#downloads), which asks where                                                                            |
 
-- **Main's handlers**: `setPermissionRequestHandler`, `setPermissionCheckHandler`, `setDevicePermissionHandler` and `setDisplayMediaRequestHandler` on the app's session deny every artifact origin; the app's own requests keep their current behavior. Main builds an origin from a URL's scheme and host itself, because Node's `URL` reports a custom scheme's origin as `"null"`: the prototype's permission handler let a notification request through until it did.
+- **Main's handlers** already grant nothing but the clipboard, and that only to the app's own page in its main frame ([security](../architecture.md#security)), so an artifact frame gets nothing without a new rule; the build's tests ask for every permission from an artifact origin, so a later change to the handlers cannot let one through. Where main compares origins, it builds one from a URL's scheme and host itself, because Node's `URL` reports a custom scheme's origin as `"null"`: the prototype's permission handler let a notification request through until it did.
 - **Verified** in the prototype on 2026-10-22: a probe page made 27 attempts from inside the surface (the app's API and Node, files above its folder, dotfiles, encoded `..`, `file:`, another artifact's origin, the dev server, other hosts by fetch, image and WebSocket, the app's frame and DOM, `window.open`, notifications, the camera, location, the clipboard, `alert()`, service workers), and each one held; the artifact's frame ran in a sandboxed process of its own. The policy stopped the requests before main's filter saw them, so the build tests the filter on its own, with the policy removed.
 - **Keys** typed in a page go to the page, as in a browser, `Esc` included. On Windows and Linux, where the renderer handles the app's shortcuts, main forwards the `Mod` shortcuts of the [shortcut table](./ui.md#keyboard) it sees in `before-input-event` while a page has focus, so they keep working; on macOS the menu's accelerators already do. The build checks that `before-input-event` reports keys typed in a page's frame.
 
-How it keeps the [security rules](../../AGENTS.md#security-rules): the window keeps `sandbox`, `contextIsolation` and no `nodeIntegration`; the preload gains typed methods only; main validates every argument of the new calls ([IPC](#ipc-and-host-protocol)); navigation and new windows stay blocked, and an external link opens only after the user's click and main's `http(s)` check; the app's policy gains `frame-src overbench-artifact:` and nothing else, for the reason above.
+How it keeps the [security rules](../../AGENTS.md#security-rules): the window keeps `sandbox`, `contextIsolation` and no `nodeIntegration`; the preload gains typed methods only; main validates every argument of the new calls ([IPC](#ipc-and-host-protocol)); navigation and new windows stay blocked, and an external link opens only after the user's click and main's `http(s)` check; the app's policy frames `overbench-artifact:` where it framed nothing, and the frame guard accepts those frames alone, for the reasons above and below.
+
+### The frame guard
+
+Since v0.0.2, main stops trusting a window whose page gains a frame: it refuses the page's IPC calls and permission requests and takes its host ports away until the main frame loads a new document ([security](../architecture.md#security)). A frame on the app's own origin could reach the page's `window.overbench`; an artifact's frame cannot, since it is on another origin, in another process. The guard keeps its rule for every other frame and learns one exception:
+
+- **Main knows the origins it opened.** `artifact:open` registers an artifact's origin before the renderer creates a frame for it, and `artifact:close` removes it.
+- **A new frame is pending until its first document commits.** Main sees a frame when it is created, before anything in it runs, but learns its origin only at the commit. While a frame of the page is pending, main holds the page's IPC calls and answers its permission requests with a denial; the held calls run once every frame has resolved.
+- **A frame whose first document commits on an origin main opened** is an artifact's frame, and the page keeps its access. Frames inside it are the artifact's own, kept on its origin by its [policy](#network-policy).
+- **Anything else revokes the page's access, as today**: a first document on the app's origin, `about:srcdoc`, `blob:`, `data:` or an origin main did not open, a frame that has not committed within 5 s, and an artifact's frame that later commits on any other origin, which `will-frame-navigate` cancels before it can.
+- **Host ports** go straight to the hosts, so main cannot hold them: a frame that turns out not to be an artifact takes them away at its commit rather than at its creation, and in between its document can run only what the app's policy allows, no inline script and only the app's own files.
+- The build tests the guard as a process test: the probe's frames, then a frame on the app's origin, `about:srcdoc` and an origin main did not open, each created while IPC calls are in flight; and it measures how long calls wait while a canvas of 24 pages opens.
 
 ### Downloads
 
@@ -334,7 +347,7 @@ Renderer and main ([adding an IPC call](../../AGENTS.md#adding-an-ipc-call)):
 | Channel                  | Arguments                | Result                 | Main checks                                                                                                           |
 | ------------------------ | ------------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `artifact:open`          | `path`                   | `{ url }`              | An absolute path to a regular `.html` or `.htm` file; registers its origin and folder ([the protocol](#the-protocol)) |
-| `artifact:close`         | `url`                    | none                   | Stops watching its files                                                                                              |
+| `artifact:close`         | `url`                    | none                   | Stops watching its files and removes its origin from the [frame guard](#the-frame-guard)                              |
 | `artifact:thumbnail`     | `path`, `layout?`        | A `data:` URL, or null | As `artifact:open`; a canvas layout is a list of at most 500 pages of checked integers                                |
 | `artifact:open-external` | `path`                   | none                   | As `artifact:open`; opens it in the default browser                                                                   |
 | `artifact:changed`       | event: `{ origin }`      | —                      | Sent when a file an open artifact loaded changed                                                                      |
@@ -347,7 +360,7 @@ Renderer and main ([adding an IPC call](../../AGENTS.md#adding-an-ipc-call)):
 The design is larger than one pull request, so the build splits into sub-issues of #11, each useful on its own:
 
 1. The index: schema version 2, the migration, `artifacts.list`, `artifacts.read` and `artifacts.changed`, with tests over each agent's recorded tool calls.
-2. The surface: the protocol, the policy, main's request filter, handlers and navigation guard, the single-page viewer, and the probe as a process test, run once more with the policy removed.
+2. The surface: the protocol, the policy, main's request filter, handlers and navigation guard, the frame guard's exception, the single-page viewer, and the probe as a process test, run once more with the policy removed.
 3. The Artifacts page and thumbnails, and the sidebar row turned on; the [UX guidelines](./ux-guidelines.md#structure) then lose the disabled row as their example of a feature shown before it is built.
 4. The canvas viewer.
 5. Opening from a session.
