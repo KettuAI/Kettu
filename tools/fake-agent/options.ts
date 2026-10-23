@@ -7,6 +7,7 @@ export const SCENARIOS = [
   'permission',
   'parallel-permissions',
   'cancel',
+  'long-turn',
   'crash',
   'error',
   'auth-required',
@@ -38,6 +39,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   'parallel-permissions': { description: 'Three tool calls asking for permission at once' },
   cancel: { description: 'A long turn that honors cancellation', hint: '--ignore-cancel' },
+  'long-turn': {
+    description: 'Thinks, reads, runs commands and edits until you cancel, as the context grows',
+  },
   crash: { description: 'Exits mid-turn with a non-zero code', hint: '--code <n>' },
   error: { description: 'Fails the turn with an internal error' },
   'auth-required': {

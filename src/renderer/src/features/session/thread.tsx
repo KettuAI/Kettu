@@ -19,6 +19,7 @@ import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
 import { hoverReply } from './reply-hover'
 import { buildItems, lastSent, replyKeys, signatureOf, type Item } from './thread-items'
+import { TurnStatus } from './turn-status'
 
 // A thread opens on its latest page, and older pages load as it scrolls back toward them, a
 // viewport ahead. Loaded items render from the end: the first frame shows the last items, and
@@ -98,7 +99,7 @@ export const Thread = memo(function Thread({
   sessionId: string
   projectPath: string
   agentName: string
-  /** A turn is running and the agent has not answered yet. */
+  /** A turn is running. */
   working: boolean
   /** The agent's messages that more work follows are progress notes, folded with the work. */
   progressNotes: boolean
@@ -114,7 +115,6 @@ export const Thread = memo(function Thread({
   const replies = useMemo(() => replyKeys(items), [items])
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
   useEffect(() => () => hoverReply(null), [sessionId])
-  const awaitingReply = working && signature.endsWith('u')
   const sent = lastSent(order ?? [], signature)
   const shownFrom = useShownFrom(items.length)
   const hasOlder = useThreadsStore((s) => (s.replicas[sessionId]?.older ?? null) !== null)
@@ -190,11 +190,9 @@ export const Thread = memo(function Thread({
                 </MessageScrollerItem>
               )
             })}
-            {awaitingReply && (
-              <MessageScrollerItem messageId="working" className="pt-4">
-                <p className="animate-in text-prose text-muted-foreground animation-duration-(--duration-base) fade-in">
-                  <span className="shimmer">{t('thread.working')}</span>
-                </p>
+            {working && (
+              <MessageScrollerItem messageId="turn-status" className="pt-4">
+                <TurnStatus sessionId={sessionId} />
               </MessageScrollerItem>
             )}
           </MessageScrollerContent>

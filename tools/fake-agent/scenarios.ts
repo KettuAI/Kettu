@@ -356,6 +356,55 @@ const cancel: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/**
+ * A long working turn in Claude Code's shape: each round thinks, reads a file, runs a command,
+ * edits a file and writes a note, and the context it reports grows as it goes, as Claude Code
+ * reports it after each response. It runs until it is cancelled, or for ten minutes.
+ */
+const longTurn: Scenario = async (turn) => {
+  const deadline = Date.now() + 10 * 60_000
+  const grow = async (tokens: number) => {
+    const session = turn.session
+    session.usedTokens = Math.min(200_000, session.usedTokens + tokens)
+    await turn.send({ sessionUpdate: 'usage_update', used: session.usedTokens, size: 200_000 })
+  }
+  // `target` is the command to run, or the file the call reads or edits.
+  const step = async (toolCallId: string, kind: ToolKind, target: string, ms: number) => {
+    const path = kind === 'execute' ? null : filePath(turn, target)
+    const verb = kind === 'execute' ? 'Run' : kind === 'read' ? 'Read' : 'Edit'
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: `${verb} ${target}`,
+      kind,
+      status: 'in_progress',
+      locations: path ? [{ path }] : [],
+      rawInput: path ? { path } : { command: target },
+    })
+    await turn.sleep(ms)
+    if (turn.signal.aborted) return false
+    await turn.send({ sessionUpdate: 'tool_call_update', toolCallId, status: 'completed' })
+    await grow(1400)
+    return true
+  }
+  for (let round = 1; Date.now() < deadline; round++) {
+    const id = `long-${turn.session.turns}-${round}`
+    const thought = `Round ${round}: what the last command printed decides what to change next.`
+    if (!(await stream(turn, thought, { kind: 'thought', delayMs: 150 }))) return 'cancelled'
+    const file = fakeFile(round)
+    const command = COMMANDS[round % COMMANDS.length]!
+    if (!(await step(`${id}-read`, 'read', file, 1500))) return 'cancelled'
+    if (!(await step(`${id}-run`, 'execute', command, 3000))) return 'cancelled'
+    if (!(await step(`${id}-edit`, 'edit', file, 1500))) return 'cancelled'
+    const note = `Round ${round} is done: \`${command}\` passes, so I move on to the next file. `
+    if (!(await stream(turn, note, { messageId: turn.messageId(), delayMs: 80 }))) {
+      return 'cancelled'
+    }
+    await grow(600)
+  }
+  return 'end_turn'
+}
+
 // Never resolves: the process is gone before the turn could end.
 const crash: Scenario = async (turn) => {
   await stream(turn, 'Starting the build. ', { messageId: turn.messageId() })
@@ -950,6 +999,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   permission,
   'parallel-permissions': parallelPermissions,
   cancel,
+  'long-turn': longTurn,
   crash,
   error,
   'auth-required': authRequired,

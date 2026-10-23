@@ -226,7 +226,21 @@
   },
   "thread": {
     "label": "对话",
-    "working": "处理中…"
+    "tokens_other": "{{tokens}} token",
+    "phase": {
+      "thinking": "正在思考",
+      "execute_other": "正在运行 {{count}} 条命令",
+      "read_other": "正在读取 {{count}} 个文件",
+      "search": "正在搜索",
+      "fetch_other": "正在获取 {{count}} 个网页",
+      "edit_other": "正在编辑 {{count}} 个文件",
+      "writing": "正在回复",
+      "compacting": "正在压缩上下文",
+      "approval": "等待你的授权",
+      "working": "处理中"
+    },
+    "resume": "继续",
+    "continuePrompt": "继续"
   },
   "link": {
     "title": "打开此链接？",
