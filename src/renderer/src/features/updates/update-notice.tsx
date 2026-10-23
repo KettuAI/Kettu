@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { cn } from '@renderer/lib/utils'
 import { useUpdatesStore } from '@renderer/stores/updates'
 
 type Notice =
@@ -37,18 +38,20 @@ export function UpdateNotice() {
 
   const close = (
     <Button
-      variant="ghost"
+      variant="outline"
       size="icon-xs"
       aria-label={t('notice.dismiss')}
       onClick={dismiss}
-      className="size-5 rounded-[5px] text-muted-foreground hover:text-foreground"
+      className="absolute -top-1.5 -right-1.5 size-4 rounded-full text-muted-foreground opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-foreground"
     >
-      <XIcon className="size-3.5" />
+      <XIcon className="size-2.5" />
     </Button>
   )
 
   const version = (
-    <span className="font-mono text-[11.5px] text-muted-foreground tabular">{notice.version}</span>
+    <span className="shrink-0 font-mono text-meta text-muted-foreground tabular">
+      {notice.version}
+    </span>
   )
 
   const row = (
@@ -64,21 +67,23 @@ export function UpdateNotice() {
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (
           <>
-            <span className="font-medium">{t('notice.ready')}</span>
+            <span className="truncate font-medium">{t('notice.ready')}</span>
             {version}
           </>
         )}
         {notice.kind === 'link' && (
-          <span className="font-medium">{t('notice.available', { version: notice.version })}</span>
+          <span className="truncate font-medium">
+            {t('notice.available', { version: notice.version })}
+          </span>
         )}
         {notice.kind === 'updated' && (
           <>
-            <span className="font-medium">{t('notice.updatedTo')}</span>
+            <span className="truncate font-medium">{t('notice.updatedTo')}</span>
             {version}
           </>
         )}
       </span>
-      <span className="inline-flex items-center gap-0.5">
+      <span className="inline-flex shrink-0 items-center gap-0.5">
         {notice.kind === 'ready' && (
           <Button
             variant="outline"
@@ -93,7 +98,7 @@ export function UpdateNotice() {
             href={releaseUrl(notice.version)}
             target="_blank"
             rel="noreferrer"
-            className={buttonVariants({ variant: 'outline', size: 'xs' })}
+            className={cn(buttonVariants({ variant: 'outline', size: 'xs' }))}
           >
             <ExternalLinkIcon data-icon="inline-start" />
             {t('notice.download')}
@@ -104,19 +109,13 @@ export function UpdateNotice() {
             href={releaseUrl(notice.version)}
             target="_blank"
             rel="noreferrer"
-            className={buttonVariants({ variant: 'ghost', size: 'xs' })}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }))}
           >
             {t('notice.whatsNew')}
           </a>
         )}
-        {notice.kind === 'updated' ? (
-          close
-        ) : (
-          <span className="hidden group-hover/update:inline-flex group-focus-within/update:inline-flex">
-            {close}
-          </span>
-        )}
       </span>
+      {close}
     </div>
   )
 

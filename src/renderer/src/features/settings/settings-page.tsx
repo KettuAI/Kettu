@@ -320,17 +320,17 @@ function AppFooter() {
   const { state } = status
   const end: ReactNode =
     state.kind === 'ready' ? (
-      <Badge variant="info">
+      <Badge variant="info" className="min-w-0 shrink">
         <CircleArrowUpIcon data-icon="inline-start" />
-        {t('footer.restartToUpdate')}
+        <span className="truncate">{t('footer.restartToUpdate')}</span>
       </Badge>
     ) : state.kind === 'available' ? (
-      <Badge variant="info">
+      <Badge variant="info" className="min-w-0 shrink">
         <CircleArrowUpIcon data-icon="inline-start" />
-        {t('footer.available', { version: state.version })}
+        <span className="truncate">{t('footer.available', { version: state.version })}</span>
       </Badge>
     ) : state.kind === 'downloading' ? (
-      <span className="tabular">
+      <span className="truncate tabular">
         {t('footer.downloading', { percent: Math.round(state.percent) })}
       </span>
     ) : state.kind === 'idle' ? (
@@ -347,7 +347,7 @@ function AppFooter() {
         OverBench
       </span>
       <span className="font-mono text-meta">{status.current}</span>
-      <span className="ml-auto flex min-w-0 items-center truncate">{end}</span>
+      <span className="ml-auto flex min-w-0 items-center">{end}</span>
     </button>
   )
 }
