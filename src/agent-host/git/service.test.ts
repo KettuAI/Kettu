@@ -204,10 +204,10 @@ describe('retain and release', () => {
     svc.retain(dir, 'port-1')
     expect(await waitFor(() => statuses.length === 1)).toBe(true)
     await sleep(800) // let the watcher settle
-    const before = statuses.length
     const oid = await s.commit(dir, 'b.txt', 'feat: second')
-    expect(await waitFor(() => statuses.length > before, 4000)).toBe(true)
-    expect(statuses.at(-1)?.head.oid).toBe(oid)
+    // A refresh can run between `git add` and `git commit` and show the file staged on the old
+    // head; the one after the commit follows it.
+    expect(await waitFor(() => statuses.at(-1)?.head.oid === oid, 4000)).toBe(true)
   })
 
   it('follows a push and a fetch made outside the service', async () => {
@@ -238,13 +238,12 @@ describe('retain and release', () => {
     await sleep(800)
 
     svc.release(dir, 'a')
-    let before = statuses.length
-    await s.commit(dir, 'b.txt', 'feat: still live')
-    expect(await waitFor(() => statuses.length > before, 4000)).toBe(true)
+    const oid = await s.commit(dir, 'b.txt', 'feat: still live')
+    expect(await waitFor(() => statuses.at(-1)?.head.oid === oid, 4000)).toBe(true)
 
     svc.release(dir, 'b')
     await sleep(300)
-    before = statuses.length
+    const before = statuses.length
     await s.commit(dir, 'c.txt', 'feat: no longer live')
     await sleep(1200)
     expect(statuses.length).toBe(before)
