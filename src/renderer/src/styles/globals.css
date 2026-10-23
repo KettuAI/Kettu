@@ -726,6 +726,7 @@
   }
   .animate-pulse,
   .animate-ping,
+  .animate-spin,
   .shimmer,
   [data-caret] {
     animation: none !important;
@@ -749,6 +750,7 @@
   }
   & .animate-pulse,
   & .animate-ping,
+  & .animate-spin,
   & .shimmer,
   & [data-caret] {
     animation: none !important;
