@@ -1,8 +1,0 @@
-{
-  "welcome": {
-    "tagline": "Open a project to start working with an agent.",
-    "openProject": "Open project",
-    "agentsLabel": "Agents",
-    "agentsHeading": "Agents on this computer"
-  }
-}

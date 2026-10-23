@@ -95,7 +95,7 @@ let launched = false
 
 /**
  * Leaves the launch view for the session shown when the app last closed, as Settings › General
- * allows, else for New session; Welcome stays while there are no projects.
+ * allows, else for New session.
  */
 function finishLaunch(): void {
   launched = true
@@ -105,7 +105,6 @@ function finishLaunch(): void {
     sessionId: lastSessionId,
     main: useViewStore.getState().main,
     byId: useSessionsStore.getState().byId,
-    hasProjects: useProjectsStore.getState().projects.length > 0,
   })
   if (target?.kind === 'session') openSession(target.summary.id, target.summary.projectPath)
   else if (target) newSessionInPlace()

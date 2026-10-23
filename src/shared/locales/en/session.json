@@ -203,6 +203,10 @@
     "missingLine": "This project's folder is missing. Choose another project.",
     "chooseProjectFirst": "Choose a project first",
     "chooseAgentFirst": "Choose an agent first",
+    "noAgent": "No agent can start yet. Install one to begin.",
+    "noAgentNode_one": "No agent can start yet: {{agents, list}} needs Node.js 22 or later.",
+    "noAgentNode_other": "No agent can start yet: {{agents, list}} need Node.js 22 or later.",
+    "setUpAgents": "Set up agents…",
     "recentLabel": "Recent sessions",
     "agentMenu": {
       "label": "Agent and model",

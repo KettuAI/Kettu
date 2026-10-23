@@ -126,13 +126,12 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 
 | Role                                                                         | Step           | Color                                |
 | ---------------------------------------------------------------------------- | -------------- | ------------------------------------ |
-| The Welcome wordmark, until the logo replaces it                             | Display        | `--foreground`                       |
 | Page title: a Settings page, the New session heading                         | Title          | `--foreground`                       |
 | Dialog title, the Settings column's title                                    | Heading        | `--foreground`                       |
 | Thread prose                                                                 | Prose          | `--foreground` at 90%                |
 | Interface text: rows, menu items, buttons, setting names                     | Interface      | `--foreground`                       |
 | A label that names a thing: a project, a model, a selected row, a card title | Interface, 500 | `--foreground`                       |
-| A sentence that explains a screen: an `Empty` state, the Welcome line        | Interface      | `--muted-foreground`                 |
+| A sentence that explains a screen: an `Empty` state                          | Interface      | `--muted-foreground`                 |
 | Tool call rows, a dialog's description                                       | Small          | `--muted-foreground`                 |
 | Segments, `compact` buttons, select triggers                                 | Control        | `--muted-foreground`, chosen in full |
 | Secondary text: descriptions, hints, a path, an empty list's line            | Caption        | `--muted-foreground`                 |
@@ -196,7 +195,7 @@ Radius follows the element's role; the values are the [radius scale](./design-sy
 ### Surfaces
 
 - The window is three columns on the [surface steps](./design-system.md#surfaces): the sidebar and the side panel on surface 0, the thread between them on surface 1, meeting at `--border-soft` hairlines. Cards sit on surface 2 and everything that floats on surface 3.
-- A full-window screen (Settings, Welcome) keeps the same arrangement: a column on surface 0 beside its page on surface 1, or the page alone on surface 1.
+- A full-window screen, such as Settings, keeps the same arrangement: a column on surface 0 beside its page on surface 1, or the page alone on surface 1.
 - A new surface step, a fourth column or a tinted region is a design-system change, not a screen's choice.
 
 ### Rows
