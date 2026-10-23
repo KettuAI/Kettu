@@ -76,6 +76,8 @@ Environment variables, read when the agent starts:
 | `FAKE_AGENT_HISTORY_ENTRIES`         | The size of the synthesized `large-history` replay (default 1,000)                                     |
 | `FAKE_AGENT_LIST_PAGE`               | The `session/list` page size (default 50), to exercise `nextCursor`                                    |
 | `FAKE_AGENT_RESUME_UNKNOWN=fail`     | `session/resume` of a session it does not know fails, as Claude Code's does                            |
+| `FAKE_AGENT_NEW_SESSION_MS`          | Delays every `session/new` answer by this long, unscaled, for a slow hidden session                    |
+| `FAKE_AGENT_WITHOUT`                 | Session capabilities to leave out, comma-separated, such as `close`                                    |
 | `FAKE_AGENT_IGNORE_EOF=1`            | Keeps running after stdin closes, for the forced-stop process test                                     |
 | `FAKE_AGENT_IGNORE_SIGTERM=1`        | Ignores `SIGTERM`, so a stop has to escalate to `SIGKILL`                                              |
 | `FAKE_AGENT_SPAWN_CHILD=1`           | Starts a long-running child process and prints its pid to stderr, for process-tree cleanup             |

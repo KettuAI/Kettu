@@ -250,6 +250,60 @@ describe('AgentManager', () => {
     await m.agents.stopAll()
   })
 
+  it('opens no hidden session in an agent that lacks the request that removes it', async () => {
+    const m = manager(
+      { FAKE_AGENT_WITHOUT: 'close' },
+      {},
+      { catalog: [{ ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }] },
+    )
+    const seen: AgentId[] = []
+    m.agents.hooks = {
+      ...m.agents.hooks,
+      optionsKnown: () => false,
+      optionsSeen: (agentId) => seen.push(agentId),
+    }
+    const runtime = await m.agents.ensureReady('codex')
+    await m.agents.readOptions('codex')
+    await m.agents.refreshLimits('codex')
+    const sent = m.diagnostics
+      .agentRecords('codex')
+      .traffic.filter((r) => r.direction === 'out')
+      .map((r) => r.method)
+    expect(seen).toEqual([])
+    expect(sent).not.toContain('session/new')
+    const listed = await runtime.connection.listSessions(
+      path.join(os.tmpdir(), 'overbench-agent-reports'),
+      null,
+    )
+    expect(listed.sessions.filter((s) => s.acpSessionId.startsWith('fake-'))).toEqual([])
+    await m.agents.stopAll()
+  })
+
+  it('gives up on options that do not come in time, and removes the session when it answers', async () => {
+    const m = manager({ FAKE_AGENT_NEW_SESSION_MS: '300' }, { optionsMs: 20 })
+    const seen: AgentId[] = []
+    m.agents.hooks = {
+      ...m.agents.hooks,
+      optionsKnown: () => false,
+      optionsSeen: (agentId) => seen.push(agentId),
+    }
+    await m.agents.ensureReady('fake-agent')
+    const startedAt = Date.now()
+    await m.agents.readOptions('fake-agent')
+    expect(Date.now() - startedAt).toBeLessThan(250)
+    const sent = () =>
+      m.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out')
+        .map((r) => r.method)
+    await until(() => sent().includes('session/delete'))
+    expect(seen).toEqual([])
+    // A failed read is not tried again until the agent restarts.
+    await m.agents.readOptions('fake-agent')
+    expect(sent().filter((method) => method === 'session/new')).toHaveLength(1)
+    await m.agents.stopAll()
+  })
+
   it('closes a hidden Codex session rather than delete it, which would archive it', async () => {
     const m = manager(
       {},
@@ -270,8 +324,8 @@ describe('AgentManager', () => {
       .agentRecords('codex')
       .traffic.filter((r) => r.direction === 'out')
       .map((r) => r.method)
-    // Read once when the agent starts, and again with the limits report.
-    expect(seen).toEqual(['codex', 'codex'])
+    // Read once when the agent starts; the limits report records them only while none are known.
+    expect(seen).toEqual(['codex'])
     expect(sent.filter((method) => method === 'session/new')).toHaveLength(2)
     expect(sent.filter((method) => method === 'session/close')).toHaveLength(2)
     expect(sent).not.toContain('session/delete')

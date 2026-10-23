@@ -297,7 +297,7 @@ export class SessionManager {
       liveSessions: (agentId) => this.connectedCount(agentId),
       agentExited: (agentId) => this.agentExited(agentId),
       signedIn: (agentId) => this.agentSignedIn(agentId),
-      optionsKnown: (agentId) => !deps.options || deps.options.get(agentId) !== null,
+      optionsKnown: (agentId) => !deps.options || deps.options.known(agentId),
       optionsSeen: (agentId, config) =>
         deps.options?.started(agentId, withUltracode({ agentId }, config)),
     }

@@ -96,17 +96,20 @@ describe('AgentOptionsStore', () => {
     expect(file.save).toHaveBeenCalledTimes(1)
   })
 
-  it("takes an opened session's options only while none are known, and its model's levels", () => {
+  it("takes an opened session's model and level as provisional, without its mode", () => {
     const { options } = store()
     const opened = [mode, model('large'), level('high', ['medium', 'high'])]
     options.opened('codex', opened)
-    expect(options.get('codex')?.config).toEqual(opened)
+    expect(options.get('codex')).toMatchObject({ config: opened.slice(1), provisional: true })
+    expect(options.known('codex')).toBe(false)
 
     const started = [mode, model('small'), level('medium', ['low', 'medium'])]
     options.started('codex', started)
+    expect(options.known('codex')).toBe(true)
     options.opened('codex', [mode, model('large'), level('max', ['high', 'max'])])
     const entry = options.get('codex')!
     expect(entry.config).toEqual(started)
+    expect(entry.provisional).toBeUndefined()
     expect(entry.levels.large?.choices?.map((c) => c.value)).toEqual(['high', 'max'])
   })
 

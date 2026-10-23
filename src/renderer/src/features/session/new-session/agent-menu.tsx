@@ -20,6 +20,7 @@ import {
 } from '@renderer/components/ui/combobox'
 import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Switch } from '@renderer/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -85,9 +86,10 @@ export function AgentMenu({
   const entries = useAgentOptionsStore((s) => s.byId)
   const picks = useAgentOptionsStore((s) => s.picks)
   const loaded = useAgentOptionsStore((s) => s.loaded)
-  const starting = useAgentOptionsStore((s) => s.starting)
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<AgentId | null>(agentId)
+  const starting = useAgentOptionsStore((s) => !!shown && (s.starting[shown] ?? 0) > 0)
+  const started = useAgentOptionsStore((s) => !!shown && s.started[shown] === true)
   const [query, setQuery] = useState('')
   const { contains } = useComboboxFilter()
   const body = useRef<HTMLDivElement>(null)
@@ -237,7 +239,8 @@ export function AgentMenu({
                 status={statuses.find((s) => s.id === shown) ?? null}
                 config={shown ? (configs.get(shown) ?? null) : null}
                 loaded={loaded}
-                starting={!!shown && (starting[shown] ?? 0) > 0}
+                starting={starting}
+                started={started}
                 searching={searching}
                 groups={groups}
                 agents={agents}
@@ -357,6 +360,7 @@ function Pane({
   config,
   loaded,
   starting,
+  started,
   searching,
   groups,
   agents,
@@ -365,8 +369,10 @@ function Pane({
   status: AgentStatus | null
   config: ConfigOption[] | null
   loaded: boolean
-  /** New session started the agent, which reads its options when none are known. */
+  /** New session's start of the agent runs, which reads its options when none are known. */
   starting: boolean
+  /** New session's start of the agent has finished, so a read with no options failed. */
+  started: boolean
   searching: boolean
   groups: MenuGroup[]
   agents: MenuAgent[]
@@ -378,7 +384,8 @@ function Pane({
   const need = agentNeed(status)
   const installed = need !== 'install'
   // The options load with the list, and with a start until the agent has reported them.
-  const loading = !loaded || (!config && (starting || status.state === 'starting'))
+  const startingUp = loaded && !config && (starting || status.state === 'starting')
+  const loading = !loaded || startingUp
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
   const highTier = isSelect(effort) && effort.choices.some((c) => tierOf(effort, c.value) !== null)
@@ -448,9 +455,7 @@ function Pane({
       notice = (
         <Notice
           text={t(
-            status.state === 'ready'
-              ? 'newSession.agentMenu.noModels'
-              : 'newSession.agentMenu.modelsOnStart',
+            started ? 'newSession.agentMenu.noModels' : 'newSession.agentMenu.modelsOnStart',
             { agent: name },
           )}
         />
@@ -461,8 +466,25 @@ function Pane({
   return (
     <>
       {notice}
+      {!searching && installed && startingUp && (
+        // Words once a start takes longer than a moment; the space is kept, so nothing shifts.
+        <div
+          role="status"
+          className="flex animate-in items-center gap-1.5 px-3.5 pt-2.5 pb-1.5 text-xs text-muted-foreground fade-in fill-mode-backwards delay-1000 animation-duration-(--duration-base)"
+        >
+          <Spinner className="size-3 shrink-0" />
+          <span className="truncate shimmer">
+            {t(status.state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
+              agent: name,
+            })}
+          </span>
+        </div>
+      )}
       {!searching && installed && loading ? (
-        <div className="flex flex-col gap-1 p-1.5" aria-hidden>
+        <div
+          className="flex animate-in flex-col gap-1 p-1.5 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-base)"
+          aria-hidden
+        >
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-row w-full rounded-lg" />
           ))}

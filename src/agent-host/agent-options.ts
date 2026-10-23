@@ -5,7 +5,7 @@
 
 import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
-import { AGENT_IDS, type AgentId, type ConfigOption } from '@shared/thread'
+import { AGENT_IDS, ULTRACODE_OPTION_ID, type AgentId, type ConfigOption } from '@shared/thread'
 import { JsonFile, type LogFn } from './storage'
 
 export interface AgentOptionsFile {
@@ -98,13 +98,35 @@ export class AgentOptionsStore {
   }
 
   /**
-   * The options of a session the agent loaded or resumed, at that session's values: they stand in
-   * for the agent's defaults until a new session reports those, and add its model's levels.
+   * The options of a session the agent loaded or resumed, at that session's values. With none
+   * known, its model, model options and level stand in, marked provisional, until a new session
+   * reports the agent's defaults; a mode is left out, since it never carries over. They also add
+   * the model's levels.
    */
   opened(agentId: AgentId, config: readonly ConfigOption[]): void {
     const current = this.byAgent.get(agentId)
-    if (!current) return this.started(agentId, config)
-    this.put({ ...current, levels: withLevels(current.levels, config) })
+    if (current) {
+      this.put({ ...current, levels: withLevels(current.levels, config) })
+      return
+    }
+    const kept = config.filter(
+      (o) => REMEMBERED_CATEGORIES.has(o.category) || o.id === ULTRACODE_OPTION_ID,
+    )
+    if (kept.length === 0) return
+    this.put({
+      agentId,
+      config: kept,
+      levels: withLevels({}, config),
+      remembered: {},
+      observedAt: this.now(),
+      provisional: true,
+    })
+  }
+
+  /** Whether the agent's own defaults are known, from a new session. */
+  known(agentId: AgentId): boolean {
+    const entry = this.byAgent.get(agentId)
+    return !!entry && !entry.provisional
   }
 
   /**
@@ -139,7 +161,8 @@ export class AgentOptionsStore {
 }
 
 // Everything but the time it was seen, which alone is no reason to write or send.
-const contentOf = (o: AgentOptions): string => JSON.stringify([o.config, o.levels, o.remembered])
+const contentOf = (o: AgentOptions): string =>
+  JSON.stringify([o.config, o.levels, o.remembered, o.provisional === true])
 
 function withLevels(
   levels: Record<string, ConfigOption>,
@@ -219,7 +242,14 @@ export function parseAgentOptionsFile(data: Record<string, unknown>): AgentOptio
       }
     }
     const observedAt = typeof entry.observedAt === 'number' ? entry.observedAt : 0
-    agents[agentId] = { agentId, config, levels, remembered, observedAt }
+    agents[agentId] = {
+      agentId,
+      config,
+      levels,
+      remembered,
+      observedAt,
+      ...(entry.provisional === true ? { provisional: true } : {}),
+    }
   }
   return { version: 1, agents }
 }

@@ -58,9 +58,12 @@ export function startConfig(entry: AgentOptions, picks: OptionValues = {}): Conf
   })
 }
 
-/** What `sessions.create` takes: the start values that differ from the agent's own defaults. */
+/**
+ * What `sessions.create` takes: the start values that differ from the agent's own defaults, or
+ * every value for a provisional entry, whose values need not be the agent's defaults.
+ */
 export function startValues(entry: AgentOptions, picks: OptionValues = {}): OptionValues {
-  const defaults = new Map(entry.config.map((o) => [o.id, o.value]))
+  const defaults = new Map(entry.provisional ? [] : entry.config.map((o) => [o.id, o.value]))
   const values: OptionValues = {}
   for (const option of startConfig(entry, picks)) {
     if (defaults.get(option.id) !== option.value) values[option.id] = option.value
