@@ -69,7 +69,7 @@ React components have no automated tests in M0; they are checked by running the 
 | `context`              | The `/context` report as Claude Code writes it, twice under two message ids as Claude Code sends it, for the session's tokens                                                                                                                                   |
 | `recall`               | Answers with the previous prompt in the session's history, so a test can tell where a fork cut it                                                                                                                                                               |
 | `attachments`          | Lists the images, files and links the prompt carried, one per line with their type, size and URI, so a test can tell how each attachment was sent                                                                                                               |
-| `artifacts`            | Through the artifacts service and the official MCP client: makes "Fake canvas", a canvas of two pages, or edits the project's one, then reads it; `--read <id>` reads that one instead                                                                          |
+| `artifacts`            | Through the artifacts service and the official MCP client: makes "Fake canvas", a canvas of two pages, or edits the project's one, then reads it; `--read <id>` reads that one instead; `--until-cancel` keeps the turn running                                 |
 
 Without a scenario it plays `basic-turn`. `/compact` streams a compaction with its summary. Replies stream with tens of milliseconds between chunks, like a real agent.
 
