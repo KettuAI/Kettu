@@ -49,9 +49,12 @@
   "trend": {
     "daily": "Tokens per day",
     "weekly": "Tokens per week",
+    "monthly": "Tokens per month",
     "hourly": "Tokens per hour",
     "hour": "{{from}} – {{to}}",
-    "label": "{{date}}: {{tokens}} tokens"
+    "label": "{{date}}: {{tokens}} tokens",
+    "agent": "{{agent}} {{tokens}}",
+    "legend": "Agents shown in the chart"
   },
   "limits": {
     "title": "Plan limits",

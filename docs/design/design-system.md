@@ -179,7 +179,9 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 
 - **Series** take the agents' own colors, like their [marks](#agent-marks), so a bar is recognized without the legend.
 - **Amount** is one hue that deepens, never a rainbow: more reads as more without a key of colors. The tokens-by-type table keys its rows with the same steps, and output with `--foreground` at 80%.
-- Bars have a 2 px top radius (`rounded-t-xs`) and a 1 px gap; heatmap cells are `rounded-xs` squares with a 2 px gap. Days outside the chosen range, and the hours still to come in a one-day trend, are dimmed to 35% opacity rather than recolored, and the hovered or focused cell takes a 1 px `--foreground` ring.
+- Bars have a 2 px top radius (`rounded-t-xs`) and a 1 px gap; a bar's part too small for a pixel is drawn 1 px high, so it never reads as a day without usage. Heatmap cells are `rounded-xs` squares with a 2 px gap. Days outside the chosen range, and the hours still to come in a one-day trend, are dimmed to 35% opacity rather than recolored, and the hovered or focused cell takes a 1 px `--foreground` ring.
+- **Scale**: a bar chart has one grid line, a 1 px dashed `--border` line at its tallest bar, with that bar's amount above its left end. Its labels and dates are captions in `--muted-foreground` with `tabular-nums`, set apart by the 12 px spacing step and never touching.
+- **Legend**: a chart whose series can be hidden keys them with toggle buttons (`ToggleGroup` with `Toggle` `variant="legend"`), one Tab stop with the arrow keys between them. Shown, the key is an 8 px square in the series color and the name `--foreground`; hidden, the square is empty with a `--border-strong` ring and the name `--muted-foreground`; under the pointer, the `--accent` fill.
 
 ## Borders and elevation
 

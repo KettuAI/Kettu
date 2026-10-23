@@ -35,6 +35,8 @@ export interface UsageFilters {
 
 /** The page's figures, with the days they were read for. */
 export interface UsagePage {
+  /** The range and source they were read for; others are chosen while newer figures load. */
+  filters: Pick<UsageFilters, 'range' | 'scope'>
   today: number
   firstDay: number
   /** The day starts the summary's `day` indexes into, plus the end of the last day. */
@@ -170,6 +172,7 @@ export async function loadUsagePage(): Promise<void> {
       if (id !== request) return
       useUsageStore.setState({
         page: {
+          filters: { range: filters.range, scope: filters.scope },
           today,
           firstDay,
           starts,
@@ -187,7 +190,7 @@ export async function loadUsagePage(): Promise<void> {
   }
 }
 
-/** The day turned while the page shows: its ranges end today, so they are read again. */
+/** The day turned while the page shows: the heatmap ends today, so the figures are read again. */
 export function usageDayTurned(day: number): void {
   const { page } = useUsageStore.getState()
   if (pageOpen && page && page.today !== day) readPage()

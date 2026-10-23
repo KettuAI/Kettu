@@ -1,9 +1,12 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { AgentId } from '@shared/thread'
+import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { cn } from '@renderer/lib/utils'
+import { agentName } from '@renderer/stores/agents'
 import {
   addDays,
   AGENT_FILL,
+  axisLabels,
   heatLevels,
   type DayRange,
   type DayTotal,
@@ -40,79 +43,184 @@ function moveIndex(
 }
 
 /**
- * The range's tokens as bars, stacked by agent when all are shown. The bar under the pointer or
- * chosen with the arrow keys is named in `onShow`; without one, the busiest bar is.
+ * The range's tokens as bars, stacked by agent and scaled to `max`, under a grid line at it. A bar
+ * chosen with the pointer or the arrow keys dims the others; the keys start from the shown one.
  */
 export function TrendChart({
   bars,
-  agents,
+  series,
+  max,
+  shown,
+  chosen,
   label,
   future = 0,
-  onShow,
+  onChoose,
 }: {
   bars: TrendBar[]
   /** The series to stack, bottom first. */
-  agents: AgentId[]
+  series: readonly AgentId[]
+  /** The tallest bar's tokens from those series: the top of the scale. */
+  max: number
+  /** The bar the header names. */
+  shown: number | null
+  chosen: number | null
   label: string
   /** How many of the last bars are still to come: dimmed, and never chosen. */
   future?: number
-  onShow: (bar: TrendBar | null) => void
+  onChoose: (index: number | null) => void
 }) {
   const begun = bars.length - future
-  const [chosen, setChosen] = useState<number | null>(null)
-  const max = Math.max(1, ...bars.map((b) => b.total))
-  const busiest = bars.reduce((best, b, i) => (b.total > (bars[best]?.total ?? 0) ? i : best), 0)
-  const shown = chosen !== null && chosen < begun ? chosen : bars.length ? busiest : null
-  const shownBar = shown === null ? null : (bars[shown] ?? null)
-  useLayoutEffect(() => onShow(shownBar), [shownBar, onShow])
-
   return (
-    <div
-      role="group"
-      tabIndex={0}
-      aria-label={label}
-      className="flex h-40 items-end justify-center gap-px rounded-md outline-none focus-ring"
-      onPointerLeave={() => setChosen(null)}
-      onBlur={() => setChosen(null)}
-      onKeyDown={(event) => {
-        const next = begun > 0 ? moveIndex(event, shown ?? 0, begun, 1, 0) : null
-        if (next !== null) setChosen(next)
-      }}
-    >
-      {bars.map((bar, i) => (
-        <div
-          key={bar.from}
-          className={cn(
-            // A few days stay bars, not blocks across the chart.
-            'flex h-full max-w-12 min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
-            shown !== null && shown !== i && chosen !== null && 'opacity-60',
-            i >= begun && 'opacity-35',
-          )}
-          onPointerEnter={i < begun ? () => setChosen(i) : undefined}
-        >
-          {bar.total === 0 ? (
-            <span className="h-px w-full bg-heat-0" />
-          ) : (
-            agents.map((agentId) => {
-              const value = bar.byAgent[agentId] ?? 0
-              if (value <= 0) return null
-              return (
-                <span
-                  key={agentId}
-                  className={cn(
-                    'w-full first:rounded-b-none last:rounded-t-xs',
-                    AGENT_FILL[agentId],
-                  )}
-                  style={{ height: `${(value / max) * 100}%` }}
-                />
-              )
-            })
-          )}
-        </div>
-      ))}
+    <div className="relative h-40">
+      <span aria-hidden className="absolute inset-x-0 top-0 border-t border-dashed border-default" />
+      <div
+        role="group"
+        tabIndex={0}
+        aria-label={label}
+        className="relative flex h-full items-end justify-center gap-px rounded-md outline-none focus-ring"
+        onPointerLeave={() => onChoose(null)}
+        onBlur={() => onChoose(null)}
+        onKeyDown={(event) => {
+          const next = begun > 0 ? moveIndex(event, shown ?? 0, begun, 1, 0) : null
+          if (next !== null) onChoose(next)
+        }}
+      >
+        {bars.map((bar, i) => {
+          const parts = series.filter((id) => (bar.byAgent[id] ?? 0) > 0)
+          return (
+            <div
+              key={bar.from}
+              className={cn(
+                // A few days stay bars, not blocks across the chart.
+                'flex h-full max-w-12 min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
+                chosen !== null && chosen !== i && 'opacity-60',
+                i >= begun && 'opacity-35',
+              )}
+              onPointerEnter={i < begun ? () => onChoose(i) : undefined}
+            >
+              {parts.length === 0 ? (
+                <span className="h-px w-full bg-heat-0" />
+              ) : (
+                parts.map((agentId) => (
+                  <span
+                    key={agentId}
+                    className={cn(
+                      // Usage too small for a pixel still shows, apart from a day without any.
+                      'min-h-px w-full first:rounded-b-none last:rounded-t-xs',
+                      AGENT_FILL[agentId],
+                    )}
+                    style={{ height: `${(bar.byAgent[agentId]! / max) * 100}%` }}
+                  />
+                ))
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
+
+/** Room between two dates under the trend, the 12 px spacing step. */
+const LABEL_GAP = 12
+
+let canvas: CanvasRenderingContext2D | null = null
+
+/** A label's width in `font`, its digits as wide as the widest, as tabular figures are. */
+function textWidth(text: string, font: string): number {
+  canvas ??= document.createElement('canvas').getContext('2d')!
+  canvas.font = font
+  return canvas.measureText(text.replace(/\d/g, '0')).width
+}
+
+/** Dates under the trend's bars, evenly spaced, as many as fit apart in the row's own font. */
+export const TrendAxis = memo(function TrendAxis({
+  count,
+  anchor,
+  steps,
+  text,
+}: {
+  count: number
+  anchor: 'start' | 'end'
+  steps?: readonly number[]
+  text: (index: number, previous: number | null) => string
+}) {
+  const row = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState<{ width: number; font: string } | null>(null)
+  useLayoutEffect(() => {
+    const el = row.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      const style = getComputedStyle(el)
+      const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+      const width = entry!.contentRect.width
+      setBox((b) => (b && b.width === width && b.font === font ? b : { width, font }))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  const labels = useMemo(() => {
+    if (!box) return []
+    const widths = new Map<string, number>()
+    const measure = (label: string) => {
+      let width = widths.get(label)
+      if (width === undefined) {
+        width = textWidth(label, box.font)
+        widths.set(label, width)
+      }
+      return width
+    }
+    return axisLabels({ count, width: box.width, anchor, steps, gap: LABEL_GAP, text, measure })
+  }, [box, count, anchor, steps, text])
+  return (
+    <div ref={row} aria-hidden className="relative h-4 text-xs text-tertiary tabular-nums">
+      {labels.map((l) => (
+        <span key={l.index} className="absolute top-0 whitespace-nowrap" style={{ left: l.left }}>
+          {l.text}
+        </span>
+      ))}
+    </div>
+  )
+})
+
+/** The trend's series as toggle buttons that show or hide each one; the last one shown stays. */
+export const TrendLegend = memo(function TrendLegend({
+  series,
+  shown,
+  label,
+  onChange,
+}: {
+  series: readonly AgentId[]
+  shown: readonly AgentId[]
+  label: string
+  onChange: (shown: AgentId[]) => void
+}) {
+  return (
+    <ToggleGroup
+      multiple
+      value={shown}
+      onValueChange={(next) => onChange(next as AgentId[])}
+      aria-label={label}
+      variant="legend"
+      size="legend"
+      spacing={1}
+      className="-ml-1.5 flex-wrap"
+    >
+      {series.map((id) => (
+        <ToggleGroupItem key={id} value={id}>
+          <span
+            aria-hidden
+            className={cn(
+              'size-2 rounded-xs',
+              shown.includes(id) ? AGENT_FILL[id] : 'ring-1 ring-border-strong ring-inset',
+            )}
+          />
+          {agentName(id)}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  )
+})
 
 const Cells = memo(function Cells({
   levels,
