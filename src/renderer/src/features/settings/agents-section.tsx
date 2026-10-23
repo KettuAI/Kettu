@@ -1295,7 +1295,6 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   const { t } = useTranslation(['settings', 'common'])
   const [apply, error] = useApply()
   const [retry, retrying, retryError] = useAction()
-  const [switched, setSwitched] = useState(false)
   const version = useAgentVersion(status)
   const installed = cli.installed
   const { command } = cli
@@ -1324,7 +1323,8 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   const attention = !!problem && (!!installed?.variable || cli.prefer === 'installed')
   // The copy is to run but this install has none: the next start downloads it.
   const missing = cli.runs === 'bundled' && cli.needsCopy
-  const running = status.state === 'ready' || status.state === 'starting'
+  // The running adapter keeps its CLI until it stops, so another choice waits for the next start.
+  const pending = cli.active !== null && cli.active !== cli.runs
   return (
     <RowFrame
       text={
@@ -1361,7 +1361,7 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
               {t('agents.cli.downloadsNext', { size: cli.copyMegabytes })}
             </span>
           )}
-          {switched && running && (
+          {pending && (
             <span className="text-xs text-muted-foreground">{t('agents.cli.nextStart')}</span>
           )}
         </div>
@@ -1391,10 +1391,7 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
             { value: 'installed', label: t('agents.cli.installed') },
             { value: 'bundled', label: t('agents.cli.bundled') },
           ]}
-          onChange={(choice: AgentCliSource) => {
-            setSwitched(true)
-            apply({ agents: { [status.id]: { cli: choice } } })
-          }}
+          onChange={(choice: AgentCliSource) => apply({ agents: { [status.id]: { cli: choice } } })}
         />
       )}
     </RowFrame>

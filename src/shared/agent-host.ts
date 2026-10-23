@@ -97,6 +97,7 @@ export interface AgentCli {
   command: string // looked up on PATH, such as claude
   prefer: AgentCliSource // the setting: the installed program when it can run, or always the copy
   runs: AgentCliSource // what a start runs now
+  active: AgentCliSource | null // what the running adapter process uses; null while none runs
   installed: InstalledCli | null // null: none found
   needsCopy: boolean // the copy is to run but is not on disk: the next start downloads it
   copyMegabytes: number // about how much that download is

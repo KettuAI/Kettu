@@ -7,12 +7,14 @@ import path from 'node:path'
 import type {
   AgentAccount,
   AgentAuthMethod,
+  AgentCliSource,
   AgentDetails,
   AgentInstallMethod,
   AgentState,
   AgentStatus,
   AgentTask,
   AgentUpdate,
+  InstalledCli,
   PlanLimit,
 } from '@shared/agent-host'
 import type { AgentProcess } from '@shared/host-control'
@@ -1676,6 +1678,14 @@ export class AgentManager {
     return displayCommand(slot.def, this.deps.electronPath, override, this.deps.adaptersDir)
   }
 
+  /** The CLI the running adapter process uses, which a change of setting leaves until it stops. */
+  private activeCli(slot: Slot, installed: InstalledCli | null): AgentCliSource | null {
+    const spec = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
+    if (!spec) return null
+    // A program the environment names runs whatever OverBench passes.
+    return spec.cli !== undefined || installed?.variable ? 'installed' : 'bundled'
+  }
+
   status(agentId: AgentId): AgentStatus {
     const slot = this.slot(agentId)
     const platform = this.deps.platform
@@ -1746,6 +1756,7 @@ export class AgentManager {
               command: slot.def.cli.command,
               prefer: this.deps.settings().agents[slot.def.id]?.cli ?? 'installed',
               runs: adapter.cli.runs,
+              active: this.activeCli(slot, adapter.cli.installed),
               installed: adapter.cli.installed,
               needsCopy: adapter.cli.needsCopy,
               copyMegabytes: slot.def.cli.copyMegabytes,

@@ -653,6 +653,15 @@ function cliManager(
   return { ...m, installs, launches, status: () => m.agents.status('fake-agent') }
 }
 
+/** The host settings with the fake agent's choice of CLI. */
+const cliSettings = (cli: AgentCliSource): HostSettings => ({
+  locale: 'en',
+  agents: { 'fake-agent': { cli } },
+  proxy: { mode: 'environment' },
+  git: { backgroundFetch: false },
+  usage: { fromComputer: false },
+})
+
 describe('the CLI the user installed', () => {
   const installedAt = (version: string, extra: Partial<InstalledAdapter> = {}) => ({
     version,
@@ -814,19 +823,47 @@ describe('the CLI the user installed', () => {
     await m.agents.stopAll()
   })
 
+  it('says which CLI the running adapter uses until it stops', async () => {
+    let choice: AgentCliSource = 'installed'
+    const m = cliManager({ installed: [installedAt('2.0.0')], settings: () => cliSettings(choice) })
+    const change = async (next: AgentCliSource) => {
+      const previous = choice
+      choice = next
+      await m.agents.settingsChanged(cliSettings(previous), cliSettings(next))
+    }
+    await m.agents.check()
+    expect(m.status().cli).toMatchObject({ runs: 'installed', active: null })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.status().cli).toMatchObject({ runs: 'installed', active: 'installed' })
+    await change('bundled')
+    expect(m.status().cli).toMatchObject({ runs: 'bundled', active: 'installed' })
+    // Back to what the process runs: nothing waits for the next start.
+    await change('installed')
+    expect(m.status().cli).toMatchObject({ runs: 'installed', active: 'installed' })
+    await change('bundled')
+    await m.agents.stopAll()
+    expect(m.status().cli).toMatchObject({ runs: 'bundled', active: null })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.status().cli).toMatchObject({ runs: 'bundled', active: 'bundled' })
+    await m.agents.stopAll()
+  })
+
+  it('says when the copy is to run but the next start downloads it', async () => {
+    const bare = [installedAt('2.0.0', { withoutCli: true })]
+    const old = cliManager({ installed: bare, minimum: '3.0.0' })
+    await old.agents.check()
+    expect(old.status().cli).toMatchObject({ runs: 'bundled', needsCopy: true, copyMegabytes: 100 })
+    const fine = cliManager({ installed: bare })
+    await fine.agents.check()
+    expect(fine.status().cli).toMatchObject({ runs: 'installed', needsCopy: false })
+  })
+
   it('tries the installed CLI again once the choice changes after a start with it failed', async () => {
-    const settings = (cli: AgentCliSource): HostSettings => ({
-      locale: 'en',
-      agents: { 'fake-agent': { cli } },
-      proxy: { mode: 'environment' },
-      git: { backgroundFetch: false },
-      usage: { fromComputer: false },
-    })
     let choice: AgentCliSource = 'installed'
     const options = {
       installed: [installedAt('2.0.0')],
       failWithCli: true,
-      settings: () => settings(choice),
+      settings: () => cliSettings(choice),
     }
     const m = cliManager(options)
     await m.agents.ensureReady('fake-agent')
@@ -834,18 +871,18 @@ describe('the CLI the user installed', () => {
     const failed = { runs: 'bundled', installed: { problem: { kind: 'failed' } } }
     expect(m.status().cli).toMatchObject(failed)
     // A change elsewhere keeps the failure.
-    await m.agents.settingsChanged(settings('installed'), settings('installed'))
+    await m.agents.settingsChanged(cliSettings('installed'), cliSettings('installed'))
     expect(m.status().cli).toMatchObject(failed)
     options.failWithCli = false
     choice = 'bundled'
-    await m.agents.settingsChanged(settings('installed'), settings('bundled'))
+    await m.agents.settingsChanged(cliSettings('installed'), cliSettings('bundled'))
     expect(m.status().cli).toMatchObject({
       prefer: 'bundled',
       runs: 'bundled',
       installed: { problem: null },
     })
     choice = 'installed'
-    await m.agents.settingsChanged(settings('bundled'), settings('installed'))
+    await m.agents.settingsChanged(cliSettings('bundled'), cliSettings('installed'))
     expect(m.status().cli).toMatchObject({ prefer: 'installed', runs: 'installed' })
     await m.agents.ensureReady('fake-agent')
     expect(m.launches.at(-1)?.env.FAKE_CLI_PATH).toContain('fake-cli')
