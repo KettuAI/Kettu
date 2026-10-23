@@ -220,6 +220,8 @@ interface Live {
   attaching: Promise<AgentConnection> | null
   /** Set while the session's tree closes, so no late update brings a child back. */
   closing: boolean
+  /** Set as it is deleted, or its project removed, so a start it interrupts fails `not_found`. */
+  removing: boolean
   /** Each entry's position in the stored thread, which pages are read by. */
   positions: Map<string, number>
   nextPos: number
@@ -868,6 +870,7 @@ export class SessionManager {
       opening: null,
       attaching: null,
       closing: false,
+      removing: false,
       positions: new Map(),
       nextPos: 0,
       dirty: new Set(),
@@ -1325,7 +1328,7 @@ export class SessionManager {
     })
     if (gone()) {
       // Closing or deleting it already closed or deleted the agent's session.
-      if (this.has(live.id)) return
+      if (!live.removing && this.has(live.id)) return
       throw removedWhileStarting()
     }
     this.update(live, { status: 'ready' })
@@ -1920,13 +1923,7 @@ export class SessionManager {
       stop: () => gone() || connection.isClosed,
     })
     if (gone()) {
-      // Closed while it attached: the agent's session closes again rather than stay open unseen,
-      // unless the session went live again meanwhile and its own attach holds it now.
-      const next = this.live.get(live.id)
-      if (!next || next === live || (!next.attaching && !next.connection)) {
-        connection.unregister(record.acpSessionId)
-        if (caps.closeSession) await connection.closeSession(record.acpSessionId).catch(() => {})
-      }
+      await this.closeUnseen(live, runtime)
       throw new HostError('busy', t('session.openFirst'))
     }
     if (connection.isClosed) throw new AgentRequestError('closed', 'The agent connection closed')
@@ -1981,6 +1978,22 @@ export class SessionManager {
     this.touch(live.id)
     this.deps.events.attention(live.id, 'error', this.titleOf(live), notice.title)
     this.checkpoint(live)
+  }
+
+  /**
+   * A session closed or deleted while it attached or started, before it took its connection: the
+   * agent's session closes rather than stay open unseen, unless the session went live again
+   * meanwhile and its own attach holds that session now.
+   */
+  private async closeUnseen(live: Live, runtime: AgentRuntime): Promise<void> {
+    const next = this.live.get(live.id)
+    if (next && next !== live && (next.attaching || next.connection)) return
+    const { connection } = runtime
+    const { acpSessionId } = live.record
+    connection.unregister(acpSessionId)
+    if (runtime.init.capabilities.closeSession && !connection.isClosed) {
+      await connection.closeSession(acpSessionId).catch(() => {})
+    }
   }
 
   /** A loaded or resumed session's options, which New session also learns from. */
@@ -2514,9 +2527,9 @@ export class SessionManager {
       live,
       entries.map((entry) => ({ op: 'entry.add', entry })),
     )
-    this.attach(live, runtime.connection)
     // Until its values are set, the fork shows and stores the source's, so one closed or stopped
-    // meanwhile gets them from its next attach.
+    // meanwhile gets them from its next attach. It takes its connection only then, as an attach
+    // does, so what the agent sends meanwhile waits rather than change them.
     this.update(live, {
       acpSessionId: setup.acpSessionId,
       config: withUltracode(record, source.thread.session.config),
@@ -2524,26 +2537,30 @@ export class SessionManager {
       usage: cut ? null : source.thread.session.usage,
     })
     this.save(live)
+    this.touch(live.id)
     // Not every agent carries the source's settings over to a fork, such as its model.
     const carried = source.thread.session.config.filter(
       (option) => option.id !== ULTRACODE_OPTION_ID,
     )
+    const { connection } = runtime
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
-    const config = await this.applyStartOptions(live, runtime.connection, agentValues(carried), {
+    const config = await this.applyStartOptions(live, connection, agentValues(carried), {
       restore: true,
       from: mergeConfig(source.thread.session.config, setup.config),
-      stop: () => gone() || runtime.connection.isClosed,
+      stop: () => gone() || connection.isClosed,
     })
     if (gone()) {
-      // Closing or deleting it already closed or deleted the agent's session; a closed fork stays
-      // listed.
-      if (this.has(live.id)) return this.summary(live.id)
+      await this.closeUnseen(live, runtime)
+      // A closed fork stays listed.
+      if (!live.removing && this.has(live.id)) return this.summary(live.id)
       throw removedWhileStarting()
     }
-    // The agent can exit while the values are set, which leaves the fork stored and closed. Its
-    // values were not refused, only not set, so there is nothing to say.
-    const attached = live.connection !== null
-    if (attached) {
+    if (connection.isClosed) {
+      // The agent went while the values were set, which leaves the fork stored and closed. Its
+      // values were not refused, only not set, so there is nothing to say.
+      this.update(live, { status: 'closed' })
+    } else {
+      this.attach(live, connection)
       this.update(live, { config: withUltracode(record, config) })
       const notice = lostValuesNotice(lostValues(carried, config))
       if (notice) {
@@ -2551,8 +2568,8 @@ export class SessionManager {
           { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
         ])
       }
+      this.update(live, { status: 'ready' })
     }
-    this.update(live, { status: attached ? 'ready' : 'closed' })
     this.persist(live)
     this.touch(live.id)
     return this.summary(live.id)
@@ -3069,7 +3086,9 @@ export class SessionManager {
   private async closeAll(records: readonly SessionRecord[], kept: boolean): Promise<void> {
     for (const record of records) {
       const live = this.live.get(record.id)
-      if (live) live.closing = true
+      if (!live) continue
+      live.closing = true
+      if (!kept) live.removing = true
     }
     for (const record of records) await this.closeOne(record.id, kept)
   }
@@ -3194,7 +3213,9 @@ export class SessionManager {
     await Promise.all(inProject.map((summary) => this.settled(summary.id)))
     for (const summary of inProject) {
       const live = this.live.get(summary.id)
-      if (live) live.closing = true
+      if (!live) continue
+      live.closing = true
+      live.removing = true
     }
     for (const summary of inProject) {
       if (summary.origin === 'user') await this.closeOne(summary.id, false)

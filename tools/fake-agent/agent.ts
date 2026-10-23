@@ -606,9 +606,12 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       sessions.get(ctx.params.sessionId)?.turn?.abort.abort()
       return {}
     })
-    .onRequest(methods.agent.session.delete, (ctx) => {
+    .onRequest(methods.agent.session.delete, async (ctx) => {
       sessions.get(ctx.params.sessionId)?.turn?.abort.abort()
       sessions.delete(ctx.params.sessionId)
+      // Not scaled: it stands for an agent that is slow to delete a session's history.
+      const slowMs = Number(env.FAKE_AGENT_DELETE_MS ?? '') || 0
+      if (slowMs > 0) await new Promise((resolve) => setTimeout(resolve, slowMs))
       return {}
     })
     .onRequest(methods.agent.session.setMode, async (ctx) => {

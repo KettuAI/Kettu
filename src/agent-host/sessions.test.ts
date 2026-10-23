@@ -463,8 +463,24 @@ describe('starting with chosen options', () => {
       const { t, port, outcome } = await createInFlight(settingValues)
       await vi.waitFor(() => expect(sent(t, 'session/set_config_option')).toBe(1))
       await port.request('projects.remove', { path: t.project })
-      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      expect(await outcome).toMatchObject({
+        error: { code: 'not_found', data: { reason: 'removed_while_starting' } },
+      })
       expect(await port.request('sessions.list', {})).toEqual([])
+    })
+
+    it('stays out of the list when a value answers while the agent deletes it', async () => {
+      const { t, port, sessionId, outcome } = await createInFlight({
+        ...settingValues,
+        FAKE_AGENT_DELETE_MS: '500',
+      })
+      await vi.waitFor(() => expect(sent(t, 'session/set_config_option')).toBe(1))
+      const deleting = port.request('sessions.delete', { sessionId })
+      expect(await outcome).toMatchObject({
+        error: { code: 'not_found', data: { reason: 'removed_while_starting' } },
+      })
+      await deleting
+      expect((await port.request('sessions.list', {})).map((s) => s.id)).not.toContain(sessionId)
     })
 
     it('stays out of the list when it is deleted before the agent opens it', async () => {
@@ -951,9 +967,9 @@ describe('forking with the source config', () => {
 
   describe('while the values are set', () => {
     /** A fork whose agent takes 200 ms for each value, reported while it is still `starting`. */
-    async function forkInFlight() {
+    async function forkInFlight(env: Record<string, string> = {}) {
       const { t, port } = await setup({
-        agentEnv: { FAKE_AGENT_FORK_CONFIG: 'reset', FAKE_AGENT_SET_CONFIG_MS: '200' },
+        agentEnv: { FAKE_AGENT_FORK_CONFIG: 'reset', FAKE_AGENT_SET_CONFIG_MS: '200', ...env },
       })
       const sessionId = await newSession(t, port)
       for (const optionId of ['model', 'thought_level']) {
@@ -1020,8 +1036,53 @@ describe('forking with the source config', () => {
     it('ends the fork when its project is removed meanwhile', async () => {
       const { t, port, outcome } = await forkInFlight()
       await port.request('projects.remove', { path: t.project })
-      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      expect(await outcome).toMatchObject({
+        error: { code: 'not_found', data: { reason: 'removed_while_starting' } },
+      })
       expect(await port.request('sessions.list', {})).toEqual([])
+    })
+
+    it('ends the fork when a value answers while the agent deletes it', async () => {
+      const { port, forkId, outcome } = await forkInFlight({ FAKE_AGENT_DELETE_MS: '500' })
+      const deleting = port.request('sessions.delete', { sessionId: forkId })
+      expect(await outcome).toMatchObject({
+        error: { code: 'not_found', data: { reason: 'removed_while_starting' } },
+      })
+      await deleting
+      expect((await port.request('sessions.list', {})).map((s) => s.id)).not.toContain(forkId)
+    })
+
+    it('closes the agent session of a fork closed meanwhile', async () => {
+      const { t, port, forkId, outcome } = await forkInFlight()
+      const { acpSessionId } = (await port.open(forkId)).session
+      await port.request('sessions.close', { sessionId: forkId })
+      await outcome
+      const closed = t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/close')
+        .map((r) => (r.message as { params: { sessionId: string } }).params.sessionId)
+      expect(closed).toContain(acpSessionId)
+    })
+
+    it('stores the fork closed when its connection closes before the agent exits', async () => {
+      const { t, port, forkId, outcome } = await forkInFlight()
+      // The connection closes as the agent's output ends, which can come before its exit.
+      t.host.agents.runtime('fake-agent')!.connection.close()
+      expect(await outcome).toMatchObject({ value: { id: forkId, status: 'closed' } })
+      ;(t.launcher as InProcessLauncher).crash()
+      await port.open(forkId)
+      expect(port.entries(forkId).filter((entry) => entry.kind === 'notice')).toEqual([])
+      expect(values(port, forkId)).toMatchObject({ model: 'deep', thought_level: 'high' })
+    })
+
+    it('holds what the agent sends until the values are set', async () => {
+      const { port, forkId, outcome } = await forkInFlight()
+      await port.open(forkId)
+      // The agent announces its commands as the fork opens; they wait, as an attach's do.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(port.thread(forkId).session.commands).toEqual([])
+      expect(await outcome).toMatchObject({ value: { status: 'ready' } })
+      await port.until(() => port.thread(forkId).session.commands.length > 0)
     })
 
     it('stores the fork closed when the agent exits meanwhile', async () => {
