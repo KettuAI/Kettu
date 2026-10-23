@@ -558,11 +558,11 @@ describe('forking with the source config', () => {
     )
     expect(values(port, forkId)).toEqual(values(port, sessionId))
     expect(values(port, forkId)).toMatchObject(chosen)
-    // The agent confirmed each one, model first so that the level is checked against its levels.
+    // The agent lists the level only once the model is set, so the level goes last.
     const sent = settings(t, port, forkId).map(
       (r) => (r.message as { params: { configId: string } }).params.configId,
     )
-    expect(sent).toEqual(['model', 'fast', 'thought_level', 'mode'])
+    expect(sent).toEqual(['model', 'fast', 'mode', 'thought_level'])
     // The fork's values are the source's, not a choice of the user's.
     const [options] = await port.request('agents.options', undefined)
     expect(options?.remembered).toMatchObject({ model: 'swift' })

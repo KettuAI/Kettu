@@ -97,6 +97,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const forkConfig = env.FAKE_AGENT_FORK_CONFIG ?? 'keep'
   const sessions = new Map<string, FakeSession>()
   const lockedSessions = new Set<string>()
+  const levelHidden = new Set<string>()
   const children = new Map<string, () => void>()
   let connection: AgentConnection | null = null
   let clientCapabilities: ClientCapabilities = {}
@@ -209,7 +210,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         currentValue: session.fast,
       },
     )
-    return list
+    return levelHidden.has(session.id) ? list.filter((o) => o.id !== 'thought_level') : list
   }
 
   const modeState = (session: FakeSession): SessionModeState | undefined =>
@@ -541,6 +542,9 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         fork.model = source.model
         fork.thought = source.thought
         fork.fast = source.fast
+      } else if (forkConfig === 'reset') {
+        // Like codex-acp, it lists the level only once a model is set.
+        levelHidden.add(fork.id)
       } else if (forkConfig === 'locked') {
         lockedSessions.add(fork.id)
       }
@@ -624,6 +628,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
             throw RequestError.invalidParams(undefined, 'Unknown model')
           }
           session.model = value
+          levelHidden.delete(session.id)
           break
         case 'thought_level':
           if (typeof value !== 'string' || !['low', 'medium', 'high'].includes(value)) {

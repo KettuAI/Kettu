@@ -2112,10 +2112,9 @@ export class SessionManager {
       usage: cut ? null : source.thread.session.usage,
     })
     // Not every agent carries the source's settings over to a fork, such as its model.
-    const offered = new Set(setup.config.map((option) => option.id))
     const settings = Object.fromEntries(
       source.thread.session.config
-        .filter((option) => offered.has(option.id))
+        .filter((option) => option.id !== ULTRACODE_OPTION_ID)
         .map((option) => [option.id, option.value]),
     )
     await this.applyStartOptions(live, runtime.connection, settings, { remember: false })
