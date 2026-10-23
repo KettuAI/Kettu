@@ -759,6 +759,7 @@ export class SessionManager {
       usage: null,
       error: null,
       turnStartedAt: null,
+      turnStartUsed: null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       parentId: record.parentId,
@@ -1474,14 +1475,22 @@ export class SessionManager {
     const held: SessionRecord[] = []
     for (const live of this.live.values()) {
       if (live.record.agentId !== agentId) continue
+      // A session takes its connection only once it has attached, so its turn was never sent.
+      const attaching = live.connection === null
       live.connection = null
       // Its background work ended with its process.
       live.background = false
       const status = live.thread.session.status
       if (!CONNECTED.has(status) || status === 'starting' || status === 'auth_required') continue
-      const turn = live.turn
-      const cut = turn !== null && !turn.ended
-      if (turn && !turn.ended) {
+      const turn = live.turn?.ended === false ? live.turn : null
+      // Its attach fails with the exit and ends the turn as a failed attach does, so Retry sends
+      // the prompt that never went out, and only once that attach has settled.
+      if (turn && attaching) continue
+      const cut = turn !== null && !turn.cancelRequested
+      if (turn && !cut) {
+        // The user had stopped it, so it ends stopped rather than cut short.
+        this.endTurn(live, turn, 'cancelled', null)
+      } else if (turn) {
         this.finishTurn(live, turn, null)
         this.emit(live, [
           {
@@ -2089,7 +2098,13 @@ export class SessionManager {
     live.turn = turn
     live.scope = newTurnScope()
     live.failure = null
-    this.update(live, { status: 'running', turnStartedAt: now, error: null, updatedAt: now })
+    this.update(live, {
+      status: 'running',
+      turnStartedAt: now,
+      turnStartUsed: live.thread.session.usage?.used ?? null,
+      error: null,
+      updatedAt: now,
+    })
     this.persist(live)
     this.touch(live.id)
     void this.runTurn(live, turn)
@@ -2276,7 +2291,12 @@ export class SessionManager {
   ): void {
     const turnEntryId = this.finishTurn(live, turn, stopReason)
     const now = this.now()
-    const changes: Partial<SessionView> = { status: 'ready', turnStartedAt: null, updatedAt: now }
+    const changes: Partial<SessionView> = {
+      status: 'ready',
+      turnStartedAt: null,
+      turnStartUsed: null,
+      updatedAt: now,
+    }
     const turnTokens = models.length > 0 ? sumModelTokens(models, tokens) : tokens
     if (turnTokens) {
       const usage = live.thread.session.usage
@@ -2320,10 +2340,16 @@ export class SessionManager {
 
   private failTurn(live: Live, turn: Turn, error: unknown): void {
     const mapped = agentError(error)
+    const closed = mapped.code === 'agent_unavailable'
+    if (closed && turn.cancelRequested) {
+      // The user had stopped it before the agent exited, so it ends stopped, as on the exit event.
+      live.connection = null
+      this.endTurn(live, turn, 'cancelled', null)
+      return
+    }
     this.finishTurn(live, turn, null)
     const now = this.now()
     const authRequired = mapped.code === 'auth_required'
-    const closed = mapped.code === 'agent_unavailable'
     this.emit(live, [
       {
         op: 'entry.add',
@@ -2347,15 +2373,26 @@ export class SessionManager {
     if (authRequired) {
       live.failure = { action: 'prompt', content: turn.content }
       this.deps.agents.authRequired(live.record.agentId)
-      this.update(live, { status: 'auth_required', turnStartedAt: null, updatedAt: now })
+      this.update(live, {
+        status: 'auth_required',
+        turnStartedAt: null,
+        turnStartUsed: null,
+        updatedAt: now,
+      })
     } else if (closed) {
       // The agent's exit, which follows, closes the session; a send before it attaches anew.
       live.connection = null
-      this.update(live, { status: 'ready', turnStartedAt: null, updatedAt: now })
+      this.update(live, {
+        status: 'ready',
+        turnStartedAt: null,
+        turnStartUsed: null,
+        updatedAt: now,
+      })
     } else {
       this.update(live, {
         status: 'ready',
         turnStartedAt: null,
+        turnStartUsed: null,
         updatedAt: now,
         error: { message: mapped.message },
       })
@@ -2370,7 +2407,7 @@ export class SessionManager {
   /** The session could not attach for the turn: it fails as a start does, and Retry sends again. */
   private failConnect(live: Live, turn: Turn, error: unknown): void {
     this.finishTurn(live, turn, null)
-    this.update(live, { turnStartedAt: null })
+    this.update(live, { turnStartedAt: null, turnStartUsed: null })
     this.pauseQueue(live)
     this.failStart(live, error, { action: 'prompt', content: turn.content })
     this.persist(live)
@@ -2690,7 +2727,7 @@ export class SessionManager {
     if (kept) {
       // A renderer still showing it keeps it, closed.
       if (live.thread.session.status !== 'closed') {
-        this.update(live, { status: 'closed', turnStartedAt: null })
+        this.update(live, { status: 'closed', turnStartedAt: null, turnStartUsed: null })
       }
       this.checkpoint(live)
     }
@@ -3065,12 +3102,10 @@ function busyError(status: SessionStatus): HostError {
   return new HostError('busy', t('session.busy', { status: t(`session.status.${status}`) }))
 }
 
-// The exit event and the failed prompt race, so both say the same thing.
-function stoppedNotice(name: string): { title: string; description: string } {
-  return {
-    title: t('notice.stopped.title', { agent: name }),
-    description: t('notice.stopped.description'),
-  }
+// The exit event and the failed prompt race, so both say the same thing. The notice ends the cut
+// turn, where the renderer offers to resume it.
+function stoppedNotice(name: string): { title: string; cause: 'agent_stopped' } {
+  return { title: t('notice.stopped.title', { agent: name }), cause: 'agent_stopped' }
 }
 
 /**

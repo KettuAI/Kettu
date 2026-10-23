@@ -38,6 +38,7 @@ const baseSession: SessionView = {
   usage: null,
   error: null,
   turnStartedAt: 1,
+  turnStartUsed: null,
   createdAt: 1,
   updatedAt: 1,
   parentId: null,

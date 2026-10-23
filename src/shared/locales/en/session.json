@@ -244,7 +244,26 @@
   },
   "thread": {
     "label": "Thread",
-    "working": "Working…"
+    "tokens_one": "{{tokens}} token",
+    "tokens_other": "{{tokens}} tokens",
+    "phase": {
+      "thinking": "Thinking",
+      "execute_one": "Running a command",
+      "execute_other": "Running {{count}} commands",
+      "read_one": "Reading a file",
+      "read_other": "Reading {{count}} files",
+      "search": "Searching",
+      "fetch_one": "Fetching a page",
+      "fetch_other": "Fetching {{count}} pages",
+      "edit_one": "Editing a file",
+      "edit_other": "Editing {{count}} files",
+      "writing": "Writing",
+      "compacting": "Compacting context",
+      "approval": "Waiting for your approval",
+      "working": "Working"
+    },
+    "resume": "Resume",
+    "continuePrompt": "Continue"
   },
   "link": {
     "title": "Open this link?",

@@ -31,6 +31,7 @@ import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
+import { CutTurnEnd } from './cut-turn'
 import { UserActions } from './message-actions'
 import { RefChip, UserContentView } from './user-content'
 
@@ -153,6 +154,16 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
   const entry = useEntry(sessionId, entryId, 'notice')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
+  if (entry.cause === 'agent_stopped') {
+    return (
+      <CutTurnEnd
+        sessionId={sessionId}
+        entryId={entryId}
+        title={entry.title}
+        className={animation}
+      />
+    )
+  }
   const Icon = NOTICE_ICON[entry.severity]
   return (
     <Alert

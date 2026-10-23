@@ -38,8 +38,7 @@
     "signInNeeded": "{{agent}} 需要你登录",
     "turnFailed": "本轮对话失败",
     "stopped": {
-      "title": "{{agent}} 意外停止",
-      "description": "本轮对话没有得到回复就结束了。对话记录已保留，发送下一条消息时会重新启动 Agent。"
+      "title": "{{agent}} 在本轮对话完成前退出了"
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} 没有确认取消",

@@ -3,7 +3,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ThreadEntry } from '@shared/thread'
-import { startTestHost, type TestHost, type TestPort } from './testing/harness'
+import {
+  startTestHost,
+  type InProcessLauncher,
+  type TestHost,
+  type TestPort,
+} from './testing/harness'
 
 let hosts: TestHost[] = []
 
@@ -613,6 +618,23 @@ describe('keeping the config across an attach', () => {
         ...restored,
         'session/prompt',
       ])
+    })
+
+    it('fails a turn whose agent exits before it was sent, and Retry sends it', async () => {
+      const { t, port, sessionId } = await slowAttach()
+      await port.request('sessions.queue', { sessionId, content: text('Fix the flaky login test') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      ;(t.launcher as InProcessLauncher).crash()
+      await port.untilStatus(sessionId, 'failed')
+      // Nothing reached the agent, so the turn was not cut short: no line offers to resume it.
+      expect(port.entries(sessionId).filter((entry) => entry.kind === 'notice')).toEqual([])
+
+      await port.request('sessions.retry', { sessionId })
+      await port.until(() => port.entries(sessionId).at(-1)?.kind === 'turn_end')
+      const users = port.entries(sessionId).filter((entry) => entry.kind === 'user')
+      expect(users.at(-1)).toMatchObject({ content: text('Fix the flaky login test') })
+      expect(users).toHaveLength(2)
+      expect(requests(t, port, sessionId)).toContain('session/prompt')
     })
 
     it('stops when the session is closed meanwhile, and keeps it in the list', async () => {

@@ -38,6 +38,7 @@ interface SessionView {
   usage: SessionUsage | null
   error: { message: string; detail?: string } | null
   turnStartedAt: number | null
+  turnStartUsed: number | null // usage.used when the running turn started, for what it adds
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
@@ -119,6 +120,7 @@ type ThreadEntry =
       severity: 'info' | 'warning' | 'error'
       title: string
       description?: string
+      cause?: 'agent_stopped' // the agent exited mid-turn, so the notice ends the turn
     }
   | {
       kind: 'compaction'
@@ -278,7 +280,7 @@ The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto
 ## Prompt turns
 
 1. `sessions.prompt` is accepted only when the session is `ready`; otherwise it fails with `busy`. M0 runs one turn at a time per session; a prompt sent during a turn waits in the [queue](#queue-and-steering).
-2. The host adds the user entry, sets `status: 'running'` and `turnStartedAt`, and sends `session/prompt` with the content as ACP content blocks.
+2. The host adds the user entry, sets `status: 'running'`, `turnStartedAt` and `turnStartUsed`, the context's `usage.used` at that moment (`null` before the agent has reported any), and sends `session/prompt` with the content as ACP content blocks. The two clear when the turn ends; the thread's [status line](./ui.md#turn-status) shows the time since the first and how far the context has grown past the second.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
 4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, is added to `usage.tokens` when present: the schema calls its fields totals across the session, but claude-agent-acp 0.94, codex-acp 2.2.2 and opencode 2.0.32 all send the turn's own counts (read in their source on 2026-10-22), so the host sums them. Claude Code's `usage` leaves out its subagents' requests, so where the response's `_meta.quota.model_usage` splits the turn by model (Claude Code and Codex), the totals sum that instead, with the reasoning still taken from `usage` ([usage statistics](./usage.md#overbenchs-own-record)). The same counts become the turn's rows in the usage record. A count no turn has reported stays `null`. A fork starts from its source's totals, as it starts from its thread; a fork from an earlier reply starts with none ([fork from a reply](#how-the-host-keeps-sessions)). The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
 5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready` or `auth_required` depending on the cause, or `closed` when the agent exited. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
@@ -325,7 +327,7 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 
 ### Recovering after a crash
 
-When an agent process exits unexpectedly, the host does not start it again. Its live sessions, subagents included, go `closed` as a [released](#how-the-host-keeps-sessions) session does: their threads are stored, and a renderer showing one keeps it with a composer. A turn that was running ends with an error notice that the agent stopped, its unfinished tool calls become `cancelled`, and its pending permission requests are cleared as `withdrawn`. The next prompt, setting or fork attaches the session again, which starts the agent; one with no use is never resumed, so a crash of Claude Code's adapter brings back only the CLIs of sessions in use. When the agent exits five times in five minutes it is `failed`, and attaching fails until the user retries ([agent host](./agent-host.md#agent-process-lifecycle)).
+When an agent process exits unexpectedly, the host does not start it again. Its live sessions, subagents included, go `closed` as a [released](#how-the-host-keeps-sessions) session does: their threads are stored, and a renderer showing one keeps it with a composer. A turn that was running ends with an error notice marked `cause: 'agent_stopped'`, "Claude Code exited before finishing this turn", whether the exit or the failed `session/prompt` arrives first; its unfinished tool calls become `cancelled`, and its pending permission requests are cleared as `withdrawn`. The thread shows that notice as the turn's [end line](./ui.md#turn-status), whose **Resume** sends "Continue" through the queue like any prompt, which attaches the session. Two turns end otherwise: one the user had stopped ends `cancelled`, as asked, and one whose session was still attaching never reached the agent, so it fails as a failed attach does and **Retry** sends its prompt. The next prompt, setting or fork attaches the session again, which starts the agent; one with no use is never resumed, so a crash of Claude Code's adapter brings back only the CLIs of sessions in use. When the agent exits five times in five minutes it is `failed`, and attaching fails until the user retries ([agent host](./agent-host.md#agent-process-lifecycle)).
 
 ### How the host keeps sessions
 

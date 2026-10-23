@@ -454,5 +454,28 @@ async function run() {
   await shoot('settings-select')
   await press('Escape', 27)
   await sleep(300)
+
+  // Last, since the crash closes the fake agent's sessions: a running turn's status line, then
+  // the line that ends a turn the agent's exit cut short.
+  // Escape outside a field closes Settings, so the one above may have closed it already.
+  const back = `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Back')`
+  if (await cdp.evaluate(`Boolean(${back})`)) await click(`return ${back}`, 'Back')
+  await click(
+    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.includes('Fix the flaky login test'))`,
+    'the session row',
+  )
+  await waitFor(`document.querySelector('textarea')`, 'the composer')
+  await prompt('/long-turn')
+  await waitFor(
+    `[...document.querySelectorAll('[role=status]')].some((s) => s.textContent.includes('tokens') && s.textContent.includes('Running a command'))`,
+    'the running turn to run a command',
+  )
+  await shoot('session-running')
+  await click(`return document.querySelector('[aria-label=Stop]')`, 'Stop')
+  await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to stop', 120_000)
+  await prompt('/crash')
+  await waitFor(`${byText('button', 'Resume').slice('return '.length)}`, 'Resume')
+  await sleep(600)
+  await shoot('session-agent-exited')
   cdp.close()
 }

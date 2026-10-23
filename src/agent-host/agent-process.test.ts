@@ -88,6 +88,7 @@ describe('spawnAgent', () => {
         usage: null,
         error: null,
         turnStartedAt: null,
+        turnStartUsed: null,
         createdAt: 0,
         updatedAt: 0,
         parentId: null,
