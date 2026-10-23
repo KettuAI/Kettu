@@ -1,6 +1,7 @@
 // What a scenario gets to work with during one prompt turn.
 
 import type {
+  ContentBlock,
   PermissionOption,
   SessionUpdate,
   StopReason,
@@ -29,6 +30,8 @@ export interface Turn {
   readonly options: ScenarioOptions
   /** The prompt text, without the scenario command. */
   readonly text: string
+  /** The prompt's blocks as the client sent them. */
+  readonly prompt: readonly ContentBlock[]
   /** The prompt before this one in the session's history, which a fork may have cut. */
   readonly previousPrompt: string | null
   /** Aborted when the client cancels the turn, unless the scenario ignores cancellation. */

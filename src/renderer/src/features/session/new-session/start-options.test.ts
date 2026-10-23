@@ -222,6 +222,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
     reports: false,
     account: false,
     progressNotes: false,
+    prompt: null,
   },
   ...overrides,
 })

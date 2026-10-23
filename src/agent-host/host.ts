@@ -30,6 +30,7 @@ import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
+import { Attachments } from './attachments'
 import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
@@ -100,6 +101,8 @@ export class AgentHost {
   /** The agent processes and what they leave behind, until seen gone. */
   private readonly trees: AgentTrees
   readonly sessions: SessionManager
+  /** The attachments of drafts and queued prompts, until sent or removed. */
+  readonly attachments: Attachments
   /** Every session's thread, read a page at a time, in a worker of its own. */
   readonly threads: ThreadStore | null
   /** OverBench's record and the agents' logs, in a worker of its own. */
@@ -151,6 +154,7 @@ export class AgentHost {
       ...(options.treeNoteMs !== undefined ? { noteMs: options.treeNoteMs } : {}),
       log,
     })
+    this.attachments = new Attachments({ userDataPath: options.userDataPath, log })
     this.threads = options.threadWorker
       ? new ThreadStore({
           file: path.join(options.userDataPath, 'state', 'threads.db'),
@@ -211,6 +215,7 @@ export class AgentHost {
       scratch: this.scratch,
       file: sessionsFile(options.userDataPath, log),
       threads: this.threads,
+      attachments: this.attachments,
       usage: this.usage,
       cacheTtl:
         options.cacheTtl ??
@@ -277,6 +282,7 @@ export class AgentHost {
       host.updates.load(),
       host.trees.load(),
       host.agentOptions.load(),
+      host.attachments.load(),
     ])
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
@@ -384,6 +390,7 @@ export class AgentHost {
         this.updates.flush(),
         this.trees.close(),
         this.agentOptions.flush(),
+        this.attachments.flush(),
         this.threads?.close(),
         this.usage.close(),
       ])
@@ -523,6 +530,7 @@ export class AgentHost {
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
       'sessions.steer': ({ sessionId, itemId }) => sessions.steer(sessionId, itemId),
       'sessions.resumeQueue': ({ sessionId }) => sessions.resumeQueue(sessionId),
+      'sessions.blob': ({ sessionId, hash }) => sessions.blob(sessionId, hash),
       'sessions.setConfigOption': ({ sessionId, optionId, value }) =>
         sessions.setConfigOption(sessionId, optionId, value),
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
@@ -581,6 +589,9 @@ export class AgentHost {
       'git.currentPullRequest': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),
       'git.tools': () => this.gitCall((g) => g.tools()),
+      'attachments.add': ({ source, thumb }) => this.attachments.add(source, thumb),
+      'attachments.read': ({ id }) => this.attachments.read(id),
+      'attachments.remove': ({ id }) => this.attachments.remove(id),
       'files.list': ({ projectPath }) =>
         this.filesCall(projectPath, (root) => this.files.list(root)),
       'files.read': ({ projectPath, path }) =>

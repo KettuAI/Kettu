@@ -1,12 +1,15 @@
 // Integration tests: the session layer, through the host and its port, against the fake agent
 // running in-process.
 
+import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { pathToFileURL } from 'node:url'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
-import type { ThreadEntry, ToolEntry } from '@shared/thread'
+import type { Attachment, ThreadEntry, ToolEntry } from '@shared/thread'
 import { forkCut } from './sessions'
 import {
   startTestHost,
@@ -45,6 +48,170 @@ async function turn(port: TestPort, sessionId: string, text: string) {
 function tools(port: TestPort, sessionId: string): ToolEntry[] {
   return port.entries(sessionId).filter((entry): entry is ToolEntry => entry.kind === 'tool')
 }
+
+describe('attachments', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
+  const THUMB = 'data:image/webp;base64,AAAA'
+  const sha = (data: Uint8Array) => createHash('sha256').update(data).digest('hex')
+
+  async function attach(port: TestPort, name = 'Image 1') {
+    return port.request('attachments.add', {
+      source: { bytes: PNG.slice().buffer, mimeType: 'image/png', name },
+      thumb: THUMB,
+    })
+  }
+  const withAttachment = (text: string, id: string) => [
+    { type: 'text' as const, text },
+    {
+      type: 'ref' as const,
+      ref: { kind: 'attachment' as const, attachment: { id } as Attachment },
+    },
+  ]
+  const reply = (port: TestPort, sessionId: string) =>
+    port
+      .entries(sessionId)
+      .filter((entry) => entry.kind === 'agent')
+      .map((entry) => (entry.kind === 'agent' ? entry.markdown : ''))
+      .join('\n')
+  const sentAttachment = (port: TestPort, sessionId: string) => {
+    const user = port.entries(sessionId).findLast((entry) => entry.kind === 'user')
+    const ref = user?.kind === 'user' ? user.content.find((c) => c.type === 'ref')?.ref : undefined
+    return ref?.kind === 'attachment' ? ref.attachment : null
+  }
+
+  it('sends a pasted image as an image and keeps it with the thread', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const added = await attach(port)
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: withAttachment('/attachments', added.id),
+    })
+    await port.until(() => reply(port, sessionId).includes('- image image/png, 12 bytes'))
+    expect(sentAttachment(port, sessionId)).toEqual({ ...added, sent: 'image', blob: sha(PNG) })
+    const blob = await port.request('sessions.blob', { sessionId, hash: sha(PNG) })
+    expect(blob.mimeType).toBe('image/png')
+    expect(new Uint8Array(blob.bytes)).toEqual(PNG)
+    // The draft's record and bytes go once the prompt is sent.
+    await expect(port.request('attachments.read', { id: added.id })).rejects.toMatchObject({
+      code: 'not_found',
+    })
+    // No port message follows the removal, so this polls rather than waits on the port.
+    await vi.waitFor(() =>
+      expect(existsSync(path.join(t.dir, 'attachments', `${sha(PNG)}.png`))).toBe(false),
+    )
+  })
+
+  it('sends a link to the saved image to an agent without image input', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'image' } })
+    const sessionId = await newSession(t, port)
+    const added = await attach(port)
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: withAttachment('/attachments', added.id),
+    })
+    const saved = path.join(t.dir, 'attachments', 'sent', `${sha(PNG)}.png`)
+    await port.until(() => reply(port, sessionId).includes('- resource_link Image 1'))
+    expect(reply(port, sessionId)).toContain(pathToFileURL(saved).href)
+    expect(sentAttachment(port, sessionId)).toMatchObject({
+      sent: 'linked',
+      uri: pathToFileURL(saved).href,
+      blob: sha(PNG),
+    })
+    // The agent may open the link later, so the file stays.
+    expect(existsSync(saved)).toBe(true)
+  })
+
+  it('refuses an attachment it does not hold', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await expect(
+      port.request('sessions.prompt', { sessionId, content: withAttachment('Look', 'nope') }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    expect(port.entries(sessionId).some((entry) => entry.kind === 'user')).toBe(false)
+  })
+
+  it('keeps the attachments of a queued prompt until it goes, then sends them', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    const added = await attach(port)
+    const { itemId } = await port.request('sessions.queue', {
+      sessionId,
+      content: withAttachment('/attachments', added.id),
+    })
+    expect(itemId).not.toBeNull()
+    await port.until(() => port.thread(sessionId).session.queue.length === 1)
+    expect(port.thread(sessionId).session.queue[0]!.content[1]).toMatchObject({
+      ref: { kind: 'attachment', attachment: { name: 'Image 1', thumb: THUMB } },
+    })
+    expect((await port.request('attachments.read', { id: added.id })).bytes.byteLength).toBe(12)
+
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    await port.request('sessions.resumeQueue', { sessionId })
+    await port.until(() => reply(port, sessionId).includes('- image image/png, 12 bytes'))
+    expect(sentAttachment(port, sessionId)?.sent).toBe('image')
+  })
+
+  it('steers a queued prompt with its attachments into the running turn', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    const added = await attach(port)
+    const { itemId } = await port.request('sessions.queue', {
+      sessionId,
+      content: withAttachment('Like this', added.id),
+    })
+    await port.request('sessions.steer', { sessionId, itemId: itemId! })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'user' && !!entry.steered)
+    expect(sentAttachment(port, sessionId)).toMatchObject({ sent: 'image', blob: sha(PNG) })
+    const blob = await port.request('sessions.blob', { sessionId, hash: sha(PNG) })
+    expect(new Uint8Array(blob.bytes)).toEqual(PNG)
+  })
+
+  it('shows a fork the images its source sent', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const added = await attach(port)
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: withAttachment('/attachments', added.id),
+    })
+    await port.untilStatus(sessionId, 'ready')
+    const fork = await port.request('sessions.fork', { sessionId })
+    // Deleting the source at once takes its bytes, but not the fork's copy.
+    await port.request('sessions.delete', { sessionId })
+    await port.request('sessions.close', { sessionId: fork.id })
+    const blob = await port.request('sessions.blob', { sessionId: fork.id, hash: sha(PNG) })
+    expect(new Uint8Array(blob.bytes)).toEqual(PNG)
+  })
+
+  it('sends the attachments of a prompt that waited for a sign-in, and keeps them', async () => {
+    const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)
+    const { t, port } = await setup({
+      agentEnv: { FAKE_AGENT_AUTH: 'required', FAKE_AGENT_LOGIN_MARKER: marker },
+    })
+    await port.request('agents.authenticate', { agentId: 'fake-agent', methodId: 'fake-login' })
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/crash')
+    await port.untilStatus(sessionId, 'closed')
+    // The agent the send starts is signed out, so the turn fails before anything is sent.
+    const added = await attach(port)
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: withAttachment('/attachments', added.id),
+    })
+    await port.untilStatus(sessionId, 'auth_required')
+    expect(sentAttachment(port, sessionId)?.sent).toBeNull()
+    await writeFile(marker, '')
+    await port.request('sessions.retry', { sessionId })
+    await port.until(() => reply(port, sessionId).includes('- image image/png, 12 bytes'))
+    expect(sentAttachment(port, sessionId)).toMatchObject({ sent: 'image', blob: sha(PNG) })
+    const blob = await port.request('sessions.blob', { sessionId, hash: sha(PNG) })
+    expect(new Uint8Array(blob.bytes)).toEqual(PNG)
+  })
+})
 
 describe('the queue', () => {
   const text = (value: string) => [{ type: 'text' as const, text: value }]

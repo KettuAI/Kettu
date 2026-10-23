@@ -289,6 +289,65 @@ describe('the thread database', () => {
     expect(String(json)).toContain('"blob"')
   })
 
+  it('keeps the bytes of sent attachments through a whole write that still names them', () => {
+    const file = tempFile()
+    const db = open(file)
+    const hash = 'ab'.repeat(32)
+    const data = new Uint8Array([1, 2, 3, 4])
+    const sent: ThreadEntry = {
+      kind: 'user',
+      id: 'u',
+      content: [
+        { type: 'text', text: 'Look' },
+        {
+          type: 'ref',
+          ref: {
+            kind: 'attachment',
+            attachment: {
+              id: 'a1',
+              type: 'image',
+              name: 'Image 1',
+              uri: null,
+              mimeType: 'image/png',
+              size: 4,
+              sent: 'image',
+              thumb: 'data:image/webp;base64,AAAA',
+              blob: hash,
+            },
+          },
+        },
+      ],
+    }
+    // The bytes go in with the entry that names them, in the same write as the thread row.
+    db.write('s1', {
+      head,
+      entries: [{ pos: 0, entry: sent }],
+      blobs: [{ hash, mime: 'image/png', data }],
+    })
+    expect(db.blob('s1', hash)).toEqual({ hash, mime: 'image/png', data })
+    expect(db.blob('s1', 'cd'.repeat(32))).toBeNull()
+    expect(db.page('s1', null)!.entries).toEqual([sent])
+
+    db.write('s1', {
+      head,
+      entries: [{ pos: 0, entry: sent }, ...turns(1, 0).map((e) => ({ ...e, pos: e.pos + 1 }))],
+      replace: true,
+    })
+    expect(db.blob('s1', hash)?.data).toEqual(data)
+
+    // A whole write without the entry drops its bytes, and so does removing the thread.
+    db.write('s2', {
+      head,
+      entries: [{ pos: 0, entry: sent }],
+      blobs: [{ hash, mime: 'image/png', data }],
+    })
+    db.write('s1', { head, entries: turns(1, 0), replace: true })
+    expect(db.blob('s1', hash)).toBeNull()
+    db.remove(['s2'])
+    expect(db.blob('s2', hash)).toBeNull()
+    db.close()
+  })
+
   it('removes threads with their images', () => {
     const file = tempFile()
     const db = open(file)

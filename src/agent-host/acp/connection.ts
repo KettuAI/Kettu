@@ -21,7 +21,7 @@ import {
   type SessionUpdate,
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
-import type { AgentAccount } from '@shared/agent-host'
+import type { AgentAccount, PromptCapabilities } from '@shared/agent-host'
 import type {
   ConfigOption,
   PendingPermission,
@@ -125,6 +125,7 @@ export interface AgentInit {
     logout: boolean
     /** `_session/steering`, an extension advertised in the response's own `_meta`. */
     steering: boolean
+    prompt: PromptCapabilities
   }
   authMethods: AuthMethodInfo[]
   /** The raw `agentCapabilities`, for diagnostics. */
@@ -391,6 +392,11 @@ export class AgentConnection {
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
             ?.supported === true,
+        prompt: {
+          image: caps.promptCapabilities?.image === true,
+          audio: caps.promptCapabilities?.audio === true,
+          embeddedContext: caps.promptCapabilities?.embeddedContext === true,
+        },
       },
       authMethods: (init.authMethods ?? []).map((method) => {
         const terminal = 'type' in method && method.type === 'terminal'

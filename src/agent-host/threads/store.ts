@@ -3,7 +3,7 @@
 
 import type { Worker } from 'node:worker_threads'
 import type { LogFn } from '../storage'
-import type { StoredThread, ThreadPage, ThreadWrite } from './model'
+import type { StoredBlob, StoredThread, ThreadPage, ThreadWrite } from './model'
 import type { ThreadDbStatus, ThreadErrorCode, ThreadReply, ThreadRequest } from './protocol'
 
 /** What the store needs of a worker, so tests can run the service in their own thread. */
@@ -149,6 +149,11 @@ export class ThreadStore {
 
   remove(sessionIds: readonly string[]): Promise<void> {
     return this.request({ op: 'remove', sessionIds: [...sessionIds] })
+  }
+
+  /** The bytes a session keeps under this hash; null when it keeps none. */
+  blob(sessionId: string, hash: string): Promise<StoredBlob | null> {
+    return this.request({ op: 'blob', sessionId, hash })
   }
 
   /** Settles once every request made so far is answered, whatever the answer. */

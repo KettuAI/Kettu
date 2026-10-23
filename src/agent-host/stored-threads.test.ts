@@ -761,6 +761,39 @@ describe('keeping the config across an attach', () => {
       expect(requests(t, port, sessionId).filter((r) => r === 'session/prompt')).toHaveLength(1)
     })
 
+    it('opens the tiles of a held-back message once its copy is sent', async () => {
+      const { t, port } = await setup({
+        sessionTimings: quick,
+        agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'locked' },
+      })
+      const sessionId = await chosenSession(t, port)
+      await release(port, sessionId)
+      const added = await port.request('attachments.add', {
+        source: { bytes: new Uint8Array([1, 2, 3]).buffer, mimeType: 'image/png', name: 'Image 1' },
+        thumb: null,
+      })
+      const ref = { type: 'ref' as const, ref: { kind: 'attachment' as const, attachment: added } }
+      await port.request('sessions.queue', { sessionId, content: [...text('Look'), ref] })
+      await port.until(() => port.thread(sessionId).session.queue.length === 1)
+      await port.untilStatus(sessionId, 'ready')
+      const sentOf = (entry: ThreadEntry) =>
+        entry.kind === 'user' &&
+        entry.content[1]?.type === 'ref' &&
+        entry.content[1].ref.kind === 'attachment'
+          ? entry.content[1].ref.attachment
+          : null
+      const tiles = () => port.entries(sessionId).flatMap((entry) => sentOf(entry) ?? [])
+      expect(tiles()).toEqual([expect.objectContaining({ id: added.id, sent: null, blob: null })])
+
+      await port.request('sessions.resumeQueue', { sessionId })
+      await port.until(() => tiles().length === 2 && tiles().every((tile) => tile.sent === 'image'))
+      const [held, copy] = tiles()
+      expect(held).toEqual(copy)
+      await port.untilStatus(sessionId, 'ready')
+      const blob = await port.request('sessions.blob', { sessionId, hash: held!.blob! })
+      expect(new Uint8Array(blob.bytes)).toEqual(new Uint8Array([1, 2, 3]))
+    })
+
     it('lets the agent go once the prompt is held back in a session out of view', async () => {
       const { t, port } = await setup({
         sessionTimings: quick,
