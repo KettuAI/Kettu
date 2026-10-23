@@ -1747,6 +1747,8 @@ export class AgentManager {
               prefer: this.deps.settings().agents[slot.def.id]?.cli ?? 'installed',
               runs: adapter.cli.runs,
               installed: adapter.cli.installed,
+              needsCopy: adapter.cli.needsCopy,
+              copyMegabytes: slot.def.cli.copyMegabytes,
             }
           : null,
       capabilities: {

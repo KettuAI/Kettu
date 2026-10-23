@@ -98,6 +98,8 @@ export interface AgentCli {
   prefer: AgentCliSource // the setting: the installed program when it can run, or always the copy
   runs: AgentCliSource // what a start runs now
   installed: InstalledCli | null // null: none found
+  needsCopy: boolean // the copy is to run but is not on disk: the next start downloads it
+  copyMegabytes: number // about how much that download is
 }
 
 export type AgentCliSource = 'installed' | 'bundled'

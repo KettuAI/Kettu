@@ -63,6 +63,8 @@ export interface AdapterCli {
    * adapter is also the oldest that adapter runs.
    */
   pinsVersion: boolean
+  /** About how large the copy the adapter brings is, in MB, said before a start downloads it. */
+  copyMegabytes: number
   /** The file that runs without a shell, or null when there is none. */
   resolve(found: string, platform: Platform, files: CliFiles): Promise<ResolvedCli | null>
   /** The oldest CLI the adapter installed in `dir` runs, or null when it names none. */
@@ -137,6 +139,8 @@ export const CLAUDE_CLI: AdapterCli = {
   variable: 'CLAUDE_CODE_EXECUTABLE',
   startsAtInitialize: false,
   pinsVersion: true,
+  // The platform package on macOS arm64, measured 2026-10-22.
+  copyMegabytes: 256,
   // The adapter also calls it with execFile, so on Windows it must be a program itself.
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
@@ -155,6 +159,8 @@ export const CODEX_CLI: AdapterCli = {
   variable: 'CODEX_PATH',
   startsAtInitialize: true,
   pinsVersion: false,
+  // The platform package on macOS arm64, measured 2026-10-22.
+  copyMegabytes: 318,
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
     if (!file) return null

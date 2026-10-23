@@ -190,7 +190,8 @@ export function RevealAction({ path }: { path: string }) {
 /**
  * A path as a location, in the interface font: folders quiet, slashes quieter, the last part in
  * the label's weight. Too long, the folders truncate first, so the name stays; it shows in full in
- * its title.
+ * its title. The separator before the name goes with the folders, so a name whose folders are cut
+ * away entirely does not read as a root path.
  */
 export function PathText({ path, missing }: { path: string; missing?: boolean }) {
   const parts = path.split(/(?<=.)[/\\]/)
@@ -207,15 +208,16 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
         <span className="min-w-0 truncate">
           {parts.map((part, i) => (
             <span key={i}>
-              {i > 0 && slash}
               {part}
+              {slash}
             </span>
           ))}
         </span>
       )}
-      <span className="max-w-full shrink-0 truncate">
-        {parts.length > 0 && slash}
-        <span className={cn(!missing && 'font-medium text-foreground')}>{name}</span>
+      <span
+        className={cn('max-w-full shrink-0 truncate', !missing && 'font-medium text-foreground')}
+      >
+        {name}
       </span>
     </span>
   )

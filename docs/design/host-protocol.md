@@ -176,6 +176,8 @@ interface AgentCli {
   command: string // looked up on PATH: claude or codex
   prefer: 'installed' | 'bundled' // the setting: the installed program when it can run, or always the copy
   runs: 'installed' | 'bundled' // what a start runs now
+  needsCopy: boolean // the copy is to run but is not on disk: the next start downloads it
+  copyMegabytes: number // about how much that download is: 256 for Claude Code, 318 for Codex
   installed: {
     path: string // as the adapter runs it, after resolving shims
     version: string | null
