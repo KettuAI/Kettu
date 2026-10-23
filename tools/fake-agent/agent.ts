@@ -95,6 +95,10 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const scale = delayScale(env)
   const legacyModes = env.FAKE_AGENT_LEGACY_MODES === '1'
   const forkConfig = env.FAKE_AGENT_FORK_CONFIG ?? 'keep'
+  // Not scaled: it stands for an agent that is slow to take a setting, whatever the pace.
+  const setConfigMs = Number(env.FAKE_AGENT_SET_CONFIG_MS ?? '') || 0
+  const settled = (): Promise<void> | undefined =>
+    setConfigMs > 0 ? new Promise((resolve) => setTimeout(resolve, setConfigMs)) : undefined
   const sessions = new Map<string, FakeSession>()
   const lockedSessions = new Set<string>()
   const levelHidden = new Set<string>()
@@ -593,7 +597,8 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       sessions.delete(ctx.params.sessionId)
       return {}
     })
-    .onRequest(methods.agent.session.setMode, (ctx) => {
+    .onRequest(methods.agent.session.setMode, async (ctx) => {
+      await settled()
       const session = sessions.get(ctx.params.sessionId)
       if (!session) throw RequestError.resourceNotFound(ctx.params.sessionId)
       if (lockedSessions.has(session.id)) throw RequestError.invalidParams(undefined, 'Locked')
@@ -611,7 +616,8 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       }, 0)
       return {}
     })
-    .onRequest(methods.agent.session.setConfigOption, (ctx) => {
+    .onRequest(methods.agent.session.setConfigOption, async (ctx) => {
+      await settled()
       const session = sessions.get(ctx.params.sessionId)
       if (!session) throw RequestError.resourceNotFound(ctx.params.sessionId)
       if (lockedSessions.has(session.id)) throw RequestError.invalidParams(undefined, 'Locked')

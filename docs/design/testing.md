@@ -87,10 +87,11 @@ Environment variables, read when the agent starts:
 | `FAKE_AGENT_SPAWN_CHILD=nested`      | A child in the agent's group that starts a grandchild in a group of its own, as Claude Code's CLI does |
 | `FAKE_AGENT_LOGIN_MARKER`            | Where `main.ts --login` writes its sign-in marker (default: the temp directory)                        |
 | `FAKE_AGENT_NAME`                    | The name in `agentInfo` (default `fake-agent`), to play an adapter that cannot fork at a message       |
-| `FAKE_AGENT_FORK_CONFIG=reset`       | A fork starts at the agent's defaults, as codex-acp's does; by default it keeps the source's config    |
-| `FAKE_AGENT_FORK_CONFIG=locked`      | The same, and the fork then refuses every setting, to test a value the agent will not take             |
+| `FAKE_AGENT_FORK_CONFIG=reset`       | A fork starts at the defaults and lists no level until a model is set, as codex-acp's does             |
+| `FAKE_AGENT_FORK_CONFIG=locked`      | A fork starts at the defaults and refuses every setting, to test a value the agent will not take       |
+| `FAKE_AGENT_SET_CONFIG_MS`           | Delays each `session/set_config_option` and `session/set_mode` answer by this long, unscaled           |
 
-The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
+A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
 
 ## Continuous integration
 

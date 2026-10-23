@@ -1208,21 +1208,25 @@ export class SessionManager {
    * Sets the values New session chose, in `startOrder`, each against the options as they stand
    * after the one before. A value the session does not offer, or one the agent refuses, is
    * logged and left at the agent's value, so the start itself never fails on it. A fork sets its
-   * source's values the same way, and `remember: false` keeps them from becoming the user's
-   * latest choice.
+   * source's values the same way; they are not the user's latest choice, and the model is sent
+   * again while an option is missing, since an agent can list an option only once a model is set.
    */
   private async applyStartOptions(
     live: Live,
     connection: AgentConnection,
     options: Record<string, string | boolean>,
-    { remember = true }: { remember?: boolean } = {},
+    { fork = false }: { fork?: boolean } = {},
   ): Promise<void> {
     const { agentId, acpSessionId } = live.record
     for (const id of startOrder(live.thread.session.config, Object.keys(options))) {
       const value = options[id]
       const config = live.thread.session.config
       const option = config.find((o) => o.id === id)
-      if (value === undefined || option?.value === value) continue
+      const offerMissing =
+        fork &&
+        option?.category === 'model' &&
+        Object.keys(options).some((wanted) => !config.some((o) => o.id === wanted))
+      if (value === undefined || (option?.value === value && !offerMissing)) continue
       if (!option || !isValueOf(option, value)) {
         this.deps.diagnostics.log(
           'warn',
@@ -1239,7 +1243,7 @@ export class SessionManager {
           next = mergeConfig(config, await connection.setConfigOption(acpSessionId, id, value))
         }
         this.update(live, { config: withUltracode(live.record, next) })
-        if (remember) this.deps.options?.chose(agentId, option, value, next)
+        if (!fork) this.deps.options?.chose(agentId, option, value, next)
       } catch (error) {
         this.deps.diagnostics.log(
           'warn',
@@ -2117,7 +2121,9 @@ export class SessionManager {
         .filter((option) => option.id !== ULTRACODE_OPTION_ID)
         .map((option) => [option.id, option.value]),
     )
-    await this.applyStartOptions(live, runtime.connection, settings, { remember: false })
+    await this.applyStartOptions(live, runtime.connection, settings, { fork: true })
+    // Deleted, or its project removed, meanwhile: closing it already closed the agent's session.
+    if (live.closing || this.live.get(live.id) !== live) throw notFound(`No session ${live.id}`)
     // The agent can exit while the values are set, which leaves the fork stored and closed.
     this.update(live, { status: live.connection ? 'ready' : 'closed' })
     this.save(live)
