@@ -83,6 +83,8 @@ export type MapperEffect =
     }
   // Work the agent runs on after its tool call ended, such as a command in the background.
   | { kind: 'background' }
+  // The session's own thread sent a request to its model, which renews its prompt cache.
+  | { kind: 'request' }
 
 export interface MapperOutput {
   patches: Patch[]
@@ -639,6 +641,17 @@ export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
   }
 }
 
+/**
+ * Whether a `usage_update` reports a request of the session's own thread. Claude Code also sends
+ * one with each plan limit report, repeating its last count, and an agent may repeat the
+ * context's size between turns, as on a resume, without asking the model.
+ */
+function isRequest(ctx: MapperContext, used: number, rateLimit: boolean): boolean {
+  if (ctx.replaying || rateLimit) return false
+  const { status, usage } = ctx.thread.session
+  return status === 'running' || status === 'awaiting_permission' || used !== usage?.used
+}
+
 const ACCOUNT_KINDS: ReadonlySet<string> = new Set([
   'account',
   'api_key',
@@ -912,6 +925,11 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
     }
     case 'usage_update': {
       const previous = ctx.thread.session.usage
+      const rateLimit = update._meta?.['_claude/rateLimit']
+      const request = isRequest(ctx, update.used, rateLimit !== undefined)
+      const cache = request
+        ? { lastRequestAt: ctx.now, ttl: previous?.cache?.ttl ?? null }
+        : previous?.cache
       out.patches.push({
         op: 'session.update',
         changes: {
@@ -922,10 +940,12 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
               ? { amount: update.cost.amount, currency: update.cost.currency }
               : null,
             tokens: previous?.tokens ?? null,
+            ...(cache ? { cache } : {}),
           },
         },
       })
-      const limit = mapRateLimit(update._meta?.['_claude/rateLimit'], ctx.now)
+      if (request) out.effects.push({ kind: 'request' })
+      const limit = mapRateLimit(rateLimit, ctx.now)
       if (limit) out.effects.push({ kind: 'limit', limit })
       break
     }

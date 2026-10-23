@@ -59,6 +59,12 @@ interface SessionUsage {
   size: number // the context window
   cost: { amount: number; currency: string } | null
   tokens: TokenTotals | null // session totals, summed over its turns, when the agent reports them
+  cache?: PromptCache // the main thread's prompt cache, from its first request on
+}
+
+interface PromptCache {
+  lastRequestAt: number // when the host saw the main thread's latest request
+  ttl: number | null // ms the cache lasts, when the agent's own transcript says
 }
 
 interface TokenTotals {
@@ -264,7 +270,7 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `config_option_update`      | `session.update` of `config`.                                                                                                                                                                                                           |
 | `current_mode_update`       | Updates the value of the mode option in `config` (see [Config options](#config-options)).                                                                                                                                               |
 | `session_info_update`       | `session.update` of `title` and `updatedAt`.                                                                                                                                                                                            |
-| `usage_update`              | `session.update` of `usage`'s `used`, `size` and `cost`. A plan limit in the update's `_meta` goes to the agent's account instead ([plan limits](#plan-limits)).                                                                        |
+| `usage_update`              | `session.update` of `usage`'s `used`, `size` and `cost`, and of its [prompt cache](#prompt-cache). A plan limit in the update's `_meta` goes to the agent's account instead ([plan limits](#plan-limits)).                              |
 | `notice`                    | Adds a notice entry. Severities other than `info`, `warning` and `error` are shown as `info`.                                                                                                                                           |
 | `compaction_update`         | Adds or updates the compaction entry for `compactionId`.                                                                                                                                                                                |
 | `compaction_summary_chunk`  | Appends text to that compaction entry's `summary`.                                                                                                                                                                                      |
@@ -479,6 +485,25 @@ interface ContextBreakdown {
 - The fork starts like a resumed session, with the model the transcript records, so the totals match the session's.
 - Claude Code sends the report twice, under two message ids; the host takes the last message that parses. Token counts such as `32.1k` become numbers; list items keep the text the report shows (`~310`, `< 20`).
 - The renderer asks when the usage popover opens and keeps the result for that session until its `used / size` changes.
+
+## Prompt cache
+
+The models keep the start of a prompt they have seen in a cache for a while, and a request that finds it there reads it at a fraction of the price. Once it expires, the next message reads the whole context again at full price, so the [usage popover](./ui.md#usage-popover) says when that happens. ACP carries none of it: `usage_update` has only `used`, `size` and `cost`, and claude-agent-acp 0.94 passes on only Claude Code's `cache_creation_input_tokens`, not how long the cache lasts. Only the session's own thread counts; subagents have caches of their own, and their updates reach their own sessions.
+
+- **The last request**: `cache.lastRequestAt` is when the host received the latest `usage_update` that reports a request of the session's thread, and is set again when a turn that reports tokens ends. A `usage_update` reports a request during a turn, and between turns when its `used` changed, as when Claude Code answers a background task by itself. One that carries a plan limit (`_claude/rateLimit`), which Claude Code sends with its last count repeated, or arrives in a replay, does not. As read in their source on 2026-10-23, claude-agent-acp 0.94.0 sends `usage_update` for the main thread's messages as they stream, each turn's result, a compaction and each plan limit, and codex-acp 2.2.2 for each of Codex's token updates, a native subagent's to the subagent's own session.
+- **How long it lasts**, `cache.ttl` where the agent's records say, else an estimate from the shortest retention the provider documents, checked on 2026-10-23. Nothing is guessed from the account or the model.
+
+| Agent       | Lifetime                                                                                                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Claude Code | From the session's transcript: Claude Code splits each request's cache writes into `ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens`. None known: no expiry    |
+| Codex       | Estimated: 5 minutes, since OpenAI keeps a prefix for 5 to 10 minutes of inactivity                                                                                      |
+| OpenCode    | Estimated by the provider in the model's name: 5 minutes for `openai/` and for `anthropic/`, whose default is 5 minutes; no expiry for any other provider, or none named |
+
+- **Claude Code's transcript**, the session's own, read whether or not [Usage on this computer](./usage.md#privacy) is on. It is `<config>/projects/<folder>/<session id>.jsonl`, `<config>` as the [log reader](./usage.md#finding-the-logs) finds it. `<folder>` is the real path of the session's folder, NFC-normalized on macOS, with every character but ASCII letters and digits replaced by `-`; a name longer than 200 characters is cut to 200 and ends with `-` and Claude Code's 32-bit hash of the path in base 36. When that file is not there, the host looks for the session's file in every folder of `projects`, since `CLAUDE_CODE_PROJECT_DIR_NAME` can rename the project's. Only a session id of letters, digits, `-` and `_` is looked up.
+- **Reading it**: backwards from its end, 64 KiB at a time and at most 1 MiB, with asynchronous reads in the agent host, so a long session costs no more than a short one. Only lines that contain `ephemeral_` are parsed, and the latest `type: "assistant"` line of the main thread (not `isSidechain`) whose `message.usage.cache_creation` wrote anything gives the lifetime: 5 minutes, or an hour; 5 minutes when it wrote both, since the prefix after the shorter one's breakpoint goes with it. A tail without such a line keeps the lifetime already known. The read runs 1 s after a turn ends and after a request between turns, at most one at a time per session, so the lines Claude Code writes as the message ends are on disk.
+- **Kept**: `cache` is part of `usage`, stored with the session's thread, so the expiry survives a restart.
+
+On the development Mac on 2026-10-22, main sessions wrote mostly one-hour cache and subagents mostly five-minute cache, and no message wrote both; a new Claude Code session there (claude-agent-acp 0.94.0, a Claude Max account) wrote 45,029 tokens of one-hour cache on its first request.
 
 ## Reports from the agents' own commands
 

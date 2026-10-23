@@ -53,7 +53,7 @@ interface Pending {
   bytes: number
 }
 
-function projectsFolder(env: ScanContext['env'], home: string, platform: Platform): string {
+export function projectsFolder(env: ScanContext['env'], home: string, platform: Platform): string {
   const config = configLocations(AGENT_ID, (name) => env[name], home, platform).find(
     (item) => item.id === 'folder',
   )?.candidates[0]

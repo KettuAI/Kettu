@@ -1,6 +1,7 @@
 import { useCallback, useId, useState, type ComponentProps, type KeyboardEvent } from 'react'
 import { ChevronDownIcon, RotateCcwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cacheExpiry } from '@shared/prompt-cache'
 import { ULTRACODE_OPTION_ID, type ConfigOption, type SessionView } from '@shared/thread'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
@@ -149,7 +150,9 @@ export function ControlRow({
         sessionId={session.id}
         agentId={session.agentId}
         idle={session.status === 'ready'}
+        running={running}
         usage={session.usage}
+        cache={cacheExpiry(session)}
         limits={agent?.limits ?? []}
         account={agent?.account ?? null}
         onCompact={onCompact}

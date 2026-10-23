@@ -580,6 +580,50 @@ describe('session-level updates', () => {
   })
 })
 
+describe('prompt cache', () => {
+  const usage = (used: number, meta?: Record<string, unknown>): SessionUpdate => ({
+    sessionUpdate: 'usage_update',
+    used,
+    size: 200_000,
+    ...(meta ? { _meta: meta } : {}),
+  })
+  const known = { used: 900, size: 200_000, cost: null, tokens: null }
+
+  it("takes each request's usage during a turn as the time of the last request", () => {
+    const { thread, effects } = run([usage(900), usage(900), usage(1_500)])
+    expect(thread.session.usage?.cache).toEqual({ lastRequestAt: 1_200, ttl: null })
+    expect(effects).toEqual([{ kind: 'request' }, { kind: 'request' }, { kind: 'request' }])
+  })
+
+  it('keeps the lifetime already known', () => {
+    const { thread } = run([usage(1_500)], {
+      session: { usage: { ...known, cache: { lastRequestAt: 10, ttl: 3_600_000 } } },
+    })
+    expect(thread.session.usage?.cache).toEqual({ lastRequestAt: 1_000, ttl: 3_600_000 })
+  })
+
+  it('counts usage between turns only when the context changed', () => {
+    const cache = { lastRequestAt: 10, ttl: 300_000 }
+    const idle = { status: 'ready' as const, turnStartedAt: null, usage: { ...known, cache } }
+    const same = run([usage(900)], { session: idle })
+    expect(same.thread.session.usage).toEqual({ ...known, cache })
+    expect(same.effects).toEqual([])
+    const grown = run([usage(1_400)], { session: idle })
+    expect(grown.thread.session.usage?.cache).toEqual({ lastRequestAt: 1_000, ttl: 300_000 })
+    expect(grown.effects).toEqual([{ kind: 'request' }])
+  })
+
+  it('does not count a plan limit report or a replay as a request', () => {
+    const limit = {
+      '_claude/rateLimit': { status: 'allowed', rateLimitType: 'five_hour', utilization: 0.2 },
+    }
+    expect(run([usage(1_500, limit)]).thread.session.usage?.cache).toBeUndefined()
+    const replay = run([usage(1_500)], { replaying: true })
+    expect(replay.thread.session.usage).toEqual({ ...known, used: 1_500 })
+    expect(replay.effects).toEqual([])
+  })
+})
+
 describe('notices and compactions', () => {
   it('adds notices and shows unknown severities as info', () => {
     const { entries } = run([

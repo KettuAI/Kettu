@@ -340,6 +340,48 @@ describe('attaching on use', () => {
   })
 })
 
+describe('prompt cache', () => {
+  it('keeps when the cache was last used, and how long it lasts, across a restart', async () => {
+    const reads: string[] = []
+    const cacheTtl = async (agentId: string, projectPath: string, acpSessionId: string) => {
+      reads.push(`${agentId} ${projectPath} ${acpSessionId}`)
+      return 3_600_000
+    }
+    const { t: first, port: before } = await setup({ cacheTtl, sessionTimings: { cacheReadMs: 0 } })
+    const sessionId = await newSession(first, before)
+    const started = Date.now()
+    await finishTurn(before, sessionId, 'hello')
+    await before.until(() => before.thread(sessionId).session.usage?.cache?.ttl === 3_600_000)
+    const cache = before.thread(sessionId).session.usage!.cache!
+    expect(cache.lastRequestAt).toBeGreaterThanOrEqual(started)
+    const acpSessionId = before.thread(sessionId).session.acpSessionId
+    expect(reads).toEqual([`fake-agent ${first.project} ${acpSessionId}`])
+
+    const { t, port } = await restart(first)
+    const snapshot = await port.open(sessionId)
+    expect(snapshot.session.usage?.cache).toEqual(cache)
+    expect(t.launcher).toMatchObject({ launches: 0 })
+  })
+
+  it('keeps the lifetime it knew when the transcript says nothing', async () => {
+    let ttl: number | null = 300_000
+    let reads = 0
+    const cacheTtl = async () => {
+      reads++
+      return ttl
+    }
+    const { t, port } = await setup({ cacheTtl, sessionTimings: { cacheReadMs: 0 } })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'hello')
+    await port.until(() => port.thread(sessionId).session.usage?.cache?.ttl === 300_000)
+    ttl = null
+    await finishTurn(port, sessionId, 'again')
+    await vi.waitFor(() => expect(reads).toBe(2))
+    await t.host.threads!.flush()
+    expect(port.thread(sessionId).session.usage?.cache?.ttl).toBe(300_000)
+  })
+})
+
 describe('releasing', () => {
   const quick = { checkpointMs: 10, releaseHiddenMs: 60, releaseShownMs: 800, releaseUnusedMs: 60 }
   const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

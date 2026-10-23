@@ -70,6 +70,12 @@ export function duration(ms: number): string {
   return i18n.t('time.hoursMinutes', { h: Math.floor(m / 60), m: m % 60 })
 }
 
+/** Time left as "4:12", in whole seconds rounded up, so it reads 0:00 only once the time is up. */
+export function countdown(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
 /** A plan-limit window's name: OverBench's for the windows it knows, else the agent's own. */
 export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   const key = `planWindow.${limit.window}`

@@ -210,7 +210,7 @@ Every state is designed with it: loading (`Skeleton`), no data yet (`Empty`, wit
 
 A **Usage** section in Settings, after Agents, in four groups:
 
-- **Count from**: **Usage on this computer**, off by default. Its description names the agents and says that only counts, models and times are read and nothing leaves the computer. Turning it on starts the first import.
+- **Count from**: **Usage on this computer**, off by default. Its description names the agents and says that only counts, models and times are read and nothing leaves the computer, and that either way OverBench reads when the prompt cache of its own Claude Code sessions expires from the end of their transcripts ([privacy](#privacy)). Turning it on starts the first import.
 - **Logs**, while that is on, with the number of agents and **Sync now** at the label's end, and the scan's progress beside it while one runs: one row per agent with its mark, what its history covers ("Since Jun 16, 2026 · 116,262 requests · synced just now"; "Reading the logs…", "Not read yet" or "No logs found"; or the reader's error), the folders or file it reads, and **Re-import…**, which asks first.
 - **Sidebar**: **Show in the sidebar**, what the end of the sidebar's **Usage** row shows: today's tokens (the default), the tightest plan limit, or nothing. Together with the plan limits on the page, this is how OverBench keeps the plan-limit checks the maintainer asked to keep (confirmed 2026-10-22).
 - **Danger zone**: **Clear OverBench's record…**, after a confirmation; disabled while the record is empty.
@@ -220,6 +220,8 @@ They are stored as `usage.fromComputer` and `usage.sidebar` in [settings](./pers
 ## Privacy
 
 The readers take token counts, model names, times, session ids and working folders, and nothing of what was said. Nothing leaves the computer. Reading another program's files waits for the user to turn the setting on (cc-switch reads them from its first launch without asking).
+
+One read does not wait for it: for a Claude Code session OverBench runs, the agent host reads the end of that session's own transcript for how long its prompt cache lasts, and only the cache fields of its API messages, so the usage popover can say when the cache expires ([prompt cache](./session-model.md#prompt-cache)). It reads no other session's transcript, and keeps nothing but the lifetime.
 
 ## Performance
 

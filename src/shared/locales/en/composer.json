@@ -58,6 +58,28 @@
       "used": "{{limit}} used",
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}"
+    },
+    "cache": {
+      "title": "Prompt cache",
+      "lastRequest": "Last request",
+      "expiresIn": "Expires in {{time}}",
+      "expiresInAbout": "Expires in about {{time}}",
+      "expired": "Expired",
+      "likelyExpired": "Probably expired",
+      "lastsMinutes_one": "{{count}}-minute cache · last request {{ago}}",
+      "lastsMinutes_other": "{{count}}-minute cache · last request {{ago}}",
+      "lastsHours_one": "{{count}}-hour cache · last request {{ago}}",
+      "lastsHours_other": "{{count}}-hour cache · last request {{ago}}",
+      "estimateMinutes_one": "Estimated {{count}}-minute cache · last request {{ago}}",
+      "estimateMinutes_other": "Estimated {{count}}-minute cache · last request {{ago}}",
+      "estimateHours_one": "Estimated {{count}}-hour cache · last request {{ago}}",
+      "estimateHours_other": "Estimated {{count}}-hour cache · last request {{ago}}",
+      "expiredNote": "The next message reads the whole context again at full price.",
+      "likelyExpiredNote": "If it has, the next message reads the whole context again at full price.",
+      "ringEnding": "Context {{percent}}% used. The prompt cache expires within a minute.",
+      "ringEndingEstimate": "Context {{percent}}% used. The prompt cache probably expires within a minute.",
+      "ringExpired": "Context {{percent}}% used. The prompt cache has expired.",
+      "ringExpiredEstimate": "Context {{percent}}% used. The prompt cache has probably expired."
     }
   }
 }

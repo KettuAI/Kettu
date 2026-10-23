@@ -65,6 +65,7 @@ import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
+import type { CacheTtlReader } from './prompt-cache'
 import { CONTEXT_REPORT, hasContextReport, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
@@ -95,6 +96,8 @@ export interface SessionTimings {
   releaseShownMs: number
   /** ...or this long after it was only opened to read, nothing sent, wherever it is. */
   releaseUnusedMs: number
+  /** How long after a request the agent's transcript is read for its cache's lifetime. */
+  cacheReadMs: number
 }
 
 export const SESSION_TIMINGS: SessionTimings = {
@@ -104,6 +107,7 @@ export const SESSION_TIMINGS: SessionTimings = {
   releaseHiddenMs: 60_000,
   releaseShownMs: 30 * 60_000,
   releaseUnusedMs: 60_000,
+  cacheReadMs: 1_000,
 }
 
 export interface SessionEvents {
@@ -138,6 +142,8 @@ export interface SessionManagerDeps {
     /** Reads what is new in these agents' logs, when Usage on this computer is on. */
     syncAgents(agentIds: AgentId[]): Promise<void>
   }
+  /** Reads how long a session's prompt cache lasts from the agent's own transcript. */
+  cacheTtl?: CacheTtlReader
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -296,6 +302,8 @@ export class SessionManager {
   private readonly reviving = new Map<string, Promise<Live>>()
   /** Idle sessions being let go, by id. */
   private readonly releasing = new Map<string, Promise<void>>()
+  /** Transcript reads waiting to run, by session id. */
+  private readonly cacheReads = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly timings: SessionTimings
   private readonly now: () => number
   private requestCounter = 0
@@ -930,7 +938,40 @@ export class SessionManager {
         live.background = true
         this.refreshRelease(live)
         break
+      case 'request':
+        // A turn reads it as it ends; this one the agent made between turns.
+        if (!live.turn) this.scheduleCacheRead(live)
+        break
     }
+  }
+
+  private scheduleCacheRead(live: Live): void {
+    if (!this.deps.cacheTtl || this.cacheReads.has(live.id)) return
+    const timer = setTimeout(() => {
+      this.cacheReads.delete(live.id)
+      void this.readCacheTtl(live)
+    }, this.timings.cacheReadMs)
+    timer.unref?.()
+    this.cacheReads.set(live.id, timer)
+  }
+
+  /** Keeps the lifetime already known when the transcript names none. */
+  private async readCacheTtl(live: Live): Promise<void> {
+    const { agentId, projectPath, acpSessionId } = live.record
+    let ttl: number | null
+    try {
+      ttl = (await this.deps.cacheTtl?.(agentId, projectPath, acpSessionId)) ?? null
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Session ${live.id}: could not read the prompt cache: ${(error as Error).message}`,
+      )
+      return
+    }
+    if (ttl === null || live.closing || this.live.get(live.id) !== live) return
+    const usage = live.thread.session.usage
+    if (!usage?.cache || usage.cache.ttl === ttl) return
+    this.update(live, { usage: { ...usage, cache: { ...usage.cache, ttl } } })
   }
 
   private firstUserText(live: Live): string | null {
@@ -2305,6 +2346,8 @@ export class SessionManager {
         size: usage?.size ?? 0,
         cost: usage?.cost ?? null,
         tokens: addTokenTotals(usage?.tokens ?? null, turnTokens),
+        // The turn's last request came just before its end.
+        cache: { lastRequestAt: now, ttl: usage?.cache?.ttl ?? null },
       }
     }
     if (turnEntryId && this.deps.usage) {
@@ -2323,6 +2366,7 @@ export class SessionManager {
       )
     }
     this.update(live, changes)
+    if (live.thread.session.usage?.cache) this.scheduleCacheRead(live)
     const git = this.deps.git()
     if (git) {
       git.turnEnded(live.record.projectPath, live.id)
@@ -3043,6 +3087,7 @@ export class SessionManager {
       if (live.releaseTimer) clearTimeout(live.releaseTimer)
       this.checkpoint(live)
     }
+    for (const timer of this.cacheReads.values()) clearTimeout(timer)
     this.stopped = true
   }
 }
