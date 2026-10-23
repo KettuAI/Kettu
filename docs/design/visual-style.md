@@ -55,8 +55,8 @@ Three sizes, chosen by context:
 
 ### Color and placement
 
-- An icon takes the color of its text (`currentColor`): `--muted-foreground` in chrome at rest, `--foreground` under the pointer, pressed or chosen.
-- Color on an icon always means state: the [repository states](./design-system.md#repository-state), `--destructive` for an error, `--attention` for something waiting on the user, `--success` for a completed check. A neutral action never takes a color.
+- An icon takes the color of its text (`currentColor`): `--icon-default` (`text-icon`) at rest, `--text-primary` under the pointer, pressed or chosen.
+- Only a status icon takes a color: `--danger` for a failure and `--attention` for something waiting for your approval. A completed step, a passing check or an open pull request stays `--icon-default` ([repository states](./design-system.md#repository-state)). A neutral action never takes a color.
 - In a button, an icon sits in the `data-icon="inline-start"` or `"inline-end"` slot, so the padding adjusts. Inline with text, it sits at `vertical-align: -0.125em`.
 - A busy button swaps its icon for a `Spinner` of the same size and keeps its label and width.
 - An icon-only button has an accessible name and a tooltip that gives the name and the shortcut.
@@ -124,27 +124,31 @@ The typefaces, the type scale and the weights are in the [design system](./desig
 
 Every piece of text takes one of these roles. A size, weight, line height or color that is not here is off the scale.
 
-| Role                                                                         | Step           | Color                                |
-| ---------------------------------------------------------------------------- | -------------- | ------------------------------------ |
-| The Welcome wordmark, until the logo replaces it                             | Display        | `--foreground`                       |
-| Page title: a Settings page, the New session heading                         | Title          | `--foreground`                       |
-| Dialog title, the Settings column's title                                    | Heading        | `--foreground`                       |
-| Thread prose                                                                 | Prose          | `--foreground` at 90%                |
-| Interface text: rows, menu items, buttons, setting names                     | Interface      | `--foreground`                       |
-| A label that names a thing: a project, a model, a selected row, a card title | Interface, 500 | `--foreground`                       |
-| A sentence that explains a screen: an `Empty` state, the Welcome line        | Interface      | `--muted-foreground`                 |
-| Tool call rows, a dialog's description                                       | Small          | `--muted-foreground`                 |
-| Segments, `compact` buttons, select triggers                                 | Control        | `--muted-foreground`, chosen in full |
-| Secondary text: descriptions, hints, a path, an empty list's line            | Caption        | `--muted-foreground`                 |
-| Group labels in menus, lists and settings                                    | Caption, 500   | `--muted-foreground`                 |
-| Code, commands, branch names, diffs                                          | Code           | as their context                     |
-| Meta: versions, times, counts, diff stats, commit ids                        | Meta           | `--muted-foreground`                 |
+| Role                                                                    | Step           | Color                             |
+| ----------------------------------------------------------------------- | -------------- | --------------------------------- |
+| The Welcome wordmark, until the logo replaces it                        | Display        | `--text-primary`                  |
+| Page title: a Settings page, the New session heading                    | Title          | `--text-primary`                  |
+| Dialog title, the Settings column's title                               | Heading        | `--text-primary`                  |
+| Thread prose                                                            | Prose          | `--text-primary`                  |
+| Interface text: rows, menu items, buttons, setting names                | Interface      | `--text-primary`                  |
+| A label that names a thing: a project, a selected row, a card title     | Interface, 500 | `--text-primary`                  |
+| A sentence that explains a screen: an `Empty` state, the Welcome line   | Interface      | `--text-secondary`                |
+| A dialog's description                                                  | Small          | `--text-secondary`                |
+| Tool call rows and fold lines, their file names `--text-primary`        | Small          | `--text-tertiary`                 |
+| Model names and reasoning levels                                        | Control        | `--text-secondary`                |
+| Segments, `compact` buttons, select triggers                            | Control        | `--text-tertiary`, chosen in full |
+| Secondary text: descriptions, hints, the top bar's information          | Caption        | `--text-secondary`                |
+| Group labels in menus, lists and settings; an empty list's line, a path | Caption, 500   | `--text-tertiary`                 |
+| Code, commands, branch names, diffs                                     | Code           | as their context                  |
+| Meta: versions, times, counts, commit ids                               | Meta           | `--text-tertiary`                 |
+| Placeholders                                                            | as the field   | `--text-placeholder`              |
+| Unavailable items                                                       | as the item    | `--text-disabled`                 |
 
 ### Rules
 
 - **Two typefaces, one stack.** Latin is Inter and Chinese the platform's face, mixed within a line by the font stack; nothing sets a font family of its own. Mono is the only other family, and only for the roles above that name it.
 - **Mono is for what the user would type or copy**: code, commands, branch names, ids, versions, times and counts. Names, descriptions, labels and a project's path shown as its location are never mono ([problems 22, 34](../milestones/m0-feedback.md#34-the-slash-command-popover-looks-crude)).
-- **Two levels of text color** in chrome: `--foreground` and `--muted-foreground`. Opacity is never a third level; a disabled control dims through its component's disabled state.
+- **Five text colors**, each with its role above: `--text-primary`, `--text-secondary`, `--text-tertiary`, `--text-placeholder` and `--text-disabled`. Opacity is never another level; a disabled control dims through its component's disabled state.
 - **Weights** are 400, 500 and 600 only, set through the weight tokens so the dark theme can lighten them; never a raw `font-weight`.
 - **Chinese is set as Chinese**: no letter spacing, no italic (emphasis is the medium weight), full-width punctuation, and a space between Chinese and Latin words or digits in the interface's own copy ([localization](./localization.md#chinese-copy)).
 - **Numbers** that change in place use `tabular-nums`.
@@ -153,16 +157,21 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 
 ## Color
 
-- **Neutral by default.** Surfaces, lines, text and chrome icons are the neutral tokens. Nothing is colored to decorate.
-- **Color means one of five things**, each with its tokens in [meaning](./design-system.md#meaning) and [data graphics](./design-system.md#data-graphics):
-  - state: waiting on the user, failed, succeeded, merged;
-  - a control that is on or chosen: `--checked`;
-  - cost: the [reasoning levels](./design-system.md#reasoning-levels) gradient;
-  - identity: the agent marks and the file-type icons, the only multicolor images, and each agent's series in a chart, in its mark's color;
-  - amount, in a chart only: one hue that deepens with the amount, the [data graphics](./design-system.md#data-graphics) steps of `--checked` (decided while the maintainer was away; to be reviewed).
-- **Quiet unless it needs you.** A sidebar row's running and unread marks are neutral, a muted `Spinner` and a muted dot. `--attention` is the loudest color in the app and only marks something waiting on the user.
+The maintainer's rules for the [palette](./design-system.md#palette), set on 2026-10-23:
+
+1. **No pure black or white text.** Body text is `--text-primary`, in both themes.
+2. **Color only where it means something**: waiting for your approval (`--attention`), a failure or a deletion (`--danger`), a diff's added and deleted lines (`--success`, `--danger`), links (`--link`) and usage warnings (`--warning`, `--danger`). Everything else is neutral: surfaces, lines, text, icons, controls that are on, things on offer, states in progress.
+3. **Success has no color.** A tool call that succeeded shows no green check, a finished turn is not green, and "Installed", "Signed in", "Copied", passing checks and open pull requests are neutral.
+4. **Model names and reasoning levels**, such as "Xhigh", are `--text-secondary`, never orange or a gradient ([model names](./design-system.md#model-names-and-reasoning-levels)).
+5. **Usage hints**, such as "7 days 57%", are `--text-tertiary`, `--warning` from 80% and `--danger` from 95% ([usage levels](./design-system.md#usage-levels)).
+6. **Brand colors stay on the agent marks.** An agent's color never colors text, a border or a state.
+7. **Icons** rest at `--icon-default` and turn `--text-primary` under the pointer; only a status icon can be `--attention` or `--danger`.
+8. **One color per region.** One area of the screen shows at most one meaning color, apart from a diff's paired added and deleted counts.
+
+- **Quiet unless it needs you.** A sidebar row's running and unread marks are neutral, a `--text-secondary` `Spinner` and a `--text-tertiary` dot. `--attention` is the loudest color in the app.
 - **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exception.
-- **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` in a component, and no Tailwind palette utilities (`bg-white`, `text-red-500`). A new color is a token in `globals.css` and a row in the design system first, in both themes, at AA contrast on every surface it sits on.
+- **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` outside `tokens.css`, and no Tailwind palette utilities (`bg-white`, `text-red-500`); `pnpm lint` fails on either ([color checks](./testing.md#color-checks)). A new color is a token in `tokens.css` and a row in the design system first, in both themes, at 4.5:1 for text on every surface it sits on, and a pair in the contrast check.
+- **Not settled yet**: the search match's yellow (`--mark`), the file-type icons' own colors, the terminal's ANSI colors, the usage charts' agent series and heatmap, and the syntax highlighting theme keep their earlier colors until the maintainer decides them.
 
 ## Shape
 
@@ -185,16 +194,16 @@ Radius follows the element's role; the values are the [radius scale](./design-sy
 ### Lines and elevation
 
 - **One line per surface** ([rule](./design-system.md#one-line-per-surface)): a container has at most one border, drawn as an inset ring of a hairline. Parts inside it are divided by a `Separator` or a surface step, never a second border.
-- **Which line**: `--border` encloses a container, `--border-soft` divides inside one, `--border-strong` marks an outline button and a hovered or focused container ([lines](./design-system.md#lines)).
+- **Which line**: `--border-default` encloses a container, `--border-subtle` divides inside one and edges the top bar and the sidebar, `--border-strong` marks an outline button and a hovered or focused container ([palette](./design-system.md#palette)).
 - **Separators are inset** to the text they divide, never edge to edge, except the hairline under a search field that spans its menu.
-- **Shadows** only on what floats: the composer, menus, popovers, dialogs and a hovered card, at the [elevation tiers](./design-system.md#elevation). Pages and lists are flat: Settings has no cards and no shadows ([problem 40](../milestones/m0-feedback.md#40-the-settings-pages-look-crude-and-their-colours-are-untuned)), and tool calls are rows, not cards ([problem 43](../milestones/m0-feedback.md#43-the-message-body-needs-a-typography-pass-to-a-given-spec)).
+- **Shadows** only on what floats: the composer, queued cards, menus, popovers, dialogs and a hovered card, at the [elevation tiers](./design-system.md#elevation). Pages and lists are flat: Settings has no cards and no shadows ([problem 40](../milestones/m0-feedback.md#40-the-settings-pages-look-crude-and-their-colours-are-untuned)), and tool calls are rows, not cards ([problem 43](../milestones/m0-feedback.md#43-the-message-body-needs-a-typography-pass-to-a-given-spec)).
 - **No decorative backgrounds.** Screens sit on their surface token; animated or patterned backgrounds were tried on the home screens and rejected.
 
 ## Layout
 
 ### Surfaces
 
-- The window is three columns on the [surface steps](./design-system.md#surfaces): the sidebar and the side panel on surface 0, the thread between them on surface 1, meeting at `--border-soft` hairlines. Cards sit on surface 2 and everything that floats on surface 3.
+- The window is three columns on the [surface steps](./design-system.md#palette): the sidebar and the side panel on surface 0 (`--bg-sidebar`), the thread between them on surface 1 (`--bg-app`), meeting at `--border-subtle` hairlines. Cards and everything that floats sit on `--bg-surface`.
 - A full-window screen (Settings, Welcome) keeps the same arrangement: a column on surface 0 beside its page on surface 1, or the page alone on surface 1.
 - A new surface step, a fourth column or a tinted region is a design-system change, not a screen's choice.
 
@@ -227,20 +236,20 @@ A row is the unit of every list: the sidebar, menus, Settings, the Files tree, t
 
 How each state looks. When each one appears, and what it says, is in the [UX guidelines](./ux-guidelines.md#feedback). Every interactive element is drawn in each state that applies to it, in both themes:
 
-| State               | Look                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Rest                | Chrome in `--muted-foreground`; content in `--foreground`                                                    |
-| Hover               | `--accent` fill (`--sidebar-accent` on surface 0), text and icon to `--foreground`, over `--duration-fast`   |
-| Focus               | shadcn's `focus-visible` ring                                                                                |
-| Pressed toggle      | The `quiet` button's `--pressed` fill and hairline ([toggle buttons](./design-system.md#toggle-buttons))     |
-| Open (menu trigger) | `--accent` fill while its menu is open                                                                       |
-| Selected, checked   | A filled row; a `Check` in a list; `--checked` on a switch                                                   |
-| Disabled            | The component's own disabled state                                                                           |
-| Busy                | A `Spinner` in place of the icon, the label kept                                                             |
-| Loading             | `Skeleton` blocks at the real sizes of what will replace them                                                |
-| Empty               | One centred `Empty` in the area it stands for                                                                |
-| Error               | `--destructive` on the icon and the words that name the error; a notice is the `Alert` `destructive` variant |
-| Waiting on the user | The [attention ring](./design-system.md#elevation) on the card that waits                                    |
+| State               | Look                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| Rest                | Chrome in `--text-tertiary`, icons `--icon-default`; content in `--text-primary`                         |
+| Hover               | `--bg-hover` fill, text and icon to `--text-primary`, over `--duration-fast`                             |
+| Focus               | The `focus-ring`: 2 px of `--focus`, 2 px outside; a field's border also turns `--border-strong`         |
+| Pressed toggle      | The `quiet` button's `--pressed` fill and hairline ([toggle buttons](./design-system.md#toggle-buttons)) |
+| Open (menu trigger) | `--accent` fill while its menu is open                                                                   |
+| Selected, checked   | A `--bg-selected` row; a `Check` in a list; a `--text-primary` track on a switch                         |
+| Disabled            | The component's own disabled state                                                                       |
+| Busy                | A `Spinner` in place of the icon, the label kept                                                         |
+| Loading             | `Skeleton` blocks at the real sizes of what will replace them                                            |
+| Empty               | One centred `Empty` in the area it stands for                                                            |
+| Error               | `--danger` on the icon and the words that name the error; a notice is the `Alert` `error` variant        |
+| Waiting on the user | The [attention ring](./design-system.md#elevation) on the card that waits for your approval              |
 
 ## Motion
 
@@ -259,7 +268,7 @@ Before a UI change goes up for review, with the [UX checklist](./ux-guidelines.m
 1. Every icon is in the [vocabulary](#vocabulary) or added to it, at 12, 14 or 16 px, with no stroke or fill of its own.
 2. Every text has a [role](#roles); no size, weight or opacity outside them.
 3. No raw color, Tailwind palette color, arbitrary radius or arbitrary size; every value is a token.
-4. Color appears only for state, a chosen control, cost or identity, and never alone.
+4. Color appears only by the [color rules](#color), at most one per region, and never alone.
 5. One border per surface; separators inset; no shadow on anything that does not float.
 6. Rows follow their [anatomy](#rows), and nothing shifts between states.
 7. Every state in the [table](#states) that applies is drawn.
