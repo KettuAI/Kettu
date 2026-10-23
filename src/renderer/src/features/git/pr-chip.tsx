@@ -117,7 +117,7 @@ export function PrChip({ url, className }: { url: string; className?: string }) 
       target="_blank"
       rel="noreferrer"
       className={cn(
-        'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-[6px] bg-subtle pr-2 pl-1.5 align-[-5px] text-control leading-none text-primary no-underline shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] transition-colors duration-(--duration-fast) hover:bg-hover hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
+        'inline-flex h-5 max-w-full items-center gap-1.5 rounded-[6px] bg-subtle pr-2 pl-1.5 align-middle text-control leading-none text-primary no-underline shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] transition-colors duration-(--duration-fast) hover:bg-hover hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
         className,
       )}
     >

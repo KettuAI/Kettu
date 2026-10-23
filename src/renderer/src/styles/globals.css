@@ -665,7 +665,7 @@
      tooltip. It opens the file in the Files pane. */
   & [data-file-ref] {
     display: inline-flex;
-    vertical-align: 1px;
+    vertical-align: middle;
     align-items: center;
     gap: 3px;
     margin-left: 4px;

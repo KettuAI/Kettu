@@ -581,7 +581,7 @@ A `Dialog` from **Create pull request…**, saying where it goes: "From fix/logi
 
 ### Pull requests
 
-- **Chips** in agent text and tool output: `--muted` fill, `--border-soft` ring, the state icon, `owner/repo#42` and the title truncated after 40 characters, all in the sans face so the chip reads as part of its sentence. Hover shows a `HoverCard` with the title, state, branches, checks, review state and when it was updated; a click opens the pull request in the browser. Without `gh`, the chip shows the neutral `GitPullRequest` icon and the number, and still opens the link.
+- **Chips** in agent text and tool output: `--muted` fill, `--border-soft` ring, the state icon, `owner/repo#42` and the title truncated after 40 characters, all in the sans face so the chip reads as part of its sentence; it is 20 px high and centred on the line like a [file chip](./design-system.md#prose). Hover shows a `HoverCard` with the title, state, branches, checks, review state and when it was updated; a click opens the pull request in the browser. Without `gh`, the chip shows the neutral `GitPullRequest` icon and the number, and still opens the link.
 - **Sidebar**: the badge on a session's row, described in [sidebar](#sidebar).
 - **Top bar**: the current branch's chip, above.
 
