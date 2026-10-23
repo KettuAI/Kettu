@@ -4,8 +4,6 @@
 
 How work travels from an idea or a report to a release. Since v0.0.1, every change goes through an issue and a pull request: the maintainer's own features, users' reports and the bugs coding agents find. Coding agents do most of the work, so this document is written for them as much as for people; [CONTRIBUTING.md](../CONTRIBUTING.md) is the short version for outside contributors.
 
-The design draws on how Ghostty, Zed, opencode, Codex, uv, Biome, Electron, Tauri and shadcn/ui run their repositories, as observed on 2026-10-22. It takes issue types over type labels and prefixed labels from Zed and Biome, kept to a few dozen; version milestones and parent issues from Ghostty; squash merges without required approvals from uv and opencode; one combined required check from uv and Codex; issues but no code from outside, from Codex; and release triggers that keep fixes from waiting, between Codex's frequent releases and Zed's weekly ones. It leaves out what only pays off at their volume: triage bots, stale bots, merge queues, vouch lists and CODEOWNERS.
-
 ## Principles
 
 - **One path for every change**: issue, branch, pull request, squash into `main`. Nothing is pushed to `main` directly, and a ruleset enforces it.
@@ -167,7 +165,7 @@ Say the core problem and stop. Many issues are one sentence and a screenshot; no
 
 One milestone per version, as in [release](#6-release). Its description names the design milestone and links its document. An open issue without a milestone is in the backlog.
 
-Discussions stay off for now, so issues are the one place to report. When outside traffic makes the issue list noisy, ideas and questions move to Discussions and the accepted ones are promoted to issues, as in Ghostty and Zed.
+Discussions stay off for now, so issues are the one place to report. When outside traffic makes the issue list noisy, ideas and questions move to Discussions and the accepted ones are promoted to issues.
 
 ## Branches and pull requests
 
@@ -214,7 +212,7 @@ A ruleset on `main`:
 
 ## Outside contributions
 
-OverBench takes issues from outside, not code: fixes and features are written by the project, as in Codex.
+OverBench takes issues from outside, not code: fixes and features are written by the project.
 
 - **Reports and requests** are welcome through the [forms](#forms), in any language.
 - **Pull requests** can be opened by collaborators only. The repository has been set that way since 2026-10-22 (`pull_request_creation_policy: collaborators_only`); anyone can still read and comment on them.
