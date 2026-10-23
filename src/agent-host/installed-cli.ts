@@ -185,9 +185,10 @@ export interface CliVersionsOptions {
 
 /**
  * `<program> --version`, asked again only when the file changes, as a CLI that updates itself does.
- * A timeout, a start that failed or a signal is asked once more at once and, failing again, not
- * kept, since a later try may well answer: the first run of a fresh binary can be slow while it is
- * scanned.
+ * A timeout, a start that failed or a signal is asked once more at once, since the first run of a
+ * fresh binary can be slow while it is scanned. Failing the same way twice, it is kept like any
+ * other answer, so a program that hangs costs one wait, not one per detection; failing another
+ * way, it is not kept. `clear()` (Reload environment) asks again either way.
  */
 export class CliVersions {
   private readonly answers = new Map<string, Promise<CliVersion>>()
@@ -204,20 +205,24 @@ export class CliVersions {
     const key = `${program}\0${info.size}\0${info.mtimeMs}`
     let answer = this.answers.get(key)
     if (!answer) {
-      const asked: Promise<CliVersion> = this.ask(program, env)
-        .then((first) => (first.repeats ? first : this.ask(program, env)))
-        .then(({ answer, repeats }) => {
-          if (!repeats && this.answers.get(key) === asked) this.answers.delete(key)
-          return answer
-        })
+      const asked: Promise<CliVersion> = this.ask(program, env).then(async (first) => {
+        if (!first.transient) return first.answer
+        const second = await this.ask(program, env)
+        const kept = !second.transient || second.transient === first.transient
+        if (!kept && this.answers.get(key) === asked) this.answers.delete(key)
+        return second.answer
+      })
       answer = asked
       this.answers.set(key, answer)
     }
     return answer
   }
 
-  /** The answer, and whether asking again would give it again. */
-  private async ask(program: string, env: Env): Promise<{ answer: CliVersion; repeats: boolean }> {
+  /** The answer, and how it failed when asking again might well answer otherwise. */
+  private async ask(
+    program: string,
+    env: Env,
+  ): Promise<{ answer: CliVersion; transient: 'timeout' | 'start' | 'signal' | null }> {
     const timeoutMs = this.options.timeoutMs ?? 10_000
     const name = path.basename(program).replace(/\.(?:exe|com)$/i, '')
     const result = await (this.options.run ?? runProgram)({
@@ -229,11 +234,17 @@ export class CliVersions {
       timeoutMs,
     })
     const failure = programFailure(name, result, timeoutMs)
-    const repeats = !result.timedOut && !result.aborted && !result.error && !result.signal
-    if (failure) return { answer: { error: failure }, repeats }
+    const transient = result.timedOut
+      ? 'timeout'
+      : result.error
+        ? 'start'
+        : result.signal || result.aborted
+          ? 'signal'
+          : null
+    if (failure) return { answer: { error: failure }, transient }
     const version = parseCliVersion(result.stdout)
     const answer = version ? { version } : { error: `${name} --version printed no version.` }
-    return { answer, repeats }
+    return { answer, transient: null }
   }
 }
 

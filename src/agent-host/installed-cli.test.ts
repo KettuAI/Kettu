@@ -182,6 +182,20 @@ describe('resolving the program the adapter runs', () => {
     })
   })
 
+  it('reads no more of a .cmd than a shim could be', async () => {
+    const limits: (number | undefined)[] = []
+    const shim = files({ [`${NPM_BIN}\\claude.cmd`]: NPM_EXE_SHIM })
+    const counted: CliFiles = {
+      ...shim,
+      readText: (file, limit) => {
+        limits.push(limit)
+        return shim.readText(file, limit)
+      },
+    }
+    await CLAUDE_CLI.resolve(`${NPM_BIN}\\claude.cmd`, 'win32', counted)
+    expect(limits).toEqual([64 * 1024])
+  })
+
   it('reads at most the start of a file when asked to', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-cli-files-'))
     const file = path.join(dir, 'big.cmd')
@@ -326,6 +340,25 @@ describe('CliVersions', () => {
     expect(await versions.probe('/bin/codex', {})).toEqual({ error: 'codex exited with code 1.' })
     expect(await versions.probe('/bin/codex', {})).toEqual({ error: 'codex exited with code 1.' })
     expect(asked).toBe(5)
+  })
+
+  it('keeps a program that fails the same way twice, until cleared', async () => {
+    let asked = 0
+    const versions = new CliVersions({
+      platform: 'darwin',
+      run: async () => {
+        asked++
+        return run('', null, { timedOut: true })
+      },
+      stat: async () => ({ size: 1, mtimeMs: 1 }),
+    })
+    const timedOut = { error: 'codex did not finish within 10 s.' }
+    expect(await versions.probe('/bin/codex', {})).toEqual(timedOut)
+    expect(await versions.probe('/bin/codex', {})).toEqual(timedOut)
+    expect(asked).toBe(2)
+    versions.clear()
+    expect(await versions.probe('/bin/codex', {})).toEqual(timedOut)
+    expect(asked).toBe(4)
   })
 
   it('answers through one slow first run', async () => {

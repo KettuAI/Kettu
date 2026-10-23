@@ -175,8 +175,10 @@ export interface AgentManagerDeps {
   fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
   /** Runs a binary agent's install route, and `npm prefix -g` after one. */
   runProgram?(options: ProgramOptions): Promise<ProgramRun>
-  /** Asks the user's own Claude Code or Codex its version. */
+  /** Asks the user's own Claude Code or Codex its version, in place of `cliVersions`. */
   probeCli?: CliProbe
+  /** Where the versions of the user's CLIs are asked and kept; one of its own by default. */
+  cliVersions?: CliVersions
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
   processes(processes: AgentProcess[]): void
@@ -326,7 +328,7 @@ export class AgentManager {
 
   constructor(private readonly deps: AgentManagerDeps) {
     this.timings = { ...AGENT_TIMINGS, ...deps.timings }
-    this.cliVersions = new CliVersions({ platform: deps.platform })
+    this.cliVersions = deps.cliVersions ?? new CliVersions({ platform: deps.platform })
     for (const def of deps.catalog) this.slots.set(def.id, new Slot(def))
   }
 

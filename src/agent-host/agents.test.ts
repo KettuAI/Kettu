@@ -30,7 +30,7 @@ import {
 } from './catalog'
 import { Diagnostics } from './diagnostics'
 import type { Env } from './find-command'
-import type { AdapterCli } from './installed-cli'
+import { CliVersions, type AdapterCli } from './installed-cli'
 import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
 import type { AgentsFile, AgentUpdatesFile } from './storage'
@@ -64,6 +64,7 @@ function manager(
       | 'rememberUpdates'
       | 'launcher'
       | 'probeCli'
+      | 'cliVersions'
     >
   > = {},
 ) {
@@ -103,7 +104,7 @@ function manager(
     adaptersDir: path.join(os.tmpdir(), 'overbench-no-adapters'),
     detect: detectAgent,
     // The tests never ask the machine's own claude or codex.
-    probeCli: async () => ({ error: 'not asked in tests' }),
+    ...(extra.cliVersions ? {} : { probeCli: async () => ({ error: 'not asked in tests' }) }),
     ...extra,
     timings,
     status: (status) => statuses.push(status),
@@ -580,6 +581,8 @@ function cliManager(
     /** The host is stopped while the start with the installed CLI fails. */
     stopOnCliFailure?: boolean
     startsAtInitialize?: boolean
+    /** Asks versions through the manager's own cache, with this one's stubbed runs. */
+    cliVersions?: CliVersions
   } = {},
 ) {
   const def: AgentDefinition = {
@@ -618,12 +621,14 @@ function cliManager(
     {
       catalog: [def],
       launcher,
+      ...(options.cliVersions ? { cliVersions: options.cliVersions } : {}),
       detect: (d, ctx) =>
         detectAgent(d, {
           ...ctx,
           node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
           installed: async () => adapters.toSorted((a, b) => compareInstalls(b, a)),
           ...cliFound(options.cli ?? '2.0.0'),
+          ...(options.cliVersions && ctx.probeCli ? { probeCli: ctx.probeCli } : {}),
         }),
       install: async (request) => {
         installs.push(request)
@@ -695,6 +700,36 @@ describe('the CLI the user installed', () => {
     await m.agents.ensureReady('fake-agent')
     expect(m.launches.at(-1)?.env.FAKE_CLI_PATH).toBeUndefined()
     await m.agents.stopAll()
+  })
+
+  it('asks a program that hangs once per environment, not at every detection', async () => {
+    let runs = 0
+    const cliVersions = new CliVersions({
+      platform: process.platform === 'win32' ? 'win32' : 'darwin',
+      run: async () => {
+        runs++
+        return {
+          code: null,
+          signal: null,
+          timedOut: true,
+          aborted: false,
+          output: new TextRing(64),
+          stdout: '',
+        }
+      },
+      stat: async () => ({ size: 1, mtimeMs: 1 }),
+    })
+    const m = cliManager({ installed: [installedAt('2.0.0')], cliVersions })
+    await m.agents.check()
+    expect(runs).toBe(2)
+    expect(m.status().cli).toMatchObject({
+      runs: 'bundled',
+      installed: { problem: { kind: 'failed' } },
+    })
+    await m.agents.check()
+    expect(runs).toBe(2)
+    await m.agents.reloadEnvironment()
+    expect(runs).toBe(4)
   })
 
   it('tries the copy once, and surfaces its own error when it fails too', async () => {
