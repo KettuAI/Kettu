@@ -2,9 +2,17 @@
 // SQLite file, so no query runs on the event loop that streams the sessions.
 
 import type { Worker } from 'node:worker_threads'
+import type { ArtifactState } from '@shared/artifacts'
+import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
 import type { LogFn } from '../storage'
 import type { StoredBlob, StoredThread, ThreadPage, ThreadWrite } from './model'
-import type { ThreadDbStatus, ThreadErrorCode, ThreadReply, ThreadRequest } from './protocol'
+import type {
+  ThreadDbStatus,
+  ThreadErrorCode,
+  ThreadReply,
+  ThreadRequest,
+  ThreadWorkerData,
+} from './protocol'
 
 /** What the store needs of a worker, so tests can run the service in their own thread. */
 export interface ThreadWorker {
@@ -15,7 +23,7 @@ export interface ThreadWorker {
   terminate(): Promise<unknown>
 }
 
-export type ThreadWorkerFactory = (file: string) => ThreadWorker
+export type ThreadWorkerFactory = (data: ThreadWorkerData) => ThreadWorker
 
 export function nodeThreadWorker(worker: Worker): ThreadWorker {
   return {
@@ -38,6 +46,7 @@ export class ThreadStoreError extends Error {
   constructor(
     message: string,
     readonly code: ThreadErrorCode | null,
+    readonly data?: ArtifactState,
   ) {
     super(message)
     this.name = 'ThreadStoreError'
@@ -46,6 +55,8 @@ export class ThreadStoreError extends Error {
 
 export interface ThreadStoreOptions {
   file: string
+  /** Where artifact versions keep their HTML; without it no artifact can be written. */
+  contentDir?: string
   createWorker: ThreadWorkerFactory
   log: LogFn
   /** How long closing waits for the worker to fold the WAL before stopping it. */
@@ -73,7 +84,10 @@ export class ThreadStore {
     this.ready = new Promise((resolve) => {
       settleReady = resolve
     })
-    this.worker = options.createWorker(options.file)
+    this.worker = options.createWorker({
+      file: options.file,
+      contentDir: options.contentDir ?? null,
+    })
     this.worker.onMessage((reply) => {
       switch (reply.type) {
         case 'ready':
@@ -86,7 +100,7 @@ export class ThreadStore {
           this.settle(reply.id)?.resolve(reply.value)
           break
         case 'error':
-          this.settle(reply.id)?.reject(new ThreadStoreError(reply.message, reply.code))
+          this.settle(reply.id)?.reject(new ThreadStoreError(reply.message, reply.code, reply.data))
           break
       }
     })
@@ -154,6 +168,15 @@ export class ThreadStore {
   /** The bytes a session keeps under this hash; null when it keeps none. */
   blob(sessionId: string, hash: string): Promise<StoredBlob | null> {
     return this.request({ op: 'blob', sessionId, hash })
+  }
+
+  /** A call on the artifact records, which share the database. */
+  artifact<K extends ArtifactCallName>(
+    name: K,
+    params: ArtifactCalls[K]['params'],
+  ): Promise<ArtifactCalls[K]['result']> {
+    // TypeScript cannot pair a generic name with its params inside the union.
+    return this.request({ op: 'artifact', call: { name, params } as ArtifactCall })
   }
 
   /** Settles once every request made so far is answered, whatever the answer. */

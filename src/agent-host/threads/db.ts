@@ -5,7 +5,15 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
+import type { ArtifactState } from '@shared/artifacts'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
+import { contentHash, putContent, removeContent, sweepContent } from '../artifacts/content'
+import type {
+  ArtifactCalls,
+  ArtifactListing,
+  ArtifactRecord,
+  VersionRecord,
+} from '../artifacts/model'
 import {
   attachmentBlobs,
   EMPTY_SESSION,
@@ -25,11 +33,11 @@ import {
 } from './model'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
-const SCHEMA = `
+const THREADS = `
   CREATE TABLE threads (
     session_id     TEXT PRIMARY KEY,
     agent_id       TEXT NOT NULL,
@@ -58,6 +66,36 @@ const SCHEMA = `
   ) STRICT, WITHOUT ROWID;
 `
 
+// Artifacts do not reference threads, so deleting a session keeps its artifacts. `project` is the
+// project's folder or the session's scratch folder; `hash` names the version's content file.
+const ARTIFACTS = `
+  CREATE TABLE artifacts (
+    id         TEXT PRIMARY KEY,
+    project    TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    head       INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER
+  ) STRICT;
+  CREATE INDEX artifacts_by_project ON artifacts (project, updated_at);
+  CREATE TABLE artifact_versions (
+    artifact_id TEXT NOT NULL REFERENCES artifacts (id) ON DELETE CASCADE,
+    n           INTEGER NOT NULL,
+    hash        TEXT NOT NULL,
+    size        INTEGER NOT NULL,
+    pages       INTEGER NOT NULL,
+    author      TEXT,
+    note        TEXT,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (artifact_id, n)
+  ) STRICT, WITHOUT ROWID;
+`
+
+/** What brings a database of the version before each key up to it; a new one runs them all. */
+const MIGRATIONS: Record<number, string> = { 2: ARTIFACTS }
+
 // SQLite's primary result codes, the low byte of node:sqlite's `errcode`.
 const SQLITE_CORRUPT = 11
 const SQLITE_CONSTRAINT = 19
@@ -71,6 +109,7 @@ export class ThreadDbError extends Error {
   constructor(
     message: string,
     readonly code: ThreadErrorCode,
+    readonly data?: ArtifactState,
   ) {
     super(message)
     this.name = 'ThreadDbError'
@@ -88,6 +127,60 @@ const isCorrupt = (error: unknown): boolean => {
 }
 
 type Row = Record<string, SQLOutputValue>
+
+// An artifact with its latest version; it shows under the session that made that version, or
+// under its creator when the user made it.
+const LISTING = `
+  SELECT a.id, a.title, a.project, COALESCE(v.author, a.session_id) AS shown_under, a.head,
+    v.pages, v.size, a.updated_at, a.deleted_at
+  FROM artifacts a JOIN artifact_versions v ON v.artifact_id = a.id AND v.n = a.head`
+
+const optionalText = (value: SQLOutputValue | undefined): string | null =>
+  value === null || value === undefined ? null : String(value)
+
+function artifactRecord(row: Row): ArtifactRecord {
+  return {
+    id: String(row.id),
+    project: String(row.project),
+    title: String(row.title),
+    head: Number(row.head),
+    sessionId: String(row.session_id),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+    deletedAt: row.deleted_at === null ? null : Number(row.deleted_at),
+  }
+}
+
+function versionRecord(row: Row): VersionRecord {
+  return {
+    version: Number(row.n),
+    hash: String(row.hash),
+    size: Number(row.size),
+    pages: Number(row.pages),
+    author: optionalText(row.author),
+    note: optionalText(row.note),
+    createdAt: Number(row.created_at),
+  }
+}
+
+function listing(row: Row): ArtifactListing {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    project: String(row.project),
+    sessionId: String(row.shown_under),
+    version: Number(row.head),
+    pages: Number(row.pages),
+    size: Number(row.size),
+    updatedAt: Number(row.updated_at),
+    deletedAt: row.deleted_at === null ? null : Number(row.deleted_at),
+  }
+}
+
+const stateOf = (artifact: ArtifactRecord): ArtifactState => ({
+  version: artifact.head,
+  deleted: artifact.deletedAt !== null,
+})
 
 function prepareAll(db: DatabaseSync) {
   const sql = (text: string): StatementSync => db.prepare(text)
@@ -129,6 +222,36 @@ function prepareAll(db: DatabaseSync) {
       'INSERT OR IGNORE INTO blobs (session_id, hash, mime, data) VALUES (?, ?, ?, ?)',
     ),
     blob: sql('SELECT mime, data FROM blobs WHERE session_id = ? AND hash = ?'),
+    artifact: sql(
+      'SELECT id, project, title, head, session_id, created_at, updated_at, deleted_at FROM artifacts WHERE id = ?',
+    ),
+    version: sql(
+      'SELECT n, hash, size, pages, author, note, created_at FROM artifact_versions WHERE artifact_id = ? AND n = ?',
+    ),
+    versions: sql(
+      'SELECT n, hash, size, pages, author, note, created_at FROM artifact_versions WHERE artifact_id = ? ORDER BY n DESC',
+    ),
+    listed: sql(`${LISTING} WHERE a.deleted_at IS NULL ORDER BY a.updated_at DESC, a.id DESC`),
+    listedIn: sql(
+      `${LISTING} WHERE a.project = ? AND a.deleted_at IS NULL ORDER BY a.updated_at DESC, a.id DESC`,
+    ),
+    listedDeleted: sql(
+      `${LISTING} WHERE a.deleted_at IS NOT NULL ORDER BY a.deleted_at DESC, a.id DESC`,
+    ),
+    insertArtifact: sql(`
+      INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at)
+      VALUES (?, ?, ?, 1, ?, ?, ?)`),
+    insertVersion: sql(`
+      INSERT INTO artifact_versions (artifact_id, n, hash, size, pages, author, note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+    setHead: sql('UPDATE artifacts SET head = ?, updated_at = ? WHERE id = ?'),
+    setTitle: sql('UPDATE artifacts SET title = ? WHERE id = ?'),
+    setDeleted: sql('UPDATE artifacts SET deleted_at = ? WHERE id = ?'),
+    deleteArtifact: sql('DELETE FROM artifacts WHERE id = ?'),
+    expire: sql('DELETE FROM artifacts WHERE deleted_at IS NOT NULL AND deleted_at < ?'),
+    hashesOf: sql('SELECT DISTINCT hash FROM artifact_versions WHERE artifact_id = ?'),
+    named: sql('SELECT 1 AS named FROM artifact_versions WHERE hash = ? LIMIT 1'),
+    allHashes: sql('SELECT DISTINCT hash FROM artifact_versions'),
   }
 }
 
@@ -143,11 +266,20 @@ export class ThreadDb {
     private readonly file: string,
     private readonly log: ThreadDbLog,
     private readonly now: () => number,
+    private readonly contentDir: string | null,
   ) {}
 
-  /** Opens the file, creating it, or moving a damaged one aside and starting empty. */
-  static open(file: string, log: ThreadDbLog, now: () => number = Date.now): ThreadDb {
-    const store = new ThreadDb(file, log, now)
+  /**
+   * Opens the file, creating it, or moving a damaged one aside and starting empty. Artifacts keep
+   * their HTML in `contentDir`; without one, no artifact can be written.
+   */
+  static open(
+    file: string,
+    log: ThreadDbLog,
+    now: () => number = Date.now,
+    contentDir: string | null = null,
+  ): ThreadDb {
+    const store = new ThreadDb(file, log, now, contentDir)
     mkdirSync(path.dirname(file), { recursive: true })
     try {
       store.connect()
@@ -167,7 +299,7 @@ export class ThreadDb {
         this.status = 'newer'
         this.log(
           'warn',
-          `${path.basename(this.file)} has schema version ${version}, newer than this app understands (${SCHEMA_VERSION}); threads are neither read nor written this run`,
+          `${path.basename(this.file)} has schema version ${version}, newer than this app understands (${SCHEMA_VERSION}); threads and artifacts are neither read nor written this run`,
         )
         return
       }
@@ -175,8 +307,14 @@ export class ThreadDb {
         // auto_vacuum takes effect only before the first table exists.
         db.exec('PRAGMA auto_vacuum = INCREMENTAL')
         db.exec('PRAGMA journal_mode = WAL')
-        db.exec(`BEGIN; ${SCHEMA} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`)
+        const schema = [THREADS, ...Object.values(MIGRATIONS)].join('')
+        db.exec(`BEGIN; ${schema} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`)
         if (this.status === 'ok') this.status = 'created'
+      } else if (version < SCHEMA_VERSION) {
+        let steps = ''
+        for (let next = version + 1; next <= SCHEMA_VERSION; next++) steps += MIGRATIONS[next]
+        db.exec(`BEGIN; ${steps} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`)
+        this.log('info', `Migrated ${path.basename(this.file)} from schema version ${version}`)
       }
       db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;')
       this.sql = prepareAll(db)
@@ -211,10 +349,28 @@ export class ThreadDb {
     this.connect()
   }
 
-  /** Runs `run`, turning damage into a fresh database and SQLite's errors into ours. */
+  /**
+   * Runs `run`, turning damage into a fresh database and SQLite's errors into ours; `fallback` is
+   * the answer while the database is not open.
+   */
   private guard<T>(run: (sql: Statements, db: DatabaseSync) => T, fallback: T): T {
     const { sql, db } = this
     if (!sql || !db) return fallback
+    return this.attempt(sql, db, run)
+  }
+
+  /** As `guard`, for what has no answer without the database: it fails with `unavailable`. */
+  private must<T>(run: (sql: Statements, db: DatabaseSync) => T): T {
+    const { sql, db } = this
+    if (!sql || !db) throw new ThreadDbError('The thread database is not open', 'unavailable')
+    return this.attempt(sql, db, run)
+  }
+
+  private attempt<T>(
+    sql: Statements,
+    db: DatabaseSync,
+    run: (sql: Statements, db: DatabaseSync) => T,
+  ): T {
     try {
       return run(sql, db)
     } catch (error) {
@@ -233,11 +389,12 @@ export class ThreadDb {
     }
   }
 
-  private transaction(db: DatabaseSync, run: () => void): void {
+  private transaction<T>(db: DatabaseSync, run: () => T): T {
     db.exec('BEGIN')
     try {
-      run()
+      const result = run()
       db.exec('COMMIT')
+      return result
     } catch (error) {
       if (db.isTransaction) db.exec('ROLLBACK')
       throw error
@@ -467,6 +624,206 @@ export class ThreadDb {
       })
       db.exec('PRAGMA incremental_vacuum')
     }, undefined)
+  }
+
+  // Artifacts.
+
+  /**
+   * The artifact within `project`, or anywhere for null: another project's artifact does not
+   * exist for a session. `live` refuses one in Recently deleted.
+   */
+  private artifactIn(
+    sql: Statements,
+    id: string,
+    project: string | null,
+    live: boolean,
+  ): ArtifactRecord {
+    const row = sql.artifact.get(id)
+    const artifact = row ? artifactRecord(row) : null
+    if (!artifact || (project !== null && artifact.project !== project)) {
+      throw new ThreadDbError(`No artifact ${id}`, 'not_found')
+    }
+    if (live && artifact.deletedAt !== null) {
+      throw new ThreadDbError(`${id} is in Recently deleted`, 'deleted', stateOf(artifact))
+    }
+    return artifact
+  }
+
+  /** Refuses a new version unless it starts from the latest. */
+  private fromHead(artifact: ArtifactRecord, baseVersion: number): void {
+    if (baseVersion === artifact.head) return
+    throw new ThreadDbError(
+      `${artifact.id} is at version ${artifact.head}, not ${baseVersion}`,
+      'conflict',
+      stateOf(artifact),
+    )
+  }
+
+  /** Writes the HTML's file, unless it is there, and returns what its version row records. */
+  private putHtml(html: string): { hash: string; size: number } {
+    if (!this.contentDir) {
+      throw new ThreadDbError('There is no folder for artifact content', 'unavailable')
+    }
+    const hash = contentHash(html)
+    putContent(this.contentDir, hash, html)
+    return { hash, size: Buffer.byteLength(html, 'utf8') }
+  }
+
+  listArtifacts(params: ArtifactCalls['list']['params']): ArtifactListing[] {
+    return this.must((sql) => {
+      const rows =
+        params.project !== null
+          ? sql.listedIn.all(params.project)
+          : params.deleted
+            ? sql.listedDeleted.all()
+            : sql.listed.all()
+      return rows.map(listing)
+    })
+  }
+
+  getArtifact({
+    id,
+    version,
+    project,
+  }: ArtifactCalls['get']['params']): ArtifactCalls['get']['result'] {
+    return this.must((sql) => {
+      const artifact = this.artifactIn(sql, id, project, project !== null)
+      const n = version ?? artifact.head
+      const row = sql.version.get(id, n)
+      if (!row) throw new ThreadDbError(`${id} has no version ${n}`, 'not_found')
+      return { artifact, version: versionRecord(row) }
+    })
+  }
+
+  artifactVersions({ id, project }: ArtifactCalls['versions']['params']): VersionRecord[] {
+    return this.must((sql) => {
+      this.artifactIn(sql, id, project, project !== null)
+      return sql.versions.all(id).map(versionRecord)
+    })
+  }
+
+  /** Makes an artifact with its first version, written by the session that creates it. */
+  createArtifact(params: ArtifactCalls['create']['params']): { version: number } {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        const { id, project, sessionId, title, pages, note, at } = params
+        const { hash, size } = this.putHtml(params.html)
+        sql.insertArtifact.run(id, project, title, sessionId, at, at)
+        sql.insertVersion.run(id, 1, hash, size, pages, sessionId, note, at)
+        return { version: 1 }
+      }),
+    )
+  }
+
+  writeArtifact(params: ArtifactCalls['write']['params']): { version: number } {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        const artifact = this.artifactIn(sql, params.id, params.project, true)
+        this.fromHead(artifact, params.baseVersion)
+        const { hash, size } = this.putHtml(params.html)
+        const n = artifact.head + 1
+        const { pages, author, note, at } = params
+        sql.insertVersion.run(artifact.id, n, hash, size, pages, author, note, at)
+        sql.setHead.run(n, at, artifact.id)
+        return { version: n }
+      }),
+    )
+  }
+
+  /** Writes an earlier version again as the newest; the two share one file. */
+  restoreArtifact(params: ArtifactCalls['restore']['params']): { version: number } {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        const artifact = this.artifactIn(sql, params.id, params.project, true)
+        this.fromHead(artifact, params.baseVersion)
+        const row = sql.version.get(artifact.id, params.version)
+        if (!row) {
+          throw new ThreadDbError(`${artifact.id} has no version ${params.version}`, 'not_found')
+        }
+        const restored = versionRecord(row)
+        const n = artifact.head + 1
+        const { author, note, at } = params
+        sql.insertVersion.run(
+          artifact.id,
+          n,
+          restored.hash,
+          restored.size,
+          restored.pages,
+          author,
+          note,
+          at,
+        )
+        sql.setHead.run(n, at, artifact.id)
+        return { version: n }
+      }),
+    )
+  }
+
+  /** The title is not versioned: renaming changes the artifact, not a version or its time. */
+  renameArtifact({ id, project, title }: ArtifactCalls['rename']['params']): void {
+    this.must((sql) => {
+      this.artifactIn(sql, id, project, project !== null)
+      sql.setTitle.run(title, id)
+    })
+  }
+
+  deleteArtifact({
+    id,
+    project,
+    at,
+  }: ArtifactCalls['delete']['params']): ArtifactCalls['delete']['result'] {
+    return this.must((sql) => {
+      const artifact = this.artifactIn(sql, id, project, false)
+      if (artifact.deletedAt !== null) return { deletedAt: artifact.deletedAt, changed: false }
+      sql.setDeleted.run(at, id)
+      return { deletedAt: at, changed: true }
+    })
+  }
+
+  undeleteArtifact(id: string): { changed: boolean } {
+    return this.must((sql) => {
+      const artifact = this.artifactIn(sql, id, null, false)
+      if (artifact.deletedAt === null) return { changed: false }
+      sql.setDeleted.run(null, id)
+      return { changed: true }
+    })
+  }
+
+  /** Removes an artifact in Recently deleted with every version, and the files only it named. */
+  eraseArtifact(id: string): void {
+    this.must((sql, db) => {
+      const artifact = this.artifactIn(sql, id, null, false)
+      if (artifact.deletedAt === null) {
+        throw new ThreadDbError(`${id} is not in Recently deleted`, 'conflict', stateOf(artifact))
+      }
+      const hashes = sql.hashesOf.all(id).map((row) => String(row.hash))
+      sql.deleteArtifact.run(id)
+      if (this.contentDir) {
+        removeContent(
+          this.contentDir,
+          hashes.filter((hash) => !sql.named.get(hash)),
+        )
+      }
+      db.exec('PRAGMA incremental_vacuum')
+    })
+  }
+
+  /**
+   * Removes the artifacts deleted before `before`, their versions by cascade, and then
+   * every content file no version names, a crash's leftovers included. Does nothing while the
+   * database is not open, since it cannot tell which files are named.
+   */
+  purgeArtifacts(before: number): { artifacts: number; files: number } {
+    return this.guard(
+      (sql, db) => {
+        const artifacts = Number(sql.expire.run(before).changes)
+        const named = new Set(sql.allHashes.all().map((row) => String(row.hash)))
+        const files = this.contentDir ? sweepContent(this.contentDir, named) : 0
+        if (artifacts > 0) db.exec('PRAGMA incremental_vacuum')
+        return { artifacts, files }
+      },
+      { artifacts: 0, files: 0 },
+    )
   }
 
   /** Folds the WAL into the file and closes it; a later call does nothing. */

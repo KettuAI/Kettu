@@ -10,6 +10,7 @@ import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
+import { ArtifactStore, versionSummary } from './artifacts/store'
 import {
   AgentManager,
   processLauncher,
@@ -107,6 +108,8 @@ export class AgentHost {
   readonly threads: ThreadStore | null
   /** OverBench's record and the agents' logs, in a worker of its own. */
   readonly usage: UsageManager
+  /** Every project's artifacts, kept in the thread database and the data folder. */
+  readonly artifacts: ArtifactStore
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
@@ -155,13 +158,25 @@ export class AgentHost {
       log,
     })
     this.attachments = new Attachments({ userDataPath: options.userDataPath, log })
+    const contentDir = path.join(options.userDataPath, 'artifacts', 'content')
     this.threads = options.threadWorker
       ? new ThreadStore({
           file: path.join(options.userDataPath, 'state', 'threads.db'),
+          contentDir,
           createWorker: options.threadWorker,
           log,
         })
       : null
+    this.artifacts = new ArtifactStore({
+      threads: this.threads,
+      contentDir,
+      log,
+      changed: () => this.hub.broadcast({ type: 'artifacts.changed' }),
+      version: (portIds, id, version) =>
+        this.hub.send(portIds, { type: 'artifacts.version', id, version }),
+      activity: (portIds, activity) =>
+        this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
+    })
     const usageStore = options.usageWorker
       ? new UsageStore({
           file: path.join(options.userDataPath, 'state', 'usage.db'),
@@ -288,6 +303,7 @@ export class AgentHost {
     host.agents.restoreUpdates(updates)
     host.sendFolders()
     host.usage.start()
+    host.artifacts.start()
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
     void host.agents.detectAll().then(() => host.agents.scheduleUpdateChecks())
@@ -340,6 +356,7 @@ export class AgentHost {
 
   private portClosed(portId: string): void {
     this.sessions.portClosed(portId)
+    this.artifacts.portClosed(portId)
     for (const [key, retained] of this.gitRetains) {
       if (retained.ports.delete(portId) && retained.ports.size === 0) this.gitRetains.delete(key)
     }
@@ -372,6 +389,7 @@ export class AgentHost {
     this.stopping ??= (async () => {
       this.sessions.shutdown()
       this.usage.stop()
+      this.artifacts.stop()
       this.execRunner.killAll()
       for (const unsubscribe of this.gitUnsubscribe) unsubscribe()
       await Promise.all([
@@ -472,7 +490,7 @@ export class AgentHost {
   }
 
   private handlers(): Handlers {
-    const { agents, sessions, projects } = this
+    const { agents, sessions, projects, artifacts } = this
     return {
       'agents.list': () => agents.list(),
       'agents.check': ({ agentId }) => agents.check(agentId),
@@ -607,6 +625,22 @@ export class AgentHost {
       'usage.sync': () => this.usage.sync(),
       'usage.reimport': ({ agentId }) => this.usage.reimport(agentId),
       'usage.clearRecord': () => this.usage.clearRecord(),
+      'artifacts.list': ({ deleted }) => artifacts.list({ deleted: deleted ?? false }),
+      'artifacts.read': async ({ id, version }) => {
+        const read = await artifacts.read(id, version === undefined ? {} : { version })
+        return { title: read.artifact.title, version: read.version.version, html: read.html }
+      },
+      'artifacts.versions': async ({ id }) => (await artifacts.versions(id)).map(versionSummary),
+      'artifacts.rename': ({ id, title }) => artifacts.rename(id, title),
+      'artifacts.delete': async ({ id, permanently }) => {
+        if (permanently) await artifacts.erase(id)
+        else await artifacts.delete(id)
+      },
+      'artifacts.undelete': ({ id }) => artifacts.undelete(id),
+      'artifacts.restoreVersion': ({ id, version, baseVersion }) =>
+        artifacts.restore({ id, version, baseVersion, author: null }),
+      'artifacts.watch': ({ id }, { portId }) => artifacts.watch(id, portId),
+      'artifacts.unwatch': ({ id }, { portId }) => artifacts.unwatch(id, portId),
     }
   }
 }
