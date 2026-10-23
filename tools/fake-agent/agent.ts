@@ -295,8 +295,8 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
 
   /**
    * Where a fork's history ends: after the turn of the message a fork point names, in
-   * `_meta.jetbrains.air.fork` as both official adapters read it, else at the end. Its fingerprint
-   * and occurrence, when given, must name the same message.
+   * `_meta.jetbrains.air.fork` as both official adapters read it, else at the end. Like them, it
+   * looks the id up first, and only for an unknown id takes the nth message with the fingerprint.
    */
   const forkEnd = (
     source: FakeSession,
@@ -304,37 +304,28 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   ): number => {
     const point = (meta?.jetbrains as { air?: { fork?: ForkPoint } } | undefined)?.air?.fork
     if (point?.version !== 1) return source.history.length
-    const texts = new Map<string, string>()
-    let at = -1
+    const messages = new Map<string, { text: string; at: number }>()
     source.history.forEach(({ sessionId, update }, i) => {
       if (sessionId !== source.id || update.sessionUpdate !== 'agent_message_chunk') return
       if (!update.messageId) return
       const text = update.content.type === 'text' ? update.content.text : ''
-      texts.set(update.messageId, (texts.get(update.messageId) ?? '') + text)
-      if (update.messageId === point.messageId) at = i
+      const known = messages.get(update.messageId)
+      messages.set(update.messageId, { text: (known?.text ?? '') + text, at: i })
     })
-    const text = texts.get(point.messageId)
-    if (at < 0 || text === undefined) {
+    const fingerprint = (text: string): string =>
+      `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`
+    const found =
+      messages.get(point.messageId) ??
+      [...messages.values()].filter((m) => fingerprint(m.text) === point.messageFingerprint)[
+        (point.messageOccurrence ?? 1) - 1
+      ]
+    if (!found) {
       throw RequestError.invalidParams(
         { messageId: point.messageId },
         `Fork point message ${point.messageId} was not found in session ${source.id}`,
       )
     }
-    const ids = [...texts.keys()]
-    const occurrence = ids
-      .slice(0, ids.indexOf(point.messageId) + 1)
-      .filter((id) => texts.get(id) === text).length
-    const fingerprint = `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`
-    if (
-      (point.messageFingerprint !== undefined && point.messageFingerprint !== fingerprint) ||
-      (point.messageOccurrence !== undefined && point.messageOccurrence !== occurrence)
-    ) {
-      throw RequestError.invalidParams(
-        { messageId: point.messageId },
-        `The fork point's fingerprint or occurrence does not match message ${point.messageId}`,
-      )
-    }
-    return source.turnStarts.find((start) => start > at) ?? source.history.length
+    return source.turnStarts.find((start) => start > found.at) ?? source.history.length
   }
 
   // The turn's own counts, as every adapter reports them; cache reads grow with the context.
@@ -426,7 +417,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           _meta: { authStatus: {} },
         },
         authMethods,
-        agentInfo: { name: 'fake-agent', title: 'Fake agent', version: FAKE_AGENT_VERSION },
+        agentInfo: {
+          name: env.FAKE_AGENT_NAME ?? 'fake-agent',
+          title: 'Fake agent',
+          version: FAKE_AGENT_VERSION,
+        },
         // Like claude-agent-acp: `_session/steering`, advertised beside the capabilities.
         _meta: { steering: { supported: true } },
       }

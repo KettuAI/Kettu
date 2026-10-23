@@ -3,8 +3,9 @@
 // The host uses the SDK's `unstable` entrypoint: its client validates every
 // `session/update` against the schema of the entrypoint before any handler runs, and the
 // stable schema has no `subagent_update` or `session_message`, which sub-sessions need.
-// Only the two unstable features the architecture allows are used (subagents and the
-// prompt response's `usage`); nothing else unstable is advertised or called.
+// Only the unstable features the architecture allows are used (subagents, the prompt
+// response's `usage`, and `session/fork` with its fork point in `_meta`); nothing else
+// unstable is advertised or called.
 
 import { Readable, Writable } from 'node:stream'
 import {

@@ -2055,6 +2055,12 @@ export class SessionManager {
         t('session.cannotForkAt', { agent: this.deps.agents.name(source.record.agentId) }),
       )
     }
+    // A closed session takes prompts while it attaches; a turn that started since then wins.
+    if (source.thread.session.status !== 'ready') throw busyError(source.thread.session.status)
+    // Subagent cards point at the source's sub-sessions, which the fork does not have.
+    const entries = (cut?.entries ?? threadEntries(source.thread)).filter(
+      (entry) => entry.kind !== 'subagent',
+    )
     let setup
     try {
       setup = await runtime.connection.forkSession(
@@ -2080,10 +2086,6 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'ready')
     live.unread = false
     live.used = true
-    // Subagent cards point at the source's sub-sessions, which the fork does not have.
-    const entries = (cut?.entries ?? threadEntries(source.thread)).filter(
-      (entry) => entry.kind !== 'subagent',
-    )
     for (const entry of entries) live.counter = Math.max(live.counter, idNumber(entry.id))
     this.emit(
       live,
@@ -2844,8 +2846,8 @@ function idNumber(id: string): number {
  * A fork from a reply's agent message: the thread up to the end of its turn, and the fork point
  * that tells the agent where. Null in the latest turn, where the fork takes the whole session.
  */
-function forkCut(
-  thread: ThreadState,
+export function forkCut(
+  thread: Pick<ThreadState, 'order' | 'byId'>,
   entryId: string,
 ): { entries: ThreadEntry[]; point: ForkPoint } | null {
   const entry = thread.byId[entryId]
@@ -2856,6 +2858,10 @@ function forkCut(
     const next = thread.byId[thread.order[end]!]
     if (next?.kind === 'user' && !next.steered) break
     end++
+  }
+  // Only the message that ends its reply, since Claude Code's adapter forks at the message itself.
+  if (thread.order.slice(at + 1, end).some((id) => thread.byId[id]?.kind === 'agent')) {
+    throw new HostError('invalid_params', t('session.noForkPoint'))
   }
   if (end === thread.order.length) return null
   const messageId = entryMessageId(entryId)
