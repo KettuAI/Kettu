@@ -72,6 +72,13 @@ export function putContent(dir: string, hash: string, html: string): void {
   }
 }
 
+/** Moves the whole folder to `target`, unless there is none; false then. */
+export function moveContent(dir: string, target: string): boolean {
+  if (!existsSync(dir)) return false
+  renameWithRetry(dir, target)
+  return true
+}
+
 function removeIfEmpty(folder: string): void {
   try {
     rmdirSync(folder)

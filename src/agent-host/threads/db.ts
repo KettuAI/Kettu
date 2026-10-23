@@ -7,7 +7,13 @@ import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import type { ArtifactState } from '@shared/artifacts'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
-import { contentHash, putContent, removeContent, sweepContent } from '../artifacts/content'
+import {
+  contentHash,
+  moveContent,
+  putContent,
+  removeContent,
+  sweepContent,
+} from '../artifacts/content'
 import type {
   ArtifactCalls,
   ArtifactListing,
@@ -261,6 +267,8 @@ export class ThreadDb {
   private db: DatabaseSync | null = null
   private sql: Statements | null = null
   status: ThreadDbStatus = 'ok'
+  /** False once the content folder could not follow a damaged database aside. */
+  private sweeps = true
 
   private constructor(
     private readonly file: string,
@@ -343,8 +351,23 @@ export class ThreadDb {
     }
     this.log(
       'error',
-      `${path.basename(this.file)} is damaged (${(error as Error).message}); it was moved to ${path.basename(target)} and threads start empty`,
+      `${path.basename(this.file)} is damaged (${(error as Error).message}); it was moved to ${path.basename(target)} and threads and artifacts start empty`,
     )
+    // The HTML goes with the records that name it, or the next purge would sweep every file.
+    if (this.contentDir) {
+      const content = `${this.contentDir}.corrupt-${stamp}`
+      try {
+        if (moveContent(this.contentDir, content)) {
+          this.log('error', `The artifacts' content was moved to ${path.basename(content)}`)
+        }
+      } catch (moveError) {
+        this.sweeps = false
+        this.log(
+          'error',
+          `The artifacts' content could not be moved aside (${(moveError as Error).message}); the purge leaves it alone this run`,
+        )
+      }
+    }
     this.status = 'recovered'
     this.connect()
   }
@@ -818,7 +841,7 @@ export class ThreadDb {
       (sql, db) => {
         const artifacts = Number(sql.expire.run(before).changes)
         const named = new Set(sql.allHashes.all().map((row) => String(row.hash)))
-        const files = this.contentDir ? sweepContent(this.contentDir, named) : 0
+        const files = this.contentDir && this.sweeps ? sweepContent(this.contentDir, named) : 0
         if (artifacts > 0) db.exec('PRAGMA incremental_vacuum')
         return { artifacts, files }
       },

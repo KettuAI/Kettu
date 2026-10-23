@@ -362,6 +362,58 @@ describe('artifacts in the thread database', () => {
     db.close()
   })
 
+  it('moves the content aside with a damaged database, so the purge keeps the pair', () => {
+    const { db, file, content } = setup()
+    create(db, { html: '<p>kept</p>' })
+    db.close()
+    writeFileSync(file, 'this is not a database, only text long enough to look like one'.repeat(80))
+
+    const recovered = ThreadDb.open(
+      file,
+      (level, message) => logs.push({ level, message }),
+      () => 0,
+      content,
+    )
+    expect(recovered.status).toBe('recovered')
+    expect(recovered.purgeArtifacts(Number.MAX_SAFE_INTEGER)).toEqual({ artifacts: 0, files: 0 })
+    const aside = `${content}.corrupt-1970-01-01T00-00-00-000Z`
+    expect(html(aside, contentHash('<p>kept</p>'))).toBe('<p>kept</p>')
+    expect(existsSync(`${file}.corrupt-1970-01-01T00-00-00-000Z`)).toBe(true)
+    expect(logs.some((l) => l.level === 'error' && l.message.includes(path.basename(aside)))).toBe(
+      true,
+    )
+
+    create(recovered, { html: '<p>new</p>' })
+    expect(html(content, contentHash('<p>new</p>'))).toBe('<p>new</p>')
+    recovered.close()
+  })
+
+  it('sweeps nothing in a run whose content could not follow a damaged database', () => {
+    const { db, file, content } = setup()
+    create(db, { html: '<p>kept</p>' })
+    db.close()
+    writeFileSync(file, 'this is not a database, only text long enough to look like one'.repeat(80))
+    // A folder in the way makes the move fail.
+    const aside = `${content}.corrupt-1970-01-01T00-00-00-000Z`
+    mkdirSync(aside)
+    writeFileSync(path.join(aside, 'in-the-way'), '')
+
+    const recovered = ThreadDb.open(
+      file,
+      (level, message) => logs.push({ level, message }),
+      () => 0,
+      content,
+    )
+    expect(recovered.status).toBe('recovered')
+    expect(logs).toContainEqual({
+      level: 'error',
+      message: expect.stringContaining('could not be moved aside'),
+    })
+    expect(recovered.purgeArtifacts(Number.MAX_SAFE_INTEGER)).toEqual({ artifacts: 0, files: 0 })
+    expect(html(content, contentHash('<p>kept</p>'))).toBe('<p>kept</p>')
+    recovered.close()
+  })
+
   it('writes no artifact without a content folder, and touches nothing in a newer database', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifacts-'))
     dirs.push(dir)

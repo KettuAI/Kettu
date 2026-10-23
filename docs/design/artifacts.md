@@ -144,7 +144,7 @@ CREATE TABLE artifact_versions (
 - **Deleting**, by an agent or the user, sets `deleted_at`. The artifact leaves the page and the lists; reading it gives `deleted`. The user can restore it, or delete it permanently at once. Deleting it again keeps the first time, so its 30 days do not start over.
 - **In Recently deleted** the user still reads an artifact and its versions, and renames it; nobody makes a version of it until it is restored.
 - **Deleting permanently** removes the artifact's rows and, at once, every file of its versions that no other version names.
-- **The purge** runs when the host starts and every 24 hours: it removes the artifacts deleted more than 30 days ago, their versions by cascade, and then every content file no version names. It touches no file while the database is not open, as when a newer app wrote it, since it cannot tell which files are named, and in the content folder it removes nothing but version files and temporary files.
+- **The purge** runs when the host starts and every 24 hours: it removes the artifacts deleted more than 30 days ago, their versions by cascade, and then every content file no version names. It touches no file while the database is not open, as when a newer app wrote it, since it cannot tell which files are named, and in the content folder it removes nothing but version files and temporary files. A damaged database takes the content folder aside with it ([recovering](./persistence.md#threads)), so the purge never meets files whose records are gone; when the folder cannot be moved, the purge leaves it alone that run.
 
 ### Store API
 
