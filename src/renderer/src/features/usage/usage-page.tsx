@@ -38,7 +38,6 @@ import {
   usageDayTurned,
   usagePageShown,
   useUsageStore,
-  type UsageFilters,
   type UsagePage as PageData,
 } from '@renderer/stores/usage'
 import { HeatLegend, Heatmap, TrendAxis, TrendChart, TrendLegend } from './charts'
@@ -51,16 +50,19 @@ import {
   figures,
   heatmapRange,
   hourBars,
+  hourLabels,
   hoursSoFar,
   legendHidden,
   modelRows,
-  monthStartOf,
+  namesYear,
   projectRows,
   RANGE_KINDS,
   seriesOf,
   shownSeries,
   shownTotals,
   trend,
+  wholeMonth,
+  type AgentFilter,
   type BreakdownRow,
   type DayTotal,
   type RangeKind,
@@ -396,7 +398,7 @@ function Dashboard({ page }: { page: PageData }) {
       <Figures facts={facts} hours={hours} rangeLabel={rangeText(range.from, range.to)} />
 
       <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TrendCard days={days} hours={hours} page={page} filters={filters} />
+        <TrendCard days={days} hours={hours} page={page} agent={agent} />
         <LimitsCard />
       </div>
 
@@ -474,10 +476,6 @@ function useHourText(zoned: boolean): (from: number, to: number) => string {
     },
     [t, i18n.language, zoned],
   )
-}
-
-function yearOf(day: number): number {
-  return new Date(day).getFullYear()
 }
 
 function dayText(day: number): string {
@@ -619,12 +617,12 @@ function TrendCard({
   days,
   hours,
   page,
-  filters,
+  agent,
 }: {
   days: DayTotal[]
   hours: HourTotals | null
   page: PageData
-  filters: UsageFilters
+  agent: AgentFilter
 }) {
   const { t, i18n } = useTranslation('usage')
   const rangeText = useRangeText()
@@ -646,17 +644,19 @@ function TrendCard({
     [hours, days, page.range, page.firstDay],
   )
   const series = useMemo(() => seriesOf(bars, AGENT_IDS), [bars])
-  // What the legend hides holds until a filter changes.
-  const [legend, setLegend] = useState({ filters, hidden: NO_SERIES })
-  const hidden = legend.filters === filters ? legend.hidden : NO_SERIES
+  // What the legend hides holds until the agent filter changes, or figures for another range or
+  // source arrive, so the chart still drawn while they load keeps its series and scale.
+  const { range, scope } = page.filters
+  const [legend, setLegend] = useState({ range, scope, agent, hidden: NO_SERIES })
+  const hidden =
+    legend.range === range && legend.scope === scope && legend.agent === agent
+      ? legend.hidden
+      : NO_SERIES
   const shown = useMemo(() => shownSeries(series, hidden), [series, hidden])
   const toggle = useCallback(
     (chosen: AgentId[]) =>
-      setLegend((l) => ({
-        filters,
-        hidden: legendHidden(series, chosen, l.filters === filters ? l.hidden : NO_SERIES),
-      })),
-    [filters, series],
+      setLegend({ range, scope, agent, hidden: legendHidden(series, chosen, hidden) }),
+    [range, scope, agent, series, hidden],
   )
   const totals = useMemo(() => shownTotals(bars, shown), [bars, shown])
   const max = Math.max(0, ...totals)
@@ -672,29 +672,28 @@ function TrendCard({
       ? hourText(bar.from, bar.to)
       : unit === 'day'
         ? dayText(bar.from)
-        : // A whole month by its name; one the range cuts by its dates.
-          unit === 'month' && bar.from === monthStartOf(bar.from) && bar.to === monthStartOf(bar.to)
+        : unit === 'month' && wholeMonth(bar)
           ? new Intl.DateTimeFormat(i18n.language, { month: 'short', year: 'numeric' }).format(
               bar.from,
             )
           : rangeText(bar.from, bar.to)
+  const froms = useMemo(() => bars.map((bar) => bar.from), [bars])
   const axisText = useMemo(() => {
     if (unit === 'hour') {
       const time = new Intl.DateTimeFormat(i18n.language, { hour: 'numeric', minute: '2-digit' })
-      return (i: number) => time.format(bars[i]!.from)
+      return (i: number) => time.format(froms[i]!)
     }
     const date: Intl.DateTimeFormatOptions =
       unit === 'month' ? { month: 'short' } : { month: 'short', day: 'numeric' }
     const plain = new Intl.DateTimeFormat(i18n.language, date)
     const dated = new Intl.DateTimeFormat(i18n.language, { ...date, year: 'numeric' })
-    // Across a new year, the first label and the first of each year name it.
-    const years = bars.length > 0 && yearOf(bars[0]!.from) !== yearOf(bars.at(-1)!.from)
-    return (i: number, previous: number | null) => {
-      const from = bars[i]!.from
-      const year = years && (previous === null || yearOf(bars[previous]!.from) !== yearOf(from))
-      return (year ? dated : plain).format(from)
-    }
-  }, [unit, bars, i18n.language])
+    return (i: number, previous: number | null) =>
+      (namesYear(froms, i, previous) ? dated : plain).format(froms[i]!)
+  }, [unit, froms, i18n.language])
+  const pickHours = useMemo(
+    () => (unit === 'hour' ? (step: number) => hourLabels(froms, step) : undefined),
+    [unit, froms],
+  )
   return (
     <Card>
       <CardHead
@@ -707,11 +706,13 @@ function TrendCard({
             {bar &&
               !late &&
               series.length > 1 &&
-              shown.map((id) => (
-                <span key={id} className="sr-only">
-                  {` ${t('trend.agent', { agent: agentName(id), tokens: tokens(bar.byAgent[id] ?? 0) })}`}
-                </span>
-              ))}
+              shown
+                .filter((id) => bar.byAgent[id])
+                .map((id) => (
+                  <span key={id} className="sr-only">
+                    {` ${t('trend.agent', { agent: agentName(id), tokens: tokens(bar.byAgent[id]!) })}`}
+                  </span>
+                ))}
           </span>
         }
       />
@@ -757,6 +758,7 @@ function TrendCard({
             count={bars.length}
             anchor={unit === 'hour' ? 'start' : 'end'}
             steps={unit === 'hour' ? HOUR_STEPS : undefined}
+            pick={pickHours}
             text={axisText}
           />
         )}

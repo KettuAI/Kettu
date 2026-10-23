@@ -9,6 +9,8 @@ import {
   addDays,
   AGENT_FILL,
   axisLabels,
+  BAR_GAP,
+  BAR_WIDTH,
   heatLevels,
   widest,
   type DayRange,
@@ -80,7 +82,8 @@ export function TrendChart({
         role="group"
         tabIndex={0}
         aria-label={label}
-        className="relative flex h-full items-end justify-center gap-px rounded-md outline-none focus-ring"
+        className="relative flex h-full items-end justify-center rounded-md outline-none focus-ring"
+        style={{ gap: BAR_GAP }}
         onPointerLeave={() => onChoose(null)}
         onBlur={() => onChoose(null)}
         onKeyDown={(event) => {
@@ -94,11 +97,12 @@ export function TrendChart({
             <div
               key={bar.from}
               className={cn(
-                // A few days stay bars, not blocks across the chart.
-                'flex h-full max-w-12 min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
+                'flex h-full min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
                 chosen !== null && chosen !== i && 'opacity-60',
                 i >= begun && 'opacity-35',
               )}
+              // A few days stay bars, not blocks across the chart; the dates are placed by it too.
+              style={{ maxWidth: BAR_WIDTH }}
               onPointerEnter={i < begun ? () => onChoose(i) : undefined}
             >
               {parts.length === 0 ? (
@@ -124,6 +128,11 @@ export function TrendChart({
   )
 }
 
+/** An agent's part of a bar; "—" for none, as the page writes a figure with nothing in it. */
+function partTokens(value: number | undefined): string {
+  return value ? tokens(value) : '—'
+}
+
 /** Room between two dates under the trend, the 12 px spacing step. */
 const LABEL_GAP = 12
 
@@ -141,11 +150,13 @@ export const TrendAxis = memo(function TrendAxis({
   count,
   anchor,
   steps,
+  pick,
   text,
 }: {
   count: number
   anchor: 'start' | 'end'
   steps?: readonly number[]
+  pick?: (step: number) => number[]
   text: (index: number, previous: number | null) => string
 }) {
   const row = useRef<HTMLDivElement>(null)
@@ -153,12 +164,15 @@ export const TrendAxis = memo(function TrendAxis({
   useLayoutEffect(() => {
     const el = row.current
     if (!el) return
-    const observer = new ResizeObserver(([entry]) => {
+    const read = () => {
       const style = getComputedStyle(el)
       const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
-      const width = entry!.contentRect.width
+      const width = parseFloat(style.width)
       setBox((b) => (b && b.width === width && b.font === font ? b : { width, font }))
-    })
+    }
+    // Read before the first paint, so the dates come with the bars, then on every resize.
+    read()
+    const observer = new ResizeObserver(read)
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
@@ -173,8 +187,9 @@ export const TrendAxis = memo(function TrendAxis({
       }
       return width
     }
-    return axisLabels({ count, width: box.width, anchor, steps, gap: LABEL_GAP, text, measure })
-  }, [box, count, anchor, steps, text])
+    const width = box.width
+    return axisLabels({ count, width, anchor, steps, pick, gap: LABEL_GAP, text, measure })
+  }, [box, count, anchor, steps, pick, text])
   return (
     <div ref={row} aria-hidden className="relative h-4 text-xs text-tertiary tabular-nums">
       {labels.map((l) => (
@@ -210,7 +225,7 @@ export const TrendLegend = memo(function TrendLegend({
   const room = useMemo(
     () => {
       const font = `12px ${getComputedStyle(document.body).fontFamily}`
-      const values = (id: AgentId) => bars.map((bar) => tokens(bar.byAgent[id] ?? 0))
+      const values = (id: AgentId) => bars.map((bar) => partTokens(bar.byAgent[id]))
       return new Map(series.map((id) => [id, widest(values(id), (t) => textWidth(t, font))]))
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tokens() follows the language
@@ -241,7 +256,7 @@ export const TrendLegend = memo(function TrendLegend({
           {/* The header reads the values out; the button's name stays the agent's. */}
           <span aria-hidden className="grid text-left text-tertiary tabular-nums">
             <span className="invisible col-start-1 row-start-1">{room.get(id)}</span>
-            <span className="col-start-1 row-start-1">{bar && tokens(bar.byAgent[id] ?? 0)}</span>
+            <span className="col-start-1 row-start-1">{bar && partTokens(bar.byAgent[id])}</span>
           </span>
         </ToggleGroupItem>
       ))}

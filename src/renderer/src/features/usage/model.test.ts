@@ -14,10 +14,12 @@ import {
   heatLevels,
   heatmapRange,
   hourBars,
+  hourLabels,
   hourStarts,
   hoursSoFar,
   legendHidden,
   modelRows,
+  namesYear,
   oneDay,
   presets,
   projectRows,
@@ -29,6 +31,7 @@ import {
   typedDay,
   typedRange,
   weekStartOf,
+  wholeMonth,
   widest,
 } from './model'
 
@@ -202,6 +205,24 @@ describe('axis labels', () => {
   const width = 7
   const measure = (text: string) => text.length * width
   const label = (index: number) => `L${String(index).padStart(2, '0')}`
+
+  it('names the year on the first label and the first of each new year, across one', () => {
+    const froms = [day(2025, 11, 1), day(2025, 12, 1), day(2026, 1, 1), day(2026, 2, 1)]
+    expect(namesYear(froms, 0, null)).toBe(true)
+    expect(namesYear(froms, 1, 0)).toBe(false)
+    expect(namesYear(froms, 2, 1)).toBe(true)
+    expect(namesYear(froms, 3, 2)).toBe(false)
+    // Every other bar labelled: February is the first label of 2026.
+    expect(namesYear(froms, 3, 1)).toBe(true)
+    expect(namesYear(froms.slice(0, 2), 0, null)).toBe(false)
+  })
+
+  it('names a whole month by itself and one the range cuts by its dates', () => {
+    expect(wholeMonth({ from: day(2026, 9, 1), to: day(2026, 10, 1) })).toBe(true)
+    expect(wholeMonth({ from: day(2025, 12, 1), to: day(2026, 1, 1) })).toBe(true)
+    expect(wholeMonth({ from: day(2023, 10, 15), to: day(2023, 11, 1) })).toBe(false)
+    expect(wholeMonth({ from: day(2026, 10, 1), to: day(2026, 10, 24) })).toBe(false)
+  })
 
   it('lays bars out as the chart does: at most 48 px, 1 px apart, centred', () => {
     expect(barCenters(3, 300)).toEqual([101, 150, 199])
@@ -383,6 +404,30 @@ describe('hours', () => {
         const minutes = starts.slice(0, -1).map((start) => new Date(start).getMinutes())
         expect(minutes.filter((m) => m !== 0)).toEqual([30])
         expect(starts.slice(1).every((start, i) => start - starts[i]! <= HOUR)).toBe(true)
+      }
+    })
+
+    it('labels the hours by the clock, every few from midnight', () => {
+      vi.stubEnv('TZ', 'America/New_York')
+      for (const date of [day(2026, 3, 8), day(2026, 11, 1), day(2026, 11, 2)]) {
+        const starts = hoursOf(date).slice(0, -1)
+        const hour = (i: number) => new Date(starts[i]!).getHours()
+        const present = [...new Set(starts.map((start) => new Date(start).getHours()))]
+        // The hour the clocks repeat is labelled once, the one they skip not at all.
+        expect(hourLabels(starts, 1).map(hour)).toEqual(present)
+        const labels = axisLabels({
+          count: starts.length,
+          width: 380,
+          anchor: 'start',
+          steps: [1, 2, 3, 4, 6, 12],
+          pick: (step) => hourLabels(starts, step),
+          gap: 8,
+          text: (i) => `${hour(i)}:00`,
+          measure: (text) => text.length * 7,
+        })
+        const hours = labels.map((l) => hour(l.index))
+        const step = hours[1]! - hours[0]!
+        expect(hours).toEqual(present.filter((h) => h % step === 0))
       }
     })
   })

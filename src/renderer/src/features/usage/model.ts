@@ -315,9 +315,9 @@ export function widest(texts: readonly string[], measure: (text: string) => numb
   return best
 }
 
-/** The trend's bars are at most this wide (its `max-w-12`), and 1 px apart. */
-const BAR_WIDTH = 48
-const BAR_GAP = 1
+/** The trend's bars are at most this wide and this far apart, in px; the chart draws them so. */
+export const BAR_WIDTH = 48
+export const BAR_GAP = 1
 
 /** The middle of each bar in a row `width` px wide, where the bars sit centred. */
 export function barCenters(count: number, width: number): number[] {
@@ -336,15 +336,17 @@ export interface AxisLabel {
 
 /**
  * The bars that name their date under the trend: every `step`th one, counted from the first or
- * the last bar, with the smallest step (one of `steps`, when given) whose labels, centred under
- * their bars and kept inside the row, leave `gap` px between them; one label when none does.
- * `text` gets the bar and the one labelled before it, so a label can add what changed since.
+ * the last bar, or those `pick` gives for a step, with the smallest step (one of `steps`, when
+ * given) whose labels, centred under their bars and kept inside the row, leave `gap` px between
+ * them; one label, at the anchor, when none does. `text` gets the bar and the one labelled before
+ * it, so a label can add what changed since.
  */
 export function axisLabels({
   count,
   width,
   anchor,
   steps,
+  pick,
   gap,
   text,
   measure,
@@ -353,16 +355,19 @@ export function axisLabels({
   width: number
   anchor: 'start' | 'end'
   steps?: readonly number[]
+  pick?: (step: number) => number[]
   gap: number
   text: (index: number, previous: number | null) => string
   measure: (text: string) => number
 }): AxisLabel[] {
   if (count <= 0 || width <= 0) return []
   const centers = barCenters(count, width)
-  const layout = (step: number) => {
+  const every = (step: number) => {
     const indices: number[] = []
     for (let i = 0; i < count; i += step) indices.push(anchor === 'start' ? i : count - 1 - i)
-    if (anchor === 'end') indices.reverse()
+    return anchor === 'end' ? indices.reverse() : indices
+  }
+  const layout = (indices: readonly number[]) => {
     let right = -Infinity
     const labels: AxisLabel[] = []
     for (const [k, index] of indices.entries()) {
@@ -378,10 +383,47 @@ export function axisLabels({
   const tried = steps ?? Array.from({ length: count }, (_, i) => i + 1)
   for (const step of tried) {
     if (step >= count) break
-    const labels = layout(step)
-    if (labels) return labels
+    const labels = layout(pick ? pick(step) : every(step))
+    if (labels && labels.length > 0) return labels
   }
-  return layout(count)!
+  return layout([anchor === 'start' ? 0 : count - 1])!
+}
+
+/**
+ * The hour bars to label for a step of `step` hours: those starting on a local hour that is a
+ * multiple of it, by the clock rather than by count, so a day of 23 or 25 hours keeps the times
+ * of any other. An hour the clocks repeat is labelled once, and one that starts on the half hour
+ * after a change of 30 minutes not at all.
+ */
+export function hourLabels(starts: readonly number[], step: number): number[] {
+  const picked: number[] = []
+  let last: number | null = null
+  starts.forEach((start, i) => {
+    const date = new Date(start)
+    const hour = date.getHours()
+    if (date.getMinutes() === 0 && hour % step === 0 && hour !== last) picked.push(i)
+    last = hour
+  })
+  return picked
+}
+
+/**
+ * Whether the label of the bar starting at `froms[index]` names the year: across a new year, the
+ * first label and the first of each year do; otherwise none does.
+ */
+export function namesYear(
+  froms: readonly number[],
+  index: number,
+  previous: number | null,
+): boolean {
+  const year = (at: number) => new Date(at).getFullYear()
+  if (froms.length === 0 || year(froms[0]!) === year(froms[froms.length - 1]!)) return false
+  return previous === null || year(froms[previous]!) !== year(froms[index]!)
+}
+
+/** Whether a month's bar holds the whole month, so it reads as the month's name, not dates. */
+export function wholeMonth(bar: { from: number; to: number }): boolean {
+  return bar.from === monthStartOf(bar.from) && bar.to === monthStartOf(bar.to)
 }
 
 /**
