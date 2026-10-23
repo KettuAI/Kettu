@@ -1271,6 +1271,21 @@ describe('opening and recovering', () => {
     expect(port.entries(sessionId).at(-1)).toBe(notices[0])
   })
 
+  it('ends a turn stopped before its agent exited as stopped, not cut short', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel --ignore-cancel')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'agent')
+    await port.request('sessions.cancel', { sessionId })
+    ;(t.launcher as InProcessLauncher).crash()
+    await port.untilStatus(sessionId, 'closed')
+    expect(port.entries(sessionId).at(-1)).toMatchObject({
+      kind: 'turn_end',
+      stopReason: 'cancelled',
+    })
+    expect(port.entries(sessionId).some((entry) => entry.kind === 'notice')).toBe(false)
+  })
+
   it('marks no other failed turn as cut', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)

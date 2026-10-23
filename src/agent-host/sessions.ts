@@ -1475,14 +1475,22 @@ export class SessionManager {
     const held: SessionRecord[] = []
     for (const live of this.live.values()) {
       if (live.record.agentId !== agentId) continue
+      // A session takes its connection only once it has attached, so its turn was never sent.
+      const attaching = live.connection === null
       live.connection = null
       // Its background work ended with its process.
       live.background = false
       const status = live.thread.session.status
       if (!CONNECTED.has(status) || status === 'starting' || status === 'auth_required') continue
-      const turn = live.turn
-      const cut = turn !== null && !turn.ended
-      if (turn && !turn.ended) {
+      const turn = live.turn?.ended === false ? live.turn : null
+      // Its attach fails with the exit and ends the turn as a failed attach does, so Retry sends
+      // the prompt that never went out, and only once that attach has settled.
+      if (turn && attaching) continue
+      const cut = turn !== null && !turn.cancelRequested
+      if (turn && !cut) {
+        // The user had stopped it, so it ends stopped rather than cut short.
+        this.endTurn(live, turn, 'cancelled', null)
+      } else if (turn) {
         this.finishTurn(live, turn, null)
         this.emit(live, [
           {
@@ -2332,10 +2340,16 @@ export class SessionManager {
 
   private failTurn(live: Live, turn: Turn, error: unknown): void {
     const mapped = agentError(error)
+    const closed = mapped.code === 'agent_unavailable'
+    if (closed && turn.cancelRequested) {
+      // The user had stopped it before the agent exited, so it ends stopped, as on the exit event.
+      live.connection = null
+      this.endTurn(live, turn, 'cancelled', null)
+      return
+    }
     this.finishTurn(live, turn, null)
     const now = this.now()
     const authRequired = mapped.code === 'auth_required'
-    const closed = mapped.code === 'agent_unavailable'
     this.emit(live, [
       {
         op: 'entry.add',
