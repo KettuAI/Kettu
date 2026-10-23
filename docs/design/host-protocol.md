@@ -25,6 +25,8 @@ Exposed as `window.overbench.agents`. `src/preload/port-client.ts` implements it
 - After `failed` ([crash recovery](./agent-host.md#crash-recovery)), requests reject at once with `host_restarted` until `restart()` brings the host back; the state then goes through `reconnecting` to `connected`.
 - A failed request rejects with a plain object, `{ name: 'PortRequestError', code, message, data? }`, not an `Error`: `contextBridge` copies an `Error` with its message only and drops `code`. `isPortError` from `src/shared/port-rpc.ts` recognizes the object, and `new PortRequestError(error)` turns it into an `Error` that keeps the code where the renderer wants one. Params that cannot be cloned reject with `invalid_params` without reaching the host.
 
+[Attachments](./session-model.md#only-what-the-user-chose) add `window.overbench.attachments`, two methods that go through main rather than the host's port: `pick(kind)`, which shows the system's file or folder dialog (`dialog:add-attachments`), and `fromFiles(files)`, which turns dropped or pasted `File`s into paths with `webUtils.getPathForFile` inside the preload (`attachments:grant`). Main grants each path to the host, and both return grant ids with names and sizes, never a path the renderer could pass back.
+
 ## Envelope
 
 ```ts
@@ -116,6 +118,11 @@ interface HostError {
 | `files.read`               | `{ projectPath, path }`                  | `FileContent`                                   | `text` with `version` and `editable`; `image` with `mimeType` and base64 `data`, up to 10 MB; `binary`; or `too-large` with its `limit` (1 MiB, 10 MB for a picture); a path out of the project is `invalid_params`            |
 | `files.search`             | `{ projectPath, query }`                 | `FileSearch`                                    | Literal, case-insensitive; at most 500 matches of 300 characters, then `truncated`                                                                                                                                             |
 | `files.write`              | `{ projectPath, path, text, version }`   | `{ version, size }`                             | Replaces an existing file's text, up to 1 MiB; `conflict` when `version` no longer matches the file, unless it is null ([project files](./agent-host.md#project-files))                                                        |
+| `attachments.add`          | `{ source }`                             | `Attachment`                                    | A draft's attachment from `{ grantId }`, `{ projectPath, path }` or `{ bytes, mimeType, name }`, kept until sent or removed ([attachments](./session-model.md#where-the-bytes-live))                                           |
+| `attachments.read`         | `{ id }`                                 | `{ mimeType, bytes }`                           | An image's bytes as an `ArrayBuffer`, up to 20 MB, for its thumbnail and its full view                                                                                                                                         |
+| `attachments.update`       | `{ id, bytes }`                          | `Attachment`                                    | Replaces an image with the copy the renderer scaled                                                                                                                                                                            |
+| `attachments.remove`       | `{ id }`                                 | none                                            |                                                                                                                                                                                                                                |
+| `sessions.blob`            | `{ sessionId, hash }`                    | `{ mimeType, bytes }`                           | A sent image or pasted text from the thread store, for its full view                                                                                                                                                           |
 
 ```ts
 interface SessionSummary {
@@ -264,10 +271,11 @@ Only watched sessions stream patches. Every other session costs the renderer one
 
 - Every request is validated in `src/agent-host/validate.ts` before the host acts on it: types, required fields, string lengths, and that ids refer to existing agents, sessions and requests.
 - `projectPath` must be absolute and canonicalize to an existing directory ([platform rules](./agent-host.md#platform-differences)).
-- Prompt content is limited to 10 MB in total; images must have an image MIME type.
+- Prompt content is limited to 10 MB in total, counted as sent, and to 20 attachments; images must have an image MIME type.
 - Validators are small hand-written type guards. The contract is small enough that a schema library would cost more than it saves.
 - A request that fails validation gets `invalid_params` and changes nothing.
 - Validators return fresh params holding only the fields they know; unknown fields are dropped. Methods without params accept nothing, `null` or `{}`.
 - An unknown `agentId` is `invalid_params`, since the catalog is fixed. A session or permission request that does not exist is `not_found`. Requests that need a live session (`sessions.prompt`, `sessions.cancel`, `sessions.setConfigOption`) fail with `busy` for one that is not open.
-- A prompt holds text, images (base64 data with an `image/*` type) and links; an `unsupported` ref cannot be sent, and a prompt with no text and no ref is empty and refused.
+- A prompt holds text, images (base64 data with an `image/*` type), links and attachment refs; an `unsupported` ref cannot be sent, and a prompt with no text and no ref is empty and refused. Of an attachment ref the host reads only `id`, which must name a record it holds, and takes everything else from that record.
+- `attachments.add` with `{ projectPath, path }` follows the containment rules of `files.read`; a `grantId` must be one main granted and not yet used; `bytes` must be at most 20 MB, with an `image/*` or `text/plain` type.
 - Every `git.*` request answers `git_error` with "Git is not available yet" while the host runs without a git service.

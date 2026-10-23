@@ -161,7 +161,7 @@ Each agent is shown with its official mark in its own colors. They are the only 
 Files and folders show their type's icon from [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) (`material-icon-theme`, MIT), the file icon theme most used in VS Code, resolved from its manifest the way VS Code resolves a file icon theme: the file name (with its parent folder, for names such as `.github/workflows`), then the extensions longest first, then the default; folders by name, open or closed. The light theme takes the manifest's light icons where it has them.
 
 - The colors are the theme's own, unchanged: a reduced saturation was tried and read as dull ([problem 38](../milestones/m0-feedback.md#38-files-pane-no-markdown-preview-file-type-icons-or-editing)). Like the agent marks, they are colored by design, the only icons that are.
-- Sizes: 16 px in the Files pane's rows and preview header, 12 px in a file chip in the thread.
+- Sizes: 16 px in the Files pane's rows and preview header, on [attachment](#attachments) tiles and in the `@` list, 12 px in a file chip in the thread.
 - The manifest and the icons load on first use, in a chunk of their own; each icon is a file of its own, never inlined, so only those on screen are read. A plain line icon stands in until they load.
 
 ### Data graphics
@@ -374,7 +374,7 @@ Every menu, the dropdown menus and the context menus alike, shares one set of me
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Menu        | Surface 3, `rounded-2xl`, 6 px padding, `shadow-menu` (a hairline ring and the `md` shadow). It is as wide as its widest item and at least 160 px, never a fixed width, so a short menu stays a small object. It opens with a fade and a zoom from 95% at its anchor in 100 ms, without a slide, and closes the same way |
 | Item        | `text-ui` text, at least `--row-height`, 8 px horizontal padding, `rounded-lg`; highlighted, it takes `--accent`. With the menu's padding, a label starts 14 px from the menu's edge and a shortcut ends 14 px before it                                                                                                 |
-| Icon        | None: labels and shortcuts line up on their own, as in the reference and in the platform's own menus, and icons only added weight. The one exception is an agent mark at 14 px, which tells agents apart                                                                                                                 |
+| Icon        | None: labels and shortcuts line up on their own, as in the reference and in the platform's own menus, and icons only added weight. The exceptions are an agent mark at 14 px, which tells agents apart, and a file's type icon in the composer's `@` list, which tells files from folders                                |
 | Check       | The checked item of a radio or checkbox group shows a 14 px `Check` on the right, centred on the first line, so a two-line item keeps it by its name                                                                                                                                                                     |
 | Group label | 12 px, weight 500, `--muted-foreground`, with the items' 8 px inset, so it lines up with their text                                                                                                                                                                                                                      |
 | Separator   | One hairline of `--border-soft`, inset 8 px on both sides so it lines up with the labels, never edge to edge                                                                                                                                                                                                             |
@@ -386,7 +386,27 @@ Every menu, the dropdown menus and the context menus alike, shares one set of me
 
 - The session menus, the title menu and the row's context menu, hold **New sub-session**, **Close**, a separator and **Delete…**.
 - The two-pane menu was decided while the maintainer was away (2026-10-22); to be reviewed. Its rail fits its widest row.
+- The file type icons in the `@` list came with the [attachments](#attachments) for #40, chosen with option A on 2026-10-23 on the comparison page, which shows them.
 - **Dialogs** (`Dialog`, `AlertDialog`): surface 3, `rounded-3xl`, 20 px padding and 16 px between parts, at most 384 px wide, with the `lg` shadow. The title is 16 px at weight 500, the description 13 px with a relaxed line height in `--text-secondary`. The buttons sit right-aligned at the end, 8 px apart, at the `default` size; the footer has no band or rule of its own. A destructive action uses `Button`'s `destructive` variant.
+
+### Attachments
+
+The tiles a message's [attachments](./ui.md#attachments) show as, in the composer and in the thread; chosen for #40 on 2026-10-23, option A of three.
+
+| Part         | Look                                                                                                                                                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Row          | Inside the composer, 6 px from its edges and 6 px between tiles, above the text; `rounded-2xl` tiles, so their corners follow the composer's `rounded-4xl` at that gap (20.8 − 6 ≈ 14.4). In the thread, the same row above the bubble, aligned to its end, wrapping |
+| Tile         | 112 px square, the reference's 7.5 rem tile at its scale (about 113 px), on the 4 px grid; a hairline `--border-default` ring and no fill, `--border-strong` under the pointer, the `--focus` ring                                                                   |
+| Image tile   | The thumbnail, cropped to fill the square, with the ring drawn over it                                                                                                                                                                                               |
+| File tile    | 10 px padding; the [type icon](#file-icons) at 16 px at the top; at the bottom the name at the caption step, weight 500, in `--text-primary`, cut in the middle so its extension stays, over the size or "Folder" at the meta step in `--text-tertiary`              |
+| Pasted text  | Its first three lines in mono at the meta step, in `--text-secondary`, over "Pasted text" and its line count                                                                                                                                                         |
+| Remove       | A 20 px round button on `--bg-surface` with a `--border-default` hairline, inset 4 px at the tile's top right, holding `X` at 12 px in `--icon-default`, `--text-primary` under the pointer; shown on hover and focus                                                |
+| Badge        | A 20 px round badge on `--bg-surface` with a `--border-default` hairline, inset 4 px at an image tile's bottom left: `TriangleAlert` at 12 px for an image sent another way                                                                                          |
+| Failed       | `CircleAlert` at 16 px in `--danger` in place of the type icon, and the words that name the error in `--danger` in place of the size                                                                                                                                 |
+| Drop overlay | Over the thread column, `--bg-app` at 88%; a centred card on `--bg-surface` with a `--border-strong` hairline and `rounded-2xl`, 20 by 28 px padding, "Drop to attach" at the heading step over a caption line                                                       |
+| Image dialog | A `Dialog` as wide as the image allows, at most 90% of the window by 85%; the image fitted over `--checker` squares with a `--border-default` hairline; its name, pixel size and file size under it at the meta step                                                 |
+
+- Thumbnails are 224 px on their long side, twice the tile, as WebP at 82%. At 192 px, for a 2880 × 1800 px screenshot of a test run, one took 41 to 87 ms in a worker and came to 2 kB (2026-10-22, the options page in Chromium on macOS); a photo comes out larger.
 
 ## Motion
 
