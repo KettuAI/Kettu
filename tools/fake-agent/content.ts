@@ -25,7 +25,7 @@ See the [Node.js timers guide](https://nodejs.org/en/learn/asynchronous-work/und
 
 export const BASIC_DONE = `
 
-Done. The edit is in place; run \`pnpm test\` to confirm the flake is gone.
+Done. The clock is read once per request, and a new regression test freezes time; the login and clock tests pass.
 `
 
 export const THOUGHT_TEXT = `The user wants to know why the test fails only on CI. CI runners are slower and share CPU, so anything that depends on wall-clock time between two statements can flip. Let me check where the clock is read. \`issueToken\` calls \`Date.now()\` and \`validate\` calls it again; if a second boundary falls between them the computed expiry differs by one second. That would explain a one-in-fifty failure rate. Before editing, I should confirm no other caller depends on the second read, because \`refresh\` also calls \`validate\` with its own timestamp. The safest change is to thread one timestamp through both functions and keep the default parameter for existing callers. I also want a regression test that freezes time with fake timers so the failure cannot come back silently.`
@@ -55,6 +55,19 @@ export const CLOCK_AFTER = `export function issueToken(user: User, now = Date.no
 export function validate(token: Token, now = Date.now()): boolean {
   return token.expiresAt > now
 }
+`
+
+export const CLOCK_TEST = `import { afterEach, expect, it, vi } from 'vitest'
+import { issueToken, validate } from '../src/clock'
+
+afterEach(() => vi.useRealTimers())
+
+it('keeps a token valid when a second passes while it is issued', () => {
+  vi.useFakeTimers({ now: 1_999 })
+  const token = issueToken({ id: 'u1' })
+  vi.setSystemTime(2_000)
+  expect(validate(token, 1_999)).toBe(true)
+})
 `
 
 const SECTION_TOPICS = [

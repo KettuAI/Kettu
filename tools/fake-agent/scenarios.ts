@@ -15,6 +15,7 @@ import {
   BASIC_REPLY,
   CLOCK_AFTER,
   CLOCK_BEFORE,
+  CLOCK_TEST,
   COMMANDS,
   THINKING_ANSWER,
   THOUGHT_TEXT,
@@ -106,7 +107,22 @@ const basicTurn: Scenario = async (turn) => {
   if (!(await stream(turn, intro + BASIC_REPLY, { messageId: turn.messageId() }))) {
     return 'cancelled'
   }
-  const toolCallId = `edit-${turn.session.turns}`
+  // The work between the two messages, which the thread folds into one line.
+  const n = turn.session.turns
+  for (const [i, file] of ['src/clock.ts', 'src/session.ts', 'test/login.ts'].entries()) {
+    const path = filePath(turn, file)
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId: `read-${n}-${i}`,
+      title: `Read ${file}`,
+      kind: 'read',
+      status: 'completed',
+      locations: [{ path }],
+      rawInput: { file_path: path },
+    })
+    await turn.sleep(40)
+  }
+  const toolCallId = `edit-${n}`
   const path = filePath(turn, 'src/clock.ts')
   await turn.send({
     sessionUpdate: 'tool_call',
@@ -125,6 +141,40 @@ const basicTurn: Scenario = async (turn) => {
     toolCallId,
     status: 'completed',
     content: [{ type: 'diff', path, oldText: CLOCK_BEFORE, newText: CLOCK_AFTER }],
+  })
+  const testPath = filePath(turn, 'test/clock.test.ts')
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: `write-${n}`,
+    title: 'Write test/clock.test.ts',
+    kind: 'edit',
+    status: 'completed',
+    locations: [{ path: testPath }],
+    rawInput: { file_path: testPath, content: CLOCK_TEST },
+    content: [{ type: 'diff', path: testPath, oldText: null, newText: CLOCK_TEST }],
+  })
+  await turn.sleep(80)
+  const command = 'pnpm test test/login.ts test/clock.test.ts'
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: `test-${n}`,
+    title: command,
+    kind: 'execute',
+    status: 'in_progress',
+    rawInput: { command, description: 'Run the login and clock tests' },
+  })
+  await turn.sleep(300)
+  await turn.send({
+    sessionUpdate: 'tool_call_update',
+    toolCallId: `test-${n}`,
+    status: 'completed',
+    content: [
+      {
+        type: 'content',
+        content: { type: 'text', text: '```\n' + commandOutput(command, 1) + '```' },
+      },
+    ],
+    rawOutput: { exitCode: 0 },
   })
   if (!(await stream(turn, BASIC_DONE, { messageId: turn.messageId() }))) return 'cancelled'
   await sendUsage(turn)

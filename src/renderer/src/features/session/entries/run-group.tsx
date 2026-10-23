@@ -15,7 +15,7 @@ import { stepItems } from '../thread-items'
 import { useEntryAnimation } from '../use-thread'
 import { AgentEntry } from './basic'
 import { Entry } from './entry'
-import { PANEL, runSummary, type RunStep } from './helpers'
+import { PANEL, runSummary, toolStep, type RunStep } from './helpers'
 import { ToolGroup } from './tool-group'
 import { useDiffStats } from './use-diff-stats'
 
@@ -30,8 +30,8 @@ interface RunGroupProps {
 
 /**
  * Two or more steps of work between messages, folded into one line that says what they did
- * ("Ran 3 commands, edited ui.md +3 −0") and expands to the steps. A step waiting for permission
- * holds it open.
+ * ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to the steps. A step waiting
+ * for permission holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,
@@ -50,19 +50,12 @@ export const RunGroup = memo(function RunGroup({
     }),
   )
   const steps: RunStep[] = []
-  const edits: ToolContent[] = []
   let waiting = false
   for (const entry of entries) {
     if (entry?.kind === 'thought') {
       steps.push({ kind: 'thought', durationMs: entry.durationMs, streaming: entry.streaming })
     } else if (entry?.kind === 'tool') {
-      steps.push({
-        kind: 'tool',
-        toolKind: entry.toolKind,
-        status: entry.status,
-        path: entry.locations[0]?.path,
-      })
-      if (entry.toolKind === 'edit') edits.push(...entry.content)
+      steps.push(toolStep(entry))
       if (entry.permission) waiting = true
     } else if (entry?.kind === 'plan') {
       steps.push({ kind: 'plan' })
@@ -70,8 +63,7 @@ export const RunGroup = memo(function RunGroup({
       steps.push({ kind: 'compaction', running: entry.status === 'in_progress' })
     }
   }
-  const stats = useDiffStats(edits)
-  const { parts, editAt, failed, running } = runSummary(steps)
+  const { parts, failed, running } = runSummary(steps)
   const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
   const spaced = useMemo(
     () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'c')),
@@ -98,13 +90,8 @@ export const RunGroup = memo(function RunGroup({
           {parts.map((part, i) => (
             <span key={i}>
               {i > 0 && t('summary.separator')}
-              {part}
-              {i === editAt && stats && (stats.insertions > 0 || stats.deletions > 0) && (
-                <span className="ml-1.5 font-mono text-[11.5px] tabular">
-                  <span className="text-success-text">+{stats.insertions}</span>{' '}
-                  <span className="text-destructive">−{stats.deletions}</span>
-                </span>
-              )}
+              {part.text}
+              {part.diffs && <PartStats diffs={part.diffs} />}
             </span>
           ))}
           {failed > 0 && (
@@ -148,6 +135,18 @@ export const RunGroup = memo(function RunGroup({
     </Collapsible>
   )
 }, sameRun)
+
+/** The insertions and deletions of a part's diffs, after the file it names. */
+function PartStats({ diffs }: { diffs: ToolContent[] }) {
+  const stats = useDiffStats(diffs)
+  if (!stats || (stats.insertions === 0 && stats.deletions === 0)) return null
+  return (
+    <span className="ml-1.5 font-mono text-[11.5px] tabular">
+      <span className="text-success-text">+{stats.insertions}</span>{' '}
+      <span className="text-destructive">−{stats.deletions}</span>
+    </span>
+  )
+}
 
 // The thread rebuilds its items on every change of shape, so the ids arrive as a new array.
 function sameRun(a: RunGroupProps, b: RunGroupProps): boolean {

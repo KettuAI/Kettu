@@ -26,7 +26,9 @@ export const SCENARIOS = [
 export type ScenarioName = (typeof SCENARIOS)[number]
 
 export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; hint?: string }> = {
-  'basic-turn': { description: 'A short answer with markdown and one edit with a diff' },
+  'basic-turn': {
+    description: 'A short answer with markdown, then reads, an edit, a new file and a test run',
+  },
   'long-stream': {
     description: '200 KB of markdown in small chunks',
     hint: '--rate <updates per second> --size <bytes, such as 200k>',

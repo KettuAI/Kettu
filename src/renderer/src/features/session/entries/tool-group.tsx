@@ -10,10 +10,10 @@ import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useShallow } from 'zustand/react/shallow'
 import { useEntryAnimation } from '../use-thread'
-import { groupLabel, PANEL } from './helpers'
+import { groupLabel, PANEL, toolStep } from './helpers'
 import { ToolCard } from './tool-card'
 
-/** A run of completed lookups as one row ("Explored 4 files"), opening to a row for each. */
+/** A run of completed lookups as one row ("Read a.ts and 2 more"), opening to a row for each. */
 export const ToolGroup = memo(function ToolGroup({
   sessionId,
   entryIds,
@@ -28,15 +28,13 @@ export const ToolGroup = memo(function ToolGroup({
   useTranslation('session')
   const [open, setOpen] = useState(false)
   const animation = useEntryAnimation(sessionId, entryIds[0]!)
-  const kinds = useThreadsStore(
+  const entries = useThreadsStore(
     useShallow((s) => {
       const byId = s.replicas[sessionId]?.state?.byId
-      return entryIds.map((id) => {
-        const entry = byId?.[id]
-        return entry?.kind === 'tool' ? entry.toolKind : 'other'
-      })
+      return entryIds.map((id) => byId?.[id])
     }),
   )
+  const steps = entries.flatMap((entry) => (entry?.kind === 'tool' ? [toolStep(entry)] : []))
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0', animation)}>
       <CollapsibleTrigger className="group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left text-[13px] text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
@@ -54,7 +52,7 @@ export const ToolGroup = memo(function ToolGroup({
           key={entryIds.length}
           className="min-w-0 flex-1 truncate animate-in fade-in animation-duration-(--duration-base)"
         >
-          {groupLabel(kinds)}
+          {groupLabel(steps)}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>

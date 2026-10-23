@@ -140,7 +140,7 @@
   /* The thread's column: 42em of prose, about 42 Chinese characters a line, plus its gutters. */
   --container-thread: calc(42 * var(--prose-size) + 3rem);
   --text-ui: var(--ui-size);
-  --text-prose--line-height: 1.75;
+  --text-prose--line-height: 1.7;
   /* The type scale of the design system, used by Settings first. */
   --text-title: 22px;
   --text-title--line-height: 28px;
@@ -769,7 +769,7 @@
    scales them; the spec's pixel values are those of the default 15 px. */
 .markdown {
   font-size: var(--prose-size);
-  line-height: 1.75;
+  line-height: 1.7;
   /* The step to full foreground for bold and headings carries the hierarchy. */
   color: color-mix(in oklch, var(--foreground) 90%, transparent);
   overflow-wrap: anywhere;

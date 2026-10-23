@@ -344,6 +344,61 @@ describe('tool calls', () => {
     ).not.toContain('background')
   })
 
+  it("keeps a command's description", () => {
+    const { entries } = run([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'c1',
+        title: 'pnpm test',
+        kind: 'execute',
+        rawInput: { command: 'pnpm test', description: 'Run the login tests' },
+      },
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'c2',
+        title: 'ls',
+        kind: 'execute',
+        rawInput: { command: 'ls', command_description: 'List the files' },
+      },
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'c3',
+        title: 'Publish',
+        kind: 'other',
+        rawInput: { title: 'Notes', description: 'Shared notes' },
+      },
+    ])
+    expect(entries.map((e) => (e.kind === 'tool' ? e.description : null))).toEqual([
+      'Run the login tests',
+      'List the files',
+      undefined,
+    ])
+    expect(entries[2]).not.toHaveProperty('description')
+  })
+
+  it('updates the description as the input streams in', () => {
+    const { entries } = run([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'c1',
+        title: 'Terminal',
+        kind: 'execute',
+        rawInput: {},
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'c1',
+        rawInput: { command: 'pnpm test', description: 'Run the' },
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'c1',
+        rawInput: { command: 'pnpm test', description: 'Run the login tests' },
+      },
+    ])
+    expect(entries[0]).toMatchObject({ rawInput: 'pnpm test', description: 'Run the login tests' })
+  })
+
   it('renders raw input as text', () => {
     expect(rawInputText(undefined)).toBeUndefined()
     expect(rawInputText('ls\r\n')).toBe('ls\n')

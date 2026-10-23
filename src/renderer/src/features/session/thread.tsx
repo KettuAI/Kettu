@@ -80,11 +80,17 @@ function OlderLoading({ sessionId }: { sessionId: string }) {
   )
 }
 
-/** 32 px between turns, 4 px between steps, 16 px between anything else. */
+/**
+ * 32 px between turns and 16 px under your message; within a reply, 4 px between steps, 12 px
+ * beside a step and 16 px between anything else.
+ */
 function spacing(item: Item, previous: Item, steps: Set<string>): string {
   if (item.type === 'entry' && item.turnStart) return 'pt-8'
   if (item.type === 'reply') return 'pt-2.5'
-  if (isStep(item, steps) && isStep(previous, steps)) return 'pt-1'
+  if (previous.type === 'entry' && previous.turnStart) return 'pt-4'
+  const step = isStep(item, steps)
+  if (step && isStep(previous, steps)) return 'pt-1'
+  if (step || isStep(previous, steps)) return 'pt-3'
   return 'pt-4'
 }
 
