@@ -222,9 +222,9 @@ A page may offer a file to save, such as an exported image. With `allow-download
 
 ## Thumbnails
 
-- Main renders each card's thumbnail in an offscreen window (`offscreen: true`, sandboxed, no preload, audio muted) in the `overbench-artifact-thumbnails` partition, which has the same protocol, policy, request filter and handlers, at 1280 × 800 for a page; for a canvas, all its pages laid out and scaled to fit, on a transparent background so the card's surface shows between them. It waits for the load and 400 ms more, at most 5 s, captures the window, scales it to 480 px wide, and closes the window.
+- Main renders each card's thumbnail in an offscreen window (`offscreen: true`, sandboxed, no preload, audio muted) in the `overbench-artifact-thumbnails` partition, which has the same protocol, policy, request filter and handlers, at 1280 × 800 for a page; for a canvas, all its pages laid out and scaled to fit, on a transparent background so the card's surface shows between them. It waits for the load and 400 ms more, at most 5 s, captures the window, scales it to 720 px wide, enough for a card two across on a 2x display, and closes the window.
 - Cards ask for their thumbnails as they scroll into view, one at a time, in that order. They are kept on disk in `artifacts/thumbnails/` under the data folder, named by a hash of the path, the size and the modification time, PNG for a canvas and JPEG for a page, so a changed file gets a new one; the folder is trimmed to the newest 500.
-- Measured in the prototype: a card took the page's load (0.1 s, or 1.3 s for a page with web fonts) and the 400 ms wait; main's own work was 4 to 77 ms for the capture and 2 to 4 ms to encode; each thumbnail was 12 to 17 KB. Live scaled frames as thumbnails cost 574 MB and 5 processes for 4 cards, so cards never hold a live page.
+- Measured in the prototype: a card took the page's load (0.1 s, or 1.3 s for a page with web fonts) and the 400 ms wait; main's own work was 4 to 77 ms for the capture and 2 to 4 ms to encode; each thumbnail was 12 to 17 KB at 480 px wide. Live scaled frames as thumbnails cost 574 MB and 5 processes for 4 cards, so cards never hold a live page.
 
 ## Interface
 
@@ -237,7 +237,7 @@ The rules this follows are the [visual style](./visual-style.md) and the [UX gui
  9 files from 4 sessions
 
  acme-web  5
- ✳ Explore onboarding directions  12 min ago
+ Explore onboarding directions  12 min ago
  ┌────────────┐ ┌────────────┐
  │ ▯ ▯ ▯      │ │            │
  │ ▭ ▭        │ │            │
@@ -248,8 +248,8 @@ The rules this follows are the [visual style](./visual-style.md) and the [UX gui
 
 - **Opening it**: the sidebar's **Artifacts** row (`Shapes`), which stays highlighted while the page shows ([sidebar](./ui.md#sidebar)). The page's code loads with dynamic `import()` the first time it opens.
 - **Layout**: a centred column of at most 960 px on surface 1. The header holds the title, a line saying how many files from how many sessions, and a filter field at its end that filters by file name (`Mod+F` focuses it, `Esc` clears it).
-- **Groups**: each project is a group label with its count, in the sidebar's project order, then **No project**. Under it, each session that wrote an artifact, most recently updated first: the agent's mark, the session's title at weight 500 and how long ago it was updated, as a row that opens the session. A project or session with nothing to show has no group.
-- **Cards**: a grid of cards at least 200 px wide, four across at 960 px. A card is the thumbnail, 16:10 on `--bg-subtle` with a hairline `--border-default` ring and `rounded-xl`, then the file name at weight 500 and, at the caption role, its folder relative to the project and, for a canvas, "Canvas, 5 pages". A card has no shadow and does not rise: on hover its ring turns `--border-strong`. The full path and the other sessions that wrote it are its tooltip.
+- **Groups**: each project is a group label with its count, in the sidebar's project order, then **No project**. Under it, each session that wrote an artifact, most recently updated first: the session's title at weight 500 and how long ago it was updated, as a row that opens the session. The row has no agent mark: the page sorts work by project and session, whichever agent wrote it. A project or session with nothing to show has no group.
+- **Cards**: a grid of cards at least 280 px wide with 16 px gaps, three across at 960 px and two in a narrower window, so a canvas's pages still read in its thumbnail. A card is the thumbnail, 16:10 on `--bg-subtle` with a hairline `--border-default` ring and `rounded-xl`, then the file name at weight 500 and, at the caption role, its folder relative to the project and, for a canvas, "Canvas, 5 pages". A card has no shadow and does not rise: on hover its ring turns `--border-strong`. The full path and the other sessions that wrote it are its tooltip.
 - **Card states**: a `Skeleton` in the thumbnail's place while it renders; a `File` icon on `--bg-subtle` when it could not render; **Missing** for a file no longer on disk, its name in `--text-disabled`.
 - **A card's menu** (right click, `Shift+F10`): **Open**, **Open in browser**, **Show in Finder** (Explorer, the file manager), **Copy path**, then **Open the session**.
 - **Keyboard**: the cards are one Tab stop; the arrow keys move through them in reading order and `Enter` opens one.
@@ -314,7 +314,7 @@ Performance:
 
 ### Opening from a session
 
-- A thread's tool call that wrote an artifact gets **Open** (`Shapes`) at the end of its row, before the status, shown on hover and focus ([tool calls](./ui.md#tool-calls)). A canvas opens fitted.
+- A thread's tool call that wrote an artifact gets **Open** (`Shapes`) at the end of its row, before the status, shown on hover and focus ([tool calls](./ui.md#tool-calls)). While its artifact is open in the side panel, the button stays shown and [pressed](./design-system.md#toggle-buttons) (`aria-pressed`), so the thread shows which call's file is beside it; pressing it again closes the pane, as the pane toggles do. A canvas opens fitted.
 - **It opens in the side panel**, as a pane beside the [Files](./ui.md#files) and [terminal](./ui.md#terminal) panes, so the page reloads in view while the agent keeps editing it. The pane's header holds the file name, **Reload**, **More**, **Maximize** and **Close**, as the other panes' headers do; it opens at 560 px and keeps its width; it has no toggle in the top bar, since it opens from the thread, and a card's **Open the session** opens the session with the artifact beside it.
 - **A canvas in the pane** pans, zooms and takes its keys as in the main area. A focused page puts its name, `ChevronLeft`, the counter, `ChevronRight` and **Back to the canvas** in the pane's header, before **Reload**; `Esc` leaves the focused page and never closes the pane.
 - Opening the full viewer in the main area, with **Back** to the session, was the alternative: it adds no pane, but the thread is out of sight while the page shows.
