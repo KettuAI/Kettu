@@ -4,7 +4,7 @@
 
 How work travels from an idea or a report to a release. Since v0.0.1, every change goes through an issue and a pull request: the maintainer's own features, users' reports and the bugs coding agents find. Coding agents do most of the work, so this document is written for them as much as for people; [CONTRIBUTING.md](../CONTRIBUTING.md) is the short version for outside contributors.
 
-The design draws on how Ghostty, Zed, opencode, Codex, uv, Biome, Electron, Tauri and shadcn/ui run their repositories, as observed on 2026-10-22. It takes issue types over type labels and prefixed labels from Zed and Biome, kept to a few dozen; version milestones and parent issues from Ghostty; squash merges without required approvals from uv and opencode; one combined required check from uv and Codex; issues but no code from outside, from Codex; and a weekly release train from Zed. It leaves out what only pays off at their volume: triage bots, stale bots, merge queues, vouch lists and CODEOWNERS.
+The design draws on how Ghostty, Zed, opencode, Codex, uv, Biome, Electron, Tauri and shadcn/ui run their repositories, as observed on 2026-10-22. It takes issue types over type labels and prefixed labels from Zed and Biome, kept to a few dozen; version milestones and parent issues from Ghostty; squash merges without required approvals from uv and opencode; one combined required check from uv and Codex; issues but no code from outside, from Codex; and release triggers that keep fixes from waiting, between Codex's frequent releases and Zed's weekly ones. It leaves out what only pays off at their volume: triage bots, stale bots, merge queues, vouch lists and CODEOWNERS.
 
 ## Principles
 
@@ -88,11 +88,20 @@ A pull request that does only part of an issue says `Refs #N` instead, and the i
 
 ### 6. Release
 
-Releases ride a weekly train, as Zed's do: often enough that a fix reaches users within days, and rarely enough that each update, which every user downloads and installs on restart, is worth it. A merged issue does not trigger a release on its own.
+A release goes out when one of four triggers fires, not on a fixed day and not for every merged issue. Fixes should not pile up, and each update, which every user downloads and installs on restart, should be worth it.
 
-- **Weekly**: once a week, on a fixed day, a patch release is cut from `main` if it holds at least one user-visible change (`feat`, `fix` or `perf`) since the last tag. A week without one ships nothing.
-- **Out of band**: a merged fix for an `urgent` issue ships at once, as a patch release of its own.
-- **Milestones**: when a milestone's last issue closes, the next train ships it as a minor version. Before 1.0, a minor version completes a design milestone (`v0.1.0` completes [M0](./milestones/m0.md), `v0.2.0` will be M1), and the weekly patches in between are previews.
+| Trigger | Fires when                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------------ |
+| Urgent  | A fix for an `urgent` issue merges                                                               |
+| Count   | 10 user-visible changes have merged since the last release                                       |
+| Time    | 7 days have passed since the last release, and at least one user-visible change has merged since |
+| Asked   | The maintainer asks for a release                                                                |
+
+- **User-visible change**: a squash commit on `main` of type `feat`, `fix` or `perf`. Docs, CI, refactors and other tasks never trigger a release; they ship with the next one.
+- **At most one a day.** A count or time release comes at least 24 hours after the previous release, so a burst of merges ships as one update. Urgent and asked releases go out at once.
+- **The numbers**: 10 changes are about what one look at the release notes can take in, and 7 days is the longest a fix waits when little is merging. Both get revisited once a few releases show how fast work lands.
+- **Checked by CI**: a `Release check` workflow runs on every push to `main` and once a day. When a trigger has fired and no release is open, it opens a Task issue, "Release vX.Y.Z", that names the trigger. An agent takes it through the steps below; an asked release starts the same way, from the maintainer's words.
+- **Versions**: a patch by default. When a milestone's last issue has closed, the release is that milestone's minor version. Before 1.0, a minor version completes a design milestone (`v0.1.0` completes [M0](./milestones/m0.md), `v0.2.0` will be M1), and the patches in between are previews.
 - **How**: an agent opens `chore(release): vX.Y.Z`, which bumps `package.json`; its description is the release notes, grouped by type and drafted from the squash commits since the last tag. After it merges come CI and Screenshots green on all three platforms for that commit, the tag, the [Release workflow](../.github/workflows/release.yml)'s draft, which the maintainer can install and try, and then publishing. The notes live on the GitHub release only.
 
 ## Gates
@@ -123,15 +132,15 @@ A parent issue with sub-issues tracks larger work (`gh issue create --parent N`,
 
 Every label carries a description on GitHub, which agents read with `gh label list`.
 
-| Label                                                                                                                                                                                                                                                                             | Meaning                                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `state:needs-triage`, `state:needs-info`, `state:needs-decision`, `state:needs-design`, `state:ready`, `state:in-progress`, `state:blocked`                                                                                                                                       | Where an open issue stands: exactly one at a time. `blocked` names what it waits for          |
-| `area:agents`, `area:session`, `area:thread`, `area:composer`, `area:sidebar`, `area:top-bar`, `area:home`, `area:settings`, `area:git`, `area:terminal`, `area:files`, `area:usage`, `area:updates`, `area:design-system`, `area:i18n`, `area:window`, `area:build`, `area:docs` | The part of OverBench it concerns: one or more                                                |
-| `platform:macos`, `platform:windows`, `platform:linux`                                                                                                                                                                                                                            | Only when some platforms are affected and others are not                                      |
-| `urgent`                                                                                                                                                                                                                                                                          | A released version crashes, loses data or has a security problem: fix it before anything else |
-| `regression`                                                                                                                                                                                                                                                                      | It worked in an earlier version                                                               |
-| `upstream`                                                                                                                                                                                                                                                                        | The cause lies in an agent, an adapter, Electron or a library; the issue links upstream       |
-| `performance`, `accessibility`                                                                                                                                                                                                                                                    | Cross-cutting concerns, next to the area                                                      |
+| Label                                                                                                                                                                                                                                                                             | Meaning                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `state:needs-triage`, `state:needs-info`, `state:needs-decision`, `state:needs-design`, `state:ready`, `state:in-progress`, `state:blocked`                                                                                                                                       | Where an open issue stands: exactly one at a time. `blocked` names what it waits for                        |
+| `area:agents`, `area:session`, `area:thread`, `area:composer`, `area:sidebar`, `area:top-bar`, `area:home`, `area:settings`, `area:git`, `area:terminal`, `area:files`, `area:usage`, `area:updates`, `area:design-system`, `area:i18n`, `area:window`, `area:build`, `area:docs` | The part of OverBench it concerns: one or more                                                              |
+| `platform:macos`, `platform:windows`, `platform:linux`                                                                                                                                                                                                                            | Only when some platforms are affected and others are not                                                    |
+| `urgent`                                                                                                                                                                                                                                                                          | A released version crashes, loses data or has a security problem: fix it first, and release the fix at once |
+| `regression`                                                                                                                                                                                                                                                                      | It worked in an earlier version                                                                             |
+| `upstream`                                                                                                                                                                                                                                                                        | The cause lies in an agent, an adapter, Electron or a library; the issue links upstream                     |
+| `performance`, `accessibility`                                                                                                                                                                                                                                                    | Cross-cutting concerns, next to the area                                                                    |
 
 `area:agents` covers the agent host, adapters and ACP; `area:session` the session lifecycle, history and persistence; `area:thread` the thread's entries and Markdown; `area:window` the main process, windows, menus and shortcuts; `area:build` CI, packaging, releases and `tools/`. GitHub's default labels go: types replace `bug`, `enhancement`, `question` and `documentation`, and close reasons replace `duplicate`, `invalid` and `wontfix`.
 
@@ -192,13 +201,13 @@ A ruleset on `main`:
 - **One issue, one session, one worktree, one branch.** The main checkout stays on a clean `main` and is only pulled. Sessions sharing one checkout used to take the same feedback number and the same dev ports; separate worktrees end that. Parallel sessions take issues in different areas, so that two sessions never touch the same files.
 - **Roles.** A session plays one role at a time, and may play several in a row, such as triage and then build for the same bug. It never reviews its own pull request.
 
-| Role    | Takes                                      | Produces                                       | Never                                          |
-| ------- | ------------------------------------------ | ---------------------------------------------- | ---------------------------------------------- |
-| Triage  | `state:needs-triage` issues                | Labels, states, reproductions, comments        | Closes an issue or changes code                |
-| Design  | `state:needs-design` issues                | A docs pull request with options to try        | Builds beyond prototypes                       |
-| Build   | `state:ready` issues                       | A pull request                                 | Works outside the issue's scope                |
-| Review  | Pull requests ready for review             | Review comments                                | Approves, merges or pushes to the branch       |
-| Release | The weekly train, or a merged `urgent` fix | The release pull request and the draft release | Tags or publishes without the maintainer's yes |
+| Role    | Takes                                        | Produces                                       | Never                                          |
+| ------- | -------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| Triage  | `state:needs-triage` issues                  | Labels, states, reproductions, comments        | Closes an issue or changes code                |
+| Design  | `state:needs-design` issues                  | A docs pull request with options to try        | Builds beyond prototypes                       |
+| Build   | `state:ready` issues                         | A pull request                                 | Works outside the issue's scope                |
+| Review  | Pull requests ready for review               | Review comments                                | Approves, merges or pushes to the branch       |
+| Release | A release issue, or the maintainer's request | The release pull request and the draft release | Tags or publishes without the maintainer's yes |
 
 - **Reporting.** An agent reports every issue, pull request and comment it creates, with its link, and asks at every [gate](#gates).
 - **Not yet.** Agents run in sessions the maintainer starts. Event-driven bots on GitHub (triage on open, stale and duplicate bots) wait until volume asks for them; the first step then is a scheduled triage run over `state:needs-triage`.
@@ -218,7 +227,7 @@ A parent issue tracks the move, with one sub-issue per step:
 1. Make the Windows tests reliable. `pnpm test` failed on Windows in three of the eight latest CI runs on 2026-10-22, and the check is about to gate every merge.
 2. Labels and milestone `v0.1.0`, with M0's remaining work.
 3. Issue forms, the pull request template, `SECURITY.md`, and updates to `CONTRIBUTING.md`, `AGENTS.md` and the [docs index](./README.md).
-4. CI: the combined `CI` check, the title and issue-link check, and Screenshots on pull requests.
+4. CI: the combined `CI` check, the title and issue-link check, Screenshots on pull requests, and the `Release check` workflow.
 5. Repository settings: squash merges only, with the pull request's title and an empty body; delete branches on merge; private vulnerability reporting; then the ruleset, once steps 1 and 4 have landed. Pull requests were limited to collaborators on 2026-10-22.
 6. The 22 problems in [M0 feedback](./milestones/m0-feedback.md) that are open or partly fixed become issues in `v0.1.0`, each naming its old number. The document is then frozen, linking to the milestone.
 
@@ -230,4 +239,3 @@ A parent issue tracks the move, with one sub-issue per step:
 - How CI checks titles and issue links: a short script in the repository, or `amannn/action-semantic-pull-request`, which is a new dependency.
 - Whether the squash commit's body stays empty or takes the pull request's description.
 - Whether Discussions stay off.
-- The weekly release day, and the time zone it follows.
