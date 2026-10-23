@@ -1752,6 +1752,15 @@ describe('installing a binary agent', () => {
     return { ...m, bin, npm, runs, executable, status: () => m.agents.status('opencode') }
   }
 
+  it('runs no install once the quit has begun', async () => {
+    const m = await binaryManager(async () => ({}))
+    await m.agents.list()
+    await m.agents.stopAll()
+    await m.agents.install('opencode')
+    expect(m.runs).toEqual([])
+    expect(m.status().task).toBeNull()
+  })
+
   it('lists its routes and installs by the first available one', async () => {
     const m = await binaryManager(async (options, bin) => {
       options.onOutput?.('added 2 packages in 3s\n')

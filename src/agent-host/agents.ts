@@ -932,6 +932,7 @@ export class AgentManager {
     const run: Promise<UpdateCheck> = (async () => {
       await before
       await this.detectAll()
+      if (this.stopped) return { checked: 0, failures: [] }
       const abort = new AbortController()
       this.updateAbort = abort
       const now = Date.now()
@@ -1218,6 +1219,8 @@ export class AgentManager {
     failure: (message: string) => string,
     method: AgentTask['method'] = null,
   ): Promise<void> {
+    // Nothing installs once the quit has begun, as though cancelled at once.
+    if (this.stopped) return
     const abort = new AbortController()
     slot.taskOutput.clear()
     slot.task = { kind, state: 'running', command, method, error: null }
