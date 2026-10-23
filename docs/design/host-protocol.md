@@ -123,6 +123,7 @@ interface HostError {
 | `attachments.update`       | `{ id, bytes }`                          | `Attachment`                                    | Replaces an image with the copy the renderer scaled                                                                                                                                                                            |
 | `attachments.remove`       | `{ id }`                                 | none                                            |                                                                                                                                                                                                                                |
 | `sessions.blob`            | `{ sessionId, hash }`                    | `{ mimeType, bytes }`                           | A sent image or pasted text from the thread store, for its full view                                                                                                                                                           |
+| `artifacts.*`              |                                          |                                                 | The Artifacts page and viewer: list, read, versions, rename, delete, restore, watch (designed, not built; [artifacts](./artifacts.md#ipc-and-host-protocol))                                                                   |
 
 ```ts
 interface SessionSummary {
@@ -256,6 +257,7 @@ interface ImportableSession {
 | `git.changed`, `git.pr` | See [git](./git.md#host-protocol) | Ports keeping that project live                                                                               |
 | `git.tools`             | `GitTools`                        | All ports                                                                                                     |
 | `usage.*`               | `UsageStatus` or none             | All ports, when the figures or the scan change ([usage](./usage.md#host-protocol))                            |
+| `artifacts.*`           | Per event                         | All ports for `changed`; watching ports for the rest ([artifacts](./artifacts.md#ipc-and-host-protocol))      |
 
 Terminals use a port of their own to the terminal host, with the same envelope ([terminal](./terminal.md#host-protocol)).
 

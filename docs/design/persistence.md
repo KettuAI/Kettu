@@ -27,6 +27,8 @@ An unpackaged run, such as `pnpm dev` or `electron .`, does not use the installe
 | `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
 | `state/attachments.json`     | Agent host | The attachments of drafts and queued prompts, until sent or removed ([attachments](./session-model.md#where-the-bytes-live))                       |
 | `attachments/`               | Agent host | Their saved bytes by SHA-256: pasted images and text, and images scaled to fit                                                                     |
+| `artifacts/content/`         | Agent host | Each [artifact](./artifacts.md#store) version's HTML, one file per hash, removed with the last version that names it                               |
+| `artifacts/thumbnails/`      | Main       | [Artifact thumbnails](./artifacts.md#thumbnails), one image per version, trimmed to the newest 500                                                 |
 | `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts
@@ -205,6 +207,7 @@ OverBench keeps its own copy of every session's thread, the entries it shows, so
   ) STRICT, WITHOUT ROWID;
   ```
 
+- **Artifacts** (designed, not built): a new schema version adds the `artifacts` and `artifact_versions` tables, which hold every artifact and its versions; each version's HTML is a file in `artifacts/content/`, written before its row commits ([artifacts](./artifacts.md#store)). They do not reference `threads`, so deleting a session keeps its artifacts.
 - **Turns**: a turn opens at a prompt of the user's own (not one steered into a running turn) and at the entry after a `turn_end`, which also splits a subagent's thread, since it has no prompts. An entry's `turn` is the position of the entry that opened its turn, so a page that starts at a turn is one range of the primary key.
 - **Pages**: a page reaches back at least 60 entries from its cursor, then on to the start of their turn, so the folding of a finished turn's work never sees half a turn; a turn longer than 500 entries is cut. The latest page is read below the end, each earlier one below the first position of the page after it, and `older` is null once a page starts the thread. A page also carries the latest plan when it lies before the page, for the plan above the composer. Measured on 2026-10-22 (Electron 44, macOS arm64, 40 other sessions in the file): 0.3 ms for the latest page of 137, 2,817 or 11,262 entries alike, about 110 KB each.
 - **Images**: an image whose base64 data is longer than 32 KB is stored once per session as bytes in `blobs`, a quarter smaller than its base64, and the entry keeps `{ kind: 'image', mimeType, blob }` in its place. Reading puts the data back, for the entries of that page only.

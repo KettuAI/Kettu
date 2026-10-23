@@ -2,11 +2,11 @@
 
 > Status: Draft for [M0](./milestones/m0.md) · Agent versions and capabilities were observed on 2026-10-20
 
-OverBench is a GUI and nothing more. It does not implement an agent, call a model or store credentials. Every agent runs as its own process, owns its auth, models and history, and talks to OverBench over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP). OverBench's job is to make that conversation fast, legible and beautiful.
+OverBench is a GUI and nothing more. It does not implement an agent, call a model or store credentials. Every agent runs as its own process, owns its auth, models and history, and talks to OverBench over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP). OverBench's job is to make that conversation fast, legible and beautiful. It offers the agents one service of its own: [artifacts](#artifacts), an MCP server through which they hand the user pages to look at.
 
 This keeps the product honest to its philosophy: the agents are the best implementations of agent logic, ACP is the best existing contract for talking to them, and OverBench spends all of its effort on the experience on top.
 
-This document is the overview. Each subsystem has a detailed design:
+This document is the overview and the global core design, the single source of truth for every core logic of the system ([core designs](#core-designs)). Each subsystem has a detailed design:
 
 | Design                                     | Covers                                                                                                                              |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -16,6 +16,7 @@ This document is the overview. Each subsystem has a detailed design:
 | [Persistence](./design/persistence.md)     | What is stored on disk, how it is written, versioned and recovered                                                                  |
 | [Git](./design/git.md)                     | Repository status, pull requests through `gh`, and git events in the thread                                                         |
 | [Terminal](./design/terminal.md)           | The terminal host, shells, flow control, rendering, and how terminals relate to projects and sessions                               |
+| [Artifacts](./design/artifacts.md)         | The artifacts service agents call, storage and versions, presence, the isolated surface, the Artifacts page and the canvas viewer   |
 | [Interface](./design/ui.md)                | Layout, screens, thread entries, composer, states, motion, typography and shortcuts                                                 |
 | [Localization](./design/localization.md)   | English and Simplified Chinese, the Language setting, and how each process translates its own text                                  |
 | [Testing](./design/testing.md)             | Unit, integration and process tests, the fake agent, CI, and how performance is measured                                            |
@@ -45,7 +46,7 @@ flowchart LR
 | ------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Main          | Electron main                       | App lifecycle, windows, menus, native dialogs and notifications, agent host supervision, [updates](./design/updates.md) |
 | Renderer      | Sandboxed Chromium                  | UI, view state, a replica of each session it shows                                                                      |
-| Agent host    | Electron `utilityProcess` (Node.js) | ACP connections, agent processes, live session state, persistence                                                       |
+| Agent host    | Electron `utilityProcess` (Node.js) | ACP connections, agent processes, live session state, persistence, the [artifacts](#artifacts) service                  |
 | Terminal host | Electron `utilityProcess` (Node.js) | Pseudo-terminals for the built-in [terminal](./design/terminal.md), started on first use                                |
 | Agent process | One per agent, spawned by the host  | The agent itself: model calls, tools, auth, conversation storage                                                        |
 
@@ -64,6 +65,7 @@ Alternatives considered:
 - **Renderer to terminal host**: a second `MessagePort` per page, exposed as `window.overbench.terminals`, so terminal output never shares a queue with session patches. See [terminal](./design/terminal.md#host-protocol).
 - **Main to agent host**: `utilityProcess` messages for startup, port handoff, binary overrides, notifications and shutdown. See [agent host](./design/agent-host.md#main-and-host-messages).
 - **Agent host to agents**: ACP over each agent's stdin and stdout as newline-delimited JSON-RPC, through the official [`@agentclientprotocol/sdk`](https://github.com/agentclientprotocol/typescript-sdk).
+- **Agents to the agent host**: the [artifacts](#artifacts) service, MCP over HTTP on `127.0.0.1`, which each session reaches with a token of its own.
 
 ### Cross-platform
 
@@ -180,13 +182,83 @@ The agent host is the source of truth for every live session. Its mapper turns A
 
 ### Persistence
 
-The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. The host also keeps its own copy of every session's thread in a SQLite database, owned by a worker thread and read a page at a time, so a session opens without its agent; the agents keep their transcripts and the context a session continues from. Token usage has a database and worker of its own, which also reads the agents' logs when the user allows it ([usage statistics](./design/usage.md)); the end of each Claude Code session's own transcript is read either way, for when its prompt cache expires ([prompt cache](./design/session-model.md#prompt-cache)). Credentials and diagnostics are never written. See [persistence](./design/persistence.md).
+The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. The host also keeps its own copy of every session's thread in a SQLite database, owned by a worker thread and read a page at a time, so a session opens without its agent; the agents keep their transcripts and the context a session continues from. Token usage has a database and worker of its own, which also reads the agents' logs when the user allows it ([usage statistics](./design/usage.md)); the end of each Claude Code session's own transcript is read either way, for when its prompt cache expires ([prompt cache](./design/session-model.md#prompt-cache)). Artifacts keep their records in the thread database and each version's HTML in the data folder ([artifacts](#artifacts)). Credentials and diagnostics are never written. See [persistence](./design/persistence.md).
+
+## Core designs
+
+Each core logic of OverBench has a section here: what it is, its model, its interfaces, the rules that always hold, and the decisions behind them with their dates. This is their single source of truth; the documents in [design](./design/) hold the details and link back here, and a change to a core design is written here first. The sections above cover the processes, ACP, data flow and security; subsystems designed before this rule keep their core design in their own documents until it moves here.
+
+### Artifacts
+
+> Decided by the maintainer on 2026-10-23 for [issue #11](https://github.com/overbench/overbench/issues/11); not built yet. Details: [artifacts](./design/artifacts.md).
+
+An artifact is a page an agent makes for the user to look at, such as a report, a slide deck or a set of design options: one HTML file, kept by OverBench with every version. Agents create and change artifacts through OverBench's own MCP service, not by writing files into the project. OverBench stores them on this machine and shows them in a surface that keeps them away from the app and the machine.
+
+**Model**
+
+| Object   | Holds                                                                                                                                                                            |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Artifact | `id` (`art_` and a ULID), the project it belongs to, `title`, `head` (its latest version), the session that created it, when it was created and updated, and when it was deleted |
+| Version  | Its number (1, 2, 3 …), the SHA-256 of its HTML, its size and page count, its author (a session, or the user), an optional one-line note, and when it was made                   |
+
+A version's HTML is stored once per hash, so restoring a version or writing the same page again takes no space.
+
+**Interface**
+
+- **The service.** The agent host runs an MCP server named `overbench`, over Streamable HTTP on `127.0.0.1` at a port the system picks. Every request that attaches a session to its agent (`session/new`, `session/load`, `session/resume`, `session/fork`) passes it in `mcpServers`, with a token of that session's own in the `Authorization` header. All three agents take MCP over HTTP ([agents](#agents)), and ACP's HTTP server entry carries headers, `session/resume` included (`@agentclientprotocol/sdk` 2.0.0, checked on 2026-10-23).
+- **Seven tools**, one per operation:
+
+| Operation | Tool                       | Does                                                                                                   |
+| --------- | -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Create    | `create_artifact`          | Makes an artifact from a title and its HTML; returns its id and version 1                              |
+| Read      | `read_artifact`            | Returns the HTML of the latest version, or of the version asked for                                    |
+| Update    | `update_artifact`          | Replaces the HTML, or applies text replacements to it, as a new version, naming the version it is from |
+| List      | `list_artifacts`           | The artifacts the session can reach, newest first, filtered by title                                   |
+| Delete    | `delete_artifact`          | Moves an artifact to Recently deleted                                                                  |
+| History   | `list_artifact_versions`   | Every version, with its time, author and note                                                          |
+| Restore   | `restore_artifact_version` | Copies an earlier version as the new latest one                                                        |
+
+- **The user** reaches the same operations in the interface, and also renames an artifact, imports an HTML file from disk as a new one, exports a version as an HTML file, and opens a version in the browser.
+
+**Rules**
+
+1. **Versions never change.** Each create, update and restore makes a new version, numbered one above the last; history is never rewritten.
+2. **No lost writes.** An update or a restore names the version it starts from; when that is not the latest, it is refused with the latest number, and the agent reads again.
+3. **A session reaches its own project.** Its token admits it to the artifacts of its project, or of its scratch folder for a session without one, through the seven tools and nothing else in OverBench. It reads and changes any of them, and deletes only to Recently deleted. The token ends when the session closes or the agent host stops.
+4. **Every version is kept** while its artifact exists. A deleted artifact stays in Recently deleted for 30 days, then every version of it is removed. Deleting a session deletes none of its artifacts.
+5. **One self-contained HTML file.** A version has no other files: a page inlines its styles and scripts or loads them from the [CDN list](./design/artifacts.md#network-policy).
+6. **An artifact leaves the machine by three roads only**: what an agent reads or writes goes to its model, as all of its context does; a page loads scripts, styles and fonts from the CDN list, without a referrer; and the user exports a version or opens it in the browser.
+7. **Isolation in five layers**:
+
+   | Layer       | What holds it                                                                                                                                                               |
+   | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | The page    | An origin of its own, a sandboxed frame in a process of its own, the network policy, every permission denied, and the frame guard's exception for it alone                  |
+   | The content | Served from OverBench's store: a page sees its own HTML and nothing on disk, not even another artifact                                                                      |
+   | The service | `127.0.0.1` only, a random token per session compared in constant time, requests that carry a browser's `Origin` refused, every argument validated, limits on size and rate |
+   | The scope   | A token names one session and its project; the artifacts of other projects do not exist for it                                                                              |
+   | The store   | Records in the thread database and each version's HTML in a file named by its hash, removed together                                                                        |
+
+8. **Presence is local.** A viewer shows how many places in OverBench have the artifact open, and which sessions are changing it: a session whose running turn created, updated or restored it, until that turn ends. A session shows by its title, not by its agent.
+
+**Decisions**, made on 2026-10-23, each as recommended; the interface and surface decisions of the same day are in [artifacts](./design/artifacts.md#decisions).
+
+| Question                       | Decided                                                                                   | Instead of                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Where artifacts come from      | OverBench's MCP service; the user can also import an HTML file                            | Finding the HTML files in the agents' edit tool calls, or both together                   |
+| Whether they leave the machine | Not yet: the model and the interface leave room for sharing, which is designed on its own | Share links and other people's presence now, which need an OverBench service and accounts |
+| Where they are stored          | OverBench's data folder                                                                   | The project's `.overbench/artifacts/`; the data folder with an export to the project      |
+| What a session's agent reaches | Every artifact of its project, to read and change; deleting moves to Recently deleted     | Only its own session's; reading the project's and changing its own; every project         |
+| How long versions are kept     | All of them, while the artifact exists                                                    | The latest 50 of each; a limit on their total size                                        |
+| Files beside the HTML          | None for now                                                                              | Images, styles and scripts uploaded through the service, kept with each version           |
+
+**Sharing later.** Ids need no server, and versions are immutable and named by their content, so a later sync can carry them as they are. Who may see or change a shared artifact needs accounts, which OverBench does not have, and is designed together with sharing.
 
 ## Security
 
 OverBench drives agents that edit files and run commands, so every layer assumes the one next to it can be wrong.
 
 - **Agent output is untrusted.** Markdown is rendered sanitized, without raw HTML. The CSP blocks remote images, so content in a reply cannot load tracking pixels or leak data through image URLs, and it blocks frames and plugin objects that load a URL. Links open in the system browser only after the `http(s)` check in main.
+- **HTML an agent hands over runs apart from the app** (designed, not built). Agents reach [artifacts](#artifacts) only through the artifacts service, on `127.0.0.1` with their session's token, and only within their project. Main serves each version from OverBench's store through the `overbench-artifact` protocol on an origin of its own that holds nothing else; the renderer shows it in a sandboxed frame that site isolation puts in another process, with no bridge to the app, and main lets it reach only a fixed list of CDNs and denies every permission it asks for. The CSP then allows frames from that protocol alone, and the frame rule below lets a page keep its access only while its frames are artifacts main opened ([the frame guard](./design/artifacts.md#the-frame-guard)).
 - **The renderer cannot run commands, except in the terminal.** The agent host has no API that takes a command line. Agent launch specs come from the catalog, and binary and shell overrides come from a native dialog in main. The built-in terminal is the one deliberate exception: what the user types there runs in a shell, so its safety rests on the renderer's integrity, and no agent output is ever written into a terminal ([terminal security](./design/terminal.md#security)).
 - **Git is read-only.** The git service runs status commands and `git fetch` only; it never commits, pushes or rewrites anything, and pull requests come through the user's own `gh` sign-in ([git](./design/git.md)).
 - **Every request to the host is validated**, including that a project folder is an absolute path to an existing directory. See [validation](./design/host-protocol.md#validation).
