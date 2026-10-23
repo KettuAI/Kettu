@@ -24,6 +24,7 @@ export const SCENARIOS = [
   'status',
   'context',
   'recall',
+  'attachments',
   'chinese',
 ] as const
 
@@ -79,6 +80,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   status: { description: "The plan limits, as Codex's /status reports them" },
   context: { description: "What fills the context, as Claude Code's /context reports it" },
   recall: { description: 'Answers with your previous message, as the agent remembers it' },
+  attachments: { description: 'Lists the images, files and links the prompt carried' },
   chinese: { description: 'A long answer in Chinese, with every Markdown block' },
 }
 

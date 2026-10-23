@@ -452,9 +452,22 @@ export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | str
 
 function initOf(value: unknown): RememberedInit | null {
   if (!isRecord(value) || !isVersion(value.version) || !isRecord(value.capabilities)) return null
-  const capabilities = Object.fromEntries(
+  const capabilities: RememberedInit['capabilities'] = Object.fromEntries(
     Object.entries(value.capabilities).filter(([, on]) => typeof on === 'boolean'),
   )
+  const prompt = value.capabilities.prompt
+  if (
+    isRecord(prompt) &&
+    typeof prompt.image === 'boolean' &&
+    typeof prompt.audio === 'boolean' &&
+    typeof prompt.embeddedContext === 'boolean'
+  ) {
+    capabilities.prompt = {
+      image: prompt.image,
+      audio: prompt.audio,
+      embeddedContext: prompt.embeddedContext,
+    }
+  }
   return { version: value.version, capabilities }
 }
 

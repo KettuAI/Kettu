@@ -12,9 +12,11 @@ import {
   readInstall,
   removeOlderInstalls,
   runNpm,
+  runProgram,
   type InstallOptions,
 } from './adapter-install'
 import { findCommand, isExecutableFile, type Env } from './find-command'
+import { QUIT_REASON, type ProcessControl } from './process-tree'
 
 const platform = process.platform as Platform
 const PACKAGE = 'fake-adapter'
@@ -236,6 +238,40 @@ describe('installAdapter', () => {
       await expect(install).rejects.toThrow('The install was stopped.')
       expect(await gone()).toBe(true)
     }, 30_000)
+  })
+})
+
+describe('runProgram', () => {
+  it.each([
+    ["with the quit's short limits when a quit aborts it", QUIT_REASON, true],
+    ['with the long limits when anything else aborts it', undefined, false],
+  ] as const)('stops a Windows tree %s', async (_, reason, quitting) => {
+    const taskkills: boolean[] = []
+    // The Windows stop, through a control whose taskkill ends the program, on every platform.
+    const control: ProcessControl = {
+      platform: 'win32',
+      list: async () => [],
+      kill: () => {},
+      taskkill: async (pids, options) => {
+        taskkills.push(options?.quitting ?? false)
+        for (const pid of pids) process.kill(pid, 'SIGKILL')
+      },
+      delay: () => Promise.resolve(),
+    }
+    const abort = new AbortController()
+    const run = runProgram({
+      program: process.execPath,
+      args: ['-e', 'setInterval(() => {}, 1000)'],
+      cwd: os.tmpdir(),
+      env: process.env,
+      platform: 'win32',
+      timeoutMs: 30_000,
+      signal: abort.signal,
+      control,
+    })
+    abort.abort(reason)
+    expect(await run).toMatchObject({ aborted: true })
+    expect(taskkills).toEqual([quitting])
   })
 })
 

@@ -180,7 +180,20 @@ export type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: C
 export type ContentRef =
   | { kind: 'image'; mimeType: string; data: string }
   | { kind: 'link'; uri: string; name: string }
+  | { kind: 'attachment'; attachment: Attachment } // what the user added, see attachments
   | { kind: 'unsupported'; label: string }
+
+export interface Attachment {
+  id: string // the host's record while a draft or the queue holds it; unique in a thread
+  type: 'image' | 'file' | 'folder' | 'text' // 'text' is a long paste
+  name: string // the file's name, or "Image 1", "Pasted text 1"
+  uri: string | null // the original's file:// URI; null for a pasted image or text
+  mimeType: string | null
+  size: number | null // bytes: what was sent, or the file's when it went as a link
+  sent: 'image' | 'embedded' | 'linked' | 'inline' | null // how it went; null until sent
+  thumb: string | null // an image's thumbnail, a 224 px WebP data URL
+  blob: string | null // SHA-256 of the bytes kept in the thread store: an image or a pasted text
+}
 
 export interface PlanItem {
   content: string
@@ -397,11 +410,34 @@ function isContentRef(value: unknown): value is ContentRef {
       return typeof value.mimeType === 'string' && typeof value.data === 'string'
     case 'link':
       return typeof value.uri === 'string' && typeof value.name === 'string'
+    case 'attachment':
+      return isAttachment(value.attachment)
     case 'unsupported':
       return typeof value.label === 'string'
     default:
       return false
   }
+}
+
+const ATTACHMENT_TYPES = new Set(['image', 'file', 'folder', 'text'])
+const SENT_AS = new Set(['image', 'embedded', 'linked', 'inline'])
+const isStringOrNull = (value: unknown): value is string | null =>
+  value === null || typeof value === 'string'
+
+function isAttachment(value: unknown): value is Attachment {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.type === 'string' &&
+    ATTACHMENT_TYPES.has(value.type) &&
+    typeof value.name === 'string' &&
+    isStringOrNull(value.uri) &&
+    isStringOrNull(value.mimeType) &&
+    (value.size === null || typeof value.size === 'number') &&
+    (value.sent === null || (typeof value.sent === 'string' && SENT_AS.has(value.sent))) &&
+    isStringOrNull(value.thumb) &&
+    isStringOrNull(value.blob)
+  )
 }
 
 function isUserContent(value: unknown): value is UserContent {

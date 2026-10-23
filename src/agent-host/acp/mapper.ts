@@ -1042,6 +1042,9 @@ export function promptBlocks(content: readonly UserContent[]): acp.ContentBlock[
         return { type: 'image', mimeType: ref.mimeType, data: ref.data }
       case 'link':
         return { type: 'resource_link', uri: ref.uri, name: ref.name }
+      // The host turns attachments into images and links before a prompt goes; never reached.
+      case 'attachment':
+        return { type: 'text', text: ref.attachment.name }
       default:
         return { type: 'text', text: ref.label }
     }

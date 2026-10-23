@@ -21,6 +21,7 @@ export type ThreadRequest =
   | { id: number; op: 'load'; sessionId: string }
   | { id: number; op: 'write'; sessionId: string; change: ThreadWrite }
   | { id: number; op: 'remove'; sessionIds: string[] }
+  | { id: number; op: 'blob'; sessionId: string; hash: string }
   | { id: number; op: 'close' }
 
 export type ThreadReply =

@@ -32,6 +32,7 @@ import {
 import { Diagnostics } from './diagnostics'
 import type { Env } from './find-command'
 import { CliVersions, type AdapterCli } from './installed-cli'
+import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
 import type { AgentsFile, AgentUpdatesFile } from './storage'
@@ -420,6 +421,80 @@ function packageManager(installedVersions: string[], adaptersDir?: string) {
   }
 }
 
+describe('quitting', () => {
+  /** What `stopAll` came to before `ms` passed: 'stopped', or 'waiting' while it still runs. */
+  const stopAllWithin = (m: ReturnType<typeof manager>, ms: number) =>
+    Promise.race([
+      m.agents.stopAll().then(() => 'stopped'),
+      new Promise((resolve) => setTimeout(() => resolve('waiting'), ms)),
+    ])
+
+  it('stops waiting for an agent that outlasts the quit, and kills what is left of it', async () => {
+    const base = inProcessLauncher(module)
+    let kills = 0
+    const launcher: AgentLauncher = {
+      launch: (def, spec, env, output) => {
+        const launched = base.launch(def, spec, env, output)
+        const stop = launched.stop
+        return Object.assign(launched, {
+          // An agent that ignores EOF and every signal the stop sends.
+          stop: () => new Promise<never>(() => {}),
+          kill: async () => {
+            kills++
+            await stop()
+          },
+        })
+      },
+    }
+    const m = manager({}, { quitStopMs: 100 }, { launcher })
+    await m.agents.ensureReady('fake-agent')
+    expect(await stopAllWithin(m, 2_000)).toBe('stopped')
+    expect(kills).toBe(1)
+    expect(m.diagnostics.logEntries()).toContainEqual(
+      expect.objectContaining({ level: 'warn', message: expect.stringContaining('Fake agent') }),
+    )
+  })
+
+  it('stops an agent that is still starting without waiting for its initialize', async () => {
+    const base = inProcessLauncher(module, {
+      FAKE_AGENT_SLOW_START_MS: '10000',
+      FAKE_AGENT_DELAY_SCALE: '1',
+    })
+    const stops: boolean[] = []
+    const launcher: AgentLauncher = {
+      launch: (def, spec, env, output) => {
+        const launched = base.launch(def, spec, env, output)
+        const stop = launched.stop
+        return Object.assign(launched, {
+          stop: (tools?: ToolOptions) => {
+            stops.push(tools?.quitting ?? false)
+            return stop(tools)
+          },
+        })
+      },
+    }
+    const m = manager({}, {}, { launcher })
+    const start = m.agents.ensureReady('fake-agent')
+    await until(() => m.state() === 'starting')
+    expect(await stopAllWithin(m, 2_000)).toBe('stopped')
+    await expect(start).rejects.toMatchObject({ code: 'agent_unavailable' })
+    // Stopped by the quit, not failed.
+    expect(m.state()).toBe('available')
+    expect(stops.length).toBeGreaterThan(0)
+    expect(stops.every((quitting) => quitting)).toBe(true)
+  })
+
+  it('starts nothing once the quit has begun', async () => {
+    const m = manager()
+    await m.agents.stopAll()
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    expect(m.launcher.launches).toBe(0)
+    expect(m.state()).toBe('available')
+  })
+})
+
 describe('AgentManager with an installed adapter', () => {
   it('installs the pinned version before its first start, once for every caller', async () => {
     const m = packageManager([])
@@ -533,14 +608,16 @@ describe('AgentManager with an installed adapter', () => {
     await m.agents.stopAll()
   })
 
-  it('stops a running install when the agent stops', async () => {
+  it('stops a running install when the agent stops, and names a quit as its reason', async () => {
     const m = packageManager([])
+    let reason: unknown
     m.onInstall(
       (options) =>
         new Promise((_, reject) =>
-          options.signal?.addEventListener('abort', () =>
-            reject(new Error('The install was stopped.')),
-          ),
+          options.signal?.addEventListener('abort', () => {
+            reason = options.signal?.reason
+            reject(new Error('The install was stopped.'))
+          }),
         ),
     )
     const start = m.agents.ensureReady('fake-agent')
@@ -550,6 +627,8 @@ describe('AgentManager with an installed adapter', () => {
       message: 'Fake agent could not be installed. The install was stopped.',
     })
     expect(m.launcher.launches).toBe(0)
+    // So npm's tree is stopped with the quit's short limits.
+    expect(reason).toBe(QUIT_REASON)
   })
 })
 
@@ -617,6 +696,7 @@ function cliManager(
         exited: Promise.resolve({ code: withCli ? 1 : 2, signal: null }),
         hasExited: true,
         stop: () => launched.stop(),
+        kill: () => launched.kill(),
       }
     },
   }
@@ -713,7 +793,7 @@ describe('the CLI the user installed', () => {
         installed: { problem: { kind: 'failed', reason: expect.any(String) } },
       },
     })
-    await m.agents.stopAll()
+    await m.agents.stop('fake-agent')
     await m.agents.ensureReady('fake-agent')
     expect(m.launches.at(-1)?.env.FAKE_CLI_PATH).toBeUndefined()
     await m.agents.stopAll()
@@ -841,7 +921,7 @@ describe('the CLI the user installed', () => {
     await change('installed')
     expect(m.status().cli).toMatchObject({ runs: 'installed', active: 'installed' })
     await change('bundled')
-    await m.agents.stopAll()
+    await m.agents.stop('fake-agent')
     expect(m.status().cli).toMatchObject({ runs: 'bundled', active: null })
     await m.agents.ensureReady('fake-agent')
     expect(m.status().cli).toMatchObject({ runs: 'bundled', active: 'bundled' })
@@ -867,7 +947,7 @@ describe('the CLI the user installed', () => {
     }
     const m = cliManager(options)
     await m.agents.ensureReady('fake-agent')
-    await m.agents.stopAll()
+    await m.agents.stop('fake-agent')
     const failed = { runs: 'bundled', installed: { problem: { kind: 'failed' } } }
     expect(m.status().cli).toMatchObject(failed)
     // A change elsewhere keeps the failure.
@@ -1449,7 +1529,7 @@ describe('updates', () => {
     expect(await m.dirs()).toEqual(['2.0.0', fresh])
     expect(m.status().launchCommand).toContain(old.entry)
 
-    await m.agents.stopAll()
+    await m.agents.stop('codex')
     await m.agents.ensureReady('codex')
     expect(m.status().launchCommand).toContain(path.join(m.root, 'codex', fresh!))
     let left: string[] = []
@@ -1671,6 +1751,15 @@ describe('installing a binary agent', () => {
     )
     return { ...m, bin, npm, runs, executable, status: () => m.agents.status('opencode') }
   }
+
+  it('runs no install once the quit has begun', async () => {
+    const m = await binaryManager(async () => ({}))
+    await m.agents.list()
+    await m.agents.stopAll()
+    await m.agents.install('opencode')
+    expect(m.runs).toEqual([])
+    expect(m.status().task).toBeNull()
+  })
 
   it('lists its routes and installs by the first available one', async () => {
     const m = await binaryManager(async (options, bin) => {

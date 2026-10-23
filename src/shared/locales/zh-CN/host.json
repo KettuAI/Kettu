@@ -21,6 +21,9 @@
     "cannotList": "{{agent}} 无法列出它的会话",
     "ultracodeBetweenTurns": "Ultracode 只能在两轮对话之间切换",
     "ultracodeDescription": "用于大型任务的动态工作流；切换会重启 Claude Code",
+    "promptTooLarge": "这条消息连同附件超过 10 MB，请移除一些再发送。",
+    "attachmentGone": "{{name}} 已不可用，请移除后重新添加。",
+    "attachmentMissing": "有一个附件已不可用，请移除后重新添加。",
     "subagent": {
       "noPrompt": "子 Agent 会话从父会话接收指令",
       "noFork": "子 Agent 会话不能分叉",

@@ -4,11 +4,13 @@
 import { randomUUID } from 'node:crypto'
 import {
   REMOVED_WHILE_STARTING,
+  type AttachmentBytes,
   type ContextBreakdown,
   type ImportableSession,
   type SessionAttention,
   type SessionSummary,
 } from '@shared/agent-host'
+import { PROMPT_BYTES, sentBytes } from '@shared/attachments'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import {
@@ -29,6 +31,8 @@ import {
   type SessionStatus,
   type SessionView,
   type StopReason,
+  type Attachment,
+  type ContentRef,
   type ThreadEntry,
   type ThreadState,
   type TokenTotals,
@@ -57,6 +61,7 @@ import {
 } from './acp/mapper'
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
+import { toArrayBuffer, type Attachments } from './attachments'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import { lostValues, lostValuesNotice, type LostValue } from './config-notice'
 import type { Diagnostics } from './diagnostics'
@@ -78,11 +83,13 @@ import {
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
 import {
+  attachmentBlobs,
   changesStored,
   pageStart,
   settled,
   storedSession,
   type PositionedEntry,
+  type StoredBlob,
   type StoredThread,
   type ThreadPage,
   type ThreadWrite,
@@ -152,6 +159,8 @@ export interface SessionManagerDeps {
   }
   /** Reads how long a session's prompt cache lasts from the agent's own transcript. */
   cacheTtl?: CacheTtlReader
+  /** The attachments drafts and queued prompts hold; without it a prompt carries none. */
+  attachments?: Attachments
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -160,11 +169,14 @@ type Failure =
   | { action: 'create' }
   | { action: 'load' }
   | { action: 'resume' }
-  | { action: 'prompt'; content: UserContent[] }
+  | { action: 'prompt'; content: UserContent[]; entryId: string | null }
 
 interface Turn {
   startedAt: number
+  /** As the user wrote it, with the attachments as their records show them. */
   content: UserContent[]
+  /** The user entry the turn started with, which shows how its attachments went. */
+  entryId: string | null
   ended: boolean
   cancelRequested: boolean
   fallback: ReturnType<typeof setTimeout> | null
@@ -219,6 +231,8 @@ interface Live {
   rewrite: boolean
   /** A replay failed partway, so the thread is not stored until one completes. */
   partial: boolean
+  /** Bytes of sent attachments for the next checkpoint, by hash. */
+  blobs: Map<string, StoredBlob>
   checkpointTimer: ReturnType<typeof setTimeout> | null
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
@@ -244,6 +258,17 @@ export function fallbackTitle(content: readonly UserContent[]): string | null {
     return chars.length > TITLE_LENGTH ? chars.slice(0, TITLE_LENGTH).join('').trimEnd() : line
   }
   return null
+}
+
+/** The attachments that sessions' queued prompts hold, which go with the sessions. */
+function queuedAttachments(records: readonly SessionRecord[]): string[] {
+  return records.flatMap((record) =>
+    (record.queue ?? []).flatMap((item) =>
+      item.content.flatMap((c) =>
+        c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment.id] : [],
+      ),
+    ),
+  )
 }
 
 /** Agents with OverBench's ultracode switch: Claude Code, and the fake agent that stands in for it. */
@@ -576,7 +601,7 @@ export class SessionManager {
   // Checkpoints: each session's thread goes to the thread store, so it opens without its agent.
 
   private hasChanges(live: Live): boolean {
-    return live.rewrite || live.sessionDirty || live.dirty.size > 0
+    return live.rewrite || live.sessionDirty || live.dirty.size > 0 || live.blobs.size > 0
   }
 
   private scheduleCheckpoint(live: Live): void {
@@ -607,17 +632,22 @@ export class SessionManager {
       const pos = live.positions.get(id)
       if (entry && pos !== undefined) entries.push({ pos, entry })
     }
+    const blobs = [...live.blobs.values()]
     const change: ThreadWrite = {
       head: { agentId: live.record.agentId, acpSessionId: live.record.acpSessionId },
       entries,
       ...(replace || live.sessionDirty ? { session: storedSession(live.thread.session) } : {}),
       ...(replace ? { replace: true } : {}),
+      ...(blobs.length > 0 ? { blobs } : {}),
     }
     live.dirty = new Set()
     live.sessionDirty = false
     live.rewrite = false
+    live.blobs = new Map()
     store.write(live.id, change).catch((error: unknown) => {
       live.rewrite = true
+      // Kept for the rewrite, which takes the whole thread but only the bytes it is handed.
+      for (const blob of blobs) if (!live.blobs.has(blob.hash)) live.blobs.set(blob.hash, blob)
       this.deps.diagnostics.log(
         'warn',
         `Could not store the thread of session ${live.id}: ${(error as Error).message}`,
@@ -844,6 +874,7 @@ export class SessionManager {
       sessionDirty: false,
       rewrite: false,
       partial: false,
+      blobs: new Map(),
       checkpointTimer: null,
       used: false,
       background: false,
@@ -1659,7 +1690,7 @@ export class SessionManager {
       case 'prompt':
         // The turn attaches the session again if it has to.
         this.update(live, { status: 'ready', error: null })
-        this.startTurn(live, failure.content, this.now())
+        this.startTurn(live, failure.content, this.now(), failure.entryId)
         return
       case 'load':
       case 'resume':
@@ -2098,23 +2129,175 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
+    const hydrated = this.hydrate(content)
     const live = await this.revive(sessionId)
     if (!canSend(live.thread.session.status)) throw busyError(live.thread.session.status)
-    this.sendPrompt(live, content)
+    this.sendPrompt(live, hydrated)
   }
 
   private sendPrompt(live: Live, content: UserContent[]): void {
     live.used = true
     const now = this.now()
+    const entryId = this.nextId(live)
     const patches: Patch[] = [
-      { op: 'entry.add', entry: { kind: 'user', id: this.nextId(live), content, at: now } },
+      { op: 'entry.add', entry: { kind: 'user', id: entryId, content, at: now } },
     ]
     this.emit(live, patches)
     if (live.thread.session.title === null) {
       const title = fallbackTitle(content)
       if (title) this.update(live, { title })
     }
-    this.startTurn(live, content, now)
+    this.startTurn(live, content, now, entryId)
+  }
+
+  // Attachments: the renderer names each by its record's id; the host fills in the rest from the
+  // record, and at send time builds what goes to the agent from what it advertised.
+
+  /** The content with each attachment as its record shows it; refuses one no longer held. */
+  private hydrate(content: UserContent[]): UserContent[] {
+    let bytes = 0
+    const out = content.map((item): UserContent => {
+      if (item.type === 'text') bytes += Buffer.byteLength(item.text, 'utf8')
+      if (item.type !== 'ref' || item.ref.kind !== 'attachment') return item
+      const store = this.deps.attachments
+      if (!store) throw invalidParams('This host takes no attachments')
+      const attachment = store.view(item.ref.attachment.id)
+      bytes += sentBytes(attachment.size ?? 0)
+      return { type: 'ref', ref: { kind: 'attachment', attachment } }
+    })
+    if (bytes > PROMPT_BYTES) throw invalidParams(t('session.promptTooLarge'))
+    return out
+  }
+
+  /**
+   * What goes to the agent for this content, how the thread shows it once sent, and the bytes
+   * the thread store keeps for it. An image goes as an image to an agent that takes images, and
+   * as a link to its saved file to one that does not.
+   */
+  private async resolveAttachments(
+    live: Live,
+    content: readonly UserContent[],
+  ): Promise<{
+    wire: UserContent[]
+    shown: UserContent[]
+    blobs: StoredBlob[]
+    ids: string[]
+  }> {
+    const store = this.deps.attachments
+    const prompt = this.deps.agents.status(live.record.agentId).capabilities.prompt
+    const wire: UserContent[] = []
+    const shown: UserContent[] = []
+    const blobs: StoredBlob[] = []
+    const ids: string[] = []
+    for (const item of content) {
+      if (item.type !== 'ref' || item.ref.kind !== 'attachment') {
+        wire.push(item)
+        shown.push(item)
+        continue
+      }
+      if (item.ref.attachment.sent) {
+        // Sent before, as when the agent asked to sign in: again from the bytes the thread keeps.
+        wire.push(await this.resend(live, item.ref.attachment))
+        shown.push(item)
+        continue
+      }
+      if (!store) throw invalidParams('This host takes no attachments')
+      const record = store.get(item.ref.attachment.id)
+      const data = await store.bytes(record)
+      ids.push(record.id)
+      blobs.push({ hash: record.hash, mime: record.mimeType, data: new Uint8Array(data) })
+      let ref: ContentRef
+      let sent: Attachment['sent']
+      if (prompt?.image) {
+        ref = { kind: 'image', mimeType: record.mimeType, data: data.toString('base64') }
+        sent = 'image'
+      } else {
+        ref = { kind: 'link', uri: await store.sentLink(record, data), name: record.name }
+        sent = 'linked'
+      }
+      wire.push({ type: 'ref', ref })
+      shown.push({
+        type: 'ref',
+        ref: {
+          kind: 'attachment',
+          attachment: {
+            ...store.view(record.id),
+            uri: ref.kind === 'link' ? ref.uri : null,
+            sent,
+            blob: record.hash,
+          },
+        },
+      })
+    }
+    return { wire, shown, blobs, ids }
+  }
+
+  private async resend(live: Live, attachment: Attachment): Promise<UserContent> {
+    if (attachment.sent === 'linked' && attachment.uri) {
+      return { type: 'ref', ref: { kind: 'link', uri: attachment.uri, name: attachment.name } }
+    }
+    const hash = attachment.blob
+    const stored = hash ? await this.storedBlob(live.id, hash).catch(() => null) : null
+    if (attachment.sent === 'image' && stored) {
+      const data = Buffer.from(stored.data).toString('base64')
+      return { type: 'ref', ref: { kind: 'image', mimeType: stored.mime, data } }
+    }
+    throw notFound(t('session.attachmentGone', { name: attachment.name }))
+  }
+
+  /** Keeps the sent bytes for the thread store and lets the attachments' records go. */
+  private commitAttachments(
+    live: Live,
+    resolved: { shown: UserContent[]; blobs: StoredBlob[]; ids: string[] },
+  ): void {
+    if (resolved.ids.length === 0) return
+    for (const blob of resolved.blobs) live.blobs.set(blob.hash, blob)
+    this.showSent(live, resolved.shown)
+    this.scheduleCheckpoint(live)
+    void this.deps.attachments?.release(resolved.ids)
+  }
+
+  /**
+   * A message held back unsent, as when the session's mode was lost, still names the records
+   * its sent copy used; once they go it opens what was sent instead.
+   */
+  private showSent(live: Live, shown: readonly UserContent[]): void {
+    const sent = new Map<string, Attachment>()
+    for (const item of shown) {
+      if (item.type === 'ref' && item.ref.kind === 'attachment' && item.ref.attachment.sent) {
+        sent.set(item.ref.attachment.id, item.ref.attachment)
+      }
+    }
+    const patches: Patch[] = []
+    for (const id of live.thread.order) {
+      const entry = live.thread.byId[id]
+      if (entry?.kind !== 'user') continue
+      let changed = false
+      const content = entry.content.map((item): UserContent => {
+        if (item.type !== 'ref' || item.ref.kind !== 'attachment') return item
+        const attachment = item.ref.attachment.sent ? undefined : sent.get(item.ref.attachment.id)
+        if (!attachment) return item
+        changed = true
+        return { type: 'ref', ref: { kind: 'attachment', attachment } }
+      })
+      if (changed) patches.push({ op: 'entry.update', id, changes: { content } })
+    }
+    if (patches.length > 0) this.emit(live, patches)
+  }
+
+  async blob(sessionId: string, hash: string): Promise<AttachmentBytes> {
+    this.recordOf(sessionId)
+    const stored = await this.storedBlob(sessionId, hash)
+    if (!stored) throw notFound(`Session ${sessionId} keeps no attachment ${hash}`)
+    return { mimeType: stored.mime, bytes: toArrayBuffer(stored.data) }
+  }
+
+  /** A sent attachment's bytes: from memory until the thread store has them. */
+  private async storedBlob(sessionId: string, hash: string): Promise<StoredBlob | null> {
+    const live = this.live.get(sessionId)
+    const pending = live?.blobs.get(hash)
+    if (pending) return pending
+    return (await this.deps.threads?.blob(sessionId, hash)) ?? null
   }
 
   // The queue: OverBench's own, for every agent, since ACP has none. One turn runs at a time,
@@ -2125,10 +2308,11 @@ export class SessionManager {
    * nothing waits, or only a paused queue does. The composer always sends through here, so a
    * prompt sent before it heard that a turn started is queued, not refused.
    */
-  async queue(sessionId: string, content: UserContent[]): Promise<{ itemId: string | null }> {
+  async queue(sessionId: string, input: UserContent[]): Promise<{ itemId: string | null }> {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
+    const content = this.hydrate(input)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
@@ -2173,9 +2357,10 @@ export class SessionManager {
     if (!live.turn || live.turn.ended || !live.connection) {
       throw new HostError('busy', t('session.noTurn'))
     }
+    const resolved = await this.resolveAttachments(live, item.content)
     let outcome
     try {
-      outcome = await live.connection.steer(live.record.acpSessionId, item.content)
+      outcome = await live.connection.steer(live.record.acpSessionId, resolved.wire)
     } catch (error) {
       throw agentError(error)
     }
@@ -2192,12 +2377,13 @@ export class SessionManager {
         entry: {
           kind: 'user',
           id: this.nextId(live),
-          content: item.content,
+          content: resolved.shown,
           at: this.now(),
           steered: true,
         },
       },
     ])
+    this.commitAttachments(live, resolved)
     this.update(live, { queue: queue.filter((i) => i.id !== itemId) })
     this.persist(live)
     this.touch(live.id)
@@ -2224,10 +2410,16 @@ export class SessionManager {
     if (live.thread.session.queue.length > 0) this.update(live, { queuePaused: true })
   }
 
-  private startTurn(live: Live, content: UserContent[], now: number): void {
+  private startTurn(
+    live: Live,
+    content: UserContent[],
+    now: number,
+    entryId: string | null = null,
+  ): void {
     const turn: Turn = {
       startedAt: now,
       content,
+      entryId,
       ended: false,
       cancelRequested: false,
       fallback: null,
@@ -2288,6 +2480,12 @@ export class SessionManager {
     const entries = (cut?.entries ?? threadEntries(source.thread)).filter(
       (entry) => entry.kind !== 'subagent',
     )
+    // Read now, so the reads go before a delete of the source that would take the bytes with it.
+    const reading = Promise.all(
+      [...attachmentBlobs(entries)].map((hash) =>
+        this.storedBlob(source.id, hash).catch(() => null),
+      ),
+    )
     let setup
     try {
       setup = await runtime.connection.forkSession(
@@ -2299,6 +2497,7 @@ export class SessionManager {
     } catch (error) {
       throw agentError(error)
     }
+    const blobs = (await reading).filter((blob) => blob !== null)
     const now = this.now()
     const record: SessionRecord = {
       ...source.record,
@@ -2313,6 +2512,7 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
+    live.blobs = new Map(blobs.map((blob) => [blob.hash, blob]))
     for (const entry of entries) live.counter = Math.max(live.counter, idNumber(entry.id))
     this.emit(
       live,
@@ -2359,7 +2559,21 @@ export class SessionManager {
     }
     if (turn.ended) return
     try {
-      const result = await connection.prompt(live.record.acpSessionId, turn.content)
+      const resolved = await this.resolveAttachments(live, turn.content)
+      if (turn.ended) return
+      if (resolved.ids.length > 0) {
+        const entry = turn.entryId ? live.thread.byId[turn.entryId] : undefined
+        if (entry?.kind === 'user') {
+          this.emit(live, [
+            { op: 'entry.update', id: entry.id, changes: { content: resolved.shown } },
+          ])
+        }
+      }
+      const sending = connection.prompt(live.record.acpSessionId, resolved.wire)
+      // Sent: the records go, and a retry after a failed sign-in sends what the thread shows.
+      this.commitAttachments(live, resolved)
+      turn.content = resolved.shown
+      const result = await sending
       if (turn.ended) return
       this.deps.agents.signedIn(live.record.agentId)
       this.endTurn(live, turn, result.stopReason, result.tokens, result.models)
@@ -2517,7 +2731,7 @@ export class SessionManager {
       },
     ])
     if (authRequired) {
-      live.failure = { action: 'prompt', content: turn.content }
+      live.failure = { action: 'prompt', content: turn.content, entryId: turn.entryId }
       this.deps.agents.authRequired(live.record.agentId)
       this.update(live, {
         status: 'auth_required',
@@ -2555,7 +2769,11 @@ export class SessionManager {
     this.finishTurn(live, turn, null)
     this.update(live, { turnStartedAt: null, turnStartUsed: null })
     this.pauseQueue(live)
-    this.failStart(live, error, { action: 'prompt', content: turn.content })
+    this.failStart(live, error, {
+      action: 'prompt',
+      content: turn.content,
+      entryId: turn.entryId,
+    })
     this.persist(live)
     this.checkpoint(live)
   }
@@ -2913,6 +3131,7 @@ export class SessionManager {
         this.deleteFailed(item, error)
       }
     }
+    void this.deps.attachments?.release(queuedAttachments(all))
     for (const item of all) this.forget(item.id)
     this.saveIndex()
     this.removeThreads(all.map((item) => item.id))

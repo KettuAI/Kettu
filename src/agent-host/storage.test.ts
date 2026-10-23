@@ -289,6 +289,25 @@ describe('the host files', () => {
         },
       },
     })
+    const prompt = { image: false, audio: false, embeddedContext: true }
+    expect(
+      parseAgentsFile({
+        agents: {
+          'claude-code': { limits: [], init: { version: '0.94.0', capabilities: { prompt } } },
+          codex: { limits: [], init: { version: '2.2.2', capabilities: { prompt: { image: 1 } } } },
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      agents: {
+        'claude-code': {
+          account: null,
+          limits: [],
+          init: { version: '0.94.0', capabilities: { prompt } },
+        },
+        codex: { account: null, limits: [], init: { version: '2.2.2', capabilities: {} } },
+      },
+    })
     expect(parseAgentsFile({ agents: [] })).toBe('agents is not an object')
     expect(agentsFile(dir, log).file).toBe(path.join(dir, 'state', 'agents.json'))
   })

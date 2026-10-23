@@ -301,3 +301,75 @@ describe('promptContent', () => {
     rejects(() => promptContent([{ type: 'text', text: '\u00e9'.repeat(5 * 1024 * 1024 + 1) }]))
   })
 })
+
+describe('attachments', () => {
+  const ref = (id: string, extra: Record<string, unknown> = {}) => ({
+    type: 'ref',
+    ref: { kind: 'attachment', attachment: { id, ...extra } },
+  })
+
+  it('reads only the id of an attachment ref', () => {
+    const [item] = promptContent([ref('a1', { name: 'secret.png', uri: 'file:///etc/passwd' })])
+    expect(item).toEqual({
+      type: 'ref',
+      ref: {
+        kind: 'attachment',
+        attachment: {
+          id: 'a1',
+          type: 'image',
+          name: '',
+          uri: null,
+          mimeType: null,
+          size: null,
+          sent: null,
+          thumb: null,
+          blob: null,
+        },
+      },
+    })
+    // A message of attachments alone can be sent.
+    expect(promptContent([ref('a1'), ref('a2')])).toHaveLength(2)
+    rejects(() => promptContent([{ type: 'ref', ref: { kind: 'attachment' } }]))
+    rejects(() => promptContent([ref('')]))
+  })
+
+  it('takes at most 20 attachments in a prompt', () => {
+    const refs = Array.from({ length: 20 }, (_, i) => ref(`a${i}`))
+    expect(promptContent(refs)).toHaveLength(20)
+    rejects(() => promptContent([...refs, ref('a20')]))
+  })
+
+  it('checks what attachments.add is handed', () => {
+    const bytes = new Uint8Array([1, 2, 3]).buffer
+    const source = { bytes, mimeType: 'image/png', name: 'Image 1' }
+    const thumb = 'data:image/webp;base64,AAAA'
+    expect(posix['attachments.add']({ source: { ...source, path: '/x' }, thumb })).toEqual({
+      source,
+      thumb,
+    })
+    expect(posix['attachments.add']({ source, thumb: null })).toEqual({ source, thumb: null })
+    rejects(() => posix['attachments.add']({ source: { ...source, bytes: [1, 2, 3] }, thumb }))
+    rejects(() => posix['attachments.add']({ source: { ...source, bytes: new ArrayBuffer(0) } }))
+    rejects(() =>
+      posix['attachments.add']({
+        source: { ...source, bytes: new ArrayBuffer(20 * 1024 * 1024 + 1) },
+        thumb,
+      }),
+    )
+    rejects(() => posix['attachments.add']({ source, thumb: 'https://example.com/t.png' }))
+    rejects(() => posix['attachments.add']({ source, thumb: 'data:image/svg+xml;base64,AAAA' }))
+    rejects(() =>
+      posix['attachments.add']({ source, thumb: `data:image/webp;base64,${'A'.repeat(300_000)}` }),
+    )
+  })
+
+  it('reads a sent blob only by its SHA-256', () => {
+    const hash = 'ab'.repeat(32)
+    expect(posix['sessions.blob']({ sessionId: 's', hash })).toEqual({ sessionId: 's', hash })
+    rejects(() => posix['sessions.blob']({ sessionId: 's', hash: '../../etc/passwd' }))
+    rejects(() => posix['sessions.blob']({ sessionId: 's', hash: hash.toUpperCase() }))
+    rejects(() => posix['sessions.blob']({ hash }))
+    expect(posix['attachments.read']({ id: 'a1', more: 1 })).toEqual({ id: 'a1' })
+    rejects(() => posix['attachments.remove']({}))
+  })
+})

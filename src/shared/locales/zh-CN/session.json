@@ -141,6 +141,7 @@
     "position": "{{number}} / {{count}}",
     "resume": "继续",
     "attachment": "附件",
+    "attachments_other": "{{count}} 个附件",
     "sendNow": "立即发送",
     "steer": "立即插入当前对话",
     "edit": "在输入框中编辑",

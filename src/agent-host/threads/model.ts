@@ -102,6 +102,14 @@ export interface ThreadWrite {
   entries: PositionedEntry[]
   /** Drops everything stored for the session first, as after a replay from the agent. */
   replace?: boolean
+  /** The bytes of attachments the entries name by hash: a sent image or pasted text. */
+  blobs?: StoredBlob[]
+}
+
+export interface StoredBlob {
+  hash: string
+  mime: string
+  data: Uint8Array
 }
 
 export interface ThreadPage {
@@ -198,6 +206,21 @@ const mapContent = (map: (ref: Json) => Json) => (item: Json) => {
   if (item.type !== 'ref' || !isRecord(item.ref)) return item
   const ref = map(item.ref)
   return ref === item.ref ? item : { ...item, ref }
+}
+
+/** The hashes of the bytes the entries' attachments keep in the thread store. */
+export function attachmentBlobs(entries: readonly ThreadEntry[]): Set<string> {
+  const hashes = new Set<string>()
+  for (const entry of entries) {
+    const content =
+      entry.kind === 'user' || entry.kind === 'session_message' ? entry.content : undefined
+    for (const item of content ?? []) {
+      if (item.type === 'ref' && item.ref.kind === 'attachment' && item.ref.attachment.blob) {
+        hashes.add(item.ref.attachment.blob)
+      }
+    }
+  }
+  return hashes
 }
 
 /**

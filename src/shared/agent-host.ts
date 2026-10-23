@@ -17,6 +17,7 @@ import type { PortConnectionState } from './port-rpc'
 import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
+  Attachment,
   ConfigOption,
   OlderPage,
   PatchBatch,
@@ -24,6 +25,11 @@ import type {
   SessionStatus,
   UserContent,
 } from './thread'
+
+export interface AttachmentBytes {
+  mimeType: string
+  bytes: ArrayBuffer
+}
 
 export interface AgentAccount {
   kind: 'account' | 'api_key' | 'external' | 'gateway' | 'none'
@@ -158,7 +164,15 @@ export interface AgentStatus {
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
     account: boolean // names its account through `_auth/status_update` as it starts
     progressNotes: boolean // its messages that more work in a turn follows are progress notes
+    prompt: PromptCapabilities | null // what a prompt may carry; null until the agent has started
   }
+}
+
+/** ACP's `promptCapabilities`: the content a prompt may carry besides text and links. */
+export interface PromptCapabilities {
+  image: boolean
+  audio: boolean
+  embeddedContext: boolean
 }
 
 /**
@@ -340,6 +354,8 @@ export interface HostContract {
   'sessions.unqueue': { params: { sessionId: string; itemId: string }; result: void }
   'sessions.steer': { params: { sessionId: string; itemId: string }; result: void }
   'sessions.resumeQueue': { params: { sessionId: string }; result: void }
+  // An image or pasted text the thread store keeps for a sent attachment, by its hash.
+  'sessions.blob': { params: { sessionId: string; hash: string }; result: AttachmentBytes }
   'sessions.setConfigOption': {
     params: { sessionId: string; optionId: string; value: string | boolean }
     result: void
@@ -387,6 +403,13 @@ export interface HostContract {
   'git.pullRequest': { params: { url: string }; result: PullRequest }
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
   'git.tools': { params: void; result: GitTools }
+  // A draft's attachment, kept until it is sent or removed; see attachments in the session model.
+  'attachments.add': {
+    params: { source: { bytes: ArrayBuffer; mimeType: string; name: string }; thumb: string | null }
+    result: Attachment
+  }
+  'attachments.read': { params: { id: string }; result: AttachmentBytes }
+  'attachments.remove': { params: { id: string }; result: void }
   'files.list': { params: { projectPath: string }; result: FileList }
   'files.read': { params: { projectPath: string; path: string }; result: FileContent }
   'files.search': { params: { projectPath: string; query: string }; result: FileSearch }
@@ -453,6 +476,7 @@ export const HOST_METHODS = [
   'sessions.unqueue',
   'sessions.steer',
   'sessions.resumeQueue',
+  'sessions.blob',
   'sessions.setConfigOption',
   'sessions.rename',
   'sessions.close',
@@ -475,6 +499,9 @@ export const HOST_METHODS = [
   'git.pullRequest',
   'git.currentPullRequest',
   'git.tools',
+  'attachments.add',
+  'attachments.read',
+  'attachments.remove',
   'files.list',
   'files.read',
   'files.search',

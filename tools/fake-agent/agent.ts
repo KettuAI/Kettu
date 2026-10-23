@@ -397,7 +397,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     }
   }
 
-  // FAKE_AGENT_WITHOUT leaves session capabilities out, such as `close`.
+  // FAKE_AGENT_WITHOUT leaves session capabilities out, such as `close`, or image input (`image`).
   const without = new Set((env.FAKE_AGENT_WITHOUT ?? '').split(',').map((name) => name.trim()))
   const sessionCapabilities = () =>
     Object.fromEntries(
@@ -438,7 +438,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         protocolVersion: 1,
         agentCapabilities: {
           loadSession: true,
-          promptCapabilities: { image: true, embeddedContext: true },
+          promptCapabilities: { image: !without.has('image'), embeddedContext: true },
           mcpCapabilities: { http: false, sse: false },
           sessionCapabilities: sessionCapabilities(),
           auth: { logout: {} },
@@ -707,6 +707,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         session,
         options: choice.options,
         text: choice.text,
+        prompt: ctx.params.prompt,
         previousPrompt,
         signal: abort.signal,
         supportsSubagents:
