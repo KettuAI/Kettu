@@ -12,7 +12,7 @@ const {
   usagePageShown,
   useUsageStore,
 } = await import('./usage')
-const { addDays, dayOf } = await import('@renderer/features/usage/model')
+const { addDays, dayOf, hourStarts } = await import('@renderer/features/usage/model')
 
 const empty: UsageSummary = {
   days: [],
@@ -37,6 +37,8 @@ describe('usage store', () => {
         : Promise.resolve(method === 'usage.total' ? { total: 0 } : undefined),
     )
     const summaries = () => request.mock.calls.filter(([method]) => method === 'usage.summary')
+    // Longer than a day, so each read is one request.
+    useUsageStore.setState({ filters: { ...DEFAULT_FILTERS, range: { kind: '7' } } })
     usagePageShown(true)
     await vi.waitFor(() => expect(answers).toHaveLength(1))
     // A scan sends a change notice every 200 ms; reading for each would pile up in the worker.
@@ -76,6 +78,28 @@ describe('usage store', () => {
     await vi.waitFor(() => expect(useUsageStore.getState().page?.range.from).toBe(firsts.overbench))
     setUsageFilters({ scope: 'computer' })
     await vi.waitFor(() => expect(useUsageStore.getState().page?.range.from).toBe(firsts.computer))
+  })
+
+  it('reads the hours of a one-day range as well, for its trend', async () => {
+    const today = dayOf(Date.now())
+    const hours = { ...empty, first: today }
+    request.mockImplementation((method: string, params: { dayStarts: number[] }) =>
+      Promise.resolve(
+        method === 'usage.summary' ? (params.dayStarts.length > 26 ? empty : hours) : undefined,
+      ),
+    )
+    setUsageFilters({ range: { kind: '1' } })
+    await vi.waitFor(() => expect(useUsageStore.getState().page).not.toBeNull())
+    const page = useUsageStore.getState().page!
+    const starts = hourStarts({ from: today, to: addDays(today, 1) })
+    expect(page.hours).toEqual({ starts, summary: hours })
+    expect(page.summary).toEqual(empty)
+    const asked = request.mock.calls.filter(([method]) => method === 'usage.summary')
+    expect(asked.map(([, params]) => params.dayStarts.length)).toContain(starts.length)
+
+    setUsageFilters({ range: { kind: '7' } })
+    await vi.waitFor(() => expect(useUsageStore.getState().page?.range.from).not.toBe(today))
+    expect(useUsageStore.getState().page?.hours).toBeNull()
   })
 
   it('keeps the last 53 weeks for the heatmap whatever the range', async () => {

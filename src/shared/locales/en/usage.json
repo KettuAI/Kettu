@@ -16,6 +16,7 @@
     "allShort": "All",
     "range": "Time range",
     "ranges": {
+      "1": "1 day",
       "7": "7 days",
       "30": "30 days",
       "90": "90 days",
@@ -37,6 +38,10 @@
     "active_one": "Used on {{active}} of {{count}} day",
     "active_other": "Used on {{active}} of {{count}} days",
     "peak": "Busiest day",
+    "hourlyAverage": "Hourly average",
+    "activeHours_one": "Used in {{active}} of {{count}} hour",
+    "activeHours_other": "Used in {{active}} of {{count}} hours",
+    "peakHour": "Busiest hour",
     "cacheShare": "Cache reads",
     "cacheShareNote": "Of all input, cached or not",
     "none": "No usage"
@@ -44,6 +49,8 @@
   "trend": {
     "daily": "Tokens per day",
     "weekly": "Tokens per week",
+    "hourly": "Tokens per hour",
+    "hour": "{{from}} – {{to}}",
     "label": "{{date}}: {{tokens}} tokens"
   },
   "limits": {

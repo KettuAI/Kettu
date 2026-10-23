@@ -4,7 +4,7 @@
 import type { AgentId } from '@shared/thread'
 import { partsTotal, type TokenParts, type UsageSummary } from '@shared/usage'
 
-export type RangeKind = '7' | '30' | '90' | '365' | 'all'
+export type RangeKind = '1' | '7' | '30' | '90' | '365' | 'all'
 /** A custom range holds local day starts, both ends included. */
 export type RangeChoice = { kind: RangeKind } | { kind: 'custom'; from: number; to: number }
 export type AgentFilter = AgentId | 'all'
@@ -15,11 +15,13 @@ export interface DayRange {
   to: number
 }
 
-export const RANGE_KINDS: readonly RangeKind[] = ['7', '30', '90', '365', 'all']
+export const RANGE_KINDS: readonly RangeKind[] = ['1', '7', '30', '90', '365', 'all']
 export const HEATMAP_WEEKS = 53
 /** Up to this many days the trend has a bar per day, beyond it one per week. */
 export const DAILY_BARS = 92
 export const BREAKDOWN_ROWS = 6
+
+const HOUR_MS = 3_600_000
 
 const ZERO: TokenParts = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
 
@@ -87,7 +89,30 @@ export function dayStarts(range: DayRange): number[] {
   return starts
 }
 
+/** Whether the range is one local day, which the trend shows by the hour. */
+export function oneDay(range: DayRange): boolean {
+  return addDays(range.from, 1) === range.to
+}
+
+/**
+ * The hour starts of [from, to), and `to` itself. It steps real hours, since local ones repeat or
+ * vanish when the clocks change: such a day has 25 or 23 hours, and the starts always ascend.
+ */
+export function hourStarts(range: DayRange): number[] {
+  const starts: number[] = []
+  for (let hour = range.from; hour < range.to; hour += HOUR_MS) starts.push(hour)
+  starts.push(range.to)
+  return starts
+}
+
+/** The hours of a one-day range begun by `now`, as the range its figures cover. */
+export function hoursSoFar(starts: readonly number[], now: number): DayRange {
+  const end = starts.find((start, i) => i > 0 && start > now) ?? starts[starts.length - 1]!
+  return { from: starts[0]!, to: end }
+}
+
 export interface DayTotal {
+  /** The day's start, or the hour's when summed over `hourStarts`. */
   day: number
   total: number
   parts: TokenParts
@@ -193,6 +218,16 @@ export function trend(
     }
   }
   return { weekly, bars }
+}
+
+/** A bar per hour, from the totals `dayTotals` sums over `hourStarts`. */
+export function hourBars(hours: readonly DayTotal[], starts: readonly number[]): TrendBar[] {
+  return hours.map((hour, i) => ({
+    from: hour.day,
+    to: starts[i + 1]!,
+    total: hour.total,
+    byAgent: hour.byAgent,
+  }))
 }
 
 /**
