@@ -9,7 +9,7 @@ How work travels from an idea or a report to a release. Since v0.0.1, every chan
 - **One path for every change**: issue, branch, pull request, squash into `main`. Nothing is pushed to `main` directly, and a ruleset enforces it.
 - **Each record has one job.** An issue says what is wrong or wanted and why. A pull request says how it was done and how it was checked. The design docs say how the system works. They link to each other instead of repeating each other.
 - **The maintainer decides; agents do the rest.** The maintainer is asked only at the [gates](#gates). Everything else goes ahead and is reported with a link.
-- **Small units.** One issue is one pull request. Work that needs more becomes a parent issue with sub-issues.
+- **Small units.** One issue is one pull request. Sub-issues are the exception, for work that cannot be one; see [splitting work](#splitting-work).
 - **Short, in the right language.** An issue or a pull request says its point and stops. Issues we open and all pull requests are English; replies on an issue use the language its reporter wrote in.
 
 ## Who takes part
@@ -124,7 +124,20 @@ Every issue has one of the organization's issue types, which replace type labels
 - **Feature**: new or changed behavior.
 - **Task**: work that changes no behavior, such as docs, CI, refactors, dependencies and releases.
 
-A parent issue with sub-issues tracks larger work (`gh issue create --parent N`, `gh issue edit N --add-sub-issue M`). It closes once all of its sub-issues have closed.
+### Splitting work
+
+One issue is one pull request. An issue gets sub-issues only when it cannot be done that way, and needing them means the issue is large:
+
+- it needs more than one pull request, because one would be too large to review (about 400 changed lines, not counting generated files), or because its parts land at different times, as when something else waits on one part;
+- each sub-issue passes the same test: one pull request, useful on its own.
+
+Never split:
+
+- by step (design, tests, implementation) or by layer (main process, renderer) when the pieces land together; a design pull request links the issue with `Refs #N` and needs no sub-issue;
+- for work that needs no pull request, such as labels, milestones or repository settings: it is done under the issue that needs it and recorded in a comment there;
+- only to work in parallel on files the pieces share.
+
+Sub-issues go one level deep: a sub-issue that would need its own becomes a separate issue in the same milestone. A parent issue (`gh issue create --parent N`) closes once all of its sub-issues have closed.
 
 ### Labels
 
@@ -220,12 +233,15 @@ OverBench takes issues from outside, not code: fixes and features are written by
 
 ## Adoption
 
-Issue #1 tracks the move, with one sub-issue per step:
+Issue #1 tracks the move. Four parts need pull requests of their own and are its sub-issues:
 
-1. Make the Windows tests reliable. `pnpm test` failed on Windows in three of the eight latest CI runs on 2026-10-22, and the check is about to gate every merge.
-2. Labels and milestone `v0.1.0`, with M0's remaining work.
-3. Issue forms, the pull request template, `SECURITY.md`, and updates to `CONTRIBUTING.md`, `AGENTS.md` and the [docs index](./README.md).
-4. CI for pull requests: the combined `CI` check, the title and issue-link check, and Screenshots on pull requests.
-5. The `Release check` workflow.
-6. Repository settings: squash merges only, with the pull request's title and an empty body; delete branches on merge; private vulnerability reporting; then the ruleset, once steps 1 and 4 have landed. Pull requests were limited to collaborators on 2026-10-22.
-7. The 22 problems in [M0 feedback](./milestones/m0-feedback.md) that are open or partly fixed become issues in `v0.1.0`, each naming its old number. The document is then frozen, linking to the milestone.
+1. #3, the Windows tests. `pnpm test` failed on Windows in three of the eight latest CI runs on 2026-10-22, and the check is about to gate every merge.
+2. #5, the issue forms, the pull request template, `SECURITY.md`, updates to `CONTRIBUTING.md`, `AGENTS.md` and the [docs index](./README.md), and freezing [M0 feedback](./milestones/m0-feedback.md) once its open problems are issues.
+3. #6, CI for pull requests: the combined `CI` check, the title and issue-link check, and Screenshots on pull requests.
+4. #7, the `Release check` workflow.
+
+The rest needs no pull request and is done under #1:
+
+- Labels and milestone `v0.1.0`.
+- The 22 problems in M0 feedback that are open or partly fixed become issues in `v0.1.0`, each naming its old number.
+- Repository settings: squash merges only, with the pull request's title and an empty body; delete branches on merge; private vulnerability reporting; then the ruleset, once #3 and #6 have landed. Pull requests were limited to collaborators on 2026-10-22.
