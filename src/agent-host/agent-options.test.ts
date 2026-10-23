@@ -96,6 +96,20 @@ describe('AgentOptionsStore', () => {
     expect(file.save).toHaveBeenCalledTimes(1)
   })
 
+  it("takes an opened session's options only while none are known, and its model's levels", () => {
+    const { options } = store()
+    const opened = [mode, model('large'), level('high', ['medium', 'high'])]
+    options.opened('codex', opened)
+    expect(options.get('codex')?.config).toEqual(opened)
+
+    const started = [mode, model('small'), level('medium', ['low', 'medium'])]
+    options.started('codex', started)
+    options.opened('codex', [mode, model('large'), level('max', ['high', 'max'])])
+    const entry = options.get('codex')!
+    expect(entry.config).toEqual(started)
+    expect(entry.levels.large?.choices?.map((c) => c.value)).toEqual(['high', 'max'])
+  })
+
   it('ignores a choice for an agent that has not started a session', () => {
     const { options, changed } = store()
     options.chose('codex', model('small'), 'large', [model('large')])

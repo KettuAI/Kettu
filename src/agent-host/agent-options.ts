@@ -1,6 +1,7 @@
 // What New session shows for each agent before a session exists. ACP lists an agent's config
-// options only in answer to `session/new`, so the host keeps the last list each agent gave, the
-// reasoning levels each model offered, and the values the user last chose.
+// options only in answer to `session/new` and the requests that open a session, so the host keeps
+// the last list each agent gave, the reasoning levels each model offered, and the values the user
+// last chose.
 
 import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
@@ -94,6 +95,16 @@ export class AgentOptionsStore {
       remembered: current?.remembered ?? {},
       observedAt: this.now(),
     })
+  }
+
+  /**
+   * The options of a session the agent loaded or resumed, at that session's values: they stand in
+   * for the agent's defaults until a new session reports those, and add its model's levels.
+   */
+  opened(agentId: AgentId, config: readonly ConfigOption[]): void {
+    const current = this.byAgent.get(agentId)
+    if (!current) return this.started(agentId, config)
+    this.put({ ...current, levels: withLevels(current.levels, config) })
   }
 
   /**

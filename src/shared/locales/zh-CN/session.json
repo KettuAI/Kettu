@@ -197,6 +197,7 @@
       "signInLong": "登录 {{agent}} 后才能使用。",
       "signInAction": "登录…",
       "noModels": "{{agent}} 跑过一次会话后，这里才会列出它的模型。这次先用它的默认模型，开始后可以在会话里换。",
+      "modelsOnStart": "{{agent}} 启动后，这里会列出它的模型。",
       "useAgent": "使用 {{agent}}",
       "noMatch": "没有匹配的 Agent 或模型"
     }

@@ -18,7 +18,7 @@ import type {
 import type { AgentProcess } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import {
   AgentConnection,
   AgentRequestError,
@@ -58,7 +58,13 @@ import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
 import { formatCommand } from './quote'
-import { limitsReport, runReport, type LimitsReport } from './reports'
+import {
+  limitsReport,
+  removalOf,
+  removeHiddenSession,
+  runReport,
+  type LimitsReport,
+} from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile } from './storage'
@@ -139,6 +145,10 @@ export interface AgentSessionHooks {
   liveSessions(agentId: AgentId): number
   agentExited(agentId: AgentId, info: ExitInfo): void
   signedIn(agentId: AgentId): void
+  /** Whether New session knows the agent's config options already. */
+  optionsKnown(agentId: AgentId): boolean
+  /** The config options of a hidden session, at the agent's own values. */
+  optionsSeen(agentId: AgentId, config: ConfigOption[]): void
 }
 
 export interface AgentManagerDeps {
@@ -150,7 +160,7 @@ export interface AgentManagerDeps {
   diagnostics: Diagnostics
   launcher: AgentLauncher
   settings(): HostSettings
-  /** The folder the `/usage` report's session runs in. */
+  /** The folder hidden sessions run in: the reports' and the one that reads the options. */
   reportsDir: string
   /** `<userData>/agents`, where package agents are installed. */
   adaptersDir: string
@@ -223,6 +233,7 @@ class Slot {
   remembered = ''
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
+  optionsRun: Promise<void> | null = null
   progress = new TextRing(8 * 1024)
   idleTimer: ReturnType<typeof setTimeout> | null = null
   progressTimer: ReturnType<typeof setTimeout> | null = null
@@ -278,6 +289,8 @@ export class AgentManager {
     liveSessions: () => 0,
     agentExited: () => {},
     signedIn: () => {},
+    optionsKnown: () => true,
+    optionsSeen: () => {},
   }
 
   constructor(private readonly deps: AgentManagerDeps) {
@@ -1326,7 +1339,11 @@ export class AgentManager {
     try {
       messages = await runReport(
         runtime,
-        async () => (await runtime.connection.newSession(dir)).acpSessionId,
+        async () => {
+          const setup = await runtime.connection.newSession(dir)
+          this.hooks.optionsSeen(slot.def.id, setup.config)
+          return setup.acpSessionId
+        },
         report,
         log,
       )
@@ -1353,6 +1370,48 @@ export class AgentManager {
       slot.limits.set(limit.window, held ? { ...limit, state: before.state } : limit)
     }
     this.emit(slot)
+  }
+
+  /**
+   * Reads the agent's config options for New session while none are known, from `session/new` in
+   * a hidden session that is removed at once, so the models show before the first session. Never
+   * rejects: a failure is logged, and New session shows the agent without its models.
+   */
+  readOptions(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    slot.optionsRun ??= this.openForOptions(slot).finally(() => {
+      slot.optionsRun = null
+    })
+    return slot.optionsRun
+  }
+
+  private async openForOptions(slot: Slot): Promise<void> {
+    const agentId = slot.def.id
+    const log = (message: string): void =>
+      this.deps.diagnostics.log('warn', `${slot.def.name}: ${message}`)
+    // A limits report running meanwhile reads them too.
+    await slot.limitsRun?.catch(() => {})
+    if (this.hooks.optionsKnown(agentId) || slot.signIn === 'required') return
+    try {
+      const runtime = await this.ensureReady(agentId)
+      const dir = this.deps.reportsDir
+      await mkdir(dir, { recursive: true })
+      const setup = await runtime.connection.newSession(dir)
+      try {
+        this.hooks.optionsSeen(agentId, setup.config)
+        this.signedIn(agentId)
+      } finally {
+        await removeHiddenSession(runtime, setup.acpSessionId, removalOf(agentId), (message) =>
+          log(`could not remove the session its options were read in: ${message}`),
+        )
+      }
+    } catch (error) {
+      if (error instanceof AgentRequestError && error.kind === 'auth_required') {
+        this.authRequired(agentId)
+        return
+      }
+      log(`could not read its options: ${agentError(error).message}`)
+    }
   }
 
   /** Where the agent reads its configuration and which CLI its adapter runs, for its page. */

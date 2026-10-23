@@ -52,6 +52,7 @@ function manager(
 ) {
   const launcher = inProcessLauncher(module, env)
   const statuses: AgentStatus[] = []
+  const diagnostics = new Diagnostics()
   let live = 0
   const environment = new EnvironmentService({
     platform: process.platform,
@@ -72,7 +73,7 @@ function manager(
     electronPath: process.execPath,
     appVersion: '0.0.0-test',
     env: environment,
-    diagnostics: new Diagnostics(),
+    diagnostics,
     launcher,
     settings: () => ({
       locale: 'en',
@@ -94,11 +95,14 @@ function manager(
     liveSessions: () => live,
     agentExited: () => {},
     signedIn: () => {},
+    optionsKnown: () => true,
+    optionsSeen: () => {},
   }
   return {
     agents,
     launcher,
     statuses,
+    diagnostics,
     setLive: (n: number) => {
       live = n
       agents.sessionsChanged('fake-agent')
@@ -243,6 +247,34 @@ describe('AgentManager', () => {
       expect.objectContaining({ window: 'five_hour', label: '5-hour', usedPercent: 19 }),
       expect.objectContaining({ window: 'seven_day', label: 'Weekly', usedPercent: 32 }),
     ])
+    await m.agents.stopAll()
+  })
+
+  it('closes a hidden Codex session rather than delete it, which would archive it', async () => {
+    const m = manager(
+      {},
+      {},
+      { catalog: [{ ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }] },
+    )
+    const seen: AgentId[] = []
+    m.agents.hooks = {
+      ...m.agents.hooks,
+      optionsKnown: () => seen.length > 0,
+      optionsSeen: (agentId) => seen.push(agentId),
+    }
+    await m.agents.ensureReady('codex')
+    await m.agents.readOptions('codex')
+    await m.agents.readOptions('codex')
+    await m.agents.refreshLimits('codex')
+    const sent = m.diagnostics
+      .agentRecords('codex')
+      .traffic.filter((r) => r.direction === 'out')
+      .map((r) => r.method)
+    // Read once when the agent starts, and again with the limits report.
+    expect(seen).toEqual(['codex', 'codex'])
+    expect(sent.filter((method) => method === 'session/new')).toHaveLength(2)
+    expect(sent.filter((method) => method === 'session/close')).toHaveLength(2)
+    expect(sent).not.toContain('session/delete')
     await m.agents.stopAll()
   })
 })

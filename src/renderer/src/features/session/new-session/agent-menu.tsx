@@ -85,6 +85,7 @@ export function AgentMenu({
   const entries = useAgentOptionsStore((s) => s.byId)
   const picks = useAgentOptionsStore((s) => s.picks)
   const loaded = useAgentOptionsStore((s) => s.loaded)
+  const starting = useAgentOptionsStore((s) => s.starting)
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<AgentId | null>(agentId)
   const [query, setQuery] = useState('')
@@ -236,6 +237,7 @@ export function AgentMenu({
                 status={statuses.find((s) => s.id === shown) ?? null}
                 config={shown ? (configs.get(shown) ?? null) : null}
                 loaded={loaded}
+                starting={!!shown && (starting[shown] ?? 0) > 0}
                 searching={searching}
                 groups={groups}
                 agents={agents}
@@ -354,6 +356,7 @@ function Pane({
   status,
   config,
   loaded,
+  starting,
   searching,
   groups,
   agents,
@@ -362,6 +365,8 @@ function Pane({
   status: AgentStatus | null
   config: ConfigOption[] | null
   loaded: boolean
+  /** New session started the agent, which reads its options when none are known. */
+  starting: boolean
   searching: boolean
   groups: MenuGroup[]
   agents: MenuAgent[]
@@ -372,6 +377,8 @@ function Pane({
   const name = status.name
   const need = agentNeed(status)
   const installed = need !== 'install'
+  // The options load with the list, and with a start until the agent has reported them.
+  const loading = !loaded || (!config && (starting || status.state === 'starting'))
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
   const highTier = isSelect(effort) && effort.choices.some((c) => tierOf(effort, c.value) !== null)
@@ -437,15 +444,24 @@ function Pane({
           </Button>
         </Notice>
       )
-    } else if (loaded && !config) {
-      notice = <Notice text={t('newSession.agentMenu.noModels', { agent: name })} />
+    } else if (!loading && !config) {
+      notice = (
+        <Notice
+          text={t(
+            status.state === 'ready'
+              ? 'newSession.agentMenu.noModels'
+              : 'newSession.agentMenu.modelsOnStart',
+            { agent: name },
+          )}
+        />
+      )
     }
   }
 
   return (
     <>
       {notice}
-      {!searching && installed && !loaded ? (
+      {!searching && installed && loading ? (
         <div className="flex flex-col gap-1 p-1.5" aria-hidden>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-row w-full rounded-lg" />

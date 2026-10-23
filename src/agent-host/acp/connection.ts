@@ -310,6 +310,7 @@ export class AgentConnection {
   unregister(acpSessionId: string, target?: SessionTarget): void {
     if (target && this.targets.get(acpSessionId) !== target) return
     this.targets.delete(acpSessionId)
+    this.pending.delete(acpSessionId)
     this.unregistered.add(acpSessionId)
     if (this.unregistered.size > CLOSED_SESSIONS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
