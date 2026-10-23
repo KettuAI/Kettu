@@ -77,7 +77,10 @@ export function TrendChart({
   const begun = bars.length - future
   return (
     <div className="relative h-40">
-      <span aria-hidden className="absolute inset-x-0 top-0 border-t border-dashed border-default" />
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 border-t border-dashed border-default"
+      />
       <div
         role="group"
         tabIndex={0}
