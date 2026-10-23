@@ -6,11 +6,12 @@ on:
     branches: [main]
     paths: ['src/**', 'tools/**', '.github/workflows/screenshots.yml']
   pull_request:
-    paths: ['src/**']
+    paths: ['src/**', 'tools/**', '.github/workflows/screenshots.yml']
 
 concurrency:
   group: screenshots-${{ github.ref }}
-  cancel-in-progress: true
+  # Every commit on main keeps its own result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   capture:

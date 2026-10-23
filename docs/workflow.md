@@ -78,7 +78,7 @@ An agent that stops before the end comments what is left and puts the issue back
 
 - Every pull request is reviewed by an agent that did not write it, for correctness and against the design rules and their checklists, as review comments. The author fixes or answers each one.
 - The required `CI` check must pass: all three platforms and the title and issue link. Editing the title or description runs all of it again.
-- A change under `src/` also runs the Screenshots workflow, whose captures show it on each platform.
+- A change under `src/` or `tools/`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
 - The maintainer merges, on GitHub or by naming the pull requests to merge in a chat with an agent.
 - The merge is a squash: the pull request's title becomes the commit subject on `main`, the branch is deleted, and `Closes #N` in its description closes the issue.
 
