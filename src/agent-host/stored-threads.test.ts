@@ -761,7 +761,20 @@ describe('keeping the config across an attach', () => {
       expect(requests(t, port, sessionId).filter((r) => r === 'session/prompt')).toHaveLength(1)
     })
 
-    it('holds back the prompt when the agent no longer offers the mode option', async () => {
+    it('lets the agent go once the prompt is held back in a session out of view', async () => {
+      const { t, port } = await setup({
+        sessionTimings: quick,
+        agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'locked' },
+      })
+      const sessionId = await chosenSession(t, port)
+      await release(port, sessionId)
+      await port.request('sessions.queue', { sessionId, content: text('and again') })
+      await port.until(() => port.thread(sessionId).session.queue.length === 1)
+      await port.untilStatus(sessionId, 'closed')
+      expect(port.thread(sessionId).session).toMatchObject({ queuePaused: true })
+    })
+
+    it('holds back the prompt when the mode option the session had is gone', async () => {
       const { t: first, port: before } = await setup()
       const sessionId = await chosenSession(first, before, { mode: 'code' })
       const { t, port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
@@ -812,6 +825,20 @@ describe('keeping the config across an attach', () => {
       await port.open(sessionId)
       return { t, port, sessionId }
     }
+
+    it('lets the agent go after a turn cancelled meanwhile in a session out of view', async () => {
+      const { t, port } = await setup({
+        sessionTimings: quick,
+        agentEnv: { FAKE_AGENT_SET_CONFIG_MS: '200', FAKE_AGENT_RESUME_CONFIG: 'reset' },
+      })
+      const sessionId = await chosenSession(t, port)
+      await release(port, sessionId)
+      await port.request('sessions.queue', { sessionId, content: text('never mind') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.cancel', { sessionId })
+      await port.untilStatus(sessionId, 'ready')
+      await port.untilStatus(sessionId, 'closed')
+    })
 
     it('ends a turn cancelled meanwhile without sending it', async () => {
       const { t, port, sessionId } = await slowAttach()

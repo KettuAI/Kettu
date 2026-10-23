@@ -1792,6 +1792,8 @@ export class SessionManager {
     if (live.connection) return Promise.resolve(live.connection)
     live.attaching ??= this.attachStored(live).finally(() => {
       live.attaching = null
+      // A turn that ended while it attached, cancelled or held back, armed no release.
+      this.refreshRelease(live)
     })
     return live.attaching
   }
