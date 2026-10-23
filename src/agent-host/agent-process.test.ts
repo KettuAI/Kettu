@@ -242,7 +242,8 @@ describe('a quit that cannot wait for the stop', () => {
       await agent.kill()
       expect(agent.hasExited).toBe(true)
       expect(taskkills).toEqual([true])
-      expect(await stopping).toMatchObject({ signal: 'SIGKILL' })
+      // The stop saw the exit; on Windows a killed process exits with 1 and no signal.
+      expect((await stopping).error).toBeUndefined()
     } finally {
       if (agent.pid && alive(agent.pid)) process.kill(agent.pid, 'SIGKILL')
     }
