@@ -78,7 +78,7 @@ An agent that stops before the end comments what is left and puts the issue back
 
 - Every pull request is reviewed by an agent that did not write it, for correctness and against the design rules and their checklists, as review comments. The author fixes or answers each one.
 - The required `CI` check must pass: all three platforms and the title and issue link. Editing the title or description runs all of it again.
-- A change under `src/` or `tools/`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
+- A change under `src/` or `tools/`, to `package.json`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
 - The maintainer merges, on GitHub or by naming the pull requests to merge in a chat with an agent.
 - The merge is a squash: the pull request's title becomes the commit subject on `main`, the branch is deleted, and `Closes #N` in its description closes the issue.
 
@@ -98,7 +98,7 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 - **User-visible change**: a squash commit on `main` of type `feat`, `fix` or `perf`. Docs, CI, refactors and other tasks never trigger a release; they ship with the next one.
 - **At most one a day.** A count or time release comes at least 24 hours after the previous release, so a burst of merges ships as one update. Urgent and asked releases go out at once.
 - **The numbers**: 10 changes are about what one look at the release notes can take in, and 7 days is the longest a fix waits when little is merging. Both get revisited once a few releases show how fast work lands.
-- **Checked by CI**: a `Release check` workflow runs on every push to `main` and once a day. When a trigger has fired and no release is open, it opens a Task issue, "Release vX.Y.Z", that names the trigger. An agent takes it through the steps below; an asked release starts the same way, from the maintainer's words.
+- **Checked by CI**: a [`Release check` workflow](./design/testing.md#release-check) runs on every push to `main` and once a day. When a trigger has fired and no release is open, it opens a Task issue, "Release vX.Y.Z", that names the trigger. An agent takes it through the steps below; an asked release starts the same way, from the maintainer's words.
 - **Versions**: minor versions carry the big plans, and patch versions are the small iterations toward them. `v0.1.0` is the full release: it completes [M0](./milestones/m0.md) and adds artifacts, the built-in browser, attachments, media and Routines. The iterations before it are `v0.0.2`, `v0.0.3` and on, and those after it `v0.1.1`, `v0.1.2` and on. A release takes the version of the earliest open patch milestone, and that milestone's unfinished issues move to the next one; once nothing is left before the minor's own milestone and its last issue has closed, the release is the minor.
 - **How**: an agent opens `chore(release): vX.Y.Z`, which bumps `package.json`; its description is the release notes, grouped by type and drafted from the squash commits since the last tag. After it merges come CI and Screenshots green on all three platforms for that commit, the tag, the [Release workflow](../.github/workflows/release.yml)'s draft, which the maintainer can install and try, and then publishing. The notes live on the GitHub release only.
 

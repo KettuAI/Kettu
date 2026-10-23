@@ -2,11 +2,12 @@ name: Screenshots
 
 on:
   workflow_dispatch:
+  # package.json is the only file a release commit changes, and the release needs its captures.
   push:
     branches: [main]
-    paths: ['src/**', 'tools/**', '.github/workflows/screenshots.yml']
+    paths: ['src/**', 'tools/**', 'package.json', '.github/workflows/screenshots.yml']
   pull_request:
-    paths: ['src/**', 'tools/**', '.github/workflows/screenshots.yml']
+    paths: ['src/**', 'tools/**', 'package.json', '.github/workflows/screenshots.yml']
 
 concurrency:
   group: screenshots-${{ github.ref }}

@@ -1,0 +1,45 @@
+name: Release check
+
+on:
+  push:
+    branches: [main]
+  # Daily, so the time trigger fires on a day without merges.
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the decision without opening an issue
+        type: boolean
+        default: false
+  # A change to the check runs it dry with the token it gets on main.
+  pull_request:
+    paths:
+      - 'tools/workflow/release-check.mjs'
+      - 'tools/workflow/commit-title.mjs'
+      - '.github/workflows/release-check.yml'
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: release-check-${{ github.ref }}
+  # A run waits for the one before it, which may be opening the issue this one would.
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every commit and tag since the last release.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node tools/workflow/release-check.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ (github.ref != 'refs/heads/main' || inputs.dry_run) && '1' || '' }}
