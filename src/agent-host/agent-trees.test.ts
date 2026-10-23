@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentTrees } from './agent-trees'
 import type { ProcessControl, ProcessRow } from './process-tree'
 import { agentProcessesFile } from './storage'
@@ -25,10 +25,12 @@ async function setup(platform: ProcessControl['platform'], rows: ProcessRow[][])
   const logs: string[] = []
   let listed = 0
   let release: () => void = () => {}
+  let held: Promise<void> | null = null
   const control: ProcessControl = {
     platform,
     list: async () => {
       listed++
+      if (held) await held
       const next = rows.shift()
       if (!next) throw new Error('ps failed')
       return next
@@ -57,7 +59,25 @@ async function setup(platform: ProcessControl['platform'], rows: ProcessRow[][])
     // When each was last seen running moves with the clock.
     return processes.map(({ pid, startedAt }) => ({ pid, startedAt }))
   }
-  return { trees, calls, logs, stored, file, endGrace: () => release(), listed: () => listed }
+  // Holds the listings until the returned function is called, as a slow PowerShell would.
+  const holdListing = (): (() => void) => {
+    let open: () => void = () => {}
+    held = new Promise((resolve) => (open = resolve))
+    return () => {
+      held = null
+      open()
+    }
+  }
+  return {
+    trees,
+    calls,
+    logs,
+    stored,
+    file,
+    endGrace: () => release(),
+    listed: () => listed,
+    holdListing,
+  }
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -151,5 +171,45 @@ describe('AgentTrees', () => {
     await settle()
     expect(calls).toEqual(['taskkill 102'])
     expect(await stored()).toEqual([])
+  })
+
+  it('on Windows, finishes a stop running in the background before it closes', async () => {
+    // The agent, and a command it started detached that outlives it.
+    const running = [row(100, 1, 100), row(101, 100, 101)]
+    const after = [row(101, 100, 101)]
+    const { trees, calls, file, stored, holdListing } = await setup('win32', [running, after])
+    await trees.load()
+    trees.launched(root)
+    await trees.note(root)
+    const release = holdListing()
+    // Resolves at once on Windows, before the listing that finds what is left.
+    await trees.reap(root, 'Fake agent')
+    let closed = false
+    const closing = trees.close().then(() => (closed = true))
+    // Every write so far has landed, so a close that only wrote what was pending is done.
+    await file.flush()
+    await settle()
+    expect(closed).toBe(false)
+    release()
+    await closing
+    expect(calls).toEqual(['taskkill 101'])
+    expect(await stored()).toEqual([])
+  })
+
+  it('writes nothing once closed, leaving what is in its grace to the next host', async () => {
+    const running = [row(100, 1, 100), row(101, 100, 100)]
+    const after = [row(101, 1, 100)]
+    const { trees, calls, file, stored, endGrace } = await setup('linux', [running, after])
+    await trees.load()
+    trees.launched(root)
+    await trees.note(root)
+    await trees.reap(root, 'Fake agent')
+    await trees.close()
+    const saves = vi.spyOn(file, 'save')
+    endGrace()
+    await settle()
+    expect(calls).toContain('kill -100 SIGKILL')
+    expect(saves).not.toHaveBeenCalled()
+    expect(await stored()).toEqual(expect.arrayContaining([root, { pid: 101, startedAt: T + 101 }]))
   })
 })
