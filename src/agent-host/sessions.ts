@@ -71,6 +71,7 @@ import {
   CONTEXT_REPORT,
   hasContextReport,
   hiddenRemoval,
+  hiddenSessionMeta,
   removeHiddenSession,
   runReport,
 } from './reports'
@@ -2074,7 +2075,7 @@ export class SessionManager {
             await runtime.connection.forkSession(
               record.acpSessionId,
               record.projectPath,
-              sessionMeta(record),
+              hiddenSessionMeta(record.agentId, sessionMeta(record)),
             )
           ).acpSessionId,
         CONTEXT_REPORT,

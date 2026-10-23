@@ -52,6 +52,32 @@ export function hiddenRemoval(agentId: AgentId, init: AgentInit): Removal | null
   return (removal === 'close' ? closeSession : deleteSession) ? removal : null
 }
 
+/**
+ * `_meta` for opening a hidden session, added to `meta`. Claude Code's adapter passes
+ * `claudeCode.options` to its SDK: `disableAllHooks` keeps the user's, the project's and plugins'
+ * hooks and the status line from running for a session nobody sees (managed hooks still run), and
+ * `persistSession: false` writes no transcript. Other agents get `meta` as it is.
+ */
+export function hiddenSessionMeta(
+  agentId: AgentId,
+  meta?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (agentId !== 'claude-code' && agentId !== 'fake-agent') return meta
+  const claudeCode = (meta?.claudeCode ?? {}) as { options?: { settings?: object } }
+  const options = claudeCode.options ?? {}
+  return {
+    ...meta,
+    claudeCode: {
+      ...claudeCode,
+      options: {
+        ...options,
+        persistSession: false,
+        settings: { ...options.settings, disableAllHooks: true },
+      },
+    },
+  }
+}
+
 export interface Report {
   command: string
 }

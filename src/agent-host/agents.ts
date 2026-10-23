@@ -65,6 +65,7 @@ import type { ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import {
   hiddenRemoval,
+  hiddenSessionMeta,
   limitsReport,
   removeHiddenSession,
   runReport,
@@ -1451,7 +1452,7 @@ export class AgentManager {
       messages = await runReport(
         runtime,
         async () => {
-          const setup = await runtime.connection.newSession(dir)
+          const setup = await runtime.connection.newSession(dir, hiddenSessionMeta(slot.def.id))
           // Only while none are known: the empty folder's defaults never replace a session's.
           if (!this.hooks.optionsKnown(slot.def.id))
             this.hooks.optionsSeen(slot.def.id, setup.config)
@@ -1537,7 +1538,7 @@ export class AgentManager {
       )
     const dir = this.deps.reportsDir
     await mkdir(dir, { recursive: true })
-    const opening = runtime.connection.newSession(dir)
+    const opening = runtime.connection.newSession(dir, hiddenSessionMeta(agentId))
     let timer: ReturnType<typeof setTimeout> | null = null
     const setup = await Promise.race([
       opening,
