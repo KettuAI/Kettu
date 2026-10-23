@@ -1,5 +1,6 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
+import type { ArtifactContent, ArtifactSummary, VersionSummary } from './artifacts'
 import type { FileContent, FileList, FileSearch, FileWritten } from './files'
 import type {
   ChangedFile,
@@ -429,6 +430,24 @@ export interface HostContract {
   'usage.sync': { params: void; result: void }
   'usage.reimport': { params: { agentId: AgentId }; result: void }
   'usage.clearRecord': { params: void; result: void }
+  // Every artifact, newest first, or those in Recently deleted, the latest deletion first.
+  'artifacts.list': { params: { deleted?: boolean }; result: ArtifactSummary[] }
+  // The latest version without `version`.
+  'artifacts.read': { params: { id: string; version?: number }; result: ArtifactContent }
+  // Newest first.
+  'artifacts.versions': { params: { id: string }; result: VersionSummary[] }
+  'artifacts.rename': { params: { id: string; title: string }; result: void }
+  // Permanently only from Recently deleted.
+  'artifacts.delete': { params: { id: string; permanently?: boolean }; result: void }
+  'artifacts.undelete': { params: { id: string }; result: void }
+  // Authored by the user; `conflict` when `baseVersion` is not the latest.
+  'artifacts.restoreVersion': {
+    params: { id: string; version: number; baseVersion: number }
+    result: { version: number }
+  }
+  // Each watch counts as a viewer, and brings `artifacts.version`.
+  'artifacts.watch': { params: { id: string }; result: void }
+  'artifacts.unwatch': { params: { id: string }; result: void }
 }
 
 export type HostMethod = keyof HostContract
@@ -512,6 +531,15 @@ export const HOST_METHODS = [
   'usage.sync',
   'usage.reimport',
   'usage.clearRecord',
+  'artifacts.list',
+  'artifacts.read',
+  'artifacts.versions',
+  'artifacts.rename',
+  'artifacts.delete',
+  'artifacts.undelete',
+  'artifacts.restoreVersion',
+  'artifacts.watch',
+  'artifacts.unwatch',
 ] as const satisfies readonly HostMethod[]
 
 export type HostEvent =
@@ -527,6 +555,9 @@ export type HostEvent =
   | { type: 'git.tools'; tools: GitTools }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'usage.status'; status: UsageStatus }
+  | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
+  | { type: 'artifacts.version'; id: string; version: number }
+  | { type: 'artifacts.activity'; id: string; viewers: number; editing: string[] }
 
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>
