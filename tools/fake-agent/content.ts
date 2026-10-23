@@ -42,6 +42,45 @@ The flake comes from reading the clock twice. Threading a single timestamp throu
 - **Guard**: a test with \`vi.useFakeTimers()\`
 `
 
+// A diagram with a title and Chinese text, one without `xmlns` and with `&nbsp;` as agents
+// write SVG for a web page, and path data with no `<svg>` around it.
+export const SVG_REPLY = `Here is the release flow as a diagram:
+
+\`\`\`svg
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="236" viewBox="0 0 360 236" font-family="system-ui, sans-serif">
+  <title>Release flow</title>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#555"/>
+    </marker>
+  </defs>
+  <rect x="110" y="12" width="140" height="36" rx="18" fill="#e8f0fe" stroke="#4a7bd0"/>
+  <text x="180" y="35" text-anchor="middle" font-size="14" fill="#222">开始 Start</text>
+  <line x1="180" y1="48" x2="180" y2="88" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="80" y="92" width="200" height="44" rx="8" fill="#fff" stroke="#333"/>
+  <text x="180" y="119" text-anchor="middle" font-size="14" fill="#222">git push origin main</text>
+  <line x1="180" y1="136" x2="180" y2="176" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="110" y="180" width="140" height="36" rx="18" fill="#e6f4ea" stroke="#3c8d4f"/>
+  <text x="180" y="203" text-anchor="middle" font-size="14" fill="#222">发布 Release</text>
+</svg>
+\`\`\`
+
+The same badge, written for a web page:
+
+\`\`\`svg
+<svg width="120" height="28" viewBox="0 0 120 28">
+  <rect width="120" height="28" rx="6" fill="#24292f"/>
+  <text x="60" y="18" text-anchor="middle" font-size="12" fill="#fff" font-family="system-ui">build&nbsp;passing</text>
+</svg>
+\`\`\`
+
+And the arrow on its own, which is only path data:
+
+\`\`\`svg
+M0,0 L8,4 L0,8 z
+\`\`\`
+`
+
 export const CLOCK_BEFORE = `export function issueToken(user: User): Token {
   return { user: user.id, expiresAt: Date.now() + TOKEN_TTL_MS }
 }

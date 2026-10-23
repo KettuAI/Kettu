@@ -104,6 +104,7 @@
   --color-track: var(--track);
   --color-segment-track: var(--segment-track);
   --color-segment-thumb: var(--segment-thumb);
+  --color-canvas: var(--canvas);
   --color-pressed: var(--pressed);
   --color-pressed-hover: var(--pressed-hover);
   --color-mark: var(--mark);
