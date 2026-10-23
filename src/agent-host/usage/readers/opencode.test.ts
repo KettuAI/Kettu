@@ -467,7 +467,7 @@ describe('opencodeReader.scan', () => {
     new Fixture(defaultFile()).session('s1').message('s1', 'm1', done(1, 1))
     const controller = new AbortController()
     controller.abort()
-    const ctx = memoryContext({ home, signal: controller.signal })
+    const ctx = memoryContext({ home, platform: process.platform, signal: controller.signal })
     await expect(opencodeReader.scan(ctx)).rejects.toThrow()
     expect(ctx.rows.size).toBe(0)
   })
