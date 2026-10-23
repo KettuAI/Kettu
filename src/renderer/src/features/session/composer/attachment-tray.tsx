@@ -72,12 +72,14 @@ export function AttachmentTray({
     return () => el.removeEventListener('wheel', onWheel)
   }, [shown])
 
-  const focusTile = (i: number) => {
+  // By key: a removed tile stays in the row while it fades out, so an index could land on it.
+  const focusTile = (key: string, i: number) => {
     setActive(i)
     requestAnimationFrame(() =>
-      row.current?.querySelectorAll<HTMLElement>('[role="option"]')[i]?.focus(),
+      row.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.focus(),
     )
   }
+  const focusAt = (i: number) => focusTile(items[i]!.key, i)
 
   const open = (item: DraftAttachment) => {
     const attachment = item.attachment
@@ -92,23 +94,23 @@ export function AttachmentTray({
     setAnnouncement(t('attachments.announceRemoved', { name: item.name }))
     // The next tile takes focus, or the text after the last one.
     if (i === items.length - 1) onLeave()
-    else focusTile(i)
+    else focusTile(items[i + 1]!.key, i)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const last = items.length - 1
     switch (event.key) {
       case 'ArrowRight':
-        focusTile(Math.min(last, index + 1))
+        focusAt(Math.min(last, index + 1))
         break
       case 'ArrowLeft':
-        focusTile(Math.max(0, index - 1))
+        focusAt(Math.max(0, index - 1))
         break
       case 'Home':
-        focusTile(0)
+        focusAt(0)
         break
       case 'End':
-        focusTile(last)
+        focusAt(last)
         break
       case 'Backspace':
       case 'Delete':
@@ -157,6 +159,7 @@ export function AttachmentTray({
                 <AttachmentTile
                   view={view(item)}
                   role="option"
+                  data-key={item.key}
                   aria-selected={i === index}
                   aria-label={`${item.name}, ${view(item).tooltip.split('\n').at(-1)}`}
                   tabIndex={i === index ? 0 : -1}
