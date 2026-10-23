@@ -256,5 +256,10 @@
   "link": {
     "title": "打开此链接？",
     "open": "在浏览器中打开"
+  },
+  "svg": {
+    "alt": "SVG 图片",
+    "showSource": "查看源码",
+    "showPreview": "查看预览"
   }
 }
