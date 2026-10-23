@@ -126,13 +126,12 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 
 | Role                                                                    | Step           | Color                             |
 | ----------------------------------------------------------------------- | -------------- | --------------------------------- |
-| The Welcome wordmark, until the logo replaces it                        | Display        | `--text-primary`                  |
 | Page title: a Settings page, the New session heading                    | Title          | `--text-primary`                  |
 | Dialog title, the Settings column's title                               | Heading        | `--text-primary`                  |
 | Thread prose                                                            | Prose          | `--text-primary`                  |
 | Interface text: rows, menu items, buttons, setting names                | Interface      | `--text-primary`                  |
 | A label that names a thing: a project, a selected row, a card title     | Interface, 500 | `--text-primary`                  |
-| A sentence that explains a screen: an `Empty` state, the Welcome line   | Interface      | `--text-secondary`                |
+| A sentence that explains a screen: an `Empty` state                     | Interface      | `--text-secondary`                |
 | A dialog's description                                                  | Small          | `--text-secondary`                |
 | Tool call rows and fold lines, their file names `--text-primary`        | Small          | `--text-tertiary`                 |
 | Model names and reasoning levels                                        | Control        | `--text-secondary`                |
@@ -205,7 +204,7 @@ Radius follows the element's role; the values are the [radius scale](./design-sy
 ### Surfaces
 
 - The window is three columns on the [surface steps](./design-system.md#palette): the sidebar and the side panel on surface 0 (`--bg-sidebar`), the thread between them on surface 1 (`--bg-app`), meeting at `--border-subtle` hairlines. Cards and everything that floats sit on `--bg-surface`.
-- A full-window screen (Settings, Welcome) keeps the same arrangement: a column on surface 0 beside its page on surface 1, or the page alone on surface 1.
+- A full-window screen, such as Settings, keeps the same arrangement: a column on surface 0 beside its page on surface 1, or the page alone on surface 1.
 - A new surface step, a fourth column or a tinted region is a design-system change, not a screen's choice.
 
 ### Rows

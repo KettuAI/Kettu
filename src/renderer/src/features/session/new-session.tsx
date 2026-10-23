@@ -7,6 +7,7 @@ import type { AgentId } from '@shared/thread'
 import { startNewSession, warmAgent } from '@renderer/app/actions'
 import { onAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { Button } from '@renderer/components/ui/button'
 import {
   InputGroup,
   InputGroupAddon,
@@ -24,7 +25,7 @@ import { isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useNow } from '@renderer/lib/use-now'
 import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
-import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
@@ -34,11 +35,11 @@ import {
   useSessionsStore,
 } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { openSession, useViewStore } from '@renderer/stores/view'
+import { openAgentSettings, openSession, useViewStore } from '@renderer/stores/view'
 import { flushDraft, NEW_SESSION_DRAFT, readDraft, writeDraft } from './composer/drafts'
 import { AgentMenu } from './new-session/agent-menu'
 import { ProjectMenu } from './new-session/project-menu'
-import { canStart, startValues } from './new-session/start-options'
+import { canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { ParentLink } from './session-header'
 
@@ -121,6 +122,9 @@ function DraftComposer({
   const textarea = useRef<HTMLTextAreaElement>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const limits = useAgentsStore((s) => (agentId ? s.byId[agentId]?.limits : undefined))
+  const waitingForNode = useAgentsStore(
+    useShallow((s) => (s.loaded ? noAgentCanStart(usableAgents(s.order, s.byId)) : null)),
+  )
   const now = useNow()
   const name = agentId ? agentName(agentId) : null
   // A sub-session of a session started with No project shares its parent's scratch folder.
@@ -225,6 +229,7 @@ function DraftComposer({
             {projectError ?? t('newSession.missingLine')}
           </p>
         )}
+        {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} />}
         <div className="flex min-w-0 items-end">
           <InputGroupTextarea
             ref={textarea}
@@ -266,6 +271,30 @@ function DraftComposer({
         </div>
       </div>
     </InputGroup>
+  )
+}
+
+/** While no agent can start: why, in one line, and the way to Settings › Agents to fix it. */
+function NoAgentLine({ waitingForNode }: { waitingForNode: string[] }) {
+  const { t } = useTranslation('session')
+  const text =
+    waitingForNode.length > 0
+      ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
+      : t('newSession.noAgent')
+  return (
+    <div className="flex min-w-0 items-center gap-2 px-3.5 pt-1">
+      <p className="truncate text-xs text-destructive" title={text}>
+        {text}
+      </p>
+      <Button
+        variant="outline"
+        size="xs"
+        className="shrink-0"
+        onClick={() => openAgentSettings(null)}
+      >
+        {t('newSession.setUpAgents')}
+      </Button>
+    </div>
   )
 }
 

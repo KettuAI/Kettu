@@ -37,15 +37,6 @@ export function readiness(status: AgentStatus): AgentReadiness {
   }
 }
 
-/** The line under an agent's name: its version once known, else how it launches. */
-export function agentSubline(status: AgentStatus): string {
-  if (status.version) return `v${status.version}`
-  if (status.binaryOverride) return status.binaryOverride
-  if (status.package && !status.package.installed)
-    return i18n.t('agents:readiness.installsOnFirstUse')
-  return status.launchCommand
-}
-
 /**
  * Listed under Installed: it can run now. A package agent whose adapter is not installed yet is
  * listed with the agents to install, since installing is one click away.

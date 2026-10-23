@@ -151,7 +151,7 @@ Each agent is shown with its official mark in its own colors. They are the only 
 | Codex       | The Codex mark, a vertical gradient `#B1A7FF` → `#7A9DFF` → `#3941FF`                              | [`@lobehub/icons`](https://github.com/lobehub/lobe-icons) (MIT)              |
 | OpenCode    | The two-tone OpenCode mark: frame `#17181C` and fill `#E6E5E6` light, `#FFFFFF` and `#5A5858` dark | [sst/opencode](https://github.com/sst/opencode) `packages/identity` (MIT)    |
 
-- Sizes: 14 px in sidebar and list rows and before the session title in the top bar, 17 px on a 32 px tile in cards (16 px on 30 px in the Welcome list). The tile is `--tile` (`--bg-subtle`) with an inset `--border-soft` ring and an 8 px radius.
+- Sizes: 14 px in sidebar and list rows and before the session title in the top bar, 17 px on a 32 px tile in cards. The tile is `--tile` (`--bg-subtle`) with an inset `--border-soft` ring and an 8 px radius.
 - An agent that is not installed shows its mark in one color, `--muted-foreground`.
 - The marks ship as SVG files with their license notices; the gradient and the two OpenCode colors are tokens, so they follow the theme.
 
@@ -241,7 +241,7 @@ The radius scale is shadcn's, derived from `--radius`, so shadcn components foll
 - Where OverBench's look differs from a shadcn component's default, the difference is a variant added to that component with `cva`, such as `InputGroup` `variant="composer"`, `Card` `variant="tool"` and a `Button` `size="compact"` bound to `--control-height`. Call sites never restyle a component with `className`; they use it for layout only.
 - The compact spacing steps are Tailwind's `1`, `1.5`, `2`, `2.5`, `3`, `4` and `7`.
 - Menu items are `rounded-lg` because they sit 6 px inside a `rounded-2xl` menu: 12.6 − 6 ≈ 6.6, so the item's corner follows the menu's. Segments sit inside their track the same way.
-- shadcn's `xs` button (24 px) is the small size; `default` (32 px) is kept for dialogs, empty states and the Welcome screen, where a larger target helps. When the comfortable density arrives, these sizes are bound to the comfortable tokens.
+- shadcn's `xs` button (24 px) is the small size; `default` (32 px) is kept for dialogs and empty states, where a larger target helps. When the comfortable density arrives, these sizes are bound to the comfortable tokens.
 
 ## Typography
 

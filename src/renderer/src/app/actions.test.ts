@@ -177,7 +177,7 @@ describe('openProjectDialog', () => {
     openProject.mockReset()
     setDefaultAgent('codex')
     useProjectsStore.setState({ projects: [] })
-    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: null })
+    useViewStore.setState({ main: { kind: 'launch' }, projectPath: null })
   })
 
   it('adds the folder and opens New session in it', async () => {
@@ -197,7 +197,7 @@ describe('openProjectDialog', () => {
     openProject.mockResolvedValue(null)
     await openProjectDialog()
     expect(request).not.toHaveBeenCalled()
-    expect(useViewStore.getState().main).toEqual({ kind: 'welcome' })
+    expect(useViewStore.getState().main).toEqual({ kind: 'launch' })
   })
 })
 
@@ -205,7 +205,7 @@ describe('newSession', () => {
   beforeEach(() => setDefaultAgent('codex'))
 
   it('opens New session with the default agent, in the selected project', () => {
-    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: '/repo' })
+    useViewStore.setState({ main: { kind: 'launch' }, projectPath: '/repo' })
     newSession()
     expect(useViewStore.getState()).toMatchObject({
       main: { kind: 'new', agentId: 'codex' },
@@ -215,7 +215,7 @@ describe('newSession', () => {
 
   it('closes Settings when asked for, and leaves it open in place of a session', () => {
     const settings = { open: true, section: 'general', agent: null } as const
-    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: '/repo', settings })
+    useViewStore.setState({ main: { kind: 'launch' }, projectPath: '/repo', settings })
     newSessionInPlace()
     expect(useViewStore.getState()).toMatchObject({ main: { kind: 'new' }, settings })
     newSession()
@@ -243,7 +243,7 @@ describe('New session with No project', () => {
   })
 
   it("starts there when asked, or when the selected folder is a scratch session's", () => {
-    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: '/repo' })
+    useViewStore.setState({ main: { kind: 'launch' }, projectPath: '/repo' })
     newSession(null, true)
     expect(useViewStore.getState()).toMatchObject({
       main: { kind: 'new', noProject: true },

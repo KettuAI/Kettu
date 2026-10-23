@@ -4,8 +4,7 @@
     "howToInstall": "安装方法",
     "needsNode": "需要 Node.js 22 或更高版本。",
     "installNode": "安装 Node.js",
-    "couldNotStart": "无法启动。",
-    "installsOnFirstUse": "首次使用时安装"
+    "couldNotStart": "无法启动。"
   },
   "state": {
     "ready": "就绪",

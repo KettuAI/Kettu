@@ -7,7 +7,6 @@ import type common from './locales/en/common.json'
 import type composer from './locales/en/composer.json'
 import type files from './locales/en/files.json'
 import type git from './locales/en/git.json'
-import type home from './locales/en/home.json'
 import type host from './locales/en/host.json'
 import type main from './locales/en/main.json'
 import type session from './locales/en/session.json'
@@ -29,7 +28,6 @@ declare module 'i18next' {
       composer: typeof composer
       files: typeof files
       git: typeof git
-      home: typeof home
       host: typeof host
       main: typeof main
       session: typeof session

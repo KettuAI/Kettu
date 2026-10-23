@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { usePendingSession } from '@renderer/app/actions'
-import { Welcome } from '@renderer/features/home/welcome'
 import { LaunchState } from '@renderer/features/shell/launch-state'
 import { SidePanelArea } from '@renderer/features/shell/side-panel-area'
 import { NewSessionView } from '@renderer/features/session/new-session'
@@ -14,8 +13,8 @@ import { useViewStore } from '@renderer/stores/view'
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
 
 /**
- * What the main area shows: Welcome, New session, a session being created, a session, in a project
- * or in a scratch folder, or the usage page.
+ * What the main area shows: New session, a session being created, a session, in a project or in a
+ * scratch folder, or the usage page.
  */
 export function MainArea() {
   const projects = useProjectsStore((s) => s.projects)
@@ -64,7 +63,6 @@ export function MainArea() {
   }
   // New session asks for no project; without one, it offers to open one.
   if (loaded && !project && main.kind === 'new') return <NewSessionView project={null} />
-  if (loaded && !project) return <Welcome />
   if (!project) return <LaunchState />
 
   let content
