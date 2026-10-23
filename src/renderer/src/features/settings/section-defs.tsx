@@ -62,6 +62,7 @@ import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage
 
 const SOURCE_URL = 'https://github.com/overbench/overbench'
 const ISSUES_URL = 'https://github.com/overbench/overbench/issues'
+const LICENSE_URL = 'https://github.com/overbench/overbench/blob/main/LICENSE'
 
 const SHORTCUTS = [
   { group: 'sessions', keys: 'Mod+N', action: 'newSession' },
@@ -583,6 +584,17 @@ export function useAboutSection(): SectionDef {
         group: links,
         layout: 'custom',
         render: () => <LinkRow name={t('about.source.name')} url={SOURCE_URL} />,
+      },
+      {
+        id: 'license',
+        name: t('about.license.name'),
+        english: en('about.license.name'),
+        keywords: t('about.license.keywords'),
+        group: links,
+        layout: 'custom',
+        render: () => (
+          <LinkRow name={t('about.license.name')} url={LICENSE_URL} detail="Apache-2.0" />
+        ),
       },
       {
         id: 'issues',

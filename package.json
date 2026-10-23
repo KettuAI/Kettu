@@ -5,6 +5,7 @@
   "private": true,
   "description": "A beautifully crafted desktop workbench for terminal coding agents.",
   "author": "Amigoer",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/overbench/overbench",
   "repository": {
     "type": "git",

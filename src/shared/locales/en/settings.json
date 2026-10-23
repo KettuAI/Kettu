@@ -391,6 +391,10 @@
     "source": {
       "name": "Source code"
     },
+    "license": {
+      "name": "License",
+      "keywords": "apache licence"
+    },
     "groups": {
       "updates": "Updates",
       "runtime": "Runtime",

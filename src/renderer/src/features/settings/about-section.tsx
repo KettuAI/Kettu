@@ -248,8 +248,11 @@ export function RuntimeFact({ value }: { value: string | undefined }) {
   )
 }
 
-/** A link row: the whole row opens the page, which main sends to the system browser. */
-export function LinkRow({ name, url }: { name: string; url: string }) {
+/**
+ * A link row: the whole row opens the page, which main sends to the system browser. The line
+ * under the name is the address, unless `detail` says something more useful.
+ */
+export function LinkRow({ name, url, detail }: { name: string; url: string; detail?: string }) {
   return (
     <a
       href={url}
@@ -260,7 +263,7 @@ export function LinkRow({ name, url }: { name: string; url: string }) {
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-ui font-medium">{name}</span>
         <span className="truncate text-xs text-muted-foreground">
-          {url.replace(/^https?:\/\//, '')}
+          {detail ?? url.replace(/^https?:\/\//, '')}
         </span>
       </span>
       <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-(--duration-fast) group-hover:text-foreground" />

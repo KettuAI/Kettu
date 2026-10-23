@@ -41,7 +41,7 @@ OverBench takes the best implementations already proven in leading projects, int
 ### Reusing code from other projects
 
 - Check the license first. Code under MIT, BSD, ISC or Apache-2.0 may be adapted: keep its copyright and license notice, and add a one-line comment with the source URL.
-- OverBench's own license is not decided yet. Ask the maintainer before reusing anything under GPL, AGPL, LGPL or MPL, or without a license.
+- OverBench is licensed under Apache-2.0, so code under GPL or AGPL cannot be reused. Ask the maintainer before reusing LGPL or MPL code, or code without a license.
 - When a maintained package already does the job, prefer depending on it over copying it, subject to the dependency rules below.
 
 ## Tech stack
