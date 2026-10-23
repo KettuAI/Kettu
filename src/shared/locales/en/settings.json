@@ -392,7 +392,7 @@
       "downloading": "Downloading {{version}}",
       "downloadProgress": "Download progress",
       "ready": "{{version}} is ready to install",
-      "available": "{{version}} is available",
+      "available": "{{version}} is out",
       "failed": "Couldn't check for updates",
       "offDevelopment": "Updates are off in development builds",
       "offPackageManager": "Updates are installed by your package manager",
@@ -444,8 +444,8 @@
   "footer": {
     "about": "About OverBench",
     "upToDate": "Up to date",
+    "ready": "{{version}} ready",
     "available": "{{version}} is out",
-    "downloading": "{{percent}}% downloaded",
-    "restartToUpdate": "Restart"
+    "downloading": "{{percent}}% downloaded"
   }
 }

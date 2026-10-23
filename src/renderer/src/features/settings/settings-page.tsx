@@ -322,7 +322,7 @@ function AppFooter() {
     state.kind === 'ready' ? (
       <Badge variant="info" className="min-w-0 shrink">
         <CircleArrowUpIcon data-icon="inline-start" />
-        <span className="truncate">{t('footer.restartToUpdate')}</span>
+        <span className="truncate">{t('footer.ready', { version: state.version })}</span>
       </Badge>
     ) : state.kind === 'available' ? (
       <Badge variant="info" className="min-w-0 shrink">

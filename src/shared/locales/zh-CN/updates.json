@@ -2,13 +2,14 @@
   "notice": {
     "dismiss": "忽略",
     "ready": "更新已就绪",
-    "available": "{{version}} 已发布",
+    "available": "已发布",
     "updatedTo": "已更新到",
     "restart": "重启",
     "download": "下载",
     "whatsNew": "更新内容",
     "readyTooltip": "OverBench {{version}} 已下载完成。重启即可完成更新，会话会自动恢复。",
-    "availableTooltip": "OverBench {{version}} 已发布，请从发布页面下载。"
+    "availableTooltip": "OverBench {{version}} 已发布，请从发布页面下载。",
+    "updatedTooltip": "OverBench 已更新到 {{version}}。"
   },
   "quit": {
     "titleUpdate": "重启以完成更新？",
