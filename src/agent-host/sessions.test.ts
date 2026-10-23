@@ -278,7 +278,9 @@ describe('starting with chosen options', () => {
       const { t, port, sessionId, outcome } = await createInFlight(settingValues)
       await vi.waitFor(() => expect(sent(t, 'session/set_config_option')).toBe(1))
       await port.request('sessions.delete', { sessionId })
-      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      expect(await outcome).toMatchObject({
+        error: { code: 'not_found', data: { reason: 'removed_while_starting' } },
+      })
       expect((await port.request('sessions.list', {})).map((s) => s.id)).not.toContain(sessionId)
       // The values stop with it, and the agent's session goes.
       expect(sent(t, 'session/set_config_option')).toBe(1)
@@ -308,6 +310,18 @@ describe('starting with chosen options', () => {
       expect((await port.request('sessions.list', {})).map((s) => s.id)).not.toContain(sessionId)
       expect(sent(t, 'session/set_config_option')).toBe(0)
       await vi.waitFor(async () => expect(await agentSessions(t, port)).toEqual([]))
+    })
+
+    it('fails as removed when it is deleted and the agent exits before it opens it', async () => {
+      const { t, port, sessionId, outcome } = await createInFlight({
+        FAKE_AGENT_NEW_SESSION_MS: '200',
+      })
+      await vi.waitFor(() => expect(sent(t, 'session/new')).toBe(1))
+      await port.request('sessions.delete', { sessionId })
+      ;(t.launcher as InProcessLauncher).crash()
+      expect(await outcome).toMatchObject({
+        error: { code: 'not_found', data: { reason: 'removed_while_starting' } },
+      })
     })
 
     it('stays in the list, closed, when it is closed while its values are set', async () => {

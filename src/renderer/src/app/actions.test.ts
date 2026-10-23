@@ -367,12 +367,23 @@ describe('createSession with a first message', () => {
 
   it('goes back to New session with it when the session is deleted while it starts', async () => {
     request.mockRejectedValueOnce(
-      Object.assign(new Error('The session was removed before it started'), { code: 'not_found' }),
+      Object.assign(new Error('The session was removed before it started'), {
+        code: 'not_found',
+        data: { reason: 'removed_while_starting' },
+      }),
     )
     await createSession('codex', '/repo', null, 'Fix the build')
     expect(usePendingSession.getState().pending).toBeNull()
     expect(useViewStore.getState().main).toMatchObject({ kind: 'new' })
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
+  })
+
+  it('shows any other not_found, such as a parent that went', async () => {
+    request.mockRejectedValueOnce(Object.assign(new Error('No session p1'), { code: 'not_found' }))
+    await createSession('codex', '/repo', 'p1', 'Fix the build')
+    expect(usePendingSession.getState().pending).toMatchObject({
+      error: { message: 'No session p1', code: 'not_found' },
+    })
   })
 
   it("leaves it in the session's composer when the session is closed while it starts", async () => {

@@ -2,11 +2,12 @@
 // session lifecycle, sub-sessions, and the session index.
 
 import { randomUUID } from 'node:crypto'
-import type {
-  ContextBreakdown,
-  ImportableSession,
-  SessionAttention,
-  SessionSummary,
+import {
+  REMOVED_WHILE_STARTING,
+  type ContextBreakdown,
+  type ImportableSession,
+  type SessionAttention,
+  type SessionSummary,
 } from '@shared/agent-host'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
@@ -1258,13 +1259,18 @@ export class SessionManager {
     options: Record<string, string | boolean> = {},
   ): Promise<void> {
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
-    const removed = (): HostError => notFound(t('session.removedWhileStarting'))
+    const removed = (): HostError =>
+      new HostError('not_found', t('session.removedWhileStarting'), {
+        reason: REMOVED_WHILE_STARTING,
+      })
     const runtime = await this.deps.agents.ensureReady(live.record.agentId)
     if (gone()) throw removed()
     let setup
     try {
       setup = await runtime.connection.newSession(live.record.projectPath, sessionMeta(live.record))
     } catch (error) {
+      // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
+      if (gone()) throw removed()
       throw this.failStart(live, error, { action: 'create' })
     }
     if (gone()) {
