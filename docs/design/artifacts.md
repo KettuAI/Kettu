@@ -146,6 +146,26 @@ CREATE TABLE artifact_versions (
 - **Deleting permanently** removes the artifact's rows and, at once, every file of its versions that no other version names.
 - **The purge** runs when the host starts and every 24 hours: it removes the artifacts deleted more than 30 days ago, their versions by cascade, and then every content file no version names. It touches no file while the database is not open, as when a newer app wrote it, since it cannot tell which files are named, and in the content folder it removes nothing but version files and temporary files.
 
+### Store API
+
+The host's `ArtifactStore` (`src/agent-host/artifacts/store.ts`) is what the service, the interface's requests and main's protocol call; every call is one request to the thread worker. A call takes `project`, the session's project folder or its scratch folder, for a session's [reach](../architecture.md#artifacts): an artifact of another project is `not_found`, and one in Recently deleted is `deleted`, except that deleting it again returns when it went. A call without it is the user's and reaches every artifact.
+
+| Call                                                              | Result                        | For                                                    |
+| ----------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------ |
+| `create({ project, sessionId, title, html, pages, note })`        | `{ id, version: 1 }`          | `create_artifact`; authored by `sessionId`             |
+| `read(id, { version?, project? })`                                | `{ artifact, version, html }` | `read_artifact`, `artifacts.read`                      |
+| `write({ id, baseVersion, html, pages, author, note, project? })` | `{ version }`                 | `update_artifact`, after applying its edits            |
+| `list({ project })`, or `list({ deleted? })` for the user         | `ArtifactSummary[]`           | `list_artifacts`, `artifacts.list`                     |
+| `delete(id, { project? })`                                        | `{ deletedAt, purgeAt }`      | `delete_artifact`, `artifacts.delete`                  |
+| `versions(id, { project? })`                                      | Version records, newest first | `list_artifact_versions`, `artifacts.versions`         |
+| `restore({ id, version, baseVersion, author, note?, project? })`  | `{ version }`                 | `restore_artifact_version`, `artifacts.restoreVersion` |
+| `rename(id, title, { project? })`                                 | none                          | `update_artifact` with a title, `artifacts.rename`     |
+| `undelete(id)`, `erase(id)`                                       | none                          | The user only                                          |
+| `content(id, version?)`                                           | `{ path, version }`           | `artifact.content`, for main                           |
+
+- **Refusals** are `ArtifactError`s: `reason` is `not_found`, `deleted` or `conflict`, the service's codes of the same names, and `state` is `{ version, deleted }` for the last two, so a conflict names the latest version.
+- **What the store does not check** is the service's: the limits on titles, notes and HTML, the rate limit, and counting a version's pages. A title alone in `update_artifact` is a `rename` and makes no version.
+
 ### Import and export
 
 - **Import**, from the user only: main's open dialog takes one `.html` or `.htm` file of at most 5 MiB that decodes as UTF-8, and the host makes it an artifact in the project the user chose, version 1, authored by the user, titled by its `<title>` or else its file name. Files beside it do not come along, since an artifact is one file; a page that needs them loads them from the CDN list or inlines them.

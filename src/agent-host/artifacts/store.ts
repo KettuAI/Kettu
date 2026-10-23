@@ -240,6 +240,7 @@ export class ArtifactStore {
     if (ports) this.deps.version(ports.keys(), id, version)
   }
 
+  /** Changes the title, which is not versioned. */
   async rename(id: string, title: string, { project }: Reach = {}): Promise<void> {
     await this.call('rename', { id, title, project: project ?? null })
     this.deps.changed()
