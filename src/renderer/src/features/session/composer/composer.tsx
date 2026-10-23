@@ -222,14 +222,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   placeholder={placeholder}
                   disabled={starting}
                   onKeyDown={onKeyDown}
-                  className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-[15px] pr-1 pl-4 text-prose leading-[22px] placeholder:text-placeholder md:text-prose"
+                  className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-4 pr-1 pl-5 text-prose leading-6 placeholder:text-placeholder md:text-prose"
                 />
               }
             />
             {hint && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-0 overflow-hidden py-[15px] pr-1 pl-4 text-prose leading-[22px] whitespace-pre"
+                className="pointer-events-none absolute inset-0 overflow-hidden py-4 pr-1 pl-5 text-prose leading-6 whitespace-pre"
               >
                 <span className="invisible">{text}</span>
                 <span className="text-placeholder">{hint}</span>

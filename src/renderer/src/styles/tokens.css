@@ -8,21 +8,21 @@
 [data-theme='light'] {
   color-scheme: light;
 
-  --bg-app: #fdfdfc;
-  --bg-sidebar: #f9f9f8;
+  --bg-app: #ffffff;
+  --bg-sidebar: #fafafa;
   --bg-surface: #ffffff;
-  --bg-subtle: #f2f2f0;
-  --bg-code-inline: #f0f0ee;
-  --bg-code-block: #f7f7f5;
-  --bg-hover: #f0f0ee;
-  --bg-selected: #ededeb;
+  --bg-subtle: #f2f2f2;
+  --bg-code-inline: #f0f0f0;
+  --bg-code-block: #f7f7f7;
+  --bg-hover: #eeeeee;
+  --bg-selected: #e0e0e0;
 
-  --border-default: #e3e3e1;
-  --border-subtle: #ececea;
+  --border-default: #e7e7e7;
+  --border-subtle: #efefef;
   /* One step past border-default: hovered and focused fields, outline buttons. */
-  --border-strong: #d6d6d3;
+  --border-strong: #d6d6d6;
 
-  --text-primary: #262626;
+  --text-primary: #141414;
   --text-secondary: #525252;
   --text-tertiary: #6b6b6b;
   --text-placeholder: #737373;
@@ -43,7 +43,7 @@
   --danger-tint: #fdf6f5;
   --danger-border: #f1d5d1;
   /* What a queued message's card darkens toward as it sits further back in the stack. */
-  --queue-back: #f4f4f2;
+  --queue-back: #f4f4f4;
   /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
   --canvas: #ffffff;
   --scrollbar-thumb: rgb(0 0 0 / 18%);
@@ -54,7 +54,7 @@
   /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
   --checker: rgb(0 0 0 / 5%);
 
-  --elevation-composer: 0 6px 20px rgb(20 20 19 / 6%), 0 -3px 10px rgb(20 20 19 / 4%);
+  --elevation-composer: 0 4px 20px rgb(0 0 0 / 6%);
   --elevation-queue: 0 1px 6px rgb(20 20 19 / 5%);
   --elevation-popover: 0 8px 24px rgb(20 20 19 / 10%);
   /* Contact shadows of small raised controls: an outline button, a switch or segment thumb. */
@@ -140,7 +140,7 @@
     --mark: oklch(0.8 0.14 85 / 32%);
     --checker: rgb(255 255 255 / 7%);
 
-    --elevation-composer: 0 6px 20px rgb(0 0 0 / 40%), 0 -3px 10px rgb(0 0 0 / 40%);
+    --elevation-composer: 0 4px 20px rgb(0 0 0 / 40%);
     --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
     --elevation-popover: 0 8px 24px rgb(0 0 0 / 40%);
     --elevation-button: inset 0 1px 0 rgb(255 255 255 / 5%);
@@ -210,7 +210,7 @@
   --mark: oklch(0.8 0.14 85 / 32%);
   --checker: rgb(255 255 255 / 7%);
 
-  --elevation-composer: 0 6px 20px rgb(0 0 0 / 40%), 0 -3px 10px rgb(0 0 0 / 40%);
+  --elevation-composer: 0 4px 20px rgb(0 0 0 / 40%);
   --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
   --elevation-popover: 0 8px 24px rgb(0 0 0 / 40%);
   --elevation-button: inset 0 1px 0 rgb(255 255 255 / 5%);
@@ -312,12 +312,13 @@
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
   --dialog-ring:
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
+  /* The composer's line is a full pixel, as in the reference, so the box reads on the white canvas. */
   --composer-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-composer), var(--highlight);
+    inset 0 0 0 1px var(--border-default), var(--elevation-composer), var(--highlight);
   --composer-hover:
-    inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-composer), var(--highlight);
+    inset 0 0 0 1px var(--border-strong), var(--elevation-composer), var(--highlight);
   --composer-focus:
-    inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-composer), var(--highlight);
+    inset 0 0 0 1px var(--border-strong), var(--elevation-composer), var(--highlight);
   --queue-ring:
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-queue), var(--highlight);
   --attention-ring-shadow:

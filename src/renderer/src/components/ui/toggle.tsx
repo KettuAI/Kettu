@@ -20,7 +20,7 @@ const toggleVariants = cva(
           'h-8 min-w-8 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
         sm: "h-7 min-w-7 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: 'h-9 min-w-9 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
-        compact: "h-control-sm min-w-0 px-2.5 text-[12.5px] [&_svg:not([class*='size-'])]:size-3.5",
+        compact: "h-control-sm min-w-0 px-2.5 text-control [&_svg:not([class*='size-'])]:size-3.5",
         tile: 'h-auto min-w-0 p-0 text-xs',
       },
     },

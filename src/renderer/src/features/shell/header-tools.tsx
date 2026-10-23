@@ -67,6 +67,7 @@ function PaneToggle({
             aria-label={label}
             aria-pressed={open}
             onClick={() => toggleSidePane(projectPath, pane)}
+            className="text-foreground"
           />
         }
       >

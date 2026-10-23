@@ -22,7 +22,6 @@ import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { basename, limitLabel, resetTime, shortAgo } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import { useNow } from '@renderer/lib/use-now'
 import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
@@ -74,21 +73,25 @@ export function NewSessionView({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TopBar>
-        <NoDrag className="min-w-0 gap-0.5">
-          {/* The label is short, so the parent's title takes the room left before the tools. */}
-          {parent && <ParentLink parent={parent} className="max-w-none" />}
-          <span className={cn('truncate px-1.5 text-ui font-medium', parent && 'shrink-0')}>
-            {parent ? t('newSession.subSessionTitle') : t('newSession.title')}
-          </span>
-        </NoDrag>
+      {/* As in the reference, the screen's own bar names nothing and draws no line: the heading
+          below says where you are. A sub-session still leads with its parent. */}
+      <TopBar className="shadow-none">
+        {parent && (
+          <NoDrag className="min-w-0 gap-0.5">
+            {/* The label is short, so the parent's title takes the room left before the tools. */}
+            <ParentLink parent={parent} className="max-w-none" />
+            <span className="shrink-0 truncate px-1.5 text-ui font-medium">
+              {t('newSession.subSessionTitle')}
+            </span>
+          </NoDrag>
+        )}
         <span className="flex-1" />
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
       {/* Raised 28 px above centre, so the eye lands on the composer. */}
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-14">
-        <div className="my-auto flex w-full max-w-[760px] flex-col gap-7 pt-6">
-          <h1 className="animate-in text-center text-title font-semibold text-balance fade-in animation-duration-(--duration-slow)">
+        <div className="my-auto flex w-full max-w-2xl flex-col gap-7 pt-6">
+          <h1 className="animate-in text-center font-serif text-greeting text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
           <DraftComposer
@@ -210,27 +213,9 @@ function DraftComposer({
         : null
 
   return (
-    <InputGroup variant="composer">
-      <div className="flex w-full min-w-0 flex-col">
-        <div className="flex h-row min-w-0 items-center gap-0.5 px-1.5 pt-1.5">
-          {parent ? (
-            <ParentProject project={project} scratch={parent.scratch} />
-          ) : (
-            <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
-          )}
-          {!inScratch && project && <BranchLabel projectPath={project.path} />}
-          <Slash />
-          <AgentMenu agentId={agentId} onChoose={choose} />
-          <span className="min-w-2 flex-1" />
-          <ModeMenu agentId={agentId} />
-        </div>
-        {(projectError || (project?.missing && !inScratch)) && (
-          <p className="truncate px-3.5 pt-1 text-xs text-danger" title={projectError ?? undefined}>
-            {projectError ?? t('newSession.missingLine')}
-          </p>
-        )}
-        {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} />}
-        <div className="flex min-w-0 items-end">
+    <div className="flex flex-col gap-1.5">
+      <InputGroup variant="composer">
+        <div className="flex min-w-0 flex-1 items-end self-stretch">
           <InputGroupTextarea
             ref={textarea}
             rows={1}
@@ -250,7 +235,7 @@ function DraftComposer({
                   ? t('newSession.askAgent', { agent: name })
                   : t('newSession.describeTask')
             }
-            className="max-h-[min(40svh,24rem)] min-h-(--composer-min) pt-2 pr-1 pb-[15px] pl-3.5 text-prose leading-[22px] placeholder:text-placeholder md:text-prose"
+            className="max-h-[min(40svh,24rem)] min-h-28 pt-3.5 pr-1 pb-3 pl-5 text-prose leading-6 placeholder:text-placeholder md:text-prose"
           />
           <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
             <Tooltip>
@@ -269,8 +254,26 @@ function DraftComposer({
             </Tooltip>
           </InputGroupAddon>
         </div>
+      </InputGroup>
+      {/* Where and with what the session starts, under the box as in the reference. */}
+      <div className="flex h-control min-w-0 items-center gap-0.5 px-2.5">
+        {parent ? (
+          <ParentProject project={project} scratch={parent.scratch} />
+        ) : (
+          <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
+        )}
+        {!inScratch && project && <BranchLabel projectPath={project.path} />}
+        <span className="min-w-2 flex-1" />
+        <AgentMenu agentId={agentId} onChoose={choose} />
+        <ModeMenu agentId={agentId} />
       </div>
-    </InputGroup>
+      {(projectError || (project?.missing && !inScratch)) && (
+        <p className="truncate px-5 text-xs text-danger" title={projectError ?? undefined}>
+          {projectError ?? t('newSession.missingLine')}
+        </p>
+      )}
+      {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} />}
+    </div>
   )
 }
 
@@ -282,7 +285,7 @@ function NoAgentLine({ waitingForNode }: { waitingForNode: string[] }) {
       ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
       : t('newSession.noAgent')
   return (
-    <div className="flex min-w-0 items-center gap-2 px-3.5 pt-1">
+    <div className="flex min-w-0 items-center gap-2 px-5">
       <p className="truncate text-xs text-destructive" title={text}>
         {text}
       </p>
@@ -313,7 +316,7 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="flex h-control min-w-12 shrink-10 items-center gap-1 overflow-hidden px-2 text-[12.5px] text-muted-foreground" />
+          <span className="flex h-control min-w-12 shrink-10 items-center gap-1 overflow-hidden px-2 text-control text-muted-foreground" />
         }
       >
         <FolderIcon className="size-3.5 shrink-0" />
@@ -345,7 +348,7 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
       <Tooltip>
         <TooltipTrigger
           render={
-            <span className="flex h-control min-w-8 shrink-1000 items-center gap-1 overflow-hidden px-2 text-[12.5px] text-muted-foreground" />
+            <span className="flex h-control min-w-8 shrink-1000 items-center gap-1 overflow-hidden px-2 text-control text-muted-foreground" />
           }
         >
           <GitBranchIcon className="size-3.5 shrink-0" />
@@ -398,9 +401,7 @@ function RecentSessions() {
         basename(summary.projectPath))
   return (
     <section aria-label={t('newSession.recentLabel')} className="flex flex-col px-1">
-      <h2 className="px-2 pb-1 text-xs font-medium text-muted-foreground">
-        {t('newSession.recent')}
-      </h2>
+      <h2 className="px-2 pb-1.5 text-ui text-secondary">{t('newSession.recent')}</h2>
       {recent.map((summary, index) => (
         <button
           key={summary.id}

@@ -14,7 +14,7 @@ export function SidebarFooterContent() {
       <SignInNotice />
       <UpdateNotice />
       <NavRow
-        icon={<SettingsIcon className="text-icon" />}
+        icon={<SettingsIcon />}
         label={t('footer.settings')}
         current={settingsOpen}
         onClick={() => openSettings()}

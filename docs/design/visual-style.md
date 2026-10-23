@@ -16,7 +16,7 @@ OverBench is a flat, technical workbench. Its look comes from hairlines, small s
 1. **Flat.** Nothing at rest has a shadow, a gradient or a raised card. Only what floats above the canvas casts a shadow ([elevation](#lines-and-elevation)).
 2. **Linear.** Icons are thin outlines, borders are hairlines, separators are inset to the text they divide.
 3. **Restrained, not grey.** The chrome is neutral. Color appears only where it carries meaning ([color](#color)), and there it is clear rather than timid ([problem 35](../milestones/m0-feedback.md#35-the-palette-is-black-and-grey-and-reads-as-cheap)).
-4. **Content first.** The agent's work has the highest contrast on screen. Chrome steps back: muted at rest, full contrast only under the pointer, pressed or chosen.
+4. **Content first.** The agent's work has the highest contrast on screen. Secondary chrome steps back: muted at rest, full contrast only under the pointer, pressed or chosen. The app's own navigation, the sidebar's rows and the top bar's buttons, is drawn in the text color, as in the reference ([#127](https://github.com/overbench/overbench/issues/127)).
 5. **Less on screen.** Every element says something the user needs now. A word that repeats what a shape already says, a time on every row, or a hint the menu already gives is removed, not styled ([problems 8, 25, 28](../milestones/m0-feedback.md)).
 
 Claude Desktop is the benchmark for measurements and behavior, never for brand ([design reference](./design-system.md#design-reference)). Where this guide leaves a detail open, measure the reference, then write the result here.
@@ -41,21 +41,22 @@ One stroke width for every icon, set once by `LucideProvider` in `main.tsx`; its
 
 ### Size
 
-Three sizes, chosen by context:
+Four sizes, chosen by context:
 
 | Size  | Utility    | Context                                                                                        |
 | ----- | ---------- | ---------------------------------------------------------------------------------------------- |
-| 16 px | `size-4`   | Free-standing chrome: sidebar rows, the top bar's buttons, pane headers, `default` buttons     |
-| 14 px | `size-3.5` | Inside a control, card or menu: `compact` and `sm` buttons, selects, chevrons, tool call rows  |
+| 20 px | `size-5`   | Chrome: the sidebar's nav rows, the top bar's buttons (`icon-compact`)                         |
+| 16 px | `size-4`   | Inside a control: `compact` and `default` buttons, pane headers                                |
+| 14 px | `size-3.5` | Inside a card or menu: `sm` buttons, selects, chevrons, tool call rows, sidebar row actions    |
 | 12 px | `size-3`   | Beside 12 px text: chips, `xs` buttons, secondary lines, status icons in meta text, file chips |
 
-- No other size: 11, 13, 15 and 18 px are off the scale. A context that truly needs another size adds a row here first.
+- No other size: 11, 13, 15 and 18 px are off the scale. The 20 px step came with the reference's density on 2026-10-23 ([#127](https://github.com/overbench/overbench/issues/127)). A context that truly needs another size adds a row here first.
 - A button sizes its icon through its own `size` variant; an icon inside a button takes no size class.
 - An empty state's icon goes in the `Empty` component's media slot, at the size the slot gives it.
 
 ### Color and placement
 
-- An icon takes the color of its text (`currentColor`): `--icon-default` (`text-icon`) at rest, `--text-primary` under the pointer, pressed or chosen.
+- An icon takes the color of its text (`currentColor`): `--icon-default` (`text-icon`) at rest, `--text-primary` under the pointer, pressed or chosen. Chrome icons, the sidebar's nav rows and the top bar's buttons, are `--text-primary` at rest too, as in the reference, where they measure near black.
 - Only a status icon takes a color: `--danger` for a failure and `--attention` for something waiting for your approval. A completed step, a passing check or an open pull request stays `--icon-default` ([repository states](./design-system.md#repository-state)). A neutral action never takes a color.
 - In a button, an icon sits in the `data-icon="inline-start"` or `"inline-end"` slot, so the padding adjusts. Inline with text, it sits at `vertical-align: -0.125em`.
 - A busy button swaps its icon for a `Spinner` of the same size and keeps its label and width.
@@ -126,7 +127,8 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 
 | Role                                                                    | Step           | Color                             |
 | ----------------------------------------------------------------------- | -------------- | --------------------------------- |
-| Page title: a Settings page, the New session heading                    | Title          | `--text-primary`                  |
+| The New session heading                                                 | Greeting       | `--text-primary`                  |
+| Page title: a Settings page                                             | Title          | `--text-primary`                  |
 | Dialog title, the Settings column's title                               | Heading        | `--text-primary`                  |
 | Thread prose                                                            | Prose          | `--text-primary`                  |
 | Interface text: rows, menu items, buttons, setting names                | Interface      | `--text-primary`                  |

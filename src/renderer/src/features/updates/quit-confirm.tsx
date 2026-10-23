@@ -93,7 +93,7 @@ export function QuitConfirm() {
           </ul>
         )}
         {busy && unsaved.length > 0 && (
-          <p className="text-[12.5px] leading-normal text-secondary">{t('quit.unsavedFiles')}</p>
+          <p className="text-control leading-normal text-secondary">{t('quit.unsavedFiles')}</p>
         )}
         {unsaved.length > 0 && (
           <ul className="rounded-[9px] bg-subtle py-0.5 text-ui">
@@ -114,10 +114,10 @@ export function QuitConfirm() {
           </ul>
         )}
         {saveFailed ? (
-          <p className="text-[12.5px] leading-normal text-danger">{t('quit.saveFailed')}</p>
+          <p className="text-control leading-normal text-danger">{t('quit.saveFailed')}</p>
         ) : (
           busy && (
-            <p className="text-[12.5px] leading-normal text-secondary">
+            <p className="text-control leading-normal text-secondary">
               {reason === 'update' ? t('quit.comeBackUpdate') : t('quit.comeBackQuit')}
             </p>
           )
