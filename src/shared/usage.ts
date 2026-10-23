@@ -43,6 +43,8 @@ export interface UsageSummary {
   sources: Partial<Record<AgentId, UsageSource>>
   /** The first quarter hour with usage under those sources, or null with none. */
   first: number | null
+  /** The agents with usage under either scope, at any time, so both offer the same agent filter. */
+  agents: AgentId[]
 }
 
 export interface UsageTotal {
