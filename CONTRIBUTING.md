@@ -20,6 +20,8 @@ pnpm typecheck
 pnpm test
 ```
 
+`pnpm dev` keeps its data in its own folder, `OverBench Dev`, apart from the installed app's. To run several worktrees at once, give each one a folder of its own with `OVERBENCH_USER_DATA`, such as `OVERBENCH_USER_DATA=/tmp/overbench-feature-x pnpm dev`; a second run on the same folder quits ([persistence](./docs/design/persistence.md#what-is-stored-and-where)).
+
 The design documents in [docs/](./docs/README.md) describe how each part is meant to work; read the one for the part you change. Any UI work follows the [design process](./docs/design/design-process.md) and the rules in [visual style](./docs/design/visual-style.md) and [UX guidelines](./docs/design/ux-guidelines.md).
 
 ## UI stack

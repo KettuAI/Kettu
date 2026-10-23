@@ -18,6 +18,7 @@ import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { TerminalHost } from './terminal-host'
 import { Updater } from './updater'
+import { devUserDataPath } from './user-data'
 import {
   applyTheme,
   applyZoom,
@@ -38,6 +39,20 @@ const log = createLogger('main')
 // draws its scrollbars there (globals.css).
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-features', 'OverlayScrollbar')
+}
+
+// Set before anything reads the data folder and before the single-instance lock, which Electron
+// keys on it.
+const devUserData = devUserDataPath({
+  isPackaged: app.isPackaged,
+  switchValue: app.commandLine.getSwitchValue('user-data-dir'),
+  appData: app.getPath('appData'),
+  override: process.env['OVERBENCH_USER_DATA'],
+  cwd: process.cwd(),
+})
+if (devUserData) {
+  app.setPath('userData', devUserData)
+  log.info(`Development run: data in ${devUserData}`)
 }
 
 async function start(): Promise<void> {

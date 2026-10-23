@@ -15,6 +15,8 @@ OverBench runs on macOS, Windows and Linux, and most of what can differ between 
 | Real agents | The running app                 | The M0 acceptance tasks with Claude Code, Codex and OpenCode                                                                                                                                                                                                                                                                      | By hand, each platform |
 | Performance | CDP script and the fake agent   | The [M0 budgets](../milestones/m0.md#performance-budgets) on a production build                                                                                                                                                                                                                                                   | By hand, each platform |
 
+Running the app by hand never touches the installed app's data: `pnpm dev` uses a [folder of its own](./persistence.md#what-is-stored-and-where), and `tools/launch.mjs`, which the screenshot and performance tools share, starts the production build with a fresh one through `--user-data-dir`.
+
 React components have no automated tests in M0; they are checked by running the app, as [AGENTS.md](../../AGENTS.md#definition-of-done) requires for every UI change.
 
 ## Unit and integration tests
