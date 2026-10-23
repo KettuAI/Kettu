@@ -51,6 +51,12 @@ export type AppCommand =
   | { kind: 'toggle-sidebar' }
   | { kind: 'open-session'; sessionId: string }
 
+/**
+ * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:
+ * `not_found` when the host does not know it, `unavailable` when the host cannot answer now.
+ */
+export type ArtifactOpenResult = { url: string } | { failed: 'not_found' | 'unavailable' }
+
 /** A frame of an artifact tried to leave its origin for an http(s) address, which never loads. */
 export interface ArtifactBlockedEvent {
   origin: string // the artifact's, as `artifact:open` gave it, without the path
@@ -102,7 +108,7 @@ export interface IpcInvokeContract {
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
   'perf:metrics': { args: []; result: PerfMetrics }
-  'artifact:open': { args: [id: string]; result: { url: string } }
+  'artifact:open': { args: [id: string]; result: ArtifactOpenResult }
   'artifact:close': { args: [url: string]; result: void }
 }
 
@@ -168,8 +174,8 @@ export interface OverbenchApi {
     onShortcut(listener: (key: ForwardedKey) => void): () => void
   }
   artifacts: {
-    /** Lets the window frame the artifact; resolves to its origin's URL, without a query. */
-    open(id: string): Promise<{ url: string }>
+    /** Lets the window frame the artifact, if the host knows it. */
+    open(id: string): Promise<ArtifactOpenResult>
     /** Undoes one `open`, once the frame is gone. */
     close(url: string): Promise<void>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void

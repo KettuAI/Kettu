@@ -10,6 +10,9 @@
     "stoppedTitle": "页面已停止",
     "stoppedDescription": "它的进程已结束。重新加载即可再次显示。",
     "errorTitle": "无法打开此 Artifact",
+    "errorNotFound": "它已不在 OverBench 中。",
+    "errorUnavailable": "Agent 后台进程暂时无法显示它，请稍后重试。",
+    "errorFailed": "出现了问题，请重试。",
     "retry": "重试"
   }
 }

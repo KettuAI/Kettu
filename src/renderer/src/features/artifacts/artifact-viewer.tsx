@@ -14,7 +14,7 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorCode, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionStore } from '@renderer/stores/connection'
 import { closeArtifact } from '@renderer/stores/view'
@@ -29,15 +29,24 @@ interface Shown {
   version: number
 }
 
+type ViewerError = 'notFound' | 'unavailable' | 'failed'
+
+const ERROR_KEYS = {
+  notFound: 'viewer.errorNotFound',
+  unavailable: 'viewer.errorUnavailable',
+  failed: 'viewer.errorFailed',
+} as const
+
 /** An artifact as a single page in the main area, live, away from the app and the machine. */
 export default function ArtifactViewer({ id }: { id: string }) {
   const { t } = useTranslation('artifacts')
   const [attempt, setAttempt] = useState(0)
   const [url, setUrl] = useState<string | null>(null)
   const [shown, setShown] = useState<Shown | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ViewerError | null>(null)
   const [reloads, setReloads] = useState(0)
   const [stopped, setStopped] = useState(false)
+  const [since] = useState(() => performance.now())
   const connected = useConnectionStore((s) => s.agentHost === 'connected')
 
   // The window may frame the artifact's origin only between open and close, so close waits for
@@ -47,11 +56,18 @@ export default function ArtifactViewer({ id }: { id: string }) {
     let opened: string | null = null
     window.overbench.artifacts.open(id).then(
       (result) => {
+        if ('failed' in result) {
+          if (live) setError(result.failed === 'not_found' ? 'notFound' : 'unavailable')
+          return
+        }
         opened = result.url
         if (live) setUrl(result.url)
         else void window.overbench.artifacts.close(result.url).catch(() => {})
       },
-      (reason: unknown) => live && setError(errorMessage(reason)),
+      (reason: unknown) => {
+        console.error(`Could not open ${id}`, reason)
+        if (live) setError('failed')
+      },
     )
     return () => {
       live = false
@@ -69,7 +85,7 @@ export default function ArtifactViewer({ id }: { id: string }) {
           if (live) setShown({ title, version })
         },
         (reason: unknown) => {
-          if (live) setError(errorMessage(reason))
+          if (live) setError(readError(reason))
         },
       )
     void read()
@@ -157,7 +173,7 @@ export default function ArtifactViewer({ id }: { id: string }) {
                 <CircleAlertIcon className="text-danger" />
               </EmptyMedia>
               <EmptyTitle>{t('viewer.errorTitle')}</EmptyTitle>
-              <EmptyDescription>{error}</EmptyDescription>
+              <EmptyDescription>{t(ERROR_KEYS[error])}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button variant="outline" size="compact" onClick={retry}>
@@ -177,8 +193,16 @@ export default function ArtifactViewer({ id }: { id: string }) {
               </Button>
             </EmptyContent>
           </Empty>
+        ) : url ? (
+          <ArtifactFrame
+            key={url}
+            url={url}
+            title={shown?.title ?? ''}
+            reloads={reloads}
+            since={since}
+          />
         ) : (
-          url && <ArtifactFrame key={url} url={url} title={shown?.title ?? ''} reloads={reloads} />
+          <Waiting since={since} />
         )}
       </div>
     </div>
@@ -189,21 +213,26 @@ export default function ArtifactViewer({ id }: { id: string }) {
  * The page's frame, one per origin: main cancels a frame's navigation from one artifact's origin
  * to another's, so a new artifact always gets a new frame.
  */
-function ArtifactFrame({ url, title, reloads }: { url: string; title: string; reloads: number }) {
+function ArtifactFrame({
+  url,
+  title,
+  reloads,
+  since,
+}: {
+  url: string
+  title: string
+  reloads: number
+  since: number
+}) {
   const { t } = useTranslation('artifacts')
   const frame = useRef<HTMLIFrameElement>(null)
   const [loaded, setLoaded] = useState(false)
-  const [waiting, setWaiting] = useState(false)
   const [blocked, setBlocked] = useState<string | null>(null)
   const origin = url.slice(0, -1)
 
   useEffect(() => {
     const show = setTimeout(() => setLoaded(true), SHOW_BY_MS)
-    const spin = setTimeout(() => setWaiting(true), SPINNER_AFTER_MS)
-    return () => {
-      clearTimeout(show)
-      clearTimeout(spin)
-    }
+    return () => clearTimeout(show)
   }, [])
 
   useEffect(
@@ -239,22 +268,18 @@ function ArtifactFrame({ url, title, reloads }: { url: string; title: string; re
           loaded && 'opacity-100',
         )}
       />
-      {!loaded && waiting && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Spinner className="text-muted-foreground" aria-label={t('viewer.loading')} />
-        </div>
-      )}
+      {!loaded && <Waiting since={since} />}
       {blocked && blockedHost && (
         <div
           role="status"
           className="absolute inset-x-3 top-2.5 flex items-center gap-2.5 rounded-2xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"
         >
-          <span className="min-w-0 flex-1 truncate text-secondary">
+          <span className="flex min-w-0 flex-1 whitespace-pre text-secondary">
             <Trans
               t={t}
               i18nKey="viewer.blocked"
               values={{ host: blockedHost }}
-              components={{ host: <span className="font-medium text-foreground" /> }}
+              components={{ host: <HostName title={blockedHost} /> }}
             />
           </span>
           <a
@@ -277,6 +302,39 @@ function ArtifactFrame({ url, title, reloads }: { url: string; title: string; re
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * A spinner once the wait that began at `since` passes SPINNER_AFTER_MS, so a quick load shows
+ * nothing, and opening and loading show one wait.
+ */
+function Waiting({ since }: { since: number }) {
+  const { t } = useTranslation('artifacts')
+  const [shown, setShown] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setShown(true),
+      Math.max(0, since + SPINNER_AFTER_MS - performance.now()),
+    )
+    return () => clearTimeout(timer)
+  }, [since])
+
+  if (!shown) return null
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <Spinner className="text-muted-foreground" aria-label={t('viewer.loading')} />
+    </div>
+  )
+}
+
+/** A host cut from its start when it does not fit, since its end names the site. */
+function HostName({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <span dir="rtl" title={title} className="min-w-0 truncate font-medium text-foreground">
+      <bdi dir="ltr">{children}</bdi>
+    </span>
   )
 }
 
@@ -311,6 +369,14 @@ function TopBarButton({
       </TooltipContent>
     </Tooltip>
   )
+}
+
+function readError(reason: unknown): ViewerError {
+  const code = errorCode(reason)
+  if (code === 'not_found') return 'notFound'
+  if (code === 'host_restarted') return 'unavailable'
+  console.error('Could not read the artifact', reason)
+  return 'failed'
 }
 
 function isEditable(target: EventTarget | null): boolean {

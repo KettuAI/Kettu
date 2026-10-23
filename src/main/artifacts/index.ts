@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { app, type Session, type WebContents } from 'electron'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { ArtifactContentResult } from '@shared/host-control'
+import type { ArtifactOpenResult } from '@shared/ipc'
 import { sendEvent } from '../events'
 import { filterArtifactRequests, guardArtifactFrames } from './guards'
 import { ArtifactOrigins } from './origins'
@@ -46,13 +47,13 @@ export class Artifacts {
     })
   }
 
-  /** `artifact:open`: lets the window frame an artifact the host knows; its origin's URL. */
-  async open(contents: WebContents, id: unknown): Promise<string> {
+  /** `artifact:open`: lets the window frame an artifact the host knows. */
+  async open(contents: WebContents, id: unknown): Promise<ArtifactOpenResult> {
     if (typeof id !== 'string' || !ARTIFACT_ID.test(id)) throw new Error('Not an artifact id')
     const found = await this.deps.content(id, null)
-    if (found.kind === 'not_found') throw new Error(`Unknown artifact "${id}"`)
-    if (found.kind === 'failed') throw new Error('The agent host cannot show artifacts now')
-    return this.origins.open(contents, id)
+    if (found.kind === 'not_found') return { failed: 'not_found' }
+    if (found.kind === 'failed') return { failed: 'unavailable' }
+    return { url: this.origins.open(contents, id) }
   }
 
   /** `artifact:close`. */

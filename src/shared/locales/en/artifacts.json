@@ -10,6 +10,9 @@
     "stoppedTitle": "The page stopped",
     "stoppedDescription": "Its process ended. Reload to show it again.",
     "errorTitle": "Could not open this artifact",
+    "errorNotFound": "It is no longer in OverBench.",
+    "errorUnavailable": "The agent host can't show it right now. Try again in a moment.",
+    "errorFailed": "Something went wrong. Try again.",
     "retry": "Retry"
   }
 }
