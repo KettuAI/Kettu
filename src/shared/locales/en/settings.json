@@ -32,7 +32,7 @@
     },
     "defaultAgent": {
       "name": "Default agent",
-      "description": "The agent New session starts. With Ask each time, the project home lets you pick.",
+      "description": "The agent New session starts. With Ask each time, you choose one there.",
       "askEachTime": "Ask each time"
     },
     "sendKey": {

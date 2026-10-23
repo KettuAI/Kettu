@@ -178,13 +178,12 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 | Tier | Shadow                                         | Used for                             |
 | ---- | ---------------------------------------------- | ------------------------------------ |
 | none |                                                | Everything on the canvas at rest     |
-| `sm` | A tight contact shadow and an 8 px ambient one | The composer at rest, hovered cards  |
+| `sm` | A tight contact shadow and an 8 px ambient one | The composer at rest                 |
 | `md` | Contact and a 24 px ambient shadow             | Popovers, menus and floating buttons |
 | `lg` | Contact and a 28 px ambient shadow             | Dialogs                              |
 
 - Dark-theme shadows are several times stronger (opacity 0.4 to 0.65), because a shadow on a dark surface barely shows. Raised surfaces in the dark theme also get a 1 px inset highlight along the top edge (`oklch(1 0 0 / 5%)`), which reads as an edge catching the light. In the light theme, outline buttons get a 1 px contact shadow instead.
 - **Composer** (the `composer` variant of `InputGroup`): a hairline ring and `sm` at rest; a `--border-strong` ring on hover; on focus within, the strong ring both inside and outside plus a wide, soft shadow (20 px light, 24 px dark). Only color and shadow change, so focusing never moves the text.
-- **Hovered cards** (the agent cards on Project home): the card rises 1 px, its ring turns `--border-strong`, it takes `sm`, and a soft light rises from its bottom edge, as the reference's starter cards do. The light is a radial gradient of `--card-glow` (`oklch(0 0 0 / 3%)` light, `oklch(1 0 0 / 5%)` dark) on a pseudo-element that fades in, because a gradient cannot be transitioned.
 - **Attention**: a card waiting for the user replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20% (75% and 16% in the dark theme).
 - **Focus rings** are shadcn's `focus-visible` ring everywhere. The reference uses a thinner ring with a glow in its brand color; a glow in a neutral color looks smudged, so OverBench keeps shadcn's ring.
 
@@ -412,7 +411,6 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 | Running           | An 8 px `bg-running` dot under Tailwind's `animate-ping`, a copy of the dot that grows to twice its size and fades, at 75% opacity                                                                                                                          | `--animate-ping` at 2 s, the period of `animate-pulse`, so the dot breathes rather than flashes    |
 | Copy feedback     | The copy button in Streamdown's code blocks                                                                                                                                                                                                                 | None                                                                                               |
 | Staggered entry   | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1 fill-mode-both`, with a growing `animation-delay`                                                                                                                                                | `--duration-slow`, `--ease-out-quint`; the first item after 60 ms, each next one 30 ms later, once |
-| Card hover        | CSS transitions on `transform`, the ring, the shadow and the opacity of the `--card-glow` layer                                                                                                                                                             | `--duration-fast`, `--ease-out-expo`                                                               |
 | Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                                                                                                                                                                    | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal              |
 | Sidebar slide     | A CSS transition on the workbench panels' `flex-grow`, set only for a toggle; both panels' contents hold their final widths against the panel's right edge, so the thread lays out once and the sidebar slides                                              | `--duration-slow`, `--ease-out-quart`; at once under reduce motion and when resizing by drag       |
 | Segmented thumb   | A CSS transition on `translate` and `scale`                                                                                                                                                                                                                 | `--duration-base`, `--ease-out-quart`                                                              |
@@ -425,7 +423,7 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 
 - Motion components follow the root `<MotionConfig reducedMotion="user">`: movement is removed and opacity remains.
 - CSS follows one `prefers-reduced-motion: reduce` block in `globals.css`: movement and loops stop (slides, zooms and spins hold still, pulses and shimmer stop), opacity and color transitions remain, and disclosures open at once.
-- A staggered entry becomes a plain fade, and a hovered card keeps its glow and shadow but does not rise.
+- A staggered entry becomes a plain fade.
 - The segmented thumb moves at once, and the sheen does not play (`motion-safe`).
 
 ## Layout behavior

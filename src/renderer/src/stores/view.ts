@@ -4,7 +4,9 @@ import { markSwitchStart } from '@renderer/app/perf'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
 export type MainView =
-  | { kind: 'home' } // Welcome without projects, else the selected project's home
+  // At launch, until the last session or New session replaces it; Welcome while there are no
+  // projects.
+  | { kind: 'welcome' }
   | { kind: 'session'; sessionId: string }
   // The New session screen; the session is created on the first send. With `noProject`, in a
   // scratch folder of its own rather than the selected project.
@@ -63,7 +65,7 @@ const saved = readJson<Partial<Persisted>>(KEY, {})
 
 export const useViewStore = create<ViewStore>()(() => ({
   projectPath: saved.projectPath ?? null,
-  main: { kind: 'home' },
+  main: { kind: 'welcome' },
   settings: { open: false, section: null, agent: null },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
@@ -101,14 +103,6 @@ export function openSession(sessionId: string, projectPath: string): void {
   if (main.kind !== 'session' || main.sessionId !== sessionId) markSwitchStart(sessionId)
   useViewStore.setState((s) => ({
     main: { kind: 'session', sessionId },
-    projectPath,
-    settings: { ...s.settings, open: false },
-  }))
-}
-
-export function openProjectHome(projectPath: string | null): void {
-  useViewStore.setState((s) => ({
-    main: { kind: 'home' },
     projectPath,
     settings: { ...s.settings, open: false },
   }))

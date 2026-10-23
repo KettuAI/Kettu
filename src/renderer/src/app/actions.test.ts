@@ -2,22 +2,40 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
 
 const request = vi.fn()
+const openProject = vi.fn()
 vi.stubGlobal('window', {
-  overbench: { agents: { request }, perf: false },
+  overbench: { agents: { request }, dialogs: { openProject }, perf: false },
   matchMedia: () => ({ matches: false, addEventListener: () => {} }),
 })
 
-const { closeSession, createSession, newSession, retryPendingSession, usePendingSession } =
-  await import('./actions')
+const {
+  closeSession,
+  createSession,
+  deleteSession,
+  followShownSession,
+  newSession,
+  openProjectDialog,
+  retryPendingSession,
+  usePendingSession,
+} = await import('./actions')
 const { NEW_SESSION_DRAFT, readDraft, writeDraft } =
   await import('@renderer/features/session/composer/drafts')
 const { pickOption, useAgentOptionsStore } = await import('@renderer/stores/agent-options')
+const { useProjectsStore } = await import('@renderer/stores/projects')
 const { useSessionsStore } = await import('@renderer/stores/sessions')
 const { useSettingsStore } = await import('@renderer/stores/settings')
 const { useThreadsStore } = await import('@renderer/stores/threads')
 const { chooseNewSessionProject, useViewStore } = await import('@renderer/stores/view')
 
 const summary = { id: 's1', projectPath: '/repo' } as SessionSummary
+const scratch = { id: 'x1', projectPath: '/data/scratch/a', scratch: true } as SessionSummary
+
+const setDefaultAgent = (defaultAgent: 'codex' | null) => {
+  const settings = useSettingsStore.getState().settings
+  useSettingsStore.setState({
+    settings: { ...settings, general: { ...settings.general, defaultAgent } },
+  })
+}
 
 const replica = {
   state: null,
@@ -33,6 +51,7 @@ describe('closeSession', () => {
   beforeEach(() => {
     request.mockReset()
     request.mockResolvedValue(undefined)
+    setDefaultAgent('codex')
     useSessionsStore.setState({ byId: { s1: summary } })
     useThreadsStore.setState({
       replicas: { s1: { ...replica, seq: 3 } },
@@ -40,11 +59,11 @@ describe('closeSession', () => {
   })
 
   it('drops the replica, so opening the session again loads it afresh', async () => {
-    useViewStore.setState({ main: { kind: 'home' }, projectPath: '/repo' })
+    useViewStore.setState({ main: { kind: 'usage' }, projectPath: '/repo' })
     await closeSession('s1')
     expect(request).toHaveBeenCalledWith('sessions.close', { sessionId: 's1' })
     expect(useThreadsStore.getState().replicas.s1).toBeUndefined()
-    expect(useViewStore.getState().main).toEqual({ kind: 'home' })
+    expect(useViewStore.getState().main).toEqual({ kind: 'usage' })
   })
 
   it('drops its sub-sessions too, which the agent host closes with it', async () => {
@@ -59,26 +78,118 @@ describe('closeSession', () => {
     useViewStore.setState({ main: { kind: 'session', sessionId: 's2' }, projectPath: '/repo' })
     await closeSession('s1')
     expect(useThreadsStore.getState().replicas).toEqual({})
-    expect(useViewStore.getState().main).toEqual({ kind: 'home' })
+    expect(useViewStore.getState().main).toEqual({
+      kind: 'new',
+      agentId: 'codex',
+      noProject: false,
+    })
   })
 
-  it('leaves the closed session for its project home when it was shown', async () => {
-    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/repo' })
+  it('leaves the closed session for New session in its project when it was shown', async () => {
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/other' })
     await closeSession('s1')
-    expect(useViewStore.getState()).toMatchObject({ main: { kind: 'home' }, projectPath: '/repo' })
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/repo',
+    })
+  })
+
+  it('leaves a closed scratch session for New session with No project', async () => {
+    useSessionsStore.setState({ byId: { x1: scratch } })
+    useViewStore.setState({
+      main: { kind: 'session', sessionId: 'x1' },
+      projectPath: scratch.projectPath,
+    })
+    await closeSession('x1')
+    expect(useViewStore.getState().main).toEqual({ kind: 'new', agentId: 'codex', noProject: true })
+  })
+})
+
+describe('a shown session that goes away', () => {
+  let unfollow: () => void
+
+  beforeEach(() => {
+    request.mockReset()
+    request.mockResolvedValue(undefined)
+    setDefaultAgent('codex')
+    useSessionsStore.setState({ byId: { s1: summary, x1: scratch } })
+    unfollow = followShownSession()
+    return () => unfollow()
+  })
+
+  it('leaves for New session in its project when it is deleted', async () => {
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/repo' })
+    await deleteSession('s1')
+    expect(request).toHaveBeenCalledWith('sessions.delete', { sessionId: 's1' })
+    expect(useSessionsStore.getState().byId.s1).toBeUndefined()
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/repo',
+    })
+  })
+
+  it('leaves a deleted scratch session for New session with No project', async () => {
+    useViewStore.setState({
+      main: { kind: 'session', sessionId: 'x1' },
+      projectPath: scratch.projectPath,
+    })
+    await deleteSession('x1')
+    expect(useViewStore.getState().main).toEqual({ kind: 'new', agentId: 'codex', noProject: true })
+  })
+
+  it('leaves for New session when the agent host removes it, as with its parent', () => {
+    const child = { id: 's2', projectPath: '/repo', parentId: 's1' } as SessionSummary
+    useSessionsStore.getState().upsert(child)
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's2' }, projectPath: '/repo' })
+    useSessionsStore.getState().remove('s2')
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/repo',
+    })
+  })
+
+  it('leaves the view alone when another session goes', async () => {
+    useViewStore.setState({ main: { kind: 'session', sessionId: 'x1' }, projectPath: '/repo' })
+    await deleteSession('s1')
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'x1' })
+  })
+})
+
+describe('openProjectDialog', () => {
+  beforeEach(() => {
+    request.mockReset()
+    openProject.mockReset()
+    setDefaultAgent('codex')
+    useProjectsStore.setState({ projects: [] })
+    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: null })
+  })
+
+  it('adds the folder and opens New session in it', async () => {
+    openProject.mockResolvedValue('/new')
+    request.mockImplementation(async (method: string) =>
+      method === 'projects.add' ? { path: '/new', name: 'new', missing: false } : undefined,
+    )
+    await openProjectDialog()
+    expect(useProjectsStore.getState().projects.map((p) => p.path)).toEqual(['/new'])
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/new',
+    })
+  })
+
+  it('leaves the view alone when the dialog is cancelled', async () => {
+    openProject.mockResolvedValue(null)
+    await openProjectDialog()
+    expect(request).not.toHaveBeenCalled()
+    expect(useViewStore.getState().main).toEqual({ kind: 'welcome' })
   })
 })
 
 describe('newSession', () => {
-  beforeEach(() => {
-    const settings = useSettingsStore.getState().settings
-    useSettingsStore.setState({
-      settings: { ...settings, general: { ...settings.general, defaultAgent: 'codex' } },
-    })
-  })
+  beforeEach(() => setDefaultAgent('codex'))
 
   it('opens New session with the default agent, in the selected project', () => {
-    useViewStore.setState({ main: { kind: 'home' }, projectPath: '/repo' })
+    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: '/repo' })
     newSession()
     expect(useViewStore.getState()).toMatchObject({
       main: { kind: 'new', agentId: 'codex' },
@@ -107,14 +218,13 @@ describe('New session with No project', () => {
   })
 
   it("starts there when asked, or when the selected folder is a scratch session's", () => {
-    useViewStore.setState({ main: { kind: 'home' }, projectPath: '/repo' })
+    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: '/repo' })
     newSession(null, true)
     expect(useViewStore.getState()).toMatchObject({
       main: { kind: 'new', noProject: true },
       projectPath: '/repo',
     })
 
-    const scratch = { id: 'x1', projectPath: '/data/scratch/a', scratch: true } as SessionSummary
     useSessionsStore.setState({ byId: { x1: scratch } })
     useViewStore.setState({
       main: { kind: 'session', sessionId: 'x1' },

@@ -127,7 +127,7 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 | Role                                                                         | Step           | Color                                |
 | ---------------------------------------------------------------------------- | -------------- | ------------------------------------ |
 | The Welcome wordmark, until the logo replaces it                             | Display        | `--foreground`                       |
-| Page title: a Settings page, the project home                                | Title          | `--foreground`                       |
+| Page title: a Settings page, the New session heading                         | Title          | `--foreground`                       |
 | Dialog title, the Settings column's title                                    | Heading        | `--foreground`                       |
 | Thread prose                                                                 | Prose          | `--foreground` at 90%                |
 | Interface text: rows, menu items, buttons, setting names                     | Interface      | `--foreground`                       |

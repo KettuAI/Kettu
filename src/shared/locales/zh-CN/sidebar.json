@@ -13,7 +13,8 @@
     "newSessionIn": "在 {{name}} 中新建会话",
     "noProject": "无项目",
     "noProjectTooltip": "每个会话都在各自的临时文件夹中运行",
-    "newSessionNoProject": "新建无项目会话"
+    "newSessionNoProject": "新建无项目会话",
+    "importSessions": "导入会话…"
   },
   "row": {
     "collapse": "收起子会话",
@@ -28,6 +29,15 @@
     "deleteBody": "Agent 也会删除它的对话记录。",
     "deleteBodyWithSub_other": "Agent 也会删除它的对话记录，它的 {{count}} 个子会话会一并删除。",
     "more": "更多操作"
+  },
+  "import": {
+    "title": "导入会话",
+    "description": "各个 Agent 已有的 {{project}} 会话，例如你在终端里开始的会话。导入的会话会带着完整历史打开。",
+    "noAgents": "没有可以列出会话的 Agent。",
+    "noSessions": "这个文件夹下没有会话。",
+    "added": "已添加",
+    "import": "导入",
+    "showMore": "显示更多"
   },
   "indicator": {
     "waiting_other": "等待你处理，{{count}} 个授权请求",

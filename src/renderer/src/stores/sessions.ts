@@ -96,7 +96,7 @@ export function sessionTree(
   return roots.sort((a, b) => b.updatedAt - a.updatedAt).map(build)
 }
 
-export function isActive(summary: SessionSummary): boolean {
+function isActive(summary: SessionSummary): boolean {
   return summary.status === 'running' || summary.status === 'awaiting_permission'
 }
 

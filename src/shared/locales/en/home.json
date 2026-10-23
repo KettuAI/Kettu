@@ -4,23 +4,5 @@
     "openProject": "Open project",
     "agentsLabel": "Agents",
     "agentsHeading": "Agents on this computer"
-  },
-  "project": {
-    "importSessions": "Import sessions",
-    "missing": "This folder no longer exists. Its sessions stay listed until it comes back.",
-    "startSession": "Start a session",
-    "recentSessions": "Recent sessions",
-    "waitingForYou": "Waiting for you",
-    "failed": "Failed",
-    "working": "Working"
-  },
-  "import": {
-    "title": "Import sessions",
-    "description": "Sessions the agents already have for {{project}}, such as ones you started in a terminal. Imported sessions open with their full history.",
-    "noAgents": "No agent here can list its sessions.",
-    "noSessions": "No sessions for this folder.",
-    "added": "Added",
-    "import": "Import",
-    "showMore": "Show more"
   }
 }

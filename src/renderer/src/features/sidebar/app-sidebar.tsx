@@ -1,8 +1,9 @@
-import { useEffect, useMemo, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import {
   ChartNoAxesColumnIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  EllipsisIcon,
   PlusIcon,
   ShapesIcon,
 } from 'lucide-react'
@@ -11,6 +12,17 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, PlanLimit, Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from '@renderer/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
 import {
   Sidebar,
@@ -35,7 +47,8 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { sessionTree, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
-import { NO_PROJECT_GROUP, openProjectHome, openUsage, useViewStore } from '@renderer/stores/view'
+import { NO_PROJECT_GROUP, openUsage, useViewStore } from '@renderer/stores/view'
+import { ImportSessionsDialog } from './import-sessions'
 import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
@@ -232,10 +245,8 @@ function ProjectGroup({ project }: { project: Project | null }) {
   const { t } = useTranslation('sidebar')
   const name = project?.name ?? t('project.noProject')
   const open = useViewStore((s) => !s.collapsedProjects[key])
-  const current = useViewStore(
-    (s) =>
-      !!project && s.projectPath === project.path && s.main.kind === 'home' && !s.settings.open,
-  )
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
   const summaries = useSessionsStore(
     useShallow((s) =>
       Object.values(s.byId).filter((x) => (project ? x.projectPath === project.path : x.scratch)),
@@ -256,66 +267,93 @@ function ProjectGroup({ project }: { project: Project | null }) {
       return { collapsedProjects }
     })
 
+  const row = (
+    <SidebarMenuButton
+      size="row"
+      data-sidebar-row=""
+      tabIndex={-1}
+      aria-expanded={open}
+      onClick={toggle}
+      onKeyDown={(event) => {
+        // The context menu key opens the More menu, the row's menu for the keyboard.
+        if (project && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+          event.preventDefault()
+          setMoreOpen(true)
+        } else if (event.key === 'ArrowRight' && !open) toggle()
+        else if (event.key === 'ArrowLeft' && open) toggle()
+      }}
+      className={cn(
+        'gap-1 font-medium',
+        // Room for the More button before the +, so the name never runs under it.
+        project && !project.missing && 'group-has-data-[sidebar=menu-action]/menu-item:pr-13',
+        project?.missing && 'text-muted-foreground',
+      )}
+    >
+      <span className="min-w-0 truncate">{name}</span>
+      {/* A folded group always shows its chevron; an open one only under the pointer. */}
+      <span
+        className={cn(
+          'grid size-3.5 shrink-0 place-items-center text-muted-foreground transition-opacity duration-(--duration-fast)',
+          open &&
+            'opacity-0 group-hover/menu-item:opacity-100 group-has-focus-visible/menu-item:opacity-100',
+        )}
+      >
+        {open ? <ChevronDownIcon className="size-3!" /> : <ChevronRightIcon className="size-3!" />}
+      </span>
+      {project?.missing && (
+        <span className="ml-auto text-[11.5px] font-normal text-muted-foreground">
+          {t('project.missing')}
+        </span>
+      )}
+    </SidebarMenuButton>
+  )
+  const tooltip = project ? (
+    <TooltipContent side="right" className="max-w-sm font-mono break-all">
+      {project.path}
+    </TooltipContent>
+  ) : (
+    <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
+  )
+  const menuItems = <ProjectMenuItems onImport={() => setImporting(true)} />
+
   return (
     <div className="flex flex-col gap-px">
       <div className="group/menu-item relative">
-        <Tooltip>
-          <TooltipTrigger
-            delay={700}
-            render={
-              <SidebarMenuButton
-                size="row"
-                isActive={current}
-                data-sidebar-row=""
-                tabIndex={-1}
-                aria-expanded={open}
-                onClick={() => {
-                  // No project has no home, so its name only folds the group.
-                  if (current || !open || !project) toggle()
-                  if (project) openProjectHome(project.path)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowRight' && !open) toggle()
-                  else if (event.key === 'ArrowLeft' && open) toggle()
-                }}
-                className={cn('gap-1 font-medium', project?.missing && 'text-muted-foreground')}
-              />
-            }
-          >
-            <span className="min-w-0 truncate">{name}</span>
-            {/* A folded group always shows its chevron; an open one only under the pointer. */}
-            <span
-              role="presentation"
-              onClick={(event) => {
-                event.stopPropagation()
-                toggle()
-              }}
-              className={cn(
-                'grid size-3.5 shrink-0 place-items-center text-muted-foreground transition-opacity duration-(--duration-fast)',
-                open &&
-                  'opacity-0 group-hover/menu-item:opacity-100 group-has-focus-visible/menu-item:opacity-100',
-              )}
+        {project ? (
+          <ContextMenu>
+            {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
+            <Tooltip>
+              <TooltipTrigger render={<ContextMenuTrigger render={row} />} delay={700} />
+              {tooltip}
+            </Tooltip>
+            <ContextMenuContent>{menuItems}</ContextMenuContent>
+          </ContextMenu>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger render={row} delay={700} />
+            {tooltip}
+          </Tooltip>
+        )}
+        {project && (
+          <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+            <DropdownMenuTrigger
+              render={
+                <SidebarMenuAction
+                  showOnHover
+                  tabIndex={-1}
+                  aria-label={t('row.more')}
+                  className={cn(
+                    'top-1 text-muted-foreground [&>svg]:size-3.5',
+                    !project.missing && 'right-6.5',
+                  )}
+                />
+              }
             >
-              {open ? (
-                <ChevronDownIcon className="size-3!" />
-              ) : (
-                <ChevronRightIcon className="size-3!" />
-              )}
-            </span>
-            {project?.missing && (
-              <span className="ml-auto text-[11.5px] font-normal text-muted-foreground">
-                {t('project.missing')}
-              </span>
-            )}
-          </TooltipTrigger>
-          {project ? (
-            <TooltipContent side="right" className="max-w-sm font-mono break-all">
-              {project.path}
-            </TooltipContent>
-          ) : (
-            <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
-          )}
-        </Tooltip>
+              <EllipsisIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
+          </DropdownMenu>
+        )}
         {!project?.missing && (
           <Tooltip>
             <TooltipTrigger
@@ -345,8 +383,17 @@ function ProjectGroup({ project }: { project: Project | null }) {
           ))}
         </SidebarMenu>
       )}
+      {project && (
+        <ImportSessionsDialog project={project} open={importing} onOpenChange={setImporting} />
+      )}
     </div>
   )
+}
+
+/** A project's actions, one list for its row's context menu and its More button. */
+function ProjectMenuItems({ onImport }: { onImport: () => void }) {
+  const { t } = useTranslation('sidebar')
+  return <DropdownMenuItem onClick={onImport}>{t('project.importSessions')}</DropdownMenuItem>
 }
 
 /** The list is one Tab stop; the arrow keys move between rows. */

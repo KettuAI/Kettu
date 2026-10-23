@@ -141,15 +141,13 @@ async function run() {
   log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
   await shoot('welcome')
 
-  // With a project and no session to restore, the app opens on the project's home.
+  // With a project and no session to restore, the app opens on New session in that project.
   cdp = await openProject(port, cdp, project)
   await setup()
   await waitFor(
-    `[...document.querySelectorAll('button')].some((b) => b.textContent.includes('Fake agent') && b.querySelector('[aria-label=Ready]'))`,
-    'the fake agent on the project home',
+    `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
+    'New session at launch',
   )
-  await sleep(800)
-  await shoot('project-home')
 
   // A click, not the shortcut: on macOS the app menu owns Cmd+N, and input from here skips it.
   const openNewSession = async () => {
@@ -166,7 +164,11 @@ async function run() {
   // The rail opens on the agent chosen, or the first installed one, which need not be the fake one.
   const openAgentMenu = async () => {
     await click(`return ${agentButton}`, 'the agent menu')
-    await waitFor(`document.querySelector('[role=tablist]')`, 'the agent menu')
+    // Right after launch the menu can open before the agents are listed.
+    await waitFor(
+      `[...document.querySelectorAll('[role=tab]')].some((t) => t.textContent.includes('Fake agent'))`,
+      'the fake agent in the agent menu',
+    )
     await click(byText('[role=tab]', 'Fake agent'), 'the fake agent in the menu')
   }
 
@@ -260,6 +262,25 @@ async function run() {
   await waitFor(`document.querySelector('[role=menu]')`, 'the context menu')
   await sleep(400)
   await shoot('context-menu')
+  await press('Escape', 27)
+  await sleep(300)
+
+  // The project row's menu, then the sessions the fake agent already has for the folder.
+  await click(
+    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('demo-project'))`,
+    'the project row',
+    'right',
+  )
+  await waitFor(`document.querySelector('[role=menu]')`, 'the project menu')
+  await sleep(400)
+  await shoot('project-menu')
+  await click(byText('[role=menuitem]', 'Import sessions'), 'Import sessions')
+  await waitFor(
+    `[...document.querySelectorAll('[role=dialog] li')].some((li) => li.textContent.includes('refactor the router'))`,
+    'the sessions to import',
+  )
+  await sleep(400)
+  await shoot('import-sessions')
   await press('Escape', 27)
   await sleep(300)
 

@@ -4,23 +4,5 @@
     "openProject": "打开项目",
     "agentsLabel": "Agent",
     "agentsHeading": "这台电脑上的 Agent"
-  },
-  "project": {
-    "importSessions": "导入会话",
-    "missing": "这个文件夹已不存在。它的会话会保留在列表中，直到文件夹恢复。",
-    "startSession": "开始会话",
-    "recentSessions": "最近的会话",
-    "waitingForYou": "等待你处理",
-    "failed": "失败",
-    "working": "运行中"
-  },
-  "import": {
-    "title": "导入会话",
-    "description": "各个 Agent 已有的 {{project}} 会话，例如你在终端里开始的会话。导入的会话会带着完整历史打开。",
-    "noAgents": "没有可以列出会话的 Agent。",
-    "noSessions": "这个文件夹下没有会话。",
-    "added": "已添加",
-    "import": "导入",
-    "showMore": "显示更多"
   }
 }

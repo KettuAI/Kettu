@@ -31,7 +31,7 @@
     },
     "defaultAgent": {
       "name": "默认 Agent",
-      "description": "新建会话时使用的 Agent。选择“每次询问”时，在项目主页中选择。",
+      "description": "新建会话时使用的 Agent。选择“每次询问”时，在新建会话中选择。",
       "askEachTime": "每次询问"
     },
     "sendKey": {
