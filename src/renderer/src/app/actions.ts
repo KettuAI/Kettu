@@ -202,7 +202,14 @@ export function warmAgent(agentId: AgentId): void {
  * agent message, up to the end of that reply's turn.
  */
 export async function forkSession(sessionId: string, entryId?: string): Promise<void> {
-  const summary = await host('sessions.fork', entryId ? { sessionId, entryId } : { sessionId })
+  let summary: SessionSummary
+  try {
+    summary = await host('sessions.fork', entryId ? { sessionId, entryId } : { sessionId })
+  } catch (error) {
+    // Deleted, or its project removed, while it started: nothing is left to show.
+    if (removedWhileStarting(error)) return
+    throw error
+  }
   useSessionsStore.getState().upsert(summary)
   openSession(summary.id, summary.projectPath)
 }
