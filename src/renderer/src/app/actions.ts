@@ -12,7 +12,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
-import { openNewSession, openSession, useViewStore } from '@renderer/stores/view'
+import { openNewSession, openSession, placeNewSession, useViewStore } from '@renderer/stores/view'
 import { create } from 'zustand'
 
 /** A session being created: shown in place of the thread until `session/new` answers. */
@@ -49,16 +49,31 @@ export async function openProjectDialog(): Promise<void> {
  * No project when asked, or when the selected folder is a scratch session's.
  */
 export function newSession(projectPath: string | null = null, noProject = false): void {
+  openNewSession(...newSessionStart(projectPath, noProject))
+}
+
+/**
+ * New session as `newSession` opens it, in place of what the main area showed, such as a session
+ * that went; Settings stays as it is.
+ */
+export function newSessionInPlace(projectPath: string | null = null, noProject = false): void {
+  placeNewSession(...newSessionStart(projectPath, noProject))
+}
+
+function newSessionStart(
+  projectPath: string | null,
+  noProject: boolean,
+): [string | null, AgentId | null, boolean] {
   const selected = useViewStore.getState().projectPath
   const inScratch =
     projectPath === null &&
     selected !== null &&
     isScratchFolder(useSessionsStore.getState().byId, selected)
-  openNewSession(
+  return [
     projectPath,
     useSettingsStore.getState().settings.general.defaultAgent,
     noProject || inScratch,
-  )
+  ]
 }
 
 /** Starts a session in the project, or with a null `projectPath` in a scratch folder. */
@@ -191,8 +206,8 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 /** After the shown session goes: New session where it ran, with No project for a scratch one. */
 function leaveSession(summary: SessionSummary | undefined): void {
-  if (summary?.scratch) newSession(null, true)
-  else newSession(summary?.projectPath ?? null)
+  if (summary?.scratch) newSessionInPlace(null, true)
+  else newSessionInPlace(summary?.projectPath ?? null)
 }
 
 /**

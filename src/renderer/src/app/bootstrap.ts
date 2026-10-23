@@ -1,5 +1,5 @@
 import type { HostEvent } from '@shared/agent-host'
-import { followShownSession, newSession, usePendingSession } from '@renderer/app/actions'
+import { followShownSession, newSessionInPlace, usePendingSession } from '@renderer/app/actions'
 import { launchTarget } from '@renderer/app/restore'
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
@@ -81,24 +81,19 @@ function loadSessionState(): Promise<unknown> {
   ])
 }
 
-/**
- * Loads everything the shell shows; also runs after the agent host comes back, and when a launch
- * whose first load failed tries again, which then leaves the launch view.
- */
+/** Loads everything the shell shows; also runs after the agent host comes back. */
 export async function loadHostState(): Promise<void> {
-  await Promise.allSettled([
-    loadSessionState().then(finishLaunch),
-    loadGitTools(),
-    loadUsageStatus(),
-    loadToday(),
-  ])
+  await Promise.allSettled([loadSessionState(), loadGitTools(), loadUsageStatus(), loadToday()])
 }
+
+let launched = false
 
 /**
  * Leaves the launch view for the session shown when the app last closed, as Settings › General
  * allows, else for New session; Welcome stays while there are no projects.
  */
 function finishLaunch(): void {
+  launched = true
   if (usePendingSession.getState().pending) return
   const target = launchTarget({
     enabled: useSettingsStore.getState().settings.general.restoreLastSession,
@@ -108,7 +103,7 @@ function finishLaunch(): void {
     hasProjects: useProjectsStore.getState().projects.length > 0,
   })
   if (target?.kind === 'session') openSession(target.summary.id, target.summary.projectPath)
-  else if (target) newSession()
+  else if (target) newSessionInPlace()
 }
 
 let shownSession: string | null = null
@@ -146,6 +141,10 @@ export function bootstrap(): Promise<unknown> {
   })
   useViewStore.subscribe(() => showFront())
   followShownSession()
+  // A project list that fills after launch, as after a failed first read, leaves the launch view.
+  useProjectsStore.subscribe((state, previous) => {
+    if (launched && state.projects !== previous.projects) finishLaunch()
+  })
 
   const settingsReady = initSettings()
   void initUpdates()

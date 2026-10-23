@@ -61,6 +61,9 @@ export function AppSidebar() {
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
   const drafting = useViewStore((s) => s.main.kind === 'new' && !s.settings.open)
+  // One dialog serves every project; it mounts the first time a project asks for it.
+  const [importing, setImporting] = useState<{ project: Project; open: boolean } | null>(null)
+  const importSessions = (project: Project) => setImporting({ project, open: true })
 
   return (
     <Sidebar collapsible="none" className="w-full" aria-label={t('nav.label')}>
@@ -112,9 +115,11 @@ export function AppSidebar() {
                   {t('nav.empty')}
                 </p>
               ) : (
-                projects.map((project) => <ProjectGroup key={project.path} project={project} />)
+                projects.map((project) => (
+                  <ProjectGroup key={project.path} project={project} onImport={importSessions} />
+                ))
               )}
-              <ProjectGroup project={null} />
+              <ProjectGroup project={null} onImport={importSessions} />
             </>
           )}
         </SidebarGroup>
@@ -122,6 +127,13 @@ export function AppSidebar() {
       <SidebarFooter className="gap-1 p-2">
         <SidebarFooterContent />
       </SidebarFooter>
+      {importing && (
+        <ImportSessionsDialog
+          project={importing.project}
+          open={importing.open}
+          onOpenChange={(open) => setImporting({ ...importing, open })}
+        />
+      )}
     </Sidebar>
   )
 }
@@ -240,13 +252,18 @@ function TightestLimit() {
 }
 
 /** A project's sessions, or with a null project those started with No project, if any. */
-function ProjectGroup({ project }: { project: Project | null }) {
+function ProjectGroup({
+  project,
+  onImport,
+}: {
+  project: Project | null
+  onImport: (project: Project) => void
+}) {
   const key = project?.path ?? NO_PROJECT_GROUP
   const { t } = useTranslation('sidebar')
   const name = project?.name ?? t('project.noProject')
   const open = useViewStore((s) => !s.collapsedProjects[key])
   const [moreOpen, setMoreOpen] = useState(false)
-  const [importing, setImporting] = useState(false)
   const summaries = useSessionsStore(
     useShallow((s) =>
       Object.values(s.byId).filter((x) => (project ? x.projectPath === project.path : x.scratch)),
@@ -314,7 +331,7 @@ function ProjectGroup({ project }: { project: Project | null }) {
   ) : (
     <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
   )
-  const menuItems = <ProjectMenuItems onImport={() => setImporting(true)} />
+  const menuItems = project && <ProjectMenuItems onImport={() => onImport(project)} />
 
   return (
     <div className="flex flex-col gap-px">
@@ -336,21 +353,28 @@ function ProjectGroup({ project }: { project: Project | null }) {
         )}
         {project && (
           <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
-            <DropdownMenuTrigger
-              render={
-                <SidebarMenuAction
-                  showOnHover
-                  tabIndex={-1}
-                  aria-label={t('row.more')}
-                  className={cn(
-                    'top-1 text-muted-foreground [&>svg]:size-3.5',
-                    !project.missing && 'right-6.5',
-                  )}
-                />
-              }
-            >
-              <EllipsisIcon />
-            </DropdownMenuTrigger>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <DropdownMenuTrigger
+                    render={
+                      <SidebarMenuAction
+                        showOnHover
+                        tabIndex={-1}
+                        aria-label={t('row.more')}
+                        className={cn(
+                          'top-1 text-muted-foreground [&>svg]:size-3.5',
+                          !project.missing && 'right-6.5',
+                        )}
+                      />
+                    }
+                  />
+                }
+              >
+                <EllipsisIcon />
+              </TooltipTrigger>
+              <TooltipContent>{t('row.more')}</TooltipContent>
+            </Tooltip>
             <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -382,9 +406,6 @@ function ProjectGroup({ project }: { project: Project | null }) {
             <SessionRow key={node.summary.id} node={node} />
           ))}
         </SidebarMenu>
-      )}
-      {project && (
-        <ImportSessionsDialog project={project} open={importing} onOpenChange={setImporting} />
       )}
     </div>
   )

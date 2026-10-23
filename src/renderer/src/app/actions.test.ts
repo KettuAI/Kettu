@@ -14,6 +14,7 @@ const {
   deleteSession,
   followShownSession,
   newSession,
+  newSessionInPlace,
   openProjectDialog,
   retryPendingSession,
   usePendingSession,
@@ -153,6 +154,17 @@ describe('a shown session that goes away', () => {
     await deleteSession('s1')
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'x1' })
   })
+
+  it('keeps Settings open when the session behind it goes', () => {
+    const settings = { open: true, section: 'advanced', agent: null } as const
+    useViewStore.setState({
+      main: { kind: 'session', sessionId: 's1' },
+      projectPath: '/repo',
+      settings,
+    })
+    useSessionsStore.getState().remove('s1')
+    expect(useViewStore.getState()).toMatchObject({ main: { kind: 'new' }, settings })
+  })
 })
 
 describe('openProjectDialog', () => {
@@ -195,6 +207,15 @@ describe('newSession', () => {
       main: { kind: 'new', agentId: 'codex' },
       projectPath: '/repo',
     })
+  })
+
+  it('closes Settings when asked for, and leaves it open in place of a session', () => {
+    const settings = { open: true, section: 'general', agent: null } as const
+    useViewStore.setState({ main: { kind: 'welcome' }, projectPath: '/repo', settings })
+    newSessionInPlace()
+    expect(useViewStore.getState()).toMatchObject({ main: { kind: 'new' }, settings })
+    newSession()
+    expect(useViewStore.getState().settings.open).toBe(false)
   })
 
   it('takes the project it is given, and keeps the agent chosen on a shown screen', () => {

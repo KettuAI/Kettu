@@ -17,7 +17,7 @@ The list is complete and no longer edited: new problems go to [GitHub issues](ht
 | 7   | The usage popover shows too little and needs a full redesign   | Usage          | Partly fixed |
 | 8   | Session rows show their time badly                             | Sidebar        | Fixed        |
 | 9   | New session is tied to the selected project                    | Sidebar        | Fixed        |
-| 10  | The welcome screen and the project home lack polish            | Home           | Partly fixed |
+| 10  | The welcome screen and the project home lack polish            | Home           | Open         |
 | 11  | No steering or queued messages while a turn runs               | Composer       | Fixed        |
 | 12  | Switching sessions visibly stalls                              | Performance    | Fixed        |
 | 13  | The git popover only displays, and repeats the terminal toggle | Git            | Fixed        |
@@ -188,8 +188,7 @@ The list is complete and no longer edited: new problems go to [GitHub issues](ht
 - **Observed**: the project home, and the welcome screen shown when there are no projects, are neither refined nor beautiful enough. They are the first thing a user sees, and an ugly first screen takes away any wish to keep using the app.
 - **Expected**: both screens are polished with care, as the app's first impression.
 - **Today**: [Interface: welcome](../design/ui.md#welcome) and project home, built in `src/renderer/src/features/home/welcome.tsx` and `project-home.tsx`. In the screenshot the cards' second lines mix the adapter's version ("v0.94.0") with raw launch commands ("npx -y @agentclientprotocol/…", "opencode acp"); the Fake agent card shows only because the app runs unpackaged. [Problem 9](#9-new-session-is-tied-to-the-selected-project) may change what the project home is for. To settle when planning: the design of both screens, written into the design docs before it is built.
-- **Partly fixed**: 2026-10-22, the project home is removed, so its half of this problem is gone: a project's **+** starts its sessions, its name only folds its group, **Import sessions…** moved to the project row's menu, and closing or deleting the shown session leaves it for [New session](../design/ui.md#new-session) ([Interface: sidebar](../design/ui.md#sidebar)).
-- **Tracked**: what is left is in [#31](https://github.com/overbench/overbench/issues/31) (the welcome screen); the project home was removed under [#14](https://github.com/overbench/overbench/issues/14).
+- **Tracked**: what is left is in [#31](https://github.com/overbench/overbench/issues/31) (the welcome screen) and [#14](https://github.com/overbench/overbench/issues/14) (the project home).
 
 ## 11. No steering or queued messages while a turn runs
 

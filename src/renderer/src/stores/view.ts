@@ -124,18 +124,36 @@ export function openNewSession(
   agentId: AgentId | null,
   noProject = false,
 ): void {
-  useViewStore.setState((s) => {
-    const shown = s.main.kind === 'new' ? s.main : null
-    return {
-      main: {
-        kind: 'new',
-        agentId: shown ? shown.agentId : agentId,
-        noProject: noProject || (projectPath === null && !!shown?.noProject),
-      },
-      projectPath: projectPath ?? s.projectPath,
-      settings: { ...s.settings, open: false },
-    }
-  })
+  useViewStore.setState((s) => ({
+    ...newSessionView(s, projectPath, agentId, noProject),
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** Puts New session in the main area as `openNewSession` does, leaving Settings as it is. */
+export function placeNewSession(
+  projectPath: string | null,
+  agentId: AgentId | null,
+  noProject = false,
+): void {
+  useViewStore.setState((s) => newSessionView(s, projectPath, agentId, noProject))
+}
+
+function newSessionView(
+  s: ViewStore,
+  projectPath: string | null,
+  agentId: AgentId | null,
+  noProject: boolean,
+): Pick<ViewStore, 'main' | 'projectPath'> {
+  const shown = s.main.kind === 'new' ? s.main : null
+  return {
+    main: {
+      kind: 'new',
+      agentId: shown ? shown.agentId : agentId,
+      noProject: noProject || (projectPath === null && !!shown?.noProject),
+    },
+    projectPath: projectPath ?? s.projectPath,
+  }
 }
 
 /** Chooses where New session starts: a project, or null for No project. */
