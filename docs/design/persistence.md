@@ -26,7 +26,7 @@ An unpackaged run, such as `pnpm dev` or `electron .`, does not use the installe
 | `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and install                                                     |
 | `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
 | `state/attachments.json`     | Agent host | The attachments of drafts and queued prompts, until sent or removed ([attachments](./session-model.md#where-the-bytes-live))                       |
-| `attachments/`               | Agent host | Their saved bytes by SHA-256: pasted images and text, and images scaled to fit                                                                     |
+| `attachments/`               | Agent host | Their saved bytes by SHA-256: pasted images and text, picked and dropped images as read when added, and images scaled to fit                       |
 | `artifacts/content/`         | Agent host | Each [artifact](./artifacts.md#store) version's HTML, one file per hash, removed with the last version that names it                               |
 | `artifacts/thumbnails/`      | Main       | [Artifact thumbnails](./artifacts.md#thumbnails), one image per version, trimmed to the newest 500                                                 |
 | `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
