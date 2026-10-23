@@ -693,10 +693,13 @@ describe('keeping the config across an attach', () => {
       sessionTimings: quick,
       agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'locked' },
     })
-    const sessionId = await chosenSession(t, port)
+    // The mode is the agent's own, so only values that leave the prompt alone are refused.
+    const kept = { model: chosen.model, thought_level: chosen.thought_level, fast: chosen.fast }
+    const sessionId = await chosenSession(t, port, kept)
     await release(port, sessionId)
     await finishTurn(port, sessionId, 'and again')
     expect(port.entries(sessionId).filter((entry) => entry.kind === 'turn_end')).toHaveLength(2)
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'notice')).toEqual([])
     expect(values(port, sessionId)).toEqual(defaults)
     const refused = t.host.diagnostics
       .logEntries()
@@ -705,8 +708,112 @@ describe('keeping the config across an attach', () => {
       'model = deep',
       'fast = true',
       'thought_level = high',
-      'mode = code',
     ])
+  })
+
+  describe('when the mode cannot be set again', () => {
+    const notSent = 'Your message was not sent. It waits in the queue until you resume it.'
+
+    it('holds back the prompt, keeps it in the queue and says so in the thread', async () => {
+      const { t, port } = await setup({
+        sessionTimings: quick,
+        agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'locked' },
+      })
+      const sessionId = await chosenSession(t, port)
+      await release(port, sessionId)
+      await port.request('sessions.queue', { sessionId, content: text('Delete the build folder') })
+      await port.until(() => port.thread(sessionId).session.queue.length === 1)
+      await port.untilStatus(sessionId, 'ready')
+      expect(requests(t, port, sessionId)).not.toContain('session/prompt')
+      expect(port.thread(sessionId).session).toMatchObject({
+        queue: [{ content: text('Delete the build folder') }],
+        queuePaused: true,
+        error: { message: 'This session could not keep all of its settings' },
+        turnStartedAt: null,
+      })
+      expect(port.summary(sessionId)?.attention).toBe('error')
+      expect(port.entries(sessionId).slice(-2)).toEqual([
+        expect.objectContaining({ kind: 'user', content: text('Delete the build folder') }),
+        expect.objectContaining({
+          kind: 'notice',
+          severity: 'warning',
+          title: 'This session could not keep all of its settings',
+          description: [
+            'Mode is Ask instead of Code.',
+            'Model is Fake Balanced instead of Fake Deep.',
+            'Fast mode is off instead of on.',
+            'Reasoning is Medium instead of High.',
+            'You can change them in the composer.',
+            notSent,
+          ].join('\n'),
+        }),
+      ])
+      expect(port.entries(sessionId).filter((entry) => entry.kind === 'turn_end')).toHaveLength(1)
+      expect(await stored(t, sessionId)).toEqual(port.entries(sessionId))
+
+      // Resumed, it goes out with the agent's values, which the session now shows.
+      await port.request('sessions.resumeQueue', { sessionId })
+      await port.until(
+        () => port.entries(sessionId).filter((entry) => entry.kind === 'turn_end').length === 2,
+      )
+      await port.untilStatus(sessionId, 'ready')
+      expect(port.thread(sessionId).session).toMatchObject({ queue: [], error: null })
+      expect(requests(t, port, sessionId).filter((r) => r === 'session/prompt')).toHaveLength(1)
+    })
+
+    it('lets the agent go once the prompt is held back in a session out of view', async () => {
+      const { t, port } = await setup({
+        sessionTimings: quick,
+        agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'locked' },
+      })
+      const sessionId = await chosenSession(t, port)
+      await release(port, sessionId)
+      await port.request('sessions.queue', { sessionId, content: text('and again') })
+      await port.until(() => port.thread(sessionId).session.queue.length === 1)
+      await port.untilStatus(sessionId, 'closed')
+      expect(port.thread(sessionId).session).toMatchObject({ queuePaused: true })
+    })
+
+    it('holds back the prompt when the mode option the session had is gone', async () => {
+      const { t: first, port: before } = await setup()
+      const sessionId = await chosenSession(first, before, { mode: 'code' })
+      const { t, port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
+      await port.open(sessionId)
+      await port.request('sessions.queue', { sessionId, content: text('and again') })
+      await port.until(() => port.thread(sessionId).session.queue.length === 1)
+      await port.untilStatus(sessionId, 'ready')
+      expect(requests(t, port, sessionId)).not.toContain('session/prompt')
+      expect(port.entries(sessionId).at(-1)).toMatchObject({
+        kind: 'notice',
+        description: [
+          'This session has no Mode option, so Code is not available.',
+          'You can change them in the composer.',
+          notSent,
+        ].join('\n'),
+      })
+    })
+
+    it('says so when a setting attaches the session, with nothing to hold back', async () => {
+      const { t: first, port: before } = await setup()
+      const sessionId = await chosenSession(first, before, { mode: 'code' })
+      const { port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
+      await port.open(sessionId)
+      await port.request('sessions.setConfigOption', {
+        sessionId,
+        optionId: 'model',
+        value: 'deep',
+      })
+      await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+      expect(port.entries(sessionId).at(-1)).toMatchObject({
+        kind: 'notice',
+        title: 'This session could not keep all of its settings',
+        description: [
+          'This session has no Mode option, so Code is not available.',
+          'You can change them in the composer.',
+        ].join('\n'),
+      })
+      expect(port.thread(sessionId).session).toMatchObject({ status: 'ready', error: null })
+    })
   })
 
   describe('while the values are set', () => {
@@ -718,6 +825,20 @@ describe('keeping the config across an attach', () => {
       await port.open(sessionId)
       return { t, port, sessionId }
     }
+
+    it('lets the agent go after a turn cancelled meanwhile in a session out of view', async () => {
+      const { t, port } = await setup({
+        sessionTimings: quick,
+        agentEnv: { FAKE_AGENT_SET_CONFIG_MS: '200', FAKE_AGENT_RESUME_CONFIG: 'reset' },
+      })
+      const sessionId = await chosenSession(t, port)
+      await release(port, sessionId)
+      await port.request('sessions.queue', { sessionId, content: text('never mind') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.cancel', { sessionId })
+      await port.untilStatus(sessionId, 'ready')
+      await port.untilStatus(sessionId, 'closed')
+    })
 
     it('ends a turn cancelled meanwhile without sending it', async () => {
       const { t, port, sessionId } = await slowAttach()
@@ -754,6 +875,45 @@ describe('keeping the config across an attach', () => {
       expect(users.at(-1)).toMatchObject({ content: text('Fix the flaky login test') })
       expect(users).toHaveLength(2)
       expect(requests(t, port, sessionId)).toContain('session/prompt')
+    })
+
+    it('leaves the agent session to an attach that started after a close meanwhile', async () => {
+      const { t, port, sessionId } = await slowAttach()
+      await port.request('sessions.queue', { sessionId, content: text('first') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.close', { sessionId })
+      await port.request('sessions.queue', { sessionId, content: text('second') })
+      await port.until(() => {
+        const entries = port.entries(sessionId)
+        const sent = entries.findLastIndex(
+          (entry) => entry.kind === 'user' && entry.content[0]?.type === 'text',
+        )
+        return entries.slice(sent).some((entry) => entry.kind === 'turn_end')
+      })
+      await port.untilStatus(sessionId, 'ready')
+      const sent = requests(t, port, sessionId, false)
+      expect(sent.filter((r) => r === 'session/resume')).toHaveLength(2)
+      expect(sent.slice(sent.lastIndexOf('session/resume'))).not.toContain('session/close')
+      expect(sent.at(-1)).toBe('session/prompt')
+      expect(port.entries(sessionId).at(-1)).toMatchObject({
+        kind: 'turn_end',
+        stopReason: 'end_turn',
+      })
+    })
+
+    it('still closes the agent session when the session came back meanwhile without attaching', async () => {
+      const { t, port, sessionId } = await slowAttach()
+      await port.request('sessions.queue', { sessionId, content: text('first') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.close', { sessionId })
+      // Brings the session back from its stored thread, with nothing to send.
+      await port.request('sessions.resumeQueue', { sessionId })
+      await vi.waitFor(() => expect(requests(t, port, sessionId, false)).toContain('session/close'))
+      expect(requests(t, port, sessionId, false)).toEqual([
+        'session/resume',
+        restored[0],
+        'session/close',
+      ])
     })
 
     it('stops when the session is closed meanwhile, and keeps it in the list', async () => {

@@ -48,13 +48,21 @@
       "description": "OverBench 已在 {{seconds}} 秒后结束本轮对话，Agent 可能仍在后台完成工作。"
     },
     "lostValues": {
-      "title": "这个分叉没能沿用全部设置",
+      "fork": {
+        "title": "这个分叉没能沿用全部设置",
+        "missing": "这个分叉没有 {{option}} 选项，无法使用 {{wanted}}。",
+        "cannotTurnOn": "这个分叉没有 {{option}} 选项，无法开启。"
+      },
+      "session": {
+        "title": "这个会话没能保留全部设置",
+        "missing": "这个会话没有 {{option}} 选项，无法使用 {{wanted}}。",
+        "cannotTurnOn": "这个会话没有 {{option}} 选项，无法开启。"
+      },
       "differs": "{{option}} 为 {{actual}}，而不是 {{wanted}}。",
-      "missing": "这个分叉没有 {{option}} 选项，无法使用 {{wanted}}。",
       "isOff": "{{option}} 已关闭，而不是开启。",
       "isOn": "{{option}} 已开启，而不是关闭。",
-      "cannotTurnOn": "这个分叉没有 {{option}} 选项，无法开启。",
-      "next": "可以在输入框中修改。"
+      "next": "可以在输入框中修改。",
+      "held": "你的消息没有发送，会留在队列中，点击「继续」后才会发出。"
     }
   },
   "attention": {
