@@ -8,7 +8,7 @@
 import { realpath as fsRealpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
-import type { Env } from './find-command'
+import { getEnv, type Env } from './find-command'
 
 // Each platform's binaries by architecture; npm installs the one package that fits its Node.js.
 const TARGETS: Partial<Record<Platform, { package: string; triple: string }[]>> = {
@@ -74,9 +74,10 @@ export async function codexBinary(
   const p = platform === 'win32' ? path.win32 : path.posix
   const name = platform === 'win32' ? 'codex.exe' : 'codex'
   for (const target of TARGETS[platform] ?? []) {
-    const vendor = await findPackage(p, target.package, codex, top, isFile)
-    const binary = vendor && p.join(vendor, 'vendor', target.triple, 'bin', name)
-    if (binary && (await isFile(binary))) return binary
+    // Without the platform's package, codex.js looks in its own package's vendor folder.
+    const vendor = (await findPackage(p, target.package, codex, top, isFile)) ?? codex
+    const binary = p.join(vendor, 'vendor', target.triple, 'bin', name)
+    if (await isFile(binary)) return binary
   }
   return null
 }
@@ -93,7 +94,7 @@ export function npmCodexEnv(root: string): Record<string, string> {
 export async function codexLaunchEnv(lookup: AdapterLookup): Promise<Record<string, string>> {
   const targets = TARGETS[lookup.platform]
   // A `CODEX_PATH` the user set wins.
-  if (!targets || lookup.env.CODEX_PATH) return {}
+  if (!targets || getEnv(lookup.env, 'CODEX_PATH', lookup.platform)) return {}
   const p = lookup.platform === 'win32' ? path.win32 : path.posix
   const exists = lookup.isFile ?? isFile
   const codex = await findPackage(p, '@openai/codex', p.dirname(lookup.entry), lookup.dir, exists)

@@ -297,13 +297,13 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         def.cli && ctx.probeCli
           ? await findInstalledCli(def.cli, { ...ctx, files, probe: ctx.probeCli })
           : null
+      // Until the pinned version is installed, the older install a start falls back to says it.
+      const runs = current ?? other
       const decision = def.cli
         ? decideCli({
             found: found?.installed ?? null,
             minimum:
-              found && current
-                ? await def.cli.minimum(current.dir, launch.package, files)
-                : undefined,
+              found && runs ? await def.cli.minimum(runs.dir, launch.package, files) : undefined,
             failure: ctx.cliFailure ?? null,
           })
         : null

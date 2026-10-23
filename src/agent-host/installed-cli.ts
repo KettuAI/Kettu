@@ -3,7 +3,7 @@
 // held against the oldest version the installed adapter runs. See "Using the installed CLI" in
 // docs/design/agent-host.md.
 
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { open, readFile, realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { AgentCliSource, InstalledCli } from '@shared/agent-host'
@@ -17,14 +17,29 @@ import { compareVersions } from './versions'
 export interface CliFiles {
   isFile(file: string): Promise<boolean>
   realpath(file: string): Promise<string>
-  readText(file: string): Promise<string>
+  /** The file's text, or its first `limit` bytes. */
+  readText(file: string, limit?: number): Promise<string>
+}
+
+async function readHead(file: string, limit: number): Promise<string> {
+  const handle = await open(file, 'r')
+  try {
+    const buffer = Buffer.alloc(limit)
+    const { bytesRead } = await handle.read(buffer, 0, limit, 0)
+    return buffer.toString('utf8', 0, bytesRead)
+  } finally {
+    await handle.close()
+  }
 }
 
 export const CLI_FILES: CliFiles = {
   isFile: async (file) => (await stat(file).catch(() => null))?.isFile() ?? false,
   realpath: (file) => realpath(file),
-  readText: (file) => readFile(file, 'utf8'),
+  readText: (file, limit) => (limit === undefined ? readFile(file, 'utf8') : readHead(file, limit)),
 }
+
+// npm's and pnpm's shims are under 1 KB; a larger `.cmd` is not one of theirs.
+const SHIM_LIMIT = 64 * 1024
 
 /** The file an adapter runs for the user's CLI, and the variables that go with it. */
 export interface ResolvedCli {
@@ -38,6 +53,11 @@ export interface AdapterCli {
   command: string
   /** The variable the adapter reads to run it instead of its own. */
   variable: string
+  /**
+   * The adapter starts the CLI while it initializes, so a start that fails can be put down to the
+   * CLI and tried again with the copy. Otherwise the CLI first runs with a session.
+   */
+  startsAtInitialize: boolean
   /** The file that runs without a shell, or null when there is none. */
   resolve(found: string, platform: Platform, files: CliFiles): Promise<ResolvedCli | null>
   /** The oldest CLI the adapter installed in `dir` runs, or null when it names none. */
@@ -84,7 +104,7 @@ async function startable(
   const ext = path.win32.extname(found).toLowerCase()
   if (ext === '.exe' || ext === '.com') return found
   if (ext !== '.cmd' && ext !== '.bat') return null
-  const text = await files.readText(found).catch(() => null)
+  const text = await files.readText(found, SHIM_LIMIT).catch(() => null)
   const target = text === null ? null : shimTarget(text, found)
   return target && (await files.isFile(target)) ? target : null
 }
@@ -110,6 +130,7 @@ async function readManifest(
 export const CLAUDE_CLI: AdapterCli = {
   command: 'claude',
   variable: 'CLAUDE_CODE_EXECUTABLE',
+  startsAtInitialize: false,
   // The adapter also calls it with execFile, so on Windows it must be a program itself.
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
@@ -126,6 +147,7 @@ export const CLAUDE_CLI: AdapterCli = {
 export const CODEX_CLI: AdapterCli = {
   command: 'codex',
   variable: 'CODEX_PATH',
+  startsAtInitialize: true,
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
     if (!file) return null
@@ -135,7 +157,9 @@ export const CODEX_CLI: AdapterCli = {
     if (real.split(/[\\/]/).slice(-4).join('/') === '@openai/codex/bin/codex.js') {
       const root = p.dirname(p.dirname(real))
       const binary = await codexBinary(root, platform, null, files.isFile)
-      return binary ? { path: binary, env: npmCodexEnv(root) } : null
+      if (binary) return { path: binary, env: npmCodexEnv(root) }
+      // Off Windows codex.js runs by its shebang, and says itself what is missing.
+      return platform === 'win32' ? null : { path: file, env: {} }
     }
     return platform !== 'win32' || isWindowsProgram(file) ? { path: file, env: {} } : null
   },
@@ -159,7 +183,12 @@ export interface CliVersionsOptions {
   stat?(file: string): Promise<{ size: number; mtimeMs: number } | null>
 }
 
-/** `<program> --version`, asked again only when the file changes, as a CLI that updates itself does. */
+/**
+ * `<program> --version`, asked again only when the file changes, as a CLI that updates itself does.
+ * A timeout, a start that failed or a signal is asked once more at once and, failing again, not
+ * kept, since a later try may well answer: the first run of a fresh binary can be slow while it is
+ * scanned.
+ */
 export class CliVersions {
   private readonly answers = new Map<string, Promise<CliVersion>>()
 
@@ -175,13 +204,20 @@ export class CliVersions {
     const key = `${program}\0${info.size}\0${info.mtimeMs}`
     let answer = this.answers.get(key)
     if (!answer) {
-      answer = this.ask(program, env)
+      const asked: Promise<CliVersion> = this.ask(program, env)
+        .then((first) => (first.repeats ? first : this.ask(program, env)))
+        .then(({ answer, repeats }) => {
+          if (!repeats && this.answers.get(key) === asked) this.answers.delete(key)
+          return answer
+        })
+      answer = asked
       this.answers.set(key, answer)
     }
     return answer
   }
 
-  private async ask(program: string, env: Env): Promise<CliVersion> {
+  /** The answer, and whether asking again would give it again. */
+  private async ask(program: string, env: Env): Promise<{ answer: CliVersion; repeats: boolean }> {
     const timeoutMs = this.options.timeoutMs ?? 10_000
     const name = path.basename(program).replace(/\.(?:exe|com)$/i, '')
     const result = await (this.options.run ?? runProgram)({
@@ -193,9 +229,11 @@ export class CliVersions {
       timeoutMs,
     })
     const failure = programFailure(name, result, timeoutMs)
-    if (failure) return { error: failure }
+    const repeats = !result.timedOut && !result.aborted && !result.error && !result.signal
+    if (failure) return { answer: { error: failure }, repeats }
     const version = parseCliVersion(result.stdout)
-    return version ? { version } : { error: `${name} --version printed no version.` }
+    const answer = version ? { version } : { error: `${name} --version printed no version.` }
+    return { answer, repeats }
   }
 }
 
@@ -254,8 +292,8 @@ export interface CliDecision {
 
 /**
  * The installed program runs when it answered its version, it meets the adapter's minimum and no
- * start with it failed. `minimum` is undefined before the adapter is
- * installed, when it is not known yet.
+ * start with it failed. `minimum` is undefined before the adapter is installed, when it is not
+ * known yet.
  */
 export function decideCli(input: {
   found: InstalledCli | null

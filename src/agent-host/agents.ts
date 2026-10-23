@@ -465,7 +465,8 @@ export class AgentManager {
 
   /**
    * Launches `spec`, or installs the pinned adapter first when it is null. A launch with the
-   * user's own CLI that fails is tried once more with the adapter's copy.
+   * user's own CLI that fails is tried once more with the adapter's copy, for an adapter that
+   * starts its CLI while it initializes; any other failure is the adapter's.
    */
   private async start(slot: Slot, spec: LaunchSpec | null): Promise<AgentRuntime> {
     const run = (async () => {
@@ -473,7 +474,7 @@ export class AgentManager {
       try {
         return await this.launch(slot, first)
       } catch (error) {
-        if (!first.cli) throw error
+        if (!first.cli || !slot.def.cli?.startsAtInitialize || this.stopped) throw error
         const reason = (error as Error).message
         slot.cliFailure = { path: first.cli, reason }
         this.deps.diagnostics.event(slot.def.id, 'cli failed', `${first.cli}: ${reason}`)

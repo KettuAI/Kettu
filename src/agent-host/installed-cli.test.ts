@@ -1,8 +1,11 @@
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ProgramOptions, ProgramRun } from './adapter-install'
 import {
   CLAUDE_CLI,
+  CLI_FILES,
   CliVersions,
   CODEX_CLI,
   decideCli,
@@ -161,6 +164,31 @@ describe('resolving the program the adapter runs', () => {
     const noBinary = files({ [`${NPM_BIN}\\codex.cmd`]: NPM_NODE_SHIM, [codexJs]: '' })
     expect(await CODEX_CLI.resolve(`${NPM_BIN}\\codex.cmd`, 'win32', noBinary)).toBeNull()
   })
+
+  it('follows codex.js to its own vendor folder, and runs codex.js itself off Windows', async () => {
+    const root = '/usr/local/lib/node_modules/@openai/codex'
+    const link = { '/usr/local/bin/codex': `${root}/bin/codex.js` }
+    const vendored = `${root}/vendor/aarch64-apple-darwin/bin/codex`
+    const withVendor = files({ '/usr/local/bin/codex': '', [vendored]: '' }, link)
+    expect(await CODEX_CLI.resolve('/usr/local/bin/codex', 'darwin', withVendor)).toEqual({
+      path: vendored,
+      env: { CODEX_MANAGED_BY_NPM: '1', CODEX_MANAGED_PACKAGE_ROOT: root },
+    })
+    // Its shebang starts it, and its --version then says what is missing.
+    const bare = files({ '/usr/local/bin/codex': '' }, link)
+    expect(await CODEX_CLI.resolve('/usr/local/bin/codex', 'linux', bare)).toEqual({
+      path: '/usr/local/bin/codex',
+      env: {},
+    })
+  })
+
+  it('reads at most the start of a file when asked to', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-cli-files-'))
+    const file = path.join(dir, 'big.cmd')
+    await writeFile(file, 'x'.repeat(100_000))
+    expect(await CLI_FILES.readText(file, 64 * 1024)).toHaveLength(64 * 1024)
+    expect(await CLI_FILES.readText(file)).toHaveLength(100_000)
+  })
 })
 
 describe('the minimum an adapter names', () => {
@@ -270,6 +298,44 @@ describe('CliVersions', () => {
     expect(await answer(run('codex\n'))).toEqual({ error: 'codex --version printed no version.' })
     const gone = new CliVersions({ platform: 'darwin', stat: async () => null })
     expect(await gone.probe('/bin/codex', {})).toEqual({ error: '/bin/codex was not found.' })
+  })
+
+  it('asks once more after a timeout, a failed start or a signal, and keeps none of them', async () => {
+    const answers = [
+      run('', null, { timedOut: true }),
+      run('', null, { error: 'spawn EBUSY' }),
+      run('', null, { signal: 'SIGKILL' }),
+      run('', null, { timedOut: true }),
+      run('', 1),
+    ]
+    let asked = 0
+    const versions = new CliVersions({
+      platform: 'darwin',
+      run: async () => answers[asked++] ?? run('0.163.0\n'),
+      stat: async () => ({ size: 1, mtimeMs: 1 }),
+    })
+    expect(await versions.probe('/bin/codex', {})).toEqual({
+      error: 'codex could not be started: spawn EBUSY',
+    })
+    expect(asked).toBe(2)
+    expect(await versions.probe('/bin/codex', {})).toEqual({
+      error: 'codex did not finish within 10 s.',
+    })
+    expect(asked).toBe(4)
+    // A non-zero exit would repeat, so it stays until the file changes.
+    expect(await versions.probe('/bin/codex', {})).toEqual({ error: 'codex exited with code 1.' })
+    expect(await versions.probe('/bin/codex', {})).toEqual({ error: 'codex exited with code 1.' })
+    expect(asked).toBe(5)
+  })
+
+  it('answers through one slow first run', async () => {
+    const answers = [run('', null, { timedOut: true })]
+    const versions = new CliVersions({
+      platform: 'darwin',
+      run: async () => answers.shift() ?? run('2.1.304 (Claude Code)\n'),
+      stat: async () => ({ size: 1, mtimeMs: 1 }),
+    })
+    expect(await versions.probe('/bin/claude', {})).toEqual({ version: '2.1.304' })
   })
 })
 

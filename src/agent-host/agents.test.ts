@@ -554,6 +554,7 @@ describe('AgentManager with an installed adapter', () => {
 const FAKE_CLI: AdapterCli = {
   command: 'fake-cli',
   variable: 'FAKE_CLI_PATH',
+  startsAtInitialize: true,
   resolve: async (found) => ({ path: found, env: {} }),
   minimum: async () => '1.0.0',
 }
@@ -572,14 +573,23 @@ function cliManager(
     installed?: InstalledAdapter[]
     cli?: string
     minimum?: string
-    /** The adapter exits before it initializes when it runs the installed CLI. */
+    /** The adapter exits with code 1 before it initializes when it runs the installed CLI. */
     failWithCli?: boolean
+    /** It exits with code 2 when it runs its own copy. */
+    failCopy?: boolean
+    /** The host is stopped while the start with the installed CLI fails. */
+    stopOnCliFailure?: boolean
+    startsAtInitialize?: boolean
   } = {},
 ) {
   const def: AgentDefinition = {
     ...fakeAgent(FAKE_AGENT_MAIN),
     launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
-    cli: { ...FAKE_CLI, minimum: async () => options.minimum ?? '1.0.0' },
+    cli: {
+      ...FAKE_CLI,
+      startsAtInitialize: options.startsAtInitialize ?? true,
+      minimum: async () => options.minimum ?? '1.0.0',
+    },
   }
   const adapters = [...(options.installed ?? [])]
   const installs: InstallOptions[] = []
@@ -589,12 +599,14 @@ function cliManager(
     launch: (d, spec, env, output) => {
       launches.push(spec)
       const launched = base.launch(d, spec, env, output)
-      if (!options.failWithCli || !spec.env.FAKE_CLI_PATH) return launched
+      const withCli = spec.env.FAKE_CLI_PATH !== undefined
+      if (withCli ? !options.failWithCli : !options.failCopy) return launched
+      if (withCli && options.stopOnCliFailure) void m.agents.stopAll()
       return {
         pid: null,
         startedAt: launched.startedAt,
         transport: launched.transport,
-        exited: Promise.resolve({ code: 1, signal: null }),
+        exited: Promise.resolve({ code: withCli ? 1 : 2, signal: null }),
         hasExited: true,
         stop: () => launched.stop(),
       }
@@ -682,6 +694,47 @@ describe('the CLI the user installed', () => {
     await m.agents.stopAll()
     await m.agents.ensureReady('fake-agent')
     expect(m.launches.at(-1)?.env.FAKE_CLI_PATH).toBeUndefined()
+    await m.agents.stopAll()
+  })
+
+  it('tries the copy once, and surfaces its own error when it fails too', async () => {
+    const m = cliManager({ installed: [installedAt('2.0.0')], failWithCli: true, failCopy: true })
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      message: expect.stringContaining('exited with code 2'),
+    })
+    expect(m.launches.map((spec) => spec.env.FAKE_CLI_PATH !== undefined)).toEqual([true, false])
+    expect(m.status()).toMatchObject({
+      state: 'failed',
+      detail: expect.stringContaining('exited with code 2'),
+    })
+    await m.agents.stopAll()
+  })
+
+  it('leaves the CLI alone when the adapter failed before it ran it', async () => {
+    const m = cliManager({
+      installed: [installedAt('2.0.0')],
+      failWithCli: true,
+      startsAtInitialize: false,
+    })
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      message: expect.stringContaining('exited with code 1'),
+    })
+    expect(m.launches).toHaveLength(1)
+    expect(m.status()).toMatchObject({
+      state: 'failed',
+      cli: { runs: 'installed', installed: { problem: null } },
+    })
+    await m.agents.stopAll()
+  })
+
+  it('does not start the copy while the host stops', async () => {
+    const m = cliManager({
+      installed: [installedAt('2.0.0')],
+      failWithCli: true,
+      stopOnCliFailure: true,
+    })
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toBeDefined()
+    expect(m.launches).toHaveLength(1)
     await m.agents.stopAll()
   })
 

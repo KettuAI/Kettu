@@ -316,6 +316,17 @@ describe('detectAgent with the CLI the user installed', () => {
     )
   })
 
+  it('holds the program to the older install while the pinned one is not installed', async () => {
+    const older = withClaude({ installed: async () => [install('0.93.0')] }, '2.1.200')
+    expect(await detectAgent(CLAUDE_CODE, older)).toMatchObject({
+      spec: null,
+      adapter: {
+        fallback: { version: '0.93.0', spec: { env: {} } },
+        cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '2.1.303' } } },
+      },
+    })
+  })
+
   it('leaves a program the environment names to the adapter', async () => {
     const detection = await detectAgent(
       CLAUDE_CODE,
