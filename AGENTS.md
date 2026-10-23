@@ -93,7 +93,8 @@ tools/
 ├── fake-agent/        Scripted ACP agent for development, tests and perf runs
 ├── perf/              The performance script and its CI runner
 ├── screenshots/       Captures the main screens on each platform
-└── launch.mjs         Starts a production build for the two above
+├── workflow/          Checks pull request titles and issue links in CI
+└── launch.mjs         Starts a production build for perf and screenshots
 ```
 
 ### Adding an IPC call

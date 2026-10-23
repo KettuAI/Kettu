@@ -4,10 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+    # Edits run everything too: the newest run on a commit gives its CI result, so a run that
+    # checked only the title and description could hide a failure on that commit.
+    types: [opened, synchronize, reopened, edited, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Every commit on main keeps its own result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -31,3 +35,36 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm exec electron-builder --dir --publish never
+
+  pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # The title and description reach the script through the environment, never the script
+      # text, where they could inject commands.
+      - run: node tools/workflow/pr-check.mjs
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+  # The one check the ruleset on main requires, so renaming a job above never breaks protection.
+  ci:
+    name: CI
+    needs: [check, pr]
+    # always(), not !cancelled(): a cancelled run must fail this check, since a skipped check
+    # counts as passing.
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          CHECK: ${{ needs.check.result }}
+          PR: ${{ needs.pr.result }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          echo "Platforms: $CHECK. Pull request: $PR."
+          [ "$CHECK" = success ] || exit 1
+          [ "$PR" = success ] || { [ "$PR" = skipped ] && [ "$EVENT" = push ]; }

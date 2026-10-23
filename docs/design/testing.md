@@ -87,18 +87,24 @@ The fake agent keeps its sessions in memory. `session/load` replays what happene
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request, on `macos-latest`, `windows-latest` and `ubuntu-24.04`, the Ubuntu that [release builds](./updates.md#releases) use:
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request. Its `check` job runs on `macos-latest`, `windows-latest` and `ubuntu-24.04`, the Ubuntu that [release builds](./updates.md#releases) use:
 
 1. Install with `pnpm install --frozen-lockfile`.
 2. `pnpm format:check`, `pnpm lint`, `pnpm typecheck`.
 3. `pnpm test`, which includes the process tests that spawn the fake agent on each platform.
 4. `pnpm build`, then `electron-builder --dir` to prove the app packages on each platform.
 
+On a pull request, the `pr` job runs `tools/workflow/pr-check.mjs`, a script with no dependencies, on the title and description, which reach it through the environment and never through the script text, where they could inject commands. The title must follow [pull requests](../workflow.md#pull-requests): a Conventional Commits header, `type(scope)!: subject`, with one of the types `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`, `revert` and `build`, an optional lowercase kebab-case scope, a subject that does not start with a capital letter or end with a period, and at most 50 characters in all. The description must link an issue: `Closes`, `Fixes`, `Resolves` or `Refs`, in any case, then `#N` or the issue's URL. A link inside an HTML comment or code does not count, because GitHub links nothing there and the pull request template's example sits in a comment. The script prints one line for each problem, as an error annotation in Actions. Run it the same way before opening a pull request: `PR_TITLE='…' PR_BODY='…' node tools/workflow/pr-check.mjs`. `tools/workflow/commit-title.mjs` holds the header parser, for other tools that read commit subjects.
+
+The last job, `CI`, needs both and passes only when all three platforms passed and the `pr` job passed, or was skipped on a push to `main`. It is the one check the ruleset on `main` requires, so renaming a platform job never breaks protection. It runs even in a cancelled run and fails there, because GitHub counts a skipped check as passing.
+
+A pull request runs CI when it is opened, reopened, pushed to, marked ready for review or edited, and a newer run cancels the older one. An edit to the title, description or base branch runs every job, the platforms included: the newest run on a commit gives its `CI` result, so a run that checked only the text could hide a failure on that commit, and a new base changes the code that is tested. Runs on `main` are never cancelled, so each commit there keeps its own result.
+
 Real agents never run in CI: they need accounts and cost money.
 
 ## Screenshots
 
-Nobody runs every platform by hand, so `.github/workflows/screenshots.yml` captures the main screens of a production build on `macos-latest`, `windows-latest` and `ubuntu-24.04` (under `xvfb-run`), on demand and on pushes to `main` that touch `src/` or `tools/`. Each run uploads one artifact per platform, `screenshots-<OS>`; `gh run download <run id>` fetches them for review.
+Nobody runs every platform by hand, so `.github/workflows/screenshots.yml` captures the main screens of a production build on `macos-latest`, `windows-latest` and `ubuntu-24.04` (under `xvfb-run`), on demand, on pushes to `main` that touch `src/` or `tools/`, and on pull requests that touch `src/`. Each run uploads one artifact per platform, `screenshots-<OS>`; `gh run download <run id>` fetches them for review. It needs no secrets and publishes nothing beyond those artifacts, so it runs the same on a pull request as on `main`.
 
 `tools/screenshots/capture.mjs`, with no dependencies, does the capturing. It starts the app from `out/` with `--overbench-perf`, a fresh data folder and the fake agent, adds a scratch git project on an unpublished branch with one uncommitted file, and drives the real UI over the Chrome DevTools Protocol in the default 1280 x 820 window at a device scale factor of 2. Only the scale is emulated, so the window controls overlay on Windows and Linux lines up as it does for users; the Windows job first enlarges the runner's 1024 x 768 screen so the window fits. The log notes the window size and the width the thread's scrollbar takes. It writes `<platform>-<screen>-<light|dark>.png` for the welcome screen, the project home, the New session screen and its project menu, a finished `/basic-turn` (and the same thread mid-scroll, light only, where overlay scrollbars show), the model menu, a `/permission` request, the terminal panel, the session context menu, the New session agent menu once the fake agent's models are known, all nine Settings sections, the fake agent's page in Settings › Agents and the Settings search results for "proxy". Locally, run `pnpm build`, then `node tools/screenshots/capture.mjs --out <folder>`; `--port` changes the debugging port (default 9230).
 
