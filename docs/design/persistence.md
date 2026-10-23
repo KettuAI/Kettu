@@ -70,6 +70,7 @@ interface SessionsFile {
     branch: string | null // checked out when its last turn ended, for its pull request
     queue?: { id: string; content: UserContent[]; at: number }[] // prompts still waiting
   }[]
+  emptySessionsRemovedAt?: number // when the one-time removal of sessions with no message ran
 }
 ```
 
@@ -77,6 +78,7 @@ interface SessionsFile {
 - `lastViewedAt` decides the `unread` attention state after a restart.
 - A session enters the index once its `session/new` succeeds, when it is imported, or, for a subagent, as soon as its parent is in the index. Its entry is rewritten when its title, `updatedAt`, `lastViewedAt`, description, branch or queue changes.
 - A saved `queue` comes back paused ([queue and steering](./session-model.md#queue-and-steering)); one that does not validate is dropped without failing the file.
+- `emptySessionsRemovedAt` marks that the [removal of sessions with no message](./session-model.md#how-the-host-keeps-sessions) has run, so it runs once. A version from before it drops the field when it writes the index, so going back to one and forward again runs it once more.
 
 ## Settings
 
@@ -158,7 +160,7 @@ interface AppStateFile {
 ## Composer drafts
 
 - Unsent composer text is stored in `localStorage` under `draft:<sessionId>`, written 300 ms after the last keystroke and when you switch sessions. The [New session](./ui.md#new-session) screen keeps its text the same way under `draft:new`, until the session it starts exists; a first message that session cannot take yet moves to that session's draft.
-- Sending a prompt or deleting the session removes the draft.
+- Sending a prompt or deleting the session removes the draft, and so does the host removing the session, as with its parent or by the [removal of sessions with no message](./session-model.md#how-the-host-keeps-sessions), which keeps every session with a draft.
 - A draft larger than 1 MB, or one whose write fails (for example on the storage quota), stays in memory until the app quits, and the failure is logged.
 
 ## Threads

@@ -92,7 +92,8 @@ export function corruptName(file: string, at: number): string {
 export class JsonFile<T> {
   private pending: T | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
-  private writing: Promise<void> = Promise.resolve()
+  /** The writes in turn; each settles to whether it reached the disk. */
+  private writing: Promise<boolean> = Promise.resolve(true)
   /** A file from a newer version of the app is never overwritten. */
   readOnly = false
   status: LoadStatus = 'missing'
@@ -166,29 +167,38 @@ export class JsonFile<T> {
     }, this.options.debounceMs ?? 500)
   }
 
-  private writePending(): Promise<void> {
+  private writePending(): Promise<boolean> {
     const data = this.pending
     if (data === null) return this.writing
     this.pending = null
     const contents = `${JSON.stringify(data, null, 2)}\n`
     this.writing = this.writing
       .then(() => writeFileAtomic(this.options.file, contents))
-      .catch((error: unknown) => {
-        this.options.log(
-          'error',
-          `Could not write ${this.options.file}: ${(error as Error).message}`,
-        )
-      })
+      .then(
+        () => true,
+        (error: unknown) => {
+          this.options.log(
+            'error',
+            `Could not write ${this.options.file}: ${(error as Error).message}`,
+          )
+          return false
+        },
+      )
     return this.writing
   }
 
   /** Writes what is pending now, and waits for writes in flight. */
   async flush(): Promise<void> {
+    await this.flushWritten()
+  }
+
+  /** `flush`, resolving to whether the last write reached the disk. */
+  flushWritten(): Promise<boolean> {
     if (this.timer) {
       clearTimeout(this.timer)
       this.timer = null
     }
-    await this.writePending()
+    return this.writePending()
   }
 }
 
@@ -227,6 +237,7 @@ export interface SessionRecord {
 export interface SessionsFile {
   version: 1
   sessions: SessionRecord[]
+  emptySessionsRemovedAt?: number // when the one-time removal of sessions with no message ran
 }
 
 /**
@@ -373,7 +384,13 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isString(item.customTitle) ? { customTitle: item.customTitle } : {}),
     })
   }
-  return { version: 1, sessions }
+  return {
+    version: 1,
+    sessions,
+    ...(isTime(data.emptySessionsRemovedAt)
+      ? { emptySessionsRemovedAt: data.emptySessionsRemovedAt }
+      : {}),
+  }
 }
 
 // Not 'none': whether a signed-out agent is still signed out is known only once it runs.

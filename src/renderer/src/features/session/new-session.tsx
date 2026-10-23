@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, GitBranchIcon } from 'lucide-react'
+import { ArrowUpIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { createSession, warmAgent } from '@renderer/app/actions'
+import { startNewSession, warmAgent } from '@renderer/app/actions'
 import { onAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -21,6 +21,7 @@ import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { basename, limitLabel, resetTime, shortAgo } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { useNow } from '@renderer/lib/use-now'
 import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
@@ -39,11 +40,13 @@ import { AgentMenu } from './new-session/agent-menu'
 import { ProjectMenu } from './new-session/project-menu'
 import { canStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
+import { ParentLink } from './session-header'
 
 /**
  * The New session screen: where to work, which agent and model, and the first message, all in one
  * composer under a heading, with the sessions used last below it. The session is created on the
- * first send, which also sends the message.
+ * first send, which also sends the message; opened for a sub-session, under its parent, in the
+ * parent's project.
  */
 export function NewSessionView({
   project,
@@ -59,6 +62,9 @@ export function NewSessionView({
     return !!status && canStart(status)
   })
   const agentId = installed ? chosenId : null
+  const parentId = useViewStore((s) => (s.main.kind === 'new' ? (s.main.parentId ?? null) : null))
+  const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
+  const toolsPath = project?.path ?? (parent?.scratch ? parent.projectPath : null)
 
   // The agent starts while the message is written; the first send then waits for the session only.
   useEffect(() => {
@@ -68,11 +74,15 @@ export function NewSessionView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TopBar>
-        <NoDrag className="min-w-0">
-          <span className="truncate px-1.5 text-ui font-medium">{t('newSession.title')}</span>
+        <NoDrag className="min-w-0 gap-0.5">
+          {/* The label is short, so the parent's title takes the room left before the tools. */}
+          {parent && <ParentLink parent={parent} className="max-w-none" />}
+          <span className={cn('truncate px-1.5 text-ui font-medium', parent && 'shrink-0')}>
+            {parent ? t('newSession.subSessionTitle') : t('newSession.title')}
+          </span>
         </NoDrag>
         <span className="flex-1" />
-        {project && <HeaderTools projectPath={project.path} />}
+        {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
       {/* Raised 28 px above centre, so the eye lands on the composer. */}
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-14">
@@ -80,7 +90,12 @@ export function NewSessionView({
           <h1 className="animate-in text-center text-title font-semibold text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
-          <DraftComposer agentId={agentId} project={project} noProject={noProject} />
+          <DraftComposer
+            agentId={agentId}
+            project={project}
+            noProject={noProject}
+            parent={parent}
+          />
           <RecentSessions />
         </div>
       </div>
@@ -92,10 +107,12 @@ function DraftComposer({
   agentId,
   project,
   noProject,
+  parent,
 }: {
   agentId: AgentId | null
   project: Project | null
   noProject: boolean
+  parent: SessionSummary | undefined
 }) {
   const { t } = useTranslation('session')
   const { t: tc } = useTranslation('composer')
@@ -106,8 +123,10 @@ function DraftComposer({
   const limits = useAgentsStore((s) => (agentId ? s.byId[agentId]?.limits : undefined))
   const now = useNow()
   const name = agentId ? agentName(agentId) : null
-  const projectPath = noProject ? null : (project?.path ?? null)
-  const ready = noProject || (!!project && !project.missing)
+  // A sub-session of a session started with No project shares its parent's scratch folder.
+  const inScratch = noProject || !!parent?.scratch
+  const projectPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
+  const ready = inScratch || (!!project && !project.missing)
   const canSend = !!agentId && ready && text.trim().length > 0
   const tightest = limits ? tightestLimit(limits, now) : null
   const reached = tightest?.state === 'reached' ? tightest : null
@@ -156,7 +175,7 @@ function DraftComposer({
     const { byId, picks } = useAgentOptionsStore.getState()
     const entry = byId[agentId]
     const options = entry ? startValues(entry, picks[agentId]) : null
-    void createSession(agentId, projectPath, null, text, options)
+    void startNewSession(agentId, projectPath, text, options)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -180,9 +199,9 @@ function DraftComposer({
 
   const blocked = !agentId
     ? t('newSession.chooseAgentFirst')
-    : !noProject && !project
+    : !inScratch && !project
       ? t('newSession.chooseProjectFirst')
-      : project?.missing && !noProject
+      : project?.missing && !inScratch
         ? t('newSession.missingLine')
         : null
 
@@ -190,14 +209,18 @@ function DraftComposer({
     <InputGroup variant="composer">
       <div className="flex w-full min-w-0 flex-col">
         <div className="flex h-row min-w-0 items-center gap-0.5 px-1.5 pt-1.5">
-          <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
-          {!noProject && project && <BranchLabel projectPath={project.path} />}
+          {parent ? (
+            <ParentProject project={project} scratch={parent.scratch} />
+          ) : (
+            <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
+          )}
+          {!inScratch && project && <BranchLabel projectPath={project.path} />}
           <Slash />
           <AgentMenu agentId={agentId} onChoose={choose} />
           <span className="min-w-2 flex-1" />
           <ModeMenu agentId={agentId} />
         </div>
-        {(projectError || (project?.missing && !noProject)) && (
+        {(projectError || (project?.missing && !inScratch)) && (
           <p
             className="truncate px-3.5 pt-1 text-xs text-destructive"
             title={projectError ?? undefined}
@@ -254,6 +277,29 @@ function Slash() {
     <span aria-hidden className="shrink-0 text-xs text-muted-foreground">
       /
     </span>
+  )
+}
+
+/** A sub-session's project, shown and not chosen: it works in its parent's. */
+function ParentProject({ project, scratch }: { project: Project | null; scratch: boolean }) {
+  const { t } = useTranslation('session')
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="flex h-control min-w-12 shrink-10 items-center gap-1 overflow-hidden px-2 text-[12.5px] text-muted-foreground" />
+        }
+      >
+        <FolderIcon className="size-3.5 shrink-0" />
+        <span className="truncate font-medium text-foreground">
+          {scratch ? t('newSession.noProject') : project?.name}
+        </span>
+        {project?.missing && !scratch && (
+          <span className="shrink-0 text-destructive">{t('newSession.missing')}</span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{t('newSession.subSessionProject')}</TooltipContent>
+    </Tooltip>
   )
 }
 

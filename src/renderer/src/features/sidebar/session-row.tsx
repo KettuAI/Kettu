@@ -163,6 +163,7 @@ export const SessionRow = memo(function SessionRow({
     <SessionMenuItems
       summary={summary}
       onRename={rename.menu.onRename}
+      onNewSubSession={rename.menu.onLeave}
       onDelete={() => setDeleting(true)}
     />
   )

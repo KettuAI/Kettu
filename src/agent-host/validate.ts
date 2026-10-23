@@ -17,6 +17,8 @@ const PATH_CHARS = 32_767
 const TEXT_CHARS = 4_096
 const URL_CHARS = 2_048
 const PROMPT_ITEMS = 1_000
+// Sessions with a draft, which the one-time removal keeps.
+const KEPT_SESSIONS = 100_000
 const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
   'brew',
   'script',
@@ -368,6 +370,20 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.close': session,
     'sessions.delete': session,
+    'sessions.removeEmpty': (params) => {
+      const keep = fields(params).keep
+      if (!Array.isArray(keep) || keep.length > KEPT_SESSIONS) {
+        throw invalidParams(`keep must be an array of at most ${KEPT_SESSIONS} session ids`)
+      }
+      return {
+        keep: keep.map((id: unknown, index) => {
+          if (typeof id !== 'string' || id.length === 0 || id.length > ID_CHARS) {
+            throw invalidParams(`keep[${index}] must be a session id`)
+          }
+          return id
+        }),
+      }
+    },
     'sessions.removeAll': none,
     'permissions.respond': (params) => {
       const o = fields(params)

@@ -158,6 +158,20 @@ describe('JsonFile', () => {
     expect(store.status).toBe('corrupt')
   })
 
+  it('says whether the last write reached the disk', async () => {
+    const file = path.join(dir, 'doc.json')
+    const store = make(file, 10_000)
+    store.save({ version: 1, value: 1 })
+    expect(await store.flushWritten()).toBe(true)
+    await mkdir(`${file}.tmp`)
+    store.save({ version: 1, value: 2 })
+    expect(await store.flushWritten()).toBe(false)
+    expect(await store.flushWritten()).toBe(false)
+    await rm(`${file}.tmp`, { recursive: true })
+    store.save({ version: 1, value: 3 })
+    expect(await store.flushWritten()).toBe(true)
+  })
+
   it('never writes over a file from a newer version', async () => {
     const file = path.join(dir, 'doc.json')
     const newer = JSON.stringify({ version: 9, value: 1, future: true })
@@ -216,6 +230,18 @@ describe('the host files', () => {
     expect(
       parseSessionsFile({ sessions: [{ ...session, queue: [{ id: 'q1', content: 'x', at: 5 }] }] }),
     ).toEqual({ version: 1, sessions: [session] })
+  })
+
+  it('keeps when sessions with no message were removed, and drops a time that does not parse', () => {
+    expect(parseSessionsFile({ sessions: [session], emptySessionsRemovedAt: 7 })).toEqual({
+      version: 1,
+      sessions: [session],
+      emptySessionsRemovedAt: 7,
+    })
+    expect(parseSessionsFile({ sessions: [session], emptySessionsRemovedAt: 'x' })).toEqual({
+      version: 1,
+      sessions: [session],
+    })
   })
 
   it('validates projects', async () => {

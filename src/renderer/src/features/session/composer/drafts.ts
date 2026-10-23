@@ -12,7 +12,8 @@ const MAX_DRAFT_BYTES = 1024 * 1024
 const memory = new Map<string, string>()
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
-const key = (sessionId: string) => `draft:${sessionId}`
+const PREFIX = 'draft:'
+const key = (sessionId: string) => `${PREFIX}${sessionId}`
 
 export function readDraft(sessionId: string): string {
   const kept = memory.get(sessionId)
@@ -56,6 +57,21 @@ export function flushDraft(sessionId: string): void {
   } catch (error) {
     console.warn(`Could not save the draft for ${sessionId}; keeping it in memory`, error)
   }
+}
+
+/** The sessions whose draft, saved or in memory, holds more than white space. */
+export function draftedSessions(): string[] {
+  const ids = new Set(memory.keys())
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const name = localStorage.key(i)
+      if (name?.startsWith(PREFIX)) ids.add(name.slice(PREFIX.length))
+    }
+  } catch {
+    // Without storage only the drafts in memory count.
+  }
+  ids.delete(NEW_SESSION_DRAFT)
+  return [...ids].filter((id) => readDraft(id).trim() !== '').sort()
 }
 
 export function clearDraft(sessionId: string): void {

@@ -24,11 +24,12 @@ export function MainArea() {
   const main = useViewStore((s) => s.main)
   const pending = usePendingSession((s) => s.pending)
   const sessionExists = useSessionsStore((s) => main.kind === 'session' && !!s.byId[main.sessionId])
-  // A session started with No project, or one being created there, shows in its scratch folder.
+  // A session started with No project, one being created there, and New session for a
+  // sub-session of one show in its scratch folder.
   const scratch = useSessionsStore((s) => {
-    const path =
-      pending?.projectPath ??
-      (!pending && main.kind === 'session' ? s.byId[main.sessionId]?.projectPath : null)
+    const shown =
+      main.kind === 'session' ? main.sessionId : main.kind === 'new' ? main.parentId : undefined
+    const path = pending?.projectPath ?? (!pending && shown ? s.byId[shown]?.projectPath : null)
     return path && isScratchFolder(s.byId, path) ? path : null
   })
 
@@ -53,6 +54,8 @@ export function MainArea() {
       <SidePanelArea projectPath={scratch}>
         {pending ? (
           <PendingSessionView pending={pending} />
+        ) : main.kind === 'new' ? (
+          <NewSessionView project={null} />
         ) : (
           main.kind === 'session' && <SessionView key={main.sessionId} sessionId={main.sessionId} />
         )}

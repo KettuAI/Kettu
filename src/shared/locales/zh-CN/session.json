@@ -152,6 +152,8 @@
   },
   "newSession": {
     "title": "新建会话",
+    "subSessionTitle": "新建子会话",
+    "subSessionProject": "子会话在父会话的项目中工作",
     "chooseProject": "选择要工作的项目",
     "projectMissing": "{{project}} 已不存在",
     "chooseAgent": "为这个会话选择 Agent",

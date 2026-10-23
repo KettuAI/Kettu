@@ -163,6 +163,8 @@
   },
   "newSession": {
     "title": "New session",
+    "subSessionTitle": "New sub-session",
+    "subSessionProject": "A sub-session works in its parent's project",
     "chooseProject": "Choose a project to work in",
     "projectMissing": "{{project}} no longer exists",
     "chooseAgent": "Choose an agent for this session",

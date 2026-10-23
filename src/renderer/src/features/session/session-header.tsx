@@ -17,9 +17,27 @@ import {
   SessionTitleField,
 } from '@renderer/features/sidebar/session-menu'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
+import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
+
+/** A sub-session's parent at the start of the top bar, which opens it. */
+export function ParentLink({ parent, className }: { parent: SessionSummary; className?: string }) {
+  return (
+    <>
+      <Button
+        variant="quiet"
+        size="compact"
+        className={cn('min-w-0 max-w-[30%] shrink px-1.5', className)}
+        onClick={() => openSession(parent.id, parent.projectPath)}
+      >
+        <span className="truncate">{sessionTitle(parent)}</span>
+      </Button>
+      <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground/70" />
+    </>
+  )
+}
 
 /** The session's top bar: its title, which a click renames, its menu, and the project's git status. */
 export function SessionHeader({ summary }: { summary: SessionSummary }) {
@@ -34,19 +52,7 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
     <TopBar>
       {/* The title gives way last: the git status shrinks first (see HeaderTools). */}
       <NoDrag className="min-w-0 gap-0.5">
-        {parent && (
-          <>
-            <Button
-              variant="quiet"
-              size="compact"
-              className="min-w-0 max-w-[30%] shrink px-1.5"
-              onClick={() => openSession(parent.id, parent.projectPath)}
-            >
-              <span className="truncate">{sessionTitle(parent)}</span>
-            </Button>
-            <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground/70" />
-          </>
-        )}
+        {parent && <ParentLink parent={parent} />}
         {summary.origin === 'subagent' ? (
           <BotIcon className="ml-1.5 size-3.5 shrink-0 text-muted-foreground" />
         ) : (
@@ -88,6 +94,7 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
             <SessionMenuItems
               summary={summary}
               onRename={rename.menu.onRename}
+              onNewSubSession={rename.menu.onLeave}
               onDelete={() => setDeleting(true)}
             />
           </DropdownMenuContent>

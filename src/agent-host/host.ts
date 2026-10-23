@@ -512,6 +512,7 @@ export class AgentHost {
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
       'sessions.delete': ({ sessionId }) => sessions.delete(sessionId),
+      'sessions.removeEmpty': ({ keep }) => sessions.removeEmptyOnce(keep),
       'sessions.removeAll': () => sessions.removeAll(),
       'permissions.respond': ({ sessionId, requestId, optionId }) =>
         sessions.respond(sessionId, requestId, optionId),
