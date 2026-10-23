@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DayUsage } from '@shared/usage'
 import {
   addDays,
+  axisLabels,
+  barCenters,
+  busiest,
   clocksChange,
   dayOf,
   dayStarts,
@@ -11,17 +14,27 @@ import {
   heatLevels,
   heatmapRange,
   hourBars,
+  hourLabels,
   hourStarts,
   hoursSoFar,
+  legendHidden,
+  legendHides,
   modelRows,
+  namesYear,
   oneDay,
   presets,
   projectRows,
   rangeOf,
+  seriesOf,
+  shownSeries,
+  shownTotals,
   trend,
   typedDay,
   typedRange,
   weekStartOf,
+  wholeMonth,
+  widest,
+  type LegendChoice,
 } from './model'
 
 const day = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
@@ -105,7 +118,7 @@ describe('figures', () => {
 
   it('draws a bar per day, or per week beyond 92 days, stacked by agent', () => {
     const daily = trend(dayTotals(summary, starts, 'all'), { from: starts[0]!, to: starts[4]! }, 1)
-    expect(daily.weekly).toBe(false)
+    expect(daily.unit).toBe('day')
     expect(daily.bars.map((b) => b.total)).toEqual([150, 0, 400, 0])
     expect(daily.bars[0]!.byAgent).toEqual({ 'claude-code': 100, codex: 50 })
 
@@ -116,13 +129,210 @@ describe('figures', () => {
       { from: long[0]!, to: long[long.length - 1]! },
       1,
     )
-    expect(weekly.weekly).toBe(true)
+    expect(weekly.unit).toBe('week')
     expect(weekly.bars[0]).toMatchObject({ from: day(2026, 6, 1), to: day(2026, 6, 8), total: 1 })
     expect(weekly.bars.at(-1)).toMatchObject({
       from: day(2026, 10, 19),
       to: day(2026, 10, 23),
       total: 2,
     })
+  })
+
+  it('draws a bar per month beyond two years, clipped to the range', () => {
+    const twoYears = { from: day(2024, 10, 22), to: day(2026, 10, 23) }
+    expect(trend(dayTotals({ days: [] }, dayStarts(twoYears), 'all'), twoYears, 1).unit).toBe(
+      'week',
+    )
+    const range = { from: day(2024, 10, 21), to: day(2026, 10, 23) }
+    const starts = dayStarts(range)
+    const rows = {
+      days: [usage(0, 'codex', 1), usage(10, 'codex', 2), usage(starts.length - 2, 'opencode', 4)],
+    }
+    const monthly = trend(dayTotals(rows, starts, 'all'), range, 1)
+    expect(monthly.unit).toBe('month')
+    expect(monthly.bars).toHaveLength(25)
+    expect(monthly.bars[0]).toMatchObject({ from: range.from, to: day(2024, 11, 1), total: 3 })
+    expect(monthly.bars[1]).toMatchObject({ from: day(2024, 11, 1), to: day(2024, 12, 1) })
+    expect(monthly.bars.at(-1)).toMatchObject({
+      from: day(2026, 10, 1),
+      to: range.to,
+      total: 4,
+      byAgent: { opencode: 4 },
+    })
+  })
+})
+
+describe('trend series', () => {
+  const bars = [
+    { from: 0, to: 1, total: 30, byAgent: { codex: 10, 'claude-code': 20 } },
+    { from: 1, to: 2, total: 0, byAgent: {} },
+    { from: 2, to: 3, total: 25, byAgent: { codex: 25 } },
+  ]
+
+  it('stacks the agents with usage in the bars, in the given order', () => {
+    expect(seriesOf(bars, ['claude-code', 'codex', 'opencode'])).toEqual(['claude-code', 'codex'])
+    expect(seriesOf([], ['claude-code'])).toEqual([])
+  })
+
+  it('scales to the series shown and names their busiest bar', () => {
+    expect(shownTotals(bars, ['claude-code', 'codex'])).toEqual([30, 0, 25])
+    expect(shownTotals(bars, ['codex'])).toEqual([10, 0, 25])
+    expect(busiest([10, 0, 25])).toBe(2)
+    expect(busiest([4, 4])).toBe(0)
+    expect(busiest([0, 0])).toBeNull()
+    expect(busiest([])).toBeNull()
+  })
+
+  it('hides a series from the legend but always keeps one shown', () => {
+    const series = ['claude-code', 'codex', 'opencode'] as const
+    expect(legendHidden(series, ['claude-code', 'opencode'], [])).toEqual(['codex'])
+    expect(legendHidden(series, ['opencode'], ['codex'])).toEqual(['claude-code', 'codex'])
+    // Turning off the last one shown changes nothing.
+    expect(legendHidden(series, [], ['claude-code', 'codex'])).toEqual(['claude-code', 'codex'])
+    expect(shownSeries(series, ['codex'])).toEqual(['claude-code', 'opencode'])
+    // A series hidden before the figures changed leaves the others shown, or all of them.
+    expect(shownSeries(['codex'], ['codex'])).toEqual(['codex'])
+  })
+
+  it('keeps what the legend hides until a filter changes, even back to an earlier value', () => {
+    const legend: LegendChoice = { agent: 2, figures: 5, hidden: ['codex'] }
+    expect(legendHides(legend, { agent: 2, figures: 5 })).toEqual(['codex'])
+    // Claude Code, then All again: two changes of the agent, though it is All as before.
+    expect(legendHides(legend, { agent: 4, figures: 5 })).toEqual([])
+    // Figures for another range or source.
+    expect(legendHides(legend, { agent: 2, figures: 6 })).toEqual([])
+  })
+
+  it('finds the widest value a legend key must keep room for', () => {
+    const measure = (text: string) =>
+      text.replace('.', '').length * 7 + (text.includes('.') ? 3 : 0)
+    expect(widest(['0', '1.2M', '100K', '9.7M'], measure)).toBe('100K')
+    expect(widest(['2.7B', '9.7M'], measure)).toBe('2.7B')
+    expect(widest([], measure)).toBe('')
+  })
+})
+
+describe('axis labels', () => {
+  const width = 7
+  const measure = (text: string) => text.length * width
+  const label = (index: number) => `L${String(index).padStart(2, '0')}`
+
+  it('names the year on the first label and the first of each new year, across one', () => {
+    const froms = [day(2025, 11, 1), day(2025, 12, 1), day(2026, 1, 1), day(2026, 2, 1)]
+    expect(namesYear(froms, 0, null)).toBe(true)
+    expect(namesYear(froms, 1, 0)).toBe(false)
+    expect(namesYear(froms, 2, 1)).toBe(true)
+    expect(namesYear(froms, 3, 2)).toBe(false)
+    // Every other bar labelled: February is the first label of 2026.
+    expect(namesYear(froms, 3, 1)).toBe(true)
+    expect(namesYear(froms.slice(0, 2), 0, null)).toBe(false)
+  })
+
+  it('names a whole month by itself and one the range cuts by its dates', () => {
+    expect(wholeMonth({ from: day(2026, 9, 1), to: day(2026, 10, 1) })).toBe(true)
+    expect(wholeMonth({ from: day(2025, 12, 1), to: day(2026, 1, 1) })).toBe(true)
+    expect(wholeMonth({ from: day(2023, 10, 15), to: day(2023, 11, 1) })).toBe(false)
+    expect(wholeMonth({ from: day(2026, 10, 1), to: day(2026, 10, 24) })).toBe(false)
+  })
+
+  it('lays bars out as the chart does: at most 48 px, 1 px apart, centred', () => {
+    expect(barCenters(3, 300)).toEqual([101, 150, 199])
+    const centers = barCenters(30, 600)
+    expect(centers[1]! - centers[0]!).toBeCloseTo(571 / 30 + 1)
+    expect(centers[0]).toBeCloseTo(571 / 60)
+    expect(barCenters(0, 600)).toEqual([])
+  })
+
+  it('names every few bars, evenly from the last, without overlap', () => {
+    const labels = axisLabels({
+      count: 30,
+      width: 600,
+      anchor: 'end',
+      gap: 8,
+      text: label,
+      measure,
+    })
+    // 21 px labels and 8 px between them need 29 px: two bars are 40 px apart.
+    expect(labels.map((l) => l.index)).toEqual([
+      1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29,
+    ])
+    for (const [i, l] of labels.entries()) {
+      expect(l.left).toBeGreaterThanOrEqual(0)
+      expect(l.left + measure(l.text)).toBeLessThanOrEqual(600)
+      if (i > 0) expect(l.left).toBeGreaterThanOrEqual(labels[i - 1]!.left + 21 + 8)
+    }
+  })
+
+  it('keeps the labels at the ends inside the row', () => {
+    const labels = axisLabels({
+      count: 24,
+      width: 480,
+      anchor: 'start',
+      steps: [1, 2, 3, 4, 6, 12],
+      gap: 8,
+      text: (i) => `${i}:00 AM`,
+      measure,
+    })
+    expect(labels[0]).toMatchObject({ index: 0, left: 0 })
+    const last = labels.at(-1)!
+    expect(last.left + measure(last.text)).toBeLessThanOrEqual(480)
+  })
+
+  it('takes only the steps it is given, from the first bar', () => {
+    // 35 px labels need 43 px: three bars of 20 px would do, but hours go by 4.
+    const labels = axisLabels({
+      count: 24,
+      width: 480,
+      anchor: 'start',
+      steps: [1, 2, 4, 6, 12],
+      gap: 8,
+      text: (i) => `${String(i).padStart(2, '0')}:00`,
+      measure,
+    })
+    expect(labels.map((l) => l.index)).toEqual([0, 4, 8, 12, 16, 20])
+  })
+
+  it('tells each label which one comes before it', () => {
+    const calls: [number, number | null][] = []
+    const labels = axisLabels({
+      count: 10,
+      width: 200,
+      anchor: 'end',
+      gap: 8,
+      text: (index, previous) => {
+        calls.push([index, previous])
+        return label(index)
+      },
+      measure,
+    })
+    expect(labels.map((l) => l.index)).toEqual([1, 3, 5, 7, 9])
+    expect(calls.slice(-5)).toEqual([
+      [1, null],
+      [3, 1],
+      [5, 3],
+      [7, 5],
+      [9, 7],
+    ])
+  })
+
+  it('falls back to one label when no step fits, and to none without bars', () => {
+    expect(
+      axisLabels({ count: 10, width: 30, anchor: 'end', gap: 8, text: label, measure }),
+    ).toEqual([{ index: 9, text: 'L09', left: 9 }])
+    expect(
+      axisLabels({
+        count: 6,
+        width: 60,
+        anchor: 'start',
+        steps: [1, 2],
+        gap: 8,
+        text: label,
+        measure,
+      }),
+    ).toEqual([{ index: 0, text: 'L00', left: 0 }])
+    expect(
+      axisLabels({ count: 0, width: 600, anchor: 'end', gap: 8, text: label, measure }),
+    ).toEqual([])
   })
 })
 
@@ -205,6 +415,30 @@ describe('hours', () => {
         const minutes = starts.slice(0, -1).map((start) => new Date(start).getMinutes())
         expect(minutes.filter((m) => m !== 0)).toEqual([30])
         expect(starts.slice(1).every((start, i) => start - starts[i]! <= HOUR)).toBe(true)
+      }
+    })
+
+    it('labels the hours by the clock, every few from midnight', () => {
+      vi.stubEnv('TZ', 'America/New_York')
+      for (const date of [day(2026, 3, 8), day(2026, 11, 1), day(2026, 11, 2)]) {
+        const starts = hoursOf(date).slice(0, -1)
+        const hour = (i: number) => new Date(starts[i]!).getHours()
+        const present = [...new Set(starts.map((start) => new Date(start).getHours()))]
+        // The hour the clocks repeat is labelled once, the one they skip not at all.
+        expect(hourLabels(starts, 1).map(hour)).toEqual(present)
+        const labels = axisLabels({
+          count: starts.length,
+          width: 380,
+          anchor: 'start',
+          steps: [1, 2, 3, 4, 6, 12],
+          pick: (step) => hourLabels(starts, step),
+          gap: 8,
+          text: (i) => `${hour(i)}:00`,
+          measure: (text) => text.length * 7,
+        })
+        const hours = labels.map((l) => hour(l.index))
+        const step = hours[1]! - hours[0]!
+        expect(hours).toEqual(present.filter((h) => h % step === 0))
       }
     })
   })

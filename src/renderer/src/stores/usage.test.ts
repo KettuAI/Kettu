@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UsageSummary } from '@shared/usage'
+import type { LegendChoice } from '@renderer/features/usage/model'
 
 const request = vi.fn()
 vi.stubGlobal('window', { overbench: { agents: { request } } })
@@ -13,7 +14,7 @@ const {
   usagePageShown,
   useUsageStore,
 } = await import('./usage')
-const { addDays, dayOf, hourStarts } = await import('@renderer/features/usage/model')
+const { addDays, dayOf, hourStarts, legendHides } = await import('@renderer/features/usage/model')
 
 // A one-day range's hour read has at most 26 boundaries; the day read holds the 53 weeks.
 const hourRead = (params: { dayStarts: number[] }) => params.dayStarts.length <= 26
@@ -138,6 +139,57 @@ describe('usage store', () => {
       usagePageShown(false)
       vi.useRealTimers()
     }
+  })
+
+  it('shows every series again after any filter change, round trips included', async () => {
+    const answers: (() => void)[] = []
+    request.mockImplementation((method: string) =>
+      method === 'usage.summary'
+        ? new Promise((resolve) => answers.push(() => resolve(empty)))
+        : Promise.resolve(undefined),
+    )
+    const arrive = async () => {
+      for (const answer of answers.splice(0)) answer()
+      await vi.waitFor(() => expect(useUsageStore.getState().loading).toBe(false))
+    }
+    // What the trend card draws: the agent filter at once, the range and source of its figures.
+    const drawn = () => {
+      const { generations, page } = useUsageStore.getState()
+      return { agent: generations.agent, figures: page!.generation }
+    }
+    const hideCodex = (): LegendChoice => ({ ...drawn(), hidden: ['codex'] })
+    useUsageStore.setState({ filters: { ...DEFAULT_FILTERS, range: { kind: '30' } } })
+    void loadUsagePage()
+    await arrive()
+
+    // Hidden on All, then Claude Code and All again.
+    let legend = hideCodex()
+    setUsageFilters({ agent: 'claude-code' })
+    setUsageFilters({ agent: 'all' })
+    expect(legendHides(legend, drawn())).toEqual([])
+
+    // The chart still drawn keeps its series until the figures for the new source arrive.
+    legend = hideCodex()
+    setUsageFilters({ scope: 'overbench' })
+    expect(legendHides(legend, drawn())).toEqual(['codex'])
+    await arrive()
+    setUsageFilters({ scope: 'computer' })
+    await arrive()
+    expect(legendHides(legend, drawn())).toEqual([])
+
+    // Back again before the other source's figures arrive is still a change.
+    legend = hideCodex()
+    setUsageFilters({ scope: 'overbench' })
+    setUsageFilters({ scope: 'computer' })
+    expect(legendHides(legend, drawn())).toEqual(['codex'])
+    await arrive()
+    expect(legendHides(legend, drawn())).toEqual([])
+
+    // Reading the same filters again, as a sync does, is not a change.
+    legend = hideCodex()
+    void loadUsagePage()
+    await arrive()
+    expect(legendHides(legend, drawn())).toEqual(['codex'])
   })
 
   it('keeps the last 53 weeks for the heatmap whatever the range', async () => {

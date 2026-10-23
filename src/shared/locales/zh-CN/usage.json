@@ -46,9 +46,12 @@
   "trend": {
     "daily": "每日用量",
     "weekly": "每周用量",
+    "monthly": "每月用量",
     "hourly": "每小时用量",
     "hour": "{{from}}–{{to}}",
-    "label": "{{date}}：{{tokens}} token"
+    "label": "{{date}}：{{tokens}} token",
+    "agent": "{{agent}} {{tokens}}",
+    "legend": "图表中显示的 Agent"
   },
   "limits": {
     "title": "套餐限额",

@@ -19,6 +19,8 @@ export const RANGE_KINDS: readonly RangeKind[] = ['1', '7', '30', '90', '365', '
 export const HEATMAP_WEEKS = 53
 /** Up to this many days the trend has a bar per day, beyond it one per week. */
 export const DAILY_BARS = 92
+/** Up to this many days, two years, the trend has a bar per week, beyond it one per month. */
+export const WEEKLY_DAYS = 731
 export const BREAKDOWN_ROWS = 6
 
 const HOUR_MS = 3_600_000
@@ -59,6 +61,11 @@ export function firstDayOfWeek(locale: string): number {
 
 export function weekStartOf(day: number, firstDay: number): number {
   return addDays(day, -((new Date(day).getDay() - firstDay + 7) % 7))
+}
+
+export function monthStartOf(day: number): number {
+  const date = new Date(day)
+  return new Date(date.getFullYear(), date.getMonth(), 1).getTime()
 }
 
 export function rangeOf(choice: RangeChoice, today: number, first: number | null): DayRange {
@@ -213,17 +220,28 @@ export interface TrendBar {
   byAgent: Partial<Record<AgentId, number>>
 }
 
-/** A bar per day for a range up to `DAILY_BARS` days, else per week, clipped to the range. */
+export type TrendUnit = 'hour' | 'day' | 'week' | 'month'
+
+/**
+ * A bar per day for a range up to `DAILY_BARS` days, per week up to `WEEKLY_DAYS`, else per
+ * month, clipped to the range.
+ */
 export function trend(
   days: readonly DayTotal[],
   range: DayRange,
   firstDay: number,
-): { weekly: boolean; bars: TrendBar[] } {
+): { unit: Exclude<TrendUnit, 'hour'>; bars: TrendBar[] } {
   const inRange = days.filter((d) => d.day >= range.from && d.day < range.to)
-  const weekly = inRange.length > DAILY_BARS
+  const unit = inRange.length > WEEKLY_DAYS ? 'month' : inRange.length > DAILY_BARS ? 'week' : 'day'
   const bars: TrendBar[] = []
   for (const day of inRange) {
-    const start = weekly ? Math.max(weekStartOf(day.day, firstDay), range.from) : day.day
+    const start =
+      unit === 'day'
+        ? day.day
+        : Math.max(
+            unit === 'week' ? weekStartOf(day.day, firstDay) : monthStartOf(day.day),
+            range.from,
+          )
     let bar = bars[bars.length - 1]
     if (!bar || bar.from !== start) {
       bar = { from: start, to: start, total: 0, byAgent: {} }
@@ -235,7 +253,7 @@ export function trend(
       bar.byAgent[agentId] = (bar.byAgent[agentId] ?? 0) + total
     }
   }
-  return { weekly, bars }
+  return { unit, bars }
 }
 
 /** A bar per hour, from the totals `dayTotals` sums over `hourStarts`. */
@@ -246,6 +264,190 @@ export function hourBars(hours: readonly DayTotal[], starts: readonly number[]):
     total: hour.total,
     byAgent: hour.byAgent,
   }))
+}
+
+/** The agents with usage in the bars, in the given order: the trend's series, bottom first. */
+export function seriesOf(bars: readonly TrendBar[], order: readonly AgentId[]): AgentId[] {
+  return order.filter((id) => bars.some((bar) => (bar.byAgent[id] ?? 0) > 0))
+}
+
+/** The series the legend leaves shown; all of them when it would leave none. */
+export function shownSeries(series: readonly AgentId[], hidden: readonly AgentId[]): AgentId[] {
+  const shown = series.filter((id) => !hidden.includes(id))
+  return shown.length > 0 ? shown : [...series]
+}
+
+/**
+ * What the legend hides once `chosen` are the series pressed: the others, unless that is all of
+ * them, since the last one shown stays.
+ */
+export function legendHidden(
+  series: readonly AgentId[],
+  chosen: readonly AgentId[],
+  hidden: readonly AgentId[],
+): readonly AgentId[] {
+  const next = series.filter((id) => !chosen.includes(id))
+  return next.length < series.length ? next : hidden
+}
+
+/**
+ * How many times the usage filters have changed, which tells them apart even after a return to
+ * earlier values: the agent filter, applied to the figures already read, and the range or source,
+ * which take figures of their own.
+ */
+export interface Generations {
+  agent: number
+  figures: number
+}
+
+/** What the legend hides, and the generations of the filters the trend was drawn under then. */
+export interface LegendChoice extends Generations {
+  hidden: readonly AgentId[]
+}
+
+export const NO_SERIES: readonly AgentId[] = []
+
+/** What the legend hides in a trend drawn under `drawn`: nothing once any filter has changed. */
+export function legendHides(legend: LegendChoice, drawn: Generations): readonly AgentId[] {
+  return legend.agent === drawn.agent && legend.figures === drawn.figures
+    ? legend.hidden
+    : NO_SERIES
+}
+
+/** Each bar's tokens from the series shown, which the trend's scale follows. */
+export function shownTotals(bars: readonly TrendBar[], series: readonly AgentId[]): number[] {
+  return bars.map((bar) => series.reduce((sum, id) => sum + (bar.byAgent[id] ?? 0), 0))
+}
+
+/** The bar with the most tokens, the first of equals; null when none has any. */
+export function busiest(totals: readonly number[]): number | null {
+  let best: number | null = null
+  totals.forEach((total, i) => {
+    if (total > 0 && (best === null || total > totals[best]!)) best = i
+  })
+  return best
+}
+
+/** The widest of `texts` by `measure`, the first of equals; '' for none. */
+export function widest(texts: readonly string[], measure: (text: string) => number): string {
+  let best = ''
+  let size = -1
+  for (const text of texts) {
+    const width = measure(text)
+    if (width > size) [best, size] = [text, width]
+  }
+  return best
+}
+
+/** The trend's bars are at most this wide and this far apart, in px; the chart draws them so. */
+export const BAR_WIDTH = 48
+export const BAR_GAP = 1
+
+/** The middle of each bar in a row `width` px wide, where the bars sit centred. */
+export function barCenters(count: number, width: number): number[] {
+  const bar = Math.max(0, Math.min(BAR_WIDTH, (width - (count - 1) * BAR_GAP) / count))
+  const offset = (width - count * bar - (count - 1) * BAR_GAP) / 2
+  return Array.from({ length: count }, (_, i) => offset + i * (bar + BAR_GAP) + bar / 2)
+}
+
+export interface AxisLabel {
+  /** The bar it names. */
+  index: number
+  text: string
+  /** Its left edge, in px from the row's. */
+  left: number
+}
+
+/**
+ * The bars that name their date under the trend: every `step`th one, counted from the first or
+ * the last bar, or those `pick` gives for a step, with the smallest step (one of `steps`, when
+ * given) whose labels, centred under their bars and kept inside the row, leave `gap` px between
+ * them; one label, at the anchor, when none does. `text` gets the bar and the one labelled before
+ * it, so a label can add what changed since.
+ */
+export function axisLabels({
+  count,
+  width,
+  anchor,
+  steps,
+  pick,
+  gap,
+  text,
+  measure,
+}: {
+  count: number
+  width: number
+  anchor: 'start' | 'end'
+  steps?: readonly number[]
+  pick?: (step: number) => number[]
+  gap: number
+  text: (index: number, previous: number | null) => string
+  measure: (text: string) => number
+}): AxisLabel[] {
+  if (count <= 0 || width <= 0) return []
+  const centers = barCenters(count, width)
+  const every = (step: number) => {
+    const indices: number[] = []
+    for (let i = 0; i < count; i += step) indices.push(anchor === 'start' ? i : count - 1 - i)
+    return anchor === 'end' ? indices.reverse() : indices
+  }
+  const layout = (indices: readonly number[]) => {
+    let right = -Infinity
+    const labels: AxisLabel[] = []
+    for (const [k, index] of indices.entries()) {
+      const label = text(index, k > 0 ? indices[k - 1]! : null)
+      const size = measure(label)
+      const left = Math.max(0, Math.min(centers[index]! - size / 2, width - size))
+      if (left < right + gap) return null
+      labels.push({ index, text: label, left })
+      right = left + size
+    }
+    return labels
+  }
+  const tried = steps ?? Array.from({ length: count }, (_, i) => i + 1)
+  for (const step of tried) {
+    if (step >= count) break
+    const labels = layout(pick ? pick(step) : every(step))
+    if (labels && labels.length > 0) return labels
+  }
+  return layout([anchor === 'start' ? 0 : count - 1])!
+}
+
+/**
+ * The hour bars to label for a step of `step` hours: those starting on a local hour that is a
+ * multiple of it, by the clock rather than by count, so a day of 23 or 25 hours keeps the times
+ * of any other. An hour the clocks repeat is labelled once, and one that starts on the half hour
+ * after a change of 30 minutes not at all.
+ */
+export function hourLabels(starts: readonly number[], step: number): number[] {
+  const picked: number[] = []
+  let last: number | null = null
+  starts.forEach((start, i) => {
+    const date = new Date(start)
+    const hour = date.getHours()
+    if (date.getMinutes() === 0 && hour % step === 0 && hour !== last) picked.push(i)
+    last = hour
+  })
+  return picked
+}
+
+/**
+ * Whether the label of the bar starting at `froms[index]` names the year: across a new year, the
+ * first label and the first of each year do; otherwise none does.
+ */
+export function namesYear(
+  froms: readonly number[],
+  index: number,
+  previous: number | null,
+): boolean {
+  const year = (at: number) => new Date(at).getFullYear()
+  if (froms.length === 0 || year(froms[0]!) === year(froms[froms.length - 1]!)) return false
+  return previous === null || year(froms[previous]!) !== year(froms[index]!)
+}
+
+/** Whether a month's bar holds the whole month, so it reads as the month's name, not dates. */
+export function wholeMonth(bar: { from: number; to: number }): boolean {
+  return bar.from === monthStartOf(bar.from) && bar.to === monthStartOf(bar.to)
 }
 
 /**
@@ -316,15 +518,6 @@ export function projectRows(
     rows.set(key, sum)
   }
   return top(rows)
-}
-
-/** The agents with any usage in the rows, in the given order. */
-export function agentsWithUsage(
-  summary: Pick<UsageSummary, 'days'>,
-  order: readonly AgentId[],
-): AgentId[] {
-  const seen = new Set(summary.days.filter((d) => partsTotal(d) > 0).map((d) => d.agentId))
-  return order.filter((id) => seen.has(id))
 }
 
 export interface Preset {
