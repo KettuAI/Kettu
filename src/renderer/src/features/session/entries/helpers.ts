@@ -8,6 +8,7 @@ import {
 import { basename, duration, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
+import { nameHints } from '../project-names'
 
 /** A Collapsible panel animating its height, the one layout animation the design allows. */
 export const PANEL =
@@ -55,6 +56,8 @@ export function groupLabel(steps: RunStep[]): string {
     .join(i18n.t('session:summary.separator'))
 }
 
+type Diff = Extract<ToolContent, { type: 'diff' }>
+
 /** A step of a folded run, as its summary counts it. */
 export type RunStep =
   | { kind: 'thought'; durationMs?: number; streaming?: boolean }
@@ -62,9 +65,10 @@ export type RunStep =
       kind: 'tool'
       toolKind: ToolKind
       status: ToolEntry['status']
-      path?: string
-      /** An edit's content, whose diffs tell a created file and give the stats. */
-      content?: ToolContent[]
+      /** The files it touched: an edit's from its diffs, else its first location. */
+      paths: string[]
+      /** An edit's diffs, which tell a created file and give the stats. */
+      diffs?: Diff[]
       description?: string
     }
   | { kind: 'plan' }
@@ -72,21 +76,22 @@ export type RunStep =
 
 /** A tool call as a step of a folded run. */
 export function toolStep(entry: ToolEntry): RunStep {
-  const path = entry.locations[0]?.path
-  return {
-    kind: 'tool',
-    toolKind: entry.toolKind,
-    status: entry.status,
-    ...(path !== undefined ? { path } : {}),
-    ...(entry.toolKind === 'edit' ? { content: entry.content } : {}),
-    ...(entry.description !== undefined ? { description: entry.description } : {}),
+  const base = { kind: 'tool' as const, toolKind: entry.toolKind, status: entry.status }
+  const description = entry.description !== undefined ? { description: entry.description } : {}
+  if (entry.toolKind !== 'edit') {
+    const first = entry.locations[0]?.path
+    return { ...base, paths: first !== undefined ? [first] : [], ...description }
   }
+  // Codex sends a patch's files only in its diffs, and locations only with a permission request.
+  const diffs = entry.content.filter((c) => c.type === 'diff')
+  const paths = diffs.length > 0 ? diffs.map((d) => d.path) : entry.locations.map((l) => l.path)
+  return { ...base, paths: [...new Set(paths)], diffs, ...description }
 }
 
 /** A part of a fold line, with the diffs whose stats follow it. */
 export interface SummaryPart {
   text: string
-  diffs?: ToolContent[]
+  diffs?: Diff[]
 }
 
 type FilePart = 'read' | 'create' | 'edit' | 'delete' | 'move'
@@ -94,29 +99,36 @@ type FilePart = 'read' | 'create' | 'edit' | 'delete' | 'move'
 type RunPart =
   FilePart | 'thought' | 'plan' | 'compaction' | 'execute' | 'search' | 'fetch' | 'other'
 
-const creates = (step: Extract<RunStep, { kind: 'tool' }>): boolean =>
-  !!step.content?.some(
-    (c) =>
-      c.type === 'diff' && c.oldText === null && (step.path === undefined || c.path === step.path),
-  )
+/** What a step adds to a part: an edit adds one unit per file it touched. */
+interface Unit {
+  part: RunPart
+  step: RunStep
+  path?: string
+  diffs?: Diff[]
+}
 
-function partOf(step: RunStep, created: Set<string>): RunPart {
-  if (step.kind !== 'tool') return step.kind
+function unitsOf(step: RunStep, created: Set<string>): Unit[] {
+  if (step.kind !== 'tool') return [{ part: step.kind, step }]
   switch (step.toolKind) {
     case 'edit':
+      if (step.paths.length === 0) return [{ part: 'edit', step, diffs: step.diffs }]
       // A file the run created stays Created through the edits that follow.
-      return creates(step) || (step.path !== undefined && created.has(step.path))
-        ? 'create'
-        : 'edit'
-    case 'execute':
+      return step.paths.map((path) => ({
+        part: created.has(path) ? 'create' : 'edit',
+        step,
+        path,
+        diffs: step.diffs?.filter((d) => d.path === path),
+      }))
     case 'read':
     case 'delete':
     case 'move':
+      return [{ part: step.toolKind, step, path: step.paths[0] }]
+    case 'execute':
     case 'search':
     case 'fetch':
-      return step.toolKind
+      return [{ part: step.toolKind, step }]
     default:
-      return 'other'
+      return [{ part: 'other', step }]
   }
 }
 
@@ -127,7 +139,14 @@ function filesText(part: FilePart, paths: (string | undefined)[]): string {
   const files = known.length + paths.filter((p) => p === undefined).length
   if (known.length === 0) return i18n.t(`session:summary.${part}`, { count: files })
   const shown = known.slice(0, 2)
-  const names = shown.map(basename).join(i18n.t('session:summary.nameSeparator'))
+  // Two shown files that share a name add the folders that tell them apart.
+  const hints = nameHints(shown)
+  const names = shown
+    .map((path) => {
+      const hint = hints.get(path)
+      return hint ? `${hint}/${basename(path)}` : basename(path)
+    })
+    .join(i18n.t('session:summary.nameSeparator'))
   const more = files - shown.length
   return more === 0
     ? i18n.t(`session:summary.${part}Named`, { names })
@@ -145,20 +164,19 @@ export function runSummary(steps: RunStep[]): {
 } {
   const created = new Set<string>()
   for (const step of steps) {
-    if (step.kind === 'tool' && step.path !== undefined && creates(step)) created.add(step.path)
+    if (step.kind !== 'tool') continue
+    for (const diff of step.diffs ?? []) if (diff.oldText === null) created.add(diff.path)
   }
-  const byPart = new Map<RunPart, RunStep[]>()
-  for (const step of steps) {
-    const part = partOf(step, created)
-    byPart.set(part, [...(byPart.get(part) ?? []), step])
+  const byPart = new Map<RunPart, Unit[]>()
+  for (const unit of steps.flatMap((step) => unitsOf(step, created))) {
+    byPart.set(unit.part, [...(byPart.get(unit.part) ?? []), unit])
   }
-  const parts = [...byPart].flatMap(([part, group]): SummaryPart[] => {
-    const n = group.length
-    const tools = group.filter((s) => s.kind === 'tool')
+  const parts = [...byPart].flatMap(([part, units]): SummaryPart[] => {
+    const n = units.length
     switch (part) {
       case 'thought': {
-        const ms = group.reduce(
-          (sum, s) => sum + (s.kind === 'thought' ? (s.durationMs ?? 0) : 0),
+        const ms = units.reduce(
+          (sum, u) => sum + (u.step.kind === 'thought' ? (u.step.durationMs ?? 0) : 0),
           0,
         )
         return [
@@ -175,7 +193,8 @@ export function runSummary(steps: RunStep[]): {
       case 'compaction':
         return [{ text: i18n.t('session:summary.compaction') }]
       case 'execute': {
-        const description = tools.at(-1)?.description
+        const last = units.at(-1)?.step
+        const description = last?.kind === 'tool' ? last.description : undefined
         if (n === 1 && description) return [{ text: description }]
         const count = { text: i18n.t('session:summary.execute', { count: n }) }
         return description ? [count, { text: description }] : [count]
@@ -189,11 +208,10 @@ export function runSummary(steps: RunStep[]): {
       default: {
         const text = filesText(
           part,
-          tools.map((s) => s.path),
+          units.map((u) => u.path),
         )
         if (part !== 'create' && part !== 'edit') return [{ text }]
-        const diffs = tools.flatMap((s) => s.content?.filter((c) => c.type === 'diff') ?? [])
-        return [{ text, diffs }]
+        return [{ text, diffs: units.flatMap((u) => u.diffs ?? []) }]
       }
     }
   })

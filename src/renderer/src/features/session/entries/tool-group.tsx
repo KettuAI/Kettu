@@ -10,6 +10,7 @@ import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useShallow } from 'zustand/react/shallow'
 import { useEntryAnimation } from '../use-thread'
+import { CutLabel } from './cut-label'
 import { groupLabel, PANEL, toolStep } from './helpers'
 import { ToolCard } from './tool-card'
 
@@ -34,7 +35,9 @@ export const ToolGroup = memo(function ToolGroup({
       return entryIds.map((id) => byId?.[id])
     }),
   )
-  const steps = entries.flatMap((entry) => (entry?.kind === 'tool' ? [toolStep(entry)] : []))
+  const label = groupLabel(
+    entries.flatMap((entry) => (entry?.kind === 'tool' ? [toolStep(entry)] : [])),
+  )
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0', animation)}>
       <CollapsibleTrigger className="group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left text-[13px] text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset">
@@ -48,12 +51,13 @@ export const ToolGroup = memo(function ToolGroup({
             )}
           />
         </span>
-        <span
+        <CutLabel
           key={entryIds.length}
           className="min-w-0 flex-1 truncate animate-in fade-in animation-duration-(--duration-base)"
+          full={label}
         >
-          {groupLabel(steps)}
-        </span>
+          {label}
+        </CutLabel>
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
         <div className="mt-0.5 ml-1.5 flex flex-col gap-0.5 border-l border-border pl-3.5">

@@ -208,16 +208,21 @@ export function rawInputText(raw: unknown): string | undefined {
   return json.length > RAW_INPUT_LIMIT ? `${json.slice(0, RAW_INPUT_LIMIT)}\n…` : json
 }
 
-/** What a command says it does: the `description` beside its input's `command`. */
+const DESCRIPTION_LIMIT = 200
+
+/** What a command says it does, as one line: the `description` beside its input's `command`. */
 function commandDescription(raw: unknown): string | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
   const input = raw as Record<string, unknown>
   if (input.command === undefined) return undefined
   // Claude Code also accepts `command_description` since CLI 2.1.295, and forwards the key used.
   const description = input.description ?? input.command_description
-  return typeof description === 'string' && description.trim() !== ''
-    ? description.trim()
-    : undefined
+  if (typeof description !== 'string') return undefined
+  const line = [...description.replace(/\s+/g, ' ').trim()]
+  if (line.length === 0) return undefined
+  return line.length > DESCRIPTION_LIMIT
+    ? `${line.slice(0, DESCRIPTION_LIMIT).join('').trimEnd()}…`
+    : line.join('')
 }
 
 function toolOutput(content: readonly ToolContent[]): string {

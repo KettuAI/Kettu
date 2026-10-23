@@ -376,6 +376,22 @@ describe('tool calls', () => {
     expect(entries[2]).not.toHaveProperty('description')
   })
 
+  it('keeps a description to one line of at most 200 characters', () => {
+    const described = (description: string) =>
+      run([
+        {
+          sessionUpdate: 'tool_call',
+          toolCallId: 'c1',
+          title: 'ls',
+          kind: 'execute',
+          rawInput: { command: 'ls', description },
+        },
+      ]).entries[0]
+    expect(described('  List\nthe \t files\r\n')).toMatchObject({ description: 'List the files' })
+    expect(described('x'.repeat(300))).toMatchObject({ description: `${'x'.repeat(200)}…` })
+    expect(described(' \n ')).not.toHaveProperty('description')
+  })
+
   it('updates the description as the input streams in', () => {
     const { entries } = run([
       {

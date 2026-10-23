@@ -63,7 +63,7 @@ describe('groupLabel', () => {
     kind: 'tool' as const,
     toolKind: kind,
     status: 'completed' as const,
-    path,
+    paths: path ? [path] : [],
   })
 
   it('names the files a run of lookups read and counts the rest', () => {
@@ -88,7 +88,7 @@ describe('runSummary', () => {
     kind: 'tool' as const,
     toolKind: kind as 'read',
     status: 'completed' as const,
-    path,
+    paths: path ? [path] : [],
     ...extra,
   })
   const text = (steps: RunStep[]) => runSummary(steps).parts.map((p) => p.text)
@@ -125,6 +125,19 @@ describe('runSummary', () => {
     ])
   })
 
+  it('tells two shown files with the same name apart by their folders', () => {
+    expect(text([run('read', '/repo/src/index.ts'), run('read', '/repo/test/index.ts')])).toEqual([
+      'Read src/index.ts, test/index.ts',
+    ])
+    expect(
+      text([
+        run('read', '/repo/src/index.ts'),
+        run('read', '/repo/a.ts'),
+        run('read', '/b/index.ts'),
+      ]),
+    ).toEqual(['Read index.ts, a.ts and 1 more'])
+  })
+
   it('says Created for an edit that creates its file, with the diffs that follow each', () => {
     const created = diff('/repo/offload.py', null)
     const later = diff('/repo/offload.py', 'x\n')
@@ -132,9 +145,9 @@ describe('runSummary', () => {
     expect(
       runSummary([
         { kind: 'thought', durationMs: 8_000 },
-        run('edit', '/repo/offload.py', { content: [created] }),
-        run('edit', '/repo/docs/ui.md', { content: [edited] }),
-        run('edit', '/repo/offload.py', { content: [later] }),
+        run('edit', '/repo/offload.py', { diffs: [created] }),
+        run('edit', '/repo/docs/ui.md', { diffs: [edited] }),
+        run('edit', '/repo/offload.py', { diffs: [later] }),
         run('search'),
       ]),
     ).toEqual({
@@ -147,6 +160,27 @@ describe('runSummary', () => {
       failed: 0,
       running: false,
     })
+  })
+
+  it('splits a patch into its files, as Codex sends one with diffs but no locations', () => {
+    const added = diff('/repo/new.py', null)
+    const hunks = [diff('/repo/old.ts', 'a\n'), diff('/repo/old.ts', 'b\n')]
+    const patch: ToolEntry = {
+      kind: 'tool',
+      id: 't:call_1',
+      title: 'Editing files',
+      toolKind: 'edit',
+      status: 'completed',
+      content: [added, ...hunks],
+      locations: [],
+      permission: null,
+      permissionResult: null,
+    }
+    expect(runSummary([toolStep(patch), run('read', '/repo/a.ts')]).parts).toEqual([
+      { text: 'Created new.py', diffs: [added] },
+      { text: 'Edited old.ts', diffs: hunks },
+      { text: 'Read a.ts' },
+    ])
   })
 
   it('names one command by its description', () => {
@@ -215,14 +249,24 @@ describe('toolStep', () => {
     permissionResult: null,
   }
 
-  it("keeps an edit's diffs and a command's description", () => {
+  it("takes an edit's files from its diffs, else from its locations", () => {
     expect(toolStep(tool)).toEqual({
       kind: 'tool',
       toolKind: 'edit',
       status: 'completed',
-      path: '/repo/a.ts',
-      content: tool.content,
+      paths: ['/repo/a.ts'],
+      diffs: tool.content,
     })
+    expect(
+      toolStep({
+        ...tool,
+        content: [],
+        locations: [{ path: '/repo/a.ts' }, { path: '/repo/b.ts' }],
+      }),
+    ).toMatchObject({ paths: ['/repo/a.ts', '/repo/b.ts'], diffs: [] })
+  })
+
+  it('keeps the first location of other calls, and the description of a command', () => {
     expect(
       toolStep({
         ...tool,
@@ -235,7 +279,14 @@ describe('toolStep', () => {
       kind: 'tool',
       toolKind: 'execute',
       status: 'completed',
+      paths: [],
       description: 'Run the tests',
+    })
+    expect(toolStep({ ...tool, toolKind: 'read', content: [] })).toEqual({
+      kind: 'tool',
+      toolKind: 'read',
+      status: 'completed',
+      paths: ['/repo/a.ts'],
     })
   })
 })
