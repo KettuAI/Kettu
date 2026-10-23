@@ -84,34 +84,46 @@ const CIM_SCRIPT =
   "ForEach-Object { '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, " +
   '$(if ($_.CreationDate) { $_.CreationDate.ToFileTimeUtc() } else { 0 }) }'
 
-export interface ListOptions {
-  /** Nothing waits for it, so it may take longer, as on a slow machine. */
-  background?: boolean
+export interface ToolOptions {
+  /** A quit waits for it, which main cuts short: it gets the quit's shorter limit. */
+  quitting?: boolean
 }
 
 export interface ProcessControl {
   platform: Platform
-  list(options?: ListOptions): Promise<ProcessRow[]>
+  list(options?: ToolOptions): Promise<ProcessRow[]>
   /** `process.kill`: a negative target addresses a process group; throws `ESRCH` once it is gone. */
   kill(target: number, signal: NodeJS.Signals | 0): void
   /**
    * `taskkill /T /F` for each pid; one that is already gone is not an error, but a run that
    * timed out is, since what it was ending may still run.
    */
-  taskkill(pids: number[]): Promise<void>
+  taskkill(pids: number[], options?: ToolOptions): Promise<void>
   delay(ms: number): Promise<void>
 }
 
 /** How long one run of each tool may take before it is killed and its call fails. */
 export interface ToolLimits {
-  /** A listing a stop waits for: `ps`, or the CIM query through PowerShell on Windows. */
+  /** A listing: `ps`, or the CIM query through PowerShell on Windows. */
   listMs: number
-  backgroundListMs: number
   taskkillMs: number
+  quitListMs: number
+  quitTaskkillMs: number
 }
 
-// Sized for the quit, which main cuts short 6 s after `host:shutdown`: docs/design/agent-host.md.
-export const TOOL_LIMITS: ToolLimits = { listMs: 750, backgroundListMs: 10_000, taskkillMs: 500 }
+/**
+ * Long enough for a slow machine, except while quitting, which main cuts short 6 s after
+ * `host:shutdown`: docs/design/agent-host.md has the sum.
+ */
+export function toolLimits(platform: Platform): ToolLimits {
+  return {
+    listMs: 10_000,
+    taskkillMs: 10_000,
+    // The CIM query takes 250 to 450 ms on CI, `ps` 10 to 50 ms.
+    quitListMs: platform === 'win32' ? 1_500 : 1_000,
+    quitTaskkillMs: 500,
+  }
+}
 
 /** Runs a tool to its end. Past `timeoutMs` it is killed, and the run fails with `ETIMEDOUT`. */
 export function runTool(
@@ -156,12 +168,12 @@ export interface ProcessControlOptions {
 
 export function processControl(
   platform: Platform,
-  { limits = TOOL_LIMITS, run = runTool }: ProcessControlOptions = {},
+  { limits = toolLimits(platform), run = runTool }: ProcessControlOptions = {},
 ): ProcessControl {
   return {
     platform,
-    async list({ background = false } = {}) {
-      const limitMs = background ? limits.backgroundListMs : limits.listMs
+    async list({ quitting = false } = {}) {
+      const limitMs = quitting ? limits.quitListMs : limits.listMs
       if (platform !== 'win32') {
         const text = await run('ps', ['-A', '-o', 'pid=,ppid=,pgid=,etime='], limitMs, {
           ...process.env,
@@ -182,12 +194,13 @@ export function processControl(
       return parseCim(text)
     },
     kill: (target, signal) => process.kill(target, signal),
-    async taskkill(pids) {
+    async taskkill(pids, { quitting = false } = {}) {
+      const limitMs = quitting ? limits.quitTaskkillMs : limits.taskkillMs
       // taskkill takes many /PID arguments; a long list is split to stay well under the command line limit.
       for (let i = 0; i < pids.length; i += 64) {
         const args = ['/T', '/F', ...pids.slice(i, i + 64).flatMap((pid) => ['/PID', String(pid)])]
         // It exits with an error for a pid that is already gone.
-        await run('taskkill', args, limits.taskkillMs).catch((error: NodeJS.ErrnoException) => {
+        await run('taskkill', args, limitMs).catch((error: NodeJS.ErrnoException) => {
           if (error.code === 'ETIMEDOUT') throw error
         })
       }
@@ -314,9 +327,9 @@ function signalAll(
 export async function terminateTrees(
   control: ProcessControl,
   roots: TreeRoot[],
-  listing?: ListOptions,
+  tools?: ToolOptions,
 ): Promise<Terminated> {
-  const rows = await control.list(listing)
+  const rows = await control.list(tools)
   const members = new Map<number, ProcessRow>()
   for (const root of roots) {
     for (const row of treeOf(rows, root, control.platform)) members.set(row.pid, row)
@@ -324,7 +337,7 @@ export async function terminateTrees(
   const leaders = new Set([...roots.map((root) => root.pid), ...members.keys()])
   const terminated: Terminated = { members: [...members.values()], leaders, failures: [] }
   if (members.size === 0) return terminated
-  if (control.platform === 'win32') await control.taskkill([...members.keys()])
+  if (control.platform === 'win32') await control.taskkill([...members.keys()], tools)
   else
     signalAll(control, signalTargets(terminated.members, leaders), 'SIGTERM', terminated.failures)
   return terminated

@@ -35,7 +35,7 @@ async function setup(
     platform,
     list: async (options) => {
       listed++
-      listings.push(options?.background ?? false)
+      listings.push(options?.quitting ?? false)
       if (held) await held
       const next = rows.shift()
       if (!next) throw new Error('ps failed')
@@ -137,13 +137,13 @@ describe('AgentTrees', () => {
   )
 
   it.each([
-    ['linux', false],
-    ['win32', true],
+    ['linux', true],
+    ['win32', false],
   ] as const)(
-    'gives the listings nothing waits for the longer limit, on %s',
-    async (platform, reapInBackground) => {
+    "gives a quit's listings the short limit, but not the one after the exit on %s",
+    async (platform, reapQuitting) => {
       const tree = [row(100, 1, 100)]
-      const { trees, file, listings } = await setup(platform, [[], tree, tree, []])
+      const { trees, file, listings } = await setup(platform, [[], tree, tree, [], [], []])
       await mkdir(path.dirname(file.file), { recursive: true })
       const leftover = { pid: 200, startedAt: T + 200 }
       await writeFile(file.file, JSON.stringify({ version: 1, processes: [leftover] }))
@@ -152,11 +152,15 @@ describe('AgentTrees', () => {
       trees.launched(root)
       trees.active(root)
       await new Promise((resolve) => setTimeout(resolve, 30))
-      // A stop waits for the listing before it, and on macOS and Linux for the one after.
       await trees.note(root)
       await trees.reap(root, 'Fake agent')
+      // Started again, then stopped by a quit.
+      const again = { pid: 300, startedAt: T + 300 }
+      trees.launched(again)
+      await trees.note(again, { quitting: true })
+      await trees.reap(again, 'Fake agent', { quitting: true })
       await trees.close()
-      expect(listings).toEqual([true, true, false, reapInBackground])
+      expect(listings).toEqual([false, false, false, false, true, reapQuitting])
     },
   )
 

@@ -58,6 +58,7 @@ import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
 import { CliVersions, type CliProbe } from './installed-cli'
+import type { ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import {
   hiddenRemoval,
@@ -78,7 +79,7 @@ export interface LaunchedAgent {
   readonly transport: AcpTransport
   readonly exited: Promise<ExitInfo>
   readonly hasExited: boolean
-  stop(): Promise<ExitInfo>
+  stop(tools?: ToolOptions): Promise<ExitInfo>
 }
 
 export interface LaunchOutput {
@@ -1292,7 +1293,7 @@ export class AgentManager {
     slot.state = 'stopping'
     this.emit(slot)
     slot.stopping = this.noteTree(launched)
-      .then(() => launched.stop())
+      .then(() => launched.stop(this.tools()))
       .then(() => this.reapTree(slot, launched))
     try {
       await slot.stopping
@@ -1301,17 +1302,23 @@ export class AgentManager {
     }
   }
 
+  /** Only a quit is short of time, and only it gets the process tools' short limits. */
+  private tools(): ToolOptions {
+    return { quitting: this.stopped }
+  }
+
   private noteTree(launched: LaunchedAgent): Promise<void> {
     const { trees } = this.deps
     if (!trees || launched.pid === null || launched.hasExited) return Promise.resolve()
-    return trees.note({ pid: launched.pid, startedAt: launched.startedAt })
+    return trees.note({ pid: launched.pid, startedAt: launched.startedAt }, this.tools())
   }
 
   /** What the agent's process left behind once it exited: CLIs, servers, commands it ran. */
   private reapTree(slot: Slot, launched: LaunchedAgent): Promise<void> {
     const { trees } = this.deps
     if (!trees || launched.pid === null) return Promise.resolve()
-    return trees.reap({ pid: launched.pid, startedAt: launched.startedAt }, slot.def.name)
+    const root = { pid: launched.pid, startedAt: launched.startedAt }
+    return trees.reap(root, slot.def.name, this.tools())
   }
 
   /** Stops every agent in parallel, with the documented sequence, and every task and check. */

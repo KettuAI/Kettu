@@ -6,10 +6,10 @@ import {
   killSurvivors,
   terminateTrees,
   treeOf,
-  type ListOptions,
   type ProcessControl,
   type ProcessId,
   type StopFailure,
+  type ToolOptions,
   type TreeRoot,
 } from './process-tree'
 import type { AgentProcessesFile, JsonFile, LogFn } from './storage'
@@ -28,7 +28,7 @@ export interface AgentTreesOptions {
 
 // Main kills the host 6 s after `host:shutdown`, and the stops before `close` can take a listing,
 // the 2 s EOF wait and a taskkill: docs/design/agent-host.md has the sum.
-const CLOSE_WAIT_MS = 2_000
+const CLOSE_WAIT_MS = 1_250
 
 interface Running {
   root: TreeRoot
@@ -78,18 +78,18 @@ export class AgentTrees {
     if (!running || running.timer) return
     running.timer = setTimeout(() => {
       running.timer = null
-      void this.note(root, { background: true })
+      void this.note(root)
     }, this.options.noteMs ?? 10_000)
     running.timer.unref?.()
   }
 
   /** Lists the agent's tree now: after it talked, and before it is stopped. */
-  async note(root: ProcessId, listing?: ListOptions): Promise<void> {
+  async note(root: ProcessId, tools?: ToolOptions): Promise<void> {
     const { control, log } = this.options
     if (!this.running.has(keyOf(root))) return
     let rows
     try {
-      rows = await control.list(listing)
+      rows = await control.list(tools)
     } catch (error) {
       // Once: without `ps` every listing fails alike.
       if (!this.listingFailed)
@@ -119,7 +119,7 @@ export class AgentTrees {
    * listing starts PowerShell, and the record already holds what the next host needs to find the
    * rest, the root and what was noted: it resolves at once, and `close` waits for the rest.
    */
-  reap(root: ProcessId, name: string): Promise<void> {
+  reap(root: ProcessId, name: string, tools?: ToolOptions): Promise<void> {
     const key = keyOf(root)
     let run = this.reaping.get(key)
     if (!run) {
@@ -129,9 +129,9 @@ export class AgentTrees {
       // It has just exited, and what is noted ran until a moment ago at the latest.
       const seenAt = Date.now()
       const noted = [root, ...(running?.members ?? [])].map((id) => ({ ...id, seenAt }))
-      // On Windows only `close` waits for it, and only up to its deadline.
-      const listing = { background: this.options.control.platform === 'win32' }
-      run = this.stopNoted(noted, `${name} left behind`, listing)
+      // On Windows only `close` waits for it, and only up to its deadline: no quit limit.
+      const windows = this.options.control.platform === 'win32'
+      run = this.stopNoted(noted, `${name} left behind`, windows ? {} : tools)
         .catch((error: unknown) => {
           this.options.log('warn', `Could not stop what ${name} left: ${(error as Error).message}`)
         })
@@ -147,8 +147,7 @@ export class AgentTrees {
     this.leftovers = []
     if (leftovers.length === 0) return
     this.stopping.delete(leftovers)
-    const stop = this.stopNoted(leftovers, 'the last run left', { background: true })
-    this.leftoverStop = stop.catch((error: unknown) => {
+    this.leftoverStop = this.stopNoted(leftovers, 'the last run left').catch((error: unknown) => {
       this.options.log('warn', `Could not stop what the last run left: ${(error as Error).message}`)
     })
     await this.leftoverStop
@@ -159,11 +158,11 @@ export class AgentTrees {
    * the grace ends and `SIGKILL` has gone to what is left. When the listing or taskkill fails they
    * stay, for the next host.
    */
-  private async stopNoted(noted: TreeRoot[], what: string, listing: ListOptions): Promise<void> {
+  private async stopNoted(noted: TreeRoot[], what: string, tools?: ToolOptions): Promise<void> {
     const { control, graceMs, log } = this.options
     this.stopping.add(noted)
     this.save()
-    const terminated = await terminateTrees(control, noted, listing)
+    const terminated = await terminateTrees(control, noted, tools)
     this.logFailures(what, terminated.failures)
     const { members } = terminated
     this.stopping.delete(noted)

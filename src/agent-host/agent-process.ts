@@ -5,7 +5,13 @@ import type { Platform } from '@shared/platform'
 import { processTransport, type AcpTransport } from './acp/connection'
 import type { LaunchSpec } from './catalog'
 import type { Env } from './find-command'
-import { killSurvivors, processControl, terminateTrees, type ProcessControl } from './process-tree'
+import {
+  killSurvivors,
+  processControl,
+  terminateTrees,
+  type ProcessControl,
+  type ToolOptions,
+} from './process-tree'
 import { quoteCmd } from './quote'
 
 export interface ExitInfo {
@@ -35,7 +41,7 @@ export interface SpawnedAgent {
    * EOF; then, if it still runs, SIGTERM to its whole process tree and SIGKILL to what is left,
    * or `taskkill /T /F` on Windows. What it leaves behind once it exits is `AgentTrees`' to stop.
    */
-  stop(): Promise<ExitInfo>
+  stop(tools?: ToolOptions): Promise<ExitInfo>
 }
 
 export interface SpawnOptions {
@@ -104,22 +110,22 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   child.stderr.setEncoding('utf8').on('data', (text: string) => options.onStderr(text))
 
   // It still runs after EOF, so its tree goes as a whole, found while the links to it hold.
-  const endTree = async (pid: number): Promise<void> => {
+  const endTree = async (pid: number, tools: ToolOptions): Promise<void> => {
     if (platform === 'win32') {
       options.onEvent?.('taskkill')
-      const ended = await control.taskkill([pid]).then(
+      const ended = await control.taskkill([pid], tools).then(
         () => true,
         (error: unknown) => {
           options.onEvent?.('taskkill failed', (error as Error).message)
           return false
         },
       )
-      // A taskkill that gave up leaves the tree to the reap that follows, which tries again.
-      if (ended) await waitForExit(exited, timings.termMs)
+      // A quit leaves what a taskkill that gave up was ending to the reap, which tries again.
+      if (ended || !tools.quitting) await waitForExit(exited, timings.termMs)
       return
     }
     options.onEvent?.('SIGTERM')
-    const terminated = await terminateTrees(control, [{ pid, startedAt }]).catch(
+    const terminated = await terminateTrees(control, [{ pid, startedAt }], tools).catch(
       (error: unknown) => {
         options.onEvent?.('process listing failed', (error as Error).message)
         return null
@@ -135,11 +141,12 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   }
 
   let stopping: Promise<ExitInfo> | null = null
-  const stop = (): Promise<ExitInfo> => {
+  const stop = (tools: ToolOptions = {}): Promise<ExitInfo> => {
     stopping ??= (async () => {
       if (!hasExited) {
         child.stdin.end()
-        if (!(await waitForExit(exited, timings.eofMs)) && child.pid) await endTree(child.pid)
+        if (!(await waitForExit(exited, timings.eofMs)) && child.pid)
+          await endTree(child.pid, tools)
       }
       return hasExited ? exited : { code: null, signal: null, error: 'did not exit after SIGKILL' }
     })()

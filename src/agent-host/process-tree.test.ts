@@ -194,11 +194,11 @@ describe('processControl', () => {
     code: 'ETIMEDOUT',
   })
 
-  it('gives each tool its limit, and fails a taskkill that timed out', async () => {
+  it('gives each tool its limit, a shorter one while quitting, and fails a taskkill that timed out', async () => {
     const calls: string[] = []
     let answer = async (): Promise<string> => '100 4 0\r\n'
     const options = {
-      limits: { listMs: 5, backgroundListMs: 9, taskkillMs: 7 },
+      limits: { listMs: 9, taskkillMs: 11, quitListMs: 5, quitTaskkillMs: 7 },
       run: (file: string, _args: string[], timeoutMs: number) => {
         calls.push(`${path.win32.basename(file)} ${timeoutMs}`)
         return answer()
@@ -206,19 +206,19 @@ describe('processControl', () => {
     }
     const control = processControl('win32', options)
     expect(await control.list()).toHaveLength(1)
-    await control.list({ background: true })
+    await control.list({ quitting: true })
     // A pid that is already gone fails taskkill with an exit code, which is the outcome wanted.
     answer = () => Promise.reject(Object.assign(new Error('Command failed'), { code: 128 }))
     await expect(control.taskkill([100])).resolves.toBeUndefined()
     answer = () => Promise.reject(timedOut)
-    await expect(control.taskkill([100])).rejects.toBe(timedOut)
+    await expect(control.taskkill([100], { quitting: true })).rejects.toBe(timedOut)
     await processControl('linux', options)
-      .list()
+      .list({ quitting: true })
       .catch(() => {})
     expect(calls).toEqual([
-      'powershell.exe 5',
       'powershell.exe 9',
-      'taskkill 7',
+      'powershell.exe 5',
+      'taskkill 11',
       'taskkill 7',
       'ps 5',
     ])
@@ -247,7 +247,7 @@ describe('runTool', () => {
   it('kills a tool that runs past its limit, and what came with it', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-tool-'))
     const pidFile = path.join(dir, 'pid')
-    // On Windows the tool is PowerShell, which the listing runs; its console host is its child.
+    // On Windows the tool is PowerShell, which the listing runs.
     const windows = process.platform === 'win32'
     const file = windows
       ? path.win32.join(
@@ -282,10 +282,11 @@ describe('runTool', () => {
       )
       expect(await until(async () => (await readPid()) > 0, limitMs)).toBe(true)
       const pid = await readPid()
-      const lister = processControl(process.platform, {
-        limits: { listMs: 15_000, backgroundListMs: 15_000, taskkillMs: 15_000 },
-      })
-      const helpers = (await lister.list()).filter((row) => row.ppid === pid)
+      // On Windows a conhost, which the app's tools each get for want of a console; under a
+      // runner's console PowerShell shares it, and this list can be empty.
+      const helpers = (await processControl(process.platform).list()).filter(
+        (row) => row.ppid === pid,
+      )
       expect(await failed).toMatchObject({
         code: 'ETIMEDOUT',
         message: `${path.win32.basename(file)} did not finish within ${limitMs} ms`,
