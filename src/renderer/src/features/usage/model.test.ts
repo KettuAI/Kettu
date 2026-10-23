@@ -18,6 +18,7 @@ import {
   hourStarts,
   hoursSoFar,
   legendHidden,
+  legendHides,
   modelRows,
   namesYear,
   oneDay,
@@ -33,6 +34,7 @@ import {
   weekStartOf,
   wholeMonth,
   widest,
+  type LegendChoice,
 } from './model'
 
 const day = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
@@ -190,6 +192,15 @@ describe('trend series', () => {
     expect(shownSeries(series, ['codex'])).toEqual(['claude-code', 'opencode'])
     // A series hidden before the figures changed leaves the others shown, or all of them.
     expect(shownSeries(['codex'], ['codex'])).toEqual(['codex'])
+  })
+
+  it('keeps what the legend hides until a filter changes, even back to an earlier value', () => {
+    const legend: LegendChoice = { agent: 2, figures: 5, hidden: ['codex'] }
+    expect(legendHides(legend, { agent: 2, figures: 5 })).toEqual(['codex'])
+    // Claude Code, then All again: two changes of the agent, though it is All as before.
+    expect(legendHides(legend, { agent: 4, figures: 5 })).toEqual([])
+    // Figures for another range or source.
+    expect(legendHides(legend, { agent: 2, figures: 6 })).toEqual([])
   })
 
   it('finds the widest value a legend key must keep room for', () => {

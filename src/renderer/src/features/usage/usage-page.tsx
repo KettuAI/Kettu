@@ -53,8 +53,10 @@ import {
   hourLabels,
   hoursSoFar,
   legendHidden,
+  legendHides,
   modelRows,
   namesYear,
+  NO_SERIES,
   projectRows,
   RANGE_KINDS,
   seriesOf,
@@ -62,9 +64,9 @@ import {
   shownTotals,
   trend,
   wholeMonth,
-  type AgentFilter,
   type BreakdownRow,
   type DayTotal,
+  type LegendChoice,
   type RangeKind,
   type TrendBar,
 } from './model'
@@ -398,7 +400,7 @@ function Dashboard({ page }: { page: PageData }) {
       <Figures facts={facts} hours={hours} rangeLabel={rangeText(range.from, range.to)} />
 
       <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TrendCard days={days} hours={hours} page={page} agent={agent} />
+        <TrendCard days={days} hours={hours} page={page} />
         <LimitsCard />
       </div>
 
@@ -595,7 +597,6 @@ const TREND_TITLE = {
 } as const
 /** Hours are labelled every 1, 2, 3, 4, 6 or 12, so the labels fall on the same times each day. */
 const HOUR_STEPS = [1, 2, 3, 4, 6, 12]
-const NO_SERIES: readonly AgentId[] = []
 /** A placeholder waits this long, so a quick answer shows no flash. */
 const PLACEHOLDER_DELAY = 200
 
@@ -617,12 +618,10 @@ function TrendCard({
   days,
   hours,
   page,
-  agent,
 }: {
   days: DayTotal[]
   hours: HourTotals | null
   page: PageData
-  agent: AgentFilter
 }) {
   const { t, i18n } = useTranslation('usage')
   const rangeText = useRangeText()
@@ -644,19 +643,20 @@ function TrendCard({
     [hours, days, page.range, page.firstDay],
   )
   const series = useMemo(() => seriesOf(bars, AGENT_IDS), [bars])
-  // What the legend hides holds until the agent filter changes, or figures for another range or
-  // source arrive, so the chart still drawn while they load keeps its series and scale.
-  const { range, scope } = page.filters
-  const [legend, setLegend] = useState({ range, scope, agent, hidden: NO_SERIES })
-  const hidden =
-    legend.range === range && legend.scope === scope && legend.agent === agent
-      ? legend.hidden
-      : NO_SERIES
+  // What the legend hides holds until any filter changes, even back to an earlier value: the agent
+  // at once, the range or source once its figures arrive, so the chart still drawn while they load
+  // keeps its series and scale.
+  const agentGeneration = useUsageStore((s) => s.generations.agent)
+  const drawn = useMemo(
+    () => ({ agent: agentGeneration, figures: page.generation }),
+    [agentGeneration, page.generation],
+  )
+  const [legend, setLegend] = useState<LegendChoice>({ ...drawn, hidden: NO_SERIES })
+  const hidden = legendHides(legend, drawn)
   const shown = useMemo(() => shownSeries(series, hidden), [series, hidden])
   const toggle = useCallback(
-    (chosen: AgentId[]) =>
-      setLegend({ range, scope, agent, hidden: legendHidden(series, chosen, hidden) }),
-    [range, scope, agent, series, hidden],
+    (chosen: AgentId[]) => setLegend({ ...drawn, hidden: legendHidden(series, chosen, hidden) }),
+    [drawn, series, hidden],
   )
   const totals = useMemo(() => shownTotals(bars, shown), [bars, shown])
   const max = Math.max(0, ...totals)

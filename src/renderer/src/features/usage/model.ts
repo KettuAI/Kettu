@@ -290,6 +290,30 @@ export function legendHidden(
   return next.length < series.length ? next : hidden
 }
 
+/**
+ * How many times the usage filters have changed, which tells them apart even after a return to
+ * earlier values: the agent filter, applied to the figures already read, and the range or source,
+ * which take figures of their own.
+ */
+export interface Generations {
+  agent: number
+  figures: number
+}
+
+/** What the legend hides, and the generations of the filters the trend was drawn under then. */
+export interface LegendChoice extends Generations {
+  hidden: readonly AgentId[]
+}
+
+export const NO_SERIES: readonly AgentId[] = []
+
+/** What the legend hides in a trend drawn under `drawn`: nothing once any filter has changed. */
+export function legendHides(legend: LegendChoice, drawn: Generations): readonly AgentId[] {
+  return legend.agent === drawn.agent && legend.figures === drawn.figures
+    ? legend.hidden
+    : NO_SERIES
+}
+
 /** Each bar's tokens from the series shown, which the trend's scale follows. */
 export function shownTotals(bars: readonly TrendBar[], series: readonly AgentId[]): number[] {
   return bars.map((bar) => series.reduce((sum, id) => sum + (bar.byAgent[id] ?? 0), 0))
