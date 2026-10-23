@@ -32,7 +32,14 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      - if: runner.os != 'Windows'
+        run: pnpm test
+      # os.tmpdir() is on the C: system drive; the tests' temp folders move to the checkout's drive.
+      - if: runner.os == 'Windows'
+        run: pnpm test
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
       - run: pnpm build
       - run: pnpm exec electron-builder --dir --publish never
 
