@@ -35,10 +35,12 @@ import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
+import { SvgBlock } from './svg-block'
 
 const plugins = {
   code: createCodePlugin({ themes: ['github-light-default', 'github-dark-default'] }),
   cjk,
+  renderers: [{ language: 'svg', component: SvgBlock }],
 }
 
 const DefaultLink = defaultComponents.a

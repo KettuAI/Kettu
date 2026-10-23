@@ -19,6 +19,7 @@ import {
   CLOCK_BEFORE,
   CLOCK_TEST,
   COMMANDS,
+  SVG_REPLY,
   THINKING_ANSWER,
   THOUGHT_TEXT,
   chunkText,
@@ -858,6 +859,11 @@ const thinking: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+const svg: Scenario = async (turn) => {
+  if (!(await stream(turn, SVG_REPLY, { messageId: turn.messageId() }))) return 'cancelled'
+  return 'end_turn'
+}
+
 // The plan windows of sendUsage, as fractions.
 function planWindows(turns: number): { fiveHour: number; weekly: number } {
   return {
@@ -1068,6 +1074,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   plan,
   background,
   thinking,
+  svg,
   usage,
   status,
   context,

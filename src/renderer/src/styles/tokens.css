@@ -44,6 +44,8 @@
   --danger-border: #f1d5d1;
   /* What a queued message's card darkens toward as it sits further back in the stack. */
   --queue-back: #f4f4f4;
+  /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
+  --canvas: #ffffff;
   --scrollbar-thumb: rgb(0 0 0 / 18%);
   /* The dimmed page behind a dialog or a sheet. */
   --scrim: rgb(0 0 0 / 10%);
@@ -132,6 +134,7 @@
     --danger-tint: #2a1d1b;
     --danger-border: #4a2c28;
     --queue-back: #1e1e1d;
+    --canvas: #ffffff;
     --scrollbar-thumb: rgb(255 255 255 / 20%);
     --scrim: rgb(0 0 0 / 10%);
     --mark: oklch(0.8 0.14 85 / 32%);
@@ -201,6 +204,7 @@
   --danger-tint: #2a1d1b;
   --danger-border: #4a2c28;
   --queue-back: #1e1e1d;
+  --canvas: #ffffff;
   --scrollbar-thumb: rgb(255 255 255 / 20%);
   --scrim: rgb(0 0 0 / 10%);
   --mark: oklch(0.8 0.14 85 / 32%);
