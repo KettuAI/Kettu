@@ -2195,11 +2195,43 @@ export class SessionManager {
   }
 
   /** Keeps the sent bytes for the thread store and lets the attachments' records go. */
-  private commitAttachments(live: Live, resolved: { blobs: StoredBlob[]; ids: string[] }): void {
+  private commitAttachments(
+    live: Live,
+    resolved: { shown: UserContent[]; blobs: StoredBlob[]; ids: string[] },
+  ): void {
     if (resolved.ids.length === 0) return
     for (const blob of resolved.blobs) live.blobs.set(blob.hash, blob)
+    this.showSent(live, resolved.shown)
     this.scheduleCheckpoint(live)
     void this.deps.attachments?.release(resolved.ids)
+  }
+
+  /**
+   * A message held back unsent, as when the session's mode was lost, still names the records
+   * its sent copy used; once they go it opens what was sent instead.
+   */
+  private showSent(live: Live, shown: readonly UserContent[]): void {
+    const sent = new Map<string, Attachment>()
+    for (const item of shown) {
+      if (item.type === 'ref' && item.ref.kind === 'attachment' && item.ref.attachment.sent) {
+        sent.set(item.ref.attachment.id, item.ref.attachment)
+      }
+    }
+    const patches: Patch[] = []
+    for (const id of live.thread.order) {
+      const entry = live.thread.byId[id]
+      if (entry?.kind !== 'user') continue
+      let changed = false
+      const content = entry.content.map((item): UserContent => {
+        if (item.type !== 'ref' || item.ref.kind !== 'attachment') return item
+        const attachment = item.ref.attachment.sent ? undefined : sent.get(item.ref.attachment.id)
+        if (!attachment) return item
+        changed = true
+        return { type: 'ref', ref: { kind: 'attachment', attachment } }
+      })
+      if (changed) patches.push({ op: 'entry.update', id, changes: { content } })
+    }
+    if (patches.length > 0) this.emit(live, patches)
   }
 
   async blob(sessionId: string, hash: string): Promise<AttachmentBytes> {
