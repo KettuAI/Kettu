@@ -877,6 +877,45 @@ describe('keeping the config across an attach', () => {
       expect(requests(t, port, sessionId)).toContain('session/prompt')
     })
 
+    it('leaves the agent session to an attach that started after a close meanwhile', async () => {
+      const { t, port, sessionId } = await slowAttach()
+      await port.request('sessions.queue', { sessionId, content: text('first') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.close', { sessionId })
+      await port.request('sessions.queue', { sessionId, content: text('second') })
+      await port.until(() => {
+        const entries = port.entries(sessionId)
+        const sent = entries.findLastIndex(
+          (entry) => entry.kind === 'user' && entry.content[0]?.type === 'text',
+        )
+        return entries.slice(sent).some((entry) => entry.kind === 'turn_end')
+      })
+      await port.untilStatus(sessionId, 'ready')
+      const sent = requests(t, port, sessionId, false)
+      expect(sent.filter((r) => r === 'session/resume')).toHaveLength(2)
+      expect(sent.slice(sent.lastIndexOf('session/resume'))).not.toContain('session/close')
+      expect(sent.at(-1)).toBe('session/prompt')
+      expect(port.entries(sessionId).at(-1)).toMatchObject({
+        kind: 'turn_end',
+        stopReason: 'end_turn',
+      })
+    })
+
+    it('still closes the agent session when the session came back meanwhile without attaching', async () => {
+      const { t, port, sessionId } = await slowAttach()
+      await port.request('sessions.queue', { sessionId, content: text('first') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.close', { sessionId })
+      // Brings the session back from its stored thread, with nothing to send.
+      await port.request('sessions.resumeQueue', { sessionId })
+      await vi.waitFor(() => expect(requests(t, port, sessionId, false)).toContain('session/close'))
+      expect(requests(t, port, sessionId, false)).toEqual([
+        'session/resume',
+        restored[0],
+        'session/close',
+      ])
+    })
+
     it('stops when the session is closed meanwhile, and keeps it in the list', async () => {
       const { t, port, sessionId } = await slowAttach()
       const setting = port
