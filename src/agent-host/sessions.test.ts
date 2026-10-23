@@ -7,7 +7,7 @@ import { writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { Attachment, ThreadEntry, ToolEntry } from '@shared/thread'
 import { forkCut } from './sessions'
@@ -96,7 +96,10 @@ describe('attachments', () => {
     await expect(port.request('attachments.read', { id: added.id })).rejects.toMatchObject({
       code: 'not_found',
     })
-    await port.until(() => !existsSync(path.join(t.dir, 'attachments', `${sha(PNG)}.png`)))
+    // No port message follows the removal, so this polls rather than waits on the port.
+    await vi.waitFor(() =>
+      expect(existsSync(path.join(t.dir, 'attachments', `${sha(PNG)}.png`))).toBe(false),
+    )
   })
 
   it('sends a link to the saved image to an agent without image input', async () => {
