@@ -11,6 +11,7 @@ import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
+import { ArtifactService } from './artifacts/service'
 import { ArtifactStore, versionSummary } from './artifacts/store'
 import {
   AgentManager,
@@ -111,6 +112,8 @@ export class AgentHost {
   readonly usage: UsageManager
   /** Every project's artifacts, kept in the thread database and the data folder. */
   readonly artifacts: ArtifactStore
+  /** The `overbench` MCP server, through which the sessions' agents reach the artifacts. */
+  readonly artifactService: ArtifactService
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
@@ -178,6 +181,13 @@ export class AgentHost {
       activity: (portIds, activity) =>
         this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
     })
+    this.artifactService = new ArtifactService({
+      store: this.artifacts,
+      sessionTitle: (sessionId) => this.sessions.title(sessionId),
+      turnRunning: (sessionId) => this.sessions.turnRunning(sessionId),
+      log,
+      appVersion: options.appVersion,
+    })
     const usageStore = options.usageWorker
       ? new UsageStore({
           file: path.join(options.userDataPath, 'state', 'usage.db'),
@@ -232,6 +242,14 @@ export class AgentHost {
       file: sessionsFile(options.userDataPath, log),
       threads: this.threads,
       attachments: this.attachments,
+      mcp: {
+        servers: (sessionId, record) => this.artifactService.servers(sessionId, record.projectPath),
+        detached: (sessionId) => {
+          this.artifactService.revoke(sessionId)
+          this.artifacts.stopEditing(sessionId)
+        },
+        turnEnded: (sessionId) => this.artifacts.stopEditing(sessionId),
+      },
       usage: this.usage,
       cacheTtl:
         options.cacheTtl ??
@@ -299,6 +317,7 @@ export class AgentHost {
       host.trees.load(),
       host.agentOptions.load(),
       host.attachments.load(),
+      host.artifactService.start(),
     ])
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
@@ -409,6 +428,7 @@ export class AgentHost {
         }),
       ])
       await Promise.all([
+        this.artifactService.stop(),
         this.projects.flush(),
         this.sessions.flush(),
         this.remembered.flush(),

@@ -2,6 +2,7 @@
 
 import type {
   ContentBlock,
+  McpServer,
   PermissionOption,
   SessionUpdate,
   StopReason,
@@ -23,6 +24,8 @@ export interface FakeSessionState {
   model: string
   thought: string
   fast: boolean
+  /** The MCP servers of its latest `session/new`, `load`, `resume` or `fork`. */
+  mcpServers: McpServer[]
 }
 
 export interface Turn {

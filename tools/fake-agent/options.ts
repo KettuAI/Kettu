@@ -26,6 +26,7 @@ export const SCENARIOS = [
   'recall',
   'attachments',
   'chinese',
+  'artifacts',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -82,6 +83,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   recall: { description: 'Answers with your previous message, as the agent remembers it' },
   attachments: { description: 'Lists the images, files and links the prompt carried' },
   chinese: { description: 'A long answer in Chinese, with every Markdown block' },
+  artifacts: {
+    description: "Makes or changes a canvas through OverBench's artifacts service, then reads it",
+    hint: '--read <artifact id>',
+  },
 }
 
 export interface ScenarioOptions {
@@ -97,6 +102,7 @@ export interface ScenarioOptions {
   holdMs: number // requests: how long the turn stays open after its request, not scaled
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
+  read: string | null // artifacts: the artifact to read instead
 }
 
 export interface ScenarioChoice {
@@ -181,6 +187,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     holdMs: parseNumber(flagValue(args, 'hold')) ?? 0,
     thenMs: parseNumber(flagValue(args, 'then')),
     atEnd: flagValue(args, 'at-end') !== undefined,
+    read: flagValue(args, 'read') || null,
   }
   return { scenario, options, text }
 }
