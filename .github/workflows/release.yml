@@ -22,6 +22,8 @@ jobs:
   mac-signing:
     name: macOS signing
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       signed: ${{ steps.decide.outputs.signed }}
       notarize: ${{ steps.decide.outputs.notarize }}
@@ -158,14 +160,16 @@ jobs:
           unzipped="$(mktemp -d)"
           ditto -x -k dist/*.zip "$unzipped"
           check "$unzipped/OverBench.app"
-      # Only the installers and the update file leave the runner; blockmaps and unpacked apps do
-      # not. A signed macOS build adds the zip that Squirrel.Mac installs from.
+      # Only the installers and the update file leave the runner. A signed macOS build adds the zip
+      # that Squirrel.Mac installs from and its blockmap, from which electron-updater downloads only
+      # the changed blocks; other blockmaps and unpacked apps stay behind.
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}
           path: |
             dist/*.dmg
             dist/*.zip
+            dist/*-mac.zip.blockmap
             dist/*-setup.exe
             dist/*.AppImage
             dist/latest*.yml
@@ -184,10 +188,10 @@ jobs:
         run: |
           mkdir release
           cp artifacts/*/*.dmg artifacts/*/*-setup.exe artifacts/*/*.AppImage release/
-          # A signed macOS build lists its zip next to its dmg.
+          # A signed macOS build lists its zip next to its dmg and ships the zip's blockmap.
           mac_files=2
           if [ "$MAC_SIGNED" = true ]; then
-            cp artifacts/*/*.zip release/
+            cp artifacts/*/*.zip artifacts/*/*-mac.zip.blockmap release/
             mac_files=4
           fi
           # Each build wrote the update file for its own architecture. macOS and Windows clients read
