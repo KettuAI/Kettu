@@ -84,6 +84,8 @@ pnpm install
 pnpm dev
 ```
 
+A development run keeps its data in its own folder, `OverBench Dev`, so it never touches the sessions of an installed OverBench; `OVERBENCH_USER_DATA` points it at another folder.
+
 Development builds also list a **Fake agent**, which needs no account or network and plays scripted scenarios such as a long answer, a burst of tool calls or three approvals at once. Type `/` in its composer to see them, or read the [fake agent](./docs/design/testing.md#fake-agent) docs.
 
 | Command                                               | What it does                                         |

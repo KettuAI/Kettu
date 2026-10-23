@@ -127,6 +127,8 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 | `pnpm package`      | Build an unpacked app into `dist/`        |
 | `pnpm shadcn add x` | Add a shadcn/ui component                 |
 
+`pnpm dev` keeps its data in a folder of its own, `OverBench Dev`, so it never touches the installed app's sessions and can run beside it. To run several worktrees at once, give each its own folder and debugging port, such as `OVERBENCH_USER_DATA=/tmp/overbench-feature-x REMOTE_DEBUGGING_PORT=9223 pnpm dev` (set the variables as your shell does on Windows). Electron's `--user-data-dir` is not needed; see [persistence](./docs/design/persistence.md#what-is-stored-and-where).
+
 ## Definition of done
 
 - `pnpm format:check`, `pnpm lint` and `pnpm typecheck` pass. Also run `pnpm build` when you touch config, the main process or the preload.

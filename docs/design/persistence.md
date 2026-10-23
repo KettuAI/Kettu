@@ -8,6 +8,8 @@ OverBench stores as little as it can. Agents already keep transcripts and creden
 
 All files live in `app.getPath('userData')` ([per platform](./agent-host.md#platform-differences)).
 
+An unpackaged run, such as `pnpm dev`, does not use the installed app's folder. It keeps its own, `OverBench Dev`, beside it in the platform's application data folder, which starts empty: no projects or sessions, and the adapters install again on first use. `OVERBENCH_USER_DATA` names another folder, resolved from the working directory when it is relative, so that each worktree can have its own. Electron's `--user-data-dir` switch beats both, which is how the tools that start a production build give it a fresh folder. A packaged build ignores the variable and uses the platform's default folder unless it is started with the switch. Main sets the folder before anything reads it, and Electron keys the single-instance lock on it: runs on different folders run side by side, and a second run on the same folder quits and brings the first forward.
+
 | File                         | Owner      | Contents                                                                                                                                           |
 | ---------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `state/projects.json`        | Agent host | Recent project folders                                                                                                                             |

@@ -84,6 +84,8 @@ pnpm install
 pnpm dev
 ```
 
+开发运行使用独立的数据目录 `OverBench Dev`，不会改动已安装的 OverBench 的会话；用环境变量 `OVERBENCH_USER_DATA` 可以改用别的目录。
+
 开发版还会列出一个 **Fake agent**：它不需要账号和网络，按脚本演示各种场景，例如很长的回答、一连串工具调用，或同时出现三个授权请求。在它的输入框里输入 `/` 即可查看，也可以阅读 [fake agent](./docs/design/testing.md#fake-agent) 文档（英文）。
 
 | 命令                                                  | 作用                                              |
