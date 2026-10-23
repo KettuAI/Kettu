@@ -23,9 +23,12 @@ export function issueToken(user: User, now = Date.now()): Token {
 See the [Node.js timers guide](https://nodejs.org/en/learn/asynchronous-work/understanding-processnexttick) for why this matters.
 `
 
+export const BASIC_NOTE = `The clock is read once now. Next, a regression test that freezes time.
+`
+
 export const BASIC_DONE = `
 
-Done. The clock is read once per request, and a new regression test freezes time; the login and clock tests pass.
+Done. The login and clock tests pass, so the flake is gone.
 `
 
 export const THOUGHT_TEXT = `The user wants to know why the test fails only on CI. CI runners are slower and share CPU, so anything that depends on wall-clock time between two statements can flip. Let me check where the clock is read. \`issueToken\` calls \`Date.now()\` and \`validate\` calls it again; if a second boundary falls between them the computed expiry differs by one second. That would explain a one-in-fifty failure rate. Before editing, I should confirm no other caller depends on the second read, because \`refresh\` also calls \`validate\` with its own timestamp. The safest change is to thread one timestamp through both functions and keep the default parameter for existing callers. I also want a regression test that freezes time with fake timers so the failure cannot come back silently.`

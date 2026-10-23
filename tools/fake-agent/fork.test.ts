@@ -28,9 +28,10 @@ it('forks at an unknown message by its fingerprint and occurrence, as the adapte
     agent.request(methods.agent.session.prompt, { sessionId: id, prompt: [{ type: 'text', text }] })
   await prompt(sessionId, 'First question')
   await prompt(sessionId, 'Second question')
-  // Each reply ends with the same message: the second of four in this session.
+  // Each reply ends with the same message, so the first reply's last one occurs twice.
   const texts = [...said].filter(([key]) => key.startsWith(sessionId)).map(([, text]) => text)
-  expect(texts[1]).toBe(texts[3])
+  const firstEnd = texts[texts.length / 2 - 1]
+  expect(firstEnd).toBe(texts.at(-1))
   const fork = (messageFingerprint: string) =>
     agent.request(methods.agent.session.fork, {
       sessionId,
@@ -45,7 +46,7 @@ it('forks at an unknown message by its fingerprint and occurrence, as the adapte
       },
     })
 
-  const fingerprint = `sha256:${createHash('sha256').update(texts[1]!, 'utf8').digest('hex')}`
+  const fingerprint = `sha256:${createHash('sha256').update(firstEnd!, 'utf8').digest('hex')}`
   const forked = await fork(fingerprint)
   await prompt(forked.sessionId, '/recall')
   expect([...said].find(([key]) => key.startsWith(forked.sessionId))?.[1]).toBe(

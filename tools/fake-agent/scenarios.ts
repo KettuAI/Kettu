@@ -12,6 +12,7 @@ import type {
 } from '@agentclientprotocol/sdk/unstable'
 import {
   BASIC_DONE,
+  BASIC_NOTE,
   BASIC_REPLY,
   CLOCK_AFTER,
   CLOCK_BEFORE,
@@ -107,7 +108,7 @@ const basicTurn: Scenario = async (turn) => {
   if (!(await stream(turn, intro + BASIC_REPLY, { messageId: turn.messageId() }))) {
     return 'cancelled'
   }
-  // The work between the two messages, which the thread folds into one line.
+  // Two runs of work around a short note, which the thread folds into a line each.
   const n = turn.session.turns
   for (const [i, file] of ['src/clock.ts', 'src/session.ts', 'test/login.ts'].entries()) {
     const path = filePath(turn, file)
@@ -142,6 +143,7 @@ const basicTurn: Scenario = async (turn) => {
     status: 'completed',
     content: [{ type: 'diff', path, oldText: CLOCK_BEFORE, newText: CLOCK_AFTER }],
   })
+  if (!(await stream(turn, BASIC_NOTE, { messageId: turn.messageId() }))) return 'cancelled'
   const testPath = filePath(turn, 'test/clock.test.ts')
   await turn.send({
     sessionUpdate: 'tool_call',
