@@ -94,7 +94,14 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const exit = options.exit ?? ((code: number) => process.exit(code))
   const scale = delayScale(env)
   const legacyModes = env.FAKE_AGENT_LEGACY_MODES === '1'
+  const forkConfig = env.FAKE_AGENT_FORK_CONFIG ?? 'keep'
+  // Not scaled: it stands for an agent that is slow to take a setting, whatever the pace.
+  const setConfigMs = Number(env.FAKE_AGENT_SET_CONFIG_MS ?? '') || 0
+  const settled = (): Promise<void> | undefined =>
+    setConfigMs > 0 ? new Promise((resolve) => setTimeout(resolve, setConfigMs)) : undefined
   const sessions = new Map<string, FakeSession>()
+  const lockedSessions = new Set<string>()
+  const levelHidden = new Set<string>()
   const children = new Map<string, () => void>()
   let connection: AgentConnection | null = null
   let clientCapabilities: ClientCapabilities = {}
@@ -207,7 +214,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         currentValue: session.fast,
       },
     )
-    return list
+    return levelHidden.has(session.id) ? list.filter((o) => o.id !== 'thought_level') : list
   }
 
   const modeState = (session: FakeSession): SessionModeState | undefined =>
@@ -534,6 +541,17 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       fork.turnStarts = source.turnStarts.filter((start) => start < end)
       fork.turns = end < source.history.length ? fork.turnStarts.length : source.turns
       fork.usedTokens = source.usedTokens
+      if (forkConfig === 'keep') {
+        fork.mode = source.mode
+        fork.model = source.model
+        fork.thought = source.thought
+        fork.fast = source.fast
+      } else if (forkConfig === 'reset') {
+        // Like codex-acp, it lists the level only once a model is set.
+        levelHidden.add(fork.id)
+      } else if (forkConfig === 'locked') {
+        lockedSessions.add(fork.id)
+      }
       fork.history = source.history.slice(0, end).map((r) => ({ ...r, sessionId: fork.id }))
       setTimeout(() => announceCommands(ctx.client, fork.id), 0)
       return { sessionId: fork.id, ...sessionSetup(fork) }
@@ -579,9 +597,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       sessions.delete(ctx.params.sessionId)
       return {}
     })
-    .onRequest(methods.agent.session.setMode, (ctx) => {
+    .onRequest(methods.agent.session.setMode, async (ctx) => {
+      await settled()
       const session = sessions.get(ctx.params.sessionId)
       if (!session) throw RequestError.resourceNotFound(ctx.params.sessionId)
+      if (lockedSessions.has(session.id)) throw RequestError.invalidParams(undefined, 'Locked')
       if (!MODES.some((mode) => mode.id === ctx.params.modeId)) {
         throw RequestError.invalidParams(undefined, `Unknown mode ${ctx.params.modeId}`)
       }
@@ -596,9 +616,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       }, 0)
       return {}
     })
-    .onRequest(methods.agent.session.setConfigOption, (ctx) => {
+    .onRequest(methods.agent.session.setConfigOption, async (ctx) => {
+      await settled()
       const session = sessions.get(ctx.params.sessionId)
       if (!session) throw RequestError.resourceNotFound(ctx.params.sessionId)
+      if (lockedSessions.has(session.id)) throw RequestError.invalidParams(undefined, 'Locked')
       const value = ctx.params.value
       switch (ctx.params.configId) {
         case 'mode':
@@ -612,6 +634,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
             throw RequestError.invalidParams(undefined, 'Unknown model')
           }
           session.model = value
+          levelHidden.delete(session.id)
           break
         case 'thought_level':
           if (typeof value !== 'string' || !['low', 'medium', 'high'].includes(value)) {

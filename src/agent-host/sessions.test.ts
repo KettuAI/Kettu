@@ -8,7 +8,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { ThreadEntry, ToolEntry } from '@shared/thread'
 import { forkCut } from './sessions'
-import { startTestHost, type TestHost, type TestPort } from './testing/harness'
+import {
+  startTestHost,
+  type InProcessLauncher,
+  type TestHost,
+  type TestPort,
+} from './testing/harness'
 import type { LogReader } from './usage/model'
 
 let current: TestHost | null = null
@@ -496,6 +501,184 @@ describe('forking', () => {
     await turn(port, sessionId, 'Second question')
     await expect(fork).rejects.toMatchObject({ code: 'busy' })
     expect(await port.request('sessions.list', {})).toHaveLength(1)
+  })
+})
+
+describe('forking with the source config', () => {
+  const chosen = { model: 'deep', thought_level: 'high', fast: true, mode: 'code' }
+
+  const values = (port: TestPort, sessionId: string) =>
+    Object.fromEntries(
+      port
+        .thread(sessionId)
+        .session.config.filter((o) => o.id !== '__ultracode')
+        .map((o) => [o.id, o.value]),
+    )
+
+  /** A source session on non-default values that has had one turn, and its fork, opened. */
+  async function forked(
+    agentEnv: Record<string, string>,
+    beforeFork: (t: TestHost, port: TestPort) => Promise<void> = async () => {},
+    choose: Record<string, string | boolean> = chosen,
+  ) {
+    const { t, port } = await setup({ agentEnv })
+    const sessionId = await newSession(t, port)
+    for (const [optionId, value] of Object.entries(choose)) {
+      await port.request('sessions.setConfigOption', { sessionId, optionId, value })
+    }
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    await port.untilStatus(sessionId, 'ready')
+    await beforeFork(t, port)
+    const fork = await port.request('sessions.fork', { sessionId })
+    await port.open(fork.id)
+    return { t, port, sessionId, forkId: fork.id }
+  }
+
+  /** The config requests the agent got for a session, by the method that carried them. */
+  function settings(t: TestHost, port: TestPort, sessionId: string) {
+    const acpSessionId = port.thread(sessionId).session.acpSessionId
+    return t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter(
+        (r) =>
+          r.direction === 'out' &&
+          (r.method === 'session/set_config_option' || r.method === 'session/set_mode') &&
+          (r.message as { params: { sessionId: string } }).params.sessionId === acpSessionId,
+      )
+  }
+
+  const configIds = (t: TestHost, port: TestPort, sessionId: string) =>
+    settings(t, port, sessionId).map(
+      (r) => (r.message as { params: { configId: string } }).params.configId,
+    )
+
+  it('sets the source values on a fork that starts at the agent defaults', async () => {
+    const { t, port, sessionId, forkId } = await forked(
+      { FAKE_AGENT_FORK_CONFIG: 'reset' },
+      async (t, port) => {
+        // The user's latest choice for the agent, which a fork must not overwrite.
+        const other = await newSession(t, port)
+        await port.request('sessions.setConfigOption', {
+          sessionId: other,
+          optionId: 'model',
+          value: 'swift',
+        })
+      },
+    )
+    expect(values(port, forkId)).toEqual(values(port, sessionId))
+    expect(values(port, forkId)).toMatchObject(chosen)
+    // The agent lists the level only once the model is set, so the level goes last.
+    expect(configIds(t, port, forkId)).toEqual(['model', 'fast', 'mode', 'thought_level'])
+    // The fork's values are the source's, not a choice of the user's.
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.remembered).toMatchObject({ model: 'swift' })
+  })
+
+  it('sets a mode the agent reports as a legacy mode through session/set_mode', async () => {
+    const { t, port, sessionId, forkId } = await forked(
+      { FAKE_AGENT_FORK_CONFIG: 'reset', FAKE_AGENT_LEGACY_MODES: '1' },
+      undefined,
+      { __mode: 'plan', model: 'swift' },
+    )
+    expect(values(port, forkId)).toEqual(values(port, sessionId))
+    expect(values(port, forkId)).toMatchObject({ __mode: 'plan', model: 'swift' })
+    expect(settings(t, port, forkId).map((r) => r.method)).toEqual([
+      'session/set_config_option',
+      'session/set_mode',
+    ])
+  })
+
+  it('sends nothing when the fork already has the source values', async () => {
+    const { t, port, sessionId, forkId } = await forked({})
+    expect(values(port, forkId)).toEqual(values(port, sessionId))
+    expect(values(port, forkId)).toMatchObject(chosen)
+    expect(settings(t, port, forkId)).toEqual([])
+  })
+
+  it('keeps the fork usable, at its own values, when the agent refuses them', async () => {
+    const { t, port, forkId } = await forked({ FAKE_AGENT_FORK_CONFIG: 'locked' })
+    expect(values(port, forkId)).toMatchObject({
+      model: 'balanced',
+      thought_level: 'medium',
+      fast: false,
+      mode: 'ask',
+    })
+    expect(
+      t.host.diagnostics.logEntries().filter((e) => e.message.includes('refused model = deep')),
+    ).toHaveLength(1)
+    await turn(port, forkId, 'Fix the flaky login test')
+    await port.until(
+      () => port.entries(forkId).filter((entry) => entry.kind === 'turn_end').length === 2,
+    )
+  })
+
+  it('sends the model again to bring up a level the fork lists only after it', async () => {
+    const { t, port, sessionId, forkId } = await forked(
+      { FAKE_AGENT_FORK_CONFIG: 'reset' },
+      undefined,
+      { thought_level: 'high' },
+    )
+    expect(values(port, forkId)).toEqual(values(port, sessionId))
+    expect(values(port, forkId)).toMatchObject({ model: 'balanced', thought_level: 'high' })
+    expect(configIds(t, port, forkId)).toEqual(['model', 'thought_level'])
+  })
+
+  describe('while the values are set', () => {
+    /** A fork whose agent takes 200 ms for each value, reported while it is still `starting`. */
+    async function forkInFlight() {
+      const { t, port } = await setup({
+        agentEnv: { FAKE_AGENT_FORK_CONFIG: 'reset', FAKE_AGENT_SET_CONFIG_MS: '200' },
+      })
+      const sessionId = await newSession(t, port)
+      for (const optionId of ['model', 'thought_level']) {
+        const value = optionId === 'model' ? 'deep' : 'high'
+        await port.request('sessions.setConfigOption', { sessionId, optionId, value })
+      }
+      const outcome = port.request('sessions.fork', { sessionId }).then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      )
+      const reported = () =>
+        port.events.flatMap((e) =>
+          e.type === 'session.summary' && e.summary.id !== sessionId ? [e.summary] : [],
+        )
+      await port.until(() => reported().length > 0)
+      return { t, port, sessionId, forkId: reported()[0]!.id, reported, outcome }
+    }
+
+    it('shows the fork as starting until the last value is set', async () => {
+      const { reported, outcome } = await forkInFlight()
+      expect(reported().map((s) => s.status)).toEqual(['starting'])
+      expect(await outcome).toMatchObject({ value: { status: 'ready' } })
+      const statuses = reported().map((s) => s.status)
+      expect(statuses.at(-1)).toBe('ready')
+      expect(statuses.indexOf('ready')).toBe(statuses.length - 1)
+    })
+
+    it('ends the fork when it is deleted meanwhile', async () => {
+      const { port, forkId, outcome } = await forkInFlight()
+      await port.request('sessions.delete', { sessionId: forkId })
+      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      const listed = await port.request('sessions.list', {})
+      expect(listed.map((s) => s.id)).not.toContain(forkId)
+    })
+
+    it('ends the fork when its project is removed meanwhile', async () => {
+      const { t, port, outcome } = await forkInFlight()
+      await port.request('projects.remove', { path: t.project })
+      expect(await outcome).toMatchObject({ error: { code: 'not_found' } })
+      expect(await port.request('sessions.list', {})).toEqual([])
+    })
+
+    it('stores the fork closed when the agent exits meanwhile', async () => {
+      const { t, port, forkId, outcome } = await forkInFlight()
+      ;(t.launcher as InProcessLauncher).crash()
+      expect(await outcome).toMatchObject({ value: { id: forkId, status: 'closed' } })
+      const listed = await port.request('sessions.list', {})
+      expect(listed.find((s) => s.id === forkId)?.status).toBe('closed')
+      await port.open(forkId)
+    })
   })
 })
 
