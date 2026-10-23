@@ -70,6 +70,7 @@ Every color, line color and shadow color in the renderer is a token in `src/rend
 - Lines are opaque and keep their hairline width (`--hairline`: 1 px, 0.5 px on 2× displays and 1/3 px on 3×), so a line is one device pixel of its color on every display.
 - Neither theme uses pure black or white for text.
 - The surface steps other documents name are these tokens: surface 0 is `--bg-sidebar`, surface 1 `--bg-app`, and surfaces 2 (cards) and 3 (the composer, menus, dialogs) are both `--bg-surface`, told apart by their shadows.
+- An [artifact canvas](./artifacts.md#canvas), the surface its pages lie on, is surface 0 (`--bg-sidebar`), not `--canvas`, so white pages stand off it in both themes.
 
 ### shadcn names
 

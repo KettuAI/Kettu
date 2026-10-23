@@ -168,6 +168,16 @@ The usage page, opened from the sidebar's **Usage** row, is designed in [usage s
 
 - **Filter row on a narrow window**: the filters are two groups, what is counted (the agent, then the source) on the left and when (the range, then **Custom**) on the right. At the default window, 1280 px with the sidebar open, in English and Chinese, they share one line: an agent's segment is its mark alone, with its name in a tooltip and as its accessible name. On a narrower window the right group wraps under the left one, whole; only below the width of one group do its own controls wrap. Decided while the maintainer was away; to be reviewed.
 
+### Artifacts
+
+> Draft for [issue #11](https://github.com/overbench/overbench/issues/11); not built yet.
+
+The HTML files agents write, designed in [artifacts](./artifacts.md):
+
+- **The Artifacts page**, opened from the sidebar's **Artifacts** row: every artifact as a card with a thumbnail, grouped by project, then by session ([Artifacts page](./artifacts.md#artifacts-page)).
+- **The viewer**, from a card: the page live in the main area, isolated from the app ([viewer](./artifacts.md#viewer)), or, for a file that marks its pages, a canvas that pans and zooms, with keys of its own that stay out of the [shortcut table](#keyboard) ([canvas](./artifacts.md#canvas)).
+- **From a session**: a tool call that wrote an artifact opens it from its row ([opening from a session](./artifacts.md#opening-from-a-session)).
+
 ### Settings
 
 Opened from **Settings** in the sidebar footer or with `Mod+,`. Settings takes the whole window: the app sidebar goes away, and the top bar holds a **Back** button after the window controls that returns to where you were. `Esc` does the same when no field has focus. While a session waits for your approval, the Back button carries the `--attention` count, so the signal the sidebar gave is not lost.
@@ -243,7 +253,7 @@ The page scales to many agents: a list first, and a page of its own for each age
 
 - The top rows are the app's navigation: 32 px rows 2 px apart, each a 20 px icon in the text color and its name, as in the reference.
 - A **New session** row (`Mod+N`) at the top opens [New session](#new-session), and stays highlighted while it is shown.
-- An **Artifacts** row (`Shapes`) follows it, disabled: artifacts come after this version, and the row holds their place until then. Hovering it shows "Coming in a later version" to its right.
+- An **Artifacts** row (`Shapes`) follows it. It opens the [Artifacts page](#artifacts) and stays highlighted while it is shown. Until that page is built, the row is disabled and holds its place, and hovering it shows "Coming in a later version" to its right.
 - A **Usage** row (`ChartNoAxesColumn`) comes next. It opens the [usage page](#usage) and stays highlighted while it is shown. Its end shows, in 12 px `tabular-nums` `--muted-foreground`, what Settings › Usage › **Show in the sidebar** chooses ([settings](./usage.md#settings)): today's tokens in the compact format ("1.4B", "13.7亿"), hidden while there are none; the tightest plan limit across the agents, as the agent's mark (12 px), the window and the used share ("5-hour 62% used"), colored by [usage level](./design-system.md#usage-levels); or nothing. The tightest limit is a reached window, else the fullest, as the agent menu picks it. Its accessible name says it in full ("Usage, Today: 1.4B tokens"; "Usage, Claude Code, 5-hour: 62% used"). Today's tokens are read again when the figures change and when the day turns. This row and the page's plan limits replace the plan usage chips the footer had ([problem 41](../milestones/m0-feedback.md#41-the-plan-usage-strip-is-unclear-and-needs-a-better-place)).
 - The projects follow these rows with no header row above them. A project is added with `Mod+O`, File › Open Project…, or **Open project…** in New session's project menu.
 - Projects are collapsible groups: folder name, with the full path in a tooltip. Clicking the name folds or unfolds the group; a project has no page of its own. The name is a group label, as the reference labels its groups: the small step at the medium weight in `--text-secondary`, with a 12 px fold chevron after it at all times, `ChevronDown` open and `ChevronRight` folded ([#127](https://github.com/overbench/overbench/issues/127)). Each project shows a **+** at the row's end at all times (shadcn's `SidebarMenuAction`), which opens New session in that project: the sidebar's one way to start a session there. A missing project has none.

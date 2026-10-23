@@ -25,6 +25,7 @@ An unpackaged run, such as `pnpm dev` or `electron .`, does not use the installe
 | `app-state.json`             | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
 | `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and install                                                     |
 | `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
+| `artifacts/thumbnails/`      | Main       | [Artifact thumbnails](./artifacts.md#thumbnails), one image per file version, trimmed to the newest 500                                            |
 | `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
 
 ```ts
@@ -202,6 +203,7 @@ OverBench keeps its own copy of every session's thread, the entries it shows, so
   ) STRICT, WITHOUT ROWID;
   ```
 
+- **Artifacts** (designed, not built): schema version 2 adds the `artifacts` table, which indexes the HTML files the stored tool entries wrote and is written in the same transactions as the entries ([artifacts](./artifacts.md#index)).
 - **Turns**: a turn opens at a prompt of the user's own (not one steered into a running turn) and at the entry after a `turn_end`, which also splits a subagent's thread, since it has no prompts. An entry's `turn` is the position of the entry that opened its turn, so a page that starts at a turn is one range of the primary key.
 - **Pages**: a page reaches back at least 60 entries from its cursor, then on to the start of their turn, so the folding of a finished turn's work never sees half a turn; a turn longer than 500 entries is cut. The latest page is read below the end, each earlier one below the first position of the page after it, and `older` is null once a page starts the thread. A page also carries the latest plan when it lies before the page, for the plan above the composer. Measured on 2026-10-22 (Electron 44, macOS arm64, 40 other sessions in the file): 0.3 ms for the latest page of 137, 2,817 or 11,262 entries alike, about 110 KB each.
 - **Images**: an image whose base64 data is longer than 32 KB is stored once per session as bytes in `blobs`, a quarter smaller than its base64, and the entry keeps `{ kind: 'image', mimeType, blob }` in its place. Reading puts the data back, for the entries of that page only.
