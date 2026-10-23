@@ -499,6 +499,114 @@ describe('forking', () => {
   })
 })
 
+describe('forking with the source config', () => {
+  const chosen = { model: 'deep', thought_level: 'high', fast: true, mode: 'code' }
+
+  const values = (port: TestPort, sessionId: string) =>
+    Object.fromEntries(
+      port
+        .thread(sessionId)
+        .session.config.filter((o) => o.id !== '__ultracode')
+        .map((o) => [o.id, o.value]),
+    )
+
+  /** A source session on non-default values that has had one turn, and its fork, opened. */
+  async function forked(
+    agentEnv: Record<string, string>,
+    beforeFork: (t: TestHost, port: TestPort) => Promise<void> = async () => {},
+    choose: Record<string, string | boolean> = chosen,
+  ) {
+    const { t, port } = await setup({ agentEnv })
+    const sessionId = await newSession(t, port)
+    for (const [optionId, value] of Object.entries(choose)) {
+      await port.request('sessions.setConfigOption', { sessionId, optionId, value })
+    }
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    await port.untilStatus(sessionId, 'ready')
+    await beforeFork(t, port)
+    const fork = await port.request('sessions.fork', { sessionId })
+    await port.open(fork.id)
+    return { t, port, sessionId, forkId: fork.id }
+  }
+
+  /** The config requests the agent got for a session, by the method that carried them. */
+  function settings(t: TestHost, port: TestPort, sessionId: string) {
+    const acpSessionId = port.thread(sessionId).session.acpSessionId
+    return t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter(
+        (r) =>
+          r.direction === 'out' &&
+          (r.method === 'session/set_config_option' || r.method === 'session/set_mode') &&
+          (r.message as { params: { sessionId: string } }).params.sessionId === acpSessionId,
+      )
+  }
+
+  it('sets the source values on a fork that starts at the agent defaults', async () => {
+    const { t, port, sessionId, forkId } = await forked(
+      { FAKE_AGENT_FORK_CONFIG: 'reset' },
+      async (t, port) => {
+        // The user's latest choice for the agent, which a fork must not overwrite.
+        const other = await newSession(t, port)
+        await port.request('sessions.setConfigOption', {
+          sessionId: other,
+          optionId: 'model',
+          value: 'swift',
+        })
+      },
+    )
+    expect(values(port, forkId)).toEqual(values(port, sessionId))
+    expect(values(port, forkId)).toMatchObject(chosen)
+    // The agent confirmed each one, model first so that the level is checked against its levels.
+    const sent = settings(t, port, forkId).map(
+      (r) => (r.message as { params: { configId: string } }).params.configId,
+    )
+    expect(sent).toEqual(['model', 'fast', 'thought_level', 'mode'])
+    // The fork's values are the source's, not a choice of the user's.
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.remembered).toMatchObject({ model: 'swift' })
+  })
+
+  it('sets a mode the agent reports as a legacy mode through session/set_mode', async () => {
+    const { t, port, sessionId, forkId } = await forked(
+      { FAKE_AGENT_FORK_CONFIG: 'reset', FAKE_AGENT_LEGACY_MODES: '1' },
+      undefined,
+      { __mode: 'plan', model: 'swift' },
+    )
+    expect(values(port, forkId)).toEqual(values(port, sessionId))
+    expect(values(port, forkId)).toMatchObject({ __mode: 'plan', model: 'swift' })
+    expect(settings(t, port, forkId).map((r) => r.method)).toEqual([
+      'session/set_config_option',
+      'session/set_mode',
+    ])
+  })
+
+  it('sends nothing when the fork already has the source values', async () => {
+    const { t, port, sessionId, forkId } = await forked({})
+    expect(values(port, forkId)).toEqual(values(port, sessionId))
+    expect(values(port, forkId)).toMatchObject(chosen)
+    expect(settings(t, port, forkId)).toEqual([])
+  })
+
+  it('keeps the fork usable, at its own values, when the agent refuses them', async () => {
+    const { t, port, forkId } = await forked({ FAKE_AGENT_FORK_CONFIG: 'locked' })
+    expect(values(port, forkId)).toMatchObject({
+      model: 'balanced',
+      thought_level: 'medium',
+      fast: false,
+      mode: 'ask',
+    })
+    expect(
+      t.host.diagnostics.logEntries().filter((e) => e.message.includes('refused model = deep')),
+    ).toHaveLength(1)
+    await turn(port, forkId, 'Fix the flaky login test')
+    await port.until(
+      () => port.entries(forkId).filter((entry) => entry.kind === 'turn_end').length === 2,
+    )
+  })
+})
+
 describe('forkCut', () => {
   const agent = (id: string): ThreadEntry => ({
     kind: 'agent',

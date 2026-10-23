@@ -94,7 +94,9 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const exit = options.exit ?? ((code: number) => process.exit(code))
   const scale = delayScale(env)
   const legacyModes = env.FAKE_AGENT_LEGACY_MODES === '1'
+  const forkConfig = env.FAKE_AGENT_FORK_CONFIG ?? 'keep'
   const sessions = new Map<string, FakeSession>()
+  const lockedSessions = new Set<string>()
   const children = new Map<string, () => void>()
   let connection: AgentConnection | null = null
   let clientCapabilities: ClientCapabilities = {}
@@ -534,6 +536,14 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       fork.turnStarts = source.turnStarts.filter((start) => start < end)
       fork.turns = end < source.history.length ? fork.turnStarts.length : source.turns
       fork.usedTokens = source.usedTokens
+      if (forkConfig === 'keep') {
+        fork.mode = source.mode
+        fork.model = source.model
+        fork.thought = source.thought
+        fork.fast = source.fast
+      } else if (forkConfig === 'locked') {
+        lockedSessions.add(fork.id)
+      }
       fork.history = source.history.slice(0, end).map((r) => ({ ...r, sessionId: fork.id }))
       setTimeout(() => announceCommands(ctx.client, fork.id), 0)
       return { sessionId: fork.id, ...sessionSetup(fork) }
@@ -582,6 +592,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     .onRequest(methods.agent.session.setMode, (ctx) => {
       const session = sessions.get(ctx.params.sessionId)
       if (!session) throw RequestError.resourceNotFound(ctx.params.sessionId)
+      if (lockedSessions.has(session.id)) throw RequestError.invalidParams(undefined, 'Locked')
       if (!MODES.some((mode) => mode.id === ctx.params.modeId)) {
         throw RequestError.invalidParams(undefined, `Unknown mode ${ctx.params.modeId}`)
       }
@@ -599,6 +610,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     .onRequest(methods.agent.session.setConfigOption, (ctx) => {
       const session = sessions.get(ctx.params.sessionId)
       if (!session) throw RequestError.resourceNotFound(ctx.params.sessionId)
+      if (lockedSessions.has(session.id)) throw RequestError.invalidParams(undefined, 'Locked')
       const value = ctx.params.value
       switch (ctx.params.configId) {
         case 'mode':
