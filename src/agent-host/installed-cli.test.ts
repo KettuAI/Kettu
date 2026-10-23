@@ -415,15 +415,16 @@ describe('findInstalledCli', () => {
 describe('decideCli', () => {
   const found = { path: '/usr/local/bin/claude', version: '2.1.304', variable: null, problem: null }
   const decide = (overrides: Partial<Parameters<typeof decideCli>[0]> = {}) =>
-    decideCli({ found, minimum: '2.1.303', failure: null, ...overrides })
+    decideCli({ prefer: 'installed', found, minimum: '2.1.303', failure: null, ...overrides })
 
   it('runs the installed program when it meets the minimum, or before the minimum is known', () => {
     expect(decide()).toEqual({ runs: 'installed', installed: found })
     expect(decide({ minimum: undefined })).toEqual({ runs: 'installed', installed: found })
   })
 
-  it('runs the copy when none is found', () => {
+  it('runs the copy when none is found, or the user chose it', () => {
     expect(decide({ found: null })).toEqual({ runs: 'bundled', installed: null })
+    expect(decide({ prefer: 'bundled' })).toEqual({ runs: 'bundled', installed: found })
   })
 
   it('runs the copy and says why when the program is too old, failed or names no minimum', () => {
@@ -444,9 +445,9 @@ describe('decideCli', () => {
     expect(decide({ found: unsupported })).toEqual({ runs: 'bundled', installed: unsupported })
   })
 
-  it('lets a variable in the environment decide, even for a program too old', () => {
+  it('lets a variable in the environment decide, whatever the setting', () => {
     const named = { ...found, variable: 'CLAUDE_CODE_EXECUTABLE', version: '2.1.1' }
-    expect(decide({ found: named })).toEqual({
+    expect(decide({ found: named, prefer: 'bundled' })).toEqual({
       runs: 'installed',
       installed: { ...named, problem: { kind: 'too-old', minimum: '2.1.303' } },
     })

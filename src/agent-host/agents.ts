@@ -7,12 +7,14 @@ import path from 'node:path'
 import type {
   AgentAccount,
   AgentAuthMethod,
+  AgentCliSource,
   AgentDetails,
   AgentInstallMethod,
   AgentState,
   AgentStatus,
   AgentTask,
   AgentUpdate,
+  InstalledCli,
   PlanLimit,
 } from '@shared/agent-host'
 import type { AgentProcess } from '@shared/host-control'
@@ -229,7 +231,7 @@ class Slot {
   installedCli: string | null = null
   /** A binary agent's install routes, found at detection. */
   installPlans: InstallPlan[] = []
-  /** The user's CLI a start failed with; the copy runs until the environment is reloaded. */
+  /** The user's CLI a start failed with; the copy runs until the setting or environment changes. */
   cliFailure: { path: string; reason: string } | null = null
   /** An install or update the user asked for, which runs beside the agent's own lifecycle. */
   task: Omit<AgentTask, 'progress'> | null = null
@@ -360,7 +362,7 @@ export class AgentManager {
 
   private async detect(slot: Slot): Promise<void> {
     const platform = this.deps.platform
-    const override = this.deps.settings().agents[slot.def.id]?.binaryPath ?? null
+    const agentSettings = this.deps.settings().agents[slot.def.id]
     const env = this.deps.env.agentEnv()
     const node = this.deps.env.nodeProbe()
     const isExecutable = (file: string): Promise<boolean> => isExecutableFile(file, platform)
@@ -368,12 +370,13 @@ export class AgentManager {
       platform,
       env,
       electronPath: this.deps.electronPath,
-      binaryOverride: override,
+      binaryOverride: agentSettings?.binaryPath ?? null,
       node,
       adaptersDir: this.deps.adaptersDir,
       isExecutable,
       probeCli:
         this.deps.probeCli ?? ((program, cliEnv) => this.cliVersions.probe(program, cliEnv)),
+      cliPreference: agentSettings?.cli ?? 'installed',
       cliFailure: slot.cliFailure,
     })
     const adapter = detection.state === 'available' ? detection.adapter : null
@@ -418,13 +421,20 @@ export class AgentManager {
     return this.statuses()
   }
 
-  /** Binary overrides changed: detect the affected agents again. */
+  /** Binary overrides or the choice of CLI changed: detect the affected agents again. */
   async settingsChanged(previous: HostSettings, next: HostSettings): Promise<void> {
+    const before = (slot: Slot) => previous.agents[slot.def.id]
+    const after = (slot: Slot) => next.agents[slot.def.id]
+    // Choosing again tries the installed CLI again, after a start with it failed.
+    for (const slot of this.slots.values()) {
+      if (before(slot)?.cli !== after(slot)?.cli) slot.cliFailure = null
+    }
     // Detecting again rewrites each idle agent's guidance in the new language.
     const changed = [...this.slots.values()].filter(
       (slot) =>
         previous.locale !== next.locale ||
-        previous.agents[slot.def.id]?.binaryPath !== next.agents[slot.def.id]?.binaryPath,
+        before(slot)?.binaryPath !== after(slot)?.binaryPath ||
+        before(slot)?.cli !== after(slot)?.cli,
     )
     await Promise.all(changed.map((slot) => this.detect(slot)))
   }
@@ -1668,6 +1678,14 @@ export class AgentManager {
     return displayCommand(slot.def, this.deps.electronPath, override, this.deps.adaptersDir)
   }
 
+  /** The CLI the running adapter process uses, which a change of setting leaves until it stops. */
+  private activeCli(slot: Slot, installed: InstalledCli | null): AgentCliSource | null {
+    const spec = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
+    if (!spec) return null
+    // A program the environment names runs whatever OverBench passes.
+    return spec.cli !== undefined || installed?.variable ? 'installed' : 'bundled'
+  }
+
   status(agentId: AgentId): AgentStatus {
     const slot = this.slot(agentId)
     const platform = this.deps.platform
@@ -1736,8 +1754,12 @@ export class AgentManager {
         adapter?.cli && slot.def.cli
           ? {
               command: slot.def.cli.command,
+              prefer: this.deps.settings().agents[slot.def.id]?.cli ?? 'installed',
               runs: adapter.cli.runs,
+              active: this.activeCli(slot, adapter.cli.installed),
               installed: adapter.cli.installed,
+              needsCopy: adapter.cli.needsCopy,
+              copyMegabytes: slot.def.cli.copyMegabytes,
             }
           : null,
       capabilities: {

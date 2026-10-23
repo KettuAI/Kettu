@@ -19,6 +19,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type {
+  AgentCli,
+  AgentCliSource,
   AgentConfigItem,
   AgentInstallMethod,
   AgentStatus,
@@ -76,6 +78,7 @@ import {
   Masked,
   PathText,
   RevealAction,
+  Segmented,
   SettingSelect,
 } from './controls'
 import { GroupLabel, RowFrame, RowShell, RowText } from './rows'
@@ -1240,6 +1243,7 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
   const [act, , error] = useAction()
   return (
     <>
+      {status.cli && <CliRow status={status} cli={status.cli} />}
       {status.id === 'opencode' && (
         <RowFrame
           text={
@@ -1283,6 +1287,114 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
         </RowShell>
       )}
     </>
+  )
+}
+
+/** The CLI an adapter runs, why when it is not the installed one, and the choice between them. */
+function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
+  const { t } = useTranslation(['settings', 'common'])
+  const [apply, error] = useApply()
+  const [retry, retrying, retryError] = useAction()
+  const version = useAgentVersion(status)
+  const installed = cli.installed
+  const { command } = cli
+  const problem = installed?.problem
+  // A program the environment names runs whatever its problem; any other gives way to the copy.
+  const problemNote = !problem
+    ? null
+    : problem.kind === 'too-old'
+      ? t('agents.cli.tooOld', { command, version: installed?.version, minimum: problem.minimum })
+      : problem.kind === 'failed'
+        ? t(installed?.variable ? 'agents.cli.failedNamed' : 'agents.cli.failed', { command })
+        : problem.kind === 'unsupported'
+          ? t('agents.cli.unsupported', { command })
+          : t('agents.cli.noMinimum', { name: status.name })
+  const note = !installed
+    ? t('agents.cli.notFound', { command })
+    : installed.variable
+      ? problemNote
+        ? t('agents.cli.setByWith', { env: installed.variable, problem: problemNote })
+        : t('agents.setBy', { env: installed.variable })
+      : (problemNote ??
+        (cli.runs === 'bundled'
+          ? t('agents.cli.found', { command, version: installed.version })
+          : null))
+  // The installed one was asked for and has a problem: the variable names it, or the setting does.
+  const attention = !!problem && (!!installed?.variable || cli.prefer === 'installed')
+  // The copy is to run but this install has none: the next start downloads it.
+  const missing = cli.runs === 'bundled' && cli.needsCopy
+  // The running adapter keeps its CLI until it stops, so another choice waits for the next start.
+  const pending = cli.active !== null && cli.active !== cli.runs
+  return (
+    <RowFrame
+      text={
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-ui font-medium">{t('agents.program')}</span>
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            {cli.runs === 'installed' && installed ? (
+              <PathText path={installed.path} />
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {t(missing ? 'agents.cli.notDownloaded' : 'agents.cli.bundledLine')}
+              </span>
+            )}
+            {version && !missing && (
+              <span className="shrink-0 font-mono text-meta text-muted-foreground">{version}</span>
+            )}
+          </span>
+          {note && (
+            <span
+              className={cn('text-xs', attention ? 'text-attention-text' : 'text-muted-foreground')}
+              data-selectable=""
+            >
+              {note}
+            </span>
+          )}
+          {cli.runs === 'bundled' && installed && <PathText path={installed.path} />}
+          {problem?.kind === 'failed' && (
+            <span className="text-xs text-muted-foreground" data-selectable="">
+              {problem.reason}
+            </span>
+          )}
+          {missing && (
+            <span className="text-xs text-muted-foreground">
+              {t('agents.cli.downloadsNext', { size: cli.copyMegabytes })}
+            </span>
+          )}
+          {pending && (
+            <span className="text-xs text-muted-foreground">{t('agents.cli.nextStart')}</span>
+          )}
+        </div>
+      }
+    >
+      <ControlError error={error ?? retryError} />
+      {problem?.kind === 'failed' && (
+        <Button
+          variant="quiet"
+          size="compact"
+          disabled={retrying}
+          onClick={() => retry(() => useAgentsStore.getState().reloadEnvironment())}
+        >
+          {retrying ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <RefreshCwIcon data-icon="inline-start" />
+          )}
+          {t('common:actions.retry')}
+        </Button>
+      )}
+      {installed && !installed.variable && (
+        <Segmented
+          label={t('agents.cli.choose', { name: status.name })}
+          value={cli.prefer}
+          options={[
+            { value: 'installed', label: t('agents.cli.installed') },
+            { value: 'bundled', label: t('agents.cli.bundled') },
+          ]}
+          onChange={(choice: AgentCliSource) => apply({ agents: { [status.id]: { cli: choice } } })}
+        />
+      )}
+    </RowFrame>
   )
 }
 

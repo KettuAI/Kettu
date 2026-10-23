@@ -9,7 +9,11 @@ const adapter = {
 }
 const installedCli = {
   command: 'claude',
+  prefer: 'installed' as const,
   runs: 'installed' as const,
+  active: null,
+  needsCopy: false,
+  copyMegabytes: 256,
   installed: { path: '/usr/local/bin/claude', version: '2.1.304', variable: null, problem: null },
 }
 const status = (overrides: Partial<AgentStatus>): AgentStatus =>

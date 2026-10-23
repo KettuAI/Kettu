@@ -23,7 +23,7 @@ describe('validateSettingsPatch', () => {
       general: { language: 'zh-CN', sendKey: 'mod-enter', defaultAgent: 'codex' },
       appearance: { theme: 'dark', zoom: 1.25 },
       notifications: { sound: true },
-      agents: { opencode: { binaryPath: null } },
+      agents: { opencode: { binaryPath: null }, codex: { cli: 'bundled' } },
       proxy: { mode: 'custom', url: 'http://proxy.local:8080', noProxy: 'localhost' },
       terminal: { fontSize: 14, shellPath: null },
       git: { backgroundFetch: true },
@@ -52,7 +52,8 @@ describe('validateSettingsPatch', () => {
     [{ notifications: { badge: 'yes' } }, '"notifications.badge" must be a boolean'],
     [{ agents: { cursor: { binaryPath: null } } }, 'Unknown agent "agents.cursor"'],
     [{ agents: { codex: { binaryPath: '/bin/sh' } } }, 'can only be cleared with null'],
-    [{ agents: { codex: { args: [] } } }, 'accepts only "binaryPath"'],
+    [{ agents: { codex: { args: [] } } }, 'accepts only "binaryPath" and "cli"'],
+    [{ agents: { codex: { cli: 'path' } } }, '"agents.codex.cli" must be one of'],
     [{ terminal: { shellPath: '/bin/zsh' } }, 'can only be cleared with null'],
     [{ terminal: { fontSize: 16 } }, '"terminal.fontSize" must be one of'],
     [{ terminal: { cursor: 'block' } }, 'Unknown setting "terminal.cursor"'],
@@ -106,6 +107,22 @@ describe('mergeSettings', () => {
     expect(cleared.terminal).toEqual({ fontSize: 13 })
   })
 
+  it('keeps the choice of CLI and the binary apart', () => {
+    const chosen = mergeSettings(withAgentBinary(defaults(), 'codex', '/opt/codex'), {
+      agents: { codex: { cli: 'bundled' } },
+    })
+    expect(chosen.agents.codex).toEqual({ binaryPath: '/opt/codex', cli: 'bundled' })
+    expect(withAgentBinary(chosen, 'codex', '/opt/other').agents.codex).toEqual({
+      binaryPath: '/opt/other',
+      cli: 'bundled',
+    })
+    const cleared = mergeSettings(chosen, { agents: { codex: { binaryPath: null } } })
+    expect(cleared.agents).toEqual({ codex: { cli: 'bundled' } })
+    expect(mergeSettings(cleared, { agents: { codex: { cli: 'installed' } } }).agents).toEqual({
+      codex: { cli: 'installed' },
+    })
+  })
+
   it('keeps the shell path when only the font size changes', () => {
     const next = mergeSettings(withShellPath(defaults(), '/bin/fish'), {
       terminal: { fontSize: 12 },
@@ -125,14 +142,17 @@ describe('parseSettingsFile', () => {
     })
   })
 
-  it('reads stored executable paths', () => {
+  it('reads stored executable paths and choices of CLI', () => {
     const loaded = parseSettingsFile({
       version: 1,
-      agents: { opencode: { binaryPath: '/opt/oc' } },
+      agents: { opencode: { binaryPath: '/opt/oc' }, codex: { cli: 'bundled' } },
       terminal: { shellPath: '/bin/fish', fontSize: 12 },
     })
     expect(loaded.problems).toEqual([])
-    expect(loaded.settings.agents).toEqual({ opencode: { binaryPath: '/opt/oc' } })
+    expect(loaded.settings.agents).toEqual({
+      opencode: { binaryPath: '/opt/oc' },
+      codex: { cli: 'bundled' },
+    })
     expect(loaded.settings.terminal).toEqual({ shellPath: '/bin/fish', fontSize: 12 })
   })
 

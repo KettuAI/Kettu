@@ -247,6 +247,23 @@
     "programOnPath": "PATH 中的 opencode",
     "reset": "重置",
     "chooseBinary": "选择可执行文件…",
+    "cli": {
+      "choose": "运行哪个 {{name}}",
+      "installed": "已安装",
+      "bundled": "内置",
+      "bundledLine": "适配器内置",
+      "found": "你也装有 {{command}} {{version}}。",
+      "notFound": "PATH 中没有找到 {{command}}。",
+      "tooOld": "你的 {{command}} 是 {{version}}，适配器需要 {{minimum}} 或更高版本。",
+      "failed": "你的 {{command}} 无法启动，现在运行内置版本。修好后重试。",
+      "failedNamed": "你的 {{command}} 无法启动。修好后重试。",
+      "unsupported": "你的 {{command}} 需要通过 Shell 才能运行。",
+      "noMinimum": "适配器没有说明它需要哪个版本的 {{name}}。",
+      "setByWith": "由 {{env}} 指定。{{problem}}",
+      "notDownloaded": "内置，尚未下载",
+      "downloadsNext": "下次启动时下载，约 {{size}} MB。",
+      "nextStart": "下次启动时生效。"
+    },
     "environment": {
       "pending": "正在读取你的环境…",
       "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}} ms。",
