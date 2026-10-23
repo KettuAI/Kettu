@@ -5,8 +5,10 @@ import {
   issueBody,
   lastPublished,
   latestTag,
+  mergedPull,
   missing,
   pullNumber,
+  readPull,
   releaseOpen,
   releaseTarget,
   summary,
@@ -16,15 +18,31 @@ type Input = Parameters<typeof decide>[0]
 
 const NOW = new Date('2026-11-01T12:00:00Z')
 const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000).toISOString()
-const commits = (...subjects: string[]) => subjects.map((subject, i) => ({ sha: `c${i}`, subject }))
+const commit = (subject: string, sha = subject, hours = 10) => ({
+  sha,
+  subject,
+  date: hoursAgo(hours),
+})
+const commits = (...subjects: string[]) => subjects.map((subject) => commit(subject))
 const fixes = (count: number) =>
-  commits(...Array.from({ length: count }, (_, i) => `fix: change ${i + 1} (#${101 + i})`))
+  Array.from({ length: count }, (_, i) => commit(`fix: change ${i + 1} (#${101 + i})`))
+const tag = (name: string, hours: number) => ({ name, date: hoursAgo(hours) })
+const published = (name: string, hours: number) => ({
+  tag: name,
+  draft: false,
+  prerelease: false,
+  publishedAt: hoursAgo(hours),
+})
+const urgentPull = (number: number, issue: number) => ({
+  number,
+  issues: [{ number: issue, labels: ['area:session', 'urgent'] }],
+})
 
 const base: Input = {
   now: NOW,
-  lastTag: 'v0.0.1',
+  tags: [tag('v0.0.1', 49)],
   commits: [],
-  releases: [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(48) }],
+  releases: [published('v0.0.1', 48)],
   milestones: [
     { number: 1, title: 'v0.1.0', openIssues: 6 },
     { number: 4, title: 'v0.0.3', openIssues: 8 },
@@ -32,7 +50,7 @@ const base: Input = {
   ],
   openIssues: [{ number: 12, title: 'Use the installed agents' }],
   openPulls: [{ number: 52, title: 'fix(agents): run the installed claude and codex' }],
-  closingIssues: {},
+  pulls: {},
 }
 const input = (overrides: Partial<Input>): Input => ({ ...base, ...overrides })
 
@@ -63,7 +81,7 @@ describe('isUserVisible', () => {
     }
   })
 
-  it('leaves out docs, CI, refactors, other tasks and anything without a header', () => {
+  it('leaves out docs, CI, refactors, reverts, other tasks and anything without a header', () => {
     for (const subject of [
       'docs(workflow): plan small patch iterations (#50)',
       'ci: check pull request titles and links (#27)',
@@ -98,16 +116,29 @@ describe('lastPublished', () => {
   it('takes the latest published release and ignores drafts', () => {
     expect(
       lastPublished([
-        { tag: 'v0.0.3', draft: true, publishedAt: null },
-        { tag: 'v0.0.1', draft: false, publishedAt: '2026-10-23T04:12:08Z' },
-        { tag: 'v0.0.2', draft: false, publishedAt: '2026-10-25T09:00:00Z' },
+        { tag: 'v0.0.3', draft: true, prerelease: false, publishedAt: null },
+        published('v0.0.1', 200),
+        published('v0.0.2', 100),
       ]),
-    ).toEqual({ tag: 'v0.0.2', at: new Date('2026-10-25T09:00:00Z') })
+    ).toEqual({ tag: 'v0.0.2', at: new Date(hoursAgo(100)) })
+  })
+
+  it('ignores prereleases and tags that are not versions', () => {
+    expect(
+      lastPublished([
+        published('v0.0.1', 48),
+        { ...published('v0.0.2', 2), prerelease: true },
+        published('v0.0.2-beta.1', 3),
+        published('nightly', 1),
+      ]),
+    ).toEqual({ tag: 'v0.0.1', at: new Date(hoursAgo(48)) })
   })
 
   it('returns null when nothing is published', () => {
     expect(lastPublished([])).toBeNull()
-    expect(lastPublished([{ tag: 'v0.0.1', draft: true, publishedAt: null }])).toBeNull()
+    expect(
+      lastPublished([{ tag: 'v0.0.1', draft: true, prerelease: false, publishedAt: null }]),
+    ).toBeNull()
   })
 })
 
@@ -194,58 +225,141 @@ describe('releaseTarget', () => {
 })
 
 describe('releaseOpen', () => {
-  it('returns null when no release is under way', () => {
-    expect(releaseOpen(base)).toBeNull()
-    expect(releaseOpen(input({ lastTag: null, releases: [] }))).toBeNull()
+  it('finds nothing when no release is under way', () => {
+    expect(releaseOpen(base)).toEqual({ open: null, warnings: [] })
+    expect(releaseOpen(input({ tags: [], releases: [] }))).toEqual({ open: null, warnings: [] })
   })
 
-  it('finds an open release issue by its title', () => {
+  it('counts an open issue titled exactly "Release vX.Y.Z" above the last tag', () => {
     expect(
       releaseOpen(
         input({ openIssues: [...base.openIssues, { number: 61, title: 'Release v0.0.2' }] }),
       ),
-    ).toBe('#61, "Release v0.0.2", is open.')
+    ).toEqual({ open: { reason: '#61, "Release v0.0.2", is open.', since: null }, warnings: [] })
+  })
+
+  it('warns about a release issue left open after its version shipped, and does not count it', () => {
+    expect(
+      releaseOpen(
+        input({
+          tags: [tag('v0.0.1', 200), tag('v0.0.2', 49)],
+          releases: [published('v0.0.1', 200), published('v0.0.2', 48)],
+          openIssues: [{ number: 61, title: 'Release v0.0.2' }],
+        }),
+      ),
+    ).toEqual({
+      open: null,
+      warnings: [
+        '#61, "Release v0.0.2", is open, but v0.0.2 is not above the last tag, v0.0.2, so it does not count as an open release.',
+      ],
+    })
+  })
+
+  it('warns about an issue that only starts like a release issue', () => {
     expect(
       releaseOpen(
         input({
           openIssues: [
+            { number: 90, title: 'Release v0.0.3 crashes on launch' },
             { number: 70, title: 'Release view crashes' },
             { number: 71, title: 'Plan the Release v0.0.2 notes' },
           ],
         }),
       ),
-    ).toBeNull()
+    ).toEqual({
+      open: null,
+      warnings: [
+        '#90, "Release v0.0.3 crashes on launch", does not count as an open release: only the exact title "Release vX.Y.Z" does.',
+      ],
+    })
   })
 
-  it('finds an open release pull request', () => {
+  it('counts an open pull request titled exactly "chore(release): vX.Y.Z" above the last tag', () => {
     expect(
       releaseOpen(
         input({ openPulls: [...base.openPulls, { number: 60, title: 'chore(release): v0.0.2' }] }),
       ),
-    ).toBe('#60, "chore(release): v0.0.2", is open.')
-    expect(
-      releaseOpen(input({ openPulls: [{ number: 62, title: 'chore: release notes' }] })),
-    ).toBeNull()
+    ).toEqual({
+      open: { reason: '#60, "chore(release): v0.0.2", is open.', since: null },
+      warnings: [],
+    })
   })
 
-  it('finds a release that merged but is not tagged yet', () => {
-    expect(
-      releaseOpen(input({ commits: commits('fix: a (#58)', 'chore(release): v0.0.2 (#60)') })),
-    ).toBe('"chore(release): v0.0.2 (#60)" has merged but is not tagged yet.')
-  })
-
-  it('finds a tag that is not published yet, whether its draft is visible or not', () => {
-    const published = base.releases
+  it('warns about other chore(release) pull requests, and does not count them', () => {
     expect(
       releaseOpen(
         input({
-          lastTag: 'v0.0.2',
-          releases: [{ tag: 'v0.0.2', draft: true, publishedAt: null }, ...published],
+          openPulls: [
+            { number: 71, title: 'chore(release): drop the intel mac build' },
+            { number: 72, title: 'chore(release): v0.0.1' },
+            { number: 62, title: 'chore: release notes' },
+          ],
         }),
       ),
-    ).toBe('v0.0.2 is tagged but not published yet.')
-    expect(releaseOpen(input({ lastTag: 'v0.0.2', releases: published }))).toBe(
-      'v0.0.2 is tagged but not published yet.',
+    ).toEqual({
+      open: null,
+      warnings: [
+        '#71, "chore(release): drop the intel mac build", does not count as a release pull request: only the exact title "chore(release): vX.Y.Z" does.',
+        '#72, "chore(release): v0.0.1", is open, but v0.0.1 is not above the last tag, v0.0.1, so it does not count as an open release.',
+      ],
+    })
+  })
+
+  it('counts a merged release commit while its version has neither a tag nor a release', () => {
+    expect(
+      releaseOpen(
+        input({
+          commits: [commit('fix: a (#58)'), commit('chore(release): v0.0.2 (#60)', 'r', 5)],
+        }),
+      ),
+    ).toEqual({
+      open: {
+        reason: '"chore(release): v0.0.2 (#60)" has merged, and v0.0.2 is not tagged yet.',
+        since: new Date(hoursAgo(5)),
+      },
+      warnings: [],
+    })
+  })
+
+  it('warns about a tooling chore(release) commit, and does not count it', () => {
+    expect(
+      releaseOpen(
+        input({ commits: [...fixes(2), commit('chore(release): sign the macos build (#70)')] }),
+      ),
+    ).toEqual({
+      open: null,
+      warnings: [
+        '"chore(release): sign the macos build (#70)" does not count as a release: only "chore(release): vX.Y.Z" does.',
+      ],
+    })
+  })
+
+  it('clears a release whose tag sits on a commit outside main', () => {
+    expect(
+      releaseOpen(
+        input({
+          tags: [tag('v0.0.1', 200), tag('v0.0.2', 31)],
+          releases: [published('v0.0.1', 200), published('v0.0.2', 30)],
+          commits: [commit('chore(release): v0.0.2 (#60)'), ...fixes(3)],
+        }),
+      ),
+    ).toEqual({ open: null, warnings: [] })
+  })
+
+  it('counts the latest tag while it has no published release, whether its draft is visible or not', () => {
+    const tags = [tag('v0.0.1', 200), tag('v0.0.2', 5)]
+    const expected = {
+      open: {
+        reason: 'v0.0.2 is tagged, and no release of it is published yet.',
+        since: new Date(hoursAgo(5)),
+      },
+      warnings: [],
+    }
+    const draft = { tag: 'v0.0.2', draft: true, prerelease: false, publishedAt: null }
+    expect(releaseOpen(input({ tags, releases: [draft, ...base.releases] }))).toEqual(expected)
+    expect(releaseOpen(input({ tags }))).toEqual(expected)
+    expect(releaseOpen(input({ tags, commits: [commit('chore(release): v0.0.2 (#60)')] }))).toEqual(
+      expected,
     )
   })
 })
@@ -259,9 +373,11 @@ describe('decide', () => {
       outcome: 'none',
       fired: [],
       held: [],
-      changes: commits('fix: a (#24)', 'docs: b (#25)', 'fix: c (#26)').filter((_, i) => i !== 1),
+      changes: commits('fix: a (#24)', 'fix: c (#26)'),
       target: { version: 'v0.0.2' },
       releaseOpen: null,
+      warnings: [],
+      failure: null,
     })
   })
 
@@ -270,27 +386,25 @@ describe('decide', () => {
       outcome: 'open',
       fired: [{ name: 'Count', detail: '10 user-visible changes have merged since v0.0.1.' }],
     })
-    const nine = [...fixes(9), ...commits('docs: a (#90)', 'ci: b (#91)', 'chore: c (#92)')]
+    const nine = [...fixes(9), ...commits('docs: a (#90)', 'ci: b (#91)', 'revert: c (#92)')]
     expect(decide(input({ commits: nine }))).toMatchObject({ outcome: 'none', fired: [] })
   })
 
   it('holds Count until 24 hours after the previous release', () => {
-    const recent = [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(23) }]
-    expect(decide(input({ commits: fixes(12), releases: recent }))).toMatchObject({
+    expect(
+      decide(input({ commits: fixes(12), releases: [published('v0.0.1', 23)] })),
+    ).toMatchObject({
       outcome: 'none',
       fired: [],
       held: [{ name: 'Count', detail: '12 user-visible changes have merged since v0.0.1.' }],
     })
-    const day = [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(24) }]
-    expect(decide(input({ commits: fixes(12), releases: day }))).toMatchObject({
-      outcome: 'open',
-      fired: [{ name: 'Count' }],
-      held: [],
-    })
+    expect(
+      decide(input({ commits: fixes(12), releases: [published('v0.0.1', 24)] })),
+    ).toMatchObject({ outcome: 'open', fired: [{ name: 'Count' }], held: [] })
   })
 
   it('fires Time 7 days after the last release when a user-visible change has merged', () => {
-    const week = [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(7 * 24) }]
+    const week = [published('v0.0.1', 7 * 24)]
     expect(decide(input({ commits: fixes(1), releases: week }))).toMatchObject({
       outcome: 'open',
       fired: [
@@ -302,41 +416,60 @@ describe('decide', () => {
       ],
     })
     expect(
-      decide(input({ commits: commits('docs: a (#1)', 'ci: b (#2)'), releases: week })),
+      decide(input({ commits: commits('docs: a (#1)', 'revert: b (#2)'), releases: week })),
     ).toMatchObject({ outcome: 'none', fired: [] })
-    const almost = [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(7 * 24 - 1) }]
-    expect(decide(input({ commits: fixes(3), releases: almost }))).toMatchObject({
-      outcome: 'none',
-      fired: [],
-    })
+    expect(
+      decide(input({ commits: fixes(3), releases: [published('v0.0.1', 7 * 24 - 1)] })),
+    ).toMatchObject({ outcome: 'none', fired: [] })
   })
 
-  it('fires Urgent at once for a merged fix of an urgent issue', () => {
+  it('fires Urgent at once for a merged fix or revert of an urgent issue', () => {
     const decision = decide(
       input({
-        releases: [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(1) }],
-        commits: commits('docs: a (#28)', 'fix(session): keep threads on crash (#30)'),
-        closingIssues: {
-          28: [{ number: 27, labels: ['urgent'] }],
-          30: [
-            { number: 29, labels: ['area:session', 'urgent'] },
-            { number: 31, labels: ['regression'] },
-          ],
+        releases: [published('v0.0.1', 1)],
+        commits: [
+          commit('fix(session): keep threads on crash (#30)', 'c30'),
+          commit('revert: feat: add login (#33) (#81)', 'c81'),
+        ],
+        pulls: {
+          c30: {
+            number: 30,
+            issues: [
+              { number: 29, labels: ['area:session', 'urgent'] },
+              { number: 31, labels: ['regression'] },
+            ],
+          },
+          c81: urgentPull(81, 82),
         },
       }),
     )
     expect(decision).toMatchObject({
       outcome: 'open',
-      fired: [{ name: 'Urgent', detail: '#28 closed urgent #27; #30 closed urgent #29.' }],
+      fired: [
+        {
+          name: 'Urgent',
+          detail:
+            '"fix(session): keep threads on crash (#30)" closed urgent #29; "revert: feat: add login (#33) (#81)" closed urgent #82.',
+        },
+      ],
     })
   })
 
-  it('ignores pull requests that close no urgent issue', () => {
+  it('ignores docs, CI and other tasks that close an urgent issue, and fixes that close none', () => {
     expect(
       decide(
         input({
-          commits: commits('fix: a (#30)', 'fix: b'),
-          closingIssues: { 30: [{ number: 29, labels: ['regression'] }] },
+          releases: [published('v0.0.1', 1)],
+          commits: [
+            commit('docs: note the workaround (#80)', 'c80'),
+            commit('ci: retry the flaky job (#83)', 'c83'),
+            commit('fix: a (#30)', 'c30'),
+          ],
+          pulls: {
+            c80: urgentPull(80, 79),
+            c83: urgentPull(83, 79),
+            c30: { number: 30, issues: [{ number: 29, labels: ['regression'] }] },
+          },
         }),
       ),
     ).toMatchObject({ outcome: 'none', fired: [] })
@@ -345,39 +478,102 @@ describe('decide', () => {
   it('names every trigger that fired, Urgent first', () => {
     const decision = decide(
       input({
-        releases: [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(8 * 24) }],
+        releases: [published('v0.0.1', 8 * 24)],
         commits: fixes(10),
-        closingIssues: { 105: [{ number: 40, labels: ['urgent'] }] },
+        pulls: { 'fix: change 5 (#105)': urgentPull(105, 40) },
       }),
     )
     expect(decision.fired.map((trigger) => trigger.name)).toEqual(['Urgent', 'Count', 'Time'])
   })
 
-  it('opens nothing while a release is open', () => {
+  it('opens nothing while a release issue is open, without a warning', () => {
     expect(
       decide(input({ commits: fixes(10), openIssues: [{ number: 61, title: 'Release v0.0.2' }] })),
     ).toMatchObject({
       outcome: 'release-open',
       fired: [{ name: 'Count' }],
       releaseOpen: '#61, "Release v0.0.2", is open.',
+      warnings: [],
+      failure: null,
     })
   })
 
-  it('reports a fired trigger without a planned version', () => {
+  it('warns while an untagged or unpublished release holds back a trigger', () => {
+    expect(
+      decide(input({ commits: [commit('chore(release): v0.0.2 (#60)', 'r', 47), ...fixes(10)] })),
+    ).toMatchObject({
+      outcome: 'release-open',
+      warnings: [
+        'A release is due (Count), but "chore(release): v0.0.2 (#60)" has merged, and v0.0.2 is not tagged yet.',
+      ],
+      failure: null,
+    })
+    expect(
+      decide(input({ tags: [tag('v0.0.1', 200), tag('v0.0.2', 47)], commits: fixes(10) })),
+    ).toMatchObject({
+      outcome: 'release-open',
+      warnings: [
+        'A release is due (Count), but v0.0.2 is tagged, and no release of it is published yet.',
+      ],
+      failure: null,
+    })
+  })
+
+  it('fails once an untagged or unpublished release has held a trigger back for 48 hours', () => {
+    expect(
+      decide(input({ commits: [commit('chore(release): v0.0.2 (#60)', 'r', 48), ...fixes(10)] })),
+    ).toMatchObject({
+      outcome: 'release-open',
+      warnings: [],
+      failure: `A release is due (Count), but "chore(release): v0.0.2 (#60)" has merged, and v0.0.2 is not tagged yet. That has held since ${hoursAgo(48).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
+    })
+    expect(
+      decide(
+        input({
+          tags: [tag('v0.0.1', 400), tag('v0.0.2', 300)],
+          releases: [published('v0.0.1', 400)],
+          commits: fixes(1),
+        }),
+      ),
+    ).toMatchObject({
+      outcome: 'release-open',
+      fired: [{ name: 'Time' }],
+      failure: `A release is due (Time), but v0.0.2 is tagged, and no release of it is published yet. That has held since ${hoursAgo(300).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
+    })
+  })
+
+  it('neither warns nor fails about a release under way when nothing is due', () => {
+    expect(
+      decide(input({ tags: [tag('v0.0.1', 400), tag('v0.0.2', 300)], commits: fixes(2) })),
+    ).toMatchObject({
+      outcome: 'none',
+      releaseOpen: 'v0.0.2 is tagged, and no release of it is published yet.',
+      warnings: [],
+      failure: null,
+    })
+  })
+
+  it('fails when a trigger fired but no milestone gives a version', () => {
     const milestones = [{ number: 1, title: 'v0.1.0', openIssues: 3 }]
     expect(decide(input({ commits: fixes(10), milestones }))).toMatchObject({
       outcome: 'no-version',
       target: {
         problem: 'No patch milestone is open before v0.1.0, which still has 3 open issues.',
       },
+      failure:
+        'A release is due (Count), but it has no version: No patch milestone is open before v0.1.0, which still has 3 open issues.',
     })
-    expect(decide(input({ commits: fixes(2), milestones }))).toMatchObject({ outcome: 'none' })
+    expect(decide(input({ commits: fixes(2), milestones }))).toMatchObject({
+      outcome: 'none',
+      failure: null,
+    })
   })
 
   it('counts from the first commit before any release, and never fires Time', () => {
-    const first = { lastTag: null, releases: [] }
+    const first = { tags: [], releases: [] }
     expect(decide(input({ ...first, commits: fixes(10) }))).toMatchObject({
       outcome: 'open',
+      lastTag: null,
       lastPublished: null,
       fired: [
         { name: 'Count', detail: '10 user-visible changes have merged since the first commit.' },
@@ -388,28 +584,30 @@ describe('decide', () => {
 })
 
 describe('issueBody', () => {
-  it('names the triggers and the version, and lists the user-visible changes', () => {
+  it('names the trigger and the version, and lists the user-visible changes and reverts', () => {
     const decision = decide(
       input({
-        releases: [{ tag: 'v0.0.1', draft: false, publishedAt: hoursAgo(1) }],
-        commits: commits(
-          'feat(usage): add a one-day range (#45)',
-          'docs: explain the release (#46)',
-          'fix(session): keep threads on crash (#30)',
-        ),
-        closingIssues: { 30: [{ number: 29, labels: ['urgent'] }] },
+        releases: [published('v0.0.1', 1)],
+        commits: [
+          commit('feat(usage): add a one-day range (#45)'),
+          commit('docs: explain the release (#46)'),
+          commit('revert: feat: add login (#33) (#81)', 'c81'),
+          commit('perf(thread): virtualize entries (#47)'),
+        ],
+        pulls: { c81: urgentPull(81, 82) },
       }),
     )
     expect(issueBody(decision)).toBe(
       [
-        'The Urgent trigger fired: #30 closed urgent #29.',
+        'The Urgent trigger fired: "revert: feat: add login (#33) (#81)" closed urgent #82.',
         '',
         'The version is v0.0.2, the earliest open patch milestone. The steps are in [release](https://github.com/overbench/overbench/blob/main/docs/workflow.md#6-release).',
         '',
-        'User-visible changes since v0.0.1:',
+        'User-visible changes and reverts since v0.0.1:',
         '',
         '- feat(usage): add a one-day range (#45)',
-        '- fix(session): keep threads on crash (#30)',
+        '- revert: feat: add login (#33) (#81)',
+        '- perf(thread): virtualize entries (#47)',
         '',
       ].join('\n'),
     )
@@ -418,8 +616,8 @@ describe('issueBody', () => {
   it('lists several triggers and says why a minor is next', () => {
     const decision = decide(
       input({
-        lastTag: 'v0.0.5',
-        releases: [{ tag: 'v0.0.5', draft: false, publishedAt: hoursAgo(8 * 24) }],
+        tags: [tag('v0.0.5', 8 * 24 + 1)],
+        releases: [published('v0.0.5', 8 * 24)],
         milestones: [
           { number: 1, title: 'v0.1.0', openIssues: 0 },
           { number: 10, title: 'v0.1.1', openIssues: 2 },
@@ -438,7 +636,9 @@ describe('issueBody', () => {
         'The version is v0.1.0, as no patch milestone is left before it and its issues have all closed.',
       ].join('\n'),
     )
-    expect(body).toContain('User-visible changes since v0.0.5:\n\n- fix: change 1 (#101)\n')
+    expect(body).toContain(
+      'User-visible changes and reverts since v0.0.5:\n\n- fix: change 1 (#101)\n',
+    )
   })
 })
 
@@ -448,8 +648,8 @@ describe('summary', () => {
       summary(
         decide(
           input({
-            releases: [{ tag: 'v0.0.1', draft: false, publishedAt: '2026-11-01T00:00:00Z' }],
-            commits: [...fixes(10), ...commits('docs: a (#200)')],
+            releases: [{ ...published('v0.0.1', 0), publishedAt: '2026-11-01T00:00:00Z' }],
+            commits: [...fixes(10), commit('docs: a (#200)')],
           }),
         ),
       ),
@@ -494,13 +694,87 @@ describe('summary', () => {
       'Fired: Count, 10 user-visible changes have merged since v0.0.1.',
       'Decision: a release is due, but no milestone gives its version; plan one.',
     ])
-    expect(summary(decide(input({ lastTag: null, releases: [], commits: fixes(10) })))).toEqual([
+    expect(summary(decide(input({ tags: [], releases: [], commits: fixes(10) })))).toEqual([
       'Last release: none yet.',
       'Since the first commit: 10 commits, 10 user-visible.',
       'Version: v0.0.2, the earliest open patch milestone.',
       'Fired: Count, 10 user-visible changes have merged since the first commit.',
       'Decision: open "Release v0.0.2".',
     ])
+  })
+})
+
+describe('mergedPull', () => {
+  const squash = commit('fix: a (#30)', 'f'.repeat(40))
+  const pull = (number: number, oid: string | null) => ({
+    number,
+    mergeCommit: oid ? { oid } : null,
+  })
+
+  it('takes the pull request whose squash merge made the commit', () => {
+    const object = {
+      associatedPullRequests: { nodes: [pull(29, 'a'.repeat(40)), pull(31, squash.sha)] },
+    }
+    expect(mergedPull(squash, object)).toEqual(pull(31, squash.sha))
+  })
+
+  it('returns null when GitHub links none, or does not know the commit', () => {
+    expect(mergedPull(squash, { associatedPullRequests: { nodes: [pull(32, null)] } })).toBeNull()
+    expect(mergedPull(squash, null)).toBeNull()
+  })
+})
+
+describe('readPull', () => {
+  const squash = commit('fix: a (#30)')
+  const labels = (...names: string[]) => ({
+    totalCount: names.length,
+    nodes: names.map((name) => ({ name })),
+  })
+
+  it('reads the issues a pull request closed, with their labels', () => {
+    expect(
+      readPull(squash, {
+        number: 30,
+        closingIssuesReferences: {
+          totalCount: 2,
+          nodes: [
+            { number: 29, labels: labels('urgent', 'area:session') },
+            { number: 31, labels: labels() },
+          ],
+        },
+      }),
+    ).toEqual({
+      pull: {
+        number: 30,
+        issues: [
+          { number: 29, labels: ['urgent', 'area:session'] },
+          { number: 31, labels: [] },
+        ],
+      },
+      warnings: [],
+    })
+  })
+
+  it('warns when a page leaves issues or labels out', () => {
+    expect(
+      readPull(squash, {
+        number: 30,
+        closingIssuesReferences: {
+          totalCount: 26,
+          nodes: [{ number: 29, labels: { totalCount: 30, nodes: [{ name: 'area:git' }] } }],
+        },
+      }).warnings,
+    ).toEqual([
+      '#30 closed 26 issues; the Urgent check read the first 1.',
+      '#29 has 30 labels; the Urgent check read the first 1.',
+    ])
+  })
+
+  it('skips a number that is not a pull request, with a warning', () => {
+    const warning =
+      '"fix: a (#30)" names no pull request GitHub knows, so the Urgent check skips it.'
+    expect(readPull(squash, null)).toEqual({ pull: null, warnings: [warning] })
+    expect(readPull(squash, {})).toEqual({ pull: null, warnings: [warning] })
   })
 })
 

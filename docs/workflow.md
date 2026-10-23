@@ -90,7 +90,7 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 
 | Trigger | Fires when                                                                                       |
 | ------- | ------------------------------------------------------------------------------------------------ |
-| Urgent  | A fix for an `urgent` issue merges                                                               |
+| Urgent  | A fix for an `urgent` issue merges: a `feat`, `fix`, `perf` or `revert` that closes it           |
 | Count   | 10 user-visible changes have merged since the last release                                       |
 | Time    | 7 days have passed since the last release, and at least one user-visible change has merged since |
 | Asked   | The maintainer asks for a release                                                                |

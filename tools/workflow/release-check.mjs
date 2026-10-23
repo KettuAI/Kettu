@@ -12,34 +12,43 @@ import { execFileSync } from 'node:child_process'
 import { parseTitle } from './commit-title.mjs'
 
 const USER_VISIBLE = ['feat', 'fix', 'perf']
+// The types that can fix an urgent issue, and that the release notes list.
+const FIXING = [...USER_VISIBLE, 'revert']
 const COUNT = 10
 const HOUR = 60 * 60 * 1000
 const SPACING = 24 * HOUR
 const PERIOD = 7 * 24 * HOUR
+const STALE = 48 * HOUR
 const VERSION = /^v(\d+)\.(\d+)\.(\d+)$/
-const RELEASE_ISSUE = /^Release v\d+\.\d+\.\d+\b/
+const RELEASE_ISSUE = /^Release (v\d+\.\d+\.\d+)$/
+const RELEASE_PULL = /^chore\(release\): (v\d+\.\d+\.\d+)$/
+const RELEASE_COMMIT = /^chore\(release\): (v\d+\.\d+\.\d+)(?: \(#\d+\))?$/
+const LIKE_RELEASE_ISSUE = /^release v\d/i
 const STEPS = 'https://github.com/overbench/overbench/blob/main/docs/workflow.md#6-release'
 const ISSUE = { type: 'Task', labels: ['state:ready', 'area:build'] }
+const PAGE = 25
 
-/** @typedef {{ sha: string, subject: string }} Commit */
-/** @typedef {{ tag: string, draft: boolean, publishedAt: string | null }} Release */
+/** @typedef {{ sha: string, subject: string, date: string }} Commit */
+/** @typedef {{ name: string, date: string }} Tag */
+/** @typedef {{ tag: string, draft: boolean, prerelease: boolean, publishedAt: string | null }} Release */
 /** @typedef {{ number: number, title: string, openIssues: number }} Milestone */
 /** @typedef {{ number: number, title: string }} Item */
 /** @typedef {{ number: number, labels: string[] }} LinkedIssue */
+/** @typedef {{ number: number, issues: LinkedIssue[] }} Pull */
 /** @typedef {{ name: 'Urgent' | 'Count' | 'Time', detail: string }} Trigger */
 /** @typedef {{ version: string, milestone: Milestone, minor: boolean } | { problem: string }} Target */
+/** @typedef {{ reason: string, since: Date | null }} Open */
 
 /**
  * @typedef {object} Input
  * @property {Date} now
- * @property {string | null} lastTag the latest version tag on main, null before the first
- * @property {Commit[]} commits main's commits since lastTag, oldest first
+ * @property {Tag[]} tags every tag in the repository
+ * @property {Commit[]} commits main's commits since the latest version tag, oldest first
  * @property {Release[]} releases
  * @property {Milestone[]} milestones the open ones
  * @property {Item[]} openIssues
  * @property {Item[]} openPulls
- * @property {Record<number, LinkedIssue[]>} closingIssues by the number of the pull request that
- *   closed them, for the pull requests in commits
+ * @property {Record<string, Pull>} pulls by commit sha, the pull request each commit came from
  */
 
 /**
@@ -51,9 +60,11 @@ const ISSUE = { type: 'Task', labels: ['state:ready', 'area:build'] }
  * @property {Commit[]} changes the user-visible commits
  * @property {Trigger[]} fired
  * @property {Trigger[]} held fired, but within 24 hours of the last release
+ * @property {Date | null} heldUntil
  * @property {string | null} releaseOpen why a release counts as open
  * @property {Target} target
- * @property {Date | null} heldUntil
+ * @property {string[]} warnings
+ * @property {string | null} failure why the run should fail
  */
 
 /** @param {string} text */
@@ -77,6 +88,15 @@ function iso(date) {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
+/** @param {string} subject */
+const typeOf = (subject) => parseTitle(subject)?.type ?? ''
+
+/** @param {string} title */
+function isReleaseScope(title) {
+  const parts = parseTitle(title)
+  return parts?.type === 'chore' && parts.scope === 'release'
+}
+
 /**
  * @param {string[]} tags
  * @returns {string | null} the highest `vX.Y.Z` tag
@@ -96,8 +116,7 @@ export function latestTag(tags) {
 
 /** @param {string} subject a squash commit's subject */
 export function isUserVisible(subject) {
-  const type = parseTitle(subject)?.type
-  return type !== undefined && USER_VISIBLE.includes(type)
+  return USER_VISIBLE.includes(typeOf(subject))
 }
 
 /**
@@ -109,20 +128,15 @@ export function pullNumber(subject) {
   return match ? Number(match[1]) : null
 }
 
-/** @param {string} title */
-function isReleasePull(title) {
-  const parts = parseTitle(title)
-  return parts?.type === 'chore' && parts.scope === 'release'
-}
-
 /**
  * @param {Release[]} releases
- * @returns {{ tag: string, at: Date } | null}
+ * @returns {{ tag: string, at: Date } | null} the latest published `vX.Y.Z` release
  */
 export function lastPublished(releases) {
   let last = null
   for (const release of releases) {
-    if (release.draft || !release.publishedAt) continue
+    if (release.draft || release.prerelease || !release.publishedAt) continue
+    if (!VERSION.test(release.tag)) continue
     const at = new Date(release.publishedAt)
     if (!last || at > last.at) last = { tag: release.tag, at }
   }
@@ -166,21 +180,76 @@ export function releaseTarget(milestones, lastTag) {
 }
 
 /**
- * @param {Pick<Input, 'lastTag' | 'commits' | 'releases' | 'openIssues' | 'openPulls'>} input
- * @returns {string | null} why a release counts as open, or null when none is
+ * @param {Pick<Input, 'tags' | 'commits' | 'releases' | 'openIssues' | 'openPulls'>} input
+ * @returns {{ open: Open | null, warnings: string[] }} the release under way, if any, and the
+ *   issues, pull requests and commits that look like one but do not count
  */
-export function releaseOpen({ lastTag, commits, releases, openIssues, openPulls }) {
-  const issue = openIssues.find((item) => RELEASE_ISSUE.test(item.title))
-  if (issue) return `#${issue.number}, "${issue.title}", is open.`
-  const pull = openPulls.find((item) => isReleasePull(item.title))
-  if (pull) return `#${pull.number}, "${pull.title}", is open.`
-  const merged = commits.find((commit) => isReleasePull(commit.subject))
-  if (merged) return `"${merged.subject}" has merged but is not tagged yet.`
-  // The workflow's token sees no drafts, so a tag without a published release is still under way.
-  if (lastTag && !releases.some((release) => release.tag === lastTag && !release.draft)) {
-    return `${lastTag} is tagged but not published yet.`
+export function releaseOpen({ tags, commits, releases, openIssues, openPulls }) {
+  const lastTag = latestTag(tags.map((tag) => tag.name))
+  const last = lastTag ? parseVersion(lastTag) : null
+  /** @param {string} version */
+  const pending = (version) => {
+    const parsed = parseVersion(version)
+    return parsed !== null && (!last || compareVersions(parsed, last) > 0)
   }
-  return null
+  /** @param {string} version */
+  const published = (version) =>
+    releases.some((release) => release.tag === version && !release.draft)
+  /** @type {Open[]} */
+  const found = []
+  const warnings = []
+
+  for (const issue of openIssues) {
+    const version = RELEASE_ISSUE.exec(issue.title)?.[1]
+    if (version && pending(version)) {
+      found.push({ reason: `#${issue.number}, "${issue.title}", is open.`, since: null })
+    } else if (version) {
+      warnings.push(
+        `#${issue.number}, "${issue.title}", is open, but ${version} is not above the last tag, ${lastTag}, so it does not count as an open release.`,
+      )
+    } else if (LIKE_RELEASE_ISSUE.test(issue.title)) {
+      warnings.push(
+        `#${issue.number}, "${issue.title}", does not count as an open release: only the exact title "Release vX.Y.Z" does.`,
+      )
+    }
+  }
+  for (const pull of openPulls) {
+    const version = RELEASE_PULL.exec(pull.title)?.[1]
+    if (version && pending(version)) {
+      found.push({ reason: `#${pull.number}, "${pull.title}", is open.`, since: null })
+    } else if (version) {
+      warnings.push(
+        `#${pull.number}, "${pull.title}", is open, but ${version} is not above the last tag, ${lastTag}, so it does not count as an open release.`,
+      )
+    } else if (isReleaseScope(pull.title)) {
+      warnings.push(
+        `#${pull.number}, "${pull.title}", does not count as a release pull request: only the exact title "chore(release): vX.Y.Z" does.`,
+      )
+    }
+  }
+  for (const commit of commits) {
+    const version = RELEASE_COMMIT.exec(commit.subject)?.[1]
+    const tagged = tags.some((tag) => tag.name === version)
+    if (version && !tagged && !published(version)) {
+      found.push({
+        reason: `"${commit.subject}" has merged, and ${version} is not tagged yet.`,
+        since: new Date(commit.date),
+      })
+    } else if (!version && isReleaseScope(commit.subject)) {
+      warnings.push(
+        `"${commit.subject}" does not count as a release: only "chore(release): vX.Y.Z" does.`,
+      )
+    }
+  }
+  // The workflow's token sees no drafts, so a tag without a published release is still under way.
+  const tag = tags.find((candidate) => candidate.name === lastTag)
+  if (tag && !published(tag.name)) {
+    found.push({
+      reason: `${tag.name} is tagged, and no release of it is published yet.`,
+      since: new Date(tag.date),
+    })
+  }
+  return { open: found[0] ?? null, warnings }
 }
 
 /**
@@ -188,7 +257,8 @@ export function releaseOpen({ lastTag, commits, releases, openIssues, openPulls 
  * @returns {Decision}
  */
 export function decide(input) {
-  const { now, lastTag, commits, closingIssues } = input
+  const { now, commits, pulls } = input
+  const lastTag = latestTag(input.tags.map((tag) => tag.name))
   const published = lastPublished(input.releases)
   const changes = commits.filter((commit) => isUserVisible(commit.subject))
   const since = lastTag ? `since ${lastTag}` : 'since the first commit'
@@ -198,11 +268,11 @@ export function decide(input) {
   /** @type {Trigger[]} */
   const held = []
   const urgent = commits.flatMap((commit) => {
-    const pull = pullNumber(commit.subject)
-    const issues = (pull === null ? [] : (closingIssues[pull] ?? []))
+    if (!FIXING.includes(typeOf(commit.subject))) return []
+    const issues = (pulls[commit.sha]?.issues ?? [])
       .filter((issue) => issue.labels.includes('urgent'))
       .map((issue) => `#${issue.number}`)
-    return issues.length > 0 ? [`#${pull} closed urgent ${issues.join(', ')}`] : []
+    return issues.length > 0 ? [`"${commit.subject}" closed urgent ${issues.join(', ')}`] : []
   })
   if (urgent.length > 0) fired.push({ name: 'Urgent', detail: `${urgent.join('; ')}.` })
 
@@ -224,12 +294,26 @@ export function decide(input) {
     })
   }
 
-  const open = releaseOpen(input)
+  const { open, warnings } = releaseOpen(input)
   const target = releaseTarget(input.milestones, lastTag)
+  const due = `A release is due (${fired.map((trigger) => trigger.name).join(', ')})`
   /** @type {Decision['outcome']} */
   let outcome = 'none'
-  if (fired.length > 0)
-    outcome = open ? 'release-open' : 'problem' in target ? 'no-version' : 'open'
+  let failure = null
+  if (fired.length > 0 && open) {
+    outcome = 'release-open'
+    // A merged release without a tag, or a tag without a release, has nothing open tracking it.
+    if (open.since && now.getTime() - open.since.getTime() >= STALE) {
+      failure = `${due}, but ${open.reason} That has held since ${iso(open.since)}, over 48 hours; finish that release.`
+    } else if (open.since) {
+      warnings.push(`${due}, but ${open.reason}`)
+    }
+  } else if (fired.length > 0 && 'problem' in target) {
+    outcome = 'no-version'
+    failure = `${due}, but it has no version: ${target.problem}`
+  } else if (fired.length > 0) {
+    outcome = 'open'
+  }
   return {
     outcome,
     lastTag,
@@ -238,9 +322,11 @@ export function decide(input) {
     changes,
     fired,
     held,
-    releaseOpen: open,
-    target,
     heldUntil: held.length > 0 && published ? new Date(published.at.getTime() + SPACING) : null,
+    releaseOpen: open?.reason ?? null,
+    target,
+    warnings,
+    failure,
   }
 }
 
@@ -260,7 +346,7 @@ const issueTitle = (target) => `Release ${target.version}`
  * @returns {string} the release issue's description, in Markdown
  */
 export function issueBody(decision) {
-  const { fired, changes, lastTag, target } = decision
+  const { fired, commits, lastTag, target } = decision
   const triggers =
     fired.length === 1
       ? [`The ${fired[0].name} trigger fired: ${fired[0].detail}`]
@@ -269,14 +355,15 @@ export function issueBody(decision) {
           '',
           ...fired.map((trigger) => `- ${trigger.name}: ${trigger.detail}`),
         ]
+  const listed = commits.filter((commit) => FIXING.includes(typeOf(commit.subject)))
   return [
     ...triggers,
     '',
     `The version is ${targetText(target)} The steps are in [release](${STEPS}).`,
     '',
-    `User-visible changes ${lastTag ? `since ${lastTag}` : 'so far'}:`,
+    `User-visible changes and reverts ${lastTag ? `since ${lastTag}` : 'so far'}:`,
     '',
-    ...changes.map((commit) => `- ${commit.subject}`),
+    ...listed.map((commit) => `- ${commit.subject}`),
     '',
   ].join('\n')
 }
@@ -315,6 +402,53 @@ export function summary(decision) {
 }
 
 /**
+ * @param {Commit} commit
+ * @param {any} object the commit's GraphQL `object(oid:)`, null when GitHub does not have it
+ * @returns {any} the pull request whose squash merge made the commit, or null
+ */
+export function mergedPull(commit, object) {
+  const pulls = object?.associatedPullRequests?.nodes ?? []
+  return pulls.find((/** @type {any} */ pull) => pull.mergeCommit?.oid === commit.sha) ?? null
+}
+
+/**
+ * @param {Commit} commit
+ * @param {any} pull a GraphQL pull request with `closingIssuesReferences`, or null or a non-pull
+ *   request when the subject's `(#N)` did not resolve to one
+ * @returns {{ pull: Pull | null, warnings: string[] }}
+ */
+export function readPull(commit, pull) {
+  if (typeof pull?.number !== 'number' || !pull.closingIssuesReferences) {
+    return {
+      pull: null,
+      warnings: [
+        `"${commit.subject}" names no pull request GitHub knows, so the Urgent check skips it.`,
+      ],
+    }
+  }
+  const warnings = []
+  const closing = pull.closingIssuesReferences
+  if (closing.totalCount > closing.nodes.length) {
+    warnings.push(
+      `#${pull.number} closed ${closing.totalCount} issues; the Urgent check read the first ${closing.nodes.length}.`,
+    )
+  }
+  /** @type {LinkedIssue[]} */
+  const issues = closing.nodes.map((/** @type {any} */ issue) => {
+    if (issue.labels.totalCount > issue.labels.nodes.length) {
+      warnings.push(
+        `#${issue.number} has ${issue.labels.totalCount} labels; the Urgent check read the first ${issue.labels.nodes.length}.`,
+      )
+    }
+    return {
+      number: issue.number,
+      labels: issue.labels.nodes.map((/** @type {any} */ label) => label.name),
+    }
+  })
+  return { pull: { number: pull.number, issues }, warnings }
+}
+
+/**
  * @param {{ type: { name: string } | null, milestone: { number: number } | null, labels: { name: string }[] }} issue
  *   as the REST API returns it
  * @param {{ type: string, milestone: number, labels: string[] }} want
@@ -340,51 +474,109 @@ const lines = (text) => text.split('\n').filter((line) => line !== '')
 /** @param {string[]} args gh arguments whose --jq prints one JSON value per line */
 const ghLines = (args) => lines(run('gh', args)).map((line) => JSON.parse(line))
 
-/**
- * @param {string} owner
- * @param {string} name
- * @param {Commit[]} commits
- * @returns {Record<number, LinkedIssue[]>}
- */
-function closingIssuesOf(owner, name, commits) {
-  const pulls = [...new Set(commits.flatMap((commit) => pullNumber(commit.subject) ?? []))]
-  /** @type {Record<number, LinkedIssue[]>} */
-  const result = {}
-  for (let start = 0; start < pulls.length; start += 50) {
-    const chunk = pulls.slice(start, start + 50)
-    // issueOrPullRequest, unlike pullRequest, does not fail on a number that is an issue.
-    const fields = chunk.map(
-      (n) =>
-        `p${n}: issueOrPullRequest(number: ${n}) { ... on PullRequest { closingIssuesReferences(first: 25) { nodes { number labels(first: 25) { nodes { name } } } } } }`,
-    )
-    const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields.join(' ')} } }`
-    const args = [
-      'api',
-      'graphql',
-      '-f',
-      `query=${query}`,
-      '-f',
-      `owner=${owner}`,
-      '-f',
-      `name=${name}`,
-    ]
-    const repository = JSON.parse(run('gh', args)).data.repository
-    for (const n of chunk) {
-      /** @type {{ number: number, labels: { nodes: { name: string }[] } }[]} */
-      const nodes = repository[`p${n}`]?.closingIssuesReferences?.nodes ?? []
-      result[n] = nodes.map((issue) => ({
-        number: issue.number,
-        labels: issue.labels.nodes.map((label) => label.name),
-      }))
-    }
-  }
-  return result
+/** @param {string} level @param {string} message */
+function annotate(level, message) {
+  console.log(process.env.GITHUB_ACTIONS === 'true' ? `::${level}::${message}` : message)
 }
 
 /** @param {string} message */
 function fail(message) {
-  console.log(process.env.GITHUB_ACTIONS === 'true' ? `::error::${message}` : message)
+  annotate('error', message)
   process.exitCode = 1
+}
+
+const CLOSING = `closingIssuesReferences(first: ${PAGE}) { totalCount nodes { number labels(first: ${PAGE}) { totalCount nodes { name } } } }`
+
+/**
+ * Runs one GraphQL query of aliased fields and returns the repository's data. gh exits with 1
+ * when any field is not found, though the others still resolve; those come back as null.
+ *
+ * @param {string} owner
+ * @param {string} name
+ * @param {string[]} fields
+ * @returns {Record<string, any>}
+ */
+function repositoryQuery(owner, name, fields) {
+  const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields.join(' ')} } }`
+  const args = [
+    'api',
+    'graphql',
+    '-f',
+    `query=${query}`,
+    '-f',
+    `owner=${owner}`,
+    '-f',
+    `name=${name}`,
+  ]
+  let output
+  try {
+    output = run('gh', args)
+  } catch (error) {
+    const stdout = /** @type {{ stdout?: string }} */ (error).stdout ?? ''
+    const response = stdout ? JSON.parse(stdout) : null
+    const errors = response?.errors ?? []
+    const notFound = errors.every((/** @type {any} */ entry) => entry.type === 'NOT_FOUND')
+    if (!response?.data || errors.length === 0 || !notFound) throw error
+    output = stdout
+  }
+  return JSON.parse(output).data.repository
+}
+
+/**
+ * @param {string} owner
+ * @param {string} name
+ * @param {Commit[]} commits
+ * @returns {{ pulls: Record<string, Pull>, warnings: string[] }}
+ */
+function pullsOf(owner, name, commits) {
+  const candidates = commits.filter(
+    (commit) => FIXING.includes(typeOf(commit.subject)) && /^[0-9a-f]{40}$/.test(commit.sha),
+  )
+  /** @type {Record<string, Pull>} */
+  const pulls = {}
+  /** @type {string[]} */
+  const warnings = []
+  /** @type {Commit[]} */
+  const byNumber = []
+  for (let start = 0; start < candidates.length; start += 50) {
+    const chunk = candidates.slice(start, start + 50)
+    const data = repositoryQuery(
+      owner,
+      name,
+      chunk.map(
+        (commit, i) =>
+          `c${i}: object(oid: "${commit.sha}") { ... on Commit { associatedPullRequests(first: 10) { nodes { number mergeCommit { oid } ${CLOSING} } } } }`,
+      ),
+    )
+    chunk.forEach((commit, i) => {
+      const pull = mergedPull(commit, data[`c${i}`])
+      if (pull) {
+        const read = readPull(commit, pull)
+        if (read.pull) pulls[commit.sha] = read.pull
+        warnings.push(...read.warnings)
+      } else if (pullNumber(commit.subject) !== null) {
+        byNumber.push(commit)
+      }
+    })
+  }
+  // A commit GitHub links to no merged pull request falls back to the number in its subject.
+  for (let start = 0; start < byNumber.length; start += 50) {
+    const chunk = byNumber.slice(start, start + 50)
+    const data = repositoryQuery(
+      owner,
+      name,
+      chunk.map(
+        (commit, i) =>
+          `p${i}: issueOrPullRequest(number: ${pullNumber(commit.subject)}) { ... on PullRequest { number ${CLOSING} } }`,
+      ),
+    )
+    chunk.forEach((commit, i) => {
+      const read = readPull(commit, data[`p${i}`])
+      if (read.pull) pulls[commit.sha] = read.pull
+      warnings.push(...read.warnings)
+    })
+  }
+  return { pulls, warnings }
 }
 
 function main() {
@@ -402,20 +594,30 @@ function main() {
     '.nameWithOwner',
   ]).trim()
   const [owner, name] = repo.split('/')
-  const lastTag = latestTag(lines(run('git', ['tag', '--merged', 'HEAD', '--list', 'v*'])))
+  const tags = lines(
+    run('git', [
+      'for-each-ref',
+      'refs/tags',
+      '--format=%(refname:short)%09%(creatordate:iso-strict)',
+    ]),
+  ).map((line) => {
+    const [tag, date] = line.split('\t')
+    return { name: tag, date }
+  })
+  const lastTag = latestTag(tags.map((tag) => tag.name))
   const range = lastTag ? `${lastTag}..HEAD` : 'HEAD'
   const commits = lines(
-    run('git', ['log', '--first-parent', '--reverse', '--format=%H%x1f%s', range]),
+    run('git', ['log', '--first-parent', '--reverse', '--format=%H%x1f%cI%x1f%s', range]),
   ).map((line) => {
-    const [sha, subject] = line.split('\x1f')
-    return { sha, subject }
+    const [sha, date, subject] = line.split('\x1f')
+    return { sha, subject, date }
   })
   const releases = ghLines([
     'api',
     '--paginate',
     `repos/${repo}/releases?per_page=100`,
     '--jq',
-    '.[] | {tag: .tag_name, draft, publishedAt: .published_at}',
+    '.[] | {tag: .tag_name, draft, prerelease, publishedAt: .published_at}',
   ])
   const milestones = ghLines([
     'api',
@@ -432,23 +634,25 @@ function main() {
     '--jq',
     '.[] | {number, title, pull: (.pull_request != null)}',
   ])
+  const { pulls, warnings } = pullsOf(owner, name, commits)
   const decision = decide({
     now: new Date(),
-    lastTag,
+    tags,
     commits,
     releases,
     milestones,
     openIssues: open.filter((item) => !item.pull),
     openPulls: open.filter((item) => item.pull),
-    closingIssues: closingIssuesOf(owner, name, commits),
+    pulls,
   })
   for (const line of summary(decision)) console.log(line)
-
-  if (decision.outcome === 'no-version' && 'problem' in decision.target) {
-    fail(`A release is due, but it has no version: ${decision.target.problem}`)
+  for (const warning of [...warnings, ...decision.warnings]) annotate('warning', warning)
+  if (decision.failure) {
+    fail(decision.failure)
     return
   }
   if (decision.outcome !== 'open' || !('version' in decision.target)) return
+
   const title = issueTitle(decision.target)
   const body = issueBody(decision)
   if (dryRun) {
