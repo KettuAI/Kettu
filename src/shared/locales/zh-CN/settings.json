@@ -388,6 +388,10 @@
     "source": {
       "name": "源代码"
     },
+    "license": {
+      "name": "许可证",
+      "keywords": "许可 apache licence"
+    },
     "groups": {
       "updates": "更新",
       "runtime": "运行环境",

@@ -99,6 +99,10 @@ pnpm dev
 
 越早的反馈越能影响 OverBench 最终的样子，我们尤其欢迎关于设计和工作流的想法，可以直接提一个 [Issue](https://github.com/overbench/overbench/issues/new/choose) 来聊聊，用什么语言都行。OverBench 只接收 Issue，不接收 Pull Request；参与方式见 [CONTRIBUTING.md](./CONTRIBUTING.md)（英文）。
 
+## 许可证
+
+OverBench 基于 [Apache-2.0 许可证](./LICENSE)发布。
+
 ---
 
 <sub>OverBench 是一个独立项目，与其所支持的各个 Agent 的开发方不存在隶属或背书关系。文中提到的产品名称均为其各自所有者的商标。</sub>

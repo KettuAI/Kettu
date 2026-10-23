@@ -99,6 +99,10 @@ Development builds also list a **Fake agent**, which needs no account or network
 
 Early feedback shapes OverBench the most, and ideas about design and workflow are especially welcome: open an [issue](https://github.com/overbench/overbench/issues/new/choose) to start the conversation, in any language. OverBench takes issues, not pull requests; [CONTRIBUTING.md](./CONTRIBUTING.md) explains how to contribute.
 
+## License
+
+OverBench is released under the [Apache-2.0 license](./LICENSE).
+
 ---
 
 <sub>OverBench is an independent project and is not affiliated with or endorsed by the makers of the agents it supports. All product names are trademarks of their respective owners.</sub>
