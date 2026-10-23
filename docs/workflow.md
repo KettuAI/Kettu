@@ -1,6 +1,6 @@
 # Development workflow
 
-> Status: Draft · [Contributing](../CONTRIBUTING.md) · [All docs](./README.md)
+> Status: Accepted · [Contributing](../CONTRIBUTING.md) · [All docs](./README.md)
 
 How work travels from an idea or a report to a release. Since v0.0.1, every change goes through an issue and a pull request: the maintainer's own features, users' reports and the bugs coding agents find. Coding agents do most of the work, so this document is written for them as much as for people; [CONTRIBUTING.md](../CONTRIBUTING.md) is the short version for outside contributors.
 
@@ -112,7 +112,7 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 | Close   | Closing an issue without a merged pull request: a duplicate, not planned, not reproduced | Confirms                                                                          |
 | Release | Each version                                                                             | Confirms the release pull request, the tag and the publication                    |
 
-A bug needs no gate before work starts. The docs already decided what should happen, and the merge gate sees the fix.
+A bug needs no gate before work starts. The docs already decided what should happen, and the merge gate sees the fix. Approving a merge also approves closing the issues the pull request names with `Closes`.
 
 ## Issues
 
@@ -176,7 +176,7 @@ Discussions stay off for now, so issues are the one place to report. When outsid
 
 ### Pull requests
 
-- **Title**: Conventional Commits, `type(scope): subject`, imperative, lowercase and at most 50 characters, because it becomes the commit subject on `main`. CI checks it.
+- **Title**: Conventional Commits, `type(scope): subject`, imperative, lowercase and at most 50 characters, because it becomes the commit subject on `main`. A script in the repository checks it in CI, with no new dependency.
 - **Description**: one or two sentences on what changes and why, `Closes #N` (or `Refs #N`), and one line on how it was checked, with screenshots in light and dark for a UI change. No headings or checklists; a sentence on a non-obvious decision only when there is one. `.github/pull_request_template.md` holds just those lines, and CI checks that the description links an issue.
 - **Language**: English, always.
 - **Size**: one issue each. Split a pull request that grows past what one review can hold; as a rough guide, 400 changed lines, not counting generated files and the lockfile.
@@ -220,20 +220,12 @@ OverBench takes issues from outside, not code: fixes and features are written by
 
 ## Adoption
 
-A parent issue tracks the move, with one sub-issue per step:
+Issue #1 tracks the move, with one sub-issue per step:
 
 1. Make the Windows tests reliable. `pnpm test` failed on Windows in three of the eight latest CI runs on 2026-10-22, and the check is about to gate every merge.
 2. Labels and milestone `v0.1.0`, with M0's remaining work.
 3. Issue forms, the pull request template, `SECURITY.md`, and updates to `CONTRIBUTING.md`, `AGENTS.md` and the [docs index](./README.md).
-4. CI: the combined `CI` check, the title and issue-link check, Screenshots on pull requests, and the `Release check` workflow.
-5. Repository settings: squash merges only, with the pull request's title and an empty body; delete branches on merge; private vulnerability reporting; then the ruleset, once steps 1 and 4 have landed. Pull requests were limited to collaborators on 2026-10-22.
-6. The 22 problems in [M0 feedback](./milestones/m0-feedback.md) that are open or partly fixed become issues in `v0.1.0`, each naming its old number. The document is then frozen, linking to the milestone.
-
-## To decide
-
-- Whether merging a pull request also approves closing the issues it names with `Closes`. This draft assumes it does.
-- Whether a bug skips the accept gate. This draft assumes it does.
-- Whether milestones are named by version, with `v0.1.0` completing M0.
-- How CI checks titles and issue links: a short script in the repository, or `amannn/action-semantic-pull-request`, which is a new dependency.
-- Whether the squash commit's body stays empty or takes the pull request's description.
-- Whether Discussions stay off.
+4. CI for pull requests: the combined `CI` check, the title and issue-link check, and Screenshots on pull requests.
+5. The `Release check` workflow.
+6. Repository settings: squash merges only, with the pull request's title and an empty body; delete branches on merge; private vulnerability reporting; then the ruleset, once steps 1 and 4 have landed. Pull requests were limited to collaborators on 2026-10-22.
+7. The 22 problems in [M0 feedback](./milestones/m0-feedback.md) that are open or partly fixed become issues in `v0.1.0`, each naming its old number. The document is then frozen, linking to the milestone.
