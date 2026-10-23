@@ -1842,9 +1842,13 @@ export class SessionManager {
       stop: () => gone() || connection.isClosed,
     })
     if (gone()) {
-      // Closed while it attached: the agent's session closes again rather than stay open unseen.
-      connection.unregister(record.acpSessionId)
-      if (caps.closeSession) await connection.closeSession(record.acpSessionId).catch(() => {})
+      // Closed while it attached: the agent's session closes again rather than stay open unseen,
+      // unless the session went live again meanwhile and its own attach holds it now.
+      const next = this.live.get(live.id)
+      if (!next || next === live || (!next.attaching && !next.connection)) {
+        connection.unregister(record.acpSessionId)
+        if (caps.closeSession) await connection.closeSession(record.acpSessionId).catch(() => {})
+      }
       throw new HostError('busy', t('session.openFirst'))
     }
     if (connection.isClosed) throw new AgentRequestError('closed', 'The agent connection closed')
