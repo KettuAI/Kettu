@@ -23,7 +23,7 @@ The design draws on how Ghostty, Zed, opencode, Codex, uv, Biome, Electron, Taur
 ## The pipeline
 
 ```mermaid
-flowchart LR
+flowchart TD
   M[Maintainer asks] --> R
   U[User report] --> T[needs-triage]
   A[Agent finds a bug] --> T
