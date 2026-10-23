@@ -118,6 +118,12 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     this.start()
   }
 
+  /** Takes the page's port away; it gets a new one only by asking again through IPC. */
+  revoke(webContents: WebContents): void {
+    this.pendingConnects.delete(webContents.id)
+    this.sendReset(webContents, true)
+  }
+
   /** Posts to the process if it exists; messages sent before it is ready queue behind init. */
   post(message: ToChild): boolean {
     if (!this.child || this.status === 'stopping') return false

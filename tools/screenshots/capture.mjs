@@ -29,7 +29,19 @@ const scratch = mkdtempSync(join(tmpdir(), 'overbench-shots-'))
 const project = join(scratch, 'demo-project')
 makeProject(project)
 makeHistory(project, join(scratch, 'origin.git'))
-const app = launchApp({ port, userData: join(scratch, 'user-data') })
+// Main logs this when it stops trusting a window; no screen should cause it.
+const REFUSED = 'Refusing IPC and permissions from window'
+let refused = false
+const tails = new Map()
+const app = launchApp({
+  port,
+  userData: join(scratch, 'user-data'),
+  onOutput: (text, stream) => {
+    const seen = (tails.get(stream) ?? '') + text
+    if (seen.includes(REFUSED)) refused = true
+    tails.set(stream, seen.slice(-REFUSED.length))
+  },
+})
 
 let failed = false
 try {
@@ -40,6 +52,10 @@ try {
 } finally {
   await stopApp(app)
   rmSync(scratch, { recursive: true, force: true, maxRetries: 5 })
+}
+if (refused) {
+  failed = true
+  log('Capture failed: the app refused IPC from its own window; see its log above')
 }
 process.exit(failed ? 1 : 0)
 

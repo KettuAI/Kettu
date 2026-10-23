@@ -1,4 +1,4 @@
-import type { Session } from 'electron'
+import type { Session, WebContents } from 'electron'
 import { describe, expect, it } from 'vitest'
 import { isPermissionAllowed, restrictPermissions } from './permissions'
 
@@ -88,14 +88,14 @@ interface Handlers {
   device: () => boolean
 }
 
-function installed(): Handlers {
+function installed(hasSubframe: (webContents: WebContents) => boolean = () => false): Handlers {
   const handlers: Partial<Handlers> = {}
   const session = {
     setPermissionRequestHandler: (handler: Handlers['request']) => (handlers.request = handler),
     setPermissionCheckHandler: (handler: Handlers['check']) => (handlers.check = handler),
     setDevicePermissionHandler: (handler: Handlers['device']) => (handlers.device = handler),
   }
-  restrictPermissions(session as unknown as Session, isOwnUrl)
+  restrictPermissions(session as unknown as Session, isOwnUrl, hasSubframe)
   return handlers as Handlers
 }
 
@@ -131,5 +131,17 @@ describe('restrictPermissions', () => {
 
   it('never grants a device', () => {
     expect(installed().device()).toBe(false)
+  })
+
+  it('denies everything to a page that has had a subframe', () => {
+    const framed = {}
+    const { request, check } = installed((contents) => contents === (framed as WebContents))
+    const details = { isMainFrame: true, requestingUrl: APP_URL }
+    const answers: boolean[] = []
+    request(framed, 'clipboard-read', (granted: boolean) => answers.push(granted), details)
+    request(webContents, 'clipboard-read', (granted: boolean) => answers.push(granted), details)
+    expect(answers).toEqual([false, true])
+    expect(check(framed, 'clipboard-sanitized-write', APP_URL, details)).toBe(false)
+    expect(check(webContents, 'clipboard-sanitized-write', APP_URL, details)).toBe(true)
   })
 })

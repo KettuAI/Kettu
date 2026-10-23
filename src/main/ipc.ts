@@ -25,6 +25,7 @@ import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
+import { hasSubframe } from './subframes'
 import type { TerminalHost } from './terminal-host'
 import type { Updater } from './updater'
 
@@ -45,13 +46,14 @@ interface Caller {
   event: IpcMainInvokeEvent | IpcMainEvent
 }
 
-/** Only the app's own pages, in its own windows, may call main. */
-function isTrusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
+/** Only the app's own pages, in its own windows and with no subframe, may call main. */
+export function isTrusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const frame = event.senderFrame
   return (
     frame !== null &&
     frame === event.sender.mainFrame &&
     isRendererUrl(frame.url) &&
+    !hasSubframe(event.sender) &&
     BrowserWindow.fromWebContents(event.sender) !== null
   )
 }

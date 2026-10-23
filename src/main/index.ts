@@ -16,6 +16,7 @@ import { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
+import { hasSubframe, watchSubframes } from './subframes'
 import { TerminalHost } from './terminal-host'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
@@ -71,7 +72,7 @@ async function start(): Promise<void> {
 
   await app.whenReady()
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
-  restrictPermissions(session.defaultSession, isRendererUrl)
+  restrictPermissions(session.defaultSession, isRendererUrl, hasSubframe)
   const [settings, windowState, appState] = await loading
 
   // The system's languages are read once; macOS and Windows ask for a restart to change them.
@@ -144,6 +145,10 @@ async function start(): Promise<void> {
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })
     quitFlow.watchWindow(window)
+    watchSubframes(window.webContents, () => {
+      agentHost.revoke(window.webContents)
+      terminalHost.revoke(window.webContents)
+    })
     window.once('show', () => applyBadgeTo(window))
     window.on('session-end', () => {
       quitFlow.systemShutdown()
