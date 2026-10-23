@@ -192,6 +192,9 @@
     "missingLine": "这个项目的文件夹不见了，请换一个项目。",
     "chooseProjectFirst": "先选择项目",
     "chooseAgentFirst": "先选择 Agent",
+    "noAgent": "暂时没有可以启动的 Agent，请先安装一个。",
+    "noAgentNode_other": "暂时没有可以启动的 Agent：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
+    "setUpAgents": "设置 Agent…",
     "recentLabel": "最近的会话",
     "agentMenu": {
       "label": "Agent 和模型",

@@ -4,8 +4,7 @@
     "howToInstall": "How to install",
     "needsNode": "Needs Node.js 22 or later.",
     "installNode": "Install Node.js",
-    "couldNotStart": "Could not start.",
-    "installsOnFirstUse": "Installs on first use"
+    "couldNotStart": "Could not start."
   },
   "state": {
     "ready": "Ready",

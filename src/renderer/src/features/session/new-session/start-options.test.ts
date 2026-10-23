@@ -6,6 +6,7 @@ import {
   canStart,
   itemKey,
   menuGroups,
+  noAgentCanStart,
   parseItemKey,
   startConfig,
   startValues,
@@ -255,5 +256,34 @@ describe('agentNeed', () => {
     expect(agentNeed(status({ state: 'installing', package: adapter(false) }))).toBe('installing')
     expect(agentNeed(status({ state: 'failed', package: adapter(false) }))).toBe('failed')
     expect(agentNeed(status({ state: 'ready', signIn: 'required' }))).toBe('sign-in')
+  })
+})
+
+describe('noAgentCanStart', () => {
+  const claude = { id: 'claude-code', name: 'Claude Code' } as const
+  const opencode = { id: 'opencode', name: 'OpenCode' } as const
+
+  it('is null while one agent can start, or before any is known', () => {
+    expect(noAgentCanStart([])).toBeNull()
+    expect(
+      noAgentCanStart([
+        status({ ...claude, state: 'node-missing' }),
+        status({ package: adapter(false) }),
+      ]),
+    ).toBeNull()
+  })
+
+  it('names the agents that wait for Node.js, missing or too old', () => {
+    expect(
+      noAgentCanStart([
+        status({ ...claude, state: 'node-missing' }),
+        status({ state: 'node-outdated' }),
+        status({ ...opencode, state: 'not-installed' }),
+      ]),
+    ).toEqual(['Claude Code', 'Codex'])
+  })
+
+  it('names none when every agent needs installing', () => {
+    expect(noAgentCanStart([status({ ...opencode, state: 'not-installed' })])).toEqual([])
   })
 })

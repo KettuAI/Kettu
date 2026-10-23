@@ -152,10 +152,14 @@ async function run() {
     `return [...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.textContent.includes(${JSON.stringify(text)}))`
 
   await setup()
-  await waitFor(`document.querySelector('#root')?.childElementCount`, 'the first render')
+  // With no projects yet, the app opens on New session with none chosen.
+  await waitFor(
+    `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
+    'New session on first run',
+  )
   await sleep(1500)
   log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
-  await shoot('welcome')
+  await shoot('first-run')
 
   // With a project and no session to restore, the app opens on New session in that project.
   cdp = await openProject(port, cdp, project)

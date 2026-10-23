@@ -17,7 +17,7 @@ const settings = () => useViewStore.getState().settings
 describe('settings view', () => {
   beforeEach(() => {
     useViewStore.setState({
-      main: { kind: 'welcome' },
+      main: { kind: 'launch' },
       projectPath: null,
       settings: { open: false, section: null, agent: null },
     })
