@@ -116,8 +116,7 @@ interface HostError {
 | `files.read`               | `{ projectPath, path }`                  | `FileContent`                                   | `text` with `version` and `editable`; `image` with `mimeType` and base64 `data`, up to 10 MB; `binary`; or `too-large` with its `limit` (1 MiB, 10 MB for a picture); a path out of the project is `invalid_params`            |
 | `files.search`             | `{ projectPath, query }`                 | `FileSearch`                                    | Literal, case-insensitive; at most 500 matches of 300 characters, then `truncated`                                                                                                                                             |
 | `files.write`              | `{ projectPath, path, text, version }`   | `{ version, size }`                             | Replaces an existing file's text, up to 1 MiB; `conflict` when `version` no longer matches the file, unless it is null ([project files](./agent-host.md#project-files))                                                        |
-| `artifacts.list`           | none                                     | `ArtifactSummary[]`                             | Every HTML file agents wrote, with its session and whether it still exists ([artifacts](./artifacts.md#listing))                                                                                                               |
-| `artifacts.read`           | `{ path }`                               | `{ text }` or `too-large`                       | An indexed artifact's text, up to 5 MiB, for the viewer to find its pages; any other path is `not_found` ([artifacts](./artifacts.md#ipc-and-host-protocol))                                                                   |
+| `artifacts.*`              |                                          |                                                 | The Artifacts page and viewer: list, read, versions, rename, delete, restore, watch (designed, not built; [artifacts](./artifacts.md#ipc-and-host-protocol))                                                                   |
 
 ```ts
 interface SessionSummary {
@@ -251,7 +250,7 @@ interface ImportableSession {
 | `git.changed`, `git.pr` | See [git](./git.md#host-protocol) | Ports keeping that project live                                                                               |
 | `git.tools`             | `GitTools`                        | All ports                                                                                                     |
 | `usage.*`               | `UsageStatus` or none             | All ports, when the figures or the scan change ([usage](./usage.md#host-protocol))                            |
-| `artifacts.changed`     | none                              | All ports, after a stored write changed the [artifact index](./artifacts.md#index)                            |
+| `artifacts.*`           | Per event                         | All ports for `changed`; watching ports for the rest ([artifacts](./artifacts.md#ipc-and-host-protocol))      |
 
 Terminals use a port of their own to the terminal host, with the same envelope ([terminal](./terminal.md#host-protocol)).
 

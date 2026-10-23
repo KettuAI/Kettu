@@ -314,7 +314,7 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 
 | Action                     | ACP                                               | Result                                                                                               |
 | -------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Create                     | `session/new` with `cwd` and `mcpServers: []`     | `acpSessionId`, config options and modes; then `ready`. The index entry is saved once this succeeds. |
+| Create                     | `session/new` with `cwd` and `mcpServers`         | `acpSessionId`, config options and modes; then `ready`. The index entry is saved once this succeeds. |
 | Open                       | None                                              | The stored thread's latest page, in `closed`; the agent is not started.                              |
 | Open with no stored thread | `session/load`                                    | `thread.reset`, then the replayed history as patches, then `ready`; the thread is then stored.       |
 | Open without `loadSession` | `session/resume`                                  | `ready` with an info notice that earlier history is not available.                                   |
@@ -324,6 +324,8 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 | Delete                     | `session/delete` when supported                   | Removed from the agent and from the index, after the user confirms.                                  |
 | Import                     | `session/list` with `cwd`, following `nextCursor` | Sessions started elsewhere, such as in the CLI, can be added to the index and opened.                |
 | Fork                       | `session/fork`, when the agent advertises it      | A new session in the same project that starts from the whole history, or from a reply; see below.    |
+
+Every request that attaches a session, `session/new`, `session/load`, `session/resume` and `session/fork`, passes `mcpServers`. Today it is empty; with the [artifacts service](./artifacts.md#connecting) (designed, not built) it holds that service, with a token made for this attach.
 
 ### Recovering after a crash
 

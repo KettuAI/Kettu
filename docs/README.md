@@ -4,7 +4,7 @@ Design documents for OverBench. Start with the architecture, then read the desig
 
 | Document                                                     | Covers                                                                                                                                                   | Status        |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| [Architecture](./architecture.md)                            | The big picture: processes, ACP, data flow, security, directory layout                                                                                   | Draft         |
+| [Architecture](./architecture.md)                            | The big picture and the global core design: processes, ACP, data flow, the core designs, security, directory layout                                      | Draft         |
 | [Agent host](./design/agent-host.md)                         | Startup and supervision, the agent catalog, environments, installing adapters, launching and stopping agents, sign-in, diagnostics, platform differences | Draft         |
 | [Session model](./design/session-model.md)                   | The thread model, patches and snapshots, the ACP v1 mapping, prompts, permissions, cancellation, session lifecycle                                       | Draft         |
 | [Host protocol](./design/host-protocol.md)                   | The preload API, requests, events and validation between the renderer and the agent host                                                                 | Draft         |
@@ -13,7 +13,7 @@ Design documents for OverBench. Start with the architecture, then read the desig
 | [Updates](./design/updates.md)                               | Checking, downloading and installing new versions, per platform, and what the user sees                                                                  | Draft         |
 | [Persistence](./design/persistence.md)                       | What is stored on disk, how it is written, versioned and recovered                                                                                       | Draft         |
 | [Usage statistics](./design/usage.md)                        | OverBench's own token record, importing the agents' local logs, the usage database and what the usage page shows                                         | Implemented   |
-| [Artifacts](./design/artifacts.md)                           | The HTML files and canvases agents write: finding them, the isolated surface that shows them, the Artifacts page and the canvas viewer                   | Accepted      |
+| [Artifacts](./design/artifacts.md)                           | The details of artifacts: the service's tools, storage and versions, presence, the isolated surface, the Artifacts page and the canvas viewer            | Draft         |
 | [Localization](./design/localization.md)                     | The interface languages, the Language setting, switching live in every process, catalogs and how to write messages                                       | Draft         |
 | [Design process](./design/design-process.md)                 | The gate every design passes: the rules first, the reference, options to try, docs before code, verification and review                                  | Draft         |
 | [Visual style](./design/visual-style.md)                     | How the interface looks: character, icons and their vocabulary, type roles, color, shape, layout, spacing and states                                     | Draft         |
@@ -34,4 +34,5 @@ Design documents for OverBench. Start with the architecture, then read the desig
 - Each document starts with a status line: **Draft** while under review, **Accepted** once agreed, **Implemented** when the code matches it.
 - Facts about third parties, such as agent versions and capabilities, carry the date they were observed.
 - One fact lives in one place. Other documents link to it instead of repeating it.
+- [Architecture](./architecture.md#core-designs) is the global core design: every core logic of the system, its model, interfaces, rules and decisions, is written there first, and the documents in `design/` hold the details. A core decision is the maintainer's, made with its options laid out and recorded there with its date.
 - The docs are written in English, like everything else in the repository.

@@ -170,13 +170,13 @@ The usage page, opened from the sidebar's **Usage** row, is designed in [usage s
 
 ### Artifacts
 
-> Accepted for [issue #11](https://github.com/overbench/overbench/issues/11) on 2026-10-23; not built yet.
+> Draft for [issue #11](https://github.com/overbench/overbench/issues/11), reworked on 2026-10-23; not built yet.
 
-The HTML files agents write, designed in [artifacts](./artifacts.md):
+The pages agents hand the user through OverBench's [artifacts](../architecture.md#artifacts) service, designed in [artifacts](./artifacts.md#interface):
 
 - **The Artifacts page**, opened from the sidebar's **Artifacts** row: every artifact as a card with a thumbnail, grouped by project, then by session, or grouped and sorted as the user chooses ([Artifacts page](./artifacts.md#artifacts-page)).
-- **The viewer**, from a card: the page live in the main area, isolated from the app ([viewer](./artifacts.md#viewer)), or, for a file that marks its pages, a canvas that pans and zooms, with keys of its own that stay out of the [shortcut table](#keyboard) ([canvas](./artifacts.md#canvas)).
-- **From a session**: a tool call that wrote an artifact opens it from its row, in the side panel beside the thread ([opening from a session](./artifacts.md#opening-from-a-session)).
+- **The viewer**, from a card: the page live in the main area, isolated from the app ([viewer](./artifacts.md#viewer)), or, for an artifact that marks its pages, a canvas that pans and zooms, with keys of its own that stay out of the [shortcut table](#keyboard) ([canvas](./artifacts.md#canvas)).
+- **From a session**: a tool call that created or changed an artifact opens it from its row, in the side panel beside the thread ([opening from a session](./artifacts.md#opening-from-a-session)).
 
 ### Settings
 
