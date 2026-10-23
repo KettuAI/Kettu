@@ -5,7 +5,7 @@
 
 import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
-import { AGENT_IDS, ULTRACODE_OPTION_ID, type AgentId, type ConfigOption } from '@shared/thread'
+import { AGENT_IDS, type AgentId, type ConfigOption } from '@shared/thread'
 import { JsonFile, type LogFn } from './storage'
 
 export interface AgentOptionsFile {
@@ -100,8 +100,8 @@ export class AgentOptionsStore {
   /**
    * The options of a session the agent loaded or resumed, at that session's values. With none
    * known, its model, model options and level stand in, marked provisional, until a new session
-   * reports the agent's defaults; a mode is left out, since it never carries over. They also add
-   * the model's levels.
+   * reports the agent's defaults; a mode and the other options are left out, since they never
+   * carry over. They also add the model's levels.
    */
   opened(agentId: AgentId, config: readonly ConfigOption[]): void {
     const current = this.byAgent.get(agentId)
@@ -109,9 +109,9 @@ export class AgentOptionsStore {
       this.put({ ...current, levels: withLevels(current.levels, config) })
       return
     }
-    const kept = config.filter(
-      (o) => REMEMBERED_CATEGORIES.has(o.category) || o.id === ULTRACODE_OPTION_ID,
-    )
+    // Ultracode is left out too: New session sends every provisional value, and a set ultracode
+    // would override the user's own Claude Code setting.
+    const kept = config.filter((o) => REMEMBERED_CATEGORIES.has(o.category))
     if (kept.length === 0) return
     this.put({
       agentId,

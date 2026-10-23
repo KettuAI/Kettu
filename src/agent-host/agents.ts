@@ -238,8 +238,8 @@ class Slot {
   limitsRun: Promise<void> | null = null
   limitsReadAt = 0
   optionsRun: Promise<void> | null = null
-  /** The hidden session that reads the options, from `session/new` until it is removed. */
-  optionsOpening: Promise<void> | null = null
+  /** The removal of the hidden session that read the options, once its `session/new` answered. */
+  optionsRemoval: Promise<void> | null = null
   /** A read of the options failed or found none; not tried again until the agent restarts. */
   optionsFailed = false
   progress = new TextRing(8 * 1024)
@@ -1232,9 +1232,9 @@ export class AgentManager {
     }
     slot.idleTimer = slot.progressTimer = null
     if (slot.starting) await slot.starting.catch(() => {})
-    // A hidden session that reads the options goes before the agent does, waited for at most
-    // as long as its `session/new` may take.
-    if (slot.optionsOpening) await settledWithin(slot.optionsOpening, this.timings.optionsMs)
+    // The hidden session that read the options goes before the agent does. Only its removal is
+    // waited for, not a `session/new` still unanswered, whose late answer is removed anyway.
+    if (slot.optionsRemoval) await settledWithin(slot.optionsRemoval, REMOVAL_WAIT_MS)
     const launched = slot.launched
     if (!launched) return
     slot.intentionalStop = true
@@ -1412,10 +1412,8 @@ export class AgentManager {
     const runtime = this.runtime(agentId)
     const removal = runtime && hiddenRemoval(agentId, runtime.init)
     if (!runtime || !removal) return
-    const read = this.readInHiddenSession(slot, runtime, removal, log)
-    slot.optionsOpening = read.catch(() => {})
     try {
-      await read
+      await this.readInHiddenSession(slot, runtime, removal, log)
     } catch (error) {
       if (error instanceof AgentRequestError && error.kind === 'auth_required') {
         this.authRequired(agentId)
@@ -1423,8 +1421,6 @@ export class AgentManager {
       }
       slot.optionsFailed = true
       log(`could not read its options: ${agentError(error).message}`)
-    } finally {
-      slot.optionsOpening = null
     }
   }
 
@@ -1467,7 +1463,13 @@ export class AgentManager {
       else this.hooks.optionsSeen(agentId, setup.config)
       this.signedIn(agentId)
     } finally {
-      await remove(setup.acpSessionId)
+      const removing = remove(setup.acpSessionId)
+      slot.optionsRemoval = removing
+      try {
+        await removing
+      } finally {
+        slot.optionsRemoval = null
+      }
     }
   }
 
@@ -1764,7 +1766,10 @@ export class AgentManager {
   }
 }
 
-/** Maps a failed ACP request to the port error the renderer acts on. */
+// A stop waits this long at most for a hidden session's removal, well under the 6 s main gives
+// the host to stop on quit; removing takes milliseconds unless the agent hangs.
+const REMOVAL_WAIT_MS = 1_000
+
 /** Waits for `promise`, which never rejects, for at most `ms`. */
 function settledWithin(promise: Promise<void>, ms: number): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -1776,6 +1781,7 @@ function settledWithin(promise: Promise<void>, ms: number): Promise<void> {
   })
 }
 
+/** Maps a failed ACP request to the port error the renderer acts on. */
 export function agentError(error: unknown): HostError {
   if (error instanceof HostError) return error
   if (error instanceof AgentRequestError) {

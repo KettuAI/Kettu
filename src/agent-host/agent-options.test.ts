@@ -98,9 +98,17 @@ describe('AgentOptionsStore', () => {
 
   it("takes an opened session's model and level as provisional, without its mode", () => {
     const { options } = store()
-    const opened = [mode, model('large'), level('high', ['medium', 'high'])]
+    const ultracode: ConfigOption = {
+      id: '__ultracode',
+      name: 'Ultracode',
+      category: 'other',
+      type: 'boolean',
+      value: false,
+    }
+    const opened = [mode, model('large'), level('high', ['medium', 'high']), ultracode]
     options.opened('codex', opened)
-    expect(options.get('codex')).toMatchObject({ config: opened.slice(1), provisional: true })
+    // Ultracode stays out: a provisional value is sent, and would override the user's setting.
+    expect(options.get('codex')).toMatchObject({ config: opened.slice(1, 3), provisional: true })
     expect(options.known('codex')).toBe(false)
 
     const started = [mode, model('small'), level('medium', ['low', 'medium'])]

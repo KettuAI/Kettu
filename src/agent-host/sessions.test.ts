@@ -302,6 +302,7 @@ describe('options before a session exists', () => {
     expect(opened).toMatchObject({ provisional: true })
     expect(opened?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
     expect(opened?.config.some((o) => o.category === 'mode')).toBe(false)
+    expect(opened?.config.some((o) => o.id === '__ultracode')).toBe(false)
     await port.request('agents.start', { agentId: 'fake-agent' })
     expect(sent(t, 'session/new')).toBe(1)
     const [options] = await port.request('agents.options', undefined)
