@@ -219,7 +219,9 @@ export interface NpmOptions extends Omit<ProgramOptions, 'program'> {
 /** Ends a program and what it started: its group on macOS and Linux, its tree on Windows. */
 function stopTree(pid: number, platform: Platform, exited: Promise<unknown>): void {
   if (platform === 'win32') {
-    void processControl(platform).taskkill([pid])
+    void processControl(platform)
+      .taskkill([pid])
+      .catch(() => {})
     return
   }
   const signal = (name: NodeJS.Signals): void => {

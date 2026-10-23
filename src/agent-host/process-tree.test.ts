@@ -1,10 +1,14 @@
 import { spawn } from 'node:child_process'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   descendantsOf,
   parseCim,
   parsePs,
   processControl,
+  runTool,
   signalTargets,
   stopTrees,
   treeOf,
@@ -182,6 +186,119 @@ describe('stopTrees', () => {
     const { control, calls } = fakeControl('win32', [row(100, 4, 100), row(101, 100, 101)])
     await stopTrees(control, [root], 2000)
     expect(calls).toEqual(['taskkill 100 101'])
+  })
+})
+
+describe('processControl', () => {
+  const timedOut = Object.assign(new Error('taskkill did not finish within 7 ms'), {
+    code: 'ETIMEDOUT',
+  })
+
+  it('gives each tool its limit, a shorter one while quitting, and fails a taskkill that timed out', async () => {
+    const calls: string[] = []
+    let answer = async (): Promise<string> => '100 4 0\r\n'
+    const options = {
+      limits: { listMs: 9, taskkillMs: 11, quitListMs: 5, quitTaskkillMs: 7 },
+      run: (file: string, _args: string[], timeoutMs: number) => {
+        calls.push(`${path.win32.basename(file)} ${timeoutMs}`)
+        return answer()
+      },
+    }
+    const control = processControl('win32', options)
+    expect(await control.list()).toHaveLength(1)
+    await control.list({ quitting: true })
+    // A pid that is already gone fails taskkill with an exit code, which is the outcome wanted.
+    answer = () => Promise.reject(Object.assign(new Error('Command failed'), { code: 128 }))
+    await expect(control.taskkill([100])).resolves.toBeUndefined()
+    answer = () => Promise.reject(timedOut)
+    await expect(control.taskkill([100], { quitting: true })).rejects.toBe(timedOut)
+    await processControl('linux', options)
+      .list({ quitting: true })
+      .catch(() => {})
+    expect(calls).toEqual([
+      'powershell.exe 9',
+      'powershell.exe 5',
+      'taskkill 11',
+      'taskkill 7',
+      'ps 5',
+    ])
+  })
+})
+
+async function until(check: () => boolean | Promise<boolean>, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    if (await check()) return true
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  return check()
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe('runTool', () => {
+  it('kills a tool that runs past its limit, and what came with it', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-tool-'))
+    const pidFile = path.join(dir, 'pid')
+    // On Windows the tool is PowerShell, which the listing runs.
+    const windows = process.platform === 'win32'
+    const file = windows
+      ? path.win32.join(
+          process.env.SystemRoot ?? 'C:\\Windows',
+          'System32',
+          'WindowsPowerShell',
+          'v1.0',
+          'powershell.exe',
+        )
+      : process.execPath
+    const args = windows
+      ? [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `Set-Content -LiteralPath '${pidFile}' -Value $PID; Start-Sleep -Seconds 60`,
+        ]
+      : [
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`,
+        ]
+    const limitMs = windows ? 4_000 : 500
+    const readPid = async () => Number((await readFile(pidFile, 'utf8').catch(() => '')).trim())
+    try {
+      const started = Date.now()
+      const failed = runTool(file, args, limitMs, {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      )
+      expect(await until(async () => (await readPid()) > 0, limitMs)).toBe(true)
+      const pid = await readPid()
+      // On Windows a conhost, which the app's tools each get for want of a console; under a
+      // runner's console PowerShell shares it, and this list can be empty.
+      const helpers = (await processControl(process.platform).list()).filter(
+        (row) => row.ppid === pid,
+      )
+      expect(await failed).toMatchObject({
+        code: 'ETIMEDOUT',
+        message: `${path.win32.basename(file)} did not finish within ${limitMs} ms`,
+      })
+      expect(Date.now() - started).toBeLessThan(limitMs + 2_000)
+      expect(await until(() => !alive(pid), 2_000)).toBe(true)
+      for (const helper of helpers) expect(await until(() => !alive(helper.pid), 2_000)).toBe(true)
+    } finally {
+      const pid = await readPid()
+      if (pid > 0 && alive(pid)) process.kill(pid, 'SIGKILL')
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
 

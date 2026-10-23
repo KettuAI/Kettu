@@ -26,7 +26,7 @@ import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
 import { pathKey } from './paths'
-import { processControl } from './process-tree'
+import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
 import { ScratchFolders } from './scratch'
@@ -68,6 +68,8 @@ export interface HostOptions {
   sessionTimings?: Partial<SessionTimings>
   /** How long after an agent's traffic its process tree is listed again. */
   treeNoteMs?: number
+  /** Lists and stops the agents' process trees; the system's tools by default. */
+  processControl?: ProcessControl
   mirrorTraffic?: boolean
   /** Starts the worker that owns the thread database; without it no thread is stored. */
   threadWorker?: ThreadWorkerFactory
@@ -141,7 +143,7 @@ export class AgentHost {
     })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
-      control: processControl(platform),
+      control: options.processControl ?? processControl(platform),
       graceMs: STOP_TIMINGS.termMs,
       ...(options.treeNoteMs !== undefined ? { noteMs: options.treeNoteMs } : {}),
       log,

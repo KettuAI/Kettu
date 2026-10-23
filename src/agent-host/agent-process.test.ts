@@ -10,8 +10,9 @@ import { applyPatches, threadFromSnapshot, type ThreadState } from '@shared/thre
 import { AgentConnection, type ConnectionHooks, type SessionTarget } from './acp/connection'
 import { newTurnScope } from './acp/mapper'
 import { spawnAgent, spawnArguments } from './agent-process'
-import { processLauncher } from './agents'
+import { processLauncher, type AgentLauncher } from './agents'
 import type { LaunchSpec } from './catalog'
+import { processControl, runTool, type ProcessControl, type ToolOptions } from './process-tree'
 import { startTestHost } from './testing/harness'
 
 const FAKE_AGENT = path.resolve('tools/fake-agent/main.ts')
@@ -179,6 +180,140 @@ describe('spawnAgent', () => {
       expect(await until(() => !alive(childPid), 3_000)).toBe(true)
     },
   )
+})
+
+describe('a process tool that times out', () => {
+  it.each([
+    ['at a quit, without waiting for the exit', true],
+    ['outside a quit, after waiting for the exit', false],
+  ] as const)('leaves the tree to the reap when taskkill times out %s', async (_, quitting) => {
+    // The Windows stop, through a control whose taskkill times out, on every platform.
+    const events: string[] = []
+    const taskkills: boolean[] = []
+    const control: ProcessControl = {
+      platform: 'win32',
+      list: async () => [],
+      kill: () => {},
+      taskkill: (_pids, options) => {
+        taskkills.push(options?.quitting ?? false)
+        return Promise.reject(
+          Object.assign(new Error('taskkill did not finish within 50 ms'), { code: 'ETIMEDOUT' }),
+        )
+      },
+      delay: () => Promise.resolve(),
+    }
+    let stderr = ''
+    const agent = spawnAgent(spec({ FAKE_AGENT_IGNORE_EOF: '1' }), {
+      platform: 'win32',
+      env: process.env,
+      cwd: process.cwd(),
+      onStderr: (text) => (stderr += text),
+      onEvent: (event) => events.push(event),
+      timings: { eofMs: 300, termMs: 1_500 },
+      control,
+    })
+    try {
+      expect(await until(() => stderr.includes('ready'), 10_000)).toBe(true)
+      const started = Date.now()
+      expect(await agent.stop({ quitting })).toMatchObject({ error: expect.any(String) })
+      const took = Date.now() - started
+      if (quitting) expect(took).toBeLessThan(1_500)
+      else expect(took).toBeGreaterThanOrEqual(1_750)
+      expect(taskkills).toEqual([quitting])
+      expect(events).toEqual(expect.arrayContaining(['taskkill', 'taskkill failed']))
+    } finally {
+      if (agent.pid && alive(agent.pid)) process.kill(agent.pid, 'SIGKILL')
+    }
+  })
+
+  it('gives the tools their short limits only while quitting', async () => {
+    const listings: boolean[] = []
+    const control: ProcessControl = {
+      platform: process.platform,
+      list: async (options) => {
+        listings.push(options?.quitting ?? false)
+        return []
+      },
+      kill: () => {},
+      taskkill: async () => {},
+      delay: () => Promise.resolve(),
+    }
+    const real = processLauncher(process.platform)
+    const stops: boolean[] = []
+    const launcher: AgentLauncher = {
+      launch: (def, launchSpec, env, output) => {
+        const launched = real.launch(def, launchSpec, env, output)
+        const stop = launched.stop
+        return Object.assign(launched, {
+          stop: (tools?: ToolOptions) => {
+            stops.push(tools?.quitting ?? false)
+            return stop(tools)
+          },
+        })
+      },
+    }
+    const t = await startTestHost({
+      launcher,
+      agentEnv: { FAKE_AGENT_DELAY_SCALE: '0' },
+      processControl: control,
+    })
+    try {
+      const port = t.connect()
+      await port.request('sessions.create', { agentId: 'fake-agent', projectPath: t.project })
+      await t.host.agents.stop('fake-agent')
+      // On Windows the listing after the exit runs in the background.
+      expect(await until(() => listings.length >= 2, 5_000)).toBe(true)
+      const idle = listings.splice(0)
+      await port.request('sessions.create', { agentId: 'fake-agent', projectPath: t.project })
+      await t.host.shutdown()
+      expect(stops).toEqual([false, true])
+      expect(idle.every((quitting) => !quitting)).toBe(true)
+      // Before the stop, then after the exit, which on Windows only the last write waits for.
+      const [before, ...after] = listings
+      expect(before).toBe(true)
+      expect(after.length).toBeGreaterThan(0)
+      expect(after.every((quitting) => quitting === (process.platform !== 'win32'))).toBe(true)
+    } finally {
+      await t.stop()
+    }
+  })
+
+  it('stops cleanly on quit while every listing hangs, leaving the agent to the next host', async () => {
+    // Each listing runs a process that never answers, until its limit kills it.
+    const control = processControl(process.platform, {
+      limits: { listMs: 50, taskkillMs: 50, quitListMs: 50, quitTaskkillMs: 50 },
+      run: (_file, _args, timeoutMs) =>
+        runTool(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], timeoutMs, {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+        }),
+    })
+    const t = await startTestHost({
+      launcher: processLauncher(process.platform),
+      agentEnv: { FAKE_AGENT_DELAY_SCALE: '0' },
+      processControl: control,
+    })
+    try {
+      const port = t.connect()
+      await port.request('sessions.create', { agentId: 'fake-agent', projectPath: t.project })
+      const [agent] = t.host.agents.processes()
+      expect(agent).toBeDefined()
+      const started = Date.now()
+      await t.host.shutdown()
+      // Main kills a host that has not stopped 6 s after host:shutdown.
+      expect(Date.now() - started).toBeLessThan(6_000)
+      expect(t.sent.at(-1)).toEqual({ type: 'host:stopped' })
+      const file = path.join(t.dir, 'state', 'agent-processes.json')
+      const recorded = JSON.parse(readFileSync(file, 'utf8')) as { processes: { pid: number }[] }
+      expect(recorded.processes.map((entry) => entry.pid)).toContain(agent!.pid)
+      const warnings = t.host.diagnostics
+        .logEntries()
+        .filter((entry) => entry.level === 'warn' && entry.message.includes('within 50 ms'))
+      expect(warnings.length).toBeGreaterThan(0)
+    } finally {
+      await t.stop()
+    }
+  })
 })
 
 describe('what an agent leaves behind', () => {
