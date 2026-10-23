@@ -107,8 +107,15 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   const endTree = async (pid: number): Promise<void> => {
     if (platform === 'win32') {
       options.onEvent?.('taskkill')
-      await control.taskkill([pid])
-      await waitForExit(exited, timings.termMs)
+      const ended = await control.taskkill([pid]).then(
+        () => true,
+        (error: unknown) => {
+          options.onEvent?.('taskkill failed', (error as Error).message)
+          return false
+        },
+      )
+      // A taskkill that gave up leaves the tree to the reap that follows, which tries again.
+      if (ended) await waitForExit(exited, timings.termMs)
       return
     }
     options.onEvent?.('SIGTERM')

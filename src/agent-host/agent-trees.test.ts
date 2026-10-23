@@ -28,12 +28,14 @@ async function setup(
   const calls: string[] = []
   const logs: string[] = []
   let listed = 0
+  const listings: boolean[] = []
   let release: () => void = () => {}
   let held: Promise<void> | null = null
   const control: ProcessControl = {
     platform,
-    list: async () => {
+    list: async (options) => {
       listed++
+      listings.push(options?.background ?? false)
       if (held) await held
       const next = rows.shift()
       if (!next) throw new Error('ps failed')
@@ -75,12 +77,14 @@ async function setup(
   }
   return {
     trees,
+    control,
     calls,
     logs,
     stored,
     file,
     endGrace: () => release(),
     listed: () => listed,
+    listings,
     holdListing,
   }
 }
@@ -129,6 +133,30 @@ describe('AgentTrees', () => {
       await new Promise((resolve) => setTimeout(resolve, 30))
       expect(listed()).toBe(1)
       expect(await stored()).toEqual([root, { pid: 102, startedAt: T + 102 }])
+    },
+  )
+
+  it.each([
+    ['linux', false],
+    ['win32', true],
+  ] as const)(
+    'gives the listings nothing waits for the longer limit, on %s',
+    async (platform, reapInBackground) => {
+      const tree = [row(100, 1, 100)]
+      const { trees, file, listings } = await setup(platform, [[], tree, tree, []])
+      await mkdir(path.dirname(file.file), { recursive: true })
+      const leftover = { pid: 200, startedAt: T + 200 }
+      await writeFile(file.file, JSON.stringify({ version: 1, processes: [leftover] }))
+      await trees.load()
+      await trees.stopLeftovers()
+      trees.launched(root)
+      trees.active(root)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      // A stop waits for the listing before it, and on macOS and Linux for the one after.
+      await trees.note(root)
+      await trees.reap(root, 'Fake agent')
+      await trees.close()
+      expect(listings).toEqual([true, true, false, reapInBackground])
     },
   )
 
@@ -225,6 +253,23 @@ describe('AgentTrees', () => {
     await Promise.all([stopping, closing])
     expect(calls).toEqual(['taskkill 100 101'])
     expect(await stored()).toEqual([])
+  })
+
+  it('on Windows, keeps what a taskkill that timed out was ending, for the next host', async () => {
+    const running = [row(100, 1, 100), row(101, 100, 101)]
+    const after = [row(101, 100, 101)]
+    const { trees, control, stored, logs } = await setup('win32', [running, after])
+    control.taskkill = () =>
+      Promise.reject(
+        Object.assign(new Error('taskkill did not finish within 500 ms'), { code: 'ETIMEDOUT' }),
+      )
+    await trees.load()
+    trees.launched(root)
+    await trees.note(root)
+    await trees.reap(root, 'Fake agent')
+    await trees.close()
+    expect(logs.filter((line) => line.includes('taskkill did not finish'))).toHaveLength(1)
+    expect(await stored()).toEqual(expect.arrayContaining([root, { pid: 101, startedAt: T + 101 }]))
   })
 
   it('stops waiting at its deadline, leaving what it was stopping to the next host', async () => {

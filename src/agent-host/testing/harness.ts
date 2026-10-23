@@ -30,6 +30,7 @@ import { detectAgent } from '../catalog'
 import type { Env } from '../find-command'
 import type { GitServiceApi } from '../git/api'
 import { AgentHost, type HostOptions } from '../host'
+import type { ProcessControl } from '../process-tree'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
 import type { LogReader } from '../usage/model'
@@ -249,6 +250,7 @@ export interface TestHostOptions {
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
   treeNoteMs?: number
+  processControl?: ProcessControl
   launcher?: AgentLauncher
   projectDir?: string
   resolveEnv?: HostOptions['resolveEnv']
@@ -311,6 +313,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     agentTimings: options.agentTimings ?? {},
     sessionTimings: options.sessionTimings ?? {},
     ...(options.treeNoteMs !== undefined ? { treeNoteMs: options.treeNoteMs } : {}),
+    ...(options.processControl ? { processControl: options.processControl } : {}),
     threadWorker: inThreadWorker,
     usageWorker: (file) => inUsageWorker(file, options.usageReaders),
     ...(options.usageReaders ? { usageReaders: options.usageReaders } : {}),

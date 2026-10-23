@@ -12,6 +12,7 @@ import { newTurnScope } from './acp/mapper'
 import { spawnAgent, spawnArguments } from './agent-process'
 import { processLauncher } from './agents'
 import type { LaunchSpec } from './catalog'
+import { processControl, runTool, type ProcessControl } from './process-tree'
 import { startTestHost } from './testing/harness'
 
 const FAKE_AGENT = path.resolve('tools/fake-agent/main.ts')
@@ -179,6 +180,79 @@ describe('spawnAgent', () => {
       expect(await until(() => !alive(childPid), 3_000)).toBe(true)
     },
   )
+})
+
+describe('a process tool that times out', () => {
+  it('leaves the tree to the reap when taskkill times out, without waiting for an exit', async () => {
+    // The Windows stop, through a control whose taskkill times out, on every platform.
+    const events: string[] = []
+    const control: ProcessControl = {
+      platform: 'win32',
+      list: async () => [],
+      kill: () => {},
+      taskkill: () =>
+        Promise.reject(
+          Object.assign(new Error('taskkill did not finish within 50 ms'), { code: 'ETIMEDOUT' }),
+        ),
+      delay: () => Promise.resolve(),
+    }
+    let stderr = ''
+    const agent = spawnAgent(spec({ FAKE_AGENT_IGNORE_EOF: '1' }), {
+      platform: 'win32',
+      env: process.env,
+      cwd: process.cwd(),
+      onStderr: (text) => (stderr += text),
+      onEvent: (event) => events.push(event),
+      timings: { eofMs: 300, termMs: 10_000 },
+      control,
+    })
+    try {
+      expect(await until(() => stderr.includes('ready'), 10_000)).toBe(true)
+      const started = Date.now()
+      expect(await agent.stop()).toMatchObject({ error: expect.any(String) })
+      expect(Date.now() - started).toBeLessThan(5_000)
+      expect(events).toEqual(expect.arrayContaining(['taskkill', 'taskkill failed']))
+    } finally {
+      if (agent.pid && alive(agent.pid)) process.kill(agent.pid, 'SIGKILL')
+    }
+  })
+
+  it('stops cleanly on quit while every listing hangs, leaving the agent to the next host', async () => {
+    // Each listing runs a process that never answers, until its limit kills it.
+    const control = processControl(process.platform, {
+      limits: { listMs: 50, backgroundListMs: 50, taskkillMs: 50 },
+      run: (_file, _args, timeoutMs) =>
+        runTool(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], timeoutMs, {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+        }),
+    })
+    const t = await startTestHost({
+      launcher: processLauncher(process.platform),
+      agentEnv: { FAKE_AGENT_DELAY_SCALE: '0' },
+      processControl: control,
+    })
+    try {
+      const port = t.connect()
+      await port.request('sessions.create', { agentId: 'fake-agent', projectPath: t.project })
+      const [agent] = t.host.agents.processes()
+      expect(agent).toBeDefined()
+      const started = Date.now()
+      await t.host.shutdown()
+      // Main kills a host that has not stopped 6 s after host:shutdown.
+      expect(Date.now() - started).toBeLessThan(6_000)
+      expect(t.sent.at(-1)).toEqual({ type: 'host:stopped' })
+      const file = path.join(t.dir, 'state', 'agent-processes.json')
+      const recorded = JSON.parse(readFileSync(file, 'utf8')) as { processes: { pid: number }[] }
+      expect(recorded.processes.map((entry) => entry.pid)).toContain(agent!.pid)
+      const warnings = t.host.diagnostics
+        .logEntries()
+        .filter((entry) => entry.level === 'warn' && entry.message.includes('within 50 ms'))
+      expect(warnings.length).toBeGreaterThan(0)
+    } finally {
+      await t.stop()
+    }
+  })
 })
 
 describe('what an agent leaves behind', () => {

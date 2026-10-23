@@ -84,33 +84,86 @@ const CIM_SCRIPT =
   "ForEach-Object { '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, " +
   '$(if ($_.CreationDate) { $_.CreationDate.ToFileTimeUtc() } else { 0 }) }'
 
+export interface ListOptions {
+  /** Nothing waits for it, so it may take longer, as on a slow machine. */
+  background?: boolean
+}
+
 export interface ProcessControl {
   platform: Platform
-  list(): Promise<ProcessRow[]>
+  list(options?: ListOptions): Promise<ProcessRow[]>
   /** `process.kill`: a negative target addresses a process group; throws `ESRCH` once it is gone. */
   kill(target: number, signal: NodeJS.Signals | 0): void
-  /** `taskkill /T /F` for each pid; one that is already gone is not an error. */
+  /**
+   * `taskkill /T /F` for each pid; one that is already gone is not an error, but a run that
+   * timed out is, since what it was ending may still run.
+   */
   taskkill(pids: number[]): Promise<void>
   delay(ms: number): Promise<void>
 }
 
-function run(file: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
+/** How long one run of each tool may take before it is killed and its call fails. */
+export interface ToolLimits {
+  /** A listing a stop waits for: `ps`, or the CIM query through PowerShell on Windows. */
+  listMs: number
+  backgroundListMs: number
+  taskkillMs: number
+}
+
+// Sized for the quit, which main cuts short 6 s after `host:shutdown`: docs/design/agent-host.md.
+export const TOOL_LIMITS: ToolLimits = { listMs: 750, backgroundListMs: 10_000, taskkillMs: 500 }
+
+/** Runs a tool to its end. Past `timeoutMs` it is killed, and the run fails with `ETIMEDOUT`. */
+export function runTool(
+  file: string,
+  args: string[],
+  timeoutMs: number,
+  env?: NodeJS.ProcessEnv,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       file,
       args,
-      { windowsHide: true, maxBuffer: 16 * 1024 * 1024, ...(env ? { env } : {}) },
-      (error, stdout) => (error ? reject(error) : resolve(stdout)),
+      {
+        windowsHide: true,
+        maxBuffer: 16 * 1024 * 1024,
+        timeout: timeoutMs,
+        killSignal: 'SIGKILL',
+        ...(env ? { env } : {}),
+      },
+      (error, stdout) => {
+        if (!error) resolve(stdout)
+        // `killed` is set only when execFile itself killed it, which here is the timeout.
+        else if (error.killed) reject(toolTimedOut(file, timeoutMs))
+        else reject(error)
+      },
     )
   })
 }
 
-export function processControl(platform: Platform): ProcessControl {
+function toolTimedOut(file: string, timeoutMs: number): NodeJS.ErrnoException {
+  const name = path.win32.basename(file)
+  return Object.assign(new Error(`${name} did not finish within ${timeoutMs} ms`), {
+    code: 'ETIMEDOUT',
+  })
+}
+
+export interface ProcessControlOptions {
+  limits?: ToolLimits
+  /** Runs the tools; `runTool` by default. */
+  run?: typeof runTool
+}
+
+export function processControl(
+  platform: Platform,
+  { limits = TOOL_LIMITS, run = runTool }: ProcessControlOptions = {},
+): ProcessControl {
   return {
     platform,
-    async list() {
+    async list({ background = false } = {}) {
+      const limitMs = background ? limits.backgroundListMs : limits.listMs
       if (platform !== 'win32') {
-        const text = await run('ps', ['-A', '-o', 'pid=,ppid=,pgid=,etime='], {
+        const text = await run('ps', ['-A', '-o', 'pid=,ppid=,pgid=,etime='], limitMs, {
           ...process.env,
           LC_ALL: 'C',
         })
@@ -121,12 +174,11 @@ export function processControl(platform: Platform): ProcessControl {
         ? path.win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
         : 'powershell.exe'
       const encoded = Buffer.from(CIM_SCRIPT, 'utf16le').toString('base64')
-      const text = await run(powershell, [
-        '-NoProfile',
-        '-NonInteractive',
-        '-EncodedCommand',
-        encoded,
-      ])
+      const text = await run(
+        powershell,
+        ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+        limitMs,
+      )
       return parseCim(text)
     },
     kill: (target, signal) => process.kill(target, signal),
@@ -134,7 +186,10 @@ export function processControl(platform: Platform): ProcessControl {
       // taskkill takes many /PID arguments; a long list is split to stay well under the command line limit.
       for (let i = 0; i < pids.length; i += 64) {
         const args = ['/T', '/F', ...pids.slice(i, i + 64).flatMap((pid) => ['/PID', String(pid)])]
-        await run('taskkill', args).catch(() => {})
+        // It exits with an error for a pid that is already gone.
+        await run('taskkill', args, limits.taskkillMs).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ETIMEDOUT') throw error
+        })
       }
     },
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -259,8 +314,9 @@ function signalAll(
 export async function terminateTrees(
   control: ProcessControl,
   roots: TreeRoot[],
+  listing?: ListOptions,
 ): Promise<Terminated> {
-  const rows = await control.list()
+  const rows = await control.list(listing)
   const members = new Map<number, ProcessRow>()
   for (const root of roots) {
     for (const row of treeOf(rows, root, control.platform)) members.set(row.pid, row)
