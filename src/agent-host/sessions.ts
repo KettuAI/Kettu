@@ -65,6 +65,7 @@ import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import type { Projects } from './projects'
+import type { CacheTtlReader } from './prompt-cache'
 import { CONTEXT_REPORT, hasContextReport, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, SessionRecord, SessionsFile } from './storage'
@@ -95,6 +96,8 @@ export interface SessionTimings {
   releaseShownMs: number
   /** ...or this long after it was only opened to read, nothing sent, wherever it is. */
   releaseUnusedMs: number
+  /** How long after a request the agent's transcript is read for its cache's lifetime. */
+  cacheReadMs: number
 }
 
 export const SESSION_TIMINGS: SessionTimings = {
@@ -104,6 +107,7 @@ export const SESSION_TIMINGS: SessionTimings = {
   releaseHiddenMs: 60_000,
   releaseShownMs: 30 * 60_000,
   releaseUnusedMs: 60_000,
+  cacheReadMs: 1_000,
 }
 
 export interface SessionEvents {
@@ -138,6 +142,8 @@ export interface SessionManagerDeps {
     /** Reads what is new in these agents' logs, when Usage on this computer is on. */
     syncAgents(agentIds: AgentId[]): Promise<void>
   }
+  /** Reads how long a session's prompt cache lasts from the agent's own transcript. */
+  cacheTtl?: CacheTtlReader
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -154,6 +160,8 @@ interface Turn {
   ended: boolean
   cancelRequested: boolean
   fallback: ReturnType<typeof setTimeout> | null
+  /** The agent reported a request of the session's thread during the turn. */
+  requested: boolean
 }
 
 interface PendingRequest {
@@ -296,6 +304,8 @@ export class SessionManager {
   private readonly reviving = new Map<string, Promise<Live>>()
   /** Idle sessions being let go, by id. */
   private readonly releasing = new Map<string, Promise<void>>()
+  /** Transcript reads waiting to run, by session id. */
+  private readonly cacheReads = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly timings: SessionTimings
   private readonly now: () => number
   private requestCounter = 0
@@ -786,6 +796,7 @@ export class SessionManager {
       context: () => ({
         thread: live.thread,
         replaying: live.replaying,
+        cancelling: live.turn?.cancelRequested ?? false,
         scope: live.scope,
         now: this.now(),
         nextId: () => this.nextId(live),
@@ -930,7 +941,41 @@ export class SessionManager {
         live.background = true
         this.refreshRelease(live)
         break
+      case 'request':
+        // A turn's transcript is read as it ends; a request between turns has a read of its own.
+        if (live.turn) live.turn.requested = true
+        else this.scheduleCacheRead(live)
+        break
     }
+  }
+
+  private scheduleCacheRead(live: Live): void {
+    if (!this.deps.cacheTtl || this.cacheReads.has(live.id)) return
+    const timer = setTimeout(() => {
+      this.cacheReads.delete(live.id)
+      void this.readCacheTtl(live)
+    }, this.timings.cacheReadMs)
+    timer.unref?.()
+    this.cacheReads.set(live.id, timer)
+  }
+
+  /** Keeps the lifetime already known when the transcript names none. */
+  private async readCacheTtl(live: Live): Promise<void> {
+    const { agentId, projectPath, acpSessionId } = live.record
+    let ttl: number | null
+    try {
+      ttl = (await this.deps.cacheTtl?.(agentId, projectPath, acpSessionId)) ?? null
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Session ${live.id}: could not read the prompt cache: ${(error as Error).message}`,
+      )
+      return
+    }
+    if (ttl === null || live.closing || this.live.get(live.id) !== live) return
+    const usage = live.thread.session.usage
+    if (!usage?.cache || usage.cache.ttl === ttl) return
+    this.update(live, { usage: { ...usage, cache: { ...usage.cache, ttl } } })
   }
 
   private firstUserText(live: Live): string | null {
@@ -1871,6 +1916,7 @@ export class SessionManager {
       context: () => ({
         thread: scratch,
         replaying: true,
+        cancelling: false,
         scope: newTurnScope(),
         now: this.now(),
         nextId: () => `q:${++counter}`,
@@ -2094,6 +2140,7 @@ export class SessionManager {
       ended: false,
       cancelRequested: false,
       fallback: null,
+      requested: false,
     }
     live.turn = turn
     live.scope = newTurnScope()
@@ -2300,11 +2347,18 @@ export class SessionManager {
     const turnTokens = models.length > 0 ? sumModelTokens(models, tokens) : tokens
     if (turnTokens) {
       const usage = live.thread.session.usage
+      // An agent that reports a turn's tokens only in its response made its last request just
+      // before it. A cancelled turn can end long after its last request, as when a command ran.
+      const cache =
+        !turn.requested && stopReason !== 'cancelled'
+          ? { lastRequestAt: now, ttl: usage?.cache?.ttl ?? null }
+          : usage?.cache
       changes.usage = {
         used: usage?.used ?? 0,
         size: usage?.size ?? 0,
         cost: usage?.cost ?? null,
         tokens: addTokenTotals(usage?.tokens ?? null, turnTokens),
+        ...(cache ? { cache } : {}),
       }
     }
     if (turnEntryId && this.deps.usage) {
@@ -2323,6 +2377,7 @@ export class SessionManager {
       )
     }
     this.update(live, changes)
+    if (live.thread.session.usage?.cache) this.scheduleCacheRead(live)
     const git = this.deps.git()
     if (git) {
       git.turnEnded(live.record.projectPath, live.id)
@@ -3043,6 +3098,7 @@ export class SessionManager {
       if (live.releaseTimer) clearTimeout(live.releaseTimer)
       this.checkpoint(live)
     }
+    for (const timer of this.cacheReads.values()) clearTimeout(timer)
     this.stopped = true
   }
 }

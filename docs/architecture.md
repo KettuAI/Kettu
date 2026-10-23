@@ -180,7 +180,7 @@ The agent host is the source of truth for every live session. Its mapper turns A
 
 ### Persistence
 
-The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. The host also keeps its own copy of every session's thread in a SQLite database, owned by a worker thread and read a page at a time, so a session opens without its agent; the agents keep their transcripts and the context a session continues from. Token usage has a database and worker of its own, which also reads the agents' logs when the user allows it ([usage statistics](./design/usage.md)). Credentials and diagnostics are never written. See [persistence](./design/persistence.md).
+The host keeps a few small JSON files, recent projects and the session index, and main keeps the settings; all are written atomically and versioned. The host also keeps its own copy of every session's thread in a SQLite database, owned by a worker thread and read a page at a time, so a session opens without its agent; the agents keep their transcripts and the context a session continues from. Token usage has a database and worker of its own, which also reads the agents' logs when the user allows it ([usage statistics](./design/usage.md)); the end of each Claude Code session's own transcript is read either way, for when its prompt cache expires ([prompt cache](./design/session-model.md#prompt-cache)). Credentials and diagnostics are never written. See [persistence](./design/persistence.md).
 
 ## Security
 

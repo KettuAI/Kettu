@@ -143,7 +143,7 @@
     },
     "fromComputer": {
       "name": "Usage on this computer",
-      "description": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on this computer, before OverBench and in a terminal. Only token counts, models and times are read, never what was said, and nothing leaves this computer.",
+      "description": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on this computer, before OverBench and in a terminal. Only token counts, models and times are read, never what was said, and nothing leaves this computer. Either way, OverBench reads the end of the transcript of each Claude Code session it runs, to show when its prompt cache expires.",
       "keywords": "logs history import tokens statistics"
     },
     "notFound": "No logs found",

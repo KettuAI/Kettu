@@ -58,6 +58,24 @@
       "used": "已使用：{{limit}}",
       "resets": "重置时间：{{time}}",
       "updated": "{{ago}}更新"
+    },
+    "cache": {
+      "title": "提示缓存",
+      "lastRequest": "上次请求",
+      "expiresIn": "{{time}} 后过期",
+      "expiresInAbout": "约 {{time}} 后过期",
+      "expired": "已过期",
+      "likelyExpired": "可能已过期",
+      "lastsMinutes_other": "{{count}} 分钟缓存 · 上次请求：{{ago}}",
+      "lastsHours_other": "{{count}} 小时缓存 · 上次请求：{{ago}}",
+      "estimateMinutes_other": "按 {{count}} 分钟估算 · 上次请求：{{ago}}",
+      "estimateHours_other": "按 {{count}} 小时估算 · 上次请求：{{ago}}",
+      "expiredNote": "下一条消息会按全价重新读取整个上下文。",
+      "likelyExpiredNote": "如果已过期，下一条消息会按全价重新读取整个上下文。",
+      "ringEnding": "上下文已使用 {{percent}}%，提示缓存将在一分钟内过期",
+      "ringEndingEstimate": "上下文已使用 {{percent}}%，提示缓存可能在一分钟内过期",
+      "ringExpired": "上下文已使用 {{percent}}%，提示缓存已过期",
+      "ringExpiredEstimate": "上下文已使用 {{percent}}%，提示缓存可能已过期"
     }
   }
 }

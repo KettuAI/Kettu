@@ -43,6 +43,19 @@ describe('chooseScenario', () => {
     expect(chooseScenario('/permission', {}).options.withdrawMs).toBeNull()
   })
 
+  it('reads how long requests holds its turn and when it answers by itself', () => {
+    expect(chooseScenario('/requests --hold 300 --then 50', {}).options).toMatchObject({
+      holdMs: 300,
+      thenMs: 50,
+    })
+    expect(chooseScenario('/requests', {}).options).toMatchObject({
+      holdMs: 0,
+      thenMs: null,
+      atEnd: false,
+    })
+    expect(chooseScenario('/requests --at-end', {}).options.atEnd).toBe(true)
+  })
+
   it('sizes a large history from --entries, else the environment, else 1,000', () => {
     const env = { FAKE_AGENT_HISTORY_ENTRIES: '2000' }
     expect(chooseScenario('/large-history --entries 4000', env).options.entries).toBe(4000)

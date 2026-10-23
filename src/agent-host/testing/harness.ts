@@ -31,6 +31,7 @@ import type { Env } from '../find-command'
 import type { GitServiceApi } from '../git/api'
 import { AgentHost, type HostOptions } from '../host'
 import type { ProcessControl } from '../process-tree'
+import type { CacheTtlReader } from '../prompt-cache'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
 import type { LogReader } from '../usage/model'
@@ -256,6 +257,7 @@ export interface TestHostOptions {
   resolveEnv?: HostOptions['resolveEnv']
   /** Log readers for Usage on this computer, read by both the manager and the worker. */
   usageReaders?: readonly LogReader[]
+  cacheTtl?: CacheTtlReader
 }
 
 export interface TestHost {
@@ -317,6 +319,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     threadWorker: inThreadWorker,
     usageWorker: (file) => inUsageWorker(file, options.usageReaders),
     ...(options.usageReaders ? { usageReaders: options.usageReaders } : {}),
+    ...(options.cacheTtl ? { cacheTtl: options.cacheTtl } : {}),
     homeDir: dir,
   })
   let stopped = false

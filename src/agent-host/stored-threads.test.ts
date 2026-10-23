@@ -340,6 +340,125 @@ describe('attaching on use', () => {
   })
 })
 
+describe('prompt cache', () => {
+  it('keeps when the cache was last used, and how long it lasts, across a restart', async () => {
+    const reads: string[] = []
+    const cacheTtl = async (agentId: string, projectPath: string, acpSessionId: string) => {
+      reads.push(`${agentId} ${projectPath} ${acpSessionId}`)
+      return 3_600_000
+    }
+    const { t: first, port: before } = await setup({ cacheTtl, sessionTimings: { cacheReadMs: 0 } })
+    const sessionId = await newSession(first, before)
+    const started = Date.now()
+    await finishTurn(before, sessionId, 'hello')
+    await before.until(() => before.thread(sessionId).session.usage?.cache?.ttl === 3_600_000)
+    const cache = before.thread(sessionId).session.usage!.cache!
+    expect(cache.lastRequestAt).toBeGreaterThanOrEqual(started)
+    const acpSessionId = before.thread(sessionId).session.acpSessionId
+    expect(reads).toEqual([`fake-agent ${first.project} ${acpSessionId}`])
+
+    const { t, port } = await restart(first)
+    const snapshot = await port.open(sessionId)
+    expect(snapshot.session.usage?.cache).toEqual(cache)
+    expect(t.launcher).toMatchObject({ launches: 0 })
+  })
+
+  it('keeps the lifetime it knew when the transcript says nothing', async () => {
+    let ttl: number | null = 300_000
+    let reads = 0
+    const cacheTtl = async () => {
+      reads++
+      return ttl
+    }
+    const { t, port } = await setup({ cacheTtl, sessionTimings: { cacheReadMs: 0 } })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, 'hello')
+    await port.until(() => port.thread(sessionId).session.usage?.cache?.ttl === 300_000)
+    ttl = null
+    await finishTurn(port, sessionId, 'again')
+    await vi.waitFor(() => expect(reads).toBe(2))
+    await t.host.threads!.flush()
+    expect(port.thread(sessionId).session.usage?.cache?.ttl).toBe(300_000)
+  })
+
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const lastRequestAt = (port: TestPort, sessionId: string) =>
+    port.thread(sessionId).session.usage?.cache?.lastRequestAt
+
+  /** Starts `/requests` and waits until the request's usage has arrived, before the hold ends. */
+  async function requested(port: TestPort, sessionId: string, flags: string) {
+    await port.request('sessions.prompt', { sessionId, content: text(`/requests ${flags}`) })
+    await port.until(() => lastRequestAt(port, sessionId) !== undefined)
+    // Both of the request's updates, as its message starts and as it ends.
+    await pause(50)
+    return lastRequestAt(port, sessionId)!
+  }
+
+  it('keeps the time of the last request when a turn is cancelled after a pause', async () => {
+    const { t, port } = await setup({ cacheTtl: async () => 300_000 })
+    const sessionId = await newSession(t, port)
+    const at = await requested(port, sessionId, '--hold 10000')
+    await pause(300)
+    const totals = port.thread(sessionId).session.usage?.tokens?.total ?? 0
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    const usage = port.thread(sessionId).session.usage!
+    expect(port.entries(sessionId).at(-1)).toMatchObject({ stopReason: 'cancelled' })
+    // The cancelled turn's tokens still count; only the stamp stays where the request left it.
+    expect(usage.tokens!.total).toBeGreaterThan(totals)
+    expect(usage.cache?.lastRequestAt).toBe(at)
+  })
+
+  it('does not take the usage an agent sends after a cancel as a request', async () => {
+    // As OpenCode does: one update as the turn ends, also when it was stopped.
+    const { t, port } = await setup({ cacheTtl: async () => 300_000 })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, '/requests --at-end')
+    const at = lastRequestAt(port, sessionId)!
+    const used = port.thread(sessionId).session.usage!.used
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: text('/requests --at-end --hold 10000'),
+    })
+    await port.untilStatus(sessionId, 'running')
+    await pause(300)
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    const usage = port.thread(sessionId).session.usage!
+    expect(usage.used).toBeGreaterThan(used)
+    expect(usage.cache?.lastRequestAt).toBe(at)
+  })
+
+  it("does not stamp a turn's end again once the agent reported its requests", async () => {
+    const { t, port } = await setup({ cacheTtl: async () => 300_000 })
+    const sessionId = await newSession(t, port)
+    const at = await requested(port, sessionId, '--hold 300')
+    await port.untilStatus(sessionId, 'ready')
+    const session = port.thread(sessionId).session
+    expect(session.updatedAt - at).toBeGreaterThanOrEqual(200)
+    expect(session.usage?.cache?.lastRequestAt).toBe(at)
+  })
+
+  it('takes a request between turns, and reads the transcript once for a burst of them', async () => {
+    let reads = 0
+    const cacheTtl = async () => {
+      reads++
+      return 300_000
+    }
+    const { t, port } = await setup({ cacheTtl, sessionTimings: { cacheReadMs: 100 } })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, '/requests --then 400')
+    const turnRequest = lastRequestAt(port, sessionId)!
+    await vi.waitFor(() => expect(reads).toBe(1))
+    // The agent answers by itself: two requests, as the message starts and ends, then the result.
+    await port.until(() => lastRequestAt(port, sessionId)! > turnRequest)
+    expect(port.thread(sessionId).session.status).toBe('ready')
+    await vi.waitFor(() => expect(reads).toBe(2))
+    await pause(250)
+    expect(reads).toBe(2)
+  })
+})
+
 describe('releasing', () => {
   const quick = { checkpointMs: 10, releaseHiddenMs: 60, releaseShownMs: 800, releaseUnusedMs: 60 }
   const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

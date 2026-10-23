@@ -50,6 +50,7 @@ const baseSession: SessionView = {
 
 interface RunOptions {
   replaying?: boolean
+  cancelling?: boolean
   thread?: ThreadState
   scope?: TurnScope
   session?: Partial<SessionView>
@@ -68,6 +69,7 @@ function run(updates: SessionUpdate[], options: RunOptions = {}) {
     const out = mapSessionUpdate(update, {
       thread,
       replaying: options.replaying ?? false,
+      cancelling: options.cancelling ?? false,
       scope,
       now,
       nextId: () => `e:${++counter}`,
@@ -580,6 +582,76 @@ describe('session-level updates', () => {
   })
 })
 
+describe('prompt cache', () => {
+  const usage = (
+    used: number,
+    extra: { meta?: Record<string, unknown>; cost?: number } = {},
+  ): SessionUpdate => ({
+    sessionUpdate: 'usage_update',
+    used,
+    size: 200_000,
+    ...(extra.cost !== undefined ? { cost: { amount: extra.cost, currency: 'USD' } } : {}),
+    ...(extra.meta ? { _meta: extra.meta } : {}),
+  })
+  const known = { used: 900, size: 200_000, cost: null, tokens: null }
+
+  it("takes each request's usage as the time of the last request", () => {
+    const { thread, effects } = run([usage(900), usage(1_200), usage(1_500)])
+    expect(thread.session.usage?.cache).toEqual({ lastRequestAt: 1_200, ttl: null })
+    expect(effects).toEqual([{ kind: 'request' }, { kind: 'request' }, { kind: 'request' }])
+  })
+
+  it("does not take the count a turn's result repeats as a request, also after a cancel", () => {
+    // claude-agent-acp sends the result's usage with its cost, whenever the turn ends.
+    const { thread, effects } = run([usage(900), usage(1_500), usage(1_500, { cost: 0.42 })])
+    expect(thread.session.usage).toEqual({
+      ...known,
+      used: 1_500,
+      cost: { amount: 0.42, currency: 'USD' },
+      cache: { lastRequestAt: 1_100, ttl: null },
+    })
+    expect(effects).toEqual([{ kind: 'request' }, { kind: 'request' }])
+  })
+
+  it('keeps the lifetime already known', () => {
+    const { thread } = run([usage(1_500)], {
+      session: { usage: { ...known, cache: { lastRequestAt: 10, ttl: 3_600_000 } } },
+    })
+    expect(thread.session.usage?.cache).toEqual({ lastRequestAt: 1_000, ttl: 3_600_000 })
+  })
+
+  it('counts usage between turns only when the context changed', () => {
+    const cache = { lastRequestAt: 10, ttl: 300_000 }
+    const idle = { status: 'ready' as const, turnStartedAt: null, usage: { ...known, cache } }
+    const same = run([usage(900)], { session: idle })
+    expect(same.thread.session.usage).toEqual({ ...known, cache })
+    expect(same.effects).toEqual([])
+    const grown = run([usage(1_400)], { session: idle })
+    expect(grown.thread.session.usage?.cache).toEqual({ lastRequestAt: 1_000, ttl: 300_000 })
+    expect(grown.effects).toEqual([{ kind: 'request' }])
+  })
+
+  it('does not count usage that arrives once the user stopped the turn', () => {
+    const cache = { lastRequestAt: 10, ttl: 300_000 }
+    const stopped = run([usage(1_500)], {
+      session: { usage: { ...known, cache } },
+      cancelling: true,
+    })
+    expect(stopped.thread.session.usage).toEqual({ ...known, used: 1_500, cache })
+    expect(stopped.effects).toEqual([])
+  })
+
+  it('does not count a plan limit report or a replay as a request', () => {
+    const limit = {
+      '_claude/rateLimit': { status: 'allowed', rateLimitType: 'five_hour', utilization: 0.2 },
+    }
+    expect(run([usage(1_500, { meta: limit })]).thread.session.usage?.cache).toBeUndefined()
+    const replay = run([usage(1_500)], { replaying: true })
+    expect(replay.thread.session.usage).toEqual({ ...known, used: 1_500 })
+    expect(replay.effects).toEqual([])
+  })
+})
+
 describe('notices and compactions', () => {
   it('adds notices and shows unknown severities as info', () => {
     const { entries } = run([
@@ -756,6 +828,7 @@ describe('permissions', () => {
       {
         thread,
         replaying: false,
+        cancelling: false,
         scope: newTurnScope(),
         now: 1,
         nextId: () => 'e:1',
