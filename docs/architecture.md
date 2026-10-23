@@ -190,7 +190,7 @@ Each core logic of OverBench has a section here: what it is, its model, its inte
 
 ### Artifacts
 
-> Decided by the maintainer on 2026-10-23 for [issue #11](https://github.com/overbench/overbench/issues/11); the store is built, the service, the surface and the interface are not yet. Details: [artifacts](./design/artifacts.md).
+> Decided by the maintainer on 2026-10-23 for [issue #11](https://github.com/overbench/overbench/issues/11); the store and the service are built, the surface and the interface are not yet. Details: [artifacts](./design/artifacts.md).
 
 An artifact is a page an agent makes for the user to look at, such as a report, a slide deck or a set of design options: one HTML file, kept by OverBench with every version. Agents create and change artifacts through OverBench's own MCP service, not by writing files into the project. OverBench stores them on this machine and shows them in a surface that keeps them away from the app and the machine.
 
@@ -303,7 +303,7 @@ src/
 │   ├── git/               Repository status, watchers, pull requests through gh
 │   ├── storage.ts         JSON persistence
 │   ├── threads/           The thread database: its worker, SQLite pages, and the host's store
-│   ├── artifacts/         Artifacts: their content files, ids, and the store the host serves
+│   ├── artifacts/         Artifacts: their content files, ids, the store and the MCP service
 │   ├── usage/             Token usage: the record, the agents' log readers, its database and worker
 │   ├── diagnostics.ts     Traffic and stderr ring buffers
 │   └── i18n.ts            The text the host writes for the user, in the chosen language

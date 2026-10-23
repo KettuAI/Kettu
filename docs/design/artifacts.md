@@ -27,28 +27,30 @@ The surface keeps the isolation the issue asked of "its own partition" by other 
 
 ### Connecting
 
-- **Where it runs.** The agent host serves the MCP server `overbench` with Node's `http` on `127.0.0.1`, on a port the system picks when the host starts, at `/mcp`. It answers in Streamable HTTP's plain JSON form: every tool call returns at once, so the service opens no event stream. It is built on the official MCP TypeScript SDK's server and transport (`@modelcontextprotocol/sdk`), a new dependency that waits for the maintainer's approval.
-- **How a session gets it.** Every request that attaches a session to its agent, `session/new`, `session/load`, `session/resume` and `session/fork`, passes `mcpServers: [{ type: 'http', name: 'overbench', url, headers: [{ name: 'Authorization', value: 'Bearer <token>' }] }]` ([session lifecycle](./session-model.md#session-lifecycle)). An agent that does not advertise `mcpCapabilities.http` gets no service; all three advertise it ([agents](../architecture.md#agents)).
-- **Tokens.** Each attach makes a token of 32 random bytes, in base64url, which the host maps to the session and its project. It ends when the session closes or is released or deleted, and when the host stops, so a restarted host hands out new ones as sessions attach again. A request without a known token gets HTTP 401.
+- **Where it runs.** The agent host serves the MCP server `overbench` with Node's `http` on `127.0.0.1`, on a port the system picks when the host starts, at `/mcp`. It answers in Streamable HTTP's plain JSON form: every tool call returns at once, so the service opens no event stream. It is built on the official MCP TypeScript SDK's `Server` and its Node Streamable HTTP transport (`@modelcontextprotocol/sdk`), without sessions of MCP's own: each request gets a server and a transport of its own, bound to the session its token names.
+- **What it refuses**, before any tool runs, each with a JSON-RPC error: a request that carries `Origin`, or a `Host` other than `127.0.0.1:<port>`, gets 403; a path other than `/mcp` 404; a method other than `POST` 405, with `Allow: POST`, since there is no event stream to open with `GET` and no session to end with `DELETE`; a request without a known token 401, before its body is read. The SDK's transport then answers 415 to a body that is not `application/json`, 413 to one over 6 MiB, and 400 to one that is not JSON.
+- **How a session gets it.** Every request that attaches a session to its agent, `session/new`, `session/load`, `session/resume` and `session/fork`, passes `mcpServers: [{ type: 'http', name: 'overbench', url, headers: [{ name: 'Authorization', value: 'Bearer <token>' }] }]` ([session lifecycle](./session-model.md#session-lifecycle)). An agent that does not advertise `mcpCapabilities.http` gets no service; all three advertise it ([agents](../architecture.md#agents)). The hidden sessions the host opens for itself, such as the one that reads an agent's options and the fork that reads `/context`, get none.
+- **Tokens.** Each attach makes a token of 32 random bytes, in base64url, which the host maps to the session and its project, and which replaces the session's last one. The host looks a token up by its SHA-256 and compares it with `timingSafeEqual`. It ends when the session leaves the host's memory, as it closes or is released or deleted, and when the host stops, so a restarted host hands out new ones as sessions attach again. A request without a known token gets HTTP 401.
 - **One connection per session.** An agent process serves many sessions, each with its own token. The build checks, for each agent, that two sessions in two projects keep their own connection; an adapter that registers MCP servers by name for its whole process would mix the tokens, and then gets a name per session (`overbench-` and the first 4 hex characters of the session id).
 
 ### Tools
 
-| Tool                       | Arguments                                                                                         | Result                                                                |
-| -------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `create_artifact`          | `title`, `html`, `note?`                                                                          | `{ id, version: 1, pages }`                                           |
-| `read_artifact`            | `id`, `version?`                                                                                  | `{ id, title, version, head, pages, updated_at, html }`               |
-| `update_artifact`          | `id`, `base_version`, and `html`, or `edits: { old_text, new_text }[]`, or `title` alone; `note?` | `{ id, version, pages }`; a title alone makes no version              |
-| `list_artifacts`           | `query?`, `limit?` (1 to 200, 50 by default)                                                      | `{ artifacts: { id, title, version, pages, updated_at, session }[] }` |
-| `delete_artifact`          | `id`                                                                                              | `{ id, purge_at }`                                                    |
-| `list_artifact_versions`   | `id`                                                                                              | `{ versions: { version, created_at, author, note, size }[] }`         |
-| `restore_artifact_version` | `id`, `version`, `base_version`                                                                   | `{ id, version }`                                                     |
+| Tool                       | Arguments                                                                                        | Result                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `create_artifact`          | `title`, `html`, `note?`                                                                         | `{ id, version: 1, pages }`                                           |
+| `read_artifact`            | `id`, `version?`                                                                                 | `{ id, title, version, head, pages, updated_at, html }`               |
+| `update_artifact`          | `id`, `base_version` with `html` or `edits: { old_text, new_text }[]`, or `title` alone; `note?` | `{ id, version, pages }`; a title alone makes no version              |
+| `list_artifacts`           | `query?`, `limit?` (1 to 200, 50 by default)                                                     | `{ artifacts: { id, title, version, pages, updated_at, session }[] }` |
+| `delete_artifact`          | `id`                                                                                             | `{ id, purge_at }`                                                    |
+| `list_artifact_versions`   | `id`                                                                                             | `{ versions: { version, created_at, author, note, size }[] }`         |
+| `restore_artifact_version` | `id`, `version`, `base_version`                                                                  | `{ id, version }`                                                     |
 
-- **Schemas.** Each tool declares an input and an output JSON Schema; a result carries the structured value and one line of text that says what happened ("Created art_01J… version 1, a canvas of 5 pages").
+- **Schemas.** Each tool declares an input and an output JSON Schema; a result carries the structured value and one line of text that says what happened ("Created art_01J… version 1, a canvas of 5 pages"). Each output schema also admits the `{ code }` of a tool error, since the official client checks a tool error's structured value against it too.
 - **Annotations.** `read_artifact`, `list_artifacts` and `list_artifact_versions` are marked read-only, `delete_artifact` destructive, so an agent's own permission settings can tell them apart.
+- **One kind of update at a time**: `html`, `edits` or `title`. `html` and `edits` make a version from `base_version`, which they need; a title alone renames the artifact, and a `base_version` or note beside it is not used.
 - **Edits** apply in order; each `old_text` must occur exactly once in the HTML as the edits before it left it, or the update fails as a whole.
-- **Lists** are newest first, without Recently deleted; `query` matches titles, case- and accent-insensitively. `session` and `author` are a session's title, or `"user"`.
-- **Limits**: a title of 1 to 120 characters, a note of at most 200, HTML of at most 5 MiB of UTF-8, at most 50 edits, a request body of at most 6 MiB, and 60 writes a minute per session.
+- **Lists** are newest first, without Recently deleted; `query` matches titles, case- and accent-insensitively. `session` and `author` are a session's title, `"Untitled session"` for one without a title, `"Deleted session"` for one no longer in the index, or `"user"`. Times (`updated_at`, `created_at`, `purge_at`) are ISO 8601 in UTC.
+- **Limits**: a title of 1 to 120 characters, a note of at most 200, HTML of at most 5 MiB of UTF-8, at most 50 edits, a query of at most 200 characters, a request body of at most 6 MiB, and 60 writes a minute per session. Creating, updating, renaming, deleting and restoring are writes; reading and listing are not.
 
 Errors come back as tool errors whose text says what to do next, with a `code` in the structured value:
 
@@ -58,9 +60,11 @@ Errors come back as tool errors whose text says what to do next, with a `code` i
 | `deleted`        | The artifact is in Recently deleted             | "art_01J… was deleted. The user can restore it in OverBench."                                |
 | `conflict`       | `base_version` is not the latest                | "art_01J… is at version 5. Read it again and apply your change to version 5."                |
 | `edit_not_found` | An `old_text` occurs nowhere, or more than once | "Edit 2: old_text occurs 3 times. Include more of the surrounding text."                     |
-| `too_large`      | The HTML or the request is over its limit       | "The HTML is 6.2 MiB; an artifact holds at most 5 MiB. Move images to a CDN or shrink them." |
+| `too_large`      | The HTML, after its edits, is over 5 MiB        | "The HTML is 6.2 MiB; an artifact holds at most 5 MiB. Move images to a CDN or shrink them." |
 | `invalid`        | An argument does not fit its schema             | The schema's message                                                                         |
 | `rate_limited`   | Over 60 writes in a minute                      | "Too many changes in a minute. Wait 20 s."                                                   |
+
+A request over 6 MiB never reaches a tool: the transport answers it with HTTP 413. An unknown tool is a JSON-RPC error, as MCP has it.
 
 ### What agents are told
 
@@ -90,7 +94,7 @@ A canvas is one HTML file that marks its pages in its markup:
 - **A group** is a row on the canvas, titled with the group's name. Pages outside a group, one after another, form a row without a title. A row wraps after six pages. Pages are 48 px apart, and rows 220 px, in canvas pixels.
 - **Two or more pages** make the artifact a canvas. One page, or none, shows it as a single page.
 - **Static markup only.** The marked elements must be in the HTML as written, not created by a script, since OverBench finds them without running the page. What the pages contain may be built by scripts.
-- **Counted when written.** The service counts a version's pages when it is written, from its first 2 MiB, with a scan for `data-page` attributes on tags that skips scripts, styles and comments; the viewer parses the HTML properly when it opens ([viewer](#viewer)).
+- **Counted when written.** The service counts a version's pages when it is written, from its first 2 MiB of UTF-8: every start tag with a `data-page` attribute, outside comments and the text of scripts, styles, titles and text areas, without checking where the tag sits; a tag the cut leaves unfinished does not count. The viewer parses the HTML properly when it opens ([viewer](#viewer)).
 - Opened in a browser, the file shows its pages one under another, as written.
 
 The format is OverBench's own; agents learn it from [what the service tells them](#what-agents-are-told).
@@ -153,6 +157,7 @@ The host's `ArtifactStore` (`src/agent-host/artifacts/store.ts`) is what the ser
 | Call                                                              | Result                        | For                                                    |
 | ----------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------ |
 | `create({ project, sessionId, title, html, pages, note })`        | `{ id, version: 1 }`          | `create_artifact`; authored by `sessionId`             |
+| `get(id, { version?, project? })`                                 | `{ artifact, version }`       | The records without the HTML, as after a rename        |
 | `read(id, { version?, project? })`                                | `{ artifact, version, html }` | `read_artifact`, `artifacts.read`                      |
 | `write({ id, baseVersion, html, pages, author, note, project? })` | `{ version }`                 | `update_artifact`, after applying its edits            |
 | `list({ project })`, or `list({ deleted? })` for the user         | `ArtifactSummary[]`           | `list_artifacts`, `artifacts.list`                     |
@@ -162,9 +167,11 @@ The host's `ArtifactStore` (`src/agent-host/artifacts/store.ts`) is what the ser
 | `rename(id, title, { project? })`                                 | none                          | `update_artifact` with a title, `artifacts.rename`     |
 | `undelete(id)`, `erase(id)`                                       | none                          | The user only                                          |
 | `content(id, version?)`                                           | `{ path, version }`           | `artifact.content`, for main                           |
+| `stopEditing(sessionId)`                                          | none                          | The session's turn ended, or it left memory            |
 
 - **Refusals** are `ArtifactError`s: `reason` is `not_found`, `deleted` or `conflict`, the service's codes of the same names, and `state` is `{ version, deleted }` for the last two, so a conflict names the latest version.
 - **What the store does not check** is the service's: the limits on titles, notes and HTML, the rate limit, and counting a version's pages. A title alone in `update_artifact` is a `rename` and makes no version.
+- **Editing**: `create`, `write`, `restore` and `rename` take `editor`, the session whose running turn makes the change, and count it as editing before they announce the change, so the list they cause already shows it.
 
 ### Import and export
 
@@ -175,8 +182,8 @@ The host's `ArtifactStore` (`src/agent-host/artifacts/store.ts`) is what the ser
 ## Presence
 
 - **Watching.** Every viewer or pane that shows an artifact watches it with `artifacts.watch`, which also brings its new versions for the live reload; the host counts the watches of each artifact.
-- **Editing.** The host serves the tool calls itself, so it knows which session changed what: a session that created, updated or restored an artifact in its running turn is editing it until that turn ends.
-- The host sends `artifacts.activity` with both whenever they change; the viewer and the cards show them ([interface](#interface)).
+- **Editing.** The host serves the tool calls itself, so it knows which session changed what: a session that created, updated, renamed or restored an artifact in its running turn is editing it until that turn ends, however it ends, or until the session leaves the host's memory. A change while no turn of the session runs is no editing.
+- The host sends `artifacts.activity` with both whenever they change; the viewer and the cards show them ([interface](#interface)). When a session stops editing it also sends `artifacts.changed`, since the cards read `editing` from the list and no new version announces the end.
 
 ## Privacy
 
