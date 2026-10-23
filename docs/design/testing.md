@@ -92,8 +92,10 @@ Environment variables, read when the agent starts:
 | `FAKE_AGENT_FORK_CONFIG=reset`       | A fork starts at the defaults and lists no level until a model is set, as codex-acp's does             |
 | `FAKE_AGENT_FORK_CONFIG=locked`      | A fork starts at the defaults and refuses every setting, to test a value the agent will not take       |
 | `FAKE_AGENT_SET_CONFIG_MS`           | Delays each `session/set_config_option` and `session/set_mode` answer by this long, unscaled           |
+| `FAKE_AGENT_RESUME_CONFIG=reset`     | `session/resume` and `session/load` answer at the defaults, as codex-acp's do                          |
+| `FAKE_AGENT_RESUME_CONFIG=locked`    | The same, and the session then refuses every setting                                                   |
 
-A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
+A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise, and a session resumed or loaded in the same process keeps its own unless `FAKE_AGENT_RESUME_CONFIG` does. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN=fail`.
 
 ## Continuous integration
 

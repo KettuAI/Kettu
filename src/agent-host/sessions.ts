@@ -261,6 +261,15 @@ function withUltracode(
   ]
 }
 
+/** The values of a session's agent options; ultracode goes out with the session's `_meta`. */
+function agentValues(config: readonly ConfigOption[]): Record<string, string | boolean> {
+  return Object.fromEntries(
+    config
+      .filter((option) => option.id !== ULTRACODE_OPTION_ID)
+      .map((option) => [option.id, option.value]),
+  )
+}
+
 const CONNECTED: ReadonlySet<SessionStatus> = new Set([
   'starting',
   'auth_required',
@@ -1208,23 +1217,33 @@ export class SessionManager {
   /**
    * Sets the values New session chose, in `startOrder`, each against the options as they stand
    * after the one before. A value the session does not offer, or one the agent refuses, is
-   * logged and left at the agent's value, so the start itself never fails on it. A fork sets its
-   * source's values the same way; they are not the user's latest choice, and the model is sent
-   * again while an option is missing, since an agent can list an option only once a model is set.
+   * logged and left at the agent's value, so the start itself never fails on it. With `restore`
+   * the values are ones a session already had, a fork's source's or its own as it attaches again:
+   * they are not the user's latest choice, and the model is sent again while an option is missing,
+   * since an agent can list an option only once a model is set. With `from`, the options are
+   * worked on apart from the session's and returned, for the caller to report once all are set;
+   * `stop` ends it before the next value.
    */
   private async applyStartOptions(
     live: Live,
     connection: AgentConnection,
     options: Record<string, string | boolean>,
-    { fork = false }: { fork?: boolean } = {},
-  ): Promise<void> {
+    {
+      restore = false,
+      from,
+      stop,
+    }: { restore?: boolean; from?: ConfigOption[]; stop?: () => boolean } = {},
+  ): Promise<ConfigOption[]> {
     const { agentId, acpSessionId } = live.record
-    for (const id of startOrder(live.thread.session.config, Object.keys(options))) {
+    let held = from
+    const current = (): ConfigOption[] => held ?? live.thread.session.config
+    for (const id of startOrder(current(), Object.keys(options))) {
+      if (stop?.()) break
       const value = options[id]
-      const config = live.thread.session.config
+      const config = current()
       const option = config.find((o) => o.id === id)
       const offerMissing =
-        fork &&
+        restore &&
         option?.category === 'model' &&
         Object.keys(options).some((wanted) => !config.some((o) => o.id === wanted))
       if (value === undefined || (option?.value === value && !offerMissing)) continue
@@ -1243,8 +1262,9 @@ export class SessionManager {
         } else {
           next = mergeConfig(config, await connection.setConfigOption(acpSessionId, id, value))
         }
-        this.update(live, { config: withUltracode(live.record, next) })
-        if (!fork) this.deps.options?.chose(agentId, option, value, next)
+        if (held) held = next
+        else this.update(live, { config: withUltracode(live.record, next) })
+        if (!restore) this.deps.options?.chose(agentId, option, value, next)
       } catch (error) {
         this.deps.diagnostics.log(
           'warn',
@@ -1252,6 +1272,7 @@ export class SessionManager {
         )
       }
     }
+    return current()
   }
 
   /** Records why a start failed; auth goes to `auth_required`, the rest to `failed`. */
@@ -1705,9 +1726,15 @@ export class SessionManager {
     return live.attaching
   }
 
-  /** `session/resume`, or a `session/load` whose replay is set aside for an agent without it. */
+  /**
+   * `session/resume`, or a `session/load` whose replay is set aside for an agent without it. Then
+   * the session's own values go out again, since not every agent opens a session at the values it
+   * had, and only then does the session take its connection, so nothing else reaches the agent
+   * first: a prompt waits for them, and a cancel ends a turn that was never sent.
+   */
   private async attachStored(live: Live): Promise<AgentConnection> {
     const { record } = live
+    const values = agentValues(live.thread.session.config)
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     const caps = runtime.init.capabilities
     const { connection } = runtime
@@ -1733,11 +1760,18 @@ export class SessionManager {
         t('session.cannotLoad', { agent: this.deps.agents.name(record.agentId) }),
       )
     }
-    if (live.closing || this.live.get(live.id) !== live) {
+    const gone = (): boolean => live.closing || this.live.get(live.id) !== live
+    config = await this.applyStartOptions(live, connection, values, {
+      restore: true,
+      from: config,
+      stop: () => gone() || connection.isClosed,
+    })
+    if (gone()) {
       // Closed while it attached: the agent's session closes again rather than stay open unseen.
       if (caps.closeSession) await connection.closeSession(record.acpSessionId).catch(() => {})
       throw new HostError('busy', t('session.openFirst'))
     }
+    if (connection.isClosed) throw new AgentRequestError('closed', 'The agent connection closed')
     this.attach(live, connection)
     this.opened(live, config)
     for (const child of this.descendants(live.id, 'subagent')) {
@@ -2120,8 +2154,7 @@ export class SessionManager {
     const carried = source.thread.session.config.filter(
       (option) => option.id !== ULTRACODE_OPTION_ID,
     )
-    const settings = Object.fromEntries(carried.map((option) => [option.id, option.value]))
-    await this.applyStartOptions(live, runtime.connection, settings, { fork: true })
+    await this.applyStartOptions(live, runtime.connection, agentValues(carried), { restore: true })
     // Deleted, or its project removed, meanwhile: closing it already closed the agent's session.
     if (live.closing || this.live.get(live.id) !== live) throw notFound(`No session ${live.id}`)
     // The agent can exit while the values are set, which leaves the fork stored and closed. Its

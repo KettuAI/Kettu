@@ -77,6 +77,13 @@ const MODES = [
   { id: 'plan', name: 'Plan', description: 'Plans without touching files' },
 ]
 
+const DEFAULT_CONFIG: Pick<FakeSessionState, 'mode' | 'model' | 'thought' | 'fast'> = {
+  mode: 'ask',
+  model: 'balanced',
+  thought: 'medium',
+  fast: false,
+}
+
 const SCENARIO_TITLES: Partial<Record<ScenarioName | 'compact', string>> = {
   'basic-turn': 'Fix the flaky login test',
   'long-stream': 'A very long answer',
@@ -95,6 +102,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const scale = delayScale(env)
   const legacyModes = env.FAKE_AGENT_LEGACY_MODES === '1'
   const forkConfig = env.FAKE_AGENT_FORK_CONFIG ?? 'keep'
+  const resumeConfig = env.FAKE_AGENT_RESUME_CONFIG ?? 'keep'
   // Not scaled: it stands for an agent that is slow to take a setting, whatever the pace.
   const setConfigMs = Number(env.FAKE_AGENT_SET_CONFIG_MS ?? '') || 0
   const settled = (): Promise<void> | undefined =>
@@ -242,10 +250,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       usedTokens: 0,
       largeHistory: id.startsWith('large-history') ? historyEntries(env) : historySize(id),
       signedOut: false,
-      mode: 'ask',
-      model: 'balanced',
-      thought: 'medium',
-      fast: false,
+      ...DEFAULT_CONFIG,
       history: [],
       turnStarts: [],
       updatedAt: new Date().toISOString(),
@@ -253,6 +258,13 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     }
     sessions.set(id, session)
     return session
+  }
+
+  /** Like codex-acp, which opens every session it resumes or loads at its defaults. */
+  const reopened = (session: FakeSession): void => {
+    if (resumeConfig === 'keep') return
+    Object.assign(session, DEFAULT_CONFIG)
+    if (resumeConfig === 'locked') lockedSessions.add(session.id)
   }
 
   const commands = (): AvailableCommand[] => [
@@ -479,6 +491,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       }
       await replay(ctx.client, session)
       announceCommands(ctx.client, session.id)
+      reopened(session)
       return sessionSetup(session)
     })
     .onRequest(methods.agent.session.resume, (ctx) => {
@@ -493,6 +506,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         session = newSession(ctx.params.sessionId, ctx.params.cwd)
         session.title = 'Restored session'
       }
+      reopened(session)
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return sessionSetup(session)
     })
