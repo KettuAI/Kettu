@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView, ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { turnPhase, turnTokens } from './turn-phase'
+import { inLatestTurn, turnPhase, turnTokens } from './turn-phase'
 
 function tool(
   id: string,
@@ -138,5 +138,34 @@ describe('turnTokens', () => {
     // A compaction during the turn shrinks the context below where it started.
     expect(turnTokens(view(120_000, 30_000))).toBeNull()
     expect(turnTokens(undefined)).toBeNull()
+  })
+})
+
+describe('inLatestTurn', () => {
+  const cut = (id: string): ThreadEntry => ({
+    kind: 'notice',
+    id,
+    severity: 'error',
+    title: 'Claude Code exited before finishing this turn',
+    cause: 'agent_stopped',
+  })
+  const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
+
+  it('holds for an entry that no message of yours follows', () => {
+    expect(inLatestTurn(state([user('u1'), agent('a1'), cut('n1')]), 'n1')).toBe(true)
+  })
+
+  it('holds past a message steered into the turn', () => {
+    expect(inLatestTurn(state([user('u1'), cut('n1'), steered, agent('a2')]), 'n1')).toBe(true)
+  })
+
+  it('does not hold for a turn an older message of yours started', () => {
+    const entries = [user('u1'), cut('n1'), user('u2'), agent('a2'), cut('n2')]
+    expect(inLatestTurn(state(entries), 'n1')).toBe(false)
+    expect(inLatestTurn(state(entries), 'n2')).toBe(true)
+  })
+
+  it('does not hold for an entry the thread does not have', () => {
+    expect(inLatestTurn(state([user('u1'), agent('a1')]), 'n1')).toBe(false)
   })
 })

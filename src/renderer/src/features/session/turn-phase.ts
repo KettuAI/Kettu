@@ -81,3 +81,17 @@ export function turnTokens(session: SessionView | null | undefined): number | nu
   if (start === null || used === undefined) return null
   return used > start ? used - start : null
 }
+
+/**
+ * Whether an entry is in the thread's latest turn: no message you sent as a turn of its own
+ * follows it. A message steered into the turn does not start one.
+ */
+export function inLatestTurn(state: ThreadState, entryId: string): boolean {
+  for (let i = state.order.length - 1; i >= 0; i--) {
+    const id = state.order[i]!
+    if (id === entryId) return true
+    const entry = state.byId[id]
+    if (entry?.kind === 'user' && !entry.steered) return false
+  }
+  return false
+}

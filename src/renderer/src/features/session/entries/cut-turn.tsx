@@ -1,23 +1,12 @@
 import { useState } from 'react'
-import { TriangleAlertIcon } from 'lucide-react'
+import { CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { ThreadState } from '@shared/thread'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
-
-/** Whether no message you sent as a turn of its own follows the entry. */
-function inLatestTurn(state: ThreadState, entryId: string): boolean {
-  for (let i = state.order.length - 1; i >= 0; i--) {
-    const id = state.order[i]!
-    if (id === entryId) return true
-    const entry = state.byId[id]
-    if (entry?.kind === 'user' && !entry.steered) return false
-  }
-  return false
-}
+import { inLatestTurn } from '../turn-phase'
 
 /**
  * The line that ends a turn the agent's exit cut short. While it ends the latest turn and the
@@ -46,20 +35,20 @@ export function CutTurnEnd({
   const resume = () => {
     setSending(true)
     setError(null)
+    // Held after a success: the button goes once the turn that starts reaches the replica.
     host('sessions.queue', {
       sessionId,
       content: [{ type: 'text', text: t('thread.continuePrompt') }],
+    }).catch((e: unknown) => {
+      setError(errorMessage(e))
+      setSending(false)
     })
-      .catch((e: unknown) => setError(errorMessage(e)))
-      .finally(() => setSending(false))
   }
   return (
     <Alert variant="error" className={cn('py-2 text-small', className)}>
-      <TriangleAlertIcon />
+      <CircleAlertIcon />
       <AlertTitle>{title}</AlertTitle>
-      {error && (
-        <AlertDescription className="text-small text-destructive">{error}</AlertDescription>
-      )}
+      {error && <AlertDescription className="text-small">{error}</AlertDescription>}
       {resumable && (
         <AlertAction className="top-1/2 -translate-y-1/2">
           <Button size="xs" variant="outline" disabled={sending} onClick={resume}>
