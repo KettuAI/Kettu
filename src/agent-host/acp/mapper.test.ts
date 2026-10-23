@@ -50,6 +50,7 @@ const baseSession: SessionView = {
 
 interface RunOptions {
   replaying?: boolean
+  cancelling?: boolean
   thread?: ThreadState
   scope?: TurnScope
   session?: Partial<SessionView>
@@ -68,6 +69,7 @@ function run(updates: SessionUpdate[], options: RunOptions = {}) {
     const out = mapSessionUpdate(update, {
       thread,
       replaying: options.replaying ?? false,
+      cancelling: options.cancelling ?? false,
       scope,
       now,
       nextId: () => `e:${++counter}`,
@@ -629,6 +631,16 @@ describe('prompt cache', () => {
     expect(grown.effects).toEqual([{ kind: 'request' }])
   })
 
+  it('does not count usage that arrives once the user stopped the turn', () => {
+    const cache = { lastRequestAt: 10, ttl: 300_000 }
+    const stopped = run([usage(1_500)], {
+      session: { usage: { ...known, cache } },
+      cancelling: true,
+    })
+    expect(stopped.thread.session.usage).toEqual({ ...known, used: 1_500, cache })
+    expect(stopped.effects).toEqual([])
+  })
+
   it('does not count a plan limit report or a replay as a request', () => {
     const limit = {
       '_claude/rateLimit': { status: 'allowed', rateLimitType: 'five_hour', utilization: 0.2 },
@@ -816,6 +828,7 @@ describe('permissions', () => {
       {
         thread,
         replaying: false,
+        cancelling: false,
         scope: newTurnScope(),
         now: 1,
         nextId: () => 'e:1',

@@ -409,6 +409,26 @@ describe('prompt cache', () => {
     expect(usage.cache?.lastRequestAt).toBe(at)
   })
 
+  it('does not take the usage an agent sends after a cancel as a request', async () => {
+    // As OpenCode does: one update as the turn ends, also when it was stopped.
+    const { t, port } = await setup({ cacheTtl: async () => 300_000 })
+    const sessionId = await newSession(t, port)
+    await finishTurn(port, sessionId, '/requests --at-end')
+    const at = lastRequestAt(port, sessionId)!
+    const used = port.thread(sessionId).session.usage!.used
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: text('/requests --at-end --hold 10000'),
+    })
+    await port.untilStatus(sessionId, 'running')
+    await pause(300)
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    const usage = port.thread(sessionId).session.usage!
+    expect(usage.used).toBeGreaterThan(used)
+    expect(usage.cache?.lastRequestAt).toBe(at)
+  })
+
   it("does not stamp a turn's end again once the agent reported its requests", async () => {
     const { t, port } = await setup({ cacheTtl: async () => 300_000 })
     const sessionId = await newSession(t, port)

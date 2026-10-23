@@ -886,13 +886,31 @@ async function resultUsage(turn: Turn): Promise<void> {
 }
 
 /**
+ * OpenCode's one `usage_update` of a turn, sent once its run has ended, also when it was
+ * interrupted: the count of the turn's last finished step.
+ */
+async function turnEndUsage(turn: Turn): Promise<void> {
+  const session = turn.session
+  session.usedTokens = Math.min(200_000, session.usedTokens + 1_020)
+  await turn.send({ sessionUpdate: 'usage_update', used: session.usedTokens, size: 200_000 })
+}
+
+/**
  * A request and the result's usage, as claude-agent-acp reports them for Claude Code. `--hold`
  * keeps the turn open after the request, as the adapter does while background subagents run;
  * a cancel then still sends the result's usage first, as the adapter does. `--then` answers
  * again by itself that long after the turn, as Claude Code does when a background task ends.
+ * `--at-end` reports usage only as the turn ends, as OpenCode does, after a cancel too.
  */
 const requests: Scenario = async (turn) => {
-  await answerWithUsage(turn, 'One request answers this, and its usage arrives as it streams.')
+  const text = 'One request answers this, and its usage arrives as it streams.'
+  if (turn.options.atEnd) {
+    await stream(turn, text, { messageId: turn.messageId() })
+    const held = await waitUnscaled(turn.options.holdMs, turn.signal)
+    await turnEndUsage(turn)
+    return held ? 'end_turn' : 'cancelled'
+  }
+  await answerWithUsage(turn, text)
   const held = await waitUnscaled(turn.options.holdMs, turn.signal)
   await resultUsage(turn)
   if (!held) return 'cancelled'

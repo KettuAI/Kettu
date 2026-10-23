@@ -796,6 +796,7 @@ export class SessionManager {
       context: () => ({
         thread: live.thread,
         replaying: live.replaying,
+        cancelling: live.turn?.cancelRequested ?? false,
         scope: live.scope,
         now: this.now(),
         nextId: () => this.nextId(live),
@@ -1915,6 +1916,7 @@ export class SessionManager {
       context: () => ({
         thread: scratch,
         replaying: true,
+        cancelling: false,
         scope: newTurnScope(),
         now: this.now(),
         nextId: () => `q:${++counter}`,

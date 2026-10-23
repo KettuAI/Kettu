@@ -68,7 +68,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   requests: {
     description: "Reports a request's usage as claude-agent-acp does, then the result's",
-    hint: '--hold <ms before the turn ends> --then <ms until it answers by itself>',
+    hint: '--hold <ms before the turn ends> --then <ms until it answers by itself> --at-end',
   },
   thinking: { description: 'A long thought, then an answer' },
   svg: { description: 'A reply with svg code blocks: a diagram, a badge and bare path data' },
@@ -94,6 +94,7 @@ export interface ScenarioOptions {
   stepMs: number // plan: how long each step's tool call runs
   holdMs: number // requests: how long the turn stays open after its request, not scaled
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
+  atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
 }
 
 export interface ScenarioChoice {
@@ -177,6 +178,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     stepMs: parseNumber(flagValue(args, 'step')) ?? 300,
     holdMs: parseNumber(flagValue(args, 'hold')) ?? 0,
     thenMs: parseNumber(flagValue(args, 'then')),
+    atEnd: flagValue(args, 'at-end') !== undefined,
   }
   return { scenario, options, text }
 }

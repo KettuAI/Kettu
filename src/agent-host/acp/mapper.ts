@@ -40,6 +40,8 @@ export interface MapperContext {
   readonly thread: ThreadState
   /** True while `session/load` replays history into the thread. */
   readonly replaying: boolean
+  /** The user stopped the running turn and the agent has not ended it yet. */
+  readonly cancelling: boolean
   readonly scope: TurnScope
   readonly now: number
   /** The next `e:<n>` id of this session. */
@@ -646,10 +648,12 @@ export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
  * the context it read, so one that repeats the last count asked the model nothing. claude-agent-acp
  * repeats it with each turn's result, which comes after the stopped work on a cancel and after the
  * wait of a turn held open for background subagents, and with each plan limit report; an agent
- * may also repeat the context's size between turns, as on a resume.
+ * may also repeat the context's size between turns, as on a resume. Once the user has stopped the
+ * turn, an update can come long after the request it counts, as OpenCode's single one at a turn's
+ * end does, so none counts.
  */
 function isRequest(ctx: MapperContext, used: number, rateLimit: boolean): boolean {
-  if (ctx.replaying || rateLimit) return false
+  if (ctx.replaying || ctx.cancelling || rateLimit) return false
   return used !== ctx.thread.session.usage?.used
 }
 

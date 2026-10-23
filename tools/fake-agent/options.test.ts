@@ -48,7 +48,12 @@ describe('chooseScenario', () => {
       holdMs: 300,
       thenMs: 50,
     })
-    expect(chooseScenario('/requests', {}).options).toMatchObject({ holdMs: 0, thenMs: null })
+    expect(chooseScenario('/requests', {}).options).toMatchObject({
+      holdMs: 0,
+      thenMs: null,
+      atEnd: false,
+    })
+    expect(chooseScenario('/requests --at-end', {}).options.atEnd).toBe(true)
   })
 
   it('sizes a large history from --entries, else the environment, else 1,000', () => {
