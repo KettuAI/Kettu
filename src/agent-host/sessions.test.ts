@@ -1936,17 +1936,39 @@ describe('the first message', () => {
     await port.request('sessions.close', { sessionId })
     expect(await outcome).toMatchObject({ id: sessionId, status: 'closed' })
     const snapshot = await port.open(sessionId)
+    // The thread says the message never went, so it does not read as sent.
     expect(snapshot.entries).toEqual([
       expect.objectContaining({ kind: 'user', content: text('Fix the flaky login test') }),
+      expect.objectContaining({
+        kind: 'notice',
+        severity: 'info',
+        title: 'The session closed before your message was sent',
+      }),
     ])
     expect(snapshot.session).toMatchObject({
       queue: [{ content: text('Fix the flaky login test') }],
       queuePaused: true,
     })
-    const prompts = t.host.diagnostics
-      .agentRecords('fake-agent')
-      .traffic.filter((r) => r.direction === 'out' && r.method === 'session/prompt')
-    expect(prompts).toEqual([])
+    const prompts = () =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/prompt')
+    expect(prompts()).toEqual([])
+
+    // Resumed, it goes out once, as a new message after the notice.
+    await port.request('sessions.resumeQueue', { sessionId })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    expect(prompts()).toHaveLength(1)
+    expect(port.entries(sessionId).map((entry) => entry.kind)).toEqual([
+      'user',
+      'notice',
+      'user',
+      ...port
+        .entries(sessionId)
+        .slice(3)
+        .map((entry) => entry.kind),
+    ])
+    expect(users(port, sessionId)).toHaveLength(2)
   })
 })
 

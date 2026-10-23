@@ -347,6 +347,35 @@ describe('createSession with a first message', () => {
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
   })
 
+  it('takes it out of the draft as the request goes, so a reload meanwhile cannot send it twice', async () => {
+    let answer: (summary: SessionSummary) => void = () => {}
+    request.mockImplementation((method: string) =>
+      method === 'sessions.create'
+        ? new Promise<SessionSummary>((resolve) => (answer = resolve))
+        : Promise.resolve(undefined),
+    )
+    const creating = createSession('codex', '/repo', null, 'Fix the build')
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+    answer(created('running'))
+    await creating
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+  })
+
+  it('does not write it over a draft typed while the start failed', async () => {
+    let fail: (error: Error) => void = () => {}
+    request.mockImplementation((method: string) =>
+      method === 'sessions.create'
+        ? new Promise((_, reject) => (fail = reject))
+        : Promise.resolve(undefined),
+    )
+    const creating = createSession('codex', '/repo', null, 'Fix the build')
+    writeDraft(NEW_SESSION_DRAFT, 'Something else')
+    fail(new Error('spawn failed'))
+    await creating
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else')
+    expect(usePendingSession.getState().pending).toMatchObject({ prompt: 'Fix the build' })
+  })
+
   it('leaves it with the host, which sends it after a sign-in, when one is needed', async () => {
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('auth_required') : undefined,

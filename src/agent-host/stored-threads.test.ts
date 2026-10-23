@@ -127,6 +127,46 @@ describe('checkpoints', () => {
   })
 })
 
+describe('a first message the app stops before it goes', () => {
+  it('waits in the paused queue at the next launch, and the thread says so', async () => {
+    const { t: first, port: before } = await setup({
+      agentEnv: { FAKE_AGENT_SET_CONFIG_MS: '1000' },
+    })
+    const creating = before
+      .request('sessions.create', {
+        agentId: 'fake-agent',
+        projectPath: first.project,
+        options: { model: 'deep' },
+        prompt: text('Fix the flaky login test'),
+      })
+      .catch(() => null)
+    const sets = () =>
+      first.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/set_config_option')
+    // In the index, still setting its start values.
+    await vi.waitFor(() => expect(sets()).toHaveLength(1))
+    const sessionId = before.events.flatMap((e) =>
+      e.type === 'session.summary' ? [e.summary.id] : [],
+    )[0]!
+    const { port } = await restart(first)
+    await creating
+    const snapshot = await port.open(sessionId)
+    expect(snapshot.entries).toEqual([
+      expect.objectContaining({ kind: 'user', content: text('Fix the flaky login test') }),
+      expect.objectContaining({
+        kind: 'notice',
+        title: 'The session closed before your message was sent',
+      }),
+    ])
+    expect(snapshot.session).toMatchObject({
+      status: 'closed',
+      queue: [{ content: text('Fix the flaky login test') }],
+      queuePaused: true,
+    })
+  })
+})
+
 describe('pages', () => {
   async function largeSession() {
     const { t, port } = await setup({ agentEnv: { FAKE_AGENT_HISTORY_ENTRIES: '200' } })

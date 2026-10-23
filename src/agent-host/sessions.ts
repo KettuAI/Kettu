@@ -1349,10 +1349,9 @@ export class SessionManager {
       stop: () => gone() || runtime.connection.isClosed,
     })
     if (gone()) {
-      // Closing or deleting it already closed or deleted the agent's session. A closed one keeps
-      // its first message, never sent, in its paused queue.
+      // Closing or deleting it already closed or deleted the agent's session; closing it kept the
+      // first message in its paused queue.
       if (live.removing || !this.has(live.id)) throw removedWhileStarting()
-      if (live.first) this.keepFirst(live.record, live.first.content)
       return
     }
     this.update(live, { status: 'ready' })
@@ -1363,11 +1362,33 @@ export class SessionManager {
     if (first) this.startTurn(live, first.content, this.now(), first.entryId)
   }
 
-  /** Puts a first message that never went out at the front of a closed session's paused queue. */
-  private keepFirst(record: SessionRecord, content: UserContent[]): void {
-    record.queue = [{ id: randomUUID(), content, at: this.now() }, ...(record.queue ?? [])]
-    this.saveIndex()
-    this.touch(record.id)
+  /**
+   * A new session closed, or stopped by the quit, before its first message went out: the message
+   * waits at the front of its paused queue, and the thread says so, as it does for a prompt held
+   * when the mode was lost.
+   */
+  private holdFirst(live: Live): void {
+    if (!live.saved || !live.first) return
+    const { content } = live.first
+    live.first = null
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('notice.closedBeforeSent.title'),
+          description: t('notice.closedBeforeSent.description'),
+        },
+      },
+    ])
+    const queue = live.thread.session.queue
+    this.update(live, {
+      queue: [{ id: randomUUID(), content, at: this.now() }, ...queue],
+      queuePaused: true,
+    })
+    this.persist(live)
   }
 
   /** The thread's notice that the agent asks to sign in, as a failed turn adds it. */
@@ -3145,6 +3166,7 @@ export class SessionManager {
       this.finishTurn(live, live.turn, 'cancelled')
     }
     this.clearPermissions(live, 'cancelled')
+    if (kept) this.holdFirst(live)
     const runtime = this.deps.agents.runtime(live.record.agentId)
     if (
       connection &&
@@ -3472,10 +3494,12 @@ export class SessionManager {
 
   /**
    * Before a clean exit: pending patches go out, every thread is stored as it stands, and turns
-   * are left as they are. No checkpoint follows.
+   * are left as they are, but a first message not sent yet waits in its queue. No checkpoint
+   * follows.
    */
   shutdown(): void {
     for (const live of this.live.values()) {
+      this.holdFirst(live)
       this.flushPatches(live)
       if (live.turn?.fallback) clearTimeout(live.turn.fallback)
       if (live.releaseTimer) clearTimeout(live.releaseTimer)
