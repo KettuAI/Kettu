@@ -328,6 +328,100 @@ describe('AgentManager', () => {
     await m.agents.stopAll()
   })
 
+  /** A launcher whose first process ignores its stop, as after a Windows taskkill that failed. */
+  function stopFails(firstEnv: Env = {}) {
+    const first = inProcessLauncher(module, firstEnv)
+    const base = inProcessLauncher(module)
+    let end: (() => Promise<unknown>) | null = null
+    const launcher: AgentLauncher = {
+      launch: (def, spec, launchEnv, output) => {
+        if (first.launches > 0) return base.launch(def, spec, launchEnv, output)
+        const launched = first.launch(def, spec, launchEnv, output)
+        end = launched.stop
+        return Object.assign(launched, {
+          pid: 4242,
+          stop: async () => ({
+            code: null,
+            signal: null,
+            error: 'taskkill failed: taskkill did not finish within 10000 ms',
+          }),
+        })
+      },
+    }
+    const pids = (m: ReturnType<typeof manager>) => m.agents.processes().map((p) => p.pid)
+    // The first process exits after all, as the reap's taskkill would end it.
+    const launches = () => first.launches + base.launches
+    return { launcher, launches, pids, exitFirst: () => end?.() }
+  }
+
+  it('does not hand out the runtime of an agent its stop did not end', async () => {
+    const { launcher, launches, pids, exitFirst } = stopFails()
+    const m = manager({}, {}, { launcher })
+    const first = await m.agents.ensureReady('fake-agent')
+    await m.agents.stop('fake-agent')
+    expect(m.state()).toBe('available')
+    expect(m.agents.runtime('fake-agent')).toBeNull()
+    expect(m.diagnostics.logEntries()).toContainEqual(
+      expect.objectContaining({
+        level: 'warn',
+        message: expect.stringContaining('taskkill failed: taskkill did not finish'),
+      }),
+    )
+    // Main still knows of it, for a host that dies before it exits.
+    expect(pids(m)).toEqual([4242])
+    const second = await m.agents.ensureReady('fake-agent')
+    expect(second).not.toBe(first)
+    expect(launches()).toBe(2)
+
+    await exitFirst()
+    await until(() => !pids(m).includes(4242))
+    expect(m.agents.runtime('fake-agent')).toBe(second)
+    expect(m.state()).toBe('ready')
+    await m.agents.stopAll()
+  })
+
+  it('kills a given-up process that still runs when the quit cuts the stops short', async () => {
+    const given = stopFails()
+    const launcher: AgentLauncher = {
+      launch: (def, spec, env, output) => {
+        const launched = given.launcher.launch(def, spec, env, output)
+        if (given.launches() === 1) return launched
+        // The process after it hangs in its stop, so the quit's cut comes.
+        return Object.assign(launched, { stop: () => new Promise<never>(() => {}) })
+      },
+    }
+    const m = manager({}, { quitStopMs: 100 }, { launcher })
+    await m.agents.ensureReady('fake-agent')
+    await m.agents.stop('fake-agent')
+    await m.agents.ensureReady('fake-agent')
+    expect(given.pids(m)).toEqual([4242])
+    await m.agents.stopAll()
+    expect(given.pids(m)).toEqual([])
+  })
+
+  it('gives up the process of a failed start that its stop did not end', async () => {
+    const { launcher, pids, exitFirst } = stopFails({
+      FAKE_AGENT_SLOW_START_MS: '10000',
+      FAKE_AGENT_DELAY_SCALE: '1',
+    })
+    const m = manager({}, { initializeMs: 100 }, { launcher })
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    expect(m.state()).toBe('failed')
+    expect(m.diagnostics.logEntries()).toContainEqual(
+      expect.objectContaining({ level: 'warn', message: expect.stringContaining('did not stop') }),
+    )
+    // It stays listed after the slot has moved on to a new process.
+    await m.agents.retry('fake-agent')
+    await m.agents.ensureReady('fake-agent')
+    expect(pids(m)).toEqual([4242])
+    await exitFirst()
+    await until(() => pids(m).length === 0)
+    expect(m.state()).toBe('ready')
+    await m.agents.stopAll()
+  })
+
   it('stops the agent without waiting for a hidden session/new that has not answered', async () => {
     const m = manager({ FAKE_AGENT_NEW_SESSION_MS: '5000' }, { optionsMs: 10_000 })
     m.agents.hooks = { ...m.agents.hooks, optionsKnown: () => false }
