@@ -311,15 +311,19 @@ async function probe(policy: boolean): Promise<ProbeResult> {
   const args = [
     path.join(dir, 'harness', 'main.cjs'),
     `--user-data-dir=${path.join(run, 'data')}`,
-    // CI's Ubuntu has no display, nor a GPU for the window, and restricts the user namespaces
-    // Chromium's sandbox needs.
-    ...(process.platform === 'linux'
-      ? ['--no-sandbox', '--ozone-platform=headless', '--disable-gpu']
-      : []),
+    '--enable-logging=stderr',
+    // CI's Ubuntu restricts the user namespaces Chromium's sandbox needs.
+    ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
   ]
+  // The probe opens a window, which crashed Electron on the headless Ozone platform in CI, so
+  // without a display it runs under Xvfb, as the screenshots do.
+  const headless = process.platform === 'linux' && !env.DISPLAY && !env.WAYLAND_DISPLAY
+  const [command, commandArgs]: [string, string[]] = headless
+    ? ['xvfb-run', ['-a', electron, ...args]]
+    : [electron, args]
   const { code, stderr } = await new Promise<{ code: number | null; stderr: string }>(
     (resolve, reject) => {
-      const child = spawn(electron, args, { env, stdio: ['ignore', 'ignore', 'pipe'] })
+      const child = spawn(command, commandArgs, { env, stdio: ['ignore', 'ignore', 'pipe'] })
       let stderr = ''
       child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk))
       child.once('error', reject)
