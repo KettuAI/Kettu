@@ -170,11 +170,13 @@ describe('hours', () => {
   })
 
   describe('when the clocks change', () => {
+    // Restored by name: on Windows, removing TZ again leaves the stubbed zone in place.
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
     beforeAll(() => {
       vi.stubEnv('TZ', 'America/New_York')
     })
     afterAll(() => {
-      vi.unstubAllEnvs()
+      vi.stubEnv('TZ', zone)
     })
 
     it('has 23 hours on the day they spring forward and 25 on the day they fall back', () => {
