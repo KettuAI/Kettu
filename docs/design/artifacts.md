@@ -1,25 +1,25 @@
 # Artifacts
 
-> Status: Draft · Part of the [architecture](../architecture.md) · Issue [#11](https://github.com/overbench/overbench/issues/11), milestone v0.0.3 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, Electron 44.9.2 (Chromium 152)
+> Status: Accepted · Part of the [architecture](../architecture.md) · Issue [#11](https://github.com/overbench/overbench/issues/11), milestone v0.0.3 · Observed on 2026-10-22: claude-agent-acp 0.94.0, codex-acp 2.2.2, opencode 2.0.32, Electron 44.9.2 (Chromium 152)
 
 Agents often answer with a page instead of a paragraph: a report, a slide deck, a set of design directions. An **artifact** is an HTML file an agent wrote or edited in a session. OverBench finds them in the sessions' threads, lists them on one page for the whole app, grouped by project and then by session, and shows each in a viewer that keeps the page away from the app and the machine. A **canvas** is an artifact whose file marks two or more pages; the viewer lays its pages out side by side on a surface that pans and zooms.
 
 The product decisions behind this design were made on [issue #11](https://github.com/overbench/overbench/issues/11#issuecomment-6357688146) on 2026-10-22: local HTML files only (no hosted links), one app-wide page, and pages that may load scripts, styles and fonts from CDNs inside an isolated surface. Word, PowerPoint and PDF files are out of scope.
 
-## Open choices
+## Decisions
 
-Each choice below has a recommendation; the maintainer decides before the build starts.
+The maintainer took each of these on 2026-10-23:
 
-| Choice                                                       | Recommended                                                                                  | Alternative                                                                                                      |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| [The surface](#the-surface)                                  | An `<iframe>` per page on an origin of its own, in its own process, inside the app's session | A `<webview>` or `WebContentsView` in a partition of its own, as the issue's wording asks; measured far costlier |
-| [The canvas format](#canvas)                                 | `data-page`, `data-page-size` and `data-page-group` attributes in the page's markup          | Other attribute names; a page list built at run time                                                             |
-| [The network policy](#network-policy)                        | Scripts, styles, fonts and fetches from a fixed list of CDNs; nothing else leaves the page   | Any `https` host for scripts, styles, fonts and images                                                           |
-| [Where a session opens an artifact](#opening-from-a-session) | The side panel, beside the thread, so a live edit shows while the agent works                | The whole main area, with **Back** to the session                                                                |
-| [The page layout](#artifacts-page)                           | Cards under each session's title                                                             | The session's title beside its cards; one row per file                                                           |
-| [Downloads](#downloads)                                      | Allowed through the system's save dialog                                                     | Blocked                                                                                                          |
+| Choice                                                       | Decided                                                                                      | Instead of                                                                                                        |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| [The surface](#the-surface)                                  | An `<iframe>` per page on an origin of its own, in its own process, inside the app's session | A `<webview>` or `WebContentsView` in a partition of its own, as the issue's wording asked; measured far costlier |
+| [The canvas format](#canvas)                                 | `data-page`, `data-page-size` and `data-page-group` attributes in the page's markup          | Other attribute names; a page list built at run time                                                              |
+| [The network policy](#network-policy)                        | Scripts, styles, fonts and fetches from a fixed list of CDNs; nothing else leaves the page   | Any `https` host for scripts, styles, fonts and images                                                            |
+| [Where a session opens an artifact](#opening-from-a-session) | The side panel, beside the thread, so a live edit shows while the agent works                | The whole main area, with **Back** to the session                                                                 |
+| [The page layout](#artifacts-page)                           | Cards under each session's title                                                             | The session's title beside its cards; one row per file                                                            |
+| [Downloads](#downloads)                                      | Allowed through the system's save dialog                                                     | Blocked                                                                                                           |
 
-The surface needs the maintainer's word in particular: the issue asks for "its own partition", and this design keeps the isolation the partition was asked for by other means, because a partition would cost the canvas its frame rate or its memory ([measurements](#the-surface)).
+The surface keeps the isolation the issue asked of "its own partition" by other means, because a partition would cost the canvas its frame rate or its memory ([measurements](#the-surface)).
 
 ## Artifacts
 
@@ -139,7 +139,7 @@ base-uri 'self'
 `<CDNs>` is a fixed list in main: `https://cdnjs.cloudflare.com`, `https://cdn.jsdelivr.net`, `https://unpkg.com`, `https://esm.sh`, `https://cdn.tailwindcss.com`, `https://fonts.googleapis.com` and `https://fonts.gstatic.com`.
 
 - **Inline scripts and `eval` are allowed**: the page is the agent's code to begin with, and in-browser JSX and utility-class compilers need both. The policy is there to keep data in, not to vet the page.
-- **Nothing reaches another host.** No fetch, image, WebSocket or form goes anywhere but the artifact's own origin and the CDNs, so a page cannot send what it reads from its folder to a server. A remote image from any other host, such as a stock photo, does not load. This is the recommended policy. The alternative allows any `https` host for scripts, styles, fonts and images: more pages work as written, and any host can then receive data in a URL.
+- **Nothing reaches another host.** No fetch, image, WebSocket or form goes anywhere but the artifact's own origin and the CDNs, so a page cannot send what it reads from its folder to a server. A remote image from any other host, such as a stock photo, does not load. Allowing any `https` host for scripts, styles, fonts and images was the alternative: more pages would work as written, and any host could then receive data in a URL.
 - **Main enforces it a second time.** `webRequest.onBeforeRequest` cancels every request from an artifact frame that is not for its own origin, `data:`, `blob:` or a listed CDN over `https`, whatever the policy says.
 - **Frames inside a page** load only from its own origin, so one artifact can never embed another, and `Cross-Origin-Resource-Policy` keeps one artifact from loading another's files by any route.
 
@@ -158,7 +158,7 @@ Each page is an `<iframe>` in the app's renderer, pointed at its artifact's orig
 
 - **Its own process.** The artifact's origin is a different site from the app's, so site isolation runs its frames in a renderer process of their own, sandboxed like the window's: in the prototype, the app's frame and an artifact's ran in different processes, both reported sandboxed. Every page of one artifact shares that one process.
 - **No bridge.** The preload runs in the main frame only (`nodeIntegrationInSubFrames` stays off), so a page has no `window.overbench`, no `require` and no `process`, and the app never listens to `message` events from it: there is no channel from a page to the app.
-- **`allow-same-origin` keeps the page on its own origin**, which is not the app's, so the page has web storage and can fetch its own files; the classic danger of that flag needs the page and its embedder to share an origin, which they never do. Without `allow-popups`, `allow-top-navigation` or `allow-modals`, a page cannot open windows, move the app's frame or block on `alert()`. `allow-downloads` follows the [downloads](#downloads) choice.
+- **`allow-same-origin` keeps the page on its own origin**, which is not the app's, so the page has web storage and can fetch its own files; the classic danger of that flag needs the page and its embedder to share an origin, which they never do. Without `allow-popups`, `allow-top-navigation` or `allow-modals`, a page cannot open windows, move the app's frame or block on `alert()`. `allow-downloads` lets a page offer a [download](#downloads).
 - **The app's own policy** changes `frame-src 'none'` to `frame-src overbench-artifact:` in `src/renderer/index.html`, its only change, so the app can frame artifacts and nothing else; `object-src 'none'` stays. Main's [frame guard](#the-frame-guard) learns the same exception.
 - **The page's theme** is its own. `prefers-color-scheme` inside the page follows the app's effective theme, so a page that supports both themes follows the app; OverBench injects no colors.
 
@@ -166,13 +166,13 @@ The options, measured in the prototype on a canvas of 24 pages of 1280 × 720, e
 
 | Surface                                                            | Open to loaded | Added processes | Added memory | Frames p50 / p95 / max | Focus a page |
 | ------------------------------------------------------------------ | -------------- | --------------- | ------------ | ---------------------- | ------------ |
-| **A** · An `<iframe>` per page, all 24 live (recommended)          | 1,014 ms       | 1               | 321 MB       | 8.3 / 13.4 / 48.6 ms   | 45 ms        |
+| **A** · An `<iframe>` per page, all 24 live (chosen)               | 1,014 ms       | 1               | 321 MB       | 8.3 / 13.4 / 48.6 ms   | 45 ms        |
 | A, at most 8 live                                                  | 392 ms         | 1               | 241 MB       | 8.3 / 16.1 / 47.0 ms   | 37 ms        |
 | **B** · One `<iframe>` with every page laid out by an added style  | 166 ms         | 1               | 172 MB       | 8.4 / 15.8 / 29.0 ms   | 45 ms        |
 | **C** · A `<webview>` per page, in a partition of its own          | 1,632 ms       | 24              | 2,538 MB     | 8.4 / 12.6 / 41.3 ms   | 165 ms       |
 | **D** · Captured images of the pages, a `WebContentsView` to focus | 15,064 ms      | 0               | 72 MB        | 8.3 / 9.8 / 18.1 ms    | 129 ms       |
 
-- **A** is recommended: one process per artifact, pages live and correct at their own viewport size, and the canvas is ordinary DOM, so it pans and zooms with one transform and menus and dialogs draw over it.
+- **A** is the choice: one process per artifact, pages live and correct at their own viewport size, and the canvas is ordinary DOM, so it pans and zooms with one transform and menus and dialogs draw over it.
 - **B** is the cheapest, since the page's scripts run once, but every page then shares the whole canvas as its viewport: a phone page's media queries see a desktop-wide window and `100vh` is the canvas's height, so responsive pages render wrong.
 - **C** gives each page its own partition, as the issue's wording asks, but a process per page: 24 processes and 2.5 GB for this canvas, and pages still blank two seconds after opening.
 - **D** keeps pages in a partition of their own too, but a `WebContentsView` is a native layer over the window: it cannot be scaled or transformed, so the canvas shows still images, which took 15 s to capture for 24 pages, and the view hides every menu and dialog that opens over it.
@@ -218,7 +218,7 @@ Since v0.0.2, main stops trusting a window whose page gains a frame: it refuses 
 
 ### Downloads
 
-A page may offer a file to save, such as an exported image. With `allow-downloads`, a download from an artifact asks where to save it in the system's save dialog, and nothing lands on disk without the user's choice; this is the recommendation. The alternative leaves `allow-downloads` out and cancels every download in `will-download`.
+A page may offer a file to save, such as an exported image. With `allow-downloads`, a download from an artifact asks where to save it in the system's save dialog, and nothing lands on disk without the user's choice. Blocking downloads, by leaving `allow-downloads` out and cancelling each one in `will-download`, was the alternative.
 
 ## Thumbnails
 
@@ -249,18 +249,18 @@ The rules this follows are the [visual style](./visual-style.md) and the [UX gui
 - **Opening it**: the sidebar's **Artifacts** row (`Shapes`), which stays highlighted while the page shows ([sidebar](./ui.md#sidebar)). The page's code loads with dynamic `import()` the first time it opens.
 - **Layout**: a centred column of at most 960 px on surface 1. The header holds the title, a line saying how many files from how many sessions, and a filter field at its end that filters by file name (`Mod+F` focuses it, `Esc` clears it).
 - **Groups**: each project is a group label with its count, in the sidebar's project order, then **No project**. Under it, each session that wrote an artifact, most recently updated first: the agent's mark, the session's title at weight 500 and how long ago it was updated, as a row that opens the session. A project or session with nothing to show has no group.
-- **Cards**: a grid of cards at least 200 px wide, four across at 960 px. A card is the thumbnail, 16:10 on `--tile` with a hairline `--border` ring and `rounded-xl`, then the file name at weight 500 and, at the caption role, its folder relative to the project and, for a canvas, "Canvas, 5 pages". A card has no shadow and does not rise: on hover its ring turns `--border-strong`. The full path and the other sessions that wrote it are its tooltip.
-- **Card states**: a `Skeleton` in the thumbnail's place while it renders; a `File` icon on `--tile` when it could not render; **Missing** for a file no longer on disk, its name in `--muted-foreground`.
+- **Cards**: a grid of cards at least 200 px wide, four across at 960 px. A card is the thumbnail, 16:10 on `--bg-subtle` with a hairline `--border-default` ring and `rounded-xl`, then the file name at weight 500 and, at the caption role, its folder relative to the project and, for a canvas, "Canvas, 5 pages". A card has no shadow and does not rise: on hover its ring turns `--border-strong`. The full path and the other sessions that wrote it are its tooltip.
+- **Card states**: a `Skeleton` in the thumbnail's place while it renders; a `File` icon on `--bg-subtle` when it could not render; **Missing** for a file no longer on disk, its name in `--text-disabled`.
 - **A card's menu** (right click, `Shift+F10`): **Open**, **Open in browser**, **Show in Finder** (Explorer, the file manager), **Copy path**, then **Open the session**.
 - **Keyboard**: the cards are one Tab stop; the arrow keys move through them in reading order and `Enter` opens one.
 - **States**: loading shows the header and a row of `Skeleton` cards at their real size; no artifacts shows one `Empty` (`Shapes`, "No artifacts yet", "HTML files your agents write in a session show here, by project and session. A file that marks its pages shows as a canvas.") with **Copy the canvas format**; a filter that matches nothing says "No matching artifacts" in the list's place; a failed read shows an `Alert` with **Retry**.
-- **The layout is an open choice**: cards under each session's title, as above (recommended, since group labels introduce their content everywhere else); the session's title in a 200 px column beside its cards, which wastes less height when sessions have one or two files; or one 44 px row per file with a 56 px thumbnail, which fits the most. The prototype has all three in both themes.
+- **Why cards under each session's title**: group labels introduce their content everywhere else in the app. The alternatives were the session's title in a 200 px column beside its cards, which wastes less height when sessions have one or two files, and one 44 px row per file with a 56 px thumbnail, which fits the most.
 
 ### Viewer
 
 Opening a card shows its artifact in the main area, in place of the page, with **Back** (`ArrowLeft`, `Esc` while nothing in the page has focus) to the list.
 
-- **Top bar**: **Back**, the file name at weight 500 and its folder in `--muted-foreground`; at the end, for a canvas, the zoom as a stepper (`Minus`, the percentage in `tabular-nums`, `Plus`) and **Zoom to fit** (`Scan`); then **Reload** (`RefreshCw`) and **More** (`Ellipsis`), whose menu holds **Open in browser**, **Show in Finder**, **Copy path**, **Copy the canvas format** and **Open the session**.
+- **Top bar**: **Back**, the file name at weight 500 and its folder in `--text-secondary`; at the end, for a canvas, the zoom as a stepper (`Minus`, the percentage in `tabular-nums`, `Plus`) and **Zoom to fit** (`Scan`); then **Reload** (`RefreshCw`) and **More** (`Ellipsis`), whose menu holds **Open in browser**, **Show in Finder**, **Copy path**, **Copy the canvas format** and **Open the session**.
 - **A single page** fills the area below the top bar, at the area's size, so the page is laid out for the space it has and scrolls itself.
 - **The frame appears when it has loaded**, fading in over `--duration-fast`, so a half-drawn page never shows.
 - **A blocked navigation** shows a bar over the top of the page: "This page tried to open example.com" with **Open in browser** and a dismiss button. Nothing opens without that click.
@@ -284,8 +284,8 @@ Opening a card shows its artifact in the main area, in place of the page, with *
  └─────────────────────────────────────────────────────────────────┘
 ```
 
-- **The surface** is surface 0 (`--sidebar`), so white pages stand off it in both themes. Each page is a frame at its own size with square corners, so the page's edge shows exactly, and a hairline `--border` ring. A selected page's ring is 2 px of `--checked`.
-- **Labels**: the page's name above it and the group's title above the row, at the caption role, the group's at weight 500 in `--foreground`. They keep their screen size at every zoom: a page's name hides when the page is narrower than 56 px on screen, and a group's title when its row is narrower than 80 px. A row's labels make room for the row above it: when the gap between the two is under 44 px on screen, the row's page names hide and its group's title moves down to their place, and under 22 px the title hides too.
+- **The surface** is surface 0 (`--bg-sidebar`), so white pages stand off it in both themes. Each page is a frame at its own size with square corners, so the page's edge shows exactly, and a hairline `--border-default` ring; under the pointer the ring is `--border-strong`. A selected page's ring is 2 px of `--text-primary`, neutral like every selection ([color](./visual-style.md#color)).
+- **Labels**: the page's name above it and the group's title above the row, at the caption role, the group's at weight 500 in `--text-primary`. They keep their screen size at every zoom: a page's name hides when the page is narrower than 56 px on screen, and a group's title when its row is narrower than 80 px. A row's labels make room for the row above it: when the gap between the two is under 44 px on screen, the row's page names hide and its group's title moves down to their place, and under 22 px the title hides too.
 - **Opening** fits every page in view, never above 100%, and selects the first page.
 - **In the overview pages are not interactive**: a pane over them takes the pointer, and their frames take no focus. Their scripts keep running, so animations show.
 
@@ -309,13 +309,15 @@ Performance:
 
 - **One transform**: the camera is one `translate` and `scale` on the layer that holds the pages, written in a `requestAnimationFrame` callback straight to the element, never through React state per frame; labels move in the same frame.
 - **Crisp after moving**: the layer has `will-change: transform` only while the camera moves, and loses it 160 ms after it stops, so Chromium draws the pages again at the new scale.
-- **Live pages are capped**: pages within one and a half views of the visible area stay loaded, nearest first, up to 48; the others unload and show their name on `--tile`. At most two pages load per frame. A page costs about 5 MB beyond the artifact's process (241 MB with 8 live, 321 MB with 24).
+- **Live pages are capped**: pages within one and a half views of the visible area stay loaded, nearest first, up to 48; the others unload and show their name on `--bg-subtle`. At most two pages load per frame. A page costs about 5 MB beyond the artifact's process (241 MB with 8 live, 321 MB with 24).
 - **Measured** in the prototype ([the surface](#the-surface)): frames took 8.3 ms at the median and 13.4 ms at the 95th percentile on a 120 Hz display while the camera crossed 24 live pages, with 18 frames of 455 over 14 ms. Chromium logged "tile memory limits exceeded" while the camera zoomed out over many pages, with every surface; the build measures it with the [performance script](./testing.md) and resolves it before the canvas ships.
 
 ### Opening from a session
 
 - A thread's tool call that wrote an artifact gets **Open** (`Shapes`) at the end of its row, before the status, shown on hover and focus ([tool calls](./ui.md#tool-calls)). A canvas opens fitted.
-- **Where it opens is an open choice.** Recommended: in the side panel, as a pane beside the [Files](./ui.md#files) and [terminal](./ui.md#terminal) panes, so the page reloads in view while the agent keeps editing it. The pane's header holds the file name, **Reload**, **More**, **Maximize** and **Close**, as the other panes' headers do; it opens at 560 px and keeps its width; it has no toggle in the top bar, since it opens from the thread, and a card's **Open the session** opens the session with the artifact beside it. The alternative opens the full viewer in the main area, with **Back** to the session, and adds no pane.
+- **It opens in the side panel**, as a pane beside the [Files](./ui.md#files) and [terminal](./ui.md#terminal) panes, so the page reloads in view while the agent keeps editing it. The pane's header holds the file name, **Reload**, **More**, **Maximize** and **Close**, as the other panes' headers do; it opens at 560 px and keeps its width; it has no toggle in the top bar, since it opens from the thread, and a card's **Open the session** opens the session with the artifact beside it.
+- **A canvas in the pane** pans, zooms and takes its keys as in the main area. A focused page puts its name, `ChevronLeft`, the counter, `ChevronRight` and **Back to the canvas** in the pane's header, before **Reload**; `Esc` leaves the focused page and never closes the pane.
+- Opening the full viewer in the main area, with **Back** to the session, was the alternative: it adds no pane, but the thread is out of sight while the page shows.
 
 ## IPC and host protocol
 

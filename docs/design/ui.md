@@ -59,7 +59,7 @@ Launching should feel like opening a lid, not waiting for a page: no white or bl
 - Built with `ResizablePanelGroup`. The sidebar defaults to 260 px, resizes between 200 and 400 px, collapses with `Mod+B` through the panel's own collapse, sliding as the design system's [sidebar slide](./design-system.md#patterns) describes, and remembers its size per device. The width at collapse is saved too, so an app that starts collapsed expands back to it, not to the minimum. Collapsed, the handle takes no width, so no line shows at the window's edge.
 - The sidebar sits on surface 0 and the thread on surface 1. The step between them is the only separation; the resize handle shows a hairline only while it is hovered or dragged.
 - The thread is a single centred column of 42em of prose plus its 24 px gutters (`max-w-thread`, 678 px at the default 15 px), about 42 Chinese characters a line, so prose keeps a comfortable line length at any window width. Tool calls and diffs use the same column. The composer below keeps its own 760 px column.
-- The **side panel** on the right of the main area holds one pane at a time: the [terminal](#terminal) or the [files](#files). It sits flush on surface 0, like the sidebar on the left, so the thread on surface 1 is framed by two quieter surfaces, each meeting it at a soft hairline ([one line per surface](./design-system.md#one-line-per-surface)). The layout follows the reference; the styling is OverBench's own. The thread column keeps the rest of the width and its own top bar. Each pane has a toggle at the right end of the top bar, as the reference's row of pane buttons: **Files** (`Folder`) and **Terminal** (`SquareTerminal`); the open pane's toggle is [pressed](./design-system.md#toggle-buttons). A toggle shows its pane, or closes the panel when its pane is shown, and the open pane is remembered per project. Each pane keeps its own width (the terminal 340 px by default, the files 560 px). The Changes panel arrives later as a third pane.
+- The **side panel** on the right of the main area holds one pane at a time: the [terminal](#terminal), the [files](#files) or, opened from the thread, an [artifact](./artifacts.md#opening-from-a-session). It sits flush on surface 0, like the sidebar on the left, so the thread on surface 1 is framed by two quieter surfaces, each meeting it at a soft hairline ([one line per surface](./design-system.md#one-line-per-surface)). The layout follows the reference; the styling is OverBench's own. The thread column keeps the rest of the width and its own top bar. Each pane has a toggle at the right end of the top bar, as the reference's row of pane buttons: **Files** (`Folder`) and **Terminal** (`SquareTerminal`); the open pane's toggle is [pressed](./design-system.md#toggle-buttons). An artifact's pane has no toggle, since it opens from the thread. A toggle shows its pane, or closes the panel when its pane is shown, and the open pane is remembered per project. Each pane keeps its own width (the terminal 340 px by default, the files and an artifact 560 px). The Changes panel arrives later as a third pane.
 
 ## Screens
 
@@ -170,13 +170,13 @@ The usage page, opened from the sidebar's **Usage** row, is designed in [usage s
 
 ### Artifacts
 
-> Draft for [issue #11](https://github.com/overbench/overbench/issues/11); not built yet.
+> Accepted for [issue #11](https://github.com/overbench/overbench/issues/11) on 2026-10-23; not built yet.
 
 The HTML files agents write, designed in [artifacts](./artifacts.md):
 
 - **The Artifacts page**, opened from the sidebar's **Artifacts** row: every artifact as a card with a thumbnail, grouped by project, then by session ([Artifacts page](./artifacts.md#artifacts-page)).
 - **The viewer**, from a card: the page live in the main area, isolated from the app ([viewer](./artifacts.md#viewer)), or, for a file that marks its pages, a canvas that pans and zooms, with keys of its own that stay out of the [shortcut table](#keyboard) ([canvas](./artifacts.md#canvas)).
-- **From a session**: a tool call that wrote an artifact opens it from its row ([opening from a session](./artifacts.md#opening-from-a-session)).
+- **From a session**: a tool call that wrote an artifact opens it from its row, in the side panel beside the thread ([opening from a session](./artifacts.md#opening-from-a-session)).
 
 ### Settings
 
