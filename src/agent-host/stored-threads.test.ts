@@ -400,3 +400,240 @@ describe('releasing', () => {
     await vi.waitFor(() => expect(events(t)).toContain('idle stop '))
   })
 })
+
+describe('keeping the config across an attach', () => {
+  const quick = { checkpointMs: 10, releaseHiddenMs: 60, releaseShownMs: 800, releaseUnusedMs: 60 }
+  const chosen = { model: 'deep', thought_level: 'high', fast: true, mode: 'code' }
+  const defaults = { model: 'balanced', thought_level: 'medium', fast: false, mode: 'ask' }
+
+  const values = (port: TestPort, sessionId: string) =>
+    Object.fromEntries(
+      port
+        .thread(sessionId)
+        .session.config.filter((o) => o.id !== '__ultracode')
+        .map((o) => [o.id, o.value]),
+    )
+
+  /** The host's requests about a session, with each option's id, since the agent last closed it. */
+  function requests(t: TestHost, port: TestPort, sessionId: string, sinceClose = true): string[] {
+    const acpSessionId = port.thread(sessionId).session.acpSessionId
+    const out = t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter(
+        (r) =>
+          r.direction === 'out' &&
+          r.method !== null &&
+          (r.message as { params?: { sessionId?: unknown } }).params?.sessionId === acpSessionId,
+      )
+    const since = sinceClose ? out.findLastIndex((r) => r.method === 'session/close') + 1 : 0
+    return out.slice(since).map((r) => {
+      const { configId } = (r.message as { params: { configId?: string } }).params
+      return configId ? `${r.method} ${configId}` : r.method!
+    })
+  }
+
+  /** A session set to `choose` that has had one turn. */
+  async function chosenSession(
+    t: TestHost,
+    port: TestPort,
+    choose: Record<string, string | boolean> = chosen,
+  ) {
+    const sessionId = await newSession(t, port)
+    for (const [optionId, value] of Object.entries(choose)) {
+      await port.request('sessions.setConfigOption', { sessionId, optionId, value })
+    }
+    await finishTurn(port, sessionId, 'hello')
+    return sessionId
+  }
+
+  async function release(port: TestPort, sessionId: string) {
+    await port.request('sessions.show', { sessionId: null })
+    await port.untilStatus(sessionId, 'closed')
+    await port.until(() => port.thread(sessionId).session.status === 'closed')
+  }
+
+  const restored = ['model', 'fast', 'thought_level', 'mode'].map(
+    (id) => `session/set_config_option ${id}`,
+  )
+
+  it('sets a released session values again before its next prompt runs', async () => {
+    const { t, port } = await setup({
+      sessionTimings: quick,
+      agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'reset' },
+    })
+    const sessionId = await chosenSession(t, port)
+    // The user's latest choice for the agent's next session, which this must not overwrite.
+    const other = await newSession(t, port)
+    await port.request('sessions.setConfigOption', {
+      sessionId: other,
+      optionId: 'model',
+      value: 'swift',
+    })
+    await release(port, sessionId)
+    expect(values(port, sessionId)).toMatchObject(chosen)
+
+    await finishTurn(port, sessionId, 'and again')
+    expect(values(port, sessionId)).toMatchObject(chosen)
+    expect(requests(t, port, sessionId)).toEqual(['session/resume', ...restored, 'session/prompt'])
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.remembered).toMatchObject({ model: 'swift' })
+  })
+
+  it('sets them again after a restart, when a setting attaches the session', async () => {
+    const { t: first, port: before } = await setup()
+    const sessionId = await chosenSession(first, before)
+    const { port } = await restart(first)
+    await port.open(sessionId)
+    await port.request('sessions.setConfigOption', {
+      sessionId,
+      optionId: 'thought_level',
+      value: 'low',
+    })
+    await vi.waitFor(() =>
+      expect(values(port, sessionId)).toEqual({ ...chosen, thought_level: 'low' }),
+    )
+  })
+
+  it('sets them again through session/load after a restart, before the prompt', async () => {
+    const agentEnv = { FAKE_AGENT_WITHOUT: 'resume' }
+    const { t: first, port: before } = await setup({ agentEnv })
+    const sessionId = await chosenSession(first, before)
+    const { t, port } = await restart(first, { agentEnv })
+    await port.open(sessionId)
+    await finishTurn(port, sessionId, 'and again')
+    expect(values(port, sessionId)).toMatchObject(chosen)
+    expect(requests(t, port, sessionId)).toEqual(['session/load', ...restored, 'session/prompt'])
+  })
+
+  it('sets a mode the agent reports as a legacy mode through session/set_mode', async () => {
+    const { t, port } = await setup({
+      sessionTimings: quick,
+      agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'reset', FAKE_AGENT_LEGACY_MODES: '1' },
+    })
+    const sessionId = await chosenSession(t, port, { __mode: 'plan', model: 'swift' })
+    await release(port, sessionId)
+    await finishTurn(port, sessionId, 'and again')
+    expect(values(port, sessionId)).toMatchObject({ __mode: 'plan', model: 'swift' })
+    expect(requests(t, port, sessionId)).toEqual([
+      'session/resume',
+      'session/set_config_option model',
+      'session/set_mode',
+      'session/prompt',
+    ])
+  })
+
+  it('keeps what the agent sends between its answer and the attach', async () => {
+    const { t, port } = await setup({
+      sessionTimings: quick,
+      agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'reset', FAKE_AGENT_SET_CONFIG_MS: '50' },
+    })
+    const sessionId = await chosenSession(t, port)
+    await release(port, sessionId)
+    const from = port.events.length
+    // The fake agent announces its commands just after it answers session/resume.
+    await port.request('sessions.setConfigOption', {
+      sessionId,
+      optionId: 'thought_level',
+      value: 'low',
+    })
+    await port.until(
+      () =>
+        port.events
+          .slice(from)
+          .some(
+            (e) =>
+              e.type === 'session.patches' &&
+              e.batch.sessionId === sessionId &&
+              e.batch.patches.some((p) => p.op === 'session.update' && 'commands' in p.changes),
+          ),
+      2_000,
+    )
+    const acpSessionId = port.thread(sessionId).session.acpSessionId!
+    const ignored = t.host.diagnostics
+      .agentRecords('fake-agent')
+      .events.filter((e) => e.event === 'ignored' && e.detail?.includes(acpSessionId))
+    expect(ignored).toEqual([])
+  })
+
+  it('sends nothing more when the agent kept the values itself', async () => {
+    const { t, port } = await setup({ sessionTimings: quick })
+    const sessionId = await chosenSession(t, port)
+    await release(port, sessionId)
+    await finishTurn(port, sessionId, 'and again')
+    expect(values(port, sessionId)).toMatchObject(chosen)
+    expect(requests(t, port, sessionId)).toEqual(['session/resume', 'session/prompt'])
+  })
+
+  it('keeps the session usable, at the agent values, when the agent refuses them', async () => {
+    const { t, port } = await setup({
+      sessionTimings: quick,
+      agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'locked' },
+    })
+    const sessionId = await chosenSession(t, port)
+    await release(port, sessionId)
+    await finishTurn(port, sessionId, 'and again')
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'turn_end')).toHaveLength(2)
+    expect(values(port, sessionId)).toEqual(defaults)
+    const refused = t.host.diagnostics
+      .logEntries()
+      .filter((e) => e.level === 'warn' && e.message.includes(`session ${sessionId} refused`))
+    expect(refused.map((e) => e.message.split(' refused ')[1]!.split(':')[0])).toEqual([
+      'model = deep',
+      'fast = true',
+      'thought_level = high',
+      'mode = code',
+    ])
+  })
+
+  describe('while the values are set', () => {
+    /** A session restored after a restart, whose agent takes 200 ms for each value. */
+    async function slowAttach() {
+      const { t: first, port: before } = await setup()
+      const sessionId = await chosenSession(first, before)
+      const { t, port } = await restart(first, { agentEnv: { FAKE_AGENT_SET_CONFIG_MS: '200' } })
+      await port.open(sessionId)
+      return { t, port, sessionId }
+    }
+
+    it('ends a turn cancelled meanwhile without sending it', async () => {
+      const { t, port, sessionId } = await slowAttach()
+      await port.request('sessions.queue', { sessionId, content: text('never mind') })
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.cancel', { sessionId })
+      await port.untilStatus(sessionId, 'ready')
+      expect(port.entries(sessionId).at(-1)).toMatchObject({
+        kind: 'turn_end',
+        stopReason: 'cancelled',
+      })
+      // The next prompt waits for the values too, and is the only one the agent gets.
+      await finishTurn(port, sessionId, 'this instead')
+      expect(values(port, sessionId)).toEqual(chosen)
+      expect(requests(t, port, sessionId)).toEqual([
+        'session/resume',
+        ...restored,
+        'session/prompt',
+      ])
+    })
+
+    it('stops when the session is closed meanwhile, and keeps it in the list', async () => {
+      const { t, port, sessionId } = await slowAttach()
+      const setting = port
+        .request('sessions.setConfigOption', { sessionId, optionId: 'thought_level', value: 'low' })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        )
+      await vi.waitFor(() => expect(requests(t, port, sessionId)).toContain(restored[0]))
+      await port.request('sessions.close', { sessionId })
+      expect(await setting).toMatchObject({ code: 'busy' })
+      expect(requests(t, port, sessionId, false)).toEqual([
+        'session/resume',
+        restored[0],
+        'session/close',
+      ])
+      expect(port.summary(sessionId)?.status).toBe('closed')
+      const listed = await port.request('sessions.list', {})
+      expect(listed.map((s) => s.id)).toContain(sessionId)
+    })
+  })
+})
