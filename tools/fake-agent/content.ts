@@ -161,3 +161,48 @@ export function commandOutput(command: string, index: number): string {
   const eol = index % 3 === 0 ? '\r\n' : '\n'
   return [`$ ${command}`, 'checking 42 files', `done in ${(index % 7) + 1}.2s`, ''].join(eol)
 }
+
+/** A long answer in Chinese that uses every Markdown block, for checking CJK prose. */
+export const CHINESE_ANSWER = `## 登录测试为什么会偶发失败
+
+我读了 \`src/clock.ts\` 和 \`src/auth/token.ts\`，问题出在**令牌过期时间被读取了两次时钟**：签发时读一次，校验时又读一次。CI 机器负载高的时候，两次读取之间可能恰好跨过一秒的边界，于是刚签发的令牌就被判定为已过期。
+
+这类问题在本地几乎复现不了，因为开发机够快；但在共享的 CI 环境里，大约每一百次运行会失败一两次。*偶发失败最难排查*，因为重跑一次往往就过了。
+
+### 修复思路
+
+1. 在请求入口处只读一次时钟，得到一个 \`now\`。
+2. 把这个 \`now\` 一路传给 \`issueToken\` 和 \`validate\`，不再各自调用 \`Date.now()\`。
+3. 用假时钟写一个测试，把时间精确地停在边界前后各一毫秒。
+
+> 同一个请求里，所有和时间有关的判断都应该基于同一个时间点。这比给过期时间加一点余量更可靠。
+
+改动后的签发函数大致如下：
+
+\`\`\`ts
+// The caller reads the clock once and passes it down.
+export function issueToken(user: User, now: number): Token {
+  return { user: user.id, expiresAt: now + TOKEN_TTL_MS }
+}
+
+export function validate(token: Token, now: number): boolean {
+  return token.expiresAt > now
+}
+\`\`\`
+
+### 影响范围
+
+| 文件 | 改动 | 说明 |
+| --- | --- | --- |
+| \`src/auth/token.ts\` | +12 −8 | 签发和校验都改为接收 \`now\` |
+| \`src/middleware/session.ts\` | +3 −1 | 在入口处读取一次时钟 |
+| \`test/auth.test.ts\` | +41 −0 | 新增边界测试 |
+
+- 这次修改不影响令牌的格式，已经签发的令牌仍然有效。
+- 其他调用 \`validate\` 的地方共有 7 处，都在同一个中间件里，已经一并更新。
+- 假时钟用的是 Vitest 自带的 \`vi.useFakeTimers()\`，不需要新增依赖。
+
+---
+
+如果你愿意，我可以再检查一下其他模块里有没有类似的"读两次时钟"的写法。相关的讨论可以参考 [Vitest 的假时钟文档](https://vitest.dev/guide/mocking.html#timers)。
+`

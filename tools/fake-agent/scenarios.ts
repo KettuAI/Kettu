@@ -12,6 +12,7 @@ import type {
 } from '@agentclientprotocol/sdk/unstable'
 import {
   BASIC_DONE,
+  CHINESE_ANSWER,
   BASIC_NOTE,
   BASIC_REPLY,
   CLOCK_AFTER,
@@ -1044,6 +1045,11 @@ const recall: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+const chinese: Scenario = async (turn) => {
+  if (!(await stream(turn, CHINESE_ANSWER, { messageId: turn.messageId() }))) return 'cancelled'
+  return 'end_turn'
+}
+
 export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'basic-turn': basicTurn,
   'long-stream': longStream,
@@ -1066,6 +1072,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   status,
   context,
   recall,
+  chinese,
 }
 
 export const compact: Scenario = async (turn) => {
