@@ -77,8 +77,8 @@ An agent that stops before the end comments what is left and puts the issue back
 ### 5. Review and merge
 
 - Every pull request is reviewed by an agent that did not write it, for correctness and against the design rules and their checklists, as review comments. The author fixes or answers each one.
-- The required `CI` check must pass on all three platforms.
-- A change under `src/` also runs the Screenshots workflow, whose captures show it on each platform.
+- The required `CI` check must pass: all three platforms and the title and issue link. Editing the title or description runs all of it again.
+- A change under `src/` or `tools/`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
 - The maintainer merges, on GitHub or by naming the pull requests to merge in a chat with an agent.
 - The merge is a squash: the pull request's title becomes the commit subject on `main`, the branch is deleted, and `Closes #N` in its description closes the issue.
 
@@ -189,7 +189,7 @@ Discussions stay off for now, so issues are the one place to report. When outsid
 
 ### Pull requests
 
-- **Title**: Conventional Commits, `type(scope): subject`, imperative, lowercase and at most 50 characters, because it becomes the commit subject on `main`. A script in the repository checks it in CI, with no new dependency.
+- **Title**: Conventional Commits, `type(scope): subject`, imperative, lowercase and at most 50 characters, because it becomes the commit subject on `main`. `tools/workflow/pr-check.mjs` checks it in CI by the rules in [CI](./design/testing.md#continuous-integration); run it before opening a pull request.
 - **Description**: one or two sentences on what changes and why, `Closes #N` (or `Refs #N`), and one line on how it was checked, with screenshots in light and dark for a UI change. No headings or checklists; a sentence on a non-obvious decision only when there is one. `.github/pull_request_template.md` holds just those lines, and CI checks that the description links an issue.
 - **Language**: English, always.
 - **Size**: one issue each. Split a pull request that grows past what one review can hold; as a rough guide, 400 changed lines, not counting generated files and the lockfile.
