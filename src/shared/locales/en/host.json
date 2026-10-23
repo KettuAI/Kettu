@@ -44,6 +44,14 @@
     "cancelUnconfirmed": {
       "title": "{{agent}} did not confirm the cancellation",
       "description": "OverBench ended the turn after {{seconds}} seconds. The agent may still be finishing work in the background."
+    },
+    "lostValues": {
+      "title": "This fork could not keep all of its settings",
+      "differs": "{{option}} is {{actual}} instead of {{wanted}}.",
+      "missing": "This fork has no {{option}} option, so {{wanted}} is not available.",
+      "next": "You can change them in the composer.",
+      "on": "on",
+      "off": "off"
     }
   },
   "attention": {
