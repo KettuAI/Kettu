@@ -28,6 +28,7 @@ import { createExec, type ExecRunner } from './git/exec'
 import { pathKey } from './paths'
 import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
+import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
 import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
@@ -80,6 +81,8 @@ export interface HostOptions {
   usageReaders?: readonly LogReader[]
   /** Where the agents' logs are looked for; the user's home by default. */
   homeDir?: string
+  /** Reads a session's prompt cache lifetime; Claude Code's transcripts by default. */
+  cacheTtl?: CacheTtlReader
 }
 
 export class AgentHost {
@@ -209,6 +212,17 @@ export class AgentHost {
       file: sessionsFile(options.userDataPath, log),
       threads: this.threads,
       usage: this.usage,
+      cacheTtl:
+        options.cacheTtl ??
+        claudeCacheTtl({
+          platform,
+          home: options.homeDir ?? os.homedir(),
+          env: async () => {
+            await this.env.ready()
+            return this.env.agentEnv()
+          },
+          log,
+        }),
       diagnostics: this.diagnostics,
       git: () => this.git,
       options: this.agentOptions,

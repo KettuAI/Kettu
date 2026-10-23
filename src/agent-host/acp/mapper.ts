@@ -40,6 +40,8 @@ export interface MapperContext {
   readonly thread: ThreadState
   /** True while `session/load` replays history into the thread. */
   readonly replaying: boolean
+  /** The user stopped the running turn and the agent has not ended it yet. */
+  readonly cancelling: boolean
   readonly scope: TurnScope
   readonly now: number
   /** The next `e:<n>` id of this session. */
@@ -83,6 +85,8 @@ export type MapperEffect =
     }
   // Work the agent runs on after its tool call ended, such as a command in the background.
   | { kind: 'background' }
+  // The session's own thread sent a request to its model, which renews its prompt cache.
+  | { kind: 'request' }
 
 export interface MapperOutput {
   patches: Patch[]
@@ -639,6 +643,20 @@ export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
   }
 }
 
+/**
+ * Whether a `usage_update` reports a request of the session's own thread: each request reports
+ * the context it read, so one that repeats the last count asked the model nothing. claude-agent-acp
+ * repeats it with each turn's result, which comes after the stopped work on a cancel and after the
+ * wait of a turn held open for background subagents, and with each plan limit report; an agent
+ * may also repeat the context's size between turns, as on a resume. Once the user has stopped the
+ * turn, an update can come long after the request it counts, as OpenCode's single one at a turn's
+ * end does, so none counts.
+ */
+function isRequest(ctx: MapperContext, used: number, rateLimit: boolean): boolean {
+  if (ctx.replaying || ctx.cancelling || rateLimit) return false
+  return used !== ctx.thread.session.usage?.used
+}
+
 const ACCOUNT_KINDS: ReadonlySet<string> = new Set([
   'account',
   'api_key',
@@ -912,6 +930,11 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
     }
     case 'usage_update': {
       const previous = ctx.thread.session.usage
+      const rateLimit = update._meta?.['_claude/rateLimit']
+      const request = isRequest(ctx, update.used, rateLimit !== undefined)
+      const cache = request
+        ? { lastRequestAt: ctx.now, ttl: previous?.cache?.ttl ?? null }
+        : previous?.cache
       out.patches.push({
         op: 'session.update',
         changes: {
@@ -922,10 +945,12 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
               ? { amount: update.cost.amount, currency: update.cost.currency }
               : null,
             tokens: previous?.tokens ?? null,
+            ...(cache ? { cache } : {}),
           },
         },
       })
-      const limit = mapRateLimit(update._meta?.['_claude/rateLimit'], ctx.now)
+      if (request) out.effects.push({ kind: 'request' })
+      const limit = mapRateLimit(rateLimit, ctx.now)
       if (limit) out.effects.push({ kind: 'limit', limit })
       break
     }

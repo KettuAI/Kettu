@@ -59,6 +59,12 @@ interface SessionUsage {
   size: number // the context window
   cost: { amount: number; currency: string } | null
   tokens: TokenTotals | null // session totals, summed over its turns, when the agent reports them
+  cache?: PromptCache // the main thread's prompt cache, from its first request on
+}
+
+interface PromptCache {
+  lastRequestAt: number // when the host saw the main thread's latest request
+  ttl: number | null // ms the cache lasts, when the agent's own transcript says
 }
 
 interface TokenTotals {
@@ -181,7 +187,19 @@ type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: ContentR
 type ContentRef =
   | { kind: 'image'; mimeType: string; data: string }
   | { kind: 'link'; uri: string; name: string }
+  | { kind: 'attachment'; attachment: Attachment } // what the user added, see attachments
   | { kind: 'unsupported'; label: string }
+interface Attachment {
+  id: string // the host's record while a draft or the queue holds it; unique in a thread
+  type: 'image' | 'file' | 'folder' | 'text' // 'text' is a long paste
+  name: string // the file's name, or "Image 1", "Pasted text 1"
+  uri: string | null // the original's file:// URI; null for a pasted image or text
+  mimeType: string | null
+  size: number | null // bytes: what was sent, or the file's when it went as a link
+  sent: 'image' | 'embedded' | 'linked' | 'inline' | null // how it went; null until sent
+  thumb: string | null // an image's thumbnail, a 224 px WebP data URL
+  blob: string | null // SHA-256 of the bytes kept in the thread store: an image or a pasted text
+}
 interface PlanItem {
   content: string
   priority: 'high' | 'medium' | 'low'
@@ -264,7 +282,7 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `config_option_update`      | `session.update` of `config`.                                                                                                                                                                                                           |
 | `current_mode_update`       | Updates the value of the mode option in `config` (see [Config options](#config-options)).                                                                                                                                               |
 | `session_info_update`       | `session.update` of `title` and `updatedAt`.                                                                                                                                                                                            |
-| `usage_update`              | `session.update` of `usage`'s `used`, `size` and `cost`. A plan limit in the update's `_meta` goes to the agent's account instead ([plan limits](#plan-limits)).                                                                        |
+| `usage_update`              | `session.update` of `usage`'s `used`, `size` and `cost`, and of its [prompt cache](#prompt-cache). A plan limit in the update's `_meta` goes to the agent's account instead ([plan limits](#plan-limits)).                              |
 | `notice`                    | Adds a notice entry. Severities other than `info`, `warning` and `error` are shown as `info`.                                                                                                                                           |
 | `compaction_update`         | Adds or updates the compaction entry for `compactionId`.                                                                                                                                                                                |
 | `compaction_summary_chunk`  | Appends text to that compaction entry's `summary`.                                                                                                                                                                                      |
@@ -273,14 +291,14 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `session_message_chunk`     | Appends its content block to the `session_message` entry for `messageId`, or adds that entry.                                                                                                                                           |
 | anything else               | Ignored and recorded in diagnostics, so a newer agent never breaks the thread.                                                                                                                                                          |
 
-Content blocks map as follows: `text` to markdown, `image` to an image ref, `resource_link` to a link ref, and `audio` and `resource` to `unsupported` refs. In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
+Content blocks map as follows: `text` to markdown, `image` to an image ref, `resource_link` to a link ref, and `audio` and `resource` to `unsupported` refs. In a user message replayed by `session/load`, the attachments the user sent map back to attachment refs ([replays](#replays)). In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
 
 The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto the same model.
 
 ## Prompt turns
 
 1. `sessions.prompt` is accepted only when the session is `ready`; otherwise it fails with `busy`. M0 runs one turn at a time per session; a prompt sent during a turn waits in the [queue](#queue-and-steering).
-2. The host adds the user entry, sets `status: 'running'`, `turnStartedAt` and `turnStartUsed`, the context's `usage.used` at that moment (`null` before the agent has reported any), and sends `session/prompt` with the content as ACP content blocks. The two clear when the turn ends; the thread's [status line](./ui.md#turn-status) shows the time since the first and how far the context has grown past the second.
+2. The host adds the user entry, sets `status: 'running'`, `turnStartedAt` and `turnStartUsed`, the context's `usage.used` at that moment (`null` before the agent has reported any), and sends `session/prompt` with the content as ACP content blocks, the [attachments](#attachments) built as the agent's prompt capabilities allow. The two clear when the turn ends; the thread's [status line](./ui.md#turn-status) shows the time since the first and how far the context has grown past the second.
 3. Updates stream in and become patches ([Keeping streaming smooth](../architecture.md#keeping-streaming-smooth)).
 4. When `session/prompt` returns, the host adds a `turn_end` entry with the stop reason and duration, sets `streaming: false` on the turn's messages, and sets `status: 'ready'`. A `usage` field in the response, which is still unstable in ACP, is added to `usage.tokens` when present: the schema calls its fields totals across the session, but claude-agent-acp 0.94, codex-acp 2.2.2 and opencode 2.0.32 all send the turn's own counts (read in their source on 2026-10-22), so the host sums them. Claude Code's `usage` leaves out its subagents' requests, so where the response's `_meta.quota.model_usage` splits the turn by model (Claude Code and Codex), the totals sum that instead, with the reasoning still taken from `usage` ([usage statistics](./usage.md#overbenchs-own-record)). The same counts become the turn's rows in the usage record. A count no turn has reported stays `null`. A fork starts from its source's totals, as it starts from its thread; a fork from an earlier reply starts with none ([fork from a reply](#how-the-host-keeps-sessions)). The host also sends `host:attention` with `turn-ended` so main can notify when no window is focused.
 5. If `session/prompt` fails, the error becomes an error notice and the status becomes `ready` or `auth_required` depending on the cause, or `closed` when the agent exited. After an agent error the session's `error` stays set, so its attention is `error`, until the next turn starts. An `auth_required` failure keeps the prompt, and `sessions.retry` sends it again without adding a second user entry.
@@ -292,6 +310,53 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 - **Queue**: `SessionView.queue` holds the prompts waiting for the running turn, oldest first, and `queuePaused` whether it waits for the user. `sessions.queue` adds one, or sends it at once when the session is `ready` and nothing waits or only a paused queue does; the composer sends everything through it, so a prompt sent before the renderer heard that a turn started is queued instead of refused. When a turn ends with `end_turn`, the host sends the oldest prompt as the next turn. After any other stop reason or a failed turn, the queue pauses until `sessions.resumeQueue`. OverBench never sends a second `session/prompt` during a turn. The queue is saved in the session index and comes back paused after a close or a restart.
 - **Steering**: an agent advertises `_session/steering` in the top-level `_meta.steering.supported` of its `initialize` response. `sessions.steer` sends a queued prompt as `_session/steering` with `{ sessionId, prompt, _meta: { steering: { idleBehavior: 'promptRequired' } } }`. On `injected`, the host adds the user entry with `steered: true` and removes the prompt from the queue; on `promptRequired` the turn is ending, so the prompt stays first in the queue and goes with the next turn. Claude Code's adapter injects the message into the running turn, interrupting the current generation or moving a running tool to the background.
 - **Codex** is left out: codex-acp 2.2.2 advertises steering but ignores `idleBehavior` and starts a turn of its own when none runs, which OverBench would not track (its PR #593 would fix it). `AgentStatus.capabilities.steering` is false for Codex until a version honours it. OpenCode advertises none and rejects a second prompt, so it gets the queue only.
+- **Attachments** wait in the queue with their prompt and go with it, or with its steering; their records stay with the host until then ([attachments](#where-the-bytes-live)).
+
+## Attachments
+
+> Decided 2026-10-23 for #40, with the [interface](./ui.md#attachments); to be built.
+
+Files, images and folders the user adds to a prompt. The renderer sends each as an attachment ref that names a record the host holds; at send time the host builds its content block from that record and from what the agent advertised in `initialize`'s `promptCapabilities`, which `AgentStatus.capabilities.prompt` passes on (`image`, `audio`, `embeddedContext`). claude-agent-acp 0.94.0, codex-acp 2.2.2 and OpenCode 2.0.32 all advertise `image` and `embeddedContext`, and none `audio` (observed 2026-10-22).
+
+### How each is sent
+
+| Attachment                                                                    | With the capability                                                 | Without it                                                             |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| An image: PNG, JPEG, GIF or WebP                                              | `image`, in base64, with the original's `uri` when it has one       | `resource_link` to the file; a pasted image is saved first to have one |
+| A text file up to 256 KB: valid UTF-8, no NUL in its first 8,000 bytes        | `resource` with `TextResourceContents` (`uri`, `mimeType`, `text`)  | `resource_link`                                                        |
+| Any other file: larger text, PDF, archive, audio, video, another image format | `resource_link` with `name`, `mimeType` and `size`                  | the same                                                               |
+| A folder                                                                      | `resource_link` to its `file://` URI, ending in `/`                 | the same                                                               |
+| A pasted text                                                                 | `resource` with its text, under the `file://` URI of its saved copy | its text, after the message's text and a blank line (`sent: 'inline'`) |
+
+- The message's text goes first, then the attachments in the composer's order.
+- A text file is read when the prompt is sent, so the agent gets it as it is then; an image is read when it is added, since its thumbnail and its size come from that read.
+- Embedding stops at 256 KB, about 64,000 tokens, the most an agent's own file read takes at once. Past that, a link lets the agent read the parts it needs.
+- Never a `BlobResourceContents`: claude-agent-acp 0.94.0 drops a binary resource, and codex-acp 2.2.2 writes it into the model's context as base64 text (observed 2026-10-22 in their sources). A binary file goes as a link, which the agent opens with its own tools as it would a file it found.
+- An image larger than 2,000 px on a side or 3.75 MB (5 MB in base64) is scaled to fit 2,000 px when it is added, and re-encoded as JPEG at 90%, or PNG when it has transparency, so it stays within every model's per-image limits even when a request holds many images. An image file over 20 MB is not read and goes as a link.
+- A folder is never read: the link is all that is sent. One outside the session's folder is linked the same way, and the agent asks before reading there, as it does for any path outside its folder.
+- `audio` blocks wait until an agent advertises them; audio files go as links.
+- An agent can still refuse what it advertised, as codex-acp refuses images for a model without image input. The prompt then fails as any prompt does, and the composer keeps the draft with its attachments.
+- Limits, checked in the composer and again by the host: at most 20 attachments in a prompt, and 10 MB in all of what is sent ([validation](./host-protocol.md#validation)).
+
+### Only what the user chose
+
+The renderer never names a path for the host to read. An attachment comes from one of three sources, and the host reads nothing else:
+
+- **Picked**: **Add files or photos…** and **Add folder…** call `dialog:add-attachments` in main, which shows the system dialog, checks each chosen path with `stat`, and hands the host a grant, `{ grantId, path, kind }`, over its own port (`host:grant`). The renderer receives only the grant ids, names and sizes.
+- **Dropped or pasted files**: the preload turns each `File` into its path with `webUtils.getPathForFile` and passes the paths to main (`attachments:grant`), which grants them the same way. A page script can give the preload only `File` objects, and only a drop, a paste or a file input yields one with a path, so it cannot name a path of its own. A pasted image or text with no file behind it goes to the host as bytes.
+- **Mentioned**: an `@` path is relative to the session's folder and passes the same containment as `files.read` ([project files](./agent-host.md#project-files)).
+- The host resolves a grant with `realpath` when it reads it, checks that it is still a regular file or a directory, and reads that path alone. A grant serves its one attachment and never widens what `files.*` may read.
+
+### Where the bytes live
+
+- **Drafts and the queue**: `attachments.add` makes a record in `state/attachments.json`: its id, type, name, MIME type, size, and the granted path or the hash of saved bytes. Saved bytes, a pasted image or text or a scaled image, go to `attachments/<sha256>` in the data folder. A record stays until its prompt is sent or the user removes it, so a draft or a queued prompt keeps its attachments across a restart; a record older than 30 days is removed when the host starts, and a draft that still names one shows it as failed ("No longer available").
+- **Sent**: the user entry keeps one attachment ref each, with `sent` set. The bytes sent for an image or a pasted text go to the thread store's `blobs` table, once per session ([threads](./persistence.md#threads)), and the ref keeps their hash and the thumbnail. An embedded file's text is not stored: the agent holds it in its context, and the file is on disk. The draft's records and saved bytes are then removed.
+- **Renderer**: names, sizes, states and thumbnails only, never an image's bytes in a store. Thumbnails are made in a renderer worker with `createImageBitmap` and `OffscreenCanvas`: from the `File` of a drop or a paste, or from the bytes `attachments.read` returns for a picked or mentioned image. The same pass scales an image that is too large and hands the result to the host with `attachments.update`. Opening an image reads its bytes (`attachments.read`, or `sessions.blob` once sent) into an `ArrayBuffer` and shows it from a `blob:` URL until the dialog closes.
+- **Forks** copy the refs with the thread, and the blobs they name.
+
+### Replays
+
+A session's own thread store keeps its attachments, so reopening one shows them without its agent. A session with no stored thread, such as an imported one, gets its user messages from the agent's `session/load` replay, in each agent's own form (observed 2026-10-22): claude-agent-acp 0.94.0 replays an image as an image and an embedded file as the text it gave Claude Code, a `[@name](file://…)` link followed by a `<context ref="…">` block; codex-acp 2.2.2 replays an embedded file the same way and an image as a `[@image](data:…)` link in the text; OpenCode 2.0.32 replays files as `resource_link`, `resource` and `image` blocks. In a replayed user message the mapper turns those links and context blocks, and `resource` and `resource_link` blocks with a `file:` URI, into attachment refs (`embedded` or `linked`, a link with no thumbnail), and a `data:` image link into an image ref, so an imported thread shows tiles rather than the files' text. Any other text stays as it is.
 
 ## Permissions
 
@@ -481,6 +546,25 @@ interface ContextBreakdown {
 - The fork starts like a resumed session, with the model the transcript records, so the totals match the session's.
 - Claude Code sends the report twice, under two message ids; the host takes the last message that parses. Token counts such as `32.1k` become numbers; list items keep the text the report shows (`~310`, `< 20`).
 - The renderer asks when the usage popover opens and keeps the result for that session until its `used / size` changes.
+
+## Prompt cache
+
+The models keep the start of a prompt they have seen in a cache for a while, and a request that finds it there reads it at a fraction of the price. Once it expires, the next message reads the whole context again at full price, so the [usage popover](./ui.md#usage-popover) says when that happens. ACP carries none of it: `usage_update` has only `used`, `size` and `cost`, and claude-agent-acp 0.94 passes on only Claude Code's `cache_creation_input_tokens`, not how long the cache lasts. Only the session's own thread counts; subagents have caches of their own, and their updates reach their own sessions.
+
+- **The last request**: `cache.lastRequestAt` is when the host received the latest `usage_update` of the session's thread whose `used` changed, since each request reports the context it read. One never counts when it carries a plan limit (`_claude/rateLimit`), arrives in a replay, or arrives after the user pressed Stop and before the turn ended, since what an agent sends then can count a request made long before. One that repeats the count asked the model nothing: claude-agent-acp repeats it with each result, which comes after the stopped work on a cancel and after the wait of a turn held open for background subagents, and with each plan limit. A turn that ends without any such update, from an agent that reports its tokens only in the prompt response, sets it as it ends, unless the turn was cancelled, since a stopped turn can end long after its last request. As read in their source on 2026-10-23, claude-agent-acp 0.94.0 sends `usage_update` for each of the main thread's messages as it starts and as it ends, each result, a compaction and each plan limit, between turns too when Claude Code answers a background task by itself; codex-acp 2.2.2 for each of Codex's token updates, which come once a response has completed, a native subagent's to the subagent's own session; and opencode 2.0.32 once per turn, as its run ends, a stopped run included, with the count of the turn's last finished step. So with each of them the time can be late by as long as the model took to write its last message: Claude Code reports a message again as it ends, Codex reports a response once it is complete, and OpenCode reports only as the turn ends.
+- **How long it lasts**, `cache.ttl` where the agent's records say, else an estimate from the shortest retention the provider documents, checked on 2026-10-23. Nothing is guessed from the plan or the model; for Codex, the account says only which provider serves it.
+
+| Agent       | Lifetime                                                                                                                                                                                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Claude Code | From the session's transcript: Claude Code splits each request's cache writes into `ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens`. None known: no expiry                                                                                                                                  |
+| Codex       | Estimated: 5 minutes on a ChatGPT account or an OpenAI API key, since OpenAI keeps a prefix for 5 to 10 minutes of inactivity. codex-acp 2.2.2 reports any other model provider as a `gateway` account and Bedrock as an `external` one: no expiry for those, nor before the agent reports its account |
+| OpenCode    | Estimated by the provider in the model's name: 5 minutes for `openai/` and for `anthropic/`, whose default is 5 minutes; no expiry for any other provider, or none named                                                                                                                               |
+
+- **Claude Code's transcript**, the session's own, read whether or not [Usage on this computer](./usage.md#privacy) is on. It is `<config>/projects/<folder>/<session id>.jsonl`, `<config>` as the [log reader](./usage.md#finding-the-logs) finds it. `<folder>` is the real path of the session's folder in NFC form, which Claude Code uses on every platform, with every character but ASCII letters and digits replaced by `-`; a name longer than 200 characters is cut to 200 and ends with `-` and Claude Code's 32-bit hash of the path in base 36. When that file is not there, the host looks for the session's file in every folder of `projects`, since `CLAUDE_CODE_PROJECT_DIR_NAME` can rename the project's. Only a session id of letters, digits, `-` and `_` is looked up. After Claude Code clears the context, on an accepted plan's "clear context" or a `conversation_reset`, claude-agent-acp 0.94.0 goes on in a new transcript under the same session id, which the host does not find; it keeps reading the old one, whose last lifetime is usually the new one's too.
+- **Reading it**: backwards from its end, 64 KiB at a time and at most 1 MiB, with asynchronous reads in the agent host, so a long session costs no more than a short one. Only lines that contain `ephemeral_` are parsed, and the latest `type: "assistant"` line of the main thread (not `isSidechain`) whose `message.usage.cache_creation` wrote anything gives the lifetime: 5 minutes, or an hour; 5 minutes when it wrote both, since the prefix after the shorter one's breakpoint goes with it. A tail without such a line keeps the lifetime already known. The read runs 1 s after a turn ends and after a request between turns, at most one at a time per session, so the lines Claude Code writes as the message ends are on disk.
+- **Kept**: `cache` is part of `usage`, stored with the session's thread, so the expiry survives a restart.
+
+On the development Mac on 2026-10-22, main sessions wrote mostly one-hour cache and subagents mostly five-minute cache, and no message wrote both; a new Claude Code session there (claude-agent-acp 0.94.0, a Claude Max account) wrote 45,029 tokens of one-hour cache on its first request.
 
 ## Reports from the agents' own commands
 

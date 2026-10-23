@@ -128,7 +128,7 @@ CREATE TABLE artifact_versions (
 ```
 
 - **Each version's HTML** is a file in `artifacts/content/` under the data folder, in a folder named by the hash's first two hex characters, named by the hash with `.html`. It is written to a temporary file and renamed into place before its row commits, so a row never names a missing file; a file a crash left without a row is removed by the next purge.
-- **Schema version 2** creates both tables, empty; the migration from version 1 adds nothing else.
+- **A new schema version** of the thread database creates both tables, empty; its migration changes nothing else.
 - Moving a project folder leaves its artifacts under the old path, as its sessions are; they still list under it.
 
 ### Versions
@@ -461,7 +461,7 @@ Main and the agent host: `artifact.content` with `{ id, version? }` returns the 
 
 The design is larger than one pull request, so the build splits into sub-issues of #11, each useful on its own:
 
-1. The store and the service: schema version 2, the content files, the MCP server and its tokens, the seven tools with their errors and limits, Recently deleted and the purge; unit tests over every tool, the scope and the limits, and a process test per agent that creates, updates and reads an artifact from two sessions in two projects.
+1. The store and the service: the new schema version, the content files, the MCP server and its tokens, the seven tools with their errors and limits, Recently deleted and the purge; unit tests over every tool, the scope and the limits, and a process test per agent that creates, updates and reads an artifact from two sessions in two projects.
 2. The surface: the protocol from the store, the policy, main's request filter, handlers and navigation guard, the frame guard's exception, the single-page viewer, and the probe as a process test, run once more with the policy removed.
 3. The Artifacts page and thumbnails, rename, delete and Recently deleted, import and export, and the sidebar row turned on; the [UX guidelines](./ux-guidelines.md#structure) then lose the disabled row as their example of a feature shown before it is built.
 4. The canvas viewer and the version history.

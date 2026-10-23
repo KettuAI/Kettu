@@ -536,6 +536,8 @@ The list is complete and no longer edited: new problems go to [GitHub issues](ht
   - How it reaches the host safely: the file is read in the main process or the agent host after the path is validated, never by loosening the sandbox; its size and kind are checked there, and nothing is embedded without the user having added it.
   - What it touches in the composer: [drafts](../design/persistence.md#composer-drafts) keep attachments, a queued or steering message carries them, and the placeholder teaches `/` as the reference's does.
   - The rule written into [Interface: composer](../design/ui.md#composer), and M0 and the README's roadmap updated if it comes in.
+- **Designed**: 2026-10-22, for #40: three options to try, with tiles in the box recommended ([Interface: attachments](../design/ui.md#attachments), [Session model: attachments](../design/session-model.md#attachments)). It also covers the image parts of [problem 49](#49-no-multimodal-support-images-audio-and-video): paste, drop, formats the models do not take, and scaling large images.
+- **Decided**: 2026-10-23, on the [comparison page](https://claude.ai/artifact/MDCp3YWNX49NKR4wUqTvvu): option A, tiles in the box, over B (chips, with **+** under the box) and C (references inside the text).
 - **Tracked**: what is left is in [#40](https://github.com/overbench/overbench/issues/40).
 
 ## 37. Icons look heavy; use thin line icons from a library

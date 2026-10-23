@@ -13,6 +13,7 @@ import {
   rangeOf,
   type AgentFilter,
   type DayRange,
+  type Generations,
   type RangeChoice,
 } from '@renderer/features/usage/model'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -35,6 +36,10 @@ export interface UsageFilters {
 
 /** The page's figures, with the days they were read for. */
 export interface UsagePage {
+  /** The range and source they were read for; others are chosen while newer figures load. */
+  filters: Pick<UsageFilters, 'range' | 'scope'>
+  /** The `figures` generation of the range and source they were read for. */
+  generation: number
   today: number
   firstDay: number
   /** The day starts the summary's `day` indexes into, plus the end of the last day. */
@@ -52,6 +57,8 @@ interface UsageStore {
   /** Today's tokens, for the sidebar; null until read. */
   today: number | null
   filters: UsageFilters
+  /** How many times the filters have changed; the page carries `figures` once its figures arrive. */
+  generations: Generations
   page: UsagePage | null
   loading: boolean
   error: string | null
@@ -68,6 +75,7 @@ export const useUsageStore = create<UsageStore>()(() => ({
   status: null,
   today: null,
   filters: DEFAULT_FILTERS,
+  generations: { agent: 0, figures: 0 },
   page: null,
   loading: false,
   error: null,
@@ -122,17 +130,24 @@ export function usagePageShown(shown: boolean): void {
 }
 
 export function setUsageFilters(patch: Partial<UsageFilters>): void {
-  const before = useUsageStore.getState().filters
+  const { filters: before, generations } = useUsageStore.getState()
   const filters = { ...before, ...patch }
-  useUsageStore.setState({ filters })
   // The agent filter is applied to the figures already read.
-  if (filters.range !== before.range || filters.scope !== before.scope) void loadUsagePage()
+  const read = filters.range !== before.range || filters.scope !== before.scope
+  useUsageStore.setState({
+    filters,
+    generations: {
+      agent: generations.agent + (filters.agent !== before.agent ? 1 : 0),
+      figures: generations.figures + (read ? 1 : 0),
+    },
+  })
+  if (read) void loadUsagePage()
 }
 
 /** Reads the page's figures for its filters; a slower answer to an older request is dropped. */
 export async function loadUsagePage(): Promise<void> {
   const id = ++request
-  const { filters, page } = useUsageStore.getState()
+  const { filters, generations, page } = useUsageStore.getState()
   const today = dayOf(Date.now())
   const firstDay = firstDayOfWeek(currentLocale())
   useUsageStore.setState({ loading: true })
@@ -170,6 +185,8 @@ export async function loadUsagePage(): Promise<void> {
       if (id !== request) return
       useUsageStore.setState({
         page: {
+          filters: { range: filters.range, scope: filters.scope },
+          generation: generations.figures,
           today,
           firstDay,
           starts,
@@ -187,7 +204,7 @@ export async function loadUsagePage(): Promise<void> {
   }
 }
 
-/** The day turned while the page shows: its ranges end today, so they are read again. */
+/** The day turned while the page shows: the heatmap ends today, so the figures are read again. */
 export function usageDayTurned(day: number): void {
   const { page } = useUsageStore.getState()
   if (pageOpen && page && page.today !== day) readPage()

@@ -46,9 +46,12 @@
   "trend": {
     "daily": "每日用量",
     "weekly": "每周用量",
+    "monthly": "每月用量",
     "hourly": "每小时用量",
     "hour": "{{from}}–{{to}}",
-    "label": "{{date}}：{{tokens}} token"
+    "label": "{{date}}：{{tokens}} token",
+    "agent": "{{agent}} {{tokens}}",
+    "legend": "图表中显示的 Agent"
   },
   "limits": {
     "title": "套餐限额",
@@ -136,7 +139,7 @@
     },
     "fromComputer": {
       "name": "统计本机用量",
-      "description": "同时统计 Claude Code、Codex 和 OpenCode 在这台电脑上自己记录的日志，包括安装 OverBench 之前和在终端里的使用。只读取 token 数、模型和时间，不读对话内容，数据不离开这台电脑。",
+      "description": "同时统计 Claude Code、Codex 和 OpenCode 在这台电脑上自己记录的日志，包括安装 OverBench 之前和在终端里的使用。只读取 token 数、模型和时间，不读对话内容，数据不离开这台电脑。无论是否开启，OverBench 都会读取它运行的每个 Claude Code 会话记录的末尾，以显示提示缓存何时过期。",
       "keywords": "日志 历史 导入 token 统计"
     },
     "notFound": "没有找到日志",

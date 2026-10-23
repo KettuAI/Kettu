@@ -47,6 +47,12 @@ export interface SessionUsage {
   size: number // the context window
   cost: { amount: number; currency: string } | null
   tokens: TokenTotals | null // session totals, when the agent reports them
+  cache?: PromptCache // the main thread's prompt cache, from its first request on
+}
+
+export interface PromptCache {
+  lastRequestAt: number // when OverBench saw the main thread's latest request
+  ttl: number | null // ms the cache lasts, when the agent's own transcript says
 }
 
 export interface TokenTotals {

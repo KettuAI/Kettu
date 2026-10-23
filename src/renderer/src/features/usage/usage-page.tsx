@@ -40,24 +40,33 @@ import {
   useUsageStore,
   type UsagePage as PageData,
 } from '@renderer/stores/usage'
-import { HeatLegend, Heatmap, TrendChart } from './charts'
+import { HeatLegend, Heatmap, TrendAxis, TrendChart, TrendLegend } from './charts'
 import {
   addDays,
-  AGENT_FILL,
-  agentsWithUsage,
+  busiest,
   clocksChange,
   dayOf,
   dayTotals,
   figures,
   heatmapRange,
   hourBars,
+  hourLabels,
   hoursSoFar,
+  legendHidden,
+  legendHides,
   modelRows,
+  namesYear,
+  NO_SERIES,
   projectRows,
   RANGE_KINDS,
+  seriesOf,
+  shownSeries,
+  shownTotals,
   trend,
+  wholeMonth,
   type BreakdownRow,
   type DayTotal,
+  type LegendChoice,
   type RangeKind,
   type TrendBar,
 } from './model'
@@ -313,11 +322,10 @@ function Dashboard({ page }: { page: PageData }) {
       },
     [page.hours, agent],
   )
-  // Every range ends today, so a new day reads them again, whether or not usage arrives.
+  // The heatmap always ends today, so a new day reads the figures again, whether or not usage
+  // arrives.
   const day = useClock(dayOf)
   useEffect(() => usageDayTurned(day), [day])
-  const agents = useMemo(() => agentsWithUsage(summary, AGENT_IDS), [summary])
-  const shownAgents = agent === 'all' ? agents : [agent]
   // A chosen agent stays a choice once its usage is gone, as after clearing the record.
   const choices =
     agent === 'all' || summary.agents.includes(agent) ? summary.agents : [...summary.agents, agent]
@@ -392,13 +400,7 @@ function Dashboard({ page }: { page: PageData }) {
       <Figures facts={facts} hours={hours} rangeLabel={rangeText(range.from, range.to)} />
 
       <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TrendCard
-          days={days}
-          hours={hours}
-          page={page}
-          agents={shownAgents}
-          legend={agent === 'all'}
-        />
+        <TrendCard days={days} hours={hours} page={page} />
         <LimitsCard />
       </div>
 
@@ -476,10 +478,6 @@ function useHourText(zoned: boolean): (from: number, to: number) => string {
     },
     [t, i18n.language, zoned],
   )
-}
-
-function yearOf(day: number): number {
-  return new Date(day).getFullYear()
 }
 
 function dayText(day: number): string {
@@ -591,95 +589,180 @@ function Figures({
   )
 }
 
+const TREND_TITLE = {
+  hour: 'trend.hourly',
+  day: 'trend.daily',
+  week: 'trend.weekly',
+  month: 'trend.monthly',
+} as const
+/** Hours are labelled every 1, 2, 3, 4, 6 or 12, so the labels fall on the same times each day. */
+const HOUR_STEPS = [1, 2, 3, 4, 6, 12]
+/** A placeholder waits this long, so a quick answer shows no flash. */
+const PLACEHOLDER_DELAY = 200
+
+/** Whether `waiting` has held for longer than `PLACEHOLDER_DELAY`. */
+function useLate(waiting: boolean): boolean {
+  const [late, setLate] = useState(false)
+  useEffect(() => {
+    if (!waiting) return
+    const timer = setTimeout(() => setLate(true), PLACEHOLDER_DELAY)
+    return () => {
+      clearTimeout(timer)
+      setLate(false)
+    }
+  }, [waiting])
+  return waiting && late
+}
+
 function TrendCard({
   days,
   hours,
   page,
-  agents,
-  legend,
 }: {
   days: DayTotal[]
   hours: HourTotals | null
   page: PageData
-  agents: AgentId[]
-  legend: boolean
 }) {
-  const { t } = useTranslation('usage')
+  const { t, i18n } = useTranslation('usage')
   const rangeText = useRangeText()
   const hourText = useHourText(hours?.zoned ?? false)
-  const { weekly, bars } = useMemo(
+  // Figures for another range or source are on their way.
+  const late = useLate(
+    useUsageStore(
+      (s) =>
+        s.loading &&
+        !!s.page &&
+        (s.page.filters.range !== s.filters.range || s.page.filters.scope !== s.filters.scope),
+    ),
+  )
+  const { unit, bars } = useMemo(
     () =>
       hours
-        ? { weekly: false, bars: hourBars(hours.totals, hours.starts) }
+        ? { unit: 'hour' as const, bars: hourBars(hours.totals, hours.starts) }
         : trend(days, page.range, page.firstDay),
     [hours, days, page.range, page.firstDay],
   )
+  const series = useMemo(() => seriesOf(bars, AGENT_IDS), [bars])
+  // What the legend hides holds until any filter changes, even back to an earlier value: the agent
+  // at once, the range or source once its figures arrive, so the chart still drawn while they load
+  // keeps its series and scale.
+  const agentGeneration = useUsageStore((s) => s.generations.agent)
+  const drawn = useMemo(
+    () => ({ agent: agentGeneration, figures: page.generation }),
+    [agentGeneration, page.generation],
+  )
+  const [legend, setLegend] = useState<LegendChoice>({ ...drawn, hidden: NO_SERIES })
+  const hidden = legendHides(legend, drawn)
+  const shown = useMemo(() => shownSeries(series, hidden), [series, hidden])
+  const toggle = useCallback(
+    (chosen: AgentId[]) => setLegend({ ...drawn, hidden: legendHidden(series, chosen, hidden) }),
+    [drawn, series, hidden],
+  )
+  const totals = useMemo(() => shownTotals(bars, shown), [bars, shown])
+  const max = Math.max(0, ...totals)
   // Re-renders as an hour begins; a range of days never does.
   const future = useClock((now) => (hours ? bars.filter((bar) => bar.from > now).length : 0))
-  const [shown, setShown] = useState<TrendBar | null>(null)
-  const title = hours ? t('trend.hourly') : weekly ? t('trend.weekly') : t('trend.daily')
+  const [chosen, setChosen] = useState<number | null>(null)
+  const at = chosen !== null && chosen < bars.length - future ? chosen : null
+  const index = at ?? busiest(totals)
+  const bar = index === null ? null : bars[index]!
+  const title = t(TREND_TITLE[unit])
   const describe = (bar: TrendBar) =>
-    t('trend.label', {
-      date: hours
-        ? hourText(bar.from, bar.to)
-        : weekly
-          ? rangeText(bar.from, bar.to)
-          : dayText(bar.from),
-      tokens: tokens(bar.total),
-    })
-  const first = bars[0]
-  const middle = bars[Math.floor(bars.length / 2)]
-  const last = bars[bars.length - 1]
-  // The axis names the year only when the bars cross one.
-  const years = first && last && yearOf(first.from) !== yearOf(addDays(last.to, -1))
-  const short = new Intl.DateTimeFormat(
-    currentLocale(),
-    hours
-      ? { hour: 'numeric', minute: '2-digit' }
-      : { month: 'short', day: 'numeric', ...(years ? { year: 'numeric' } : {}) },
+    unit === 'hour'
+      ? hourText(bar.from, bar.to)
+      : unit === 'day'
+        ? dayText(bar.from)
+        : unit === 'month' && wholeMonth(bar)
+          ? new Intl.DateTimeFormat(i18n.language, { month: 'short', year: 'numeric' }).format(
+              bar.from,
+            )
+          : rangeText(bar.from, bar.to)
+  const froms = useMemo(() => bars.map((bar) => bar.from), [bars])
+  const axisText = useMemo(() => {
+    if (unit === 'hour') {
+      const time = new Intl.DateTimeFormat(i18n.language, { hour: 'numeric', minute: '2-digit' })
+      return (i: number) => time.format(froms[i]!)
+    }
+    const date: Intl.DateTimeFormatOptions =
+      unit === 'month' ? { month: 'short' } : { month: 'short', day: 'numeric' }
+    const plain = new Intl.DateTimeFormat(i18n.language, date)
+    const dated = new Intl.DateTimeFormat(i18n.language, { ...date, year: 'numeric' })
+    return (i: number, previous: number | null) =>
+      (namesYear(froms, i, previous) ? dated : plain).format(froms[i]!)
+  }, [unit, froms, i18n.language])
+  const pickHours = useMemo(
+    () => (unit === 'hour' ? (step: number) => hourLabels(froms, step) : undefined),
+    [unit, froms],
   )
-  const labelOf = (bar: TrendBar, end: boolean) =>
-    short.format(hours || !end ? bar.from : addDays(bar.to, -1))
   return (
     <Card>
       <CardHead
         title={title}
         aside={
           <span aria-live="polite" className="truncate text-xs text-tertiary tabular-nums">
-            {shown ? describe(shown) : ''}
+            {bar &&
+              !late &&
+              t('trend.label', { date: describe(bar), tokens: tokens(totals[index!]!) })}
+            {bar &&
+              !late &&
+              series.length > 1 &&
+              shown
+                .filter((id) => bar.byAgent[id])
+                .map((id) => (
+                  <span key={id} className="sr-only">
+                    {` ${t('trend.agent', { agent: agentName(id), tokens: tokens(bar.byAgent[id]!) })}`}
+                  </span>
+                ))}
           </span>
         }
       />
-      <TrendChart bars={bars} agents={agents} label={title} future={future} onShow={setShown} />
-      {/* A slot per bar, as wide as its bar, so each label sits under the bar it names. */}
-      <div className="flex justify-center gap-px text-xs text-tertiary tabular-nums" aria-hidden>
-        {bars.map((bar, i) => {
-          const end = i === bars.length - 1
-          const shown = i === 0 || end || (bars.length > 2 && bar === middle)
-          return (
-            <span
-              key={bar.from}
-              className={cn(
-                'flex max-w-12 min-w-0 flex-1 justify-center whitespace-nowrap',
-                bars.length > 1 && i === 0 && 'justify-start',
-                bars.length > 1 && end && 'justify-end',
-              )}
-            >
-              {shown && labelOf(bar, end)}
-            </span>
-          )
-        })}
-      </div>
-      {legend && agents.length > 1 && (
-        <div className="flex flex-wrap gap-3 text-xs text-tertiary">
-          {agents.map((id) => (
-            <span key={id} className="flex items-center gap-1.5">
-              <span aria-hidden className={cn('size-2 rounded-xs', AGENT_FILL[id])} />
-              {agentName(id)}
-            </span>
-          ))}
+      <div className="flex flex-col gap-1">
+        {/* The scale's top, and the legend with each agent's part of the bar the header names. */}
+        <div className="flex min-h-(--control-height-sm) items-center justify-between gap-3">
+          <span aria-hidden className="text-xs text-tertiary tabular-nums">
+            {!late && max > 0 && tokens(max)}
+          </span>
+          {!late && series.length > 1 && (
+            <TrendLegend
+              bars={bars}
+              index={index}
+              series={series}
+              shown={shown}
+              label={t('trend.legend')}
+              onChange={toggle}
+            />
+          )}
         </div>
-      )}
+        {late ? (
+          <Skeleton className="h-40" />
+        ) : max === 0 ? (
+          <p className="flex h-40 items-center justify-center text-xs text-secondary">
+            {t('noUsage')}
+          </p>
+        ) : (
+          <TrendChart
+            bars={bars}
+            series={shown}
+            max={max}
+            shown={index}
+            chosen={at}
+            label={title}
+            future={future}
+            onChoose={setChosen}
+          />
+        )}
+        {late || max === 0 ? (
+          <span className="h-4" />
+        ) : (
+          <TrendAxis
+            count={bars.length}
+            anchor={unit === 'hour' ? 'start' : 'end'}
+            steps={unit === 'hour' ? HOUR_STEPS : undefined}
+            pick={pickHours}
+            text={axisText}
+          />
+        )}
+      </div>
     </Card>
   )
 }

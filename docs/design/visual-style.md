@@ -61,7 +61,7 @@ Four sizes, chosen by context:
 - In a button, an icon sits in the `data-icon="inline-start"` or `"inline-end"` slot, so the padding adjusts. Inline with text, it sits at `vertical-align: -0.125em`.
 - A busy button swaps its icon for a `Spinner` of the same size and keeps its label and width.
 - An icon-only button has an accessible name and a tooltip that gives the name and the shortcut.
-- Menu items carry no icons ([menus](./design-system.md#menus-and-dialogs)); an agent mark is the one exception.
+- Menu items carry no icons ([menus](./design-system.md#menus-and-dialogs)); the exceptions are an agent mark and a file's type icon in the composer's `@` list.
 
 ### Vocabulary
 
@@ -70,7 +70,7 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Meaning                                                           | Icon                     | Not                               |
 | ----------------------------------------------------------------- | ------------------------ | --------------------------------- |
 | Close, dismiss, remove from a list                                | `X`                      |                                   |
-| Add, new session, new terminal                                    | `Plus`                   | `SquarePen`, `CirclePlus`         |
+| Add, new session, new terminal, add to a message                  | `Plus`                   | `SquarePen`, `CirclePlus`         |
 | More actions                                                      | `Ellipsis`               | `EllipsisVertical`                |
 | Folded group, submenu                                             | `ChevronRight`           |                                   |
 | Open group, menu trigger, select                                  | `ChevronDown`            | `ChevronsUpDown`                  |
@@ -144,6 +144,7 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 | Segments, `compact` buttons, select triggers                            | Control        | `--text-tertiary`, chosen in full |
 | Secondary text: descriptions, hints, the top bar's information          | Caption        | `--text-secondary`                |
 | Group labels in menus, lists and settings; an empty list's line, a path | Caption, 500   | `--text-tertiary`                 |
+| An attachment's name on its tile                                        | Caption, 500   | `--text-primary`                  |
 | Code, commands, branch names, diffs                                     | Code           | as their context                  |
 | Meta: versions, times, counts, commit ids                               | Meta           | `--text-tertiary`                 |
 | Placeholders                                                            | as the field   | `--text-placeholder`              |

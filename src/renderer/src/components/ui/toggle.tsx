@@ -14,6 +14,9 @@ const toggleVariants = cva(
           'min-w-0 rounded-md font-normal text-muted-foreground transition-colors duration-(--duration-fast) hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent data-[state=on]:bg-transparent data-active:text-foreground',
         // A preview tile with its label under it; the chosen tile takes a strong ring.
         tile: 'h-auto flex-col gap-1.5 bg-transparent p-0 font-normal text-muted-foreground hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent aria-pressed:text-foreground [&>[data-tile]]:ring-1 [&>[data-tile]]:ring-border [&>[data-tile]]:transition-shadow aria-pressed:[&>[data-tile]]:ring-2 aria-pressed:[&>[data-tile]]:ring-foreground',
+        // A chart's legend key that shows or hides its series; shown, its name is in full.
+        legend:
+          'font-normal text-muted-foreground transition-colors duration-(--duration-fast) hover:bg-accent hover:text-foreground aria-pressed:bg-transparent aria-pressed:text-foreground aria-pressed:hover:bg-accent',
       },
       size: {
         default:
@@ -22,6 +25,7 @@ const toggleVariants = cva(
         lg: 'h-9 min-w-9 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
         compact: "h-control-sm min-w-0 px-2.5 text-control [&_svg:not([class*='size-'])]:size-3.5",
         tile: 'h-auto min-w-0 p-0 text-xs',
+        legend: 'h-control-sm min-w-0 gap-1.5 px-1.5 text-xs',
       },
     },
     defaultVariants: {
