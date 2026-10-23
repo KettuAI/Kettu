@@ -10,6 +10,7 @@ import {
   processControl,
   terminateTrees,
   type ProcessControl,
+  type Terminated,
   type ToolOptions,
 } from './process-tree'
 import { quoteCmd } from './quote'
@@ -42,6 +43,11 @@ export interface SpawnedAgent {
    * or `taskkill /T /F` on Windows. What it leaves behind once it exits is `AgentTrees`' to stop.
    */
   stop(tools?: ToolOptions): Promise<ExitInfo>
+  /**
+   * `SIGKILL` now to the groups its stop listed, else to its own, for a quit that cannot wait for
+   * the stop any longer. On Windows the stop's `taskkill /F` is already the hardest there is.
+   */
+  kill(): void
 }
 
 export interface SpawnOptions {
@@ -109,6 +115,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   child.stdin.on('error', (error) => options.onEvent?.('stdin error', error.message))
   child.stderr.setEncoding('utf8').on('data', (text: string) => options.onStderr(text))
 
+  let terminated: Terminated | null = null
   // It still runs after EOF, so its tree goes as a whole, found while the links to it hold.
   const endTree = async (pid: number, tools: ToolOptions): Promise<void> => {
     if (platform === 'win32') {
@@ -125,7 +132,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
       return
     }
     options.onEvent?.('SIGTERM')
-    const terminated = await terminateTrees(control, [{ pid, startedAt }], tools).catch(
+    terminated = await terminateTrees(control, [{ pid, startedAt }], tools).catch(
       (error: unknown) => {
         options.onEvent?.('process listing failed', (error as Error).message)
         return null
@@ -153,6 +160,13 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
     return stopping
   }
 
+  const kill = (): void => {
+    if (hasExited || !child.pid || platform === 'win32') return
+    options.onEvent?.('SIGKILL')
+    if (terminated) killSurvivors(control, terminated)
+    else signalGroup(control, child.pid, 'SIGKILL')
+  }
+
   return {
     pid: child.pid ?? null,
     startedAt,
@@ -162,6 +176,7 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
       return hasExited
     },
     stop,
+    kill,
   }
 }
 

@@ -61,7 +61,7 @@ import { HostError, invalidParams } from './errors'
 import { isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
 import { CliVersions, type CliProbe } from './installed-cli'
-import type { ToolOptions } from './process-tree'
+import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import {
   hiddenRemoval,
@@ -83,6 +83,8 @@ export interface LaunchedAgent {
   readonly exited: Promise<ExitInfo>
   readonly hasExited: boolean
   stop(tools?: ToolOptions): Promise<ExitInfo>
+  /** Kills what is left of it now, for a quit that cannot wait for `stop` any longer. */
+  kill(): void
 }
 
 export interface LaunchOutput {
@@ -127,6 +129,11 @@ export interface AgentTimings {
   updateDelayMs: number
   /** How often updates are checked while the host runs. */
   updateIntervalMs: number
+  /**
+   * How long a quit waits for the agents to stop before it kills what is left and writes its
+   * state: main kills the host 6 s after `host:shutdown`, and docs/design/agent-host.md has the sum.
+   */
+  quitStopMs: number
 }
 
 export const AGENT_TIMINGS: AgentTimings = {
@@ -141,6 +148,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   updateViewMs: 20_000,
   updateDelayMs: 60_000,
   updateIntervalMs: 24 * 60 * 60_000,
+  quitStopMs: 4_000,
 }
 
 export interface AgentRuntime {
@@ -505,7 +513,8 @@ export class AgentManager {
       return runtime
     } catch (error) {
       const message = (error as Error).message
-      if (error instanceof InstallCancelled) {
+      // A start the quit stopped did not fail either.
+      if (error instanceof InstallCancelled || this.stopped) {
         slot.state = slot.detection?.state ?? 'available'
         slot.detail = null
         this.emit(slot)
@@ -594,7 +603,7 @@ export class AgentManager {
     } catch (error) {
       slot.intentionalStop = true
       connection.close()
-      await launched.stop()
+      await launched.stop(this.tools())
       throw error instanceof AgentRequestError
         ? new Error(`${slot.def.name} failed to initialize: ${error.message}`)
         : error
@@ -1313,18 +1322,21 @@ export class AgentManager {
 
   async stop(agentId: AgentId): Promise<void> {
     const slot = this.slot(agentId)
-    slot.installAbort?.abort()
+    slot.installAbort?.abort(this.stopped ? QUIT_REASON : undefined)
     if (slot.installing) await slot.installing.catch(() => {})
     await this.stopProcess(slot)
   }
 
-  /** Stops the agent's process, after a start in progress settles. */
+  /**
+   * Stops the agent's process, after a start in progress settles. A quit does not wait for a
+   * start that has launched its process, up to 30 s of `initialize`: it stops that process now.
+   */
   private async stopProcess(slot: Slot): Promise<void> {
     for (const timer of [slot.idleTimer, slot.progressTimer]) {
       if (timer) clearTimeout(timer)
     }
     slot.idleTimer = slot.progressTimer = null
-    if (slot.starting) await slot.starting.catch(() => {})
+    if (slot.starting && !(this.stopped && slot.launched)) await slot.starting.catch(() => {})
     // The hidden session that read the options goes before the agent does. Only its removal is
     // waited for, not a `session/new` still unanswered, whose late answer is removed anyway.
     if (slot.optionsRemoval) await settledWithin(slot.optionsRemoval, REMOVAL_WAIT_MS)
@@ -1362,19 +1374,39 @@ export class AgentManager {
     return trees.reap(root, slot.def.name, this.tools())
   }
 
-  /** Stops every agent in parallel, with the documented sequence, and every task and check. */
+  /**
+   * Stops every agent in parallel, with the documented sequence, and every task and check, for a
+   * quit. After `quitStopMs` it stops waiting and kills what still runs, which the process record
+   * keeps for the next host, so that the host still writes its state before main kills it.
+   */
   async stopAll(): Promise<void> {
     this.stopped = true
     if (this.updateTimer) clearTimeout(this.updateTimer)
     this.updateTimer = null
-    this.updateAbort?.abort()
+    this.updateAbort?.abort(QUIT_REASON)
     const slots = [...this.slots.values()]
-    for (const slot of slots) slot.taskAbort?.abort()
-    await Promise.all([
+    for (const slot of slots) slot.taskAbort?.abort(QUIT_REASON)
+    const stops = Promise.all([
       this.updateCheck,
       ...slots.map((slot) => slot.taskRun?.catch(() => {})),
       ...slots.map((slot) => this.stop(slot.def.id)),
-    ])
+    ]).then(() => true)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), this.timings.quitStopMs)
+    })
+    const stopped = await Promise.race([stops, late])
+    clearTimeout(timer)
+    if (stopped) return
+    for (const slot of slots) {
+      const launched = slot.launched
+      if (!launched || launched.hasExited) continue
+      launched.kill()
+      this.deps.diagnostics.log(
+        'warn',
+        `${slot.def.name} had not stopped ${this.timings.quitStopMs / 1000} s into the quit; the next run stops what is left of it`,
+      )
+    }
   }
 
   // Sign-in, account and limits.

@@ -5,8 +5,9 @@ import { mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
+import type { AgentLauncher } from './agents'
 import type { GitEventDraft, GitServiceApi } from './git/api'
-import { startTestHost, type TestHost } from './testing/harness'
+import { inProcessLauncher, loadFakeAgent, startTestHost, type TestHost } from './testing/harness'
 
 let current: TestHost | null = null
 
@@ -135,6 +136,27 @@ describe('main messages', () => {
     expect(index).toMatchObject({ version: 1, sessions: [{ id: session.id }] })
     const projects = JSON.parse(await readFile(path.join(t.dir, 'state', 'projects.json'), 'utf8'))
     expect(projects).toMatchObject({ version: 1, projects: [{ path: t.project }] })
+  })
+
+  it('writes its state and reports a clean stop when an agent outlasts the quit', async () => {
+    const base = inProcessLauncher(await loadFakeAgent())
+    const launcher: AgentLauncher = {
+      // An agent that ignores EOF and every signal the stop sends.
+      launch: (def, spec, env, output) =>
+        Object.assign(base.launch(def, spec, env, output), {
+          stop: () => new Promise<never>(() => {}),
+          kill: () => {},
+        }),
+    }
+    const { t, port } = await setup({ launcher, agentTimings: { quitStopMs: 100 } })
+    const session = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    await t.host.shutdown()
+    expect(t.sent.at(-1)).toEqual({ type: 'host:stopped' })
+    const index = JSON.parse(await readFile(path.join(t.dir, 'state', 'sessions.json'), 'utf8'))
+    expect(index).toMatchObject({ version: 1, sessions: [{ id: session.id }] })
   })
 
   it('removes a project with its sessions from the index', async () => {

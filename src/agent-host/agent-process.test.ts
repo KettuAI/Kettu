@@ -182,6 +182,25 @@ describe('spawnAgent', () => {
       expect(await until(() => !alive(childPid), 3_000)).toBe(true)
     },
   )
+
+  it.skipIf(process.platform === 'win32')(
+    'kills the tree at once for a quit that cannot wait for the stop',
+    async () => {
+      const { agent, stderr, events } = start(
+        { FAKE_AGENT_IGNORE_EOF: '1', FAKE_AGENT_IGNORE_SIGTERM: '1', FAKE_AGENT_SPAWN_CHILD: '1' },
+        { eofMs: 200, termMs: 30_000 },
+      )
+      expect(await until(() => /child pid (\d+)/.test(stderr()), 10_000)).toBe(true)
+      const childPid = Number(/child pid (\d+)/.exec(stderr())![1])
+      const stopping = agent.stop({ quitting: true })
+      expect(await until(() => events.includes('SIGTERM'), 5_000)).toBe(true)
+      const started = Date.now()
+      agent.kill()
+      expect(await stopping).toMatchObject({ signal: 'SIGKILL' })
+      expect(Date.now() - started).toBeLessThan(3_000)
+      expect(await until(() => !alive(childPid), 3_000)).toBe(true)
+    },
+  )
 })
 
 describe('a process tool that times out', () => {

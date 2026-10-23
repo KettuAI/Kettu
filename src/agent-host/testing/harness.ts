@@ -103,6 +103,7 @@ export function inProcessLauncher(module: FakeAgentModule, env: Env = {}): InPro
           finish({ code: 0, signal: null })
           return exited
         },
+        kill: () => finish({ code: null, signal: 'SIGKILL' }),
       }
     },
   }

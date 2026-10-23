@@ -32,6 +32,7 @@ import {
 import { Diagnostics } from './diagnostics'
 import type { Env } from './find-command'
 import { CliVersions, type AdapterCli } from './installed-cli'
+import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
 import type { AgentsFile, AgentUpdatesFile } from './storage'
@@ -420,6 +421,70 @@ function packageManager(installedVersions: string[], adaptersDir?: string) {
   }
 }
 
+describe('quitting', () => {
+  /** What `stopAll` came to before `ms` passed: 'stopped', or 'waiting' while it still runs. */
+  const stopAllWithin = (m: ReturnType<typeof manager>, ms: number) =>
+    Promise.race([
+      m.agents.stopAll().then(() => 'stopped'),
+      new Promise((resolve) => setTimeout(() => resolve('waiting'), ms)),
+    ])
+
+  it('stops waiting for an agent that outlasts the quit, and kills what is left of it', async () => {
+    const base = inProcessLauncher(module)
+    let kills = 0
+    const launcher: AgentLauncher = {
+      launch: (def, spec, env, output) => {
+        const launched = base.launch(def, spec, env, output)
+        const stop = launched.stop
+        return Object.assign(launched, {
+          // An agent that ignores EOF and every signal the stop sends.
+          stop: () => new Promise<never>(() => {}),
+          kill: () => {
+            kills++
+            void stop()
+          },
+        })
+      },
+    }
+    const m = manager({}, { quitStopMs: 100 }, { launcher })
+    await m.agents.ensureReady('fake-agent')
+    expect(await stopAllWithin(m, 2_000)).toBe('stopped')
+    expect(kills).toBe(1)
+    expect(m.diagnostics.logEntries()).toContainEqual(
+      expect.objectContaining({ level: 'warn', message: expect.stringContaining('Fake agent') }),
+    )
+  })
+
+  it('stops an agent that is still starting without waiting for its initialize', async () => {
+    const base = inProcessLauncher(module, {
+      FAKE_AGENT_SLOW_START_MS: '10000',
+      FAKE_AGENT_DELAY_SCALE: '1',
+    })
+    const stops: boolean[] = []
+    const launcher: AgentLauncher = {
+      launch: (def, spec, env, output) => {
+        const launched = base.launch(def, spec, env, output)
+        const stop = launched.stop
+        return Object.assign(launched, {
+          stop: (tools?: ToolOptions) => {
+            stops.push(tools?.quitting ?? false)
+            return stop(tools)
+          },
+        })
+      },
+    }
+    const m = manager({}, {}, { launcher })
+    const start = m.agents.ensureReady('fake-agent')
+    await until(() => m.state() === 'starting')
+    expect(await stopAllWithin(m, 2_000)).toBe('stopped')
+    await expect(start).rejects.toMatchObject({ code: 'agent_unavailable' })
+    // Stopped by the quit, not failed.
+    expect(m.state()).toBe('available')
+    expect(stops.length).toBeGreaterThan(0)
+    expect(stops.every((quitting) => quitting)).toBe(true)
+  })
+})
+
 describe('AgentManager with an installed adapter', () => {
   it('installs the pinned version before its first start, once for every caller', async () => {
     const m = packageManager([])
@@ -533,14 +598,16 @@ describe('AgentManager with an installed adapter', () => {
     await m.agents.stopAll()
   })
 
-  it('stops a running install when the agent stops', async () => {
+  it('stops a running install when the agent stops, and names a quit as its reason', async () => {
     const m = packageManager([])
+    let reason: unknown
     m.onInstall(
       (options) =>
         new Promise((_, reject) =>
-          options.signal?.addEventListener('abort', () =>
-            reject(new Error('The install was stopped.')),
-          ),
+          options.signal?.addEventListener('abort', () => {
+            reason = options.signal?.reason
+            reject(new Error('The install was stopped.'))
+          }),
         ),
     )
     const start = m.agents.ensureReady('fake-agent')
@@ -550,6 +617,8 @@ describe('AgentManager with an installed adapter', () => {
       message: 'Fake agent could not be installed. The install was stopped.',
     })
     expect(m.launcher.launches).toBe(0)
+    // So npm's tree is stopped with the quit's short limits.
+    expect(reason).toBe(QUIT_REASON)
   })
 })
 
@@ -617,6 +686,7 @@ function cliManager(
         exited: Promise.resolve({ code: withCli ? 1 : 2, signal: null }),
         hasExited: true,
         stop: () => launched.stop(),
+        kill: () => launched.kill(),
       }
     },
   }
