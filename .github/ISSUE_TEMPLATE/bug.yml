@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in OverBench does not work
+type: Bug
+labels:
+  - state:needs-triage
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Tell us what went wrong and what you expected. A screenshot is welcome, and any language is fine.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OverBench version
+      description: Find it in Settings > About.
+      placeholder: 0.0.1
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: The system and its version.
+      placeholder: macOS 15.2, Windows 11 24H2, Ubuntu 24.04
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      description: The agent in use when it happened, if any.
+      options:
+        - Claude Code
+        - Codex CLI
+        - opencode
+        - Other
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error text
+      render: text

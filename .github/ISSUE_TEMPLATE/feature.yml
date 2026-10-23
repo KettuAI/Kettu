@@ -1,0 +1,13 @@
+name: Feature request
+description: Suggest something OverBench could do
+type: Feature
+labels:
+  - state:needs-triage
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: What do you want, and why?
+      description: Any language is fine.
+    validations:
+      required: true
