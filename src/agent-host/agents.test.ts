@@ -859,7 +859,8 @@ describe('updates', () => {
       state: 'ready',
       task: { kind: 'update', state: 'running', error: null },
     })
-    expect(m.status().task?.command).toContain('install fake-adapter@2.0.0 --omit=dev')
+    // On Windows the command is quoted for cmd.exe, which splits words at `=`.
+    expect(m.status().task?.command).toMatch(/install fake-adapter@2\.0\.0 "?--omit=dev"?/)
     release()
     await update
     expect(m.installs.map((i) => [i.version, i.alongside])).toEqual([['2.0.0', true]])

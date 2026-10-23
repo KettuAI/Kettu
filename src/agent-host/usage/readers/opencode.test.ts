@@ -21,7 +21,9 @@ afterEach(() => {
 })
 
 const defaultFile = (): string => path.join(home, '.local', 'share', 'opencode', 'opencode.db')
-const context = (env: Record<string, string> = {}): MemoryContext => memoryContext({ env, home })
+// The database is a real file in a temporary folder, so paths follow the platform the tests run on.
+const context = (env: Record<string, string> = {}): MemoryContext =>
+  memoryContext({ env, home, platform: process.platform })
 
 let tick = 0
 /** Moves the file's time on, since two writes in a test can land in one tick. */
