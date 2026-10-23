@@ -72,7 +72,7 @@ export function UpdateNotice() {
       <span className="@container/notice flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (
           <>
-            <span className="truncate font-medium @max-[7.5rem]/notice:hidden">
+            <span className="truncate font-medium @max-[7.5rem]/notice:sr-only">
               {t('notice.ready')}
             </span>
             {version}
@@ -81,14 +81,14 @@ export function UpdateNotice() {
         {notice.kind === 'link' && (
           <>
             {version}
-            <span className="truncate font-medium @max-[5rem]/notice:hidden">
+            <span className="truncate font-medium @max-[5rem]/notice:sr-only">
               {t('notice.available')}
             </span>
           </>
         )}
         {notice.kind === 'updated' && (
           <>
-            <span className="truncate font-medium @max-[6.5rem]/notice:hidden">
+            <span className="truncate font-medium @max-[6.5rem]/notice:sr-only">
               {t('notice.updatedTo')}
             </span>
             {version}
