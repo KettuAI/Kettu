@@ -120,7 +120,8 @@
   },
   "replyFooter": {
     "copyReply": "复制回复",
-    "fork": "分叉为新会话"
+    "fork": "分叉为新会话",
+    "forking": "正在分叉…"
   },
   "queue": {
     "label": "排队中的消息",

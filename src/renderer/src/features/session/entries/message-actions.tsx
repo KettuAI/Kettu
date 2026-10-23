@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CopyButton } from '@renderer/features/git/branch-popover'
 import { longAgo } from '@renderer/lib/format'
@@ -159,15 +160,21 @@ export const ReplyFooter = memo(
           animation,
         )}
       >
-        <div className={cn('flex min-w-0 items-center gap-0.5', REVEAL, hovered && 'opacity-100')}>
+        <div
+          className={cn(
+            'flex min-w-0 items-center gap-0.5',
+            REVEAL,
+            (hovered || forking) && 'opacity-100',
+          )}
+        >
           <CopyButton text={text} label={t('replyFooter.copyReply')} />
           {showFork && (
             <ActionButton
-              label={t('replyFooter.fork')}
+              label={forking ? t('replyFooter.forking') : t('replyFooter.fork')}
               disabled={forking || (session.status !== 'ready' && session.status !== 'closed')}
               onClick={() => void fork()}
             >
-              <GitForkIcon />
+              {forking ? <Spinner /> : <GitForkIcon />}
             </ActionButton>
           )}
           {(end || at !== undefined) && (

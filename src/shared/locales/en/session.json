@@ -131,7 +131,8 @@
   },
   "replyFooter": {
     "copyReply": "Copy reply",
-    "fork": "Fork into a new session"
+    "fork": "Fork into a new session",
+    "forking": "Forking…"
   },
   "queue": {
     "label": "Queued messages",
