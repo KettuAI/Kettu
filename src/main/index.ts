@@ -4,7 +4,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AgentHost } from './agent-host'
-import { Artifacts } from './artifacts'
+import { Artifacts, disableDnsPrefetching } from './artifacts'
 import { registerArtifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
@@ -60,6 +60,7 @@ if (devUserData) {
 }
 
 registerArtifactScheme()
+disableDnsPrefetching()
 
 async function start(): Promise<void> {
   const perf = process.argv.includes('--overbench-perf')

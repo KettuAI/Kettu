@@ -12,6 +12,15 @@ import { serveArtifacts } from './protocol'
 
 const MAX_URL_CHARS = 2_048
 
+/**
+ * Must run before the app is ready. Blink resolves any host a page names in a `dns-prefetch` link,
+ * which no policy, request filter or header stops, so a page could spell data out in a DNS query.
+ * It is off for every page; the app's own names no host.
+ */
+export function disableDnsPrefetching(): void {
+  app.commandLine.appendSwitch('blink-settings', 'dnsPrefetchingEnabled=false')
+}
+
 export interface ArtifactsDeps {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   contentDir: string

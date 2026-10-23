@@ -4,7 +4,7 @@
 // are shown to hold on their own. See docs/design/artifacts.md#security.
 
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -29,17 +29,23 @@ const ids = {
 }
 
 // Runs in the page; every attempt reports whether it held. What reaches the test's server is
-// checked as well, since a request can leave even where the page sees a failure.
-function probePage(server: string, secret: string, image: string): string {
+// checked as well, since a request can leave even where the page sees a failure, and so is the
+// net log, for DNS lookups of the hosts in `exfil`, which no request carries.
+function probePage(server: string, secret: string, image: string, exfil: Exfil): string {
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Probe</title></head>
+<html><head><meta charset="utf-8"><title>Probe</title>
+<link rel="dns-prefetch" href="//${exfil.link}">
+<link rel="preconnect" href="https://${exfil.preconnect}">
+</head>
 <body><iframe name="sink" style="display: none"></iframe>
+<a href="https://${exfil.anchor}/">A link</a>
 <script>
 const SERVER = ${JSON.stringify(server)}
 const DEV_SERVER = ${JSON.stringify(server.replace('127.0.0.1', 'localhost'))}
 const OTHER = ${JSON.stringify(artifactUrl(ids.other))}
 const SECRET = ${JSON.stringify(secret)}
 const IMAGE = ${JSON.stringify(image)}
+const EXFIL = ${JSON.stringify(exfil.script)}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const fails = (promise) => promise.then(() => false, () => true)
 const loads = (element) => new Promise((resolve) => {
@@ -135,17 +141,32 @@ const attempts = {
     return performance.now() - start < 100
   },
   'notifications': async () => (await Notification.requestPermission()) !== 'granted',
-  'the camera': () => fails(navigator.mediaDevices.getUserMedia({ video: true })),
+  'the camera': () => {
+    const request = navigator.mediaDevices.getUserMedia({ video: true }).then(
+      () => { window.__probe.camera = 'allowed'; return false },
+      () => true,
+    )
+    // Linux without devices may never answer, which is no access either; a late stream still shows.
+    return Promise.race([request, sleep(3000).then(() => 'pending')])
+  },
   'location': () => new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(() => resolve(false), () => resolve(true))
   }),
   'the clipboard': async () =>
     (await fails(navigator.clipboard.writeText('secret'))) && (await fails(navigator.clipboard.readText())),
+  'a DNS lookup from a link added later': async () => {
+    const link = document.createElement('link')
+    link.rel = 'dns-prefetch'
+    link.href = '//' + EXFIL
+    document.head.append(link)
+    await sleep(500)
+    return true
+  },
   'a service worker': () => {
     try { return fails(navigator.serviceWorker.register('/sw.js')) } catch { return true }
   },
 }
-window.__probe = { done: false, results: [] }
+window.__probe = { done: false, results: [], camera: null }
 ;(async () => {
   for (const [name, attempt] of Object.entries(attempts)) {
     let held
@@ -184,16 +205,29 @@ contextBridge.exposeInMainWorld('overbench', {
 })
 `
 
+/** Hosts named only for DNS: `control` is looked up by main, the rest by the page if it can. */
+type Exfil = Record<'control' | 'link' | 'preconnect' | 'anchor' | 'script' | 'late', string>
+
+/** Whether main, the app's page and the artifact's page see a dark theme. */
+interface ThemeSeen {
+  main: boolean
+  app: boolean | null
+  page: boolean | null
+}
+
 interface ProbeResult {
   error?: string
+  dns: Record<keyof Exfil, boolean>
   held: { waits: (number | string)[] }
   attempts: { name: string; held: boolean | string }[]
+  /** 'allowed' if the camera request ever gave a stream, however late. */
+  camera: string | null
   processes: Record<'app' | 'page', { pid: number; sandboxed: boolean | null }>
   afterNavigation: { restored: boolean; trusted: boolean; appUrl: string }
   inputs: { key: string; inArtifact: boolean }[]
-  theme: { dark: boolean; light: boolean }
+  theme: Record<'dark' | 'light', ThemeSeen>
   stopped: boolean
-  reloaded: { shown: boolean; dark: boolean }
+  reloaded: { shown: boolean; theme: ThemeSeen }
   events: { channel: string; payload: Record<string, unknown> }[]
   trustedAfterProbe: boolean
   refused: Record<string, { waits: (number | string)[]; revoked: boolean; revocations: number }>
@@ -280,7 +314,14 @@ async function probe(policy: boolean): Promise<ProbeResult> {
   )
   const { port } = server.address() as AddressInfo
   const origin = `http://127.0.0.1:${port}`
-  const page = probePage(origin, pathToFileURL(secret).href, pathToFileURL(image).href)
+  const nonce = randomUUID().slice(0, 8)
+  const exfil = Object.fromEntries(
+    (['control', 'link', 'preconnect', 'anchor', 'script', 'late'] as const).map((name) => [
+      name,
+      `${name}-${nonce}.exfil.test`,
+    ]),
+  ) as Exfil
+  const page = probePage(origin, pathToFileURL(secret).href, pathToFileURL(image).href, exfil)
   const files = {
     [ids.probe]: await hashFile(contentDir, page),
     [ids.other]: await hashFile(contentDir, '<!doctype html><p>SECRET of another artifact</p>'),
@@ -299,6 +340,8 @@ async function probe(policy: boolean): Promise<ProbeResult> {
     hang: ids.hang,
     unopened: ids.unopened,
     commitTimeoutMs: 1_000,
+    exfil,
+    netLog: path.join(run, 'net-log.json'),
   }
   await writeFile(path.join(run, 'config.json'), JSON.stringify(config))
   // Run as Electron, and load the page from its file rather than a dev server.
@@ -316,10 +359,11 @@ async function probe(policy: boolean): Promise<ProbeResult> {
     ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
   ]
   // The probe opens a window, which crashed Electron on the headless Ozone platform in CI, so
-  // without a display it runs under Xvfb, as the screenshots do.
+  // without a display it runs under Xvfb, as the screenshots do, and in a D-Bus session of its
+  // own, as on a desktop, for Chromium's system theme and device code.
   const headless = process.platform === 'linux' && !env.DISPLAY && !env.WAYLAND_DISPLAY
   const [command, commandArgs]: [string, string[]] = headless
-    ? ['xvfb-run', ['-a', electron, ...args]]
+    ? ['dbus-run-session', ['--', 'xvfb-run', '-a', electron, ...args]]
     : [electron, args]
   const { code, stderr } = await new Promise<{ code: number | null; stderr: string }>(
     (resolve, reject) => {
@@ -349,9 +393,24 @@ describe.each([
     result = await probe(policy)
   }, 120_000)
 
+  it('sends no DNS query for a host the page names', () => {
+    // Main's own lookup shows the net log records them.
+    expect(result.dns).toEqual({
+      control: true,
+      link: false,
+      preconnect: false,
+      anchor: false,
+      script: false,
+      late: false,
+    })
+  })
+
   it('holds every attempt, and nothing reaches another host', () => {
     expect(result.attempts.length).toBeGreaterThanOrEqual(27)
-    expect(result.attempts.filter((attempt) => attempt.held !== true)).toEqual([])
+    const held = (attempt: { name: string; held: boolean | string }) =>
+      attempt.held === true || (attempt.name === 'the camera' && attempt.held === 'pending')
+    expect(result.attempts.filter((attempt) => !held(attempt))).toEqual([])
+    expect(result.camera).toBeNull()
     expect(reached).toEqual([])
     expect(result.asked).not.toContain(ids.other)
     expect(result.opened).toEqual([])
@@ -385,12 +444,15 @@ describe.each([
   })
 
   it("follows the app's theme", () => {
-    expect(result.theme).toEqual({ dark: true, light: false })
+    expect(result.theme).toEqual({
+      dark: { main: true, app: true, page: true },
+      light: { main: false, app: false, page: false },
+    })
   })
 
   it('tells the app when the page stopped, and loads it again in the theme', () => {
     expect(result.stopped).toBe(true)
-    expect(result.reloaded).toEqual({ shown: true, dark: true })
+    expect(result.reloaded).toEqual({ shown: true, theme: { main: true, app: true, page: true } })
   })
 
   it.each([

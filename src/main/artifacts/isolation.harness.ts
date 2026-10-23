@@ -13,7 +13,7 @@ import { restrictPermissions } from '../permissions'
 import { isRendererUrl } from '../renderer'
 import { hasPendingFrame, isRevoked, watchSubframes } from '../subframes'
 import { configureWindows, createMainWindow, WindowStateStore } from '../window'
-import { Artifacts } from '.'
+import { Artifacts, disableDnsPrefetching } from '.'
 import { ARTIFACT_SCHEME, artifactHost, originId } from './origins'
 import { registerArtifactScheme, respond } from './protocol'
 
@@ -34,12 +34,16 @@ export interface ProbeConfig {
   unopened: string
   /** The frame guard's commit timeout, short for the test. */
   commitTimeoutMs: number
+  /** Hosts the page names for DNS alone, and `control`, which main looks up itself. */
+  exfil: Record<string, string> & { control: string }
+  netLog: string
 }
 
 const config = JSON.parse(readFileSync(process.env.OVERBENCH_PROBE ?? '', 'utf8')) as ProbeConfig
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 registerArtifactScheme()
+disableDnsPrefetching()
 
 function report(result: unknown): void {
   writeFileSync(config.resultFile, JSON.stringify(result, null, 2))
@@ -72,6 +76,9 @@ async function run(): Promise<unknown> {
   }
   const artifacts = new Artifacts({ content, contentDir: config.contentDir })
   const ses = session.defaultSession
+  // The built-in resolver logs each DNS query, on every platform, which getaddrinfo does not.
+  app.configureHostResolver({ enableBuiltInResolver: true, secureDnsMode: 'off' })
+  await ses.netLog.startLogging(config.netLog)
   artifacts.install(ses)
   if (!config.policy) {
     ses.protocol.unhandle(ARTIFACT_SCHEME)
@@ -156,6 +163,8 @@ async function run(): Promise<unknown> {
       ? (probeFrame.executeJavaScript('window.__probe.results') as Promise<unknown>)
       : null
   }, 60_000)
+  // Read before the page loads again below, which starts the probe over.
+  const camera = await probeFrame.executeJavaScript('window.__probe.camera')
   const metrics = app.getAppMetrics()
   const sandboxedOf = (pid: number) => metrics.find((m) => m.pid === pid)?.sandboxed ?? null
   const processes = {
@@ -201,14 +210,37 @@ async function run(): Promise<unknown> {
   contents.sendInputEvent({ type: 'keyUp', keyCode: 'L', modifiers: [mod] })
   await sleep(300)
 
-  // The page follows the app's theme.
-  const darkIn = async (source: 'dark' | 'light'): Promise<boolean> => {
-    nativeTheme.themeSource = source
-    await sleep(300)
-    const query = `matchMedia('(prefers-color-scheme: dark)').matches`
-    return (await frameOf(config.probe)!.executeJavaScript(query)) === true
+  // The page follows the app's theme. Each side is read until it matches or 3 s pass, and main's
+  // and the app page's view are kept too, so a failure tells a late theme from a wrong one.
+  const darkQuery = `matchMedia('(prefers-color-scheme: dark)').matches`
+  const darkOf = async (frame: WebFrameMain | undefined): Promise<boolean | null> => {
+    const dark = await Promise.race([
+      frame?.executeJavaScript(darkQuery).catch(() => null),
+      sleep(500),
+    ])
+    return typeof dark === 'boolean' ? dark : null
   }
-  const theme = { dark: await darkIn('dark'), light: await darkIn('light') }
+  const themeSeen = async (dark: boolean) => {
+    const settled = async (read: () => Promise<boolean | null>) =>
+      until(async () => ((await read()) === dark ? dark : null), 3_000).catch(read)
+    return {
+      main: nativeTheme.shouldUseDarkColors,
+      app: await settled(() => darkOf(contents.mainFrame)),
+      page: await settled(() => darkOf(frameOf(config.probe))),
+    }
+  }
+  const themeIn = async (source: 'dark' | 'light') => {
+    nativeTheme.themeSource = source
+    return themeSeen(source === 'dark')
+  }
+  const theme = { dark: await themeIn('dark'), light: await themeIn('light') }
+  // A theme change sends the page's preferences again, which must not turn DNS prefetching on.
+  await frameOf(config.probe)!.executeJavaScript(`(() => {
+    const link = document.createElement('link')
+    link.rel = 'dns-prefetch'
+    link.href = '//' + ${JSON.stringify(config.exfil.late)}
+    document.head.append(link)
+  })()`)
 
   // The page's process stops, and the frame loads again, still in the app's theme.
   nativeTheme.themeSource = 'dark'
@@ -221,13 +253,7 @@ async function run(): Promise<unknown> {
   await page(
     `(() => { const f = document.querySelector('iframe'); f.replaceWith(f.cloneNode()) })()`,
   )
-  const reloaded = {
-    shown: await ready(config.probe),
-    dark:
-      (await frameOf(config.probe)
-        ?.executeJavaScript(`matchMedia('(prefers-color-scheme: dark)').matches`)
-        .catch(() => null)) === true,
-  }
+  const reloaded = { shown: await ready(config.probe), theme: await themeSeen(true) }
   nativeTheme.themeSource = 'system'
   const events = await page<unknown[]>('overbench.events()')
   const trustedAfterProbe = !isRevoked(contents) && revocations === 0
@@ -276,9 +302,19 @@ async function run(): Promise<unknown> {
   })()`)
   const canvasTrusted = !isRevoked(contents)
 
+  // A lookup of main's own, so the net log's silence on the page's hosts means something.
+  await ses.resolveHost(config.exfil.control).catch(() => null)
+  await ses.netLog.stopLogging()
+  const netLog = readFileSync(config.netLog, 'utf8')
+  const dns = Object.fromEntries(
+    Object.entries(config.exfil).map(([name, host]) => [name, netLog.includes(host)]),
+  )
+
   return {
+    dns,
     held,
     attempts,
+    camera,
     processes,
     afterNavigation,
     inputs,
