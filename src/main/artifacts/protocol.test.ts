@@ -7,7 +7,8 @@ import { ARTIFACT_CSP } from './policy'
 
 vi.mock('electron', () => ({ protocol: {} }))
 
-const { pageStyle, parseRequest, respond, withStyle } = await import('./protocol')
+const { CONTENT_WAIT_MS, pageStyle, parseRequest, respond, withStyle } = await import('./protocol')
+const { COMMIT_TIMEOUT_MS } = await import('../subframes')
 
 const HOST = '0123456789abcdef0123456789'
 const ID = 'art_01JB2QZ8X4K7M9N3P5R6S8T0VW'
@@ -141,6 +142,25 @@ describe('respond', () => {
     expect((await respond(new Request(`${ORIGIN}/?v=9`), source())).status).toBe(404)
     found = { kind: 'failed' }
     expect((await respond(new Request(`${ORIGIN}/`), source())).status).toBe(503)
+  })
+
+  it('answers 503 rather than wait for the host past the frame guard', async () => {
+    vi.useFakeTimers()
+    try {
+      const late = {
+        ...source(),
+        content: () =>
+          new Promise<ArtifactContentResult>((resolve) => setTimeout(() => resolve(found), 10_000)),
+      }
+      let status: number | null = null
+      void respond(new Request(`${ORIGIN}/`), late).then((response) => (status = response.status))
+      await vi.advanceTimersByTimeAsync(CONTENT_WAIT_MS)
+      expect(status).toBe(503)
+      // A frame that commits the 503 keeps the window's access; one still waiting at 5 s loses it.
+      expect(CONTENT_WAIT_MS * 2).toBeLessThanOrEqual(COMMIT_TIMEOUT_MS)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('refuses a file outside the content folder, whatever the host says', async () => {

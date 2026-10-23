@@ -4,7 +4,7 @@ import { createLogger } from './log'
 const log = createLogger('window')
 
 /** How long a new frame may take to commit its first document. */
-const COMMIT_TIMEOUT_MS = 5_000
+export const COMMIT_TIMEOUT_MS = 5_000
 /** How often main looks for pending frames the page removed before they committed. */
 const REMOVED_POLL_MS = 100
 

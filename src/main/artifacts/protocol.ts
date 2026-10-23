@@ -12,6 +12,12 @@ import { artifactHeaders } from './policy'
 
 const log = createLogger('artifacts')
 
+/**
+ * How long a request waits for the host to name a version's file before it answers 503. Well inside
+ * the frame guard's commit timeout, since a frame still waiting then cuts the window off.
+ */
+export const CONTENT_WAIT_MS = 2_000
+
 /** Must run before the app is ready. A standard scheme gives each host its own origin and storage. */
 export function registerArtifactScheme(): void {
   protocol.registerSchemesAsPrivileged([
@@ -111,11 +117,22 @@ function answer(status: number): Response {
 }
 
 /** Answers one request on an artifact origin. */
+function withinWait(content: Promise<ArtifactContentResult>): Promise<ArtifactContentResult> {
+  let timer: NodeJS.Timeout | undefined
+  const late = new Promise<ArtifactContentResult>((resolve) => {
+    timer = setTimeout(() => {
+      log.warn(`The agent host named no file within ${CONTENT_WAIT_MS} ms`)
+      resolve({ kind: 'failed' })
+    }, CONTENT_WAIT_MS)
+  })
+  return Promise.race([content, late]).finally(() => clearTimeout(timer))
+}
+
 export async function respond(request: Request, source: ArtifactSource): Promise<Response> {
   if (request.method !== 'GET') return answer(405)
   const wanted = parseRequest(request.url, (host) => source.artifactOf(host))
   if (!wanted) return answer(404)
-  const found = await source.content(wanted.id, wanted.version)
+  const found = await withinWait(source.content(wanted.id, wanted.version))
   if (found.kind === 'not_found') return answer(404)
   if (found.kind === 'failed') return answer(503)
   if (!isInside(source.contentDir, found.path)) {
