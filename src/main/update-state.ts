@@ -74,6 +74,7 @@ export type UpdaterEvent =
   | { type: 'progress'; percent: number }
   | { type: 'downloaded'; version: string }
   | { type: 'error'; message: string; manual: boolean }
+  | { type: 'load-failed'; message: string; manual: boolean }
 
 export interface TransitionContext {
   mode: UpdateMode
@@ -117,6 +118,9 @@ export function nextState(
       return context.lastAvailable
         ? { kind: 'available', version: context.lastAvailable, mode: context.mode }
         : { kind: 'idle', checkedAt: context.lastCheckedAt }
+    case 'load-failed':
+      // Without electron-updater no check can run, so even an automatic one shows it.
+      return { kind: 'error', message: event.message, manual: event.manual }
   }
 }
 

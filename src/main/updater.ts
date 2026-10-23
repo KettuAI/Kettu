@@ -3,6 +3,7 @@ import type { AppUpdater } from 'electron-updater'
 import type { SettingsFile } from '@shared/settings'
 import type { UpdateStatus } from '@shared/updates'
 import type { AppStateStore } from './app-state'
+import { loadAutoUpdater } from './auto-updater'
 import { broadcast } from './events'
 import { createLogger } from './log'
 import type { SettingsSection } from './settings-schema'
@@ -145,7 +146,7 @@ export class Updater {
   }
 
   private load(): Promise<AppUpdater> {
-    this.updater ??= import('electron-updater').then(({ autoUpdater }) => {
+    this.updater ??= loadAutoUpdater().then((autoUpdater) => {
       const settings = this.deps.settings()
       autoUpdater.logger = {
         info: (message?: unknown) => log.info(String(message)),
@@ -225,15 +226,22 @@ export class Updater {
     }
     this.manual = manual
     const errorsBefore = this.errorEvents
+    let loaded = false
     this.checking = this.load()
-      .then((updater) => updater.checkForUpdates())
+      .then((updater) => {
+        loaded = true
+        return updater.checkForUpdates()
+      })
       .then(
         () => undefined,
         (error: unknown) => {
-          // electron-updater reports its own failures through 'error' as well; anything else,
-          // such as failing to load it, has to reach the state here.
-          if (this.errorEvents === errorsBefore) {
-            this.dispatch({ type: 'error', message: errorMessage(error), manual: this.manual })
+          const message = errorMessage(error)
+          if (!loaded) {
+            this.dispatch({ type: 'load-failed', message, manual: this.manual })
+          } else if (this.errorEvents === errorsBefore) {
+            // electron-updater reports its own failures through 'error' as well; anything else
+            // has to reach the state here.
+            this.dispatch({ type: 'error', message, manual: this.manual })
           }
         },
       )
