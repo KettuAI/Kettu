@@ -311,8 +311,11 @@ async function probe(policy: boolean): Promise<ProbeResult> {
   const args = [
     path.join(dir, 'harness', 'main.cjs'),
     `--user-data-dir=${path.join(run, 'data')}`,
-    // CI's Ubuntu has no display and restricts the user namespaces Chromium's sandbox needs.
-    ...(process.platform === 'linux' ? ['--no-sandbox', '--ozone-platform=headless'] : []),
+    // CI's Ubuntu has no display, nor a GPU for the window, and restricts the user namespaces
+    // Chromium's sandbox needs.
+    ...(process.platform === 'linux'
+      ? ['--no-sandbox', '--ozone-platform=headless', '--disable-gpu']
+      : []),
   ]
   const { code, stderr } = await new Promise<{ code: number | null; stderr: string }>(
     (resolve, reject) => {
