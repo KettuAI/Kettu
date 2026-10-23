@@ -130,7 +130,9 @@
     "todo": "To do"
   },
   "planBar": {
-    "progress": "Plan <count/>"
+    "label": "Plan",
+    "count": "{{done}}/{{total}}",
+    "progress": "{{done}} of {{total}} steps done"
   },
   "userActions": {
     "steered": "Steered",
@@ -142,13 +144,15 @@
     "forking": "Forking…"
   },
   "queue": {
-    "label": "Queued messages",
-    "queued": "Queued {{total}}",
-    "paused": "Paused until you resume",
-    "waiting": "Sent when the turn ends",
-    "sending": "Sending…",
+    "label": "Queued messages: {{count}}",
+    "next": "Next",
+    "number": "#{{number}}",
+    "queued": "{{count}} queued",
+    "pausedCount": "Paused · {{count}} queued",
+    "position": "{{number}} / {{count}}",
     "resume": "Resume",
     "attachment": "Attachment",
+    "sendNow": "Send now",
     "steer": "Steer now: send into the running turn",
     "edit": "Edit in the composer",
     "remove": "Remove"

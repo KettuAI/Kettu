@@ -16,7 +16,7 @@ import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { PlanBar } from './plan-bar'
-import { QueueTray } from './queue-tray'
+import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import { ComposerPlaceholder, FailedState, StartingAgent, ThreadSkeleton } from './session-states'
 import { SignIn } from './sign-in'
@@ -53,6 +53,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   useEffect(() => ensureFiles(summary.projectPath), [summary.projectPath])
 
   const [actionError, setActionError] = useState<string | null>(null)
+  const [queueOpen, setQueueOpen] = useState(false)
+  // A queued message's failed action; the stack clears it with its next action or its last item.
+  const [queueError, setQueueError] = useState<string | null>(null)
   const status = session?.status ?? summary.status
   const running = status === 'running' || status === 'awaiting_permission'
   const fail = useCallback((e: unknown) => setActionError(errorMessage(e)), [])
@@ -151,23 +154,29 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             </AlertAction>
           </Alert>
         )}
-        {actionError && (
+        {(actionError || queueError) && (
           <p role="alert" className="animate-in px-1 text-xs text-destructive fade-in">
-            {actionError}
+            {actionError ?? queueError}
           </p>
         )}
         <div className="flex flex-col">
           {session && summary.origin !== 'subagent' && (
-            <PlanBar sessionId={sessionId} running={running} />
+            <PlanBar
+              sessionId={sessionId}
+              running={running}
+              hidden={queueOpen && session.queue.length > 0}
+            />
           )}
-          {/* Mounted only while something waits, so its error goes with the last item. */}
+          {/* Mounted only while something waits; its cards sit behind the composer. */}
           {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
-            <QueueTray session={session} />
+            <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
           )}
           {summary.origin === 'subagent' ? (
             <SubagentBar summary={summary} session={session} />
           ) : session ? (
-            <Composer key={sessionId} session={session} agentName={name} />
+            <div className="relative z-10">
+              <Composer key={sessionId} session={session} agentName={name} />
+            </div>
           ) : (
             <ComposerPlaceholder agentId={summary.agentId} />
           )}

@@ -184,6 +184,8 @@
   /* A toggle that is on, such as a side pane's: sunk into the bar, flat, with a hairline edge. */
   --pressed: oklch(0 0 0 / 8%);
   --pressed-hover: oklch(0 0 0 / 11%);
+  /* What a queued message's card fades toward as it sits further back in the stack. */
+  --queue-back: oklch(0.96 0 0);
 
   /* Lines are translucent so one token reads the same on every surface. Alphas are for the
      0.5 px hairline of a 2x display and halved below, so a line keeps its visual weight. */
@@ -380,6 +382,7 @@
   --segment-thumb: oklch(1 0 0 / 12%);
   --pressed: oklch(1 0 0 / 10%);
   --pressed-hover: oklch(1 0 0 / 14%);
+  --queue-back: oklch(0.196 0 0);
 
   --border: oklch(1 0 0 / 7%);
   --border-soft: oklch(1 0 0 / 4%);

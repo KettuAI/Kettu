@@ -56,7 +56,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'slow-start': { description: 'Explains how to start the agent slowly (set at launch)' },
   'all-updates': { description: 'Sends every session update variant once, plus an unknown one' },
   subagent: { description: 'Runs a subagent in a child session with a permission request' },
-  plan: { description: 'A plan whose items progress while the agent works' },
+  plan: {
+    description: 'A plan whose items progress while the agent works',
+    hint: '--step <ms each step takes>',
+  },
   background: {
     description: 'Starts a command in the background, as Claude Code does with run_in_background',
   },
@@ -79,6 +82,7 @@ export interface ScenarioOptions {
   exitCode: number
   entries: number // large-history: the entries its replay synthesizes
   plain: boolean // usage: Claude Code's own text, as the adapter forwards it when its report fails
+  stepMs: number // plan: how long each step's tool call runs
 }
 
 export interface ScenarioChoice {
@@ -159,6 +163,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     exitCode: parseNumber(flagValue(args, 'code')) ?? 3,
     entries: historyEntries(env, parseNumber(flagValue(args, 'entries'))),
     plain: flagValue(args, 'plain') !== undefined,
+    stepMs: parseNumber(flagValue(args, 'step')) ?? 300,
   }
   return { scenario, options, text }
 }

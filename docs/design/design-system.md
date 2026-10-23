@@ -38,6 +38,7 @@ Four surface steps, mapped onto the shadcn tokens so that shadcn components pick
 | 3    | Raised: composer, popovers, menus, dialogs | `--popover`    | `oklch(1 0 0)`     | `oklch(0.243 0 0)` |
 
 - The lightness steps match the reference. Its surfaces carry a trace of warmth (chroma about 0.002); OverBench keeps shadcn's pure neutral.
+- A queued message's card in the [queue stack](./ui.md#composer) fades from surface 3 toward `--queue-back` the further back it sits: `oklch(0.96 0 0)` light, a grey step like `--muted`, and `oklch(0.196 0 0)` dark, surface 1, so a card further back recedes in both themes.
 - `BACKGROUND_COLOR` in `src/main/window.ts` follows `--background` in both themes, so the first frame does not flash.
 
 ### Lines
@@ -67,7 +68,7 @@ Lines are translucent, so one token reads the same on every surface step. The al
 
 ### Reasoning levels
 
-The top reasoning levels cost the most time and tokens, so their names carry a warm gradient wherever they show: in the model menu and on the model button ([interface](./ui.md#composer)). It is the one gradient in the interface, and it marks a cost, so it still carries meaning. Which levels are on top is recognised by name ([interface](./ui.md#composer)).
+The top reasoning levels cost the most time and tokens, so their names carry a warm gradient where a level is chosen: in the model menu, the agent menu and New session's route line. The session's model button, in the control row, shows the name in its own color ([interface](./ui.md#composer)). It is the one gradient in the interface, and it marks a cost, so it still carries meaning. Which levels are on top is recognised by name ([interface](./ui.md#composer)).
 
 | Token                        | Light                                                               | Dark                                                                   | Used for                                                                                                  |
 | ---------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -195,7 +196,7 @@ M0 ships the compact density only. The comfortable values are recorded so that a
 | `--radius`            | The base of shadcn's radius scale                                  | 7 px                       | 8 px                 |
 | `--control-height`    | Buttons and selectors                                              | 26 px                      | 32 px                |
 | `--control-height-sm` | Small inline buttons, icon buttons in the title bar                | 24 px                      | 28 px                |
-| `--row-height`        | Sidebar rows, menu items, the plan bar, the composer's control row | 28 px                      | to be measured       |
+| `--row-height`        | Sidebar rows, menu items, the plan row, the composer's control row | 28 px                      | to be measured       |
 | `--card-header`       | Card headers, such as a permission request's                       | 30 px                      | 36 px                |
 | `--composer-min`      | The composer with one line of text                                 | 52 px                      | 56 px                |
 | `--icon-size`         | UI icons; 14 px inside cards and controls                          | 16 px                      | 20 px                |
@@ -376,10 +377,10 @@ Every menu, the dropdown menus and the context menus alike, shares one set of me
 
 The reference uses nine curves, several of them nearly identical. OverBench keeps the ones M0 uses; the press and overshoot curves are left out because buttons and switches keep shadcn's own feedback.
 
-| Spring (Motion) | Stiffness / damping / mass | Used for            |
-| --------------- | -------------------------- | ------------------- |
-| `card`          | 320 / 28 / 1               | Cards, drag release |
-| `panel`         | 1200 / 80 / 0.1            | Panels and sheets   |
+| Spring (Motion) | Stiffness / damping / mass | Used for                             |
+| --------------- | -------------------------- | ------------------------------------ |
+| `card`          | 320 / 28 / 1               | Cards, drag release, the queue stack |
+| `panel`         | 1200 / 80 / 0.1            | Panels and sheets                    |
 
 Durations are custom properties: `duration-(--duration-fast)` times a transition, and `animation-duration-(--duration-fast)` times a tw-animate-css enter or exit animation. Never time an animation with `duration-*`: it also sets `transition-duration`, and with the default `transition-property: all` the element would then transition every property that changes, including inherited ones such as `scrollbar-color`, recalculating its whole subtree on each frame. Easings are `--ease-*` theme variables, which give `ease-*` utilities. Springs are exported from `src/renderer/src/lib/motion.ts`.
 

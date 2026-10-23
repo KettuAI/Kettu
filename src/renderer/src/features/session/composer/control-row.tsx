@@ -271,7 +271,6 @@ function ModelMenu({
       list.scrollTop = chosen.offsetTop - (list.clientHeight - chosen.offsetHeight) / 2
     }
   }, [])
-  const tier = effort ? tierOf(effort, effortValue) : null
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return
@@ -314,9 +313,7 @@ function ModelMenu({
           </span>
         )}
         {effort && !(model && level?.usesDefault) && (
-          <span className={cn('shrink-0', tier && tierText[tier])}>
-            {choiceName(effort, effortValue)}
-          </span>
+          <span className="shrink-0">{choiceName(effort, effortValue)}</span>
         )}
         {!model && !effort && <span>{t('controls.options')}</span>}
         <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />

@@ -10,6 +10,13 @@ export const springs = {
 /** Motion exit for dismissed alerts and banners: opacity at --duration-fast. */
 export const fadeExit = { opacity: 0, transition: { duration: 0.12 } }
 
+/** What follows the pointer or the wheel: --duration-fast and --ease-out-quart. */
+export const follow = {
+  type: 'tween',
+  duration: 0.12,
+  ease: [0.165, 0.84, 0.44, 1],
+} satisfies Transition
+
 /** Staggered entry: once, the first item after `base` ms and each next one 30 ms later. */
 export function rise(index: number, base = 60): { className: string; style: CSSProperties } {
   return {
