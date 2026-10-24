@@ -3,14 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.stubGlobal('window', { overbench: { perf: false } })
 
 const {
+  closeArtifact,
   closeSettings,
   openAgentSettings,
+  openArtifact,
+  openArtifacts,
   openNewSession,
   openSession,
   openSettings,
   settingsBack,
   useViewStore,
 } = await import('./view')
+
+const { useArtifactsStore } = await import('./artifacts')
 
 const settings = () => useViewStore.getState().settings
 
@@ -74,5 +79,28 @@ describe('settings view', () => {
     expect(settings()).toEqual({ open: true, section: 'agents', agent: null })
     settingsBack()
     expect(settings()).toEqual({ open: false, section: 'agents', agent: null })
+  })
+})
+
+describe('artifacts view', () => {
+  it('opens the whole list from the sidebar, and the viewer goes back to it', () => {
+    useArtifactsStore.setState({ filter: 'report', opened: 'art_1' })
+    useViewStore.setState({
+      main: { kind: 'usage' },
+      settings: { open: true, section: 'git', agent: null },
+    })
+    openArtifacts()
+    expect(useViewStore.getState().main).toEqual({ kind: 'artifacts' })
+    expect(settings().open).toBe(false)
+    expect(useArtifactsStore.getState()).toMatchObject({ filter: '', opened: null })
+
+    openArtifact('art_2')
+    expect(useViewStore.getState().main).toEqual({
+      kind: 'artifact',
+      id: 'art_2',
+      back: { kind: 'artifacts' },
+    })
+    closeArtifact()
+    expect(useViewStore.getState().main).toEqual({ kind: 'artifacts' })
   })
 })

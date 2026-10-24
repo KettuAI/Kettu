@@ -192,7 +192,7 @@ Each core logic of OverBench has a section here: what it is, its model, its inte
 
 ### Artifacts
 
-> Decided by the maintainer on 2026-10-23 for [issue #11](https://github.com/overbench/overbench/issues/11); the store, the service and the surface with its single-page viewer are built, the rest of the interface is not yet. Details: [artifacts](./design/artifacts.md).
+> Decided by the maintainer on 2026-10-23 for [issue #11](https://github.com/overbench/overbench/issues/11); the store, the service, the surface with its single-page viewer and the Artifacts page are built, the rest of the interface is not yet. Details: [artifacts](./design/artifacts.md).
 
 An artifact is a page an agent makes for the user to look at, such as a report, a slide deck or a set of design options: one HTML file, kept by OverBench with every version. Agents create and change artifacts through OverBench's own MCP service, not by writing files into the project. OverBench stores them on this machine and shows them in a surface that keeps them away from the app and the machine.
 

@@ -30,6 +30,7 @@ export interface ArtifactSummary {
   id: string
   title: string
   project: string // the project's folder, or a scratch folder for No project
+  scratch: boolean // `project` is a scratch folder, so the artifact is under No project
   sessionId: string // the session it shows under: its latest version's, else its creator
   version: number // the latest
   pages: number // two or more is a canvas
@@ -51,6 +52,48 @@ export interface ArtifactContent {
   title: string
   version: number
   html: string
+}
+
+/** A card's thumbnail renders at this size, a page's viewport, before main scales it down. */
+export const THUMBNAIL_WIDTH = 1280
+export const THUMBNAIL_HEIGHT = 800
+/** Room around a canvas's pages in its thumbnail, in thumbnail pixels. */
+export const THUMBNAIL_INSET = 64
+/** The most pages a canvas's thumbnail lays out. */
+export const THUMBNAIL_PAGES = 500
+
+/** One page of a canvas laid out for its thumbnail, in canvas pixels, from the canvas's origin. */
+export interface ThumbnailPage {
+  group: number // the body's `data-page-group` child it is in, from 1, or 0 outside any
+  index: number // its place among the pages there, from 1
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Where a canvas's pages land in its thumbnail: scaled to fit inside the inset and centred. */
+export function fitThumbnail(pages: readonly ThumbnailPage[]): {
+  scale: number
+  x: number
+  y: number
+} {
+  let width = 0
+  let height = 0
+  for (const page of pages) {
+    width = Math.max(width, page.x + page.width)
+    height = Math.max(height, page.y + page.height)
+  }
+  if (width === 0 || height === 0) return { scale: 1, x: 0, y: 0 }
+  const scale = Math.min(
+    (THUMBNAIL_WIDTH - 2 * THUMBNAIL_INSET) / width,
+    (THUMBNAIL_HEIGHT - 2 * THUMBNAIL_INSET) / height,
+  )
+  return {
+    scale,
+    x: (THUMBNAIL_WIDTH - width * scale) / 2,
+    y: (THUMBNAIL_HEIGHT - height * scale) / 2,
+  }
 }
 
 /**

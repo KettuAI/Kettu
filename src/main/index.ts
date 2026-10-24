@@ -112,6 +112,7 @@ async function start(): Promise<void> {
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
     contentDir: join(userDataPath, 'artifacts', 'content'),
+    thumbnailDir: join(userDataPath, 'artifacts', 'thumbnails'),
   })
   await artifacts.install(session.defaultSession)
   serveMedia(session.defaultSession, mediaGrants, isRendererUrl)
@@ -170,6 +171,8 @@ async function start(): Promise<void> {
   installMenu(menuDeps)
 
   app.on('browser-window-created', (_, window) => {
+    // The thumbnails' offscreen windows load no app page and keep their own guards.
+    if (window.webContents.isOffscreen()) return
     // F12 toggles DevTools in development; reload shortcuts are disabled in production. Without
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })

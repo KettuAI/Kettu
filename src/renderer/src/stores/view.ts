@@ -1,7 +1,14 @@
 import { create } from 'zustand'
 import type { AgentId } from '@shared/thread'
 import { markSwitchStart } from '@renderer/app/perf'
+import {
+  GROUPINGS,
+  SORTS,
+  type ArtifactGrouping,
+  type ArtifactSort,
+} from '@renderer/features/artifacts/model'
 import { readJson, writeJson } from '@renderer/lib/storage'
+import { useArtifactsStore } from '@renderer/stores/artifacts'
 
 type PageView =
   // At launch, until the last session or New session replaces it.
@@ -12,6 +19,7 @@ type PageView =
   // of that session, in its project.
   | { kind: 'new'; agentId: AgentId | null; noProject: boolean; parentId?: string }
   | { kind: 'usage' } // the usage page, opened from the sidebar
+  | { kind: 'artifacts' } // the Artifacts page, opened from the sidebar
 
 // An artifact in the viewer, which Back leaves for what the main area showed before.
 export type MainView = PageView | { kind: 'artifact'; id: string; back: PageView }
@@ -50,6 +58,8 @@ interface ViewStore {
   /** The open side pane per project; none when the panel is closed. */
   sidePane: Record<string, SidePane>
   sidePaneMaximized: boolean
+  /** How the Artifacts page groups and sorts, for the whole app. */
+  artifactsView: { group: ArtifactGrouping; sort: ArtifactSort }
 }
 
 interface Persisted {
@@ -59,6 +69,7 @@ interface Persisted {
   collapsedProjects: Record<string, true>
   expandedParents: Record<string, boolean>
   sidePane: Record<string, SidePane>
+  artifactsView?: { group?: string; sort?: string }
   /** Read once from versions before the Files pane, when the side panel held only the terminal. */
   terminalOpen?: Record<string, boolean>
 }
@@ -81,7 +92,15 @@ export const useViewStore = create<ViewStore>()(() => ({
         .map(([path]) => [path, 'terminal' as const]),
     ),
   sidePaneMaximized: false,
+  artifactsView: {
+    group: oneOf(GROUPINGS, saved.artifactsView?.group, 'project-session'),
+    sort: oneOf(SORTS, saved.artifactsView?.sort, 'newest'),
+  },
 }))
+
+function oneOf<T extends string>(values: readonly T[], value: string | undefined, fallback: T): T {
+  return values.includes(value as T) ? (value as T) : fallback
+}
 
 export const lastSessionId = saved.lastSessionId ?? null
 
@@ -96,6 +115,7 @@ useViewStore.subscribe((state) => {
       collapsedProjects: state.collapsedProjects,
       expandedParents: state.expandedParents,
       sidePane: state.sidePane,
+      artifactsView: state.artifactsView,
     }
     writeJson(KEY, persisted)
   }, 300)
@@ -116,6 +136,19 @@ export function openUsage(): void {
     main: { kind: 'usage' },
     settings: { ...s.settings, open: false },
   }))
+}
+
+/** The Artifacts page from the sidebar, with its whole list. */
+export function openArtifacts(): void {
+  useArtifactsStore.setState({ filter: '', opened: null })
+  useViewStore.setState((s) => ({
+    main: { kind: 'artifacts' },
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+export function setArtifactsView(patch: Partial<ViewStore['artifactsView']>): void {
+  useViewStore.setState((s) => ({ artifactsView: { ...s.artifactsView, ...patch } }))
 }
 
 /** Shows an artifact in the viewer, in place of what the main area shows. */

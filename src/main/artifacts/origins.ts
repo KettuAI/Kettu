@@ -35,6 +35,12 @@ export class ArtifactOrigins {
   private readonly served = new Map<string, string>()
   private readonly opened = new WeakMap<WebContents, Map<string, number>>()
 
+  /** Serves the artifact for the rest of the run; returns its URL. */
+  serve(artifactId: string): string {
+    this.served.set(originId(artifactId), artifactId)
+    return artifactUrl(artifactId)
+  }
+
   /** Serves the artifact for the rest of the run and lets `contents` frame it; returns its URL. */
   open(contents: WebContents, artifactId: string): string {
     const host = originId(artifactId)

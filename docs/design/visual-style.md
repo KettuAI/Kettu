@@ -119,6 +119,9 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | The prompt cache and its time left                                | `Hourglass`              | `Timer`, `Clock`                  |
 | A date or a range of dates                                        | `Calendar`               | `CalendarDays`, `CalendarRange`   |
 | An artifact, the Artifacts page                                   | `Shapes`                 |                                   |
+| Group a list by, such as the Artifacts page's **Group by**        | `Rows3`                  | `Group`, `LayoutList`             |
+| Sort a list                                                       | `ArrowDownUp`            | `ArrowUpDown`, `ListFilter`       |
+| No preview of a page or an image                                  | `ImageOff`               |                                   |
 | Zoom to fit                                                       | `Scan`                   | `Fullscreen`, `Expand`            |
 | Previous page beside a counter, previous item in the media viewer | `ChevronLeft`            | `ArrowLeft`                       |
 | Next page beside a counter, next item in the media viewer         | `ChevronRight`           | `ArrowRight`                      |

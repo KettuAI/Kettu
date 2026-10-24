@@ -1,4 +1,5 @@
 import type { AgentsApi, DiagnosticsBundle } from './agent-host'
+import type { ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
@@ -110,6 +111,10 @@ export interface IpcInvokeContract {
   'perf:metrics': { args: []; result: PerfMetrics }
   'artifact:open': { args: [id: string]; result: ArtifactOpenResult }
   'artifact:close': { args: [url: string]; result: void }
+  'artifact:thumbnail': {
+    args: [id: string, version: number, layout: ThumbnailPage[] | null]
+    result: string | null
+  }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -178,6 +183,11 @@ export interface OverbenchApi {
     open(id: string): Promise<ArtifactOpenResult>
     /** Undoes one `open`, once the frame is gone. */
     close(url: string): Promise<void>
+    /**
+     * A version's card image as a `data:` URL, or null when it could not render. A canvas passes
+     * its pages laid out, which main cannot find without parsing the HTML.
+     */
+    thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
   }
