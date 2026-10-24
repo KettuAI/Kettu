@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { FolderIcon, PlusIcon } from 'lucide-react'
+import { PlusIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
 import { addProjectFromDialog } from '@renderer/app/actions'
@@ -95,7 +95,6 @@ export function ProjectMenu({
           />
         }
       >
-        <FolderIcon data-icon="inline-start" />
         <span className="truncate font-medium text-foreground">
           {noProject
             ? t('newSession.noProject')

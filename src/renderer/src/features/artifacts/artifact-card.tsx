@@ -18,6 +18,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
+import { cn } from '@renderer/lib/utils'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { openArtifact } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
@@ -30,13 +31,17 @@ function openFromPage(id: string, history = false): void {
   openArtifact(id, { history })
 }
 
-/** One artifact on the page: its thumbnail, title and caption, and its menu. */
+/**
+ * One artifact: its thumbnail, title and caption, and its menu. On the page by default; `recent` is
+ * New session's shorter card, whose caption ends with when.
+ */
 export const ArtifactCard = memo(function ArtifactCard({
   artifact,
   lead,
   project,
   session,
   tabbable,
+  variant = 'page',
 }: {
   artifact: ArtifactSummary
   /** What the grouping hides: the version, the session or the project; in Recently deleted, the
@@ -45,12 +50,21 @@ export const ArtifactCard = memo(function ArtifactCard({
   project: string
   session: string
   tabbable: boolean
+  variant?: 'page' | 'recent'
 }) {
   const { t } = useTranslation('artifacts')
   const card = useRef<HTMLDivElement>(null)
   const thumbnail = useThumbnail(artifact, useInView(card))
   const [moreOpen, setMoreOpen] = useState(false)
-  const caption = [lead, artifact.pages >= 2 && t('card.canvas', { count: artifact.pages })]
+  const recent = variant === 'recent'
+  // Only the page takes the focus back to the card it opened.
+  const open = (history = false) =>
+    recent ? openArtifact(artifact.id, { history }) : openFromPage(artifact.id, history)
+  // The short card's caption keeps its room for when; its thumbnail shows a canvas's pages.
+  const caption = [
+    lead,
+    !recent && artifact.pages >= 2 && t('card.canvas', { count: artifact.pages }),
+  ]
     .filter(Boolean)
     .join(' · ')
 
@@ -64,8 +78,8 @@ export const ArtifactCard = memo(function ArtifactCard({
         sessionId: artifact.sessionId,
         deletedAt: artifact.deletedAt,
       }}
-      onOpen={() => openFromPage(artifact.id)}
-      onVersionHistory={() => openFromPage(artifact.id, true)}
+      onOpen={() => open()}
+      onVersionHistory={() => open(true)}
     />
   )
 
@@ -74,7 +88,7 @@ export const ArtifactCard = memo(function ArtifactCard({
       type="button"
       data-artifact-card={artifact.id}
       tabIndex={tabbable ? 0 : -1}
-      onClick={() => openFromPage(artifact.id)}
+      onClick={() => open()}
       onKeyDown={(event) => {
         // The context menu key opens the More menu, the card's menu for the keyboard.
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
@@ -84,13 +98,21 @@ export const ArtifactCard = memo(function ArtifactCard({
       }}
       className="relative flex w-full flex-col overflow-hidden rounded-xl bg-surface text-left outline-none focus-ring"
     >
-      <span className="relative block aspect-16/10 w-full overflow-hidden bg-subtle">
-        <ThumbnailImage thumbnail={thumbnail} />
+      <span
+        className={cn(
+          'relative block w-full overflow-hidden bg-subtle',
+          recent ? 'h-28' : 'aspect-16/10',
+        )}
+      >
+        <ThumbnailImage thumbnail={thumbnail} inset={recent} />
         {artifact.editing.length > 0 && <EditingPill />}
       </span>
       <span className="block py-3 pr-11 pl-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
         <span className="block truncate text-ui font-medium text-primary">{artifact.title}</span>
-        <span className="mt-0.5 block truncate text-xs text-tertiary">{caption}</span>
+        <span className="mt-0.5 block truncate text-xs text-tertiary">
+          {caption}
+          {recent && <Ago at={artifact.updatedAt} />}
+        </span>
       </span>
       <span
         aria-hidden
@@ -132,7 +154,11 @@ export const ArtifactCard = memo(function ArtifactCard({
   )
 })
 
-function ThumbnailImage({ thumbnail }: { thumbnail: Thumbnail }) {
+/**
+ * `inset` fits a short card: a page 10 px in from the top and sides, cut off at the bottom so its
+ * top shows; a canvas whole, at the card's height and centred, so none of its pages is cut.
+ */
+function ThumbnailImage({ thumbnail, inset = false }: { thumbnail: Thumbnail; inset?: boolean }) {
   const { t } = useTranslation('artifacts')
   if (thumbnail.state === 'loading') return <Skeleton className="absolute inset-0 rounded-none" />
   if (thumbnail.state === 'failed') {
@@ -143,9 +169,16 @@ function ThumbnailImage({ thumbnail }: { thumbnail: Thumbnail }) {
       </span>
     )
   }
-  return (
-    <span className="absolute inset-0 animate-in fade-in duration-(--duration-fast)">
+  const image = (
+    <>
       <img src={thumbnail.src} alt="" draggable={false} className="size-full object-cover" />
+      {/* Over the image, which would cover an inset ring; a canvas's pages have their own. */}
+      {inset && !thumbnail.pages && (
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]"
+        />
+      )}
       {thumbnail.pages?.map((page, i) => (
         <span
           key={i}
@@ -159,6 +192,20 @@ function ThumbnailImage({ thumbnail }: { thumbnail: Thumbnail }) {
           }}
         />
       ))}
+    </>
+  )
+  const fade = 'absolute animate-in fade-in duration-(--duration-fast)'
+  if (!inset) return <span className={cn(fade, 'inset-0')}>{image}</span>
+  if (!thumbnail.pages) {
+    return (
+      <span className={cn(fade, 'inset-x-2.5 top-2.5 aspect-16/10 overflow-hidden rounded-t-md')}>
+        {image}
+      </span>
+    )
+  }
+  return (
+    <span className={cn(fade, 'inset-0 flex justify-center')}>
+      <span className="relative aspect-16/10 h-full shrink-0">{image}</span>
     </span>
   )
 }
@@ -174,6 +221,12 @@ function EditingPill() {
   )
 }
 
+/** The caption's time, apart so only it follows the clock. */
+function Ago({ at }: { at: number }) {
+  const now = useNow()
+  return <> · {longAgo(at, now)}</>
+}
+
 /** In the tooltip only, so it reads the time as it opens. */
 function CardTime({ artifact }: { artifact: ArtifactSummary }) {
   const { t } = useTranslation('artifacts')
@@ -186,10 +239,12 @@ function CardTime({ artifact }: { artifact: ArtifactSummary }) {
 }
 
 /** A card's place before the list arrives, at its real size. */
-export function CardSkeleton() {
+export function CardSkeleton({ variant = 'page' }: { variant?: 'page' | 'recent' }) {
   return (
     <div aria-hidden className="relative overflow-hidden rounded-xl bg-surface">
-      <Skeleton className="aspect-16/10 w-full rounded-none" />
+      <Skeleton
+        className={cn('w-full rounded-none', variant === 'recent' ? 'h-28' : 'aspect-16/10')}
+      />
       <div className="flex flex-col gap-2 p-4 pl-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
         <Skeleton className="h-3 w-[58%]" />
         <Skeleton className="h-2.5 w-[36%]" />
