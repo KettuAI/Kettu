@@ -46,6 +46,11 @@ export interface AgentDefinition {
    * the thread tells them by the work that follows.
    */
   progressNotes?: boolean
+  /**
+   * Keeps MCP servers by name for each folder rather than each session, so a session's artifacts
+   * service goes by a name of its own, or the next session there would take over its connection.
+   */
+  mcpServersByName?: boolean
   /** Variables a package agent's launch adds, from what its install holds. */
   launchEnv?(lookup: AdapterLookup): Promise<Record<string, string>>
   /** How OverBench can install a binary agent for the user. */
@@ -88,6 +93,8 @@ export const OPENCODE: AgentDefinition = {
   name: 'OpenCode',
   registryId: 'opencode',
   launch: { kind: 'binary', command: 'opencode', args: ['acp'] },
+  // Seen in OpenCode 2.0.32: every attach adds its servers to the folder, replacing a same name.
+  mcpServersByName: true,
   install: {
     hint: 'detect.hint.opencode',
     url: 'https://opencode.ai/docs/',

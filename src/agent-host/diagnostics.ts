@@ -45,6 +45,30 @@ function methodOf(message: unknown): string | null {
   return typeof method === 'string' ? method : null
 }
 
+/**
+ * The message without the values of its MCP servers' headers, which carry the artifacts service's
+ * session tokens; only attach requests hold servers.
+ */
+function redacted(message: unknown): unknown {
+  if (typeof message !== 'object' || message === null) return message
+  const params = (message as { params?: unknown }).params
+  if (typeof params !== 'object' || params === null) return message
+  const servers = (params as { mcpServers?: unknown }).mcpServers
+  if (!Array.isArray(servers)) return message
+  const mcpServers = servers.map((server: unknown) => {
+    const headers = (server as { headers?: unknown } | null)?.headers
+    if (!Array.isArray(headers)) return server
+    return {
+      ...(server as object),
+      headers: headers.map((header: unknown) => ({
+        ...(header as object),
+        value: '<redacted>',
+      })),
+    }
+  })
+  return { ...message, params: { ...params, mcpServers } }
+}
+
 export interface DiagnosticsOptions {
   /** Mirrors ACP traffic to stdout, for `OVERBENCH_ACP_LOG=1` in development. */
   mirrorTraffic?: boolean
@@ -74,7 +98,7 @@ export class Diagnostics {
   traffic(agentId: AgentId, direction: 'in' | 'out', message: unknown): void {
     let json: string
     try {
-      json = JSON.stringify(message) ?? 'null'
+      json = JSON.stringify(redacted(message)) ?? 'null'
     } catch {
       json = '"<unserializable message>"'
     }
