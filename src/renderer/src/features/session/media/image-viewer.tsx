@@ -51,7 +51,7 @@ export function ImageViewer({
             className={cn(
               'flex h-top-bar shrink-0 items-center gap-2 pr-2.5 pl-5 app-region-drag',
               isMac
-                ? 'pl-[calc(20px+var(--traffic-lights))]'
+                ? 'pl-[calc(32px+var(--traffic-lights))]'
                 : 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
             )}
           >
