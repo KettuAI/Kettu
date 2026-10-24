@@ -10,7 +10,7 @@ The first desktop version benchmarks the Claude Desktop app, through the analysi
 
 - **Taken**: the principles in this document and the measured values behind them, expressed as OverBench tokens on top of shadcn/ui.
 - **Not taken**:
-  - Brand identity: logos, the clay accent color, illustrations, sounds, product names and the proprietary typefaces. OverBench keeps a neutral palette, its own semantic colors and Inter.
+  - Brand identity: logos, the clay accent color, illustrations, sounds, product names and the proprietary typefaces. OverBench keeps a neutral palette, its own semantic colors and Inter, and its own [brand](./brand.md).
   - Code: the reference reconstructs a proprietary app's bundles, so its code examples are a specification to read, never source to copy. Every behavior is implemented with OverBench's own stack.
   - Names: no `cds-` or `claude-` prefixes. Tokens follow shadcn and Tailwind naming.
 - **Changed on purpose**: where OverBench deviates, the section says so and why.
@@ -153,7 +153,7 @@ The 16 ANSI colors are VS Code's defaults for its light and dark themes (MIT), t
 
 ### Agent marks
 
-Each agent is shown with its official mark in its own colors. They are the only brand colors in the interface.
+Each agent is shown with its official mark in its own colors. With OverBench's own [mark](./brand.md#color), they are the only brand colors in the interface.
 
 | Agent       | Mark and colors                                                                                    | Source                                                                       |
 | ----------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |

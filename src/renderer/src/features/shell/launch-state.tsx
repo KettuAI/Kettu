@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { loadHostState } from '@renderer/app/bootstrap'
+import { BrandMark } from '@renderer/components/brand'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { FailedState } from '@renderer/features/session/session-states'
 import { useProjectsStore } from '@renderer/stores/projects'
 
 /**
- * The main area until launch knows what to show. A launch that takes longer than 1 s shows
- * "Starting OverBench…", so a slow start never looks frozen; a normal start shows nothing.
+ * The main area until launch knows what to show. A launch that takes longer than 1 s shows the mark
+ * over "Starting OverBench…", so a slow start never looks frozen; a normal start shows nothing.
  */
 export function LaunchState() {
   const { t } = useTranslation('shell')
@@ -33,12 +34,15 @@ export function LaunchState() {
   }
   if (!slow) return <div className="h-full" />
   return (
-    <div
-      role="status"
-      className="flex h-full animate-in items-center justify-center gap-2.5 pb-10 text-[15px] font-medium text-secondary animation-duration-(--duration-base) fade-in"
-    >
-      <Spinner className="size-[18px]" />
-      {t('launch.starting')}
+    <div className="flex h-full animate-in flex-col items-center justify-center gap-6 pb-10 animation-duration-(--duration-base) fade-in">
+      <BrandMark width={72} />
+      <div
+        role="status"
+        className="flex items-center gap-2.5 text-[15px] font-medium text-secondary"
+      >
+        <Spinner className="size-[18px]" />
+        {t('launch.starting')}
+      </div>
     </div>
   )
 }

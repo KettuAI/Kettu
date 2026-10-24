@@ -3,6 +3,7 @@ import { CheckIcon, CircleCheckIcon, CopyIcon, ExternalLinkIcon, RefreshCwIcon }
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
+import { BrandLockup } from '@renderer/components/brand'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
@@ -20,8 +21,8 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
   const { t } = useTranslation('settings')
   return (
     <header className="flex flex-col gap-1.5 px-1 pb-7">
-      <h2 id="settings-about" className="text-title font-semibold">
-        OverBench
+      <h2 id="settings-about" className="pb-1">
+        <BrandLockup fontSize={22} />
       </h2>
       <p className="text-small text-pretty text-secondary">{t('about.version.description')}</p>
       {info ? (
