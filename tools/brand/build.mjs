@@ -1,10 +1,8 @@
 // Builds the app icons and the brand images from src/shared/brand.ts, as docs/design/brand.md
-// specifies them. Run on macOS, which has iconutil, with `pnpm exec electron tools/brand/build.mjs`;
-// Chromium draws every size from the vector source. No dependencies.
+// specifies them, with `pnpm exec electron tools/brand/build.mjs`; Chromium draws every size from the
+// vector source. No dependencies.
 
-import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import {
@@ -88,6 +86,40 @@ ${centredMark(size / 2, size / 2, 0.62 * w, versionForCanvas(size))}`
   return svg(size, size, body)
 }
 
+/** A colour as Icon Composer writes it. */
+function srgb(hex) {
+  const c = [1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(5))
+  return `srgb:${c.join(',')},1.00000`
+}
+
+/**
+ * The macOS icon as an Icon Composer document, which macOS 26 draws in Liquid Glass and actool
+ * compiles for older versions. The system draws the tile, so the 1024 px canvas is the tile: the
+ * tile's gradient as the fill and the mark, flat and without a shadow, as the one layer.
+ */
+function iconComposer(dir) {
+  rmSync(dir, { recursive: true, force: true })
+  mkdirSync(join(dir, 'Assets'), { recursive: true })
+  writeFileSync(
+    join(dir, 'Assets', 'mark.svg'),
+    `${svg(1024, 1024, centredMark(512, 512, 0.62 * 1024, 'standard'))}\n`,
+  )
+  const document = {
+    fill: {
+      'linear-gradient': [srgb(TILE_TOP), srgb(TILE_BOTTOM)],
+      orientation: { start: { x: 0.5, y: 0 }, stop: { x: 0.5, y: 1 } },
+    },
+    groups: [
+      {
+        layers: [{ glass: false, 'image-name': 'mark.svg', name: 'mark' }],
+        shadow: { kind: 'none', opacity: 0.5 },
+      },
+    ],
+    'supported-platforms': { squares: 'shared' },
+  }
+  writeFileSync(join(dir, 'icon.json'), `${JSON.stringify(document, null, 2)}\n`)
+}
+
 /** The Windows icon: a flat square tile filling the canvas with a 12% corner radius. */
 function windowsIcon(size) {
   // At 16 px the mark grows a little so its two cuts still show.
@@ -164,22 +196,7 @@ async function main() {
   write(join(brand, 'icon-macos.svg'), macIcon(1024))
   write(join(brand, 'icon-windows.svg'), windowsIcon(256))
 
-  // macOS: every size of the iconset, each drawn at its own size.
-  const iconset = join(mkdtempSync(join(tmpdir(), 'overbench-icon-')), 'icon.iconset')
-  mkdirSync(iconset)
-  for (const size of [16, 32, 128, 256, 512]) {
-    writeFileSync(
-      join(iconset, `icon_${size}x${size}.png`),
-      await render(macIcon(size), size, size),
-    )
-    const double = size * 2
-    writeFileSync(
-      join(iconset, `icon_${size}x${size}@2x.png`),
-      await render(macIcon(double), double, double),
-    )
-  }
-  execFileSync('iconutil', ['-c', 'icns', iconset, '-o', join(build, 'icon.icns')])
-  rmSync(resolve(iconset, '..'), { recursive: true, force: true })
+  iconComposer(join(build, 'icon.icon'))
 
   // Linux takes the macOS tile, which has the rounded corners its desktops expect.
   writeFileSync(join(build, 'icon.png'), await render(macIcon(1024), 1024, 1024))
