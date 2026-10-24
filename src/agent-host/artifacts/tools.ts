@@ -2,7 +2,7 @@
 // limits, and the store calls behind them. See docs/design/artifacts.md, The artifacts service.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
-import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS } from '@shared/artifacts'
+import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { countPages } from './pages'
 import { ArtifactError, type ArtifactStore, type Editor } from './store'
 
@@ -314,18 +314,6 @@ function args(value: unknown, allowed: readonly string[]): Args {
   return o as Args
 }
 
-/** Longer than `max` as JSON Schema counts length: in code points, not UTF-16 units. */
-function longer(text: string, max: number): boolean {
-  if (text.length <= max) return false
-  let n = 0
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i)
-    if (c >= 0xd800 && c <= 0xdbff) i++
-    if (++n > max) return true
-  }
-  return false
-}
-
 function invalid(message: string): ToolError {
   return new ToolError('invalid', message)
 }
@@ -515,21 +503,30 @@ export class ArtifactTools {
     }
   }
 
-  /** Refuses a write once the session made 60 in the last minute. */
-  private allowWrite(caller: Caller): void {
+  /** Runs a write as one of the session's 60 a minute; a write that fails gives its slot back. */
+  private async limited<T>(caller: Caller, write: () => Promise<T>): Promise<T> {
+    const at = this.allowWrite(caller)
+    try {
+      return await write()
+    } catch (error) {
+      const recent = this.writes.get(caller.sessionId) ?? []
+      const i = recent.indexOf(at)
+      if (i >= 0) recent.splice(i, 1)
+      throw error
+    }
+  }
+
+  /** Takes a slot as the write starts, so calls that run at once all count; 60 a minute. */
+  private allowWrite(caller: Caller): number {
     const now = this.now()
     const recent = (this.writes.get(caller.sessionId) ?? []).filter((at) => at > now - MINUTE_MS)
     this.writes.set(caller.sessionId, recent)
-    if (recent.length < WRITES_PER_MINUTE) return
-    const wait = Math.max(1, Math.ceil((recent[0]! + MINUTE_MS - now) / 1000))
-    throw new ToolError('rate_limited', `Too many changes in a minute. Wait ${wait} s.`)
-  }
-
-  /** Counts a write that was made; a refused one does not count. */
-  private countWrite(caller: Caller): void {
-    const recent = this.writes.get(caller.sessionId) ?? []
-    recent.push(this.now())
-    this.writes.set(caller.sessionId, recent)
+    if (recent.length >= WRITES_PER_MINUTE) {
+      const wait = Math.max(1, Math.ceil((recent[0]! + MINUTE_MS - now) / 1000))
+      throw new ToolError('rate_limited', `Too many changes in a minute. Wait ${wait} s.`)
+    }
+    recent.push(now)
+    return now
   }
 
   /** The session left: its writes need no counting. */
@@ -596,18 +593,22 @@ export class ArtifactTools {
 
   private async create(caller: Caller, o: Args): Promise<CallToolResult> {
     const input = { title: title(o), html: html(o), note: note(o) }
-    this.allowWrite(caller)
-    const pages = countPages(input.html)
-    const editor = this.editor(caller)
-    const { id, version } = await this.deps.store.create({
-      ...input,
-      project: caller.project,
-      sessionId: caller.sessionId,
-      pages,
-      ...(editor ? { editor } : {}),
+    return this.limited(caller, async () => {
+      const pages = countPages(input.html)
+      const editor = this.editor(caller)
+      const { id, version } = await this.deps.store.create({
+        ...input,
+        project: caller.project,
+        sessionId: caller.sessionId,
+        pages,
+        ...(editor ? { editor } : {}),
+      })
+      return result(`Created ${id} version ${version}, ${pagesText(pages)}.`, {
+        id,
+        version,
+        pages,
+      })
     })
-    this.countWrite(caller)
-    return result(`Created ${id} version ${version}, ${pagesText(pages)}.`, { id, version, pages })
   }
 
   private async read(caller: Caller, o: Args): Promise<CallToolResult> {
@@ -646,13 +647,13 @@ export class ArtifactTools {
     if (o.title !== undefined) {
       // A rename makes no version, so base_version and a note have nothing to apply to.
       const newTitle = title(o)
-      this.allowWrite(caller)
       const editor = this.editor(caller)
-      await store.rename(artifactId, newTitle, {
-        project: caller.project,
-        ...(editor ? { editor } : {}),
-      })
-      this.countWrite(caller)
+      await this.limited(caller, () =>
+        store.rename(artifactId, newTitle, {
+          project: caller.project,
+          ...(editor ? { editor } : {}),
+        }),
+      )
       const { version } = await store.get(artifactId, { project: caller.project })
       return result(
         `Renamed ${artifactId} to "${newTitle}"; it stays at version ${version.version}.`,
@@ -666,43 +667,41 @@ export class ArtifactTools {
     if (o.base_version === undefined) throw invalid('base_version is needed with html or edits.')
     const baseVersion = wholeNumber(o, 'base_version', 1)
     const versionNote = note(o)
-    let next: string
-    if (o.html !== undefined) {
-      next = html(o)
-      this.allowWrite(caller)
-    } else {
-      const list = edits(o)
-      this.allowWrite(caller)
-      // The version first, so a stale one is refused without reading the HTML.
-      const { artifact } = await store.get(artifactId, { project: caller.project })
-      if (artifact.head !== baseVersion) {
-        throw new ArtifactError('conflict', 'Not the latest version', {
-          version: artifact.head,
-          deleted: false,
-        })
+    const replaced = o.html === undefined ? undefined : html(o)
+    const list = replaced === undefined ? edits(o) : []
+    return this.limited(caller, async () => {
+      let next = replaced
+      if (next === undefined) {
+        // The version first, so a stale one is refused without reading the HTML.
+        const { artifact } = await store.get(artifactId, { project: caller.project })
+        if (artifact.head !== baseVersion) {
+          throw new ArtifactError('conflict', 'Not the latest version', {
+            version: artifact.head,
+            deleted: false,
+          })
+        }
+        const base = await store.read(artifactId, { project: caller.project, version: baseVersion })
+        next = applyEdits(base.html, list)
+        const bytes = Buffer.byteLength(next, 'utf8')
+        if (bytes > HTML_BYTES) throw tooLarge(bytes)
       }
-      const base = await store.read(artifactId, { project: caller.project, version: baseVersion })
-      next = applyEdits(base.html, list)
-      const bytes = Buffer.byteLength(next, 'utf8')
-      if (bytes > HTML_BYTES) throw tooLarge(bytes)
-    }
-    const pages = countPages(next)
-    const editor = this.editor(caller)
-    const { version } = await store.write({
-      id: artifactId,
-      baseVersion,
-      html: next,
-      pages,
-      author: caller.sessionId,
-      note: versionNote,
-      project: caller.project,
-      ...(editor ? { editor } : {}),
-    })
-    this.countWrite(caller)
-    return result(`Updated ${artifactId} to version ${version}, ${pagesText(pages)}.`, {
-      id: artifactId,
-      version,
-      pages,
+      const pages = countPages(next)
+      const editor = this.editor(caller)
+      const { version } = await store.write({
+        id: artifactId,
+        baseVersion,
+        html: next,
+        pages,
+        author: caller.sessionId,
+        note: versionNote,
+        project: caller.project,
+        ...(editor ? { editor } : {}),
+      })
+      return result(`Updated ${artifactId} to version ${version}, ${pagesText(pages)}.`, {
+        id: artifactId,
+        version,
+        pages,
+      })
     })
   }
 
@@ -735,9 +734,9 @@ export class ArtifactTools {
 
   private async delete(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
-    this.allowWrite(caller)
-    const { purgeAt } = await this.deps.store.delete(artifactId, { project: caller.project })
-    this.countWrite(caller)
+    const { purgeAt } = await this.limited(caller, () =>
+      this.deps.store.delete(artifactId, { project: caller.project }),
+    )
     return result(
       `Moved ${artifactId} to Recently deleted; the user can restore it until ${iso(purgeAt)}.`,
       { id: artifactId, purge_at: iso(purgeAt) },
@@ -764,17 +763,17 @@ export class ArtifactTools {
     const artifactId = id(o)
     const version = wholeNumber(o, 'version', 1)
     const baseVersion = wholeNumber(o, 'base_version', 1)
-    this.allowWrite(caller)
     const editor = this.editor(caller)
-    const restored = await this.deps.store.restore({
-      id: artifactId,
-      version,
-      baseVersion,
-      author: caller.sessionId,
-      project: caller.project,
-      ...(editor ? { editor } : {}),
-    })
-    this.countWrite(caller)
+    const restored = await this.limited(caller, () =>
+      this.deps.store.restore({
+        id: artifactId,
+        version,
+        baseVersion,
+        author: caller.sessionId,
+        project: caller.project,
+        ...(editor ? { editor } : {}),
+      }),
+    )
     return result(`Restored version ${version} of ${artifactId} as version ${restored.version}.`, {
       id: artifactId,
       version: restored.version,

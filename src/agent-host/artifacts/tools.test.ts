@@ -484,6 +484,18 @@ describe('the artifacts tools', () => {
     expect(later.value).toEqual({ id, version: 2, pages: 0 })
   })
 
+  it('take no more than 60 writes a minute when they arrive at once', async () => {
+    const { call } = setup()
+    const calls = Array.from({ length: WRITES_PER_MINUTE + 1 }, (_, i) =>
+      call(A, 'create_artifact', { title: `Canvas ${i}`, html: '<p>x</p>' }),
+    )
+    const codes = (await Promise.all(calls)).map(({ result, value }) =>
+      result.isError ? value.code : 'created',
+    )
+    expect(codes.filter((code) => code === 'created')).toHaveLength(WRITES_PER_MINUTE)
+    expect(codes.filter((code) => code === 'rate_limited')).toHaveLength(1)
+  })
+
   it('count only the writes that were made', async () => {
     const { call, create, clock } = setup()
     for (let i = 0; i < WRITES_PER_MINUTE; i++) {
