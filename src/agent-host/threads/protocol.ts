@@ -33,6 +33,7 @@ export type ThreadRequest =
   | { id: number; op: 'write'; sessionId: string; change: ThreadWrite }
   | { id: number; op: 'remove'; sessionIds: string[] }
   | { id: number; op: 'blob'; sessionId: string; hash: string }
+  | { id: number; op: 'mentions'; sessionId: string; text: string }
   | { id: number; op: 'artifact'; call: ArtifactCall }
   | { id: number; op: 'close' }
 

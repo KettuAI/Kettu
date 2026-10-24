@@ -228,6 +228,9 @@ function prepareAll(db: DatabaseSync) {
       'INSERT OR IGNORE INTO blobs (session_id, hash, mime, data) VALUES (?, ?, ?, ?)',
     ),
     blob: sql('SELECT mime, data FROM blobs WHERE session_id = ? AND hash = ?'),
+    mentions: sql(
+      "SELECT 1 FROM entries WHERE session_id = ? AND kind IN ('agent', 'user') AND instr(json, ?) > 0 LIMIT 1",
+    ),
     artifact: sql(
       'SELECT id, project, title, head, session_id, created_at, updated_at, deleted_at FROM artifacts WHERE id = ?',
     ),
@@ -637,6 +640,17 @@ export class ThreadDb {
       const row = sql.blob.get(sessionId, hash)
       return row ? { hash, mime: String(row.mime), data: row.data as Uint8Array } : null
     }, null)
+  }
+
+  /**
+   * Whether an agent or user entry of the session holds `text`. Entries are stored as JSON, so
+   * the text is looked for as JSON writes it inside a string.
+   */
+  mentions(sessionId: string, text: string): boolean {
+    return this.guard(
+      (sql) => sql.mentions.get(sessionId, JSON.stringify(text).slice(1, -1)) !== undefined,
+      false,
+    )
   }
 
   /** Drops the threads of these sessions, with their images, and returns the space. */

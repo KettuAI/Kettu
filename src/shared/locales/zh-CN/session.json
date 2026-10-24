@@ -267,5 +267,11 @@
     "alt": "SVG 图片",
     "showSource": "查看源码",
     "showPreview": "查看预览"
+  },
+  "media": {
+    "openImage": "打开图片 {{name}}",
+    "notFound": "在 {{path}} 找不到。",
+    "cannotRead": "无法读取 {{name}}",
+    "unsupported": "这种图片格式无法在这里显示。"
   }
 }

@@ -348,6 +348,33 @@ describe('the thread database', () => {
     db.close()
   })
 
+  it('tells whether an agent or user entry holds a text, as written', () => {
+    const db = open()
+    const shot = 'C:\\Users\\me\\Application Support\\"shot".png'
+    const reply: ThreadEntry = {
+      kind: 'agent',
+      id: 'a',
+      markdown: `Saved:\n\n![shot](${shot})`,
+      attachments: [],
+      streaming: false,
+    }
+    db.write('s1', {
+      head,
+      entries: [
+        { pos: 0, entry: user('look at ~/a b.png') },
+        { pos: 1, entry: reply },
+      ],
+    })
+    db.write('s2', { head, entries: [{ pos: 0, entry: tool('/tmp/x.png') }] })
+    expect(db.mentions('s1', shot)).toBe(true)
+    expect(db.mentions('s1', '~/a b.png')).toBe(true)
+    expect(db.mentions('s1', '/tmp/y.png')).toBe(false)
+    // A tool call's text is not where a reply names its files.
+    expect(db.mentions('s2', '/tmp/x.png')).toBe(false)
+    expect(db.mentions('missing', shot)).toBe(false)
+    db.close()
+  })
+
   it('removes threads with their images', () => {
     const file = tempFile()
     const db = open(file)

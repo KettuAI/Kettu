@@ -60,8 +60,8 @@ Typed in `src/shared/host-control.ts`.
 | host → main | `host:badge`           | `count`: pending permission requests across all sessions, whenever it changes                                                                                 |
 | host → main | `host:busy`            | `requestId`, and the sessions that are `running` or `awaiting_permission`                                                                                     |
 | host → main | `host:granted`         | `requestId`, once the host holds the grants; main answers the renderer only then, and gives up after 5 s                                                      |
-| host → main | `host:media-grant`     | `token`, `path`, `mimeType`, `size`, `mtimeMs`, `sessionId`: a file main may serve ([media](./media.md#granting-a-file))                                      |
-| host → main | `host:media-revoke`    | `sessionId`, or none for all: the grants to drop when a session closes or is deleted                                                                          |
+| host → main | `host:media-grant`     | `token`, `path`, `mimeType`, `sessionId`: a file main may serve ([media](./media.md#granting-a-file))                                                         |
+| host → main | `host:media-revoke`    | `sessionId`, or null for all: the grants to drop when a session is deleted, or a project or every session removed                                             |
 | host → main | `host:log`             | `level`, `message`: every entry of the host log, such as a corrupt state file                                                                                 |
 | host → main | `host:stopped`         | none; sent just before a clean exit                                                                                                                           |
 

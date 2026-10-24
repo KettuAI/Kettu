@@ -4,7 +4,7 @@
 import { open, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
-import { protocol, type Session } from 'electron'
+import { protocol, type CustomScheme, type Session } from 'electron'
 import type { ArtifactContentResult } from '@shared/host-control'
 import { createLogger } from '../log'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
@@ -18,20 +18,21 @@ const log = createLogger('artifacts')
  */
 export const CONTENT_WAIT_MS = 2_000
 
-/** Must run before the app is ready. A standard scheme gives each host its own origin and storage. */
+/** A standard scheme gives each host its own origin and storage. */
+export const artifactScheme: CustomScheme = {
+  scheme: ARTIFACT_SCHEME,
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    stream: true,
+    codeCache: true,
+  },
+}
+
+/** Must run before the app is ready, and only once: the app registers its schemes together. */
 export function registerArtifactScheme(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: ARTIFACT_SCHEME,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        stream: true,
-        codeCache: true,
-      },
-    },
-  ])
+  protocol.registerSchemesAsPrivileged([artifactScheme])
 }
 
 export interface ArtifactSource {

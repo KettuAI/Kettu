@@ -540,6 +540,16 @@ export function createValidators(platform: Platform): Validators {
     },
     'git.currentPullRequest': project,
     'git.tools': none,
+    'media.open': (params) => {
+      const o = fields(params)
+      const written = string(o, 'path', PATH_CHARS)
+      if (written.includes('\0')) throw invalidParams('path contains a NUL character')
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        path: written,
+        sessionId: sessionId(o),
+      }
+    },
     'usage.summary': (params) => {
       const o = fields(params)
       if (o.scope !== 'computer' && o.scope !== 'overbench') {

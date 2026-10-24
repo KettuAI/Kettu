@@ -16,6 +16,7 @@ import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/t
 import { openSettings } from '@renderer/stores/view'
 import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
+import { SessionIdContext } from './media/grants'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { PlanBar } from './plan-bar'
 import { QueueStack } from './queue-stack'
@@ -136,7 +137,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       <SessionHeader summary={summary} />
       <ProjectPathContext value={summary.projectPath}>
-        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+        <SessionIdContext value={sessionId}>
+          <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+        </SessionIdContext>
       </ProjectPathContext>
       {/* Leaves the width the thread's scrollbar takes, so the composer lines up with its column. */}
       <div style={{ paddingRight: gutter }}>

@@ -1,16 +1,17 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, powerMonitor, session } from 'electron'
+import { app, BrowserWindow, powerMonitor, protocol, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AgentHost } from './agent-host'
 import { Artifacts, disableDnsPrefetching } from './artifacts'
-import { registerArtifactScheme } from './artifacts/protocol'
+import { artifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { broadcast } from './events'
 import { locale as currentLocale, setLocale } from './i18n'
 import { registerIpcHandlers } from './ipc'
+import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
 import { notifyAttention } from './notifications'
@@ -59,7 +60,8 @@ if (devUserData) {
   log.info(`Development run: data in ${devUserData}`)
 }
 
-registerArtifactScheme()
+// Before the app is ready, and only once.
+protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
 disableDnsPrefetching()
 
 async function start(): Promise<void> {
@@ -96,6 +98,7 @@ async function start(): Promise<void> {
   configureWindows({ state: windowState, perf, systemLocale })
   setBadgeEnabled(settings.get().notifications.badge)
 
+  const mediaGrants = new MediaGrants()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
@@ -103,12 +106,15 @@ async function start(): Promise<void> {
     onBadge: setBadgeCount,
     onProjects: (paths) => terminalHost.setProjects(paths),
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
+    onMediaGrant: (grant) => mediaGrants.add(grant),
+    onMediaRevoke: (sessionId) => mediaGrants.revoke(sessionId),
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
     contentDir: join(userDataPath, 'artifacts', 'content'),
   })
   await artifacts.install(session.defaultSession)
+  serveMedia(session.defaultSession, mediaGrants, isRendererUrl)
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,
