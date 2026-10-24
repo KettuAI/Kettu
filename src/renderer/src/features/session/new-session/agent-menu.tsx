@@ -293,13 +293,15 @@ function RailRow({ status }: { status: AgentStatus }) {
   const trailing =
     need === 'install' || need === 'adapter'
       ? t('newSession.agentMenu.notInstalled')
-      : need === 'installing'
-        ? t('newSession.agentMenu.installing')
-        : need === 'failed'
-          ? t('newSession.agentMenu.failed')
-          : need === 'sign-in'
-            ? t('newSession.agentMenu.signIn')
-            : null
+      : need === 'setup'
+        ? t('newSession.agentMenu.setsUp')
+        : need === 'installing'
+          ? t('newSession.agentMenu.installing')
+          : need === 'failed'
+            ? t('newSession.agentMenu.failed')
+            : need === 'sign-in'
+              ? t('newSession.agentMenu.signIn')
+              : null
 
   return (
     <TabsTrigger value={status.id} className="justify-start gap-2">
@@ -417,6 +419,14 @@ function Pane({
     } else if (need === 'adapter') {
       notice = (
         <Notice text={t('newSession.agentMenu.installsOnFirstUse', { agent: name })}>
+          {install}
+        </Notice>
+      )
+    } else if (need === 'setup') {
+      notice = (
+        <Notice
+          text={t('newSession.agentMenu.setsUpLong', { agent: name, command: status.cli?.command })}
+        >
           {install}
         </Notice>
       )
