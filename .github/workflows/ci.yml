@@ -13,8 +13,9 @@ concurrency:
 
 jobs:
   # The name is the check the ruleset on main requires. A skipped job still reports a check, which
-  # counts as passing, so a draft's skipped run takes another name: under this one, a pull request
-  # marked ready could merge before the run that marking it ready starts has reported.
+  # counts as passing, so a draft's skipped run must not be named CI, or a pull request marked ready
+  # could merge before the run that marking it ready starts has reported. GitHub shows a skipped
+  # job's name unevaluated; evaluated, it would read `CI (draft)`. Neither is CI.
   check:
     name: ${{ github.event.pull_request.draft && 'CI (draft)' || 'CI' }}
     if: ${{ !github.event.pull_request.draft }}
