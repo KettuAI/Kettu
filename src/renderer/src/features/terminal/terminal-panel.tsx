@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DragDropProvider, KeyboardSensor, PointerSensor, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
-import { Maximize2Icon, Minimize2Icon, PlusIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
+import {
+  Maximize2Icon,
+  Minimize2Icon,
+  PencilIcon,
+  PlusIcon,
+  SquareTerminalIcon,
+  XIcon,
+} from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -336,9 +343,13 @@ function TerminalTab({
             renameAfterMenu.current = true
           }}
         >
+          <PencilIcon />
           {t('tab.rename')}
         </ContextMenuItem>
-        <ContextMenuItem onClick={onClose}>{t('common:actions.close')}</ContextMenuItem>
+        <ContextMenuItem onClick={onClose}>
+          <XIcon />
+          {t('common:actions.close')}
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )

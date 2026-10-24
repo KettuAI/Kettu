@@ -4,6 +4,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   EllipsisIcon,
+  HistoryIcon,
   PlusIcon,
   ShapesIcon,
 } from 'lucide-react'
@@ -406,7 +407,12 @@ function ProjectGroup({
 /** A project's actions, one list for its row's context menu and its More button. */
 function ProjectMenuItems({ onImport }: { onImport: () => void }) {
   const { t } = useTranslation('sidebar')
-  return <DropdownMenuItem onClick={onImport}>{t('project.importSessions')}</DropdownMenuItem>
+  return (
+    <DropdownMenuItem onClick={onImport}>
+      <HistoryIcon />
+      {t('project.importSessions')}
+    </DropdownMenuItem>
+  )
 }
 
 /** The list is one Tab stop; the arrow keys move between rows. */

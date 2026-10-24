@@ -6,6 +6,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CircleIcon,
+  CopyIcon,
   FilePenIcon,
   FileTextIcon,
   GlobeIcon,
@@ -182,9 +183,11 @@ export const ToolCard = memo(function ToolCard({
         <ContextMenuItem
           onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
         >
+          <SquareTerminalIcon />
           {t('tool.runInTerminal')}
         </ContextMenuItem>
         <ContextMenuItem onClick={() => void navigator.clipboard.writeText(command)}>
+          <CopyIcon />
           {t('tool.copyCommand')}
         </ContextMenuItem>
       </ContextMenuContent>
