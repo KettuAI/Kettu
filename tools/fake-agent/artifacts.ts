@@ -47,6 +47,10 @@ async function say(turn: Turn, text: string): Promise<void> {
  * reads it back; `/artifacts --read <id>` reads that artifact. Each call shows as a tool call
  * named as Claude Code names MCP tools, and the reply lists what each call returned. With
  * `--until-cancel` the turn runs on after the reply until it is cancelled, whatever the pace.
+ *
+ * Every call names its session in `_meta`, as OpenCode's do. `--child <id>` makes the calls a
+ * subagent's: its tool calls come on this session with OpenCode's child-session `_meta`, and the
+ * calls name the child. `--meta <id>` names another session instead, and `--meta none` none.
  */
 export const artifacts: Scenario = async (turn) => {
   const server = overbench(turn.session.mcpServers)
@@ -64,9 +68,17 @@ export const artifacts: Scenario = async (turn) => {
     new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }),
   )
   const lines: string[] = []
+  const { child } = turn.options
+  const named = turn.options.meta ?? child ?? turn.session.id
+  const meta = named === 'none' ? undefined : { 'ai.opencode/sessionID': named }
+  // OpenCode sends a subagent's updates on the session it runs under, marked as the child's.
+  const childMeta = child
+    ? { 'opencode/child-session': { id: child, parentID: turn.session.id, depth: 1 } }
+    : undefined
   let n = 0
   const call: Call = async (name, args) => {
-    const toolCallId = `${server.name}-${turn.session.turns}-${++n}`
+    const id = `${server.name}-${turn.session.turns}-${++n}`
+    const toolCallId = child ? `${child}:${id}` : id
     await turn.send({
       sessionUpdate: 'tool_call',
       toolCallId,
@@ -74,17 +86,31 @@ export const artifacts: Scenario = async (turn) => {
       kind: 'other',
       status: 'in_progress',
       rawInput: args,
+      ...(childMeta ? { _meta: childMeta } : {}),
     })
-    const result = await client.callTool({ name, arguments: args })
-    const content = result.content as { type: string; text?: string }[]
-    const text = content.find((block) => block.type === 'text')?.text ?? ''
-    const value = (result.structuredContent ?? {}) as Record<string, unknown>
-    const isError = result.isError === true
+    let text: string
+    let value: Record<string, unknown> = {}
+    let isError: boolean
+    try {
+      const result = await client.callTool({
+        name,
+        arguments: args,
+        ...(meta ? { _meta: meta } : {}),
+      })
+      const content = result.content as { type: string; text?: string }[]
+      text = content.find((block) => block.type === 'text')?.text ?? ''
+      value = (result.structuredContent ?? {}) as Record<string, unknown>
+      isError = result.isError === true
+    } catch (error) {
+      text = (error as Error).message
+      isError = true
+    }
     await turn.send({
       sessionUpdate: 'tool_call_update',
       toolCallId,
       status: isError ? 'failed' : 'completed',
       content: [{ type: 'content', content: { type: 'text', text } }],
+      ...(childMeta ? { _meta: childMeta } : {}),
     })
     lines.push(`${name}: ${text}`)
     return { text, value, isError }

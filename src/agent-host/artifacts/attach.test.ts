@@ -25,18 +25,26 @@ async function setup(options: Parameters<typeof startTestHost>[0] = {}) {
   const port = t.connect()
   // Every attach's servers, as the host handed them to the agent.
   const attached: { sessionId: string; servers: McpServer[] }[] = []
-  const servers = t.host.artifactService.servers.bind(t.host.artifactService)
-  vi.spyOn(t.host.artifactService, 'servers').mockImplementation((sessionId, project, name) => {
-    const given = servers(sessionId, project, name)
+  const service = t.host.artifactService
+  const servers = service.servers.bind(service)
+  vi.spyOn(service, 'servers').mockImplementation((sessionId, project) => {
+    const given = servers(sessionId, project)
     attached.push({ sessionId, servers: given })
     return given
   })
-  const create = async (projectPath = t.project) => {
+  const folderServers = service.folderServers.bind(service)
+  vi.spyOn(service, 'folderServers').mockImplementation((process, folder, sessionId) => {
+    const given = folderServers(process, folder, sessionId)
+    attached.push({ sessionId, servers: given })
+    return given
+  })
+  const create = async (projectPath = t.project) => (await start(projectPath)).id
+  const start = async (projectPath = t.project) => {
     const summary = await port.request('sessions.create', { agentId: 'fake-agent', projectPath })
     await port.open(summary.id)
-    return summary.id
+    return summary
   }
-  return { t, port, attached, create }
+  return { t, port, attached, create, start }
 }
 
 function turnEnds(port: TestPort, sessionId: string): number {
@@ -218,16 +226,69 @@ describe('the artifacts service in sessions', () => {
     )
   })
 
-  it('names the service per session for an agent that keeps one server of a name per folder', async () => {
-    const { t, port, create } = await setup()
-    vi.spyOn(t.host.agents, 'mcpServersByName').mockReturnValue(true)
-    const sessionId = await create()
-    await run(port, sessionId, '/artifacts')
-    const name = `overbench-${sessionId.replace(/-/g, '').slice(0, 12)}`
-    const tool = port
-      .entries(sessionId)
-      .find((entry) => entry.kind === 'tool' && entry.title.includes('create_artifact'))
-    expect(tool).toMatchObject({ title: `mcp__${name}__create_artifact`, status: 'completed' })
+  describe('for an agent that keeps one server of a name per folder', () => {
+    async function folders() {
+      const context = await setup()
+      vi.spyOn(context.t.host.agents, 'mcpServersByName').mockReturnValue(true)
+      const other = path.join(context.t.dir, 'other')
+      await mkdir(other)
+      await context.port.request('projects.add', { path: other })
+      return { ...context, other: await realpath(other) }
+    }
+
+    it('passes one token per folder and tells the sessions there apart by their calls', async () => {
+      const { port, attached, start, other } = await folders()
+      const a = await start()
+      const b = await start()
+      const c = await start(other)
+      const [first, second, third] = attached.map((x) => x.servers)
+      expect(first).toEqual(second)
+      expect(first).toEqual([expect.objectContaining({ name: 'overbench' })])
+      expect(tokenOf(third!)).not.toBe(tokenOf(first!))
+
+      expect(await run(port, a.id, '/artifacts')).toMatch(/create_artifact: Created/)
+      expect(await run(port, b.id, '/artifacts')).toMatch(/to version 2/)
+      // A subagent's call names its own session, which counts as the one it runs under.
+      expect(await run(port, b.id, '/artifacts --child sub-1')).toMatch(/to version 3/)
+      const [artifact] = await port.request('artifacts.list', {})
+      expect(artifact).toMatchObject({ sessionId: b.id, project: a.projectPath })
+      const versions = await port.request('artifacts.versions', { id: artifact!.id })
+      expect(versions.map((v) => v.author)).toEqual([b.id, b.id, a.id])
+      const tool = port
+        .entries(a.id)
+        .find((entry) => entry.kind === 'tool' && entry.title.includes('create_artifact'))
+      expect(tool).toMatchObject({ title: 'mcp__overbench__create_artifact' })
+
+      // No session id, one OverBench does not know, and one of another folder.
+      const foreign = port.thread(c.id).session.acpSessionId
+      expect(foreign).toMatch(/^fake-/)
+      for (const meta of ['none', 'unknown-session', foreign]) {
+        expect(await run(port, b.id, `/artifacts --meta ${meta}`)).toMatch(
+          /^list_artifacts: .*names no session of this agent in this folder/,
+        )
+      }
+    })
+
+    it('ends the token when the last session there leaves memory, or the agent exits', async () => {
+      const { t, port, attached, create } = await folders()
+      const a = await create()
+      const b = await create()
+      const url = t.host.artifactService.url!
+      const shared = tokenOf(attached[0]!.servers)
+      await port.request('sessions.close', { sessionId: a })
+      expect(await listTools(url, shared)).toBe(200)
+      await port.request('sessions.close', { sessionId: b })
+      expect(await listTools(url, shared)).toBe(401)
+
+      await run(port, a, '/artifacts')
+      const next = tokenOf(attached.at(-1)!.servers)
+      expect(next).not.toBe(shared)
+      expect(await listTools(url, next)).toBe(200)
+      ;(t.launcher as InProcessLauncher).crash()
+      await vi.waitFor(async () => expect(await listTools(url, next)).toBe(401))
+      expect(await run(port, a, '/artifacts')).toMatch(/to version 2/)
+      expect(tokenOf(attached.at(-1)!.servers)).not.toBe(next)
+    })
   })
 
   it('passes nothing to an agent without MCP over HTTP', async () => {

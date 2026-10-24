@@ -11,7 +11,7 @@ import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
-import { ArtifactService, SERVICE_NAME, sessionServiceName } from './artifacts/service'
+import { ArtifactService } from './artifacts/service'
 import { ArtifactError, ArtifactStore, versionSummary } from './artifacts/store'
 import {
   AgentManager,
@@ -185,6 +185,7 @@ export class AgentHost {
       store: this.artifacts,
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
+      sessionOf: (process, id) => this.sessions.sessionOf(process, id),
       log,
       appVersion: options.appVersion,
     })
@@ -243,14 +244,10 @@ export class AgentHost {
       threads: this.threads,
       attachments: this.attachments,
       mcp: {
-        servers: (sessionId, record) =>
-          this.artifactService.servers(
-            sessionId,
-            record.projectPath,
-            this.agents.mcpServersByName(record.agentId)
-              ? sessionServiceName(sessionId)
-              : SERVICE_NAME,
-          ),
+        servers: (sessionId, record, connection) =>
+          this.agents.mcpServersByName(record.agentId)
+            ? this.artifactService.folderServers(connection, record.projectPath, sessionId)
+            : this.artifactService.servers(sessionId, record.projectPath),
         detached: (sessionId) => {
           this.artifactService.revoke(sessionId)
           this.artifacts.stopEditing(sessionId)

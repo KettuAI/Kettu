@@ -151,8 +151,8 @@ export interface SessionEvents {
 
 /** The artifacts service, as the sessions pass it to their agents. */
 export interface SessionMcp {
-  /** What an attach of the session passes in `mcpServers`, with a token made for it. */
-  servers(sessionId: string, record: SessionRecord): McpServer[]
+  /** What an attach of the session through `connection` passes in `mcpServers`. */
+  servers(sessionId: string, record: SessionRecord, connection: AgentConnection): McpServer[]
   /** The session left memory, closed, released or deleted: its token ends. */
   detached(sessionId: string): void
   turnEnded(sessionId: string): void
@@ -434,6 +434,18 @@ export class SessionManager {
     const record = live?.record ?? this.records.get(sessionId)
     if (!record) return undefined
     return record.customTitle ?? (live ? live.thread.session.title : record.title)
+  }
+
+  /**
+   * The session in memory attached through `connection` whose agent session is `id`, or the one
+   * the agent's subagent `id` runs under.
+   */
+  sessionOf(connection: object, id: string): string | null {
+    for (const live of this.live.values()) {
+      if (live.connection !== connection || !live.connection) continue
+      if (live.record.acpSessionId === live.connection.rootOf(id)) return live.id
+    }
+    return null
   }
 
   /** The session's running turn, for telling it from a later one; null between turns. */
@@ -947,7 +959,7 @@ export class SessionManager {
     runtime: AgentRuntime | null | undefined,
   ): McpServer[] {
     if (!this.deps.mcp || !runtime?.init.capabilities.mcpHttp) return []
-    return this.deps.mcp.servers(sessionId, record)
+    return this.deps.mcp.servers(sessionId, record, runtime.connection)
   }
 
   private dropLive(live: Live): void {
