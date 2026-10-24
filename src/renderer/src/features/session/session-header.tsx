@@ -76,18 +76,17 @@ export function SessionHeader({
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            // As tall as the text with no padding, the ring 1 px outside it; the margins make up
-            // the button's padding, so the text and the chevron stay put.
-            style={{ minWidth: Math.max(titleWidth - 14, 0) }}
-            className="mx-[7px] field-sizing-content h-5 rounded-[3px] bg-transparent p-0 text-control font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
+            // The ring's outer edge is the button's box (25 px tall, text 4 px in, 6 px radius), so
+            // the hover fill and the ring match and the text does not move.
+            style={{ minWidth: Math.max(titleWidth - 5, 0) }}
+            className="mx-[5.5px] field-sizing-content h-5 rounded-[3.5px] bg-transparent px-[1.5px] py-0 text-control font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <Button
             ref={titleButton}
             variant="ghost"
-            size="compact"
             title={`${title} · ${agentName(summary.agentId)}`}
-            className="min-w-0 shrink px-1.5"
+            className="mx-[3px] h-[25px] min-w-0 shrink rounded-[6px] px-[3px] text-control focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
             onClick={() => {
               measureTitle()
               rename.start()
