@@ -209,7 +209,8 @@
     "noAgent": "暂时没有可以启动的 Agent，请先安装一个。",
     "noAgentNode_other": "暂时没有可以启动的 Agent：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
     "setUpAgents": "设置 Agent…",
-    "recentLabel": "最近的会话",
+    "recentArtifacts": "最近的 Artifacts",
+    "viewAll": "查看全部",
     "agentMenu": {
       "label": "Agent 和模型",
       "search": "搜索 Agent 和模型",

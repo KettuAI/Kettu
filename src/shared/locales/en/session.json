@@ -223,7 +223,8 @@
     "noAgentNode_one": "No agent can start yet: {{agents, list}} needs Node.js 22 or later.",
     "noAgentNode_other": "No agent can start yet: {{agents, list}} need Node.js 22 or later.",
     "setUpAgents": "Set up agents…",
-    "recentLabel": "Recent sessions",
+    "recentArtifacts": "Recent artifacts",
+    "viewAll": "View all",
     "agentMenu": {
       "label": "Agent and model",
       "search": "Search agents and models",
