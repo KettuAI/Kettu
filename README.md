@@ -70,6 +70,7 @@ It rests on one belief, **beauty is productivity**:
 - [ ] M0 accepted on all three platforms
 - [ ] A changes panel for reviewing diffs
 - [ ] `@` file mentions and images in the composer
+- [ ] Images, audio and video in the thread and the Files pane
 - [ ] Search across sessions and a command palette
 - [ ] Signed and notarized builds
 

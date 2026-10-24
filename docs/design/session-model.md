@@ -185,8 +185,17 @@ type PermissionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_al
 type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled'
 type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: ContentRef }
 type ContentRef =
-  | { kind: 'image'; mimeType: string; data: string }
-  | { kind: 'link'; uri: string; name: string }
+  // `data` is base64; `uri` is where the agent says the same bytes live, such as a saved file.
+  | { kind: 'image'; mimeType: string; data: string; uri?: string }
+  | { kind: 'audio' | 'video'; mimeType: string; data: string; uri?: string }
+  | {
+      kind: 'link'
+      uri: string
+      name: string
+      mimeType?: string
+      size?: number
+      description?: string
+    }
   | { kind: 'attachment'; attachment: Attachment } // what the user added, see attachments
   | { kind: 'unsupported'; label: string }
 interface Attachment {
@@ -209,7 +218,9 @@ interface PlanItem {
 
 - `diff.oldText` is `null` for a new file.
 - A thought's `durationMs` is set when it closes: when the next entry arrives, or when the turn ends. It runs from the thought's first chunk, and replayed thoughts have none.
-- `ContentRef` with `kind: 'unsupported'` keeps content the UI cannot show yet (audio, embedded resources) visible as a labelled chip instead of dropping it.
+- `ContentRef` with `kind: 'unsupported'` keeps content the UI cannot show yet (embedded text resources, terminals, unknown blocks) visible as a labelled chip instead of dropping it.
+- An `image`, `audio` or `video` ref whose base64 `data` is over 20 MB becomes an `unsupported` ref naming its kind and size, so one block cannot swell the store and every snapshot ([media](./media.md#bytes-in-the-conversation)).
+- Files the agent names on disk, such as a video it rendered, are not part of the model: the renderer finds them in an entry's markdown, links and tool call locations, and reads them through the [media scheme](./media.md#the-media-scheme). Only the text that names them is stored.
 - Text from tools is normalized to LF line endings before it enters the model.
 
 ### Patches, snapshots and sequence numbers
@@ -291,7 +302,7 @@ Every `session/update` variant in ACP v1, and what the mapper does with it. "Cur
 | `session_message_chunk`     | Appends its content block to the `session_message` entry for `messageId`, or adds that entry.                                                                                                                                           |
 | anything else               | Ignored and recorded in diagnostics, so a newer agent never breaks the thread.                                                                                                                                                          |
 
-Content blocks map as follows: `text` to markdown, `image` to an image ref, `resource_link` to a link ref, and `audio` and `resource` to `unsupported` refs. In a user message replayed by `session/load`, the attachments the user sent map back to attachment refs ([replays](#replays)). In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
+Content blocks map as follows: `text` to markdown; `image` to an image ref with its `uri`, except one with no data and an `http(s)` `uri`, which becomes a link ref and is never loaded; `audio` to an audio ref; `resource_link` to a link ref with its `title` or `name`, `mimeType`, `size` and `description`; a `resource` whose blob has an image, audio or video MIME type to that kind of ref with the resource's `uri`; and any other `resource` to an `unsupported` ref. In a user message replayed by `session/load`, the attachments the user sent map back to attachment refs ([replays](#replays)). In tool content, `content` blocks map the same way, `diff` maps to a diff, and `terminal` cannot occur while the terminal capability is off.
 
 The mapper is the only code that knows ACP. ACP v2 will add a second mapper onto the same model.
 

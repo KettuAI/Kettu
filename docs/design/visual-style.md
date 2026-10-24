@@ -32,7 +32,7 @@ Claude Desktop is the benchmark for measurements and behavior, never for brand (
 
 - Take the plainest shape that names the meaning: `Folder` over `FolderOpen`, `SunMoon` over `Palette`, `Trash` over `Trash2`. Perspective, extra strokes and filled parts read heavier than their neighbours.
 - Outlines only. The one filled shape is the stop square of a running turn (`Square` with `fill-current`), the convention every media control shares. Status dots are shapes drawn with CSS, not icons.
-- One meaning, one icon, across the app ([vocabulary](#vocabulary)); one icon never stands for two meanings. The exceptions are pairs on either side of a value, where they cannot read as their other meaning: `Plus`, which also increases a stepped value beside `Minus`, and `ChevronRight`, which also steps to the next page beside `ChevronLeft` around a counter such as "3 / 5".
+- One meaning, one icon, across the app ([vocabulary](#vocabulary)); one icon never stands for two meanings. The exceptions are pairs on either side of a value, where they cannot read as their other meaning: `Plus`, which also increases a stepped value beside `Minus`, and `ChevronRight`, which also steps to the next page beside `ChevronLeft` around a counter such as "3 / 5", or to the next item beside `ChevronLeft` on either side of the media viewer's item (proposed with the [media design](./media.md); to be agreed).
 - When no Lucide shape fits, use a word. A near-miss icon is worse than a label.
 
 ### Weight
@@ -119,8 +119,8 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | A date or a range of dates                                        | `Calendar`               | `CalendarDays`, `CalendarRange`   |
 | An artifact, the Artifacts page                                   | `Shapes`                 |                                   |
 | Zoom to fit                                                       | `Scan`                   | `Fullscreen`, `Expand`            |
-| Previous page, beside a counter                                   | `ChevronLeft`            | `ArrowLeft`                       |
-| Next page, beside a counter                                       | `ChevronRight`           | `ArrowRight`                      |
+| Previous page beside a counter, previous item in the media viewer | `ChevronLeft`            | `ArrowLeft`                       |
+| Next page beside a counter, next item in the media viewer         | `ChevronRight`           | `ArrowRight`                      |
 
 ## Typography
 
@@ -191,7 +191,7 @@ Radius follows the element's role; the values are the [radius scale](./design-sy
 | -------------------------------------------- | -------------- |
 | Segments and their thumb, chips, inline code | `rounded-md`   |
 | Buttons, inputs, rows, menu items, tabs      | `rounded-lg`   |
-| Cards, the user bubble, code blocks          | `rounded-xl`   |
+| Cards, the user bubble, code blocks, media   | `rounded-xl`   |
 | The composer, menus, popovers                | `rounded-2xl`  |
 | Dialogs                                      | `rounded-3xl`  |
 | The send button, dots, counts, status pills  | `rounded-full` |
