@@ -62,14 +62,27 @@ describe('cacheExpiry', () => {
     })
   })
 
-  it("estimates Codex's from OpenAI's shortest documented retention", () => {
-    const codex = session('codex', { lastRequestAt: 1_000, ttl: null }, [model('gpt-5.5')])
-    const estimate = { lastRequestAt: 1_000, ttl: 5 * MINUTE, expiresAt: 1_000 + 5 * MINUTE }
-    expect(cacheExpiry(codex, chatGpt)).toEqual({ ...estimate, estimate: true })
-    expect(cacheExpiry(codex, { kind: 'api_key', label: 'OpenAI API key', email: null })).toEqual({
-      ...estimate,
-      estimate: true,
-    })
+  it("estimates Codex's from OpenAI's shortest documented retention for its model", () => {
+    const at = { lastRequestAt: 1_000, ttl: null }
+    const apiKey: AgentAccount = { kind: 'api_key', label: 'OpenAI API key', email: null }
+    for (const value of ['gpt-5.5', 'gpt-5.6-sol/high', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.10']) {
+      const codex = session('codex', at, [model(value)])
+      for (const account of [chatGpt, apiKey]) {
+        expect(cacheExpiry(codex, account)).toEqual({
+          lastRequestAt: 1_000,
+          ttl: 30 * MINUTE,
+          expiresAt: 1_000 + 30 * MINUTE,
+          estimate: true,
+        })
+      }
+    }
+    for (const config of [[model('gpt-5.4')], [model('gpt-5')], [model('o3')], []]) {
+      expect(cacheExpiry(session('codex', at, config), chatGpt)).toMatchObject({
+        ttl: 5 * MINUTE,
+        expiresAt: 1_000 + 5 * MINUTE,
+        estimate: true,
+      })
+    }
   })
 
   it('estimates nothing for Codex on another provider, or before it names its account', () => {
@@ -86,8 +99,15 @@ describe('cacheExpiry', () => {
 
   it("estimates OpenCode's only for a provider that documents one", () => {
     const at = { lastRequestAt: 1_000, ttl: null }
+    for (const value of ['openai/gpt-5.5', 'OpenAI/gpt-6-astra']) {
+      expect(cacheExpiry(session('opencode', at, [model(value)]), null)).toMatchObject({
+        ttl: 30 * MINUTE,
+        expiresAt: 1_000 + 30 * MINUTE,
+        estimate: true,
+      })
+    }
     for (const value of [
-      'openai/gpt-5.5',
+      'openai/gpt-5.4',
       'anthropic/claude-sonnet-5',
       'Anthropic/claude-opus-5',
     ]) {

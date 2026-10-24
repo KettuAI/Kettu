@@ -1,5 +1,5 @@
 // When a session's prompt cache expires: from the lifetime the agent's own transcript gives,
-// else estimated from the shortest retention the agent's provider documents.
+// else estimated from the shortest retention the agent's provider documents for its model.
 
 import type { AgentAccount } from './agent-host'
 import type { AgentId, ConfigOption, PromptCache, SessionView } from './thread'
@@ -8,13 +8,25 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 
 /**
- * The shortest time each provider documents keeping a prompt cache after its last use, checked on
- * 2026-10-23: OpenAI keeps a prefix for 5 to 10 minutes of inactivity, Anthropic for 5 minutes
- * unless a request asks for an hour.
+ * The shortest time a provider documents keeping a prompt cache after its last use, or null.
+ * Checked on 2026-10-24: OpenAI keeps it at least 30 minutes for GPT-5.5 and later, and 5 to 10
+ * minutes of inactivity for earlier models; Anthropic 5 minutes unless a request asks for an hour.
  */
-const DOCUMENTED_TTL: Readonly<Record<string, number>> = {
-  openai: 5 * MINUTE,
-  anthropic: 5 * MINUTE,
+function documentedTtl(provider: string | null, model: string | null): number | null {
+  if (provider === 'anthropic') return 5 * MINUTE
+  if (provider !== 'openai') return null
+  return model !== null && isGpt55OrLater(model) ? 30 * MINUTE : 5 * MINUTE
+}
+
+/**
+ * From the version in the model's name, after OpenCode's provider if any: "gpt-5.6-sol/high",
+ * "openai/gpt-6".
+ */
+function isGpt55OrLater(model: string): boolean {
+  const version = /^(?:[^/]+\/)?gpt-(\d+)(?:\.(\d+))?/i.exec(model)
+  if (!version) return false
+  const major = Number(version[1])
+  return major > 5 || (major === 5 && Number(version[2] ?? 0) >= 5)
 }
 
 export interface CacheExpiry {
@@ -64,9 +76,7 @@ export function expiryOf(
   if (!cache) return null
   const { lastRequestAt, ttl } = cache
   if (ttl !== null) return { lastRequestAt, ttl, expiresAt: lastRequestAt + ttl, estimate: false }
-  const provider = providerOf(agentId, model, account)
-  const documented =
-    provider !== null && Object.hasOwn(DOCUMENTED_TTL, provider) ? DOCUMENTED_TTL[provider]! : null
+  const documented = documentedTtl(providerOf(agentId, model, account), model)
   if (documented === null) return { lastRequestAt, ttl: null, expiresAt: null, estimate: false }
   return { lastRequestAt, ttl: documented, expiresAt: lastRequestAt + documented, estimate: true }
 }
