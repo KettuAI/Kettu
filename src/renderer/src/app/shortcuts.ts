@@ -74,7 +74,14 @@ export function useKeyboardShortcuts(): void {
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
+    // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
+    const offForwarded = window.overbench.app.onShortcut((key) =>
+      onKeyDown(new KeyboardEvent('keydown', { ...key, cancelable: true })),
+    )
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      offForwarded()
+    }
   }, [])
 }
 

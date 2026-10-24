@@ -678,6 +678,34 @@ describe('artifacts', () => {
     expect(await readdir(path.join(t.dir, 'artifacts', 'content'))).toEqual([])
   })
 
+  it("names a version's file for main's protocol, or says there is none", async () => {
+    const { t } = await setup()
+    const { id } = await t.host.artifacts.create({
+      project: t.project,
+      sessionId: 's1',
+      title: 'Report',
+      html: '<p>one</p>',
+      pages: 1,
+      note: null,
+    })
+    const answers = () => t.sent.filter((message) => message.type === 'host:artifact-content')
+    await t.host.artifactContent(1, id, null)
+    await t.host.artifactContent(2, id, 1)
+    await t.host.artifactContent(3, id, 2)
+    await t.host.artifactContent(4, 'art_01JB2QZ8X4K7M9N3P5R6S8T0VW', null)
+    const contentDir = path.join(t.dir, 'artifacts', 'content')
+    expect(answers()).toEqual([
+      {
+        type: 'host:artifact-content',
+        requestId: 1,
+        result: { kind: 'found', path: expect.stringContaining(contentDir), version: 1 },
+      },
+      expect.objectContaining({ requestId: 2, result: expect.objectContaining({ version: 1 }) }),
+      { type: 'host:artifact-content', requestId: 3, result: { kind: 'not_found' } },
+      { type: 'host:artifact-content', requestId: 4, result: { kind: 'not_found' } },
+    ])
+  })
+
   it('keeps the artifacts of a deleted session', async () => {
     const { t, port } = await setup()
     const session = await port.request('sessions.create', {

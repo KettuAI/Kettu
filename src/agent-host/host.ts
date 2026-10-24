@@ -5,14 +5,14 @@ import os from 'node:os'
 import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
 import type { AttachmentGrant } from '@shared/attachments'
-import type { AgentProcess, HostToMain } from '@shared/host-control'
+import type { AgentProcess, ArtifactContentResult, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { ArtifactService, SERVICE_NAME, sessionServiceName } from './artifacts/service'
-import { ArtifactStore, versionSummary } from './artifacts/store'
+import { ArtifactError, ArtifactStore, versionSummary } from './artifacts/store'
 import {
   AgentManager,
   processLauncher,
@@ -415,6 +415,22 @@ export class AgentHost {
   grant(requestId: number, grants: AttachmentGrant[]): void {
     this.attachments.grant(grants)
     this.options.send({ type: 'host:granted', requestId })
+  }
+
+  /** `host:artifact-content-request`: the file of a version, for main's protocol. */
+  async artifactContent(requestId: number, id: string, version: number | null): Promise<void> {
+    let result: ArtifactContentResult
+    try {
+      result = { kind: 'found', ...(await this.artifacts.content(id, version ?? undefined)) }
+    } catch (error) {
+      if (error instanceof ArtifactError) {
+        result = { kind: 'not_found' }
+      } else {
+        this.diagnostics.log('warn', `Could not find ${id}'s content: ${(error as Error).message}`)
+        result = { kind: 'failed' }
+      }
+    }
+    this.options.send({ type: 'host:artifact-content', requestId, result })
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */

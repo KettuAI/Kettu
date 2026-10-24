@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { BrowserWindow, nativeTheme, screen, shell } from 'electron'
 import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
+import { mayOpenWindow } from './artifacts/guards'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import { isRendererUrl, loadRenderer } from './renderer'
@@ -177,7 +178,7 @@ export function createMainWindow(): BrowserWindow {
   })
 
   window.webContents.setWindowOpenHandler(({ url }) => {
-    openIfExternal(url)
+    if (mayOpenWindow(window.webContents, url)) openIfExternal(url)
     return { action: 'deny' }
   })
 

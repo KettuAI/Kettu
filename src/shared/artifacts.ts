@@ -5,6 +5,12 @@ export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/
 
 export const ARTIFACT_TITLE_CHARS = 120
 
+/**
+ * The viewer's frame: the page runs scripts on its own origin and may offer a download, but opens
+ * no window, never moves the app's frame and cannot block on alert().
+ */
+export const ARTIFACT_FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-downloads'
+
 /** Longer than `max` as JSON Schema counts length: in code points, not UTF-16 units. */
 export function longer(text: string, max: number): boolean {
   if (text.length <= max) return false

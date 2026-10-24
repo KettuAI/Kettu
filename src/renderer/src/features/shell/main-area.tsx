@@ -11,10 +11,11 @@ import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useViewStore } from '@renderer/stores/view'
 
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
+const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
 
 /**
  * What the main area shows: New session, a session being created, a session, in a project or in a
- * scratch folder, or the usage page.
+ * scratch folder, the usage page, or an artifact.
  */
 export function MainArea() {
   const projects = useProjectsStore((s) => s.projects)
@@ -43,6 +44,13 @@ export function MainArea() {
     return (
       <Suspense fallback={null}>
         <UsagePage />
+      </Suspense>
+    )
+  }
+  if (main.kind === 'artifact') {
+    return (
+      <Suspense fallback={null}>
+        <ArtifactViewer key={main.id} id={main.id} />
       </Suspense>
     )
   }
