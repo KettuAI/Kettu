@@ -195,7 +195,7 @@ The maintainer's rules for the [palette](./design-system.md#palette), set on 202
    | Links                     | `--link`                                                    | Links                                                                                            |
 
 4. **Routine stays neutral.** What happens on every turn gets no color, so the thread never fills with it: a tool call that succeeded shows a check in `--icon-default`, a finished turn is not green, and action feedback such as "Copied" is neutral. A state is colored when you check it, not because it happened.
-5. **Color stays small.** A state color sits on an icon, a dot, a spinner, a pill or a short word, never on a surface, a container's border or a whole row's text. A row or a control shows one state color, apart from a diff's paired counts.
+5. **Color stays small.** A state color sits on an icon, a dot, a spinner, a pill or a short word, never on a surface, a container's border or a whole row's text. A row or a control shows one state color, apart from a diff's paired counts and a pull request's state icon beside its checks, as in the top bar.
 6. **Model names and reasoning levels**, such as "Xhigh", are `--text-secondary`, never orange or a gradient ([model names](./design-system.md#model-names-and-reasoning-levels)).
 7. **Usage hints**, such as "7 days 57%", are `--text-tertiary` below 80% ([usage levels](./design-system.md#usage-levels)).
 8. **Brand colors stay on the agent marks.** An agent's color never colors text, a border or a state.
@@ -304,7 +304,7 @@ Before a UI change goes up for review, with the [UX checklist](./ux-guidelines.m
 1. Every icon is in the [vocabulary](#vocabulary) or added to it, at 12, 14 or 16 px, with no stroke or fill of its own.
 2. Every text has a [role](#roles); no size, weight or opacity outside them.
 3. No raw color, Tailwind palette color, arbitrary radius or arbitrary size; every value is a token.
-4. Color marks states only, by the [color rules](#color): small, one state color per row or control, and never alone.
+4. Color marks states only, by the [color rules](#color): small, one state color per row or control (with the two exceptions there), and never alone.
 5. One border per surface; separators inset; no shadow on anything that does not float.
 6. Rows follow their [anatomy](#rows), and nothing shifts between states.
 7. Every state in the [table](#states) that applies is drawn.
