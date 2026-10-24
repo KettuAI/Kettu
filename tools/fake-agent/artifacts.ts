@@ -51,6 +51,8 @@ async function say(turn: Turn, text: string): Promise<void> {
  * Every call names its session in `_meta`, as OpenCode's do. `--child <id>` makes the calls a
  * subagent's: its tool calls come on this session with OpenCode's child-session `_meta`, and the
  * calls name the child. `--meta <id>` names another session instead, and `--meta none` none.
+ * `--execute` makes every call from one `execute` tool call, as OpenCode's Code Mode does, and
+ * writes the canvas once more after making or changing it.
  */
 export const artifacts: Scenario = async (turn) => {
   const server = overbench(turn.session.mcpServers)
@@ -76,9 +78,36 @@ export const artifacts: Scenario = async (turn) => {
     ? { 'opencode/child-session': { id: child, parentID: turn.session.id, depth: 1 } }
     : undefined
   let n = 0
+  const { execute } = turn.options
+  const codeCallId = `execute-${turn.session.turns}`
+  if (execute) {
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId: codeCallId,
+      title: 'execute',
+      kind: 'other',
+      status: 'in_progress',
+      rawInput: { code: 'await tools.overbench.create_artifact({ ... })' },
+    })
+  }
   const call: Call = async (name, args) => {
     const id = `${server.name}-${turn.session.turns}-${++n}`
     const toolCallId = child ? `${child}:${id}` : id
+    if (execute) {
+      const result = await client.callTool({
+        name,
+        arguments: args,
+        ...(meta ? { _meta: meta } : {}),
+      })
+      const content = result.content as { type: string; text?: string }[]
+      const text = content.find((block) => block.type === 'text')?.text ?? ''
+      lines.push(`${name}: ${text}`)
+      return {
+        text,
+        value: (result.structuredContent ?? {}) as Record<string, unknown>,
+        isError: result.isError === true,
+      }
+    }
     await turn.send({
       sessionUpdate: 'tool_call',
       toolCallId,
@@ -140,9 +169,27 @@ export const artifacts: Scenario = async (turn) => {
         const created = await call('create_artifact', { title: CANVAS_TITLE, html: CANVAS })
         id = String(created.value.id)
       }
+      if (execute) {
+        const { value } = await call('read_artifact', { id })
+        const version = Number(value.version)
+        await call('update_artifact', {
+          id,
+          base_version: version,
+          edits: [{ old_text: `revision ${version}<`, new_text: `revision ${version + 1}<` }],
+          note: `Revision ${version + 1}`,
+        })
+      }
       const back = await call('read_artifact', { id })
       const html = String(back.value.html ?? '')
       lines.push(`html: ${/revision \d+/.exec(html)?.[0] ?? 'no revision'}`)
+    }
+    if (execute) {
+      await turn.send({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: codeCallId,
+        status: 'completed',
+        content: [{ type: 'content', content: { type: 'text', text: lines.join('\n') } }],
+      })
     }
   } finally {
     await client.close()

@@ -33,6 +33,7 @@ import { Markdown } from '../markdown'
 import { SessionIdContext } from '../media/grants'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
+import { OutOfCreditEnd } from './out-of-credit'
 import { UserActions } from './message-actions'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
@@ -177,6 +178,11 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
         title={entry.title}
         className={animation}
       />
+    )
+  }
+  if (entry.cause === 'out_of_credit') {
+    return (
+      <OutOfCreditEnd title={entry.title} description={entry.description} className={animation} />
     )
   }
   const Icon = NOTICE_ICON[entry.severity]

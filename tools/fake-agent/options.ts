@@ -11,6 +11,7 @@ export const SCENARIOS = [
   'crash',
   'error',
   'auth-required',
+  'out-of-credit',
   'large-history',
   'slow-start',
   'all-updates',
@@ -55,6 +56,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'auth-required': {
     description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
   },
+  'out-of-credit': {
+    description: 'Fails the turn as a provider out of credit does; the retry answers',
+  },
   'large-history': {
     description: 'Makes reopening this session replay 1,000 entries',
     hint: '--entries <n>',
@@ -86,7 +90,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   chinese: { description: 'A long answer in Chinese, with every Markdown block' },
   artifacts: {
     description: "Makes or changes a canvas through OverBench's artifacts service, then reads it",
-    hint: '--read <artifact id> --until-cancel --child <id> --meta <session id|none>',
+    hint: '--read <artifact id> --until-cancel --child <id> --meta <session id|none> --execute',
   },
   report: { description: 'Short Chinese notes between runs of work, then a report' },
 }
@@ -108,6 +112,7 @@ export interface ScenarioOptions {
   untilCancel: boolean // artifacts: the turn runs on after its calls until it is cancelled
   child: string | null // artifacts: the calls come from this subagent session, as OpenCode's do
   meta: string | null // artifacts: the session id the calls name instead; none names none
+  execute: boolean // artifacts: the calls run inside one tool call, as OpenCode's Code Mode runs them
   silent: boolean // error: fails before writing anything
 }
 
@@ -197,6 +202,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     untilCancel: flagValue(args, 'until-cancel') !== undefined,
     child: flagValue(args, 'child') || null,
     meta: flagValue(args, 'meta') || null,
+    execute: flagValue(args, 'execute') !== undefined,
     silent: flagValue(args, 'silent') !== undefined,
   }
   return { scenario, options, text }

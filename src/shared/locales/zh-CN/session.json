@@ -58,18 +58,7 @@
     "copyCommand": "复制命令",
     "showAll": "显示全部",
     "showFullDiff": "显示完整差异",
-    "image": "图片",
-    "artifact": {
-      "create": "创建了 artifact",
-      "update": "更新了 artifact",
-      "restore": "恢复了版本",
-      "delete": "删除了 artifact",
-      "read": "读取了 artifact",
-      "open": "打开",
-      "openArtifact": "打开 {{title}}",
-      "openTip": "在对话旁边打开",
-      "version": "v{{version}}"
-    }
+    "image": "图片"
   },
   "permission": {
     "ask": {
@@ -124,6 +113,19 @@
     "switchedTo": "已切换到 <branch/>",
     "openedPr": "已创建 Pull Request",
     "copyCommitId": "复制提交 ID"
+  },
+  "artifactEntry": {
+    "create": "已创建",
+    "update": "已更新",
+    "restore": "已恢复",
+    "delete": "已删除",
+    "version": "v{{version}}",
+    "writes_other": "本轮 {{count}} 个版本",
+    "deleted": "已删除",
+    "erased": "已永久删除",
+    "open": "打开 {{title}}",
+    "openShort": "打开",
+    "deletedLine": "已删除 artifact <title/>"
   },
   "plan": {
     "inProgress": "进行中",
@@ -268,7 +270,11 @@
       "working": "处理中"
     },
     "resume": "继续",
-    "continuePrompt": "继续"
+    "continuePrompt": "继续",
+    "outOfCredit": {
+      "details": "详情",
+      "copy": "复制原始信息"
+    }
   },
   "link": {
     "title": "打开此链接？",

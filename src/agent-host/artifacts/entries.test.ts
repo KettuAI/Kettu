@@ -1,0 +1,185 @@
+import { describe, expect, it } from 'vitest'
+import type { ArtifactEntry, SessionView, ThreadEntry, ThreadState } from '@shared/thread'
+import { artifactWrite, ReplayKeeper, writePatch, type ArtifactWrite } from './entries'
+
+const ID = 'art_01JB2QZ8X4K7M9N3P5R6S8T0VW'
+const OTHER = 'art_01JB2QZ8X4K7M9N3P5R6S8T0VX'
+const ok = (structuredContent: Record<string, unknown>) => ({ content: [], structuredContent })
+const titled = (title: string | null) => () => Promise.resolve(title)
+
+function threadOf(entries: ThreadEntry[]): ThreadState {
+  return {
+    session: {} as SessionView,
+    order: entries.map((e) => e.id),
+    byId: Object.fromEntries(entries.map((e) => [e.id, e])),
+  }
+}
+
+const user = (id: string): ThreadEntry => ({ kind: 'user', id, content: [] })
+const tool = (id: string): ThreadEntry => ({
+  kind: 'tool',
+  id,
+  title: 'execute',
+  toolKind: 'other',
+  status: 'in_progress',
+  content: [],
+  locations: [],
+  permission: null,
+  permissionResult: null,
+})
+const turnEnd = (id: string): ThreadEntry => ({
+  kind: 'turn_end',
+  id,
+  stopReason: 'end_turn',
+  durationMs: 1,
+})
+const card = (id: string, fields: Partial<ArtifactEntry> = {}): ArtifactEntry => ({
+  kind: 'artifact',
+  id,
+  artifactId: ID,
+  title: 'Deck',
+  action: 'create',
+  version: 1,
+  writes: 1,
+  after: null,
+  ...fields,
+})
+const write = (fields: Partial<ArtifactWrite> = {}): ArtifactWrite => ({
+  artifactId: ID,
+  title: 'Deck',
+  action: 'update',
+  version: 2,
+  ...fields,
+})
+
+describe('artifactWrite', () => {
+  it('takes the title from the call or its result', async () => {
+    expect(
+      await artifactWrite(
+        'create_artifact',
+        { title: 'Deck', html: '' },
+        ok({ id: ID, version: 1 }),
+        titled(null),
+      ),
+    ).toEqual({ artifactId: ID, title: 'Deck', action: 'create', version: 1 })
+    expect(
+      await artifactWrite(
+        'restore_artifact_version',
+        { id: ID, version: 1 },
+        ok({ id: ID, title: 'Deck', version: 4 }),
+        titled(null),
+      ),
+    ).toEqual({ artifactId: ID, title: 'Deck', action: 'restore', version: 4 })
+  })
+
+  it('looks the title up otherwise, and a deletion has no version', async () => {
+    expect(
+      await artifactWrite(
+        'update_artifact',
+        { id: ID, html: '' },
+        ok({ id: ID, version: 2 }),
+        titled('Deck'),
+      ),
+    ).toEqual({ artifactId: ID, title: 'Deck', action: 'update', version: 2 })
+    expect(
+      await artifactWrite('delete_artifact', { id: ID }, ok({ id: ID }), titled('Deck')),
+    ).toEqual({ artifactId: ID, title: 'Deck', action: 'delete', version: null })
+  })
+
+  it('makes none for a read, a failed call, or an artifact it cannot name', async () => {
+    const failed = { ...ok({ code: 'conflict', message: '' }), isError: true }
+    expect(await artifactWrite('update_artifact', {}, failed, titled('Deck'))).toBeNull()
+    expect(
+      await artifactWrite('read_artifact', { id: ID }, ok({ id: ID, version: 1 }), titled('Deck')),
+    ).toBeNull()
+    expect(
+      await artifactWrite('list_artifacts', {}, ok({ artifacts: [] }), titled(null)),
+    ).toBeNull()
+    expect(await artifactWrite('update_artifact', {}, ok({ id: ID }), titled(null))).toBeNull()
+  })
+})
+
+describe('writePatch', () => {
+  const newId = () => 'a:9'
+
+  it('adds an entry at the end, after the call that is running there', () => {
+    const thread = threadOf([user('e:1'), tool('t:1')])
+    expect(writePatch(thread, write({ action: 'create', version: 1 }), newId)).toEqual({
+      op: 'entry.add',
+      entry: card('a:9', { after: 't:1' }),
+    })
+  })
+
+  it("updates the turn's entry for the same artifact in place", () => {
+    const thread = threadOf([user('e:1'), tool('t:1'), card('a:2', { after: 't:1' }), tool('t:3')])
+    expect(writePatch(thread, write({ title: 'Deck 2', version: 3 }), newId)).toEqual({
+      op: 'entry.update',
+      id: 'a:2',
+      changes: { title: 'Deck 2', version: 3, writes: 2 },
+    })
+  })
+
+  it('starts a new entry in a new turn, for another artifact, and for a deletion', () => {
+    const earlier = threadOf([user('e:1'), card('a:2'), turnEnd('e:3'), user('e:4'), tool('t:5')])
+    expect(writePatch(earlier, write(), newId)).toMatchObject({ op: 'entry.add' })
+    const same = threadOf([user('e:1'), card('a:2'), tool('t:3')])
+    expect(writePatch(same, write({ artifactId: OTHER }), newId)).toMatchObject({
+      op: 'entry.add',
+      entry: { artifactId: OTHER, after: 't:3' },
+    })
+    expect(writePatch(same, write({ action: 'delete', version: null }), newId)).toEqual({
+      op: 'entry.add',
+      entry: card('a:9', { action: 'delete', version: null, after: 't:3' }),
+    })
+    const deleted = threadOf([user('e:1'), card('a:2', { action: 'delete', version: null })])
+    expect(writePatch(deleted, write(), newId)).toMatchObject({ op: 'entry.add' })
+  })
+
+  it("joins the latest turn's entry after the turn ended, skipping the host's own entries", () => {
+    const thread = threadOf([user('e:1'), tool('t:2'), card('a:3'), turnEnd('e:4')])
+    expect(writePatch(thread, write(), newId)).toMatchObject({ op: 'entry.update', id: 'a:3' })
+    const other = writePatch(thread, write({ artifactId: OTHER }), newId)
+    expect(other).toMatchObject({ op: 'entry.add', entry: { after: 't:2' } })
+    expect(writePatch(threadOf([]), write(), newId)).toMatchObject({ entry: { after: null } })
+  })
+})
+
+describe('ReplayKeeper', () => {
+  it('puts each entry back after the one it followed', () => {
+    const keeper = new ReplayKeeper(
+      threadOf([
+        user('e:1'),
+        tool('t:2'),
+        card('a:3', { after: 't:2' }),
+        card('a:4', { after: 't:2' }),
+      ]),
+    )
+    expect(keeper.before(user('m:1'))).toEqual([])
+    expect(keeper.after(user('m:1'))).toEqual([])
+    expect(keeper.after(tool('t:2')).map((e) => e.id)).toEqual(['a:3', 'a:4'])
+    expect(keeper.rest()).toEqual([])
+  })
+
+  it('puts one whose entry never comes back at the end of its turn, or of the replay', () => {
+    const keeper = new ReplayKeeper(
+      threadOf([
+        user('e:1'),
+        tool('t:2'),
+        card('a:3', { after: 't:gone' }),
+        user('e:4'),
+        card('a:5', { after: 't:also-gone' }),
+      ]),
+    )
+    expect(keeper.before(user('m:1'))).toEqual([])
+    expect(keeper.after(tool('t:2'))).toEqual([])
+    expect(keeper.before(user('m:2')).map((e) => e.id)).toEqual(['a:3'])
+    expect(keeper.rest().map((e) => e.id)).toEqual(['a:5'])
+    expect(keeper.empty).toBe(true)
+  })
+
+  it('never anchors on an entry the host adds itself', () => {
+    const keeper = new ReplayKeeper(threadOf([user('e:1'), card('a:2', { after: 'e:3' })]))
+    expect(keeper.after(turnEnd('e:3'))).toEqual([])
+    expect(new ReplayKeeper(threadOf([user('e:1'), tool('t:2')])).empty).toBe(true)
+  })
+})

@@ -1,5 +1,6 @@
-import { useEffect, type KeyboardEvent } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { ArrowUpIcon, ListPlusIcon, SquareIcon } from 'lucide-react'
+import { AnimatePresence } from 'motion/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { SessionView, UserContent } from '@shared/thread'
 import { InputGroupButton } from '@renderer/components/ui/input-group'
@@ -11,7 +12,9 @@ import { useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { attachmentContent, attachmentsBlock } from './attachments'
 import { ControlRow } from './control-row'
+import { OutOfCreditStrip } from './out-of-credit-strip'
 import { PromptBox } from './prompt-box'
+import { useOutOfCredit } from './use-out-of-credit'
 import { usePromptBox } from './use-prompt-box'
 
 /** The prompt box and the session's controls under it. */
@@ -21,6 +24,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const limits = useAgentsStore((s) => s.byId[session.agentId]?.limits)
   const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const outOfCredit = useOutOfCredit(sessionId)
 
   const status = session.status
   const starting = status === 'starting'
@@ -138,6 +143,20 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         label={t('prompt.label', { agent: agentName })}
         className="min-h-(--composer-min) py-4"
         onKeyDown={onKeyDown}
+        wrap={!!outOfCredit}
+        top={
+          <AnimatePresence initial={false}>
+            {outOfCredit && !starting && (
+              <OutOfCreditStrip
+                key={outOfCredit.id}
+                sessionId={sessionId}
+                notice={outOfCredit}
+                config={session.config}
+                onSwitchModel={() => setModelMenuOpen(true)}
+              />
+            )}
+          </AnimatePresence>
+        }
         end={
           <>
             {canQueue && (
@@ -232,7 +251,15 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             {error ?? blocked?.message}
           </p>
         )}
-        {!starting && <ControlRow session={session} onCompact={compact} ultracode={ultracode} />}
+        {!starting && (
+          <ControlRow
+            session={session}
+            onCompact={compact}
+            ultracode={ultracode}
+            modelMenu={{ open: modelMenuOpen, onOpenChange: setModelMenuOpen }}
+            outOfCredit={!!outOfCredit}
+          />
+        )}
       </div>
     </div>
   )

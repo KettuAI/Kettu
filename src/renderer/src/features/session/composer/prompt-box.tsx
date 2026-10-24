@@ -56,6 +56,8 @@ export function PromptBox({
   placeholder,
   label,
   className,
+  top,
+  wrap = false,
   end,
   onKeyDown,
 }: {
@@ -67,6 +69,9 @@ export function PromptBox({
   label: string
   /** The text area's size and padding. */
   className: string
+  /** What the box shows before the attachments, such as a notice; `wrap` while it shows. */
+  top?: ReactNode
+  wrap?: boolean
   /** What follows the text on its last line, such as Send. */
   end: ReactNode
   /** A key the popovers left to the composer. */
@@ -201,8 +206,9 @@ export function PromptBox({
           ref={group}
           variant="composer"
           data-disabled={disabled || undefined}
-          className={cn(attachments.length > 0 && 'flex-wrap')}
+          className={cn((attachments.length > 0 || wrap) && 'flex-wrap')}
         >
+          {top}
           <AttachmentTray
             draft={draft}
             agentId={agentId}

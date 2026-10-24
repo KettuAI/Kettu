@@ -8,6 +8,7 @@ import {
   pageStart,
   parseStoredSession,
   settled,
+  splitLinks,
   turnOf,
 } from './model'
 
@@ -96,6 +97,43 @@ describe('settled', () => {
 
   it('returns a settled entry as it was', () => {
     expect(settled(agent)).toBe(agent)
+  })
+})
+
+describe('splitLinks', () => {
+  const linked = (id: string, action: string, version: number | null): ThreadEntry =>
+    ({
+      kind: 'tool',
+      id,
+      title: `mcp__overbench__${action}`,
+      toolKind: 'other',
+      status: 'completed',
+      content: [],
+      locations: [],
+      permission: null,
+      permissionResult: null,
+      artifact: { id: 'art_1', title: 'Deck', action, version },
+    }) as ThreadEntry
+
+  it("turns a stored link into the tool call and an artifact entry after it, a read's into nothing", () => {
+    const entries = [user(), linked('t:1', 'create', 1), linked('t:2', 'read', 1), agent]
+    const split = splitLinks(entries)!
+    expect(split.map((e) => e.id)).toEqual(['u', 't:1', 'a:t:1', 't:2', agent.id])
+    expect(split.every((e) => !('artifact' in e))).toBe(true)
+    expect(split[2]).toEqual({
+      kind: 'artifact',
+      id: 'a:t:1',
+      artifactId: 'art_1',
+      title: 'Deck',
+      action: 'create',
+      version: 1,
+      writes: 1,
+      after: 't:1',
+    })
+  })
+
+  it('leaves a thread without links as it is', () => {
+    expect(splitLinks([user(), agent])).toBeNull()
   })
 })
 

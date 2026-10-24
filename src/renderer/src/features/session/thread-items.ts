@@ -38,18 +38,17 @@ const isStep = (char: string | undefined): boolean =>
 
 /**
  * Marks progress notes as c: an agent message that more work in its turn follows, as Codex's
- * commentary, which it writes before its tool calls and never after its final answer. The turn
- * still running is work to its end, since a message that streams may yet be a note.
+ * commentary, which it writes before its tool calls and never after its final answer. In the turn
+ * still running, the latest message may be the answer, so it stays one until work follows it.
  */
-function markNotes(signature: string, live: boolean): string {
+function markNotes(signature: string): string {
   const chars = [...signature]
   const starts = [0]
   for (let i = 1; i < chars.length; i++) if (chars[i] === 'u') starts.push(i)
   starts.forEach((start, n) => {
     const end = starts[n + 1] ?? chars.length
     let workEnd = end
-    if (!(live && end === chars.length))
-      while (workEnd > start && !isStep(chars[workEnd - 1])) workEnd--
+    while (workEnd > start && !isStep(chars[workEnd - 1])) workEnd--
     for (let i = start; i < workEnd; i++) if (chars[i] === 'a') chars[i] = 'c'
   })
   return chars.join('')
@@ -73,12 +72,12 @@ export type Item =
   | { key: string; type: 'reply'; agentIds: string[]; endId: string | null; latest: boolean }
 
 /**
- * The thread's items. With `live`, a turn is running and the run at the thread's end is still
- * growing, so it shows step by step; it folds once a message or the turn's end follows it. With
- * `notes`, the agent's messages that more work follows are progress notes and fold with it.
+ * The thread's items. Work folds as it happens, so a running turn already reads as it will once it
+ * ends. With `live`, a turn is running and gets its reply footer only when it ends. With `notes`,
+ * the agent's messages that more work follows are progress notes and fold with it.
  */
 export function buildItems(order: string[], shape: string, live = false, notes = false): Item[] {
-  const signature = notes ? markNotes(shape, live) : shape
+  const signature = notes ? markNotes(shape) : shape
   const items: Item[] = []
   const { replacing, after } = replyFooters(order, signature, live)
   for (let i = 0; i < order.length; i++) {
@@ -91,11 +90,10 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       let end = i
       while (isStep(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
-      const growing = live && end === order.length - 1
       // A lone tool call folds too, so every piece of work reads as one quiet line; a request
       // for permission, a thought and a plan show as they are.
       const lone = end === i && (signature[i] === 'g' || signature[i] === 't')
-      if ((end > i || lone) && !growing) {
+      if (end > i || lone) {
         items.push({
           key: `run:${ids[0]}`,
           type: 'run',

@@ -67,18 +67,7 @@
     "copyCommand": "Copy command",
     "showAll": "Show all",
     "showFullDiff": "Show full diff",
-    "image": "Image",
-    "artifact": {
-      "create": "Created artifact",
-      "update": "Updated artifact",
-      "restore": "Restored version",
-      "delete": "Deleted artifact",
-      "read": "Read artifact",
-      "open": "Open",
-      "openArtifact": "Open {{title}}",
-      "openTip": "Open beside the thread",
-      "version": "v{{version}}"
-    }
+    "image": "Image"
   },
   "permission": {
     "ask": {
@@ -135,6 +124,20 @@
     "switchedTo": "Switched to <branch/>",
     "openedPr": "Opened pull request",
     "copyCommitId": "Copy commit id"
+  },
+  "artifactEntry": {
+    "create": "Created",
+    "update": "Updated",
+    "restore": "Restored",
+    "delete": "Deleted",
+    "version": "v{{version}}",
+    "writes_one": "{{count}} version this turn",
+    "writes_other": "{{count}} versions this turn",
+    "deleted": "Deleted",
+    "erased": "Deleted permanently",
+    "open": "Open {{title}}",
+    "openShort": "Open",
+    "deletedLine": "Deleted artifact <title/>"
   },
   "plan": {
     "inProgress": "In progress",
@@ -286,7 +289,11 @@
       "working": "Working"
     },
     "resume": "Resume",
-    "continuePrompt": "Continue"
+    "continuePrompt": "Continue",
+    "outOfCredit": {
+      "details": "Details",
+      "copy": "Copy the message"
+    }
   },
   "link": {
     "title": "Open this link?",

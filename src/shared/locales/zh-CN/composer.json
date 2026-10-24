@@ -20,10 +20,17 @@
     "ultracodeOn": "本会话已开启 Ultracode：对较大的任务使用动态工作流",
     "ultracodeNext": "此消息将以 Ultracode 运行：对任务使用动态工作流",
     "model": "模型",
+    "modelOutOfCredit": "模型，余额不足",
     "options": "选项",
     "changesBetweenTurns": "仅在两轮对话之间可更改",
     "useFallback": "使用 {{name}}",
     "useDefault": "使用 Agent 的默认值"
+  },
+  "outOfCredit": {
+    "modelTitle": "{{model}} 余额不足",
+    "strip": "{{model}} 的服务商余额已用完。充值或换一个模型后继续。",
+    "stripNoModel": "模型服务商的余额已用完。充值后继续。",
+    "switchModel": "切换模型"
   },
   "usage": {
     "title": "用量",

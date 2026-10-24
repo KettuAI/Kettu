@@ -85,6 +85,7 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Completed, passing                                                | `CircleCheck`            |                                   |
 | Error, failed                                                     | `CircleAlert`            | `CircleX`, except a failing check |
 | Warning, conflict                                                 | `TriangleAlert`          |                                   |
+| A model provider out of credit                                    | `Wallet`                 | `CreditCard`, `Coins`             |
 | Information                                                       | `Info`                   |                                   |
 | Help, an unknown value                                            | `CircleHelp`             |                                   |
 | Delete; Recently deleted                                          | `Trash`                  | `Trash2`                          |
@@ -195,7 +196,7 @@ The maintainer's rules for the [palette](./design-system.md#palette), set on 202
    | Done or passing           | `--success`                                                 | Passing checks, "Installed", "Signed in", "Updated", an agent's **Ready** dot                    |
    | Failed or deleted         | `--danger`                                                  | A failed tool call, failing checks, conflicts, a deletion                                        |
    | On offer                  | `--info`                                                    | An update or an install you can start: the **Install** and **Update** pills, "Update ready"      |
-   | Something to do           | `--warning`                                                 | Not signed in: the gh pill, "Sign in to continue", the sidebar's sign-in notice                  |
+   | Something to do           | `--warning`                                                 | Not signed in: the gh pill, "Sign in to continue", the sidebar's sign-in notice; out of credit   |
    | Usage warning             | `--warning`, `--danger`                                     | Usage from 80% and from 95% ([usage levels](./design-system.md#usage-levels))                    |
    | Pull request state        | per [repository state](./design-system.md#repository-state) | Open, draft, merged, closed ([#205](https://github.com/overbench/overbench/issues/205))          |
    | Diff lines                | `--success`, `--danger`                                     | Added and deleted lines and their counts                                                         |

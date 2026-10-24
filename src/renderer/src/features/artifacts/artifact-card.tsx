@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type RefObject } from 'react'
+import { memo, useRef, useState } from 'react'
 import { EllipsisIcon, ImageOffIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactSummary } from '@shared/artifacts'
@@ -22,6 +22,7 @@ import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { openArtifact } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
 import { useThumbnail, type Thumbnail } from './thumbnails'
+import { useInView } from './use-in-view'
 
 /** Opens the viewer; Back returns to the page with this card focused. */
 function openFromPage(id: string, history = false): void {
@@ -182,28 +183,6 @@ function CardTime({ artifact }: { artifact: ArtifactSummary }) {
       {t('card.when', { version: artifact.version, time: longAgo(artifact.updatedAt, now) })}
     </span>
   )
-}
-
-/** A card that loads with the page asks for its thumbnail once it scrolls into view. */
-const watched = new Map<Element, (inView: boolean) => void>()
-let observer: IntersectionObserver | null = null
-
-function useInView(ref: RefObject<Element | null>): boolean {
-  const [inView, setInView] = useState(false)
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    observer ??= new IntersectionObserver((entries) => {
-      for (const entry of entries) watched.get(entry.target)?.(entry.isIntersecting)
-    })
-    watched.set(element, setInView)
-    observer.observe(element)
-    return () => {
-      watched.delete(element)
-      observer?.unobserve(element)
-    }
-  }, [ref])
-  return inView
 }
 
 /** A card's place before the list arrives, at its real size. */
