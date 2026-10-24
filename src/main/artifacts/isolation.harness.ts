@@ -79,7 +79,7 @@ async function run(): Promise<unknown> {
   // The built-in resolver logs each DNS query, on every platform, which getaddrinfo does not.
   app.configureHostResolver({ enableBuiltInResolver: true, secureDnsMode: 'off' })
   await ses.netLog.startLogging(config.netLog)
-  artifacts.install(ses)
+  await artifacts.install(ses)
   if (!config.policy) {
     ses.protocol.unhandle(ARTIFACT_SCHEME)
     ses.protocol.handle(ARTIFACT_SCHEME, async (request) => {
@@ -309,9 +309,20 @@ async function run(): Promise<unknown> {
   const dns = Object.fromEntries(
     Object.entries(config.exfil).map(([name, host]) => [name, netLog.includes(host)]),
   )
+  const proxies = {
+    cdn: await ses.resolveProxy('https://cdn.jsdelivr.net/npm/chart.js'),
+    loopback: await ses.resolveProxy('http://localhost:5173/'),
+    other: await ses.resolveProxy('https://example.com/'),
+  }
+  // electron-updater's own session, which keeps the system's proxy or the user's.
+  const updaterProxy = await session
+    .fromPartition('electron-updater', { cache: false })
+    .resolveProxy('https://github.com/')
 
   return {
     dns,
+    proxies,
+    updaterProxy,
     held,
     attempts,
     camera,

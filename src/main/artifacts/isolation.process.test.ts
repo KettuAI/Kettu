@@ -6,8 +6,13 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createSocket, type Socket } from 'node:dgram'
 import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import {
+  createServer as createTcpServer,
+  type AddressInfo,
+  type Server as TcpServer,
+} from 'node:net'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -28,10 +33,16 @@ const ids = {
   unopened: 'art_01JB2QZ8X4K7M9N3P5R6S8T0V5',
 }
 
-// Runs in the page; every attempt reports whether it held. What reaches the test's server is
-// checked as well, since a request can leave even where the page sees a failure, and so is the
-// net log, for DNS lookups of the hosts in `exfil`, which no request carries.
-function probePage(server: string, secret: string, image: string, exfil: Exfil): string {
+// Runs in the page; every attempt reports whether it held. What reaches the test's server and its
+// WebRTC listeners is checked as well, since a request can leave even where the page sees a
+// failure, and so is the net log, for DNS lookups of the hosts in `exfil`, which no request carries.
+function probePage(
+  server: string,
+  secret: string,
+  image: string,
+  exfil: Exfil,
+  peers: PeerListeners,
+): string {
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Probe</title>
 <link rel="dns-prefetch" href="//${exfil.link}">
@@ -46,6 +57,8 @@ const OTHER = ${JSON.stringify(artifactUrl(ids.other))}
 const SECRET = ${JSON.stringify(secret)}
 const IMAGE = ${JSON.stringify(image)}
 const EXFIL = ${JSON.stringify(exfil.script)}
+const PEERS = ${JSON.stringify(peers)}
+const PEER_NAMES = ${JSON.stringify({ stun: exfil.stun, turn: exfil.turn, turns: exfil.turns })}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const fails = (promise) => promise.then(() => false, () => true)
 const loads = (element) => new Promise((resolve) => {
@@ -56,6 +69,20 @@ const notServed = async (path) => {
   const response = await fetch(path)
   return response.status === 404 && !(await response.text()).includes('SECRET')
 }
+// A peer connection's servers decide where it goes; what reaches the listeners tells.
+const peerConnection = async (iceServers) => {
+  const connection = new RTCPeerConnection({ iceServers })
+  connection.createDataChannel('probe')
+  await connection.setLocalDescription(await connection.createOffer())
+  await sleep(2000)
+  connection.close()
+  return true
+}
+const turnServers = (scheme, port) => [PEERS.host, PEER_NAMES[scheme]].map((host) => ({
+  urls: scheme + ':' + host + ':' + port + '?transport=tcp',
+  username: 'probe',
+  credential: 'probe',
+}))
 const fromWorker = (code, shared) => new Promise((resolve) => {
   const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }))
   const worker = shared ? new SharedWorker(url) : new Worker(url)
@@ -162,6 +189,11 @@ const attempts = {
     await sleep(500)
     return true
   },
+  'STUN over UDP to another host': () => peerConnection([PEERS.host, PEER_NAMES.stun].map(
+    (host) => ({ urls: 'stun:' + host + ':' + PEERS.udp }),
+  )),
+  'TURN over TCP to another host': () => peerConnection(turnServers('turn', PEERS.tcp)),
+  'TURN over TLS to another host': () => peerConnection(turnServers('turns', PEERS.tls)),
   'a service worker': () => {
     try { return fails(navigator.serviceWorker.register('/sw.js')) } catch { return true }
   },
@@ -206,7 +238,21 @@ contextBridge.exposeInMainWorld('overbench', {
 `
 
 /** Hosts named only for DNS: `control` is looked up by main, the rest by the page if it can. */
-type Exfil = Record<'control' | 'link' | 'preconnect' | 'anchor' | 'script' | 'late', string>
+type Exfil = Record<
+  'control' | 'link' | 'preconnect' | 'anchor' | 'script' | 'late' | 'stun' | 'turn' | 'turns',
+  string
+>
+
+/**
+ * Where the page's STUN and TURN servers point: an address of this machine that is not loopback,
+ * since Chromium sends loopback past any proxy, and ports the test listens on.
+ */
+interface PeerListeners {
+  host: string
+  udp: number
+  tcp: number
+  tls: number
+}
 
 /** Whether main, the app's page and the artifact's page see a dark theme. */
 interface ThemeSeen {
@@ -218,6 +264,9 @@ interface ThemeSeen {
 interface ProbeResult {
   error?: string
   dns: Record<keyof Exfil, boolean>
+  /** The default session's proxy for a CDN, the dev server and any other host. */
+  proxies: Record<'cdn' | 'loopback' | 'other', string>
+  updaterProxy: string
   held: { waits: (number | string)[] }
   attempts: { name: string; held: boolean | string }[]
   /** 'allowed' if the camera request ever gave a stream, however late. */
@@ -240,6 +289,10 @@ interface ProbeResult {
 let dir: string
 let server: Server
 const reached: string[] = []
+let udp: Socket
+const peerServers: TcpServer[] = []
+let peers: PeerListeners
+const peersReached = { udp: 0, tcp: 0, tls: 0 }
 
 async function hashFile(contentDir: string, html: string): Promise<string> {
   const hash = createHash('sha256').update(html).digest('hex')
@@ -260,6 +313,23 @@ beforeAll(async () => {
     socket.destroy()
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const host = Object.values(os.networkInterfaces())
+    .flat()
+    .find((address) => address?.family === 'IPv4' && !address.internal)?.address
+  if (!host) throw new Error('The probe needs an IPv4 address that is not loopback')
+  udp = createSocket('udp4')
+  udp.on('message', () => peersReached.udp++)
+  await new Promise<void>((resolve) => udp.bind(0, '0.0.0.0', () => resolve()))
+  const listen = async (kind: 'tcp' | 'tls'): Promise<number> => {
+    const peer = createTcpServer((socket) => {
+      peersReached[kind]++
+      socket.destroy()
+    })
+    peerServers.push(peer)
+    await new Promise<void>((resolve) => peer.listen(0, '0.0.0.0', resolve))
+    return (peer.address() as AddressInfo).port
+  }
+  peers = { host, udp: udp.address().port, tcp: await listen('tcp'), tls: await listen('tls') }
   // Main's own modules, as the app bundles them, with a stand-in for the agent host.
   await build({
     configFile: false,
@@ -293,6 +363,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   server?.close()
+  udp?.close()
+  for (const peer of peerServers) peer.close()
   if (dir) await rm(dir, { recursive: true, force: true, maxRetries: 5 })
 })
 
@@ -316,12 +388,27 @@ async function probe(policy: boolean): Promise<ProbeResult> {
   const origin = `http://127.0.0.1:${port}`
   const nonce = randomUUID().slice(0, 8)
   const exfil = Object.fromEntries(
-    (['control', 'link', 'preconnect', 'anchor', 'script', 'late'] as const).map((name) => [
-      name,
-      `${name}-${nonce}.exfil.test`,
-    ]),
+    (
+      [
+        'control',
+        'link',
+        'preconnect',
+        'anchor',
+        'script',
+        'late',
+        'stun',
+        'turn',
+        'turns',
+      ] as const
+    ).map((name) => [name, `${name}-${nonce}.exfil.test`]),
   ) as Exfil
-  const page = probePage(origin, pathToFileURL(secret).href, pathToFileURL(image).href, exfil)
+  const page = probePage(
+    origin,
+    pathToFileURL(secret).href,
+    pathToFileURL(image).href,
+    exfil,
+    peers,
+  )
   const files = {
     [ids.probe]: await hashFile(contentDir, page),
     [ids.other]: await hashFile(contentDir, '<!doctype html><p>SECRET of another artifact</p>'),
@@ -390,19 +477,33 @@ describe.each([
 
   beforeAll(async () => {
     reached.length = 0
+    Object.assign(peersReached, { udp: 0, tcp: 0, tls: 0 })
     result = await probe(policy)
   }, 120_000)
 
-  it('sends no DNS query for a host the page names', () => {
-    // Main's own lookup shows the net log records them.
-    expect(result.dns).toEqual({
+  it('sends no DNS query for a host the page names, but for TURN servers', () => {
+    // Main's own lookup shows the net log records them. WebRTC looks a TURN server's name up
+    // before any proxy is asked, a risk the design accepts (docs/design/artifacts.md#network-policy).
+    const { turn, turns, ...dns } = result.dns
+    expect(dns).toEqual({
       control: true,
       link: false,
       preconnect: false,
       anchor: false,
       script: false,
       late: false,
+      stun: false,
     })
+    console.info(`TURN names looked up: turn ${turn}, turns ${turns}`)
+  })
+
+  it('sends WebRTC through a proxy that refuses it, and nothing else', () => {
+    expect(result.proxies).toEqual({
+      cdn: 'DIRECT',
+      loopback: 'DIRECT',
+      other: 'PROXY 127.0.0.1:9',
+    })
+    expect(result.updaterProxy).not.toMatch(/127\.0\.0\.1:9(?!\d)/)
   })
 
   it('holds every attempt, and nothing reaches another host', () => {
@@ -412,6 +513,7 @@ describe.each([
     expect(result.attempts.filter((attempt) => !held(attempt))).toEqual([])
     expect(result.camera).toBeNull()
     expect(reached).toEqual([])
+    expect(peersReached).toEqual({ udp: 0, tcp: 0, tls: 0 })
     expect(result.asked).not.toContain(ids.other)
     expect(result.opened).toEqual([])
     expect(result.windows).toBe(1)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ARTIFACT_CDNS, ARTIFACT_CSP, artifactHeaders, mayRequest } from './policy'
+import { ARTIFACT_CDNS, ARTIFACT_CSP, artifactHeaders, mayRequest, WINDOW_PROXY } from './policy'
 
 const HOST = '0123456789abcdef0123456789'
 
@@ -61,5 +61,15 @@ describe('the policy', () => {
       'Referrer-Policy': 'no-referrer',
       'Cache-Control': 'no-store',
     })
+  })
+})
+
+describe('WINDOW_PROXY', () => {
+  it('lets the CDNs and loopback past the proxy that refuses everything else', () => {
+    const bypass = WINDOW_PROXY.proxyBypassRules?.split(',') ?? []
+    for (const origin of ARTIFACT_CDNS) expect(bypass).toContain(new URL(origin).host)
+    expect(bypass).toEqual(expect.arrayContaining(['localhost', '127.0.0.1', '[::1]']))
+    expect(bypass).not.toContain('*')
+    expect(WINDOW_PROXY.proxyRules).toBe('http://127.0.0.1:9')
   })
 })

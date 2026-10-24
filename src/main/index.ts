@@ -108,7 +108,7 @@ async function start(): Promise<void> {
     content: (id, version) => agentHost.artifactContent(id, version),
     contentDir: join(userDataPath, 'artifacts', 'content'),
   })
-  artifacts.install(session.defaultSession)
+  await artifacts.install(session.defaultSession)
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,

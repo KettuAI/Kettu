@@ -8,6 +8,7 @@ import type { ArtifactOpenResult } from '@shared/ipc'
 import { sendEvent } from '../events'
 import { filterArtifactRequests, guardArtifactFrames } from './guards'
 import { ArtifactOrigins } from './origins'
+import { WINDOW_PROXY } from './policy'
 import { serveArtifacts } from './protocol'
 
 const MAX_URL_CHARS = 2_048
@@ -31,8 +32,8 @@ export class Artifacts {
 
   constructor(private readonly deps: ArtifactsDeps) {}
 
-  /** The protocol, the request filter and downloads, for the session the windows use. */
-  install(session: Session): void {
+  /** The protocol, the request filter, the proxy and downloads, for the session the windows use. */
+  async install(session: Session): Promise<void> {
     serveArtifacts(session, {
       contentDir: this.deps.contentDir,
       artifactOf: (host) => this.origins.artifactOf(host),
@@ -44,10 +45,13 @@ export class Artifacts {
     session.on('will-download', (_, item) => {
       item.setSaveDialogOptions({ defaultPath: join(app.getPath('downloads'), item.getFilename()) })
     })
+    await session.setProxy(WINDOW_PROXY)
   }
 
   watchWindow(contents: WebContents): void {
     this.origins.watch(contents)
+    // No UDP for WebRTC, so its connections go through the session's proxy, which refuses them.
+    contents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp')
     guardArtifactFrames(contents, {
       platform: process.platform,
       blocked: (event) => sendEvent(contents, 'artifact:blocked', event),
