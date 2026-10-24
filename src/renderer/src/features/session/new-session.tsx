@@ -208,7 +208,8 @@ function DraftComposer({
               : t('newSession.describeTask')
         }
         label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
-        className="min-h-28 pt-3.5 pb-3"
+        className="min-h-17 pt-3.5 pr-5 pb-1 pl-5"
+        stacked
         onKeyDown={onKeyDown}
         end={
           <Tooltip>

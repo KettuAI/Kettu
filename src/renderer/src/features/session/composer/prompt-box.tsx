@@ -58,6 +58,7 @@ export function PromptBox({
   className,
   top,
   wrap = false,
+  stacked = false,
   end,
   onKeyDown,
 }: {
@@ -72,6 +73,8 @@ export function PromptBox({
   /** What the box shows before the attachments, such as a notice; `wrap` while it shows. */
   top?: ReactNode
   wrap?: boolean
+  /** The text over a row of **+** and `end`, as on New session, rather than between them. */
+  stacked?: boolean
   /** What follows the text on its last line, such as Send. */
   end: ReactNode
   /** A key the popovers left to the composer. */
@@ -140,6 +143,23 @@ export function PromptBox({
     return match ? commands.find((c) => c.name === match[1])?.inputHint : undefined
   })()
 
+  const addMenu = (
+    <AddMenu
+      agentName={agentName}
+      disabled={disabled}
+      full={box.full}
+      commands={commands.length > 0}
+      emptyDraft={text === ''}
+      textarea={textarea}
+      onPick={box.pick}
+      onSlash={() => {
+        update('/')
+        textarea.current?.focus()
+      }}
+      onMention={startMention}
+    />
+  )
+
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     const handling = popoverKey(event.key, {
       composing: event.nativeEvent.isComposing || event.keyCode === 229,
@@ -206,7 +226,7 @@ export function PromptBox({
           ref={group}
           variant="composer"
           data-disabled={disabled || undefined}
-          className={cn((attachments.length > 0 || wrap) && 'flex-wrap')}
+          className={cn(!stacked && (attachments.length > 0 || wrap) && 'flex-wrap')}
         >
           {top}
           <AttachmentTray
@@ -219,24 +239,15 @@ export function PromptBox({
             onLeave={() => textarea.current?.focus()}
           />
           {/* After the tiles in the DOM, so they keep the first row when the box wraps. */}
-          <InputGroupAddon align="inline-start" className="order-none self-end pb-3 pl-3">
-            <AddMenu
-              agentName={agentName}
-              disabled={disabled}
-              full={box.full}
-              commands={commands.length > 0}
-              emptyDraft={text === ''}
-              textarea={textarea}
-              onPick={box.pick}
-              onSlash={() => {
-                update('/')
-                textarea.current?.focus()
-              }}
-              onMention={startMention}
-            />
-          </InputGroupAddon>
+          {!stacked && (
+            <InputGroupAddon align="inline-start" className="order-none self-end pb-3 pl-3">
+              {addMenu}
+            </InputGroupAddon>
+          )}
           {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
-          <div className="relative min-w-0 flex-[1_1_12rem] self-stretch">
+          <div
+            className={cn('relative min-w-0', stacked ? 'w-full' : 'flex-[1_1_12rem] self-stretch')}
+          >
             <Autocomplete.Input
               render={
                 <InputGroupTextarea
@@ -273,9 +284,17 @@ export function PromptBox({
               </div>
             )}
           </div>
-          <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
-            {end}
-          </InputGroupAddon>
+          {stacked ? (
+            <InputGroupAddon align="block-end" className="gap-1.5 px-3 pb-3">
+              {addMenu}
+              <span className="flex-1" />
+              {end}
+            </InputGroupAddon>
+          ) : (
+            <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
+              {end}
+            </InputGroupAddon>
+          )}
         </InputGroup>
         <Autocomplete.Portal>
           <Autocomplete.Positioner
