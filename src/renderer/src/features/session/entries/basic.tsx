@@ -218,7 +218,7 @@ export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryI
   const text = t(`compaction.${COMPACTION_KEY[entry.status]}`)
   const icon =
     entry.status === 'in_progress' ? (
-      <Spinner className="size-3.5" />
+      <Spinner className="size-3.5 text-info" />
     ) : (
       <LayersIcon className="size-3.5" />
     )

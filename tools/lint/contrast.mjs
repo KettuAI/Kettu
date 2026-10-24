@@ -66,7 +66,10 @@ export const PAIR_GROUPS = [
     fg: '--success',
     on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-code-block', '--success-tint'],
   },
-  { fg: '--info', on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--info-tint'] },
+  {
+    fg: '--info',
+    on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--info-tint', '--info-tint-hover'],
+  },
   {
     fg: '--merged',
     on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-subtle', '--bg-hover', '--bg-selected'],

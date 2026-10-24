@@ -53,7 +53,7 @@ export function StartingAgent({ agentId }: { agentId: AgentId }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-2 text-center" role="status">
       <span className="inline-flex items-center gap-2 text-ui text-muted-foreground">
-        <Spinner className="size-3.5" />
+        <Spinner className={cn('size-3.5', state === 'installing' && 'text-info')} />
         <span className="shimmer">
           {t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
             agent: agentName(agentId),
