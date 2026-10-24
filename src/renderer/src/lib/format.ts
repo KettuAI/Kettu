@@ -76,6 +76,16 @@ export function countdown(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+/** Within this much time left, `timeLeft` counts seconds. */
+export const SECONDS_LEFT = 5 * 60_000
+
+/** Time left as "52 min", in whole minutes rounded down, then as a `countdown` in the last five. */
+export function timeLeft(ms: number): string {
+  return ms > SECONDS_LEFT
+    ? i18n.t('time.minutesLeft', { m: Math.floor(ms / 60_000) })
+    : countdown(ms)
+}
+
 /** A plan-limit window's name: OverBench's for the windows it knows, else the agent's own. */
 export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   const key = `planWindow.${limit.window}`

@@ -1,7 +1,12 @@
 import { ChevronRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
-import type { CacheExpiry, CachePhase } from '@shared/prompt-cache'
+import {
+  knownExpiry,
+  type CacheExpiry,
+  type CachePhase,
+  type KnownExpiry,
+} from '@shared/prompt-cache'
 import type { AgentId, SessionUsage } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
@@ -15,6 +20,9 @@ import { Progress } from '@renderer/components/ui/progress'
 import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { CacheDetails } from '@renderer/features/prompt-cache/cache-details'
+import { CacheHourglass } from '@renderer/features/prompt-cache/cache-hourglass'
+import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { USAGE_TONE_TEXT, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import {
@@ -27,7 +35,7 @@ import {
   tokens,
 } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { useNow, useSeconds } from '@renderer/lib/use-now'
+import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
   loadContext,
@@ -35,7 +43,6 @@ import {
   useUsageStore,
   type ContextReport,
 } from '@renderer/stores/usage'
-import { useCachePhase } from './cache-phase'
 
 /** From this share of the context the button shows the percentage, in the usage level's color. */
 const CONTEXT_WARNING = 0.8
@@ -43,9 +50,6 @@ const CONTEXT_WARNING = 0.8
 /** The context's usage level, by the same thresholds as a plan's windows. */
 const contextTone = (share: number): UsageTone =>
   usageTone({ usedPercent: share * 100, state: 'ok' })
-
-const MINUTE = 60_000
-const HOUR = 60 * MINUTE
 
 const SHORT_WINDOW = {
   five_hour: 'usage.shortWindow.five_hour',
@@ -91,7 +95,7 @@ export function Ring({
 }: {
   share: number
   tone: keyof typeof RING_TONE
-  /** The prompt cache in its last minute dashes the track; once expired, the wedge fades too. */
+  /** The prompt cache in its last minutes dashes the track; once expired, the wedge fades too. */
   cache?: RingCache | null
   /** Its size: 16 px unless given. */
   className?: string
@@ -154,7 +158,8 @@ export function UsageButton({
   onCompact: (() => void) | null
 }) {
   const { t } = useTranslation('composer')
-  const phase = useCachePhase(running ? null : (cache?.expiresAt ?? null))
+  const timed = knownExpiry(running ? null : cache)
+  const phase = useCachePhase(timed)
   const ringCache = phase === 'warm' ? null : phase
   const warning = warningLimit(limits)
   if (!usage && !warning) return null
@@ -209,6 +214,9 @@ export function UsageButton({
           >
             {percent}%
           </span>
+        )}
+        {usage && timed && ringCache && (
+          <CacheTime key={ringCache} cache={timed} phase={ringCache} />
         )}
         {usage && <Ring share={share} tone={tone} cache={ringCache} />}
       </PopoverTrigger>
@@ -310,17 +318,7 @@ function ContextPart({
           )}
         </dl>
       )}
-      {cache &&
-        (cache.expiresAt === null || cache.ttl === null ? (
-          <LastRequest at={cache.lastRequestAt} />
-        ) : (
-          <CacheCountdown
-            lastRequestAt={cache.lastRequestAt}
-            ttl={cache.ttl}
-            expiresAt={cache.expiresAt}
-            estimate={cache.estimate}
-          />
-        ))}
+      {cache && <CacheDetails cache={cache} used={usage.used} />}
       {(usage.cost || onCompact) && (
         <div className="flex min-h-6 items-center justify-between text-xs">
           <span className="text-muted-foreground tabular">
@@ -337,57 +335,29 @@ function ContextPart({
   )
 }
 
-/** For a cache whose lifetime nothing says: only how long ago the last request was. */
-function LastRequest({ at }: { at: number }) {
+/**
+ * The time before the ring in the cache's last minutes, and "Expired" once it is up; the one part
+ * of the button on a one-second clock.
+ */
+function CacheTime({ cache, phase }: { cache: KnownExpiry; phase: RingCache }) {
   const { t } = useTranslation('composer')
-  const now = useNow()
+  const time = useCacheLeft(phase === 'ending' ? cache.expiresAt : null, countdown)
   return (
-    <div className="flex items-baseline justify-between gap-3 text-xs">
-      <span className="text-muted-foreground">{t('usage.cache.lastRequest')}</span>
-      <span className="tabular">{longAgo(at, now)}</span>
-    </div>
-  )
-}
-
-/** The popover's one part on a one-second clock, so the countdown re-renders nothing else. */
-function CacheCountdown({
-  lastRequestAt,
-  ttl,
-  expiresAt,
-  estimate,
-}: {
-  lastRequestAt: number
-  ttl: number
-  expiresAt: number
-  estimate: boolean
-}) {
-  const { t } = useTranslation('composer')
-  const now = useSeconds()
-  const left = expiresAt - now
-  const ago = longAgo(lastRequestAt, now)
-  const hours = ttl % HOUR === 0
-  const count = hours ? ttl / HOUR : Math.round(ttl / MINUTE)
-  const lifetime = estimate
-    ? t(hours ? 'usage.cache.estimateHours' : 'usage.cache.estimateMinutes', { count, ago })
-    : t(hours ? 'usage.cache.lastsHours' : 'usage.cache.lastsMinutes', { count, ago })
-  return (
-    <div className="flex flex-col gap-0.5 text-xs">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-muted-foreground">{t('usage.cache.title')}</span>
-        <span className="tabular">
-          {left > 0
-            ? t(estimate ? 'usage.cache.expiresInAbout' : 'usage.cache.expiresIn', {
-                time: countdown(left),
-              })
-            : t(estimate ? 'usage.cache.likelyExpired' : 'usage.cache.expired')}
-        </span>
-      </div>
-      <p className="text-muted-foreground">
-        {left > 0
-          ? lifetime
-          : t(estimate ? 'usage.cache.likelyExpiredNote' : 'usage.cache.expiredNote')}
-      </p>
-    </div>
+    <span
+      className={cn(
+        'inline-flex animate-in items-center gap-1 fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)',
+        phase === 'ending' ? 'text-warning' : 'text-tertiary',
+      )}
+    >
+      {phase === 'ending' ? (
+        <>
+          <CacheHourglass expiresAt={cache.expiresAt} ttl={cache.ttl} className="size-[13px]" />
+          {cache.estimate ? t('usage.cache.about', { time }) : time}
+        </>
+      ) : (
+        t(cache.estimate ? 'usage.cache.likelyExpired' : 'usage.cache.expired')
+      )}
+    </span>
   )
 }
 

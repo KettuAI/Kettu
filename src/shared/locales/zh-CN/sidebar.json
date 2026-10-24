@@ -44,7 +44,22 @@
     "error": "错误",
     "running": "运行中",
     "starting": "正在启动",
-    "unread": "未读"
+    "unread": "未读",
+    "cacheExpiring_other": "提示缓存 {{count}} 分钟后过期",
+    "cacheExpiringAbout_other": "提示缓存约 {{count}} 分钟后过期",
+    "cacheSoon": "提示缓存将在一分钟内过期",
+    "cacheSoonAbout": "提示缓存可能在一分钟内过期",
+    "cacheExpired": "提示缓存已过期",
+    "cacheLikelyExpired": "提示缓存可能已过期",
+    "noCache": "没有提示缓存"
+  },
+  "cache": {
+    "expiresIn": "提示缓存 {{time}} 后过期 · {{lifetime}}",
+    "expiresInAbout": "提示缓存约 {{time}} 后过期 · {{lifetime}}",
+    "lastsMinutes_other": "{{count}} 分钟缓存",
+    "lastsHours_other": "{{count}} 小时缓存",
+    "estimateMinutes_other": "按 {{count}} 分钟估算",
+    "estimateHours_other": "按 {{count}} 小时估算"
   },
   "footer": {
     "settings": "设置",

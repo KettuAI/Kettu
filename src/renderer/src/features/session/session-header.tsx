@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { BotIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
+import type { SessionView } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -9,6 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { CacheChip } from '@renderer/features/prompt-cache/cache-chip'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import {
@@ -39,8 +41,17 @@ export function ParentLink({ parent, className }: { parent: SessionSummary; clas
   )
 }
 
-/** The session's top bar: its title, which a click renames, its menu, and the project's git status. */
-export function SessionHeader({ summary }: { summary: SessionSummary }) {
+/**
+ * The session's top bar: its title, which a click renames, its menu, the prompt cache's time left,
+ * and the project's git status.
+ */
+export function SessionHeader({
+  summary,
+  session,
+}: {
+  summary: SessionSummary
+  session: SessionView | undefined
+}) {
   const { t } = useTranslation('sidebar')
   const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
   const [deleting, setDeleting] = useState(false)
@@ -99,6 +110,7 @@ export function SessionHeader({ summary }: { summary: SessionSummary }) {
             />
           </DropdownMenuContent>
         </DropdownMenu>
+        {session && <CacheChip session={session} />}
       </NoDrag>
       <span className="flex-1" />
       <HeaderTools projectPath={summary.projectPath} />

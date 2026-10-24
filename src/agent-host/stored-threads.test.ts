@@ -447,6 +447,21 @@ describe('prompt cache', () => {
     expect(t.launcher).toMatchObject({ launches: 0 })
   })
 
+  it("gives the sidebar a session's cache and model, also before it opens after a restart", async () => {
+    const cacheTtl = async () => 3_600_000
+    const { t: first, port: before } = await setup({ cacheTtl, sessionTimings: { cacheReadMs: 0 } })
+    const sessionId = await newSession(first, before)
+    expect(before.summary(sessionId)?.cache).toBeNull()
+    await finishTurn(before, sessionId, 'hello')
+    await before.until(() => before.summary(sessionId)?.cache?.ttl === 3_600_000)
+    const cache = before.thread(sessionId).session.usage!.cache!
+    expect(before.summary(sessionId)).toMatchObject({ cache, model: 'balanced' })
+
+    const { port } = await restart(first)
+    const listed = await port.request('sessions.list', {})
+    expect(listed.find((s) => s.id === sessionId)).toMatchObject({ cache, model: 'balanced' })
+  })
+
   it('keeps the lifetime it knew when the transcript says nothing', async () => {
     let ttl: number | null = 300_000
     let reads = 0

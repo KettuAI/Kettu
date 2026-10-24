@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentAccount } from './agent-host'
-import { cacheExpiry, cachePhase, nextPhaseIn } from './prompt-cache'
+import { cacheExpiry, cachePhase, endingWindow, expiryOf, nextPhaseIn } from './prompt-cache'
 import type { ConfigOption, SessionView } from './thread'
 
 const MINUTE = 60_000
@@ -122,22 +122,47 @@ describe('cacheExpiry', () => {
   })
 })
 
+describe('expiryOf', () => {
+  it('takes the model by name, as a session summary carries it', () => {
+    const cache = { lastRequestAt: 1_000, ttl: null }
+    expect(expiryOf('opencode', cache, 'anthropic/claude-opus-5-5', null)).toEqual({
+      lastRequestAt: 1_000,
+      ttl: 5 * MINUTE,
+      expiresAt: 1_000 + 5 * MINUTE,
+      estimate: true,
+    })
+    expect(expiryOf('opencode', cache, null, null)?.expiresAt).toBeNull()
+    expect(expiryOf('claude-code', null, null, null)).toBeNull()
+  })
+})
+
+describe('endingWindow', () => {
+  it('is the last five minutes of an hour-long cache and the last minute of a shorter one', () => {
+    expect(endingWindow(60 * MINUTE)).toBe(5 * MINUTE)
+    expect(endingWindow(30 * MINUTE)).toBe(MINUTE)
+    expect(endingWindow(5 * MINUTE)).toBe(MINUTE)
+  })
+})
+
 describe('cachePhase', () => {
   const expiresAt = 10 * MINUTE
 
-  it('is warm, ending in its last minute, then expired', () => {
-    expect(cachePhase(expiresAt, 0)).toBe('warm')
-    expect(cachePhase(expiresAt, expiresAt - MINUTE - 1)).toBe('warm')
-    expect(cachePhase(expiresAt, expiresAt - MINUTE)).toBe('ending')
-    expect(cachePhase(expiresAt, expiresAt - 1)).toBe('ending')
-    expect(cachePhase(expiresAt, expiresAt)).toBe('expired')
-    expect(cachePhase(expiresAt, expiresAt + 60 * MINUTE)).toBe('expired')
+  it('is warm, ending in its last minutes, then expired', () => {
+    expect(cachePhase(expiresAt, MINUTE, 0)).toBe('warm')
+    expect(cachePhase(expiresAt, MINUTE, expiresAt - MINUTE - 1)).toBe('warm')
+    expect(cachePhase(expiresAt, MINUTE, expiresAt - MINUTE)).toBe('ending')
+    expect(cachePhase(expiresAt, MINUTE, expiresAt - 1)).toBe('ending')
+    expect(cachePhase(expiresAt, MINUTE, expiresAt)).toBe('expired')
+    expect(cachePhase(expiresAt, MINUTE, expiresAt + 60 * MINUTE)).toBe('expired')
+    expect(cachePhase(expiresAt, 5 * MINUTE, expiresAt - 5 * MINUTE)).toBe('ending')
+    expect(cachePhase(expiresAt, 5 * MINUTE, expiresAt - 5 * MINUTE - 1)).toBe('warm')
   })
 
   it('names when the phase changes next, and nothing once expired', () => {
-    expect(nextPhaseIn(expiresAt, 0)).toBe(9 * MINUTE)
-    expect(nextPhaseIn(expiresAt, expiresAt - MINUTE)).toBe(MINUTE)
-    expect(nextPhaseIn(expiresAt, expiresAt - 30_000)).toBe(30_000)
-    expect(nextPhaseIn(expiresAt, expiresAt)).toBeNull()
+    expect(nextPhaseIn(expiresAt, MINUTE, 0)).toBe(9 * MINUTE)
+    expect(nextPhaseIn(expiresAt, MINUTE, expiresAt - MINUTE)).toBe(MINUTE)
+    expect(nextPhaseIn(expiresAt, MINUTE, expiresAt - 30_000)).toBe(30_000)
+    expect(nextPhaseIn(expiresAt, MINUTE, expiresAt)).toBeNull()
+    expect(nextPhaseIn(expiresAt, 5 * MINUTE, 0)).toBe(5 * MINUTE)
   })
 })
