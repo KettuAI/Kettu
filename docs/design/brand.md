@@ -39,7 +39,7 @@ The brand is black and white for now.
 | Black | `#000000` | One-color print, foil and engraving (K100)                |
 | Stone | `#8A8A85` | Supporting text in brand artwork; never the mark          |
 
-In the app the mark takes `--brand-overbench`: ink in the light theme, paper in the dark one.
+In the app the mark takes `--brand-overbench`: ink in the light theme, paper in the dark one. Beside page text, where a solid mark in full ink reads too heavy, it takes `--icon-default`, the grey of the interface's own icons, so it sits in the page as one of them (the maintainer's choice, 2026-10-24).
 
 ## Misuse
 
@@ -57,11 +57,11 @@ The guidelines also define a light macOS icon; it is not shipped, since an `.icn
 
 ## In the app
 
-| Where                                | What                                                                    |
-| ------------------------------------ | ----------------------------------------------------------------------- |
-| [New session](./ui.md#new-session)   | The mark, 52 px wide, 16 px before the heading, centred on its line     |
-| [Launch](./ui.md#launch), when slow  | The mark, 72 px wide, above "Starting OverBench…"                       |
-| Settings › [About](./ui.md#settings) | The horizontal lockup at 22 px in place of the title, named "OverBench" |
+| Where                                | What                                                                                                                  |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| [New session](./ui.md#new-session)   | The small mark, 36 px wide in `--icon-default`, 12 px before the heading: as tall as its capitals and on its baseline |
+| [Launch](./ui.md#launch), when slow  | The mark, 72 px wide, above "Starting OverBench…"                                                                     |
+| Settings › [About](./ui.md#settings) | The horizontal lockup at 22 px in place of the title, named "OverBench"                                               |
 
 The marks are decorative where text beside them already says OverBench; the lockup is an image named "OverBench". The sidebar header carries no brand, so the chrome stays quiet.
 
