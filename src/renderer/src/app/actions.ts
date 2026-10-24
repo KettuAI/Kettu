@@ -11,7 +11,8 @@ import {
 import { dropAttachments } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
-import { clearPicks, noteStarting, type OptionValues } from '@renderer/stores/agent-options'
+import { adoptedPrepared } from '@renderer/features/session/new-session/prepared'
+import { clearPicks, type OptionValues } from '@renderer/stores/agent-options'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -92,6 +93,7 @@ export async function createSession(
   parentId: string | null = null,
   prompt: string | null = null,
   options: OptionValues | null = null,
+  preparedId: string | null = null,
 ): Promise<void> {
   usePendingSession.setState({
     pending: { agentId, projectPath, parentId, prompt, options, error: null },
@@ -112,7 +114,9 @@ export async function createSession(
       ...(parentId ? { parentId } : {}),
       ...(options && Object.keys(options).length > 0 ? { options } : {}),
       ...(prompt !== null ? { prompt: [{ type: 'text', text: prompt }] } : {}),
+      ...(preparedId ? { preparedId } : {}),
     })
+    if (preparedId) adoptedPrepared(summary.id)
     // The host now remembers what carries over; the rest starts afresh next time.
     if (options) clearPicks(agentId)
     useSessionsStore.getState().upsert(summary)
@@ -160,6 +164,7 @@ export function startNewSession(
   projectPath: string | null,
   prompt: string,
   options: OptionValues | null,
+  preparedId: string | null = null,
 ): Promise<void> {
   const { main } = useViewStore.getState()
   const parent =
@@ -167,22 +172,8 @@ export function startNewSession(
       ? useSessionsStore.getState().byId[main.parentId]
       : undefined
   return parent
-    ? createSession(agentId, parent.projectPath, parent.id, prompt, options)
-    : createSession(agentId, projectPath, null, prompt, options)
-}
-
-/**
- * Starts the agent while the New session screen is shown, so the first send waits only for the
- * session, and has the host read its options when none are known; a failure shows when the
- * session is created.
- */
-export function warmAgent(agentId: AgentId): void {
-  noteStarting(agentId, 1)
-  host('agents.start', { agentId })
-    .catch((error: unknown) =>
-      console.warn(`Could not start ${agentId} ahead of the session: ${errorMessage(error)}`),
-    )
-    .finally(() => noteStarting(agentId, -1))
+    ? createSession(agentId, parent.projectPath, parent.id, prompt, options, preparedId)
+    : createSession(agentId, projectPath, null, prompt, options, preparedId)
 }
 
 /**

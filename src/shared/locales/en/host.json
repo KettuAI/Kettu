@@ -70,6 +70,11 @@
         "missing": "This session has no {{option}} option, so {{wanted}} is not available.",
         "cannotTurnOn": "This session has no {{option}} option, so it cannot be turned on."
       },
+      "start": {
+        "title": "This session could not start with all of your settings",
+        "missing": "This session has no {{option}} option, so {{wanted}} is not available.",
+        "cannotTurnOn": "This session has no {{option}} option, so it cannot be turned on."
+      },
       "differs": "{{option}} is {{actual}} instead of {{wanted}}.",
       "isOff": "{{option}} is off instead of on.",
       "isOn": "{{option}} is on instead of off.",

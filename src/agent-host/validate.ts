@@ -347,7 +347,13 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'agents.cancelTask': agent,
-    'agents.start': agent,
+    'agents.readOptions': (params) => {
+      const o = fields(params)
+      return {
+        agentId: agentId(o),
+        projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
+      }
+    },
     'agents.refreshLimits': agent,
     'agents.details': agent,
     'agents.refreshAccount': agent,
@@ -374,6 +380,7 @@ export function createValidators(platform: Platform): Validators {
     'sessions.create': (params) => {
       const o = fields(params)
       const parentId = optionalString(o, 'parentId', ID_CHARS)
+      const preparedId = optionalString(o, 'preparedId', ID_CHARS)
       const options = o.options === undefined ? undefined : configValues(o.options)
       return {
         agentId: agentId(o),
@@ -382,8 +389,25 @@ export function createValidators(platform: Platform): Validators {
         ...(parentId !== undefined ? { parentId } : {}),
         ...(options !== undefined ? { options } : {}),
         ...(o.prompt !== undefined ? { prompt: promptContent(o.prompt) } : {}),
+        ...(preparedId !== undefined ? { preparedId } : {}),
       }
     },
+    'sessions.prepare': (params) => {
+      const o = fields(params)
+      const parentId = optionalString(o, 'parentId', ID_CHARS)
+      const options = o.options === undefined ? undefined : configValues(o.options)
+      if (o.replace !== undefined && typeof o.replace !== 'boolean') {
+        throw invalidParams('replace must be a boolean')
+      }
+      return {
+        agentId: agentId(o),
+        projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
+        ...(parentId !== undefined ? { parentId } : {}),
+        ...(options !== undefined ? { options } : {}),
+        ...(o.replace === true ? { replace: true } : {}),
+      }
+    },
+    'sessions.discard': (params) => ({ sessionId: sessionId(fields(params)) }),
     'sessions.import': (params) => {
       const o = fields(params)
       return {

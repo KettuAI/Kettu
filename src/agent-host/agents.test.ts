@@ -336,9 +336,9 @@ describe('AgentManager', () => {
     expect(sent()).not.toContain('session/delete')
     await until(() => sent().includes('session/delete'))
     expect(seen).toEqual([])
-    // A failed read is not tried again until the agent restarts.
+    // The menu's next opening tries again.
     await m.agents.readOptions('fake-agent')
-    expect(sent().filter((method) => method === 'session/new')).toHaveLength(1)
+    expect(sent().filter((method) => method === 'session/new')).toHaveLength(2)
     await m.agents.stopAll()
   })
 
@@ -561,13 +561,12 @@ describe('AgentManager', () => {
     }
     await m.agents.ensureReady('codex')
     await m.agents.readOptions('codex')
-    await m.agents.readOptions('codex')
     await m.agents.refreshLimits('codex')
     const sent = m.diagnostics
       .agentRecords('codex')
       .traffic.filter((r) => r.direction === 'out')
       .map((r) => r.method)
-    // Read once when the agent starts; the limits report records them only while none are known.
+    // The limits report records them only while none are known.
     expect(seen).toEqual(['codex'])
     expect(sent.filter((method) => method === 'session/new')).toHaveLength(2)
     expect(sent.filter((method) => method === 'session/close')).toHaveLength(2)
