@@ -96,7 +96,11 @@ describe('layoutCanvas', () => {
         ),
       ]),
     )
-    const { pages, width, height } = layoutCanvas(rows)
+    const { pages, titles, width, height } = layoutCanvas(rows)
+    expect(titles).toEqual([
+      { title: 'Phones', x: 0, y: 0, width: 2 * 390 + PAGE_GAP },
+      { title: 'Many', x: 0, y: 844 + ROW_GAP, width: 6 * 100 + 5 * PAGE_GAP },
+    ])
     expect(pages.slice(0, 2).map((p) => [p.x, p.y])).toEqual([
       [0, 0],
       [390 + PAGE_GAP, 0],

@@ -15,3 +15,10 @@ export const follow = {
   duration: 0.12,
   ease: [0.165, 0.84, 0.44, 1],
 } satisfies Transition
+
+/** A camera move a button or key asks for: --duration-base and --ease-out-quart. */
+export const glide = {
+  type: 'tween',
+  duration: 0.2,
+  ease: [0.165, 0.84, 0.44, 1],
+} satisfies Transition

@@ -194,12 +194,16 @@ export class ArtifactStore {
     return this.call('versions', { id, project: project ?? null })
   }
 
-  /** The file of a version, the latest by default, for main to serve. */
-  async content(id: string, version?: number): Promise<{ path: string; version: number }> {
+  /** The file of a version, the latest by default, for main to serve; with the artifact's title. */
+  async content(
+    id: string,
+    version?: number,
+  ): Promise<{ path: string; version: number; title: string }> {
     const found = await this.get(id, version === undefined ? {} : { version })
     return {
       path: contentPath(this.deps.contentDir, found.version.hash),
       version: found.version.version,
+      title: found.artifact.title,
     }
   }
 

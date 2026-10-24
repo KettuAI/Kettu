@@ -1,23 +1,38 @@
 import { create } from 'zustand'
-import type { ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
 import { errorMessage, host } from '@renderer/lib/host'
 
 interface ArtifactsStore {
   /** Every artifact outside Recently deleted, newest first; null until the first read. */
   list: ArtifactSummary[] | null
+  /** Recently deleted, the latest deletion first; null until the first read. */
+  deleted: ArtifactSummary[] | null
   /** Why the last read failed, until a read succeeds. */
   error: string | null
   /** The page's filter, kept while the viewer shows so Back returns to the same list. */
   filter: string
   /** The card the viewer was opened from, which takes the focus back. */
   opened: string | null
+  /** Why the last import failed, until it is dismissed or another import starts. */
+  importFailed: ImportFailure | null
+  /** The rename or permanent delete waiting for the user's answer. */
+  dialog: ArtifactDialog | null
 }
+
+export type ArtifactDialog =
+  | { kind: 'rename'; id: string; title: string }
+  | { kind: 'erase'; id: string; title: string; versions: number }
+
+export type ImportFailure = Extract<ArtifactImportResult, { failed: string }>['failed'] | 'failed'
 
 export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   list: null,
+  deleted: null,
   error: null,
   filter: '',
   opened: null,
+  importFailed: null,
+  dialog: null,
 }))
 
 let shown = 0
@@ -32,9 +47,9 @@ function read(): void {
   }
   reading = true
   stale = false
-  host('artifacts.list', {})
+  Promise.all([host('artifacts.list', {}), host('artifacts.list', { deleted: true })])
     .then(
-      (list) => useArtifactsStore.setState({ list, error: null }),
+      ([list, deleted]) => useArtifactsStore.setState({ list, deleted, error: null }),
       (error: unknown) => {
         stale = true
         useArtifactsStore.setState({ error: errorMessage(error) })
@@ -48,8 +63,11 @@ function read(): void {
     })
 }
 
-/** The page came into view or left it; while it shows, the list follows the host's changes. */
-export function artifactsPageShown(on: boolean): void {
+/**
+ * A page, viewer or pane that shows artifacts came into view or left it; while one shows, the lists
+ * follow the host's changes.
+ */
+export function artifactListShown(on: boolean): void {
   shown += on ? 1 : -1
   if (on && stale) read()
 }
@@ -66,4 +84,60 @@ export function retryArtifacts(): void {
 
 export function setArtifactsFilter(filter: string): void {
   useArtifactsStore.setState({ filter })
+}
+
+// The host announces each change with `artifacts.changed`, which reads the lists again.
+
+export function renameArtifact(id: string, title: string): Promise<void> {
+  return host('artifacts.rename', { id, title })
+}
+
+/** To Recently deleted, which needs no confirmation since it can be undone. */
+export function deleteArtifact(id: string): Promise<void> {
+  return host('artifacts.delete', { id })
+}
+
+export function restoreArtifact(id: string): Promise<void> {
+  return host('artifacts.undelete', { id })
+}
+
+/** From Recently deleted, for good. */
+export function eraseArtifact(id: string): Promise<void> {
+  return host('artifacts.delete', { id, permanently: true })
+}
+
+/** Asks main for a file through its open dialog; `project` null is No project. */
+export async function importArtifact(project: string | null): Promise<string | null> {
+  useArtifactsStore.setState({ importFailed: null })
+  let result: ArtifactImportResult
+  try {
+    result = await window.overbench.artifacts.import(project)
+  } catch (error) {
+    console.error('Could not import an artifact', error)
+    useArtifactsStore.setState({ importFailed: 'failed' })
+    return null
+  }
+  if (result === null) return null
+  if ('failed' in result) {
+    useArtifactsStore.setState({ importFailed: result.failed })
+    return null
+  }
+  return result.id
+}
+
+export function dismissImportFailure(): void {
+  useArtifactsStore.setState({ importFailed: null })
+}
+
+export function askArtifactDialog(dialog: ArtifactDialog | null): void {
+  useArtifactsStore.setState({ dialog })
+}
+
+/** An earlier version written again as the newest, by the user; `baseVersion` is the latest. */
+export async function restoreVersion(
+  id: string,
+  version: number,
+  baseVersion: number,
+): Promise<void> {
+  await host('artifacts.restoreVersion', { id, version, baseVersion })
 }

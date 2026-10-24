@@ -2,7 +2,7 @@
 // limits, and the store calls behind them. See docs/design/artifacts.md, The artifacts service.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
-import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
+import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer, NO_SESSION } from '@shared/artifacts'
 import { countPages } from './pages'
 import { ArtifactError, type ArtifactStore, type Editor } from './store'
 
@@ -545,7 +545,7 @@ export class ArtifactTools {
   }
 
   private sessionName(sessionId: string | null): string {
-    if (sessionId === null) return 'user'
+    if (sessionId === null || sessionId === NO_SESSION) return 'user'
     const known = this.deps.sessionTitle(sessionId)
     if (known === undefined) return 'Deleted session'
     return known ?? 'Untitled session'

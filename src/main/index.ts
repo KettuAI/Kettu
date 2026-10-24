@@ -113,6 +113,7 @@ async function start(): Promise<void> {
     content: (id, version) => agentHost.artifactContent(id, version),
     contentDir: join(userDataPath, 'artifacts', 'content'),
     thumbnailDir: join(userDataPath, 'artifacts', 'thumbnails'),
+    importFile: (path, project) => agentHost.artifactImport(path, project),
   })
   await artifacts.install(session.defaultSession)
   serveMedia(session.defaultSession, mediaGrants, isRendererUrl)

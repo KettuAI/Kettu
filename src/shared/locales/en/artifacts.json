@@ -38,7 +38,25 @@
     "emptyDescription": "Pages your agents make for you show here, by project and session. Ask an agent for a report, a deck or design options.",
     "noMatch": "No matching artifacts",
     "noMatchHint": "Esc clears the filter",
-    "errorTitle": "Your artifacts could not be listed"
+    "errorTitle": "Your artifacts could not be listed",
+    "imported": "Imported",
+    "import": "Import an HTML file",
+    "importEllipsis": "Import an HTML file…",
+    "importInto": "Import into",
+    "importFailedTitle": "The file could not be imported",
+    "importFailed": {
+      "too_large": "It is over 5 MiB, the most an artifact holds.",
+      "not_utf8": "It is not UTF-8 text.",
+      "unreadable": "It could not be read.",
+      "unavailable": "The agent host can't take it right now. Try again in a moment.",
+      "failed": "Something went wrong. Try again."
+    },
+    "dismiss": "Dismiss",
+    "recentlyDeleted": "Recently deleted",
+    "backToArtifacts": "Back to Artifacts",
+    "deletedDescription": "Deleted artifacts stay here for 30 days, then they and every version of them are removed for good.",
+    "nothingDeleted": "Nothing in Recently deleted",
+    "nothingDeletedHint": "What you or your agents delete stays here for 30 days"
   },
   "card": {
     "version": "v{{version}}",
@@ -47,8 +65,30 @@
     "more": "More for {{title}}",
     "where": "{{project}} · {{session}}",
     "when": "v{{version}} · {{time}}",
+    "daysLeft_one": "{{project}} · {{count}} day left",
+    "daysLeft_other": "{{project}} · {{count}} days left",
+    "editing": "Editing"
+  },
+  "menu": {
     "open": "Open",
-    "openSession": "Open the session"
+    "openInBrowser": "Open in browser",
+    "export": "Export…",
+    "rename": "Rename…",
+    "versionHistory": "Version history",
+    "openSession": "Open the session",
+    "delete": "Delete",
+    "restore": "Restore",
+    "erase": "Delete permanently…"
+  },
+  "dialog": {
+    "renameTitle": "Rename artifact",
+    "title": "Title",
+    "titleTooLong": "A title holds at most {{count}} characters.",
+    "rename": "Rename",
+    "eraseTitle": "Delete “{{title}}” permanently?",
+    "eraseDescription_one": "Its one version will be removed from this computer. This cannot be undone.",
+    "eraseDescription_other": "Its {{count}} versions will be removed from this computer. This cannot be undone.",
+    "erase": "Delete"
   },
   "viewer": {
     "back": "Back",
@@ -61,9 +101,42 @@
     "stoppedTitle": "The page stopped",
     "stoppedDescription": "Its process ended. Reload to show it again.",
     "errorTitle": "Could not open this artifact",
-    "errorNotFound": "It is no longer in OverBench.",
-    "errorUnavailable": "The agent host can't show it right now. Try again in a moment.",
-    "errorFailed": "Something went wrong. Try again.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "more": "More",
+    "error": {
+      "notFound": "It is no longer in OverBench.",
+      "unavailable": "The agent host can't show it right now. Try again in a moment.",
+      "failed": "Something went wrong. Try again."
+    },
+    "earlierLead": "Version {{version}} of {{head}}",
+    "restoreVersion": "Restore this version",
+    "inTrash": "In Recently deleted",
+    "daysLeft_one": " · {{count}} day left",
+    "daysLeft_other": " · {{count}} days left",
+    "goneTitle": "This artifact was deleted",
+    "goneDescription": "It stays in Recently deleted for 30 days.",
+    "editing": "{{session}} is editing",
+    "editingLabel": "{{session}} is editing this artifact. Open the session",
+    "places_other": "Open in {{count}} places",
+    "placesTip_other": "This artifact is open in {{count}} places in OverBench"
+  },
+  "canvas": {
+    "role": "Canvas",
+    "page": "Page {{number}}",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoom": "{{percent}}%",
+    "zoomToFit": "Zoom to fit",
+    "previous": "Previous page",
+    "next": "Next page",
+    "counter": "{{number}} / {{count}}",
+    "backToCanvas": "Back to the canvas"
+  },
+  "history": {
+    "title": "Version history",
+    "close": "Close version history",
+    "version": "Version {{version}}",
+    "latest": "Latest",
+    "you": "You"
   }
 }

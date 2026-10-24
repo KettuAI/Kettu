@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ARTIFACT_KEEP_DELETED_MS } from '@shared/artifacts'
+import { ARTIFACT_KEEP_DELETED_MS, NO_SESSION } from '@shared/artifacts'
 import { inThreadWorker } from '../testing/thread-worker'
 import { ThreadStore } from '../threads/store'
 import { ArtifactStore, type ArtifactActivity } from './store'
@@ -420,6 +420,24 @@ describe('the artifacts tools', () => {
       ],
     })
     expect(versions.text).toBe(`${id} has 3 versions, newest first.`)
+  })
+
+  it('name the user for an artifact the user imported', async () => {
+    const { call, store } = setup()
+    const { id } = await store.create({
+      project: A.project,
+      sessionId: NO_SESSION,
+      title: 'Imported',
+      html: '<p>i</p>',
+      pages: 0,
+      note: null,
+    })
+    expect((await call(A, 'list_artifacts', {})).value).toMatchObject({
+      artifacts: [{ id, session: 'user' }],
+    })
+    expect((await call(A, 'list_artifact_versions', { id })).value).toMatchObject({
+      versions: [{ version: 1, author: 'user' }],
+    })
   })
 
   it('delete to Recently deleted, which ends what a session can do with it', async () => {

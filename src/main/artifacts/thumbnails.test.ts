@@ -110,7 +110,12 @@ describe('Thumbnails', () => {
     await mkdir(dir, { recursive: true })
     await writeFile(path.join(dir, `${HASH}.jpg`), 'page')
     await writeFile(path.join(dir, `${HASH}.png`), 'canvas')
-    const found: ArtifactContentResult = { kind: 'found', path: `/c/ab/${HASH}.html`, version: 1 }
+    const found: ArtifactContentResult = {
+      kind: 'found',
+      path: `/c/ab/${HASH}.html`,
+      version: 1,
+      title: 'Page',
+    }
     expect(await thumbnails(found).thumbnail(ID, 1, null)).toBe(
       `data:image/jpeg;base64,${Buffer.from('page').toString('base64')}`,
     )
@@ -123,13 +128,23 @@ describe('Thumbnails', () => {
   it('gives null for a version the host does not know or cannot name', async () => {
     expect(await thumbnails({ kind: 'not_found' }).thumbnail(ID, 1, null)).toBeNull()
     expect(await thumbnails({ kind: 'failed' }).thumbnail(ID, 1, null)).toBeNull()
-    const odd: ArtifactContentResult = { kind: 'found', path: '/c/ab/../x.html', version: 1 }
+    const odd: ArtifactContentResult = {
+      kind: 'found',
+      path: '/c/ab/../x.html',
+      version: 1,
+      title: 'Page',
+    }
     expect(await thumbnails(odd).thumbnail(ID, 1, null)).toBeNull()
     expect(opened).not.toHaveBeenCalled()
   })
 
   it('gives null when the page cannot render, and keeps nothing', async () => {
-    const found: ArtifactContentResult = { kind: 'found', path: `/c/ab/${HASH}.html`, version: 1 }
+    const found: ArtifactContentResult = {
+      kind: 'found',
+      path: `/c/ab/${HASH}.html`,
+      version: 1,
+      title: 'Page',
+    }
     const made = thumbnails(found)
     // Not installed, so nothing renders.
     expect(await made.thumbnail(ID, 1, null)).toBeNull()

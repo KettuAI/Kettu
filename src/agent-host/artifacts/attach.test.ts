@@ -81,6 +81,31 @@ async function listTools(url: string, authorization: string): Promise<number> {
 }
 
 describe('the artifacts service in sessions', () => {
+  it("links each call to the agent's tool call, with the artifact as the call left it", async () => {
+    const { port, create } = await setup()
+    const sessionId = await create()
+    await run(port, sessionId, '/artifacts')
+    await run(port, sessionId, '/artifacts')
+    const [artifact] = await port.request('artifacts.list', {})
+    const links = port
+      .entries(sessionId)
+      .flatMap((entry) => (entry.kind === 'tool' ? [[entry.title, entry.artifact ?? null]] : []))
+    const link = (action: string, version: number) => ({
+      id: artifact!.id,
+      title: 'Fake canvas',
+      action,
+      version,
+    })
+    expect(links).toEqual([
+      ['mcp__overbench__list_artifacts', null],
+      ['mcp__overbench__create_artifact', link('create', 1)],
+      ['mcp__overbench__read_artifact', link('read', 1)],
+      ['mcp__overbench__list_artifacts', null],
+      ['mcp__overbench__update_artifact', link('update', 2)],
+      ['mcp__overbench__read_artifact', link('read', 2)],
+    ])
+  })
+
   it('passes the service with a token of its own on every attach', async () => {
     const { t, port, attached, create } = await setup()
     const sessionId = await create()

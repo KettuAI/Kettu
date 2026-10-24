@@ -67,7 +67,18 @@
     "copyCommand": "Copy command",
     "showAll": "Show all",
     "showFullDiff": "Show full diff",
-    "image": "Image"
+    "image": "Image",
+    "artifact": {
+      "create": "Created artifact",
+      "update": "Updated artifact",
+      "restore": "Restored version",
+      "delete": "Deleted artifact",
+      "read": "Read artifact",
+      "open": "Open",
+      "openArtifact": "Open {{title}}",
+      "openTip": "Open beside the thread",
+      "version": "v{{version}}"
+    }
   },
   "permission": {
     "ask": {

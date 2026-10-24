@@ -4,6 +4,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
+import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { AgentProcess, ArtifactContentResult, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
@@ -11,6 +12,7 @@ import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
+import { readImport } from './artifacts/import'
 import { ArtifactService } from './artifacts/service'
 import { ArtifactError, ArtifactStore, versionSummary } from './artifacts/store'
 import {
@@ -195,6 +197,7 @@ export class AgentHost {
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
+      linked: (sessionId, tool, link) => this.sessions.linkArtifactCall(sessionId, tool, link),
       log,
       appVersion: options.appVersion,
     })
@@ -437,6 +440,41 @@ export class AgentHost {
       }
     }
     this.options.send({ type: 'host:artifact-content', requestId, result })
+  }
+
+  /**
+   * `host:artifact-import-request`: makes an artifact of a file the user chose, in `project` or,
+   * when it is null, in a new scratch folder, which the page lists under No project.
+   */
+  async artifactImport(requestId: number, file: string, project: string | null): Promise<void> {
+    let result: NonNullable<ArtifactImportResult>
+    try {
+      let folder: string | null = null
+      if (project !== null) {
+        folder = await this.projects.resolveDirectory(project)
+        if (!this.scratch.contains(folder)) this.projects.match(folder)
+      }
+      const read = await readImport(file)
+      if ('failed' in read) {
+        result = read
+      } else {
+        // Made only now, so a file that cannot be read leaves no empty folder behind.
+        folder ??= await this.scratch.create()
+        const { id } = await this.artifacts.create({
+          project: folder,
+          sessionId: NO_SESSION,
+          title: read.title,
+          html: read.html,
+          pages: read.pages,
+          note: null,
+        })
+        result = { id }
+      }
+    } catch (error) {
+      this.diagnostics.log('warn', `Could not import an artifact: ${(error as Error).message}`)
+      result = { failed: 'unavailable' }
+    }
+    this.options.send({ type: 'host:artifact-import', requestId, result })
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */

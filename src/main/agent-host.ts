@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, type WebContents } from 'electron'
+import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type {
   ArtifactContentResult,
@@ -41,6 +42,11 @@ const GRACE_MS = 2_000
 const GRANT_TIMEOUT_MS = 5_000
 /** How long the protocol waits for the host to name a version's file. */
 const CONTENT_TIMEOUT_MS = 10_000
+/** How long an import waits for the host to make the artifact. */
+const IMPORT_TIMEOUT_MS = 10_000
+
+type ImportAnswer = NonNullable<ArtifactImportResult>
+const UNAVAILABLE: ImportAnswer = { failed: 'unavailable' }
 
 function isStringList(value: unknown): value is string[] {
   return (
@@ -52,14 +58,27 @@ function isStringList(value: unknown): value is string[] {
 
 function isContentResult(value: unknown): value is ArtifactContentResult {
   if (typeof value !== 'object' || value === null) return false
-  const { kind, path, version } = value as Record<string, unknown>
+  const { kind, path, version, title } = value as Record<string, unknown>
   if (kind === 'not_found' || kind === 'failed') return true
   return (
     kind === 'found' &&
     typeof path === 'string' &&
     path.length <= MAX_STRING &&
     Number.isSafeInteger(version) &&
-    (version as number) >= 1
+    (version as number) >= 1 &&
+    typeof title === 'string'
+  )
+}
+
+function isImportAnswer(value: unknown): value is ImportAnswer {
+  if (typeof value !== 'object' || value === null) return false
+  const { id, failed } = value as Record<string, unknown>
+  if (typeof id === 'string') return ARTIFACT_ID.test(id)
+  return (
+    failed === 'too_large' ||
+    failed === 'not_utf8' ||
+    failed === 'unreadable' ||
+    failed === 'unavailable'
   )
 }
 
@@ -100,6 +119,8 @@ export class AgentHost {
   )
   private readonly contentRequests = new Map<number, (result: ArtifactContentResult) => void>()
   private nextContentId = 1
+  private readonly importRequests = new Map<number, (result: ImportAnswer) => void>()
+  private nextImportId = 1
 
   constructor(private readonly deps: AgentHostDeps) {
     this.host = new UtilityHost<MainToHost, HostToMain>({
@@ -212,6 +233,27 @@ export class AgentHost {
     })
   }
 
+  /** Has the host make an artifact of a file the user chose; `unavailable` without a host. */
+  artifactImport(path: string, project: string | null): Promise<ImportAnswer> {
+    if (this.host.state !== 'ready') return Promise.resolve(UNAVAILABLE)
+    const requestId = this.nextImportId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.importRequests.delete(requestId)
+        log.warn(`No artifact import answer within ${IMPORT_TIMEOUT_MS} ms`)
+        resolve(UNAVAILABLE)
+      }, IMPORT_TIMEOUT_MS)
+      this.importRequests.set(requestId, (result) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      if (!this.host.post({ type: 'host:artifact-import-request', requestId, path, project })) {
+        this.importRequests.get(requestId)?.(UNAVAILABLE)
+        this.importRequests.delete(requestId)
+      }
+    })
+  }
+
   stop(): Promise<void> {
     return this.host.stop()
   }
@@ -256,6 +298,13 @@ export class AgentHost {
         resolve(isContentResult(message.result) ? message.result : { kind: 'failed' })
         break
       }
+      case 'host:artifact-import': {
+        const resolve = this.importRequests.get(message.requestId)
+        if (!resolve) break
+        this.importRequests.delete(message.requestId)
+        resolve(isImportAnswer(message.result) ? message.result : UNAVAILABLE)
+        break
+      }
       case 'host:media-grant':
         if (isMediaGrant(message.grant)) this.deps.onMediaGrant(message.grant)
         break
@@ -282,6 +331,8 @@ export class AgentHost {
     this.grants.failAll()
     for (const resolve of this.contentRequests.values()) resolve({ kind: 'failed' })
     this.contentRequests.clear()
+    for (const resolve of this.importRequests.values()) resolve(UNAVAILABLE)
+    this.importRequests.clear()
     this.deps.onMediaRevoke(null)
     this.deps.onBadge(0)
     const roots = this.agentProcesses

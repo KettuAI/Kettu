@@ -23,6 +23,7 @@ import {
   threadFromSnapshot,
   UnknownEntryError,
   type AgentId,
+  type ArtifactLink,
   type ConfigOption,
   type OlderPage,
   type Patch,
@@ -48,6 +49,7 @@ import {
   type SessionTarget,
 } from './acp/connection'
 import type { ForkPoint } from './acp/fork-point'
+import { callsTool } from './artifacts/links'
 import {
   addTokenTotals,
   isStopReason,
@@ -257,6 +259,11 @@ interface Live {
   partial: boolean
   /** Bytes of sent attachments for the next checkpoint, by hash. */
   blobs: Map<string, StoredBlob>
+  /**
+   * The artifacts its tool calls acted on, by entry id: the agent's replay of the history does not
+   * carry them, so they are put back on the entries it sends again.
+   */
+  links: Map<string, ArtifactLink>
   checkpointTimer: ReturnType<typeof setTimeout> | null
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
@@ -587,7 +594,9 @@ export class SessionManager {
   }
 
   private emit(live: Live, patches: readonly Patch[]): void {
-    for (const patch of patches) {
+    for (let patch of patches) {
+      if (patch.op === 'thread.reset') this.keepLinks(live)
+      else if (patch.op === 'entry.add') patch = this.withLink(live, patch)
       try {
         live.thread = applyPatchInPlace(live.thread, patch)
       } catch (error) {
@@ -601,6 +610,54 @@ export class SessionManager {
     }
     this.scheduleFlush(live)
     this.scheduleCheckpoint(live)
+  }
+
+  /** Keeps the artifact links of the thread a replay is about to replace. */
+  private keepLinks(live: Live): void {
+    for (const entry of Object.values(live.thread.byId)) {
+      if (entry.kind === 'tool' && entry.artifact) live.links.set(entry.id, entry.artifact)
+    }
+  }
+
+  /** A tool call the replay sends again gets back the artifact it acted on. */
+  private withLink(live: Live, patch: Extract<Patch, { op: 'entry.add' }>): Patch {
+    const { entry } = patch
+    if (entry.kind !== 'tool' || entry.artifact) return patch
+    const link = live.links.get(entry.id)
+    return link ? { ...patch, entry: { ...entry, artifact: link } } : patch
+  }
+
+  /**
+   * A call to the artifacts service acted on an artifact: the session's tool call that names the
+   * same tool, while it runs, carries it from then on; of several such calls, the first, as they
+   * reach the service in order. A subagent's call counts as its session's, so its threads are
+   * searched too.
+   */
+  linkArtifactCall(sessionId: string, tool: string, link: ArtifactLink): void {
+    const tree = [sessionId, ...this.descendants(sessionId, 'subagent').map((r) => r.id)]
+    for (const id of tree) {
+      const live = this.live.get(id)
+      if (!live) continue
+      const { order, byId } = live.thread
+      let found: string | null = null
+      // Running calls belong to the turn that runs now.
+      for (let i = order.length - 1; i >= 0; i--) {
+        const entry = byId[order[i]!]
+        if (!entry || entry.kind === 'turn_end') break
+        if (
+          entry.kind === 'tool' &&
+          !entry.artifact &&
+          (entry.status === 'pending' || entry.status === 'in_progress') &&
+          callsTool(entry.title, tool)
+        ) {
+          found = entry.id
+        }
+      }
+      if (found === null) continue
+      live.links.set(found, link)
+      this.emit(live, [{ op: 'entry.update', id: found, changes: { artifact: link } }])
+      return
+    }
   }
 
   /** Notes what a patch changed for the next checkpoint. */
@@ -940,6 +997,7 @@ export class SessionManager {
       rewrite: false,
       partial: false,
       blobs: new Map(),
+      links: new Map(),
       checkpointTimer: null,
       used: false,
       first: null,

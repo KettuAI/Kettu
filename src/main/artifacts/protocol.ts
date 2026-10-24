@@ -102,7 +102,8 @@ export function withStyle(html: string, css: string): string {
   return html.slice(0, at) + style + html.slice(at)
 }
 
-function isInside(dir: string, file: string): boolean {
+/** Whether `file` lies inside `dir`, by its path as written. */
+export function isInside(dir: string, file: string): boolean {
   const relative = path.relative(dir, path.resolve(file))
   return (
     relative !== '' &&

@@ -73,12 +73,15 @@ async function run(): Promise<unknown> {
       return new Promise(() => {})
     }
     const path = config.files[id]
-    return Promise.resolve(path ? { kind: 'found', path, version: 1 } : { kind: 'not_found' })
+    return Promise.resolve(
+      path ? { kind: 'found', path, version: 1, title: 'Page' } : { kind: 'not_found' },
+    )
   }
   const artifacts = new Artifacts({
     content,
     contentDir: config.contentDir,
     thumbnailDir: join(config.contentDir, '..', 'thumbnails'),
+    importFile: () => Promise.resolve({ failed: 'unavailable' }),
   })
   const ses = session.defaultSession
   // The built-in resolver logs each DNS query, on every platform, which getaddrinfo does not.

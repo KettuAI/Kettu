@@ -5,6 +5,16 @@ export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/
 
 export const ARTIFACT_TITLE_CHARS = 120
 
+/** The session id of an artifact the user imported, which no session created. */
+export const NO_SESSION = ''
+
+/**
+ * `artifact:import`: the new artifact's id, or why the file could not be imported; null when the
+ * user cancelled the dialog.
+ */
+export type ArtifactImportResult =
+  { id: string } | { failed: 'too_large' | 'not_utf8' | 'unreadable' | 'unavailable' } | null
+
 /**
  * The viewer's frame: the page runs scripts on its own origin and may offer a download, but opens
  * no window, never moves the app's frame and cannot block on alert().

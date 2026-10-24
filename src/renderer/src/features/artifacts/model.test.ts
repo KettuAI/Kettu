@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { ArtifactSummary } from '@shared/artifacts'
+import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import {
   dateBucket,
+  daysLeft,
   filterByTitle,
   groupArtifacts,
   sessionCount,
@@ -46,6 +47,7 @@ const context: ListContext = {
   ],
   session: (id) => SESSIONS[id] ?? null,
   deletedSession: 'Deleted session',
+  imported: 'Imported',
   collator: new Intl.Collator('en', { numeric: true, sensitivity: 'base' }),
   now: NOW,
 }
@@ -145,6 +147,21 @@ describe('groupArtifacts', () => {
     expect(newest).toEqual(['gone', 's2', 's1'])
   })
 
+  it('puts what the user imported under its own label, by its newest artifact', () => {
+    const list = [
+      artifact({ sessionId: 's1' }),
+      artifact({ sessionId: NO_SESSION, title: 'Mock', updatedAt: NOW }),
+      artifact({ sessionId: 's3' }),
+    ]
+    expect(group(list, 'project-session')[0]!.sections.map((s) => s.sessionId)).toEqual([
+      NO_SESSION,
+      's1',
+      's3',
+    ])
+    const byName = group(list, 'project-session', 'name')[0]!.sections.map((s) => s.sessionId)
+    expect(byName).toEqual(['s1', NO_SESSION, 's3'])
+  })
+
   it('sorts names in numeric order', () => {
     const list = ['Slide 10', 'slide 2', 'Slide 1'].map((title) => artifact({ title }))
     expect(titles(group(list, 'none', 'name'))).toEqual([[['Slide 1', 'slide 2', 'Slide 10']]])
@@ -192,5 +209,25 @@ describe('sessionCount', () => {
       sessionCount([artifact({ sessionId: 'a' }), artifact({ sessionId: 'b' }), artifact({})]),
     ).toBe(3)
     expect(sessionCount([artifact({ sessionId: 'a' }), artifact({ sessionId: 'a' })])).toBe(1)
+  })
+
+  it('counts no session for what the user imported', () => {
+    expect(sessionCount([artifact({ sessionId: NO_SESSION }), artifact({ sessionId: 'a' })])).toBe(
+      1,
+    )
+  })
+})
+
+describe('daysLeft', () => {
+  it('starts at 30 and never says less than one', () => {
+    expect(daysLeft(NOW, NOW)).toBe(30)
+    expect(daysLeft(NOW - HOUR, NOW)).toBe(30)
+    expect(daysLeft(NOW - DAY - HOUR, NOW)).toBe(29)
+    expect(daysLeft(NOW - 29 * DAY - HOUR, NOW)).toBe(1)
+    expect(daysLeft(NOW - 31 * DAY, NOW)).toBe(1)
+  })
+
+  it('says 30 for a deletion newer than the clock the view last read', () => {
+    expect(daysLeft(NOW + 40_000, NOW)).toBe(30)
   })
 })
