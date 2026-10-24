@@ -826,6 +826,39 @@ describe('prepared sessions', () => {
     expect(await agentSessions(t, t.connect())).toHaveLength(1)
   })
 
+  it('sends the attachments of the first message it is adopted with', async () => {
+    const { t, port } = await setup()
+    const prepared = await prepare(t, port)
+    const attachment = await port.request('attachments.add', {
+      source: {
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer,
+        mimeType: 'image/png',
+        name: 'Image 1',
+      },
+      thumb: null,
+    })
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      preparedId: prepared.id,
+      prompt: [
+        { type: 'text', text: 'hello' },
+        { type: 'ref', ref: { kind: 'attachment', attachment } },
+      ],
+    })
+    expect(summary.id).toBe(prepared.id)
+    await port.open(summary.id)
+    await port.untilStatus(summary.id, 'ready')
+    const user = port.entries(summary.id).find((e) => e.kind === 'user')
+    expect(user?.kind === 'user' && user.content[1]).toMatchObject({
+      ref: { kind: 'attachment', attachment: { id: attachment.id, sent: 'image' } },
+    })
+    // Sent, the draft's record goes.
+    await expect(port.request('attachments.read', { id: attachment.id })).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
   it('replaces it when asked, removing the old one', async () => {
     const { t, port } = await setup()
     const first = await prepare(t, port)
