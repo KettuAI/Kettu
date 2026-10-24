@@ -144,9 +144,9 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 - **Imports**: use the `@renderer/*` and `@shared/*` aliases instead of deep relative paths.
 - **Comments**: English and ASCII only, and only when they say what the code cannot, such as the reason for a workaround or an edge case. No commented-out code.
 - **Dependencies**: ask the maintainer before adding any. Renderer-only libraries go in `devDependencies` because Vite bundles them; only modules a process loads at runtime instead of from the bundle, such as `node-pty` and `electron-updater`, go in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
-- **Docs**: `README.md` and `README.zh-CN.md` are kept in sync; change both together. Design docs under `docs/` follow the maintenance rules in `docs/README.md`.
+- **Docs**: `README.md` and `README.zh-CN.md` are kept in sync, and so are `ROADMAP.md` and `ROADMAP.zh-CN.md`; change both of a pair together. The README is for users; setup and commands live in `CONTRIBUTING.md`, and plans in the roadmap, which follows the GitHub milestones. Design docs under `docs/` follow the maintenance rules in `docs/README.md`.
 - **Git**: Conventional Commits 1.0.0 in English, with an imperative subject of at most 50 characters and a body that explains why. No tool-generated trailers or attribution lines. Branches are `<type>/<issue>-<slug>` in kebab-case, such as `fix/123-model-menu-close`. A pull request's title follows the same subject rules, because the squash merge makes it the commit on `main`; its description is a sentence or two, `Closes #N` and how it was checked, with no headings.
-- **Language**: talk to the maintainer in Simplified Chinese. Everything written into the repository is English (code, comments, commits, pull requests), except Chinese product copy and `README.zh-CN.md`.
+- **Language**: talk to the maintainer in Simplified Chinese. Everything written into the repository is English (code, comments, commits, pull requests), except Chinese product copy, `README.zh-CN.md` and `ROADMAP.zh-CN.md`.
 
 ## Gotchas
 

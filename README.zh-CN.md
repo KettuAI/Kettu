@@ -12,7 +12,7 @@
 Claude Code、Codex CLI 和 opencode 并排在同一个窗口里，<br>
 好读的对话线程、清晰的授权请求，每个会话旁边都有 Git 和终端。
 
-[**下载**](https://github.com/overbench/overbench/releases/latest) · [反馈](https://github.com/overbench/overbench/issues/new/choose) · [English](./README.md)
+[**下载**](https://github.com/overbench/overbench/releases/latest) · [路线图](./ROADMAP.zh-CN.md) · [反馈](https://github.com/overbench/overbench/issues/new/choose) · [English](./README.md)
 
 </div>
 
@@ -80,22 +80,6 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 - **集成最优秀的实现。** 研究每个环节最强的实现，从终端到 diff 查看器，把它们集成到一起，而不是重新造轮子。
 - **极致优化。** 启动迅速，再长的对话记录也滚动顺滑，不掉帧。
 - **极致 UI。** 清晰的层级、克制的字体与动效，让你比翻任何滚动记录都更快看清 Agent 改了什么。
-
-## 路线图
-
-- [x] 通过 ACP 接入 Claude Code、Codex CLI 和 opencode
-- [x] 会话历史、多会话并行与子会话
-- [x] Git 状态、Pull Request、文件与内置终端
-- [x] macOS、Windows、Linux 预览版
-- [x] 输入框中的附件和 `@` 文件引用
-- [x] Artifacts：Agent 生成的页面和画布，保留历史版本
-- [x] 所有 Agent 的 token 用量与套餐额度
-- [ ] M0 在三个平台上通过验收
-- [ ] 在改动面板中审阅 diff
-- [ ] 在对话和文件面板中播放音频和视频
-- [ ] Routines：按计划自动运行的 Agent 任务
-- [ ] 跨会话搜索与命令面板
-- [ ] 签名并公证的安装包
 
 ## 反馈
 

@@ -12,7 +12,7 @@
 Claude Code, Codex CLI and opencode side by side in one window,<br>
 with readable threads, clear approvals, git and a terminal beside every session.
 
-[**Download**](https://github.com/overbench/overbench/releases/latest) · [Feedback](https://github.com/overbench/overbench/issues/new/choose) · [简体中文](./README.zh-CN.md)
+[**Download**](https://github.com/overbench/overbench/releases/latest) · [Roadmap](./ROADMAP.md) · [Feedback](https://github.com/overbench/overbench/issues/new/choose) · [简体中文](./README.zh-CN.md)
 
 </div>
 
@@ -80,22 +80,6 @@ It rests on one belief, **beauty is productivity**: a tool you spend whole days 
 - **Start from the best.** Study the strongest implementations of each piece, from terminals to diff viewers, and bring them together instead of reinventing them.
 - **Optimize to the limit.** Quick to start and smooth through the longest transcript, with no dropped frames.
 - **Polish to the limit.** A clear hierarchy, calm typography and restrained motion, so you see what the agent changed faster than in any scrollback.
-
-## Roadmap
-
-- [x] Claude Code, Codex CLI and opencode over ACP
-- [x] Session history, parallel sessions and sub-sessions
-- [x] Git status, pull requests, files and a built-in terminal
-- [x] Preview builds for macOS, Windows and Linux
-- [x] Attachments and `@` file mentions in the composer
-- [x] Artifacts: the pages and canvases agents create, with their versions
-- [x] Token usage across agents, with plan limits
-- [ ] M0 accepted on all three platforms
-- [ ] A changes panel for reviewing diffs
-- [ ] Audio and video in the thread and the Files pane
-- [ ] Routines: agent tasks that run on a schedule
-- [ ] Search across sessions and a command palette
-- [ ] Signed and notarized builds
 
 ## Feedback
 
