@@ -45,7 +45,7 @@ export function usePromptBox({
   sessionId: string | null
   projectPath: string | null
   disabled: boolean
-  /** Typing in the box or focusing it, as New session's prepared session watches for. */
+  /** Typing, attaching or focusing the box, as New session's prepared session watches for. */
   onActivity?: () => void
 }) {
   const { t } = useTranslation('composer')
@@ -72,6 +72,7 @@ export function usePromptBox({
       return
     }
     picking.current = true
+    onActivity?.()
     pickAttachments(draft, kind, projectPath)
       .then(limitError, (e: unknown) => setError(errorMessage(e)))
       .finally(() => {
@@ -81,6 +82,7 @@ export function usePromptBox({
   const onEvent = useEffectEvent((event: AppEvent) => {
     if (event.kind === 'add-attachments') pick('files')
     if (event.kind === 'drop-attachments' && event.draft === draft && !disabled) {
+      onActivity?.()
       attachFiles(draft, event.files).then(limitError, (e: unknown) => setError(errorMessage(e)))
     }
   })
@@ -166,6 +168,7 @@ export function usePromptBox({
     const images = pastedImages(event.clipboardData)
     if (images.length === 0) return
     event.preventDefault()
+    onActivity?.()
     limitError(attachImages(draft, images))
   }
 

@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { SessionSummary } from '@shared/agent-host'
-import type { Attachment, ThreadEntry, ToolEntry } from '@shared/thread'
+import type { Attachment, ThreadEntry, ToolEntry, UserContent } from '@shared/thread'
 import { AgentRequestError } from './acp/connection'
 import { forkCut, unknownSession } from './sessions'
 import {
@@ -857,6 +857,34 @@ describe('prepared sessions', () => {
     await expect(port.request('attachments.read', { id: attachment.id })).rejects.toMatchObject({
       code: 'not_found',
     })
+  })
+
+  it('refuses a first message naming an attachment no longer held, and stays prepared', async () => {
+    const { t, port } = await setup()
+    const prepared = await prepare(t, port)
+    const attachment = await port.request('attachments.add', {
+      source: {
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer,
+        mimeType: 'image/png',
+        name: 'Image 1',
+      },
+      thumb: null,
+    })
+    await port.request('attachments.remove', { id: attachment.id })
+    const create = (prompt: UserContent[]) =>
+      port.request('sessions.create', {
+        agentId: 'fake-agent',
+        projectPath: t.project,
+        preparedId: prepared.id,
+        prompt,
+      })
+    await expect(
+      create([{ type: 'ref', ref: { kind: 'attachment', attachment } }]),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    expect(await port.request('sessions.list', {})).toEqual([])
+    const summary = await create([{ type: 'text', text: 'hello' }])
+    expect(summary.id).toBe(prepared.id)
+    expect(sent(t, 'session/new')).toBe(1)
   })
 
   it('replaces it when asked, removing the old one', async () => {
