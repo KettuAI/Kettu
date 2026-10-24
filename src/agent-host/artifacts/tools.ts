@@ -1,5 +1,5 @@
 // The seven tools of the artifacts service: what agents are told, the schemas, the checks and the
-// limits, and the store calls behind them. See docs/design/artifacts.md, The artifacts service.
+// limits, and the store calls behind them.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer, NO_SESSION } from '@shared/artifacts'

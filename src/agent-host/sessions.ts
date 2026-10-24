@@ -2826,8 +2826,7 @@ export class SessionManager {
 
   /**
    * What goes to the agent for this content, how the thread shows it once sent, and the bytes
-   * the thread store keeps for it. Each attachment goes as the agent's prompt capabilities allow
-   * ([how each is sent](docs/design/session-model.md#how-each-is-sent)).
+   * the thread store keeps for it. Each attachment goes as the agent's prompt capabilities allow.
    */
   private async resolveAttachments(
     live: Live,

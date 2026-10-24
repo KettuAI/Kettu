@@ -1,5 +1,4 @@
-// The Artifacts page's list: the filter, then the groups and their order. See
-// docs/design/artifacts.md#artifacts-page.
+// The Artifacts page's list: the filter, then the groups and their order.
 
 import { ARTIFACT_KEEP_DELETED_MS, NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import { basename } from '@renderer/lib/format'

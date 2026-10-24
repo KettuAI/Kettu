@@ -2,7 +2,7 @@
 // Captures the main screens of a production build in both themes, so the interface can be checked
 // on platforms nobody runs by hand. It starts the app from `out/` with a fresh data folder and a
 // scratch git project, drives it with the fake agent over the Chrome DevTools Protocol, and writes
-// PNG files named <platform>-<screen>-<theme>.png. See docs/design/testing.md#screenshots.
+// PNG files named <platform>-<screen>-<theme>.png.
 //
 //   pnpm build && node tools/screenshots/capture.mjs [--out screenshots] [--port 9230]
 //

@@ -1,5 +1,4 @@
-// The media scheme: files the agent host granted, served to the app's own page alone. See
-// docs/design/media.md#serving.
+// The media scheme: files the agent host granted, served to the app's own page alone.
 
 import { open, realpath } from 'node:fs/promises'
 import { Readable } from 'node:stream'

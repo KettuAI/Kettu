@@ -32,7 +32,7 @@ export interface StopTimings {
 export const STOP_TIMINGS: StopTimings = { eofMs: 2_000, termMs: 3_000 }
 
 // How long a quit's kill waits for the exit, so that the reap of what is left starts before the
-// record's last write: docs/design/agent-host.md has the sum.
+// record's last write: the longest quit adds up to 5.25 s of the 6 s main allows.
 const KILL_WAIT_MS = 500
 
 export interface SpawnedAgent {

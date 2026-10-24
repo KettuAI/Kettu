@@ -392,8 +392,8 @@
 }
 
 /* A top fade drawn over a scroller rather than masking it: Chromium repaints a scroller whose mask
-   fades its top on every streamed chunk (docs/perf/m0.md). Goes on the scroller's positioned
-   parent, which must sit on --background; the scroller sets scroll-timeline: --scroll-fade-top y. */
+   fades its top on every streamed chunk. Goes on the scroller's positioned parent, which must
+   sit on --background; the scroller sets scroll-timeline: --scroll-fade-top y. */
 @utility scroll-fade-top-overlay {
   timeline-scope: --scroll-fade-top;
   &::before {
@@ -547,8 +547,7 @@
   transition: flex-grow var(--duration-slow) var(--ease-out-quart);
 }
 
-/* Agent prose, rendered by Streamdown, set to the thread's measurements (the typography spec
-   of m0-feedback problem 43). These rules are not in a layer, so they win over the utility
+/* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not in a layer, so they win over the utility
    classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
    scales them; the spec's pixel values are those of the default 15 px. */
 .markdown {

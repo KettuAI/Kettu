@@ -1,7 +1,7 @@
 // Process test: the isolation probe. A page in the viewer's frame tries to reach what an artifact
 // must not, in Electron with main's real protocol, guards and frame guard; then the frame guard
 // meets frames it must refuse. It runs once with the policy and once without, so main's own guards
-// are shown to hold on their own. See docs/design/artifacts.md#security.
+// are shown to hold on their own.
 
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
@@ -495,7 +495,7 @@ describe.each([
 
   it('sends no DNS query for a host the page names, but for TURN servers', () => {
     // Main's own lookup shows the net log records them. WebRTC looks a TURN server's name up
-    // before any proxy is asked, a risk the design accepts (docs/design/artifacts.md#network-policy).
+    // before any proxy is asked, a risk the design accepts.
     const { turn, turns, ...dns } = result.dns
     expect(dns).toEqual({
       control: true,

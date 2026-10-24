@@ -34,7 +34,7 @@ export interface SettingsFile {
   updates: { automatic: 'download' | 'notify' | 'off' }
   privacy: { hideAccount: boolean } // masks emails and account names on screen
   usage: {
-    fromComputer: boolean // read the agents' own logs; see docs/design/usage.md
+    fromComputer: boolean // read the agents' own logs
     sidebar: 'today' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
   }
 }

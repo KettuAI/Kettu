@@ -1,6 +1,5 @@
 // Card thumbnails, asked for as cards scroll into view, one at a time in that order. Main renders
-// and keeps them on disk; this keeps the ones shown in this run. See
-// docs/design/artifacts.md#thumbnails.
+// and keeps them on disk; this keeps the ones shown in this run.
 
 import { useEffect, useSyncExternalStore } from 'react'
 import { fitThumbnail, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '@shared/artifacts'

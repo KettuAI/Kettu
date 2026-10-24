@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Starts the production build in `out/` with the fake agent, a fresh data folder and a scratch
 // project, runs measure.mjs against it, and exits with its code. This is how CI measures the
-// budgets on runners nobody sits at. See docs/design/testing.md#measuring-performance.
+// budgets on runners nobody sits at.
 //
 //   pnpm build && node tools/perf/run.mjs [--port 9250] [--json]
 //

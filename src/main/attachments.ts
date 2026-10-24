@@ -1,5 +1,5 @@
 // What the user chose to attach: main checks each path and grants it to the agent host, which
-// reads nothing else. See docs/design/session-model.md#only-what-the-user-chose.
+// reads nothing else.
 
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'

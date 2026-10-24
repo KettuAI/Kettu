@@ -1,5 +1,4 @@
-// Media an agent names by path, served to the renderer on a scheme of its own. See
-// docs/design/media.md.
+// Media an agent names by path, served to the renderer on a scheme of its own.
 
 export const MEDIA_SCHEME = 'overbench-media'
 

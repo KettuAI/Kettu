@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Measures the M0 performance budgets (docs/milestones/m0.md) against a running OverBench.
+// Measures the performance budgets against a running OverBench.
 //
 // Start a production build with the fake agent, a debugging port and the perf flag, and open a
-// project in it, then run this script. See docs/design/testing.md#measuring-performance.
+// project in it, then run this script.
 //
 //   pnpm build && pnpm exec electron-vite preview --skipBuild -- \
 //     --overbench-perf --remote-debugging-port=9222

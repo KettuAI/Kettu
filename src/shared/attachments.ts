@@ -1,5 +1,5 @@
 // Limits of the attachments a message carries, checked in the composer and again by the host,
-// and the rules both use to tell how an attachment is sent. See docs/design/session-model.md#attachments.
+// and the rules both use to tell how an attachment is sent.
 
 /** Attachments in one prompt. */
 export const ATTACHMENT_LIMIT = 20

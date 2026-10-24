@@ -1,5 +1,4 @@
 // What the user does with an artifact's file: open it in the browser, export it, or import one.
-// See docs/design/artifacts.md#import-and-export.
 
 import { copyFile, mkdir } from 'node:fs/promises'
 import os from 'node:os'

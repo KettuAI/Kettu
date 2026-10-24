@@ -1,6 +1,5 @@
 // What keeps an artifact's page in its frame, beyond its own policy: main's request filter, the
-// navigation guard, forwarded shortcuts and the watch for a page whose process stopped. See
-// docs/design/artifacts.md#security.
+// navigation guard, forwarded shortcuts and the watch for a page whose process stopped.
 
 import type { Input, Session, WebContents, WebFrameMain } from 'electron'
 import type { ArtifactBlockedEvent, ArtifactStoppedEvent, ForwardedKey } from '@shared/ipc'

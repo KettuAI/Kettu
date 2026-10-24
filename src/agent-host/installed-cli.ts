@@ -1,7 +1,6 @@
 // The Claude Code or Codex CLI the user installed, which an adapter runs instead of the copy it
 // brings: found on PATH, resolved to a file that starts without a shell, asked its version and
-// held against the oldest version the installed adapter runs. See "Using the installed CLI" in
-// docs/design/agent-host.md.
+// held against the oldest version the installed adapter runs.
 
 import { open, readFile, realpath, stat } from 'node:fs/promises'
 import os from 'node:os'

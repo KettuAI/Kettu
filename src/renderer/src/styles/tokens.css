@@ -2,7 +2,7 @@
    hold color literals (tools/lint/color-literals.mjs enforces it). Light values sit on :root,
    dark ones on [data-theme='dark'] and, until the settings set the theme, under
    prefers-color-scheme: dark. The two dark blocks must stay identical (tools/lint/contrast.mjs
-   checks it). See docs/design/design-system.md#color. */
+   checks it). */
 
 :root,
 [data-theme='light'] {
@@ -78,7 +78,7 @@
   /* The top edge of a raised surface catching the light; dark theme only. */
   --highlight: 0 0 #0000;
 
-  /* The OverBench mark: ink on light, paper on dark (docs/design/brand.md). */
+  /* The OverBench mark: ink on light, paper on dark. */
   --brand-overbench: #1c1b18;
 
   /* Agent marks: with the OverBench mark, the only brand colors in the interface. */

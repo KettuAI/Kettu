@@ -528,7 +528,7 @@ describe('issueBody', () => {
       [
         'The Urgent trigger fired: "revert: feat: add login (#33) (#81)" closed urgent #82.',
         '',
-        'The version is v0.0.2, the earliest open patch milestone. The steps are in [release](https://github.com/overbench/overbench/blob/main/docs/workflow.md#6-release).',
+        'The version is v0.0.2, the earliest open patch milestone.',
         '',
         'User-visible changes and reverts since v0.0.1:',
         '',

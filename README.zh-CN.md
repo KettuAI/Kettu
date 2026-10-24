@@ -2,8 +2,8 @@
 
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/brand/lockup-horizontal-dark.svg">
-    <img src="./docs/brand/lockup-horizontal.svg" alt="OverBench" width="300">
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/lockup-horizontal-dark.svg">
+    <img src="./assets/lockup-horizontal.svg" alt="OverBench" width="300">
   </picture>
 </h1>
 
@@ -24,8 +24,8 @@ Claude Code、Codex CLI 和 opencode 并排在同一个窗口里，<br>
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/images/screenshot-dark.webp">
-  <img src="./docs/images/screenshot-light.webp" alt="OverBench 界面：Claude Code 会话修复了一个 bug，正在请求运行测试，侧边栏里还有 Codex 和 opencode 的会话">
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshot-dark.webp">
+  <img src="./assets/screenshot-light.webp" alt="OverBench 界面：Claude Code 会话修复了一个 bug，正在请求运行测试，侧边栏里还有 Codex 和 opencode 的会话">
 </picture>
 
 > [!NOTE]

@@ -1,4 +1,4 @@
-// The interface languages and how one is chosen; see docs/design/localization.md.
+// The interface languages and how one is chosen.
 
 import type { InitOptions, Resource } from 'i18next'
 

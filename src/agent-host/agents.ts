@@ -132,7 +132,7 @@ export interface AgentTimings {
   updateIntervalMs: number
   /**
    * How long a quit waits for the agents to stop before it kills what still runs and writes its
-   * state: main kills the host 6 s after `host:shutdown`, and docs/design/agent-host.md has the sum.
+   * state: main kills the host 6 s after `host:shutdown`, and the longest quit adds up to 5.25 s.
    */
   quitStopMs: number
 }

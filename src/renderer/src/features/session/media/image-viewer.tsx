@@ -17,8 +17,7 @@ import { cn } from '@renderer/lib/utils'
 
 /**
  * The plain viewer of the media design's first version: the picture fitted over the whole window
- * on a dark scrim, with its name and sizes, closed by Close, `Esc` or a click beside it. See
- * docs/design/ui.md#viewer.
+ * on a dark scrim, with its name and sizes, closed by Close, `Esc` or a click beside it.
  */
 export function ImageViewer({
   open,

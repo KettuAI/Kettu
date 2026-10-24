@@ -116,7 +116,7 @@ export interface ToolLimits {
 
 /**
  * Long enough for a slow machine, except while quitting, which main cuts short 6 s after
- * `host:shutdown`: docs/design/agent-host.md has the sum.
+ * `host:shutdown`; the longest quit adds up to 5.25 s.
  */
 export function toolLimits(platform: Platform): ToolLimits {
   return {

@@ -1,5 +1,5 @@
 // The origins artifacts are served on: one per artifact, and only for the artifacts opened in
-// this run. See docs/design/artifacts.md#the-protocol.
+// this run.
 
 import { createHash } from 'node:crypto'
 import type { WebContents } from 'electron'

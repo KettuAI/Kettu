@@ -12,7 +12,7 @@ import { useEntry, useEntryAnimation } from '../use-thread'
 
 /**
  * A write to the artifacts service: a card that opens the artifact beside the thread, or a line
- * for a deletion. See docs/design/design-system.md#artifact-entries.
+ * for a deletion.
  */
 export const ArtifactEntry = memo(function ArtifactEntry({
   sessionId,

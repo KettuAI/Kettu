@@ -1,7 +1,6 @@
 // The artifacts service: the `overbench` MCP server on 127.0.0.1, which each attached session
 // reaches with a token of its own, or for OpenCode with its process and folder's token. Streamable
-// HTTP in plain JSON, one stateless transport per request. See docs/design/artifacts.md, The
-// artifacts service.
+// HTTP in plain JSON, one stateless transport per request.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'

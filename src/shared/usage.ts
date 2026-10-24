@@ -1,4 +1,4 @@
-// The usage page's data, as the agent host serves it. See docs/design/usage.md.
+// The usage page's data, as the agent host serves it.
 
 import type { AgentId } from './thread'
 

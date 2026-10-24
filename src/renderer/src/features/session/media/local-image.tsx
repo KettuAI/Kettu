@@ -28,7 +28,7 @@ function fileName(path: string): string {
 
 /**
  * An image a reply names by its path, in place, from the media scheme. Give it `key={path}`, so a
- * different path starts over. See docs/design/ui.md#media.
+ * different path starts over.
  */
 export function LocalImage({ path, alt }: { path: string; alt: string }) {
   const { t } = useTranslation(['session', 'common'])

@@ -1,6 +1,5 @@
 // What an artifact's page may load: its own origin, `data:`, `blob:` and a fixed list of CDNs. The
-// policy goes out as a header, and main's request filter holds the same line on its own. See
-// docs/design/artifacts.md#network-policy.
+// policy goes out as a header, and main's request filter holds the same line on its own.
 
 import type { ProxyConfig } from 'electron'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
@@ -54,7 +53,7 @@ const POWERFUL_FEATURES = [
  * The proxy of the session the windows use. Main's request filter stops a page's requests to other
  * hosts, but WebRTC's connections never pass it: with WebRTC kept off UDP, they all come here, to a
  * port nothing listens on, which refuses them. The CDNs, loopback and the spellchecker's
- * dictionaries, which Linux downloads, go direct. See docs/design/artifacts.md#network-policy.
+ * dictionaries, which Linux downloads, go direct.
  */
 export const WINDOW_PROXY: ProxyConfig = {
   mode: 'fixed_servers',

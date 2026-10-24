@@ -205,7 +205,7 @@ describe('findColorLiterals: markup', () => {
 describe('checkFile', () => {
   it('prints path:line:col with the message', () => {
     expect(checkFile('src/renderer/src/a.css', 'a {\n  color: red;\n}\n')).toEqual([
-      "src/renderer/src/a.css:2:10 Color literal 'red': colors live in src/renderer/src/styles/tokens.css (see docs/design/design-system.md#color)",
+      "src/renderer/src/a.css:2:10 Color literal 'red': colors live in src/renderer/src/styles/tokens.css",
     ])
   })
 

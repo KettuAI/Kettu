@@ -1,5 +1,5 @@
 // The `overbench-artifact` protocol: each artifact on an origin of its own, its HTML from the
-// store and nothing else. See docs/design/artifacts.md#the-protocol.
+// store and nothing else.
 
 import { open, readFile } from 'node:fs/promises'
 import path from 'node:path'

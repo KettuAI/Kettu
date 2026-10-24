@@ -1,5 +1,4 @@
-// Grants for media files a thread names, which main then serves on the media scheme. See
-// docs/design/media.md#granting-a-file.
+// Grants for media files a thread names, which main then serves on the media scheme.
 
 import { randomBytes } from 'node:crypto'
 import { open, realpath, stat } from 'node:fs/promises'

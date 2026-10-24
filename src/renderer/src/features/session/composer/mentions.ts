@@ -1,6 +1,6 @@
 // The composer's `@` mentions: the word being typed, the project's files and folders that match
 // it, the files the session's tool calls used, and the text once one is chosen. Paths are relative
-// to the project, with `/`. See docs/design/ui.md#attachments.
+// to the project, with `/`.
 
 import type { ThreadState } from '@shared/thread'
 import { toolStep } from '@renderer/features/session/entries/helpers'

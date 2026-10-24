@@ -1,4 +1,4 @@
-// The OverBench mark and wordmark, as docs/design/brand.md specifies them. The renderer draws
+// The OverBench mark and wordmark. The renderer draws
 // them through components/brand.tsx and tools/brand builds the icons and images from them.
 
 /** The mark's artboard: every size rule measures this box, not the shape inside it. */

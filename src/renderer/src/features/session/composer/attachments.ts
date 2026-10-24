@@ -1,7 +1,6 @@
 // A composer's attachments: adding pasted images, picked or dropped files and folders, and the
 // project's files and folders an `@` mention names, through the host, removing them, keeping them
-// with the draft across a restart, and the content refs a message carries. See
-// docs/design/ui.md#attachments.
+// with the draft across a restart, and the content refs a message carries.
 
 import {
   ATTACHMENT_LIMIT,
@@ -396,7 +395,7 @@ let keeping = false
 /**
  * Puts the attachments each draft kept back in its composer, and from then on keeps a composer's
  * added attachments with its draft. The host then says which records it still holds; one it no
- * longer does fails as "No longer available". See docs/design/persistence.md#composer-drafts.
+ * longer does fails as "No longer available".
  */
 export async function restoreDraftAttachments(): Promise<void> {
   if (keeping) return
