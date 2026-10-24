@@ -2,7 +2,7 @@
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
-import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS } from '@shared/artifacts'
+import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
@@ -623,8 +623,10 @@ export function createValidators(platform: Platform): Validators {
     'artifacts.versions': artifact,
     'artifacts.rename': (params) => {
       const o = fields(params)
-      const title = string(o, 'title', ARTIFACT_TITLE_CHARS)
-      if (title.trim() === '') throw invalidParams('title must not be blank')
+      const title = o.title
+      if (typeof title !== 'string' || title.trim() === '' || longer(title, ARTIFACT_TITLE_CHARS)) {
+        throw invalidParams(`title must be 1 to ${ARTIFACT_TITLE_CHARS} characters, not blank`)
+      }
       return { id: artifactId(o), title }
     },
     'artifacts.delete': (params) => {

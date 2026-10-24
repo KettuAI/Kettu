@@ -3,6 +3,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import {
   REMOVED_WHILE_STARTING,
   type AttachmentBytes,
@@ -148,6 +149,15 @@ export interface SessionEvents {
   badge(count: number): void
 }
 
+/** The artifacts service, as the sessions pass it to their agents. */
+export interface SessionMcp {
+  /** What an attach of the session passes in `mcpServers`, with a token made for it. */
+  servers(sessionId: string, record: SessionRecord): McpServer[]
+  /** The session left memory, closed, released or deleted: its token ends. */
+  detached(sessionId: string): void
+  turnEnded(sessionId: string): void
+}
+
 export interface SessionManagerDeps {
   platform: Platform
   agents: AgentManager
@@ -171,6 +181,8 @@ export interface SessionManagerDeps {
   cacheTtl?: CacheTtlReader
   /** The attachments drafts and queued prompts hold; without it a prompt carries none. */
   attachments?: Attachments
+  /** The artifacts service; without it every attach passes no MCP servers. */
+  mcp?: SessionMcp
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -414,6 +426,20 @@ export class SessionManager {
 
   has(sessionId: string): boolean {
     return this.live.has(sessionId) || this.records.has(sessionId)
+  }
+
+  /** The session's title, null for one without a title yet, undefined for one not in the index. */
+  title(sessionId: string): string | null | undefined {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.records.get(sessionId)
+    if (!record) return undefined
+    return record.customTitle ?? (live ? live.thread.session.title : record.title)
+  }
+
+  /** The session's running turn, for telling it from a later one; null between turns. */
+  runningTurn(sessionId: string): object | null {
+    const turn = this.live.get(sessionId)?.turn
+    return turn && !turn.ended ? turn : null
   }
 
   private children(parentId: string): SessionRecord[] {
@@ -914,12 +940,23 @@ export class SessionManager {
     connection.register(live.record.acpSessionId, live.target)
   }
 
+  /** The artifacts service for an attach of the session, to an agent that takes MCP over HTTP. */
+  private mcpServers(
+    sessionId: string,
+    record: SessionRecord,
+    runtime: AgentRuntime | null | undefined,
+  ): McpServer[] {
+    if (!this.deps.mcp || !runtime?.init.capabilities.mcpHttp) return []
+    return this.deps.mcp.servers(sessionId, record)
+  }
+
   private dropLive(live: Live): void {
     this.flushPatches(live)
     if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
     if (live.releaseTimer) clearTimeout(live.releaseTimer)
     if (live.turn?.fallback) clearTimeout(live.turn.fallback)
     live.connection?.unregister(live.record.acpSessionId, live.target)
+    this.deps.mcp?.detached(live.id)
     this.seqs.set(live.id, live.seq)
     this.live.delete(live.id)
     this.deps.agents.sessionsChanged(live.record.agentId)
@@ -1317,7 +1354,11 @@ export class SessionManager {
     if (gone()) throw removedWhileStarting()
     let setup
     try {
-      setup = await runtime.connection.newSession(live.record.projectPath, sessionMeta(live.record))
+      setup = await runtime.connection.newSession(
+        live.record.projectPath,
+        sessionMeta(live.record),
+        this.mcpServers(live.id, live.record, runtime),
+      )
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
       if (gone()) throw removedWhileStarting()
@@ -1571,12 +1612,18 @@ export class SessionManager {
       )
     }
     this.attach(live, connection)
+    const mcpServers = this.mcpServers(live.id, live.record, runtime)
     try {
       if (useLoad) {
         this.prepareReplay(live, connection)
         let setup
         try {
-          setup = await connection.loadSession(acpSessionId, projectPath, sessionMeta(live.record))
+          setup = await connection.loadSession(
+            acpSessionId,
+            projectPath,
+            sessionMeta(live.record),
+            mcpServers,
+          )
         } catch (error) {
           this.finishReplay(live, false)
           throw error
@@ -1588,6 +1635,7 @@ export class SessionManager {
           acpSessionId,
           projectPath,
           sessionMeta(live.record),
+          mcpServers,
         )
         this.opened(live, setup.config)
         if (live.thread.order.length === 0) {
@@ -1967,20 +2015,23 @@ export class SessionManager {
     connection.reopen(record.acpSessionId)
     let config: ConfigOption[]
     if (caps.resumeSession) {
+      const mcpServers = this.mcpServers(live.id, record, runtime)
       try {
         config = (
           await connection.resumeSession(
             record.acpSessionId,
             record.projectPath,
             sessionMeta(record),
+            mcpServers,
           )
         ).config
       } catch (error) {
         if (!this.neverAnswered(live, error)) throw error
-        config = await this.renew(live, connection)
+        config = await this.renew(live, connection, mcpServers)
       }
     } else if (caps.loadSession) {
-      config = (await this.loadQuietly(live, connection)).config
+      config = (await this.loadQuietly(live, connection, this.mcpServers(live.id, record, runtime)))
+        .config
     } else {
       throw new HostError(
         'agent_unavailable',
@@ -2059,6 +2110,8 @@ export class SessionManager {
   private async closeUnseen(live: Live, runtime: AgentRuntime): Promise<void> {
     const next = this.live.get(live.id)
     if (next && next !== live && (next.attaching || next.connection)) return
+    // Its token was made for this attach, which may have outlived the session's going.
+    if (next !== live) this.deps.mcp?.detached(live.id)
     const { connection } = runtime
     const { acpSessionId } = live.record
     connection.unregister(acpSessionId)
@@ -2097,8 +2150,16 @@ export class SessionManager {
   }
 
   /** `session/new` in place of a session the agent does not have; the thread stays as it is. */
-  private async renew(live: Live, connection: AgentConnection): Promise<ConfigOption[]> {
-    const setup = await connection.newSession(live.record.projectPath, sessionMeta(live.record))
+  private async renew(
+    live: Live,
+    connection: AgentConnection,
+    mcpServers: McpServer[],
+  ): Promise<ConfigOption[]> {
+    const setup = await connection.newSession(
+      live.record.projectPath,
+      sessionMeta(live.record),
+      mcpServers,
+    )
     live.record.acpSessionId = setup.acpSessionId
     live.rewrite = true
     this.update(live, { acpSessionId: setup.acpSessionId })
@@ -2110,6 +2171,7 @@ export class SessionManager {
   private async loadQuietly(
     live: Live,
     connection: AgentConnection,
+    mcpServers: McpServer[],
   ): Promise<{ config: ConfigOption[] }> {
     const { record } = live
     const scratch = threadFromSnapshot({ session: live.thread.session, entries: [], seq: 0 })
@@ -2133,6 +2195,7 @@ export class SessionManager {
         record.acpSessionId,
         record.projectPath,
         sessionMeta(record),
+        mcpServers,
       )
     } finally {
       connection.unregister(record.acpSessionId, quiet)
@@ -2559,6 +2622,7 @@ export class SessionManager {
         this.storedBlob(source.id, hash).catch(() => null),
       ),
     )
+    const forkId = randomUUID()
     let setup
     try {
       setup = await runtime.connection.forkSession(
@@ -2566,15 +2630,17 @@ export class SessionManager {
         source.record.projectPath,
         sessionMeta(source.record),
         cut?.point,
+        this.mcpServers(forkId, source.record, runtime),
       )
     } catch (error) {
+      this.deps.mcp?.detached(forkId)
       throw agentError(error)
     }
     const blobs = (await reading).filter((blob) => blob !== null)
     const now = this.now()
     const record: SessionRecord = {
       ...source.record,
-      id: randomUUID(),
+      id: forkId,
       acpSessionId: setup.acpSessionId,
       title: source.thread.session.title,
       createdAt: now,
@@ -2706,6 +2772,7 @@ export class SessionManager {
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
     if (live.turn === turn) live.turn = null
+    this.deps.mcp?.turnEnded(live.id)
     this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
     if (!stopReason) return null
@@ -3102,6 +3169,7 @@ export class SessionManager {
         live.record.acpSessionId,
         live.record.projectPath,
         sessionMeta(live.record),
+        this.mcpServers(live.id, live.record, this.deps.agents.runtime(live.record.agentId)),
       )
       this.update(live, {
         status: 'ready',

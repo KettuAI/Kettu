@@ -292,6 +292,9 @@ describe('createValidators', () => {
     expect(rename({ id, title: 'Traffic report' })).toEqual({ id, title: 'Traffic report' })
     expect(rename({ id, title: 'x'.repeat(120) }).title).toHaveLength(120)
     rejects(() => rename({ id, title: 'x'.repeat(121) }))
+    // Counted in code points, as the agents' tools count a title.
+    expect(rename({ id, title: '\u{1F600}'.repeat(120) }).title).toHaveLength(240)
+    rejects(() => rename({ id, title: '\u{1F600}'.repeat(121) }))
     rejects(() => rename({ id, title: '   ' }))
     rejects(() => rename({ id }))
 
