@@ -6,7 +6,7 @@ How OverBench finds, serves and shows the images, audio and video an agent sends
 
 ## Options
 
-Three presentations were offered on 2026-10-22, each on a page to try, in both themes, with the measurements below. They share everything in this document except how media sits in a reply.
+Three presentations were offered on 2026-10-22, each on a [page to try](https://claude.ai/artifact/Sv32T9zwbKJbUN9crodw8x), in both themes, with the measurements below. They share everything in this document except how media sits in a reply.
 
 | Option                       | In a reply                                                                                                                  | Players                                        |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -46,14 +46,18 @@ ACP content blocks that carry their bytes: `image` and `audio` blocks, and `reso
 
 Files an agent wrote, such as a video it rendered into an output folder, are read where they lie. A file counts when the session's thread names it in one of these places:
 
-- a Markdown image in a reply, `![alt](out/chart.png)`, shown where it is written;
+- a Markdown image in a reply, `![alt](out/chart.png)`, shown where it is written ([spaces in a path](#spaces-in-a-path));
 - a [file reference](./ui.md#markdown) in a reply that names a media file, shown under the block that names it;
 - a `resource_link` whose URI is a local path or a `file:` URI, such as Codex's `view_image` and the attachments it replays, and an `image` block's local `uri`;
 - the `locations` and diff paths of a tool call, shown in its details.
 
-A path in a command line or in a tool's text output is not recognised: output is full of paths, and the reply names what matters. A path is relative to the session's project folder or absolute. Unlike a reference to a text file, it need not be in the project's file list, which leaves out git-ignored folders such as `out/` or `dist/`: the host checks it on disk instead ([granting](#granting-a-file)).
+A path in a command line or in a tool's text output is not recognised: output is full of paths, and the reply names what matters. A path is relative to the session's folder, absolute, or starts with `~/` for the home folder. The session's folder is its project, or for a session started with No project its [scratch folder](./session-model.md#sessions-without-a-project), where agents often save what they make, such as a screenshot. Unlike a reference to a text file, it need not be in the project's file list, which leaves out git-ignored folders such as `out/` or `dist/`: the host checks it on disk instead ([granting](#granting-a-file)).
 
 The renderer finds these files in the entries it already has; they add nothing to the session model.
+
+#### Spaces in a path
+
+Agents write absolute paths as they are, spaces included: OpenCode, asked for a screenshot on 2026-10-24, replied `![desktop](/Users/…/Application Support/OverBench Dev/scratch/…/desktop-shot.png)` ([#43](https://github.com/overbench/overbench/issues/43#issuecomment-6379889027)). CommonMark ends a link destination at its first space unless it is written `<…>`, so that line renders as text. Before a reply is parsed, a remark step takes `![alt](` followed by a path that starts with `/`, `~/`, `./`, `../` or a drive letter, holds no `(`, `)` or line break, ends in a media file's extension and is followed by `)`, and reads it as if the destination were written `<…>`. Anything else keeps CommonMark's reading, so code spans and blocks, where Markdown is not parsed, and prose that only looks like an image stay text.
 
 ## The media scheme
 
@@ -67,9 +71,9 @@ overbench-media://<grant>/<file name>?v=<mtime>
 
 `media.open` ([host protocol](./host-protocol.md#requests)) asks the host for a grant: `{ projectPath, path, sessionId? }`. The host:
 
-1. Resolves the path: a `file:` URI to its path, a relative path against `projectPath`.
+1. Resolves the path: a `file:` URI to its path, a leading `~/` to the home folder, a relative path against `projectPath`, which is the session's folder, its project or its scratch folder.
 2. Takes its real path (`realpath`) and requires a regular file.
-3. Allows it when the real path is inside the project folder, by the [platform's path rules](./agent-host.md#platform-differences), git-ignored folders included; or, with a `sessionId`, when that session's thread names the path as written in an entry of the agent or the user, found in the live thread or in the [stored one](./persistence.md#threads). Anything else is `forbidden`, so the renderer cannot ask for a file no one named.
+3. Allows it when the real path is inside that folder, by the [platform's path rules](./agent-host.md#platform-differences), git-ignored folders included; or, with a `sessionId`, when that session's thread names the path as written in an entry of the agent or the user, found in the live thread or in the [stored one](./persistence.md#threads). Anything else is `forbidden`, so the renderer cannot ask for a file no one named.
 4. Reads its first 4 KB and takes the kind and MIME type from them ([what counts](#what-counts-as-media)); a file that is not media is `not_media`.
 5. For an image, reads its pixel size when the header holds it (PNG, GIF, WebP, BMP and AVIF at their start, JPEG within its first 64 KB), so the thread reserves the exact box before it loads.
 6. Registers the grant with main (`host:media-grant`, [main and host messages](./agent-host.md#main-and-host-messages)) and answers a `MediaGrant`:
@@ -108,20 +112,20 @@ An SVG is only ever shown as an image, in `<img>` or as a CSS background, never 
 
 ### Agent HTML
 
-The artifact design ([#11](https://github.com/overbench/overbench/issues/11)) serves the HTML pages agents write on a scheme of its own, an origin per page, in sandboxed frames. The two schemes share main's file serving: the real-path check, range requests and the response headers. They share nothing else: the media scheme serves single granted files, never a document, to OverBench's own page alone; the artifact scheme serves a page's folder as documents to that page's frames, whose network policy lets them request nothing but their own origin and a fixed list of CDNs.
+[Artifacts](./artifacts.md#the-protocol) serve the HTML pages agents hand over on `overbench-artifact:`, an origin per artifact, from OverBench's own store, in sandboxed frames. The two schemes share only their hardening headers (`nosniff`, `no-store`) and the way main streams a file into a response. The media scheme serves single granted files where they lie, never a document, to OverBench's own page alone, and adds the real-path check and range requests, which the store's files do not need; the artifact scheme serves documents to their own frames, whose network policy lets them request nothing but their own origin and a fixed list of CDNs.
 
 ## Content Security Policy
 
-`src/renderer/index.html` today allows `img-src 'self' data:` and has no `media-src`, so audio and video fall back to `default-src 'self'`. It becomes:
+`src/renderer/index.html` today allows `img-src 'self' data: blob:` and has no `media-src`, so audio and video fall back to `default-src 'self'`. It becomes:
 
 ```text
-img-src 'self' data: overbench-media:; media-src data: overbench-media:
+img-src 'self' data: blob: overbench-media:; media-src data: overbench-media:
 ```
 
 - `overbench-media:` for files, which only granted files answer.
 - `data:` in `media-src` for audio and video carried in the conversation, within the 20 MB cap, as `data:` already serves its images.
 - Still nothing remote: no `https:`, so a reply cannot load a tracking pixel or a remote clip, and nothing the agent writes can make the page fetch.
-- Media needs no `blob:`. The attachments design ([#40](https://github.com/overbench/overbench/issues/40)) adds it to `img-src` for the full view of an attached image, which the [viewer](./ui.md#viewer) shows too; with both, `img-src` is `'self' data: blob: overbench-media:`.
+- Media needs no `blob:`. It is in `img-src` for the full view of an attached image ([attachments](./session-model.md#where-the-bytes-live)), which the [viewer](./ui.md#viewer) shows too.
 
 ## Remote media
 

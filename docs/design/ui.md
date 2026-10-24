@@ -396,7 +396,7 @@ Fork starts a new session with the conversation up to the end of that reply's tu
 
 #### Viewer
 
-- **What**: a layer over the whole window, Base UI's `Dialog` in a `viewer` variant, on a `--scrim` that is dark in both themes, since pictures and video read best on dark. It holds the session's images and videos in thread order as far as the loaded pages reach, the user's attached images and folded runs included, so a screenshot inside a folded run is an arrow away.
+- **What**: a layer over the whole window, Base UI's `Dialog` in a `viewer` variant, on a `--viewer-scrim` that is dark in both themes, since pictures and video read best on dark. It holds the session's images and videos in thread order as far as the loaded pages reach, the user's attached images and folded runs included, so a screenshot inside a folded run is an arrow away.
 - **Bar**: 40 px, laid out as the top bar, clear of the traffic lights and the window controls: the name (interface role, 500), its pixel size and file size (meta), the position ("3 / 7", meta), then **Zoom out** (`Minus`), the zoom level as a button that toggles fit and 100% (meta), **Zoom in** (`Plus`), **Copy image** (`Copy`, then `Check`), **Save as…** (`FileDown`), **Show in Files** (`Folder`) and **Close** (`X`). A video has no zoom and no copy.
 - **Stage**: the item fitted inside the stage less 48 px on each side, never enlarged past its own pixels; a transparent picture over `--checker` on `--card`. **Previous** and **Next** (`ChevronLeft`, `ChevronRight`), 32 px round buttons on `--popover` with the `md` shadow, sit at the stage's edges, show on hover and on focus, and go at the ends.
 - **Zoom**: from the fitted size up to 800% of the image's own pixels. A pinch, or `Mod` with the wheel, zooms around the pointer; the buttons and keys zoom by steps of 1.25 around the centre; a zoom that ends within 5% of the fit snaps back to it. From 300% of its pixels an image renders pixelated, so its pixels stay crisp.
@@ -470,7 +470,7 @@ Files, photos and folders a message carries besides its text. The host sends eac
 
 - An image is its thumbnail. A file or folder shows its type icon, then its name, cut in the middle so the extension stays (`ci-failure-…-1042.log`), and its size or "Folder". A pasted text shows its first three lines and its line count.
 - Hover or focus shows **Remove** (`X`) at the tile's top right; it holds its place. The tooltip gives the name, the size, an image's pixel size and how the agent gets it: "Sent with its contents", "Sent as a link. Codex reads it with its own tools.", "Sent as an image, scaled to 2000 × 1250".
-- A click, `Enter` or `Space` opens it: an image in its [dialog](./design-system.md#attachments); a pasted text in the same dialog as code; a project file in the [Files](#files) pane; any other file or folder in the file manager.
+- A click, `Enter` or `Space` opens it: an image in its [dialog](./design-system.md#attachments), and in the [viewer](#viewer) once that is built, with the thread's other pictures an arrow away (proposed with the [media design](./media.md); to be agreed); a pasted text in the same dialog as code; a project file in the [Files](#files) pane; any other file or folder in the file manager.
 
 **States.**
 

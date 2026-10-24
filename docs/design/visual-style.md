@@ -73,8 +73,6 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Add, new session, new terminal, add to a message                  | `Plus`                   | `SquarePen`, `CirclePlus`         |
 | More actions                                                      | `Ellipsis`               | `EllipsisVertical`                |
 | Folded group, submenu                                             | `ChevronRight`           |                                   |
-| Previous item in the media viewer                                 | `ChevronLeft`            | `ArrowLeft`                       |
-| Next item in the media viewer                                     | `ChevronRight`           | `ArrowRight`                      |
 | Open group, menu trigger, select                                  | `ChevronDown`            | `ChevronsUpDown`                  |
 | Back                                                              | `ArrowLeft`              | `ChevronLeft`                     |
 | Send                                                              | `ArrowUp`                | `Send`                            |
@@ -121,8 +119,8 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | A date or a range of dates                                        | `Calendar`               | `CalendarDays`, `CalendarRange`   |
 | An artifact, the Artifacts page                                   | `Shapes`                 |                                   |
 | Zoom to fit                                                       | `Scan`                   | `Fullscreen`, `Expand`            |
-| Previous page, beside a counter                                   | `ChevronLeft`            | `ArrowLeft`                       |
-| Next page, beside a counter                                       | `ChevronRight`           | `ArrowRight`                      |
+| Previous page beside a counter, previous item in the media viewer | `ChevronLeft`            | `ArrowLeft`                       |
+| Next page beside a counter, next item in the media viewer         | `ChevronRight`           | `ArrowRight`                      |
 
 ## Typography
 

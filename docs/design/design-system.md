@@ -212,7 +212,7 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 - **Queued cards** (the [queue stack](./ui.md#composer)): `--bg-surface` with a `--border-default` hairline and the queue shadow; a card further back darkens toward `--queue-back`, from `#FFFFFF` to `#F4F4F2` light and from `#232322` to `#1E1E1D` dark.
 - **Attention**: a card waiting for your approval replaces its hairline with a 1 px `--attention` ring at 80% and a 3 px halo at 20%.
 - **Focus rings**: the `focus-ring` utility, a 2 px `--focus` outline 2 px outside the element, on every control that takes keyboard focus; `focus-ring-within` draws it on a field whose control has focus. The thread's scroller draws its ring 2 px inset instead, because its faded edges would hide one outside.
-- **Viewer scrim**: the media [viewer](./ui.md#viewer) covers the window with `--scrim`, `oklch(0.13 0 0 / 92%)` in both themes, because pictures and video read best on dark; its bar and buttons take the dark theme's tokens on it, whatever the app's theme. It has no backdrop blur, which the flat style does without: a 40 px blur cost no frame time when measured (2026-10-22), so the choice is the look, not the cost (decided while the maintainer was away; to be reviewed).
+- **Viewer scrim**: the media [viewer](./ui.md#viewer) covers the window with `--viewer-scrim`, `oklch(0.13 0 0 / 92%)` in both themes, because pictures and video read best on dark, a token of its own since `--scrim` is the light veil behind a dialog; its bar and buttons take the dark theme's tokens on it, whatever the app's theme. It has no backdrop blur, which the flat style does without: a 40 px blur cost no frame time when measured (2026-10-22), so the choice is the look, not the cost (decided while the maintainer was away; to be reviewed).
 
 ## Density and sizing
 
@@ -408,6 +408,7 @@ The tiles a message's [attachments](./ui.md#attachments) show as, in the compose
 | Drop overlay | Over the thread column, `--bg-app` at 88%; a centred card on `--bg-surface` with a `--border-strong` hairline and `rounded-2xl`, 20 by 28 px padding, "Drop to attach" at the heading step over a caption line                                                       |
 | Image dialog | A `Dialog` as wide as the image allows, at most 90% of the window by 85%; the image fitted over `--checker` squares with a `--border-default` hairline; its name, pixel size and file size under it at the meta step                                                 |
 
+- Once the media [viewer](./ui.md#viewer) is built, an attached image opens there instead of in the image dialog, and a pasted text keeps the dialog (proposed with the [media design](./media.md); to be agreed).
 - Thumbnails are 224 px on their long side, twice the tile, as WebP at 82%. At 192 px, for a 2880 × 1800 px screenshot of a test run, one took 41 to 87 ms in a worker and came to 2 kB (2026-10-22, the options page in Chromium on macOS); a photo comes out larger.
 
 ## Motion
