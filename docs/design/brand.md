@@ -53,6 +53,8 @@ Never stretch or squash it, rotate or skew it, draw it as an outline, drop the c
 - **Windows** (`build/icon.ico`, 16 to 256 px): a flat ink square filling the canvas, 12% corners; at 16 px the mark grows to 69% so its cuts still show.
 - **Linux** (`build/icon.png`, 1024 px, and `docs/brand/icon-macos.svg`): the tile on Apple's grid before Liquid Glass, an 824 px tile on a 1024 px canvas, 22.5% corners, the same gradient with a lit top edge, and a soft shadow; the mark in paper.
 
+A development run would show Electron's icon, so it sets `build/icon.png` as the Dock icon on macOS and as the window icon on Windows and Linux.
+
 The guidelines also define a light macOS icon; it is not shipped. An Icon Composer document can carry it as the light appearance.
 
 ## In the app

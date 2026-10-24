@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, nativeTheme, screen, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron'
 import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
 import { mayOpenWindow } from './artifacts/guards'
@@ -21,6 +21,11 @@ const TITLE_BAR_HEIGHT = 40
 const TRAFFIC_LIGHTS_HEIGHT = 12
 const DEFAULT_SIZE = { width: 1280, height: 820 }
 const MIN_SIZE = { width: 960, height: 600 }
+
+// Packaged builds carry the icon in the bundle; a development run would show Electron's own.
+export function devIcon(): string | null {
+  return app.isPackaged ? null : join(app.getAppPath(), 'build/icon.png')
+}
 
 let zoom: ZoomLevel = DEFAULT_SETTINGS.appearance.zoom
 
@@ -140,6 +145,8 @@ export function createMainWindow(): BrowserWindow {
   if (!options) throw new Error('configureWindows must run before a window is created')
   const isMac = process.platform === 'darwin'
   const placement = options.state.placement()
+  // On macOS the Dock carries the icon, set once in index.ts.
+  const icon = isMac ? null : devIcon()
 
   const window = new BrowserWindow({
     ...placement.bounds,
@@ -148,6 +155,7 @@ export function createMainWindow(): BrowserWindow {
     show: false,
     backgroundColor: backgroundColor(),
     autoHideMenuBar: true,
+    ...(icon ? { icon } : {}),
     titleBarStyle: 'hidden',
     ...(isMac
       ? { trafficLightPosition: trafficLightPosition() }
