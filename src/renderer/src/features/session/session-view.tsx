@@ -58,6 +58,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const [queueOpen, setQueueOpen] = useState(false)
   // A queued message's failed action; the stack clears it with its next action or its last item.
   const [queueError, setQueueError] = useState<string | null>(null)
+  const [gutter, setGutter] = useState(0)
   const status = session?.status ?? summary.status
   const running = status === 'running' || status === 'awaiting_permission'
   const fail = useCallback((e: unknown) => setActionError(errorMessage(e)), [])
@@ -122,6 +123,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         agentName={name}
         working={running}
         progressNotes={progressNotes}
+        onGutter={setGutter}
       />
     )
   }
@@ -136,56 +138,59 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       <ProjectPathContext value={summary.projectPath}>
         <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </ProjectPathContext>
-      <div className="mx-auto flex w-full max-w-[760px] flex-col gap-2 px-6 pb-3">
-        {session && status === 'failed' && (
-          <FailedState
-            title={t('view.stopped', { agent: name })}
-            message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
-            detail={session.error?.detail}
-            onRetry={retry}
-          />
-        )}
-        {session && status === 'auth_required' && !empty && (
-          <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
-            <CircleAlertIcon />
-            <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
-            <AlertDescription>{t('view.historyStays')}</AlertDescription>
-            <AlertAction className="flex gap-1.5">
-              <Button size="xs" variant="outline" onClick={retry}>
-                {t('common:actions.retry')}
-              </Button>
-              <Button size="xs" onClick={() => openSettings('agents')}>
-                {t('view.signIn')}
-              </Button>
-            </AlertAction>
-          </Alert>
-        )}
-        {(actionError || queueError) && (
-          <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
-            {actionError ?? queueError}
-          </p>
-        )}
-        <div className="flex flex-col">
-          {session && summary.origin !== 'subagent' && (
-            <PlanBar
-              sessionId={sessionId}
-              running={running}
-              hidden={queueOpen && session.queue.length > 0}
+      {/* Leaves the width the thread's scrollbar takes, so the composer lines up with its column. */}
+      <div style={{ paddingRight: gutter }}>
+        <div className="mx-auto flex w-full max-w-thread flex-col gap-2 px-6 pb-3">
+          {session && status === 'failed' && (
+            <FailedState
+              title={t('view.stopped', { agent: name })}
+              message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
+              detail={session.error?.detail}
+              onRetry={retry}
             />
           )}
-          {/* Mounted only while something waits; its cards sit behind the composer. */}
-          {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
-            <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
+          {session && status === 'auth_required' && !empty && (
+            <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
+              <CircleAlertIcon />
+              <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
+              <AlertDescription>{t('view.historyStays')}</AlertDescription>
+              <AlertAction className="flex gap-1.5">
+                <Button size="xs" variant="outline" onClick={retry}>
+                  {t('common:actions.retry')}
+                </Button>
+                <Button size="xs" onClick={() => openSettings('agents')}>
+                  {t('view.signIn')}
+                </Button>
+              </AlertAction>
+            </Alert>
           )}
-          {summary.origin === 'subagent' ? (
-            <SubagentBar summary={summary} session={session} />
-          ) : session ? (
-            <div className="relative z-10">
-              <Composer key={sessionId} session={session} agentName={name} />
-            </div>
-          ) : (
-            <ComposerPlaceholder agentId={summary.agentId} />
+          {(actionError || queueError) && (
+            <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
+              {actionError ?? queueError}
+            </p>
           )}
+          <div className="flex flex-col">
+            {session && summary.origin !== 'subagent' && (
+              <PlanBar
+                sessionId={sessionId}
+                running={running}
+                hidden={queueOpen && session.queue.length > 0}
+              />
+            )}
+            {/* Mounted only while something waits; its cards sit behind the composer. */}
+            {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
+              <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
+            )}
+            {summary.origin === 'subagent' ? (
+              <SubagentBar summary={summary} session={session} />
+            ) : session ? (
+              <div className="relative z-10">
+                <Composer key={sessionId} session={session} agentName={name} />
+              </div>
+            ) : (
+              <ComposerPlaceholder agentId={summary.agentId} />
+            )}
+          </div>
         </div>
       </div>
       <Announcer summary={summary} name={name} />

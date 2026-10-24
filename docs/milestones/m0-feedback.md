@@ -698,6 +698,7 @@ The list is complete and no longer edited: new problems go to [GitHub issues](ht
   - The column replaces both the 760 px of the code and the 768 px of the old text: 42em plus the gutters. The composer keeps 760 px.
   - The written spec was taken where the mockup differs; the muted lead paragraph and the boxed conclusion are left out.
   - Checked on a production build in both themes; the before and after screenshots go with the acceptance.
+- **Revised**: 2026-10-23, after the maintainer put a screenshot of the body beside the reference's and found it loose and ragged ([#125](https://github.com/overbench/overbench/issues/125)). Measured from both screenshots, calibrated on OverBench's own known sizes: the reference sets prose at about 14.5 px on 21 px lines (1.44) in a column of about 51em, starts every work line on the prose's edge with its chevron after the label, and shows a lone tool call as one such line. Prose now takes 1.45 in a 50em column that the composer shares, inline code 0.8em, folded lines `text-ui` with a trailing chevron, and a lone tool call folds ([Design system: prose](../design/design-system.md#prose), [Interface: tool calls](../design/ui.md#tool-calls)). Colours stay as [#124](https://github.com/overbench/overbench/pull/124) sets them, so the reference's red inline code and blue pull request chip are not taken.
 
 ## 44. The space beside the window controls needs a design
 

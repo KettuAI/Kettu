@@ -72,12 +72,12 @@ describe('signatureOf', () => {
     expect(signatureOf(s)).toBe('uhgtta')
   })
 
-  it('does not group a lookup that runs or waits for permission', () => {
+  it('does not group a lookup that runs, and marks one waiting for permission', () => {
     const waiting: ToolEntry = {
       ...tool('r2', 'read'),
       permission: { requestId: 'p', options: [] },
     }
-    expect(signatureOf(state([tool('r1', 'read', 'in_progress'), waiting]))).toBe('tt')
+    expect(signatureOf(state([tool('r1', 'read', 'in_progress'), waiting]))).toBe('tw')
   })
 
   it('marks plans and compactions as work', () => {
@@ -102,9 +102,27 @@ describe('buildItems', () => {
     expect(result[1]).toMatchObject({ type: 'run', ids: ['h1', 'x1', 'e1'], signature: 'htt' })
   })
 
-  it('leaves a single step as its own entry', () => {
-    const result = items([user('u1'), tool('x1', 'execute'), agent('a1'), thought('h1')])
-    expect(result.map((i) => i.type)).toEqual(['entry', 'entry', 'entry', 'entry', 'reply'])
+  it('folds a lone tool call into a line of its own', () => {
+    const result = items([user('u1'), tool('x1', 'execute'), agent('a1'), tool('r1', 'read')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a1', 'run:r1', 'reply:u1'])
+    expect(result[1]).toMatchObject({ type: 'run', ids: ['x1'], signature: 't' })
+  })
+
+  it('leaves a lone thought, plan or permission request as it is', () => {
+    const waiting: ToolEntry = {
+      ...tool('x2', 'execute', 'in_progress'),
+      permission: { requestId: 'p', options: [] },
+    }
+    const result = items([user('u1'), thought('h1'), agent('a1'), plan('p1'), agent('a2'), waiting])
+    expect(result.map((i) => i.type)).toEqual([
+      'entry',
+      'entry',
+      'entry',
+      'entry',
+      'entry',
+      'entry',
+      'reply',
+    ])
   })
 
   it('never folds an agent message', () => {
@@ -150,6 +168,22 @@ describe('buildItems', () => {
     expect(live.map((i) => i.key)).toEqual(['u1', 'x1', 'x2'])
     const done = buildItems(s.order, signatureOf(s), false)
     expect(done.map((i) => i.key)).toEqual(['u1', 'run:x1'])
+  })
+
+  it('shows a lone call at the end of a live turn as it is until a message follows it', () => {
+    const running = state([user('u1'), agent('a1'), tool('x1', 'execute')])
+    expect(buildItems(running.order, signatureOf(running), true).map((i) => i.key)).toEqual([
+      'u1',
+      'a1',
+      'x1',
+    ])
+    const followed = state([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2')])
+    expect(buildItems(followed.order, signatureOf(followed), true).map((i) => i.key)).toEqual([
+      'u1',
+      'a1',
+      'run:x1',
+      'a2',
+    ])
   })
 
   it("folds a live turn's earlier runs once a message follows them", () => {
@@ -220,7 +254,7 @@ describe('progress notes', () => {
 
   it('leave every message as it is for other agents', () => {
     const result = items([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2')])
-    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'x1', 'a2', 'reply:u1'])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'run:x1', 'a2', 'reply:u1'])
   })
 
   it('keep a turn without work as its answer', () => {
@@ -278,7 +312,7 @@ describe('reply footers', () => {
   it("take the place of a turn's end, after its messages", () => {
     const s = state([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2'), end('t1')])
     const result = buildItems(s.order, signatureOf(s))
-    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'x1', 'a2', 'reply:u1'])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'run:x1', 'a2', 'reply:u1'])
     expect(result.at(-1)).toMatchObject({
       type: 'reply',
       agentIds: ['a1', 'a2'],
@@ -307,7 +341,7 @@ describe('reply footers', () => {
   })
 
   it('leave a turn without a message to its end marker', () => {
-    expect(keys([user('u1'), tool('x1', 'execute'), end('t1')])).toEqual(['u1', 'x1', 't1'])
+    expect(keys([user('u1'), tool('x1', 'execute'), end('t1')])).toEqual(['u1', 'run:x1', 't1'])
   })
 })
 
@@ -323,12 +357,12 @@ describe('replyKeys', () => {
     ])
     expect(result.map((i) => i.key)).toEqual([
       'u1',
-      'x1',
+      'run:x1',
       'a1',
       'reply:u1',
       'u2',
       'a2',
-      'x2',
+      'run:x2',
       'reply:u2',
     ])
     expect(replyKeys(result)).toEqual([

@@ -229,7 +229,7 @@ function Body({ projectPath, file }: { projectPath: string; file: OpenFile }) {
       >
         <Markdown
           markdown={editedText(projectPath, file) ?? content.text}
-          className="mx-auto max-w-[42em]"
+          className="mx-auto max-w-[50em]"
         />
       </div>
     )

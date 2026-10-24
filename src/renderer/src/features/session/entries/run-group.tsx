@@ -30,9 +30,9 @@ interface RunGroupProps {
 }
 
 /**
- * Two or more steps of work between messages, folded into one line that says what they did
- * ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to the steps. A step waiting
- * for permission holds it open.
+ * The work between messages, two or more steps or a lone tool call, folded into one line that
+ * says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to the
+ * steps. A step waiting for permission holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,
@@ -82,11 +82,7 @@ export const RunGroup = memo(function RunGroup({
       onOpenChange={(next) => setUserOpen(next)}
       className={cn('min-w-0', animation)}
     >
-      <CollapsibleTrigger className="group/run -mx-1.5 flex h-6 max-w-[calc(100%+0.75rem)] items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring">
-        <ChevronRightIcon
-          aria-hidden
-          className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"
-        />
+      <CollapsibleTrigger className="group/run -mx-1.5 flex h-6 max-w-[calc(100%+0.75rem)] items-center gap-1 rounded-md px-1.5 text-ui text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring">
         <CutLabel
           className="min-w-0 truncate"
           full={<Summary parts={parts} failed={failed} plain />}
@@ -94,6 +90,10 @@ export const RunGroup = memo(function RunGroup({
           <Summary parts={parts} failed={failed} />
         </CutLabel>
         {running && <Spinner aria-label={t('status.running')} className="size-3 shrink-0" />}
+        <ChevronRightIcon
+          aria-hidden
+          className="size-3.5 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"
+        />
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
         <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-subtle pl-3.5">

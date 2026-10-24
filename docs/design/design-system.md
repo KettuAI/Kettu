@@ -278,7 +278,7 @@ Every size in the interface is one of these steps. Line heights sit on a 4 px gr
 | Display   | `text-display`  | 28 px   | 36 px       | 600    | −2%      | Sans   |
 | Title     | `text-title`    | 22 px   | 28 px       | 600    | −1.5%    | Sans   |
 | Heading   | `text-heading`  | 16 px   | 24 px       | 500    | 0        | Sans   |
-| Prose     | `text-prose`    | 15 px   | 1.7         | 400    | 0        | Sans   |
+| Prose     | `text-prose`    | 15 px   | 1.45        | 400    | 0        | Sans   |
 | Interface | `text-ui`       | 14 px   | 20 px       | 400    | 0        | Sans   |
 | Small     | `text-small`    | 13 px   | 1.6         | 400    | 0        | Sans   |
 | Control   | `text-control`  | 14 px   | 20 px       | 500    | 0        | Sans   |
@@ -286,7 +286,7 @@ Every size in the interface is one of these steps. Line heights sit on a 4 px gr
 | Code      | `text-code`     | 12 px   | 18 px       | 400    | 0        | Mono   |
 | Meta      | `text-meta`     | 11.5 px | 16 px       | 400    | 0        | Mono   |
 
-- `--prose-size` is 15 px; **Text size** sets 14, 15 or 16 px. Prose keeps 1.7 instead of the reference's 1.43 because CJK text needs the extra leading.
+- `--prose-size` is 15 px; **Text size** sets 14, 15 or 16 px. Prose is set at 1.45, the reference's measured 1.44: at 1.7 the gap between paragraphs was hardly larger than the gap between lines, so a reply read as one loose block ([problem 43](../milestones/m0-feedback.md#43-the-message-body-needs-a-typography-pass-to-a-given-spec), revised 2026-10-23).
 - `--ui-size` is the reference's interface size, 14 px. The root stays 16 px, so Tailwind's rem scale is unchanged.
 - Tracking is negative only on the greeting and the two steps that use Inter's display design, and never positive: there are no uppercase or letter-spaced labels.
 - 11.5 px is the smallest text in the interface. A count in a pill, a badge or a chart label takes the meta step, never less.
@@ -308,15 +308,15 @@ Every size in the interface is one of these steps. Line heights sit on a 4 px gr
 
 The message body, from the typography spec of [problem 43](../milestones/m0-feedback.md#43-the-message-body-needs-a-typography-pass-to-a-given-spec), all under the `.markdown` class in `globals.css`. Sizes are in em of the prose size, so **Text size** scales them; the pixel values below are those of the default 15 px. Colors come only from the existing tokens, so the dark theme follows without values of its own.
 
-- **Column**: 42em (630 px), about 42 Chinese characters a line, at a 1.7 line height. Text, bold and headings in `--text-primary`; weight and size carry the hierarchy. Paragraphs `text-wrap: pretty`, long paths and URLs `overflow-wrap: anywhere`, no letter spacing for Chinese.
+- **Column**: 50em (750 px), about 50 Chinese characters a line, at a 1.45 line height; the reference measured about 51em. Text, bold and headings in `--text-primary`; weight and size carry the hierarchy. Paragraphs `text-wrap: pretty`, long paths and URLs `overflow-wrap: anywhere`, no letter spacing for Chinese.
 - **Headings**: more space above than below, so each sits on its content. h1 20 px with `1.8em 0 0.4em`, h2 17 px with `1.75em 0 0.4em`, h3 15 px with `1.5em 0 0.3em`, h4 and below 15 px in `--muted-foreground`; all at the semibold weight, `text-wrap: balance`, none above the first block.
 - **Paragraphs and emphasis**: `margin: 0 0 0.75em`; bold at the semibold weight, never 700; emphasis italic, except in Chinese text, where it is the medium weight upright (`data-cjk-emphasis`, set when the emphasis holds a Han character).
 - **Lists**: `padding-left: 1.25em`, items 0.3em apart, markers in `--muted-foreground`, ordered numbers `tabular-nums`, nested lists 0.25em above and below, and no margin on a paragraph inside an item, so loose lists keep the spacing of tight ones.
-- **Inline code**: mono at 0.85em in `--text-primary` on `--bg-code-inline`, `padding: 0.1em 0.35em`, radius 4 px, no border and no colored text.
+- **Inline code**: mono at 0.8em in `--text-primary` on `--bg-code-inline`, `padding: 0.1em 0.35em`, radius 4 px, no border and no colored text.
 - **Code blocks**: `--bg-code-block`, a 1 px `--border-subtle`, radius 8 px, 13 px at 1.6, padding 0 14px 12px under a 32 px header with the language at 12 px in `--muted-foreground` and the copy button as a ghost button; a block scrolls sideways and never wraps; 1em above and below. An `svg` block's picture replaces the text under the same header: centred, `0 14px 12px` from the frame, on a `--canvas` page with 12 px of page around it and `rounded-md` corners, so a shape with round corners keeps them.
 - **Links**: `--link` with an underline in `--link` at 40%, 3 px below the text; on hover the text turns `--link-hover` and the underline full.
 - **Syntax highlighting** keeps GitHub's themes (`github-light-default`, `github-dark-default` in Shiki, `@uiw/codemirror-theme-github` in the editor) until the maintainer picks the low-saturation theme the palette asks for; its comments must reach 4.5:1 on `--bg-code-block`, which GitHub's light comment, at 4.24:1, does not.
-- **File chips**: `inline-flex`, 20 px high, `vertical-align: 1px`; the file icon and 3 px; 6 px of padding each side, radius 5 px; mono 11.5 px in `--muted-foreground` on `--muted`, no wrapping; 4 px from what comes before; `--accent` and `--foreground` on hover.
+- **File chips**: `inline-flex`, 20 px high, `vertical-align: middle`, which keeps the name within 0.6 px of the text's baseline at any text size, and `margin-block: -1px`, so the line counts the chip as 18 px and a chip never makes its line taller, down to 14 px; the file icon and 3 px; 6 px of padding each side, radius 5 px; mono 11.5 px in `--muted-foreground` on `--muted`, no wrapping; 4 px from what comes before; `--accent` and `--foreground` on hover.
 - **Blockquotes**: a 2 px `--border` rule on the left, 12 px in, `--muted-foreground`, no fill. **Tables**: no frame, in a wrapper that scrolls sideways; 14 px with `tabular-nums`; a `--bg-code-block` header row with its cells at the medium weight in `--muted-foreground`; cells `8px 12px`, every line `--border-subtle`, none under the last row, and no zebra stripes. **Rules**: 1 px `--border`, 1.5em above and below.
 - The user's bubble, the tool call rows and the thread's spacing are in [Interface: thread](./ui.md#thread).
 

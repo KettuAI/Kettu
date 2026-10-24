@@ -245,3 +245,18 @@ export function validate(token: Token, now: number): boolean {
 
 如果你愿意，我可以再检查一下其他模块里有没有类似的"读两次时钟"的写法。相关的讨论可以参考 [Vitest 的假时钟文档](https://vitest.dev/guide/mocking.html#timers)。
 `
+
+/** The closing report of the work-report scenario: Chinese prose, chips, inline code and lists. */
+export const REPORT_ANSWER = `登录测试偶发失败的问题修好了，开了 draft PR：https://github.com/acme/demo/pull/57 。原因是签发令牌和校验令牌各读了一次时钟，CI 机器慢的时候两次读数会跨过整秒，详细过程记在 https://github.com/acme/demo/issues/56#issuecomment-1 。
+
+## 做了什么
+
+- **只读一次时钟**：\`issueToken\` 和 \`validate\` 都改成接收同一个 \`now\`，默认值仍是 \`Date.now()\`，已有的调用方不用改。
+  - \`refresh\` 原来自己再读一次时钟，现在沿用请求开始时的时间。
+  - 读时钟集中到 \`src/login.ts\` 一处，测试里可以替换。
+- **回归测试**：
+  - 用假计时器冻结时间，覆盖整秒边界、时钟回拨和并发请求三种情况。
+  - 在 CI 上连续跑了 50 次，没有再失败。
+
+还没做的：\`src/session.ts\` 里还有一处直接读 \`Date.now()\`，和这次的问题无关，先不动，等你确认。
+`

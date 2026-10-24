@@ -140,7 +140,8 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 | A label that names a thing: a project, a selected row, a card title     | Interface, 500 | `--text-primary`                  |
 | A sentence that explains a screen: an `Empty` state                     | Interface      | `--text-secondary`                |
 | A dialog's description                                                  | Small          | `--text-secondary`                |
-| Tool call rows and fold lines, their file names `--text-primary`        | Small          | `--text-tertiary`                 |
+| Fold lines, their file names `--text-primary`                           | Interface      | `--text-tertiary`                 |
+| Tool call rows, their file names `--text-primary`                       | Small          | `--text-tertiary`                 |
 | Model names and reasoning levels                                        | Control        | `--text-secondary`                |
 | Segments, `compact` buttons, select triggers                            | Control        | `--text-tertiary`, chosen in full |
 | Secondary text: descriptions, hints, the top bar's information          | Caption        | `--text-secondary`                |
@@ -228,7 +229,7 @@ A row is the unit of every list: the sidebar, menus, Settings, the Files tree, t
 
 ### Pages and columns
 
-- A page's content sits in one centred column with a maximum width: 42em for prose, 560 px for Settings, 960 px for the usage dashboard and the Artifacts page. It never stretches to the window. An artifact's viewer is the exception: the page it shows fills the area, since its layout is the page's own.
+- A page's content sits in one centred column with a maximum width: 50em for prose, 560 px for Settings, 960 px for the usage dashboard and the Artifacts page. It never stretches to the window. An artifact's viewer is the exception: the page it shows fills the area, since its layout is the page's own.
 - A page starts with its title at the page title role; groups inside it are introduced by group labels, not by cards or headings of their own. A dashboard of figures is the one exception: the [usage page](./usage.md#interface) sets each figure, chart and table on a card with its title inside, so panels side by side read as separate (decided while the maintainer was away; to be reviewed).
 - Containers adapt to their own width with container queries ([layout behavior](./design-system.md#layout-behavior)); what gives way first in a crowded bar is written in [Interface](./ui.md) for that bar, the least important part first.
 

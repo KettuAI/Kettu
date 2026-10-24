@@ -158,10 +158,10 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
   --text-prose: var(--prose-size);
-  /* The thread's column: 42em of prose, about 42 Chinese characters a line, plus its gutters. */
-  --container-thread: calc(42 * var(--prose-size) + 3rem);
+  /* The thread's column: 50em of prose, about 50 Chinese characters a line, plus its gutters. */
+  --container-thread: calc(50 * var(--prose-size) + 3rem);
   --text-ui: var(--ui-size);
-  --text-prose--line-height: 1.7;
+  --text-prose--line-height: 1.45;
   /* The type scale of the design system, used by Settings first. */
   --text-greeting: 34px;
   --text-greeting--line-height: 40px;
@@ -550,7 +550,7 @@
    scales them; the spec's pixel values are those of the default 15 px. */
 .markdown {
   font-size: var(--prose-size);
-  line-height: 1.7;
+  line-height: 1.45;
   color: var(--text-primary);
   overflow-wrap: anywhere;
   user-select: text;
@@ -658,17 +658,19 @@
     color: var(--text-primary);
     padding: 0.1em 0.35em;
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: 0.8em;
   }
 
   /* A file reference is a chip, not a link: its type's icon and its name, the path in its
      tooltip. It opens the file in the Files pane. */
   & [data-file-ref] {
     display: inline-flex;
-    vertical-align: 1px;
+    vertical-align: middle;
     align-items: center;
     gap: 3px;
     margin-left: 4px;
+    /* The line counts the chip as 18 px, so it never makes a 1.45 line taller, down to 14 px. */
+    margin-block: -1px;
     border-radius: 5px;
     background: var(--muted);
     padding: 0 6px;

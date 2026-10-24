@@ -89,8 +89,8 @@ export function NewSessionView({
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
       {/* Raised 28 px above centre, so the eye lands on the composer. */}
-      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pb-14">
-        <div className="my-auto flex w-full max-w-2xl flex-col gap-7 pt-6">
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pb-14">
+        <div className="my-auto flex w-full max-w-thread flex-col gap-7 px-6 pt-6">
           <h1 className="animate-in text-center font-serif text-greeting text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>

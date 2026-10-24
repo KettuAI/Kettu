@@ -2,7 +2,8 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
-// groupable lookup, t other tool, p plan or compaction, e turn end, o anything else.
+// groupable lookup, t other tool, w tool waiting for permission, p plan or compaction, e turn
+// end, o anything else.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -18,9 +19,9 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.kind === 'thought') return 'h'
   if (entry.kind === 'plan' || entry.kind === 'compaction') return 'p'
   if (entry.kind !== 'tool') return 'o'
+  if (entry.permission) return 'w'
   if (
     entry.status === 'completed' &&
-    !entry.permission &&
     (entry.toolKind === 'read' || entry.toolKind === 'search' || entry.toolKind === 'fetch')
   ) {
     return 'g'
@@ -33,7 +34,7 @@ function charOf(entry: ThreadEntry | undefined): string {
  * compactions and progress notes (c, below). Messages never fold.
  */
 const isStep = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't' || char === 'p' || char === 'c'
+  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'p' || char === 'c'
 
 /**
  * Marks progress notes as c: an agent message that more work in its turn follows, as Codex's
@@ -66,7 +67,7 @@ export type Item =
       turnStart: boolean
     }
   | { key: string; type: 'group'; ids: string[] }
-  // Two or more steps between messages, folded into one summary line.
+  // The work between messages, two or more steps or a lone tool call, folded into one line.
   | { key: string; type: 'run'; ids: string[]; signature: string }
   // The actions under a turn's reply, with its turn-end marker when it has one.
   | { key: string; type: 'reply'; agentIds: string[]; endId: string | null; latest: boolean }
@@ -91,7 +92,10 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       while (isStep(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
       const growing = live && end === order.length - 1
-      if (end > i && !growing) {
+      // A lone tool call folds too, so every piece of work reads as one quiet line; a request
+      // for permission, a thought and a plan show as they are.
+      const lone = end === i && (signature[i] === 'g' || signature[i] === 't')
+      if ((end > i || lone) && !growing) {
         items.push({
           key: `run:${ids[0]}`,
           type: 'run',

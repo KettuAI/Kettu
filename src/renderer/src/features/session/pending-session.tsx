@@ -34,7 +34,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
     )
   } else if (error) {
     body = (
-      <div className="mx-auto w-full max-w-[760px] px-6 pt-6">
+      <div className="mx-auto w-full max-w-thread px-6 pt-6">
         <FailedState
           title={t('pending.couldntStart', { agent: name })}
           message={error.message}
@@ -81,7 +81,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
         {pending.projectPath !== null && <HeaderTools projectPath={pending.projectPath} />}
       </TopBar>
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
-      <div className="mx-auto w-full max-w-[760px] px-6 pb-3">
+      <div className="mx-auto w-full max-w-thread px-6 pb-3">
         <InputGroup variant="composer" data-disabled>
           <InputGroupTextarea
             rows={1}
