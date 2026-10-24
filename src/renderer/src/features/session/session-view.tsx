@@ -134,7 +134,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
-      <SessionHeader summary={summary} />
+      <SessionHeader summary={summary} session={session} />
       <ProjectPathContext value={summary.projectPath}>
         <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </ProjectPathContext>

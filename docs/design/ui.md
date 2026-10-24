@@ -574,11 +574,11 @@ While the cache is warm the usage ring stands alone, since the top bar shows the
 
 - **A cache that is gone**: the row's agent mark turns grey (`grayscale(1)` at 40% opacity) once the session's cache is known to be gone, because it expired or the session has no request on record. A row whose cache is warm, whose lifetime is not known, or that runs keeps its mark in color. A sub-session's mark follows its own cache; a subagent's `Bot` icon stays as it is.
 - **A cache about to go**: in the last minutes, the status slot shows the **Prompt cache expiring** ring, between Starting and Unread in [priority](#sidebar).
-- The row's accessible name ends with the cache's state ("Prompt cache expires in 4 minutes", "Prompt cache expired"), and the tooltip of the mark or the ring gives the time to the second ("Prompt cache expires in 4:07 · 1-hour cache"). Rows still show no time.
+- The row's accessible name ends with the cache's state ("Prompt cache expires in 4 minutes", "Prompt cache expired", "No prompt cache"), and the row's tooltip adds a line for it after the branch, with the time to the second in the last minutes ("Prompt cache expires in 4:07 · 1-hour cache"). A tooltip on the 14 px mark or the 8 px ring, inside the row's own, would open with it. The tooltip stays in place without content, disabled, so the row is not mounted again, and does not lose focus, as its cache expires. Rows still show no time.
 
 ### Clocks
 
-- The sidebar and the control row render only when a state starts: each change is on a timer set for its moment and checked again on each tick of the shared 30 s clock, as for the ring.
+- The sidebar rows and the usage button render only when a state starts: each change is on a timer set for its moment and checked again on each tick of the shared 30 s clock, as for the ring. Inside them, the time before the ring renders each second and the expiring ring's name each minute, both only in the last minutes.
 - The top bar's chip renders once a minute while more than five minutes are left, and once a second in the last five. The card and the usage popover count each second only while they are open.
 
 ## Git in the top bar

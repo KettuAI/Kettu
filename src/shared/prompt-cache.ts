@@ -2,12 +2,10 @@
 // else estimated from the shortest retention the agent's provider documents.
 
 import type { AgentAccount } from './agent-host'
-import type { AgentId, ConfigOption, SessionView } from './thread'
+import type { AgentId, ConfigOption, PromptCache, SessionView } from './thread'
 
 const MINUTE = 60_000
-
-/** From this much time left, the usage ring shows that the cache is about to expire. */
-export const CACHE_ENDING_MS = MINUTE
+const HOUR = 60 * MINUTE
 
 /**
  * The shortest time each provider documents keeping a prompt cache after its last use, checked on
@@ -28,7 +26,15 @@ export interface CacheExpiry {
   estimate: boolean
 }
 
+/** A cache whose lifetime is known, so it has a moment it expires. */
+export type KnownExpiry = CacheExpiry & { ttl: number; expiresAt: number }
+
 export type CachePhase = 'warm' | 'ending' | 'expired'
+
+/** The cache's last minutes, when the session page warns: five of an hour, one of less. */
+export function endingWindow(ttl: number): number {
+  return ttl >= HOUR ? 5 * MINUTE : MINUTE
+}
 
 /**
  * The provider whose retention applies. codex-acp reports a model provider other than OpenAI as a
@@ -37,43 +43,61 @@ export type CachePhase = 'warm' | 'ending' | 'expired'
  */
 function providerOf(
   agentId: AgentId,
-  config: readonly ConfigOption[],
+  model: string | null,
   account: AgentAccount | null,
 ): string | null {
   if (agentId === 'codex') {
     return account?.kind === 'account' || account?.kind === 'api_key' ? 'openai' : null
   }
-  if (agentId !== 'opencode') return null
-  const model = config.find((option) => option.category === 'model')?.value
-  if (typeof model !== 'string') return null
+  if (agentId !== 'opencode' || model === null) return null
   const slash = model.indexOf('/')
   return slash > 0 ? model.slice(0, slash).toLowerCase() : null
 }
 
-/** `account` is the one the session's agent last reported. */
-export function cacheExpiry(
-  session: Pick<SessionView, 'agentId' | 'config' | 'usage'>,
+/** `model` is the session's model option and `account` the one its agent last reported. */
+export function expiryOf(
+  agentId: AgentId,
+  cache: PromptCache | null | undefined,
+  model: string | null,
   account: AgentAccount | null,
 ): CacheExpiry | null {
-  const cache = session.usage?.cache
   if (!cache) return null
   const { lastRequestAt, ttl } = cache
   if (ttl !== null) return { lastRequestAt, ttl, expiresAt: lastRequestAt + ttl, estimate: false }
-  const provider = providerOf(session.agentId, session.config, account)
+  const provider = providerOf(agentId, model, account)
   const documented =
     provider !== null && Object.hasOwn(DOCUMENTED_TTL, provider) ? DOCUMENTED_TTL[provider]! : null
   if (documented === null) return { lastRequestAt, ttl: null, expiresAt: null, estimate: false }
   return { lastRequestAt, ttl: documented, expiresAt: lastRequestAt + documented, estimate: true }
 }
 
-export function cachePhase(expiresAt: number, now: number): CachePhase {
+/** The session's model option, as `expiryOf` takes it. */
+export function modelOption(config: readonly ConfigOption[]): string | null {
+  const model = config.find((option) => option.category === 'model')?.value
+  return typeof model === 'string' ? model : null
+}
+
+export function cacheExpiry(
+  session: Pick<SessionView, 'agentId' | 'config' | 'usage'>,
+  account: AgentAccount | null,
+): CacheExpiry | null {
+  return expiryOf(session.agentId, session.usage?.cache, modelOption(session.config), account)
+}
+
+export function knownExpiry(expiry: CacheExpiry | null): KnownExpiry | null {
+  if (!expiry || expiry.ttl === null || expiry.expiresAt === null) return null
+  return { ...expiry, ttl: expiry.ttl, expiresAt: expiry.expiresAt }
+}
+
+/** `ending` is the cache's `endingWindow`. */
+export function cachePhase(expiresAt: number, ending: number, now: number): CachePhase {
   if (now >= expiresAt) return 'expired'
-  return expiresAt - now <= CACHE_ENDING_MS ? 'ending' : 'warm'
+  return expiresAt - now <= ending ? 'ending' : 'warm'
 }
 
 /** How long until the phase changes, or null once the cache has expired. */
-export function nextPhaseIn(expiresAt: number, now: number): number | null {
+export function nextPhaseIn(expiresAt: number, ending: number, now: number): number | null {
   const left = expiresAt - now
   if (left <= 0) return null
-  return left > CACHE_ENDING_MS ? left - CACHE_ENDING_MS : left
+  return left > ending ? left - ending : left
 }

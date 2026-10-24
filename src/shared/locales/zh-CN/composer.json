@@ -70,12 +70,19 @@
       "lastsHours_other": "{{count}} 小时缓存 · 上次请求：{{ago}}",
       "estimateMinutes_other": "按 {{count}} 分钟估算 · 上次请求：{{ago}}",
       "estimateHours_other": "按 {{count}} 小时估算 · 上次请求：{{ago}}",
-      "expiredNote": "下一条消息会按全价重新读取整个上下文。",
-      "likelyExpiredNote": "如果已过期，下一条消息会按全价重新读取整个上下文。",
-      "ringEnding": "上下文已使用 {{percent}}%，提示缓存将在一分钟内过期",
-      "ringEndingEstimate": "上下文已使用 {{percent}}%，提示缓存可能在一分钟内过期",
+      "ringEnding": "上下文已使用 {{percent}}%，提示缓存即将过期",
+      "ringEndingEstimate": "上下文已使用 {{percent}}%，提示缓存可能即将过期",
       "ringExpired": "上下文已使用 {{percent}}%，提示缓存已过期",
-      "ringExpiredEstimate": "上下文已使用 {{percent}}%，提示缓存可能已过期"
+      "ringExpiredEstimate": "上下文已使用 {{percent}}%，提示缓存可能已过期",
+      "about": "约 {{time}}",
+      "chip": "缓存 {{time}}",
+      "chipAbout": "缓存约 {{time}}",
+      "chipExpired": "缓存已过期",
+      "chipLikelyExpired": "缓存可能已过期",
+      "left": "提示缓存剩余时间",
+      "ifExpires": "如果过期，下一条消息会按全价重新读取约 {{tokens}} token。",
+      "costExpired": "下一条消息会按全价重新读取约 {{tokens}} token。",
+      "ifExpired": "如果已过期，下一条消息会按全价重新读取约 {{tokens}} token。"
     }
   },
   "attachments": {

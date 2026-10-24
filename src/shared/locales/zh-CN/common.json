@@ -20,6 +20,7 @@
     "onDate": "{{date}}",
     "seconds": "{{s}} 秒",
     "minutesSeconds": "{{m}} 分 {{s}} 秒",
+    "minutesLeft": "{{m}} 分钟",
     "hoursMinutes": "{{h}} 小时 {{m}} 分"
   },
   "errors": {

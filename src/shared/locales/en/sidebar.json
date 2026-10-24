@@ -47,7 +47,28 @@
     "error": "Error",
     "running": "Running",
     "starting": "Starting",
-    "unread": "Unread"
+    "unread": "Unread",
+    "cacheExpiring_one": "Prompt cache expires in {{count}} minute",
+    "cacheExpiring_other": "Prompt cache expires in {{count}} minutes",
+    "cacheExpiringAbout_one": "Prompt cache expires in about {{count}} minute",
+    "cacheExpiringAbout_other": "Prompt cache expires in about {{count}} minutes",
+    "cacheSoon": "Prompt cache expires in under a minute",
+    "cacheSoonAbout": "Prompt cache probably expires in under a minute",
+    "cacheExpired": "Prompt cache expired",
+    "cacheLikelyExpired": "Prompt cache probably expired",
+    "noCache": "No prompt cache"
+  },
+  "cache": {
+    "expiresIn": "Prompt cache expires in {{time}} · {{lifetime}}",
+    "expiresInAbout": "Prompt cache expires in about {{time}} · {{lifetime}}",
+    "lastsMinutes_one": "{{count}}-minute cache",
+    "lastsMinutes_other": "{{count}}-minute cache",
+    "lastsHours_one": "{{count}}-hour cache",
+    "lastsHours_other": "{{count}}-hour cache",
+    "estimateMinutes_one": "estimated {{count}}-minute cache",
+    "estimateMinutes_other": "estimated {{count}}-minute cache",
+    "estimateHours_one": "estimated {{count}}-hour cache",
+    "estimateHours_other": "estimated {{count}}-hour cache"
   },
   "footer": {
     "settings": "Settings",

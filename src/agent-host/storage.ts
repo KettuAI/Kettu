@@ -3,7 +3,7 @@
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
-import { AGENT_IDS, type AgentId, type QueuedPrompt } from '@shared/thread'
+import { AGENT_IDS, type AgentId, type PromptCache, type QueuedPrompt } from '@shared/thread'
 import type { AgentInit } from './acp/connection'
 import { isVersion } from './versions'
 
@@ -232,6 +232,8 @@ export interface SessionRecord {
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
   ultracode?: boolean // Claude Code's ultracode, once set from OverBench
   customTitle?: string // the user's own title, which wins over the agent's
+  cache?: PromptCache // the main thread's prompt cache as its last turn left it, for the sidebar
+  model?: string // the model option as its last turn left it, which an estimate of the cache needs
 }
 
 export interface SessionsFile {
@@ -343,6 +345,11 @@ function queueOf(value: unknown): { queue?: QueuedPrompt[] } {
   return queue.length > 0 ? { queue } : {}
 }
 
+function cacheOf(value: unknown): { cache?: PromptCache } {
+  if (!isRecord(value) || !isTime(value.lastRequestAt) || !isNullable(isTime)(value.ttl)) return {}
+  return { cache: { lastRequestAt: value.lastRequestAt, ttl: value.ttl } }
+}
+
 export function parseSessionsFile(data: Record<string, unknown>): SessionsFile | string {
   if (!Array.isArray(data.sessions)) return 'sessions is not a list'
   const sessions: SessionRecord[] = []
@@ -382,6 +389,8 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...queueOf(item.queue),
       ...(typeof item.ultracode === 'boolean' ? { ultracode: item.ultracode } : {}),
       ...(isString(item.customTitle) ? { customTitle: item.customTitle } : {}),
+      ...cacheOf(item.cache),
+      ...(isString(item.model) ? { model: item.model } : {}),
     })
   }
   return {

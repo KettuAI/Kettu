@@ -139,6 +139,8 @@ interface SessionSummary {
   parentId: string | null
   branch: string | null // the branch checked out when its last turn ended
   pr: { number: number; state: 'open' | 'draft' | 'merged' | 'closed'; url: string } | null
+  cache: PromptCache | null // the thread's prompt cache as its last turn or request left it
+  model: string | null // the model option then, for an estimated lifetime
 }
 ```
 
@@ -246,19 +248,19 @@ interface ImportableSession {
 
 ## Events
 
-| Event                   | Payload                           | Sent to                                                                                                       |
-| ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `session.patches`       | `PatchBatch`                      | Ports watching that session                                                                                   |
-| `session.summary`       | `SessionSummary`                  | All ports, whenever a field changes: status, title, attention, `permissionCount`, `updatedAt`, `branch`, `pr` |
-| `session.removed`       | `{ sessionId }`                   | All ports                                                                                                     |
-| `agent.status`          | `AgentStatus`                     | All ports, also when its account or a plan limit changes                                                      |
-| `agent.options`         | `AgentOptions`                    | All ports, when an agent's options or remembered values change                                                |
-| `projects.changed`      | `Project[]`                       | All ports, whenever the list or a folder's `missing` changes                                                  |
-| `environment.changed`   | `EnvironmentInfo`                 | All ports, after each resolution of the environment                                                           |
-| `git.changed`, `git.pr` | See [git](./git.md#host-protocol) | Ports keeping that project live                                                                               |
-| `git.tools`             | `GitTools`                        | All ports                                                                                                     |
-| `usage.*`               | `UsageStatus` or none             | All ports, when the figures or the scan change ([usage](./usage.md#host-protocol))                            |
-| `artifacts.*`           | Per event                         | All ports for `changed`; watching ports for the rest ([artifacts](./artifacts.md#ipc-and-host-protocol))      |
+| Event                   | Payload                           | Sent to                                                                                                                         |
+| ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `session.patches`       | `PatchBatch`                      | Ports watching that session                                                                                                     |
+| `session.summary`       | `SessionSummary`                  | All ports, whenever a field changes: status, title, attention, `permissionCount`, `updatedAt`, `branch`, `pr`, `cache`, `model` |
+| `session.removed`       | `{ sessionId }`                   | All ports                                                                                                                       |
+| `agent.status`          | `AgentStatus`                     | All ports, also when its account or a plan limit changes                                                                        |
+| `agent.options`         | `AgentOptions`                    | All ports, when an agent's options or remembered values change                                                                  |
+| `projects.changed`      | `Project[]`                       | All ports, whenever the list or a folder's `missing` changes                                                                    |
+| `environment.changed`   | `EnvironmentInfo`                 | All ports, after each resolution of the environment                                                                             |
+| `git.changed`, `git.pr` | See [git](./git.md#host-protocol) | Ports keeping that project live                                                                                                 |
+| `git.tools`             | `GitTools`                        | All ports                                                                                                                       |
+| `usage.*`               | `UsageStatus` or none             | All ports, when the figures or the scan change ([usage](./usage.md#host-protocol))                                              |
+| `artifacts.*`           | Per event                         | All ports for `changed`; watching ports for the rest ([artifacts](./artifacts.md#ipc-and-host-protocol))                        |
 
 Terminals use a port of their own to the terminal host, with the same envelope ([terminal](./terminal.md#host-protocol)).
 

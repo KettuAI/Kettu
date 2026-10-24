@@ -530,6 +530,8 @@ export class SessionManager {
       missing: this.missing.has(record.id),
       branch: record.branch,
       pr: pr ? { number: pr.number, state: pr.state, url: pr.url } : null,
+      cache: record.cache ?? null,
+      model: record.model ?? null,
     }
   }
 
@@ -992,6 +994,10 @@ export class SessionManager {
     live.record.updatedAt = session.updatedAt
     if (session.queue.length > 0) live.record.queue = session.queue
     else delete live.record.queue
+    // Until the stored thread is read, the view has neither, and the record keeps what it had.
+    if (session.usage?.cache) live.record.cache = session.usage.cache
+    const model = modelOf(session.config)
+    if (model !== null) live.record.model = model
     this.records.set(live.id, live.record)
     this.saveIndex()
   }
@@ -1051,7 +1057,10 @@ export class SessionManager {
       case 'request':
         // A turn's transcript is read as it ends; a request between turns has a read of its own.
         if (live.turn) live.turn.requested = true
-        else this.scheduleCacheRead(live)
+        else {
+          this.persist(live)
+          this.scheduleCacheRead(live)
+        }
         break
     }
   }
@@ -1083,6 +1092,8 @@ export class SessionManager {
     const usage = live.thread.session.usage
     if (!usage?.cache || usage.cache.ttl === ttl) return
     this.update(live, { usage: { ...usage, cache: { ...usage.cache, ttl } } })
+    this.persist(live)
+    this.touch(live.id)
   }
 
   private firstUserText(live: Live): string | null {

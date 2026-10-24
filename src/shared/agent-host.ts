@@ -22,6 +22,7 @@ import type {
   ConfigOption,
   OlderPage,
   PatchBatch,
+  PromptCache,
   SessionSnapshot,
   SessionStatus,
   UserContent,
@@ -247,6 +248,8 @@ export interface SessionSummary {
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
   pr: { number: number; state: PullRequestState; url: string } | null
+  cache: PromptCache | null // the main thread's prompt cache as its last turn or request left it
+  model: string | null // the model option then, for an estimate of the cache's lifetime
 }
 
 export interface ImportableSession {

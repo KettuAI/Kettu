@@ -74,12 +74,19 @@
       "estimateMinutes_other": "Estimated {{count}}-minute cache · last request {{ago}}",
       "estimateHours_one": "Estimated {{count}}-hour cache · last request {{ago}}",
       "estimateHours_other": "Estimated {{count}}-hour cache · last request {{ago}}",
-      "expiredNote": "The next message reads the whole context again at full price.",
-      "likelyExpiredNote": "If it has, the next message reads the whole context again at full price.",
-      "ringEnding": "Context {{percent}}% used. The prompt cache expires within a minute.",
-      "ringEndingEstimate": "Context {{percent}}% used. The prompt cache probably expires within a minute.",
+      "ringEnding": "Context {{percent}}% used. The prompt cache is about to expire.",
+      "ringEndingEstimate": "Context {{percent}}% used. The prompt cache is probably about to expire.",
       "ringExpired": "Context {{percent}}% used. The prompt cache has expired.",
-      "ringExpiredEstimate": "Context {{percent}}% used. The prompt cache has probably expired."
+      "ringExpiredEstimate": "Context {{percent}}% used. The prompt cache has probably expired.",
+      "about": "about {{time}}",
+      "chip": "Cache {{time}}",
+      "chipAbout": "Cache about {{time}}",
+      "chipExpired": "Cache expired",
+      "chipLikelyExpired": "Cache probably expired",
+      "left": "Prompt cache lifetime left",
+      "ifExpires": "If it expires, the next message reads about {{tokens}} tokens again at full price.",
+      "costExpired": "The next message reads about {{tokens}} tokens again at full price.",
+      "ifExpired": "If it has expired, the next message reads about {{tokens}} tokens again at full price."
     }
   },
   "attachments": {

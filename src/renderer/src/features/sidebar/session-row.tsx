@@ -25,6 +25,8 @@ import { prStateText } from '@renderer/features/git/pr-text'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, type SessionNode } from '@renderer/stores/sessions'
 import { openSession, useViewStore } from '@renderer/stores/view'
+import { CacheTip } from './cache-status'
+import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionIndicator } from './session-indicator'
 import { DeleteSessionDialog, SessionMenuItems, SessionTitleField } from './session-menu'
 import { useRenaming } from './use-renaming'
@@ -69,6 +71,9 @@ export const SessionRow = memo(function SessionRow({
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
   const pad = 26 + Math.min(depth, MAX_DEPTH) * 16
   const subagent = summary.origin === 'subagent'
+  const cache = useSessionCache(summary)
+  const gone = useGoneLabel(cache)
+  const expiring = cache?.state === 'ending' ? cache.cache : null
 
   const lead = subagent ? (
     <BotIcon className="text-icon" />
@@ -77,7 +82,11 @@ export const SessionRow = memo(function SessionRow({
       <AgentMark
         agent={summary.agentId}
         size={14}
-        className={cn(hasChildren && 'group-hover/menu-button:opacity-0')}
+        className={cn(
+          'transition-[filter,opacity] duration-(--duration-base)',
+          cacheGone(cache) && 'opacity-40 grayscale',
+          hasChildren && 'group-hover/menu-button:opacity-0',
+        )}
       />
       {hasChildren && (
         <span
@@ -150,10 +159,12 @@ export const SessionRow = memo(function SessionRow({
           {children.length}
         </span>
       )}
+      {gone && <span className="sr-only">{gone}</span>}
       <SessionIndicator
         summary={summary}
         permissionCount={node.permissionCount}
         running={node.running}
+        expiring={expiring}
         className={cn(
           'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
           moreOpen && 'opacity-0',
@@ -193,22 +204,22 @@ export const SessionRow = memo(function SessionRow({
         ) : (
           <>
             <ContextMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
-              {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
-              {summary.branch ? (
-                <Tooltip>
-                  <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
-                  <TooltipContent side="right" className="flex-col items-start gap-0.5">
-                    <span className="font-mono">{summary.branch}</span>
-                    {summary.pr && (
-                      <span className="opacity-70">
-                        #{summary.pr.number} · {prStateText(summary.pr.state)}
-                      </span>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <ContextMenuTrigger render={button} />
-              )}
+              {/*
+               * A trigger's render must take its props, so the tooltip Root wraps the menu trigger.
+               * It stays without content, so the row is not mounted again as the cache expires.
+               */}
+              <Tooltip disabled={!summary.branch && !gone && !expiring}>
+                <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
+                <TooltipContent side="right" className="flex-col items-start gap-0.5">
+                  {summary.branch && <span className="font-mono">{summary.branch}</span>}
+                  {summary.branch && summary.pr && (
+                    <span className="opacity-70">
+                      #{summary.pr.number} · {prStateText(summary.pr.state)}
+                    </span>
+                  )}
+                  {expiring ? <CacheTip cache={expiring} /> : gone && <span>{gone}</span>}
+                </TooltipContent>
+              </Tooltip>
               <ContextMenuContent finalFocus={rename.menu.finalFocus}>
                 {menuItems}
               </ContextMenuContent>
