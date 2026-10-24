@@ -1,7 +1,7 @@
-// What New session shows for each agent before a session exists. ACP lists an agent's config
-// options only in answer to `session/new` and the requests that open a session, so the host keeps
-// the last list each agent gave, the reasoning levels each model offered, and the values the user
-// last chose.
+// What New session shows for each agent until its prepared session answers. ACP lists an agent's
+// config options only in answer to `session/new` and the requests that open a session, so the host
+// keeps the last list each agent gave, its own values in each folder, the reasoning levels each
+// model offered, and the values the user last chose.
 
 import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
@@ -22,6 +22,14 @@ export const REMEMBERED_CATEGORIES: ReadonlySet<ConfigOption['category']> = new 
 
 // Models whose levels are kept per agent; OpenCode lists dozens.
 const MAX_LEVELS = 200
+// Folders whose own values are kept per agent, the latest first to stay.
+const MAX_FOLDERS = 50
+
+/** A remembered value dropped because the agent's own value changed outside OverBench since. */
+export interface ReplacedValue {
+  option: ConfigOption // as the session lists it, at the agent's own value
+  wanted: string | boolean
+}
 
 /** The order in which start values are set: a level is checked against its model's levels. */
 const START_ORDER: readonly ConfigOption['category'][] = [
@@ -84,17 +92,44 @@ export class AgentOptionsStore {
     return this.byAgent.get(agentId) ?? null
   }
 
-  /** The options of a new session, at the agent's own values, before any start value is set. */
-  started(agentId: AgentId, config: readonly ConfigOption[]): void {
-    if (config.length === 0) return
+  /**
+   * The options of a new session in the folder `folderKey`, at the agent's own values, before any
+   * start value is set. A remembered value whose option's own value in that folder changed since
+   * it was last seen there is dropped and returned: the change outside OverBench came after the
+   * user's choice, so it wins.
+   */
+  started(agentId: AgentId, config: readonly ConfigOption[], folderKey?: string): ReplacedValue[] {
+    if (config.length === 0) return []
     const current = this.byAgent.get(agentId)
+    const remembered = { ...current?.remembered }
+    const replaced: ReplacedValue[] = []
+    const before = folderKey === undefined ? undefined : current?.defaults?.[folderKey]
+    if (before) {
+      for (const [id, wanted] of Object.entries(remembered)) {
+        const option = config.find((o) => o.id === id)
+        if (!option || !(id in before) || before[id] === option.value) continue
+        delete remembered[id]
+        if (wanted !== option.value) replaced.push({ option, wanted })
+      }
+    }
+    const defaults =
+      folderKey === undefined
+        ? current?.defaults
+        : withDefaults(current?.defaults ?? {}, folderKey, config)
     this.put({
       agentId,
       config: [...config],
       levels: withLevels(current?.levels ?? {}, config),
-      remembered: current?.remembered ?? {},
+      remembered,
+      ...(defaults ? { defaults } : {}),
       observedAt: this.now(),
     })
+    return replaced
+  }
+
+  /** The values last chosen for the agent, by option id. */
+  rememberedOf(agentId: AgentId): Record<string, string | boolean> {
+    return { ...this.byAgent.get(agentId)?.remembered }
   }
 
   /**
@@ -106,7 +141,13 @@ export class AgentOptionsStore {
   opened(agentId: AgentId, config: readonly ConfigOption[]): void {
     const current = this.byAgent.get(agentId)
     if (current) {
-      this.put({ ...current, levels: withLevels(current.levels, config) })
+      // The models it lists are what the agent offers now; the values stay its own.
+      this.put({
+        ...current,
+        config: withModels(current.config, config),
+        levels: withLevels(current.levels, config),
+        observedAt: this.now(),
+      })
       return
     }
     // Ultracode is left out too: New session sends every provisional value, and a set ultracode
@@ -162,7 +203,36 @@ export class AgentOptionsStore {
 
 // Everything but the time it was seen, which alone is no reason to write or send.
 const contentOf = (o: AgentOptions): string =>
-  JSON.stringify([o.config, o.levels, o.remembered, o.provisional === true])
+  JSON.stringify([o.config, o.levels, o.remembered, o.defaults ?? {}, o.provisional === true])
+
+function withDefaults(
+  defaults: Record<string, Record<string, string | boolean>>,
+  folderKey: string,
+  config: readonly ConfigOption[],
+): Record<string, Record<string, string | boolean>> {
+  const next = { ...defaults }
+  // The folder seen last goes to the end, so the oldest are dropped first.
+  delete next[folderKey]
+  next[folderKey] = Object.fromEntries(
+    config.filter((o) => REMEMBERED_CATEGORIES.has(o.category)).map((o) => [o.id, o.value]),
+  )
+  const keys = Object.keys(next)
+  for (const key of keys.slice(0, Math.max(0, keys.length - MAX_FOLDERS))) delete next[key]
+  return next
+}
+
+/** The cached options with the model lists of `seen`, keeping each cached value it still offers. */
+function withModels(
+  cached: readonly ConfigOption[],
+  seen: readonly ConfigOption[],
+): ConfigOption[] {
+  return cached.map((option) => {
+    if (option.category !== 'model') return option
+    const fresh = seen.find((o) => o.id === option.id && o.type === option.type)
+    if (!fresh) return option
+    return { ...fresh, value: isValueOf(fresh, option.value) ? option.value : fresh.value }
+  })
+}
 
 function withLevels(
   levels: Record<string, ConfigOption>,
@@ -242,11 +312,23 @@ export function parseAgentOptionsFile(data: Record<string, unknown>): AgentOptio
       }
     }
     const observedAt = typeof entry.observedAt === 'number' ? entry.observedAt : 0
+    const defaults: Record<string, Record<string, string | boolean>> = {}
+    if (isRecord(entry.defaults)) {
+      for (const [folder, values] of Object.entries(entry.defaults)) {
+        if (!isRecord(values)) continue
+        const kept: Record<string, string | boolean> = {}
+        for (const [id, v] of Object.entries(values)) {
+          if (typeof v === 'string' || typeof v === 'boolean') kept[id] = v
+        }
+        defaults[folder] = kept
+      }
+    }
     agents[agentId] = {
       agentId,
       config,
       levels,
       remembered,
+      ...(Object.keys(defaults).length > 0 ? { defaults } : {}),
       observedAt,
       ...(entry.provisional === true ? { provisional: true } : {}),
     }

@@ -11,6 +11,11 @@ import { restoreDraftAttachments } from '@renderer/features/session/composer/att
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
+import {
+  hostRestarted,
+  preparedRemoved,
+  receivePrepared,
+} from '@renderer/features/session/new-session/prepared'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { artifactsChanged } from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
@@ -43,10 +48,12 @@ function onHostEvent(event: HostEvent): void {
       receiveBatch(event.batch)
       break
     case 'session.summary':
-      useSessionsStore.getState().upsert(event.summary)
+      // A prepared session is New session's alone until its first message.
+      if (event.summary.prepared) receivePrepared(event.summary)
+      else useSessionsStore.getState().upsert(event.summary)
       break
     case 'session.removed':
-      sessionRemoved(event.sessionId)
+      if (!preparedRemoved(event.sessionId)) sessionRemoved(event.sessionId)
       break
     case 'agent.status':
       useAgentsStore.getState().setOne(event.status)
@@ -147,6 +154,7 @@ export function bootstrap(): Promise<unknown> {
     void removeEmptySessions()
     void loadHostState()
     artifactsChanged()
+    hostRestarted()
     rewatchAll()
     showFront(true)
     rewatchGit()

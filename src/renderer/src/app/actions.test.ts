@@ -493,6 +493,20 @@ describe('createSession with a first message', () => {
     expect(request).not.toHaveBeenCalledWith('attachments.remove', expect.anything())
   })
 
+  it('sends its attachments through the prepared session it adopts', async () => {
+    holdShot()
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('running') : undefined,
+    )
+    await createSession('codex', '/repo', null, withShot, null, 'prepared-1')
+    expect(request).toHaveBeenCalledWith('sessions.create', {
+      ...withPrompt,
+      prompt: withShot,
+      preparedId: 'prepared-1',
+    })
+    expect(draftAttachments(NEW_SESSION_DRAFT)).toEqual([])
+  })
+
   it('puts its attachments back in the draft as they were when the start fails', async () => {
     holdShot()
     request.mockRejectedValueOnce(new Error('spawn failed'))

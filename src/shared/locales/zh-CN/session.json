@@ -229,10 +229,27 @@
       "retry": "重试",
       "signInLong": "登录 {{agent}} 后才能使用。",
       "signInAction": "登录…",
-      "noModels": "{{agent}} 跑过一次会话后，这里才会列出它的模型。这次先用它的默认模型，开始后可以在会话里换。",
       "modelsOnStart": "{{agent}} 启动后，这里会列出它的模型。",
       "useAgent": "使用 {{agent}}",
-      "noMatch": "没有匹配的 Agent 或模型"
+      "noMatch": "没有匹配的 Agent 或模型",
+      "checking": "正在检查 {{agent}} 的模型…",
+      "prepareFailed": "{{agent}} 无法打开会话：{{error}}"
+    },
+    "startNotice": {
+      "model": {
+        "not_offered": "{{agent}} 已不再提供 {{wanted}}，将使用 {{actual}} 启动。",
+        "refused": "{{agent}} 没有接受 {{wanted}}，将使用 {{actual}} 启动。",
+        "replaced": "{{agent}} 的默认模型已在 OverBench 之外改为 {{actual}}，将使用它启动，而不是 {{wanted}}。"
+      },
+      "option": {
+        "not_offered": "{{agent}} 已不再提供 {{option}} {{wanted}}，将使用 {{actual}} 启动。",
+        "refused": "{{agent}} 没有接受 {{option}} {{wanted}}，将使用 {{actual}} 启动。",
+        "replaced": "{{agent}} 的默认 {{option}} 已在 OverBench 之外改为 {{actual}}，将使用它启动，而不是 {{wanted}}。"
+      },
+      "noOption": "{{agent}} 现在没有 {{option}} 选项，不会使用 {{wanted}}。",
+      "noSwitch": "{{agent}} 现在没有 {{option}} 选项，无法开启。",
+      "switchOff": "{{agent}} 启动时 {{option}} 为关闭，而不是开启。",
+      "switchOn": "{{agent}} 启动时 {{option}} 为开启，而不是关闭。"
     }
   },
   "signIn": {

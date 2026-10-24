@@ -70,6 +70,11 @@
         "missing": "这个会话没有 {{option}} 选项，无法使用 {{wanted}}。",
         "cannotTurnOn": "这个会话没有 {{option}} 选项，无法开启。"
       },
+      "start": {
+        "title": "这个会话没能按你的全部设置启动",
+        "missing": "这个会话没有 {{option}} 选项，无法使用 {{wanted}}。",
+        "cannotTurnOn": "这个会话没有 {{option}} 选项，无法开启。"
+      },
       "differs": "{{option}} 为 {{actual}}，而不是 {{wanted}}。",
       "isOff": "{{option}} 已关闭，而不是开启。",
       "isOn": "{{option}} 已开启，而不是关闭。",

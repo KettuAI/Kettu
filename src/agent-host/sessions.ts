@@ -11,6 +11,7 @@ import {
   type ImportableSession,
   type SessionAttention,
   type SessionSummary,
+  type StartNotice,
 } from '@shared/agent-host'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import type { BusySession } from '@shared/host-control'
@@ -65,7 +66,7 @@ import {
   type TurnScope,
 } from './acp/mapper'
 import { parseContextReport } from './acp/claude-reports'
-import { isValueOf, startOrder, type AgentOptionsStore } from './agent-options'
+import { isValueOf, startOrder, type AgentOptionsStore, type ReplacedValue } from './agent-options'
 import {
   blockBytes,
   embedFile,
@@ -84,6 +85,7 @@ import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import { isOutOfCredit } from './out-of-credit'
+import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
 import {
@@ -128,6 +130,8 @@ export interface SessionTimings {
   releaseUnusedMs: number
   /** How long after a request the agent's transcript is read for its cache's lifetime. */
   cacheReadMs: number
+  /** A prepared session is replaced this long after the last change to the agent's settings. */
+  settingsDelayMs: number
 }
 
 export const SESSION_TIMINGS: SessionTimings = {
@@ -138,12 +142,14 @@ export const SESSION_TIMINGS: SessionTimings = {
   releaseShownMs: 30 * 60_000,
   releaseUnusedMs: 60_000,
   cacheReadMs: 1_000,
+  settingsDelayMs: 500,
 }
 
 export interface SessionEvents {
   patches(batch: PatchBatch, portIds: readonly string[]): void
-  summary(summary: SessionSummary): void
-  removed(sessionId: string): void
+  /** To every port, or to `portIds` alone for a prepared session. */
+  summary(summary: SessionSummary, portIds?: readonly string[]): void
+  removed(sessionId: string, portIds?: readonly string[]): void
   attention(
     sessionId: string,
     kind: 'permission' | 'turn-ended' | 'error',
@@ -187,6 +193,10 @@ export interface SessionManagerDeps {
   attachments?: Attachments
   /** The artifacts service; without it every attach passes no MCP servers. */
   mcp?: SessionMcp
+  /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
+  prepared?: PreparedRecords
+  /** What to watch for changes to the agent's options in a folder; without it nothing is. */
+  settingsTargets?: (agentId: AgentId, folder: string) => WatchTarget[]
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -208,6 +218,36 @@ interface Turn {
   fallback: ReturnType<typeof setTimeout> | null
   /** The agent reported a request of the session's thread during the turn. */
   requested: boolean
+}
+
+/** What `sessions.prepare` asks for: the agent and where the session will work. */
+interface PrepareParams {
+  agentId: AgentId
+  projectPath: string | null
+  parentId?: string
+}
+
+/** A session opened for a window's New session, outside the index until its first message. */
+interface Prepared {
+  portId: string
+  /** The agent, folder and parent it was asked for, so a request for the same one reuses it. */
+  key: string
+  params: PrepareParams
+  openedAt: number
+  notices: StartNotice[]
+  /** Settles once its values are set; rejects as the prepare fails. */
+  opening: Promise<void>
+  /** Its scratch folder was made for it, so it goes with it while still empty. */
+  scratch: boolean
+  unwatch: (() => void) | null
+}
+
+/** A window's prepared sessions: the one New session shows, and the one opening in its place. */
+interface PreparedSlot {
+  current: Live | null
+  next: Live | null
+  /** The agent's settings changed since `current` opened, so a send waits for `next`. */
+  stale: boolean
 }
 
 interface PendingRequest {
@@ -272,6 +312,8 @@ interface Live {
   startValues: Record<string, string | boolean>
   /** It started work that runs on after its tool call, which Claude Code reports no end of. */
   background: boolean
+  /** Set while it is a prepared session, not yet in the index. */
+  prepared: Prepared | null
   /** Since when nothing has needed its agent, and since when no port has shown it in front. */
   idleSince: number | null
   hiddenSince: number | null
@@ -391,6 +433,8 @@ export class SessionManager {
   private readonly atLaunch = new Set<string>()
   /** When `removeEmpty` ran, kept in the index; null before that. */
   private emptySessionsRemovedAt: number | null = null
+  /** Each window's prepared sessions, by port. */
+  private readonly preparedSlots = new Map<string, PreparedSlot>()
   private emptyRemoval: Promise<void> | null = null
 
   constructor(private readonly deps: SessionManagerDeps) {
@@ -401,8 +445,13 @@ export class SessionManager {
       agentExited: (agentId) => this.agentExited(agentId),
       signedIn: (agentId) => this.agentSignedIn(agentId),
       optionsKnown: (agentId) => !deps.options || deps.options.known(agentId),
-      optionsSeen: (agentId, config) =>
-        deps.options?.started(agentId, withUltracode({ agentId }, config)),
+      optionsSeen: (agentId, config, folder) => {
+        deps.options?.started(
+          agentId,
+          withUltracode({ agentId }, config),
+          pathKey(folder, deps.platform),
+        )
+      },
     }
   }
 
@@ -548,6 +597,15 @@ export class SessionManager {
       model: record.model ?? null,
       pinnedAt: record.pinnedAt ?? null,
       archivedAt: record.archivedAt ?? null,
+      ...(live?.prepared
+        ? {
+            prepared: {
+              config: session?.config ?? [],
+              notices: live.prepared.notices,
+              openedAt: live.prepared.openedAt,
+            },
+          }
+        : {}),
     }
   }
 
@@ -556,6 +614,8 @@ export class SessionManager {
     const key = projectPath === undefined ? null : pathKey(projectPath, this.deps.platform)
     const out: SessionSummary[] = []
     for (const id of ids) {
+      // A prepared session is its window's alone until its first message.
+      if (this.live.get(id)?.prepared) continue
       const summary = this.summary(id)
       if (key === null || pathKey(summary.projectPath, this.deps.platform) === key)
         out.push(summary)
@@ -567,7 +627,10 @@ export class SessionManager {
   scratchFolders(): string[] {
     const { platform, scratch } = this.deps
     const folders = new Map<string, string>()
-    const records = [...this.records.values(), ...[...this.live.values()].map((l) => l.record)]
+    const records = [
+      ...this.records.values(),
+      ...[...this.live.values()].filter((l) => !l.prepared).map((l) => l.record),
+    ]
     for (const { projectPath } of records) {
       if (scratch.contains(projectPath)) folders.set(pathKey(projectPath, platform), projectPath)
     }
@@ -583,7 +646,8 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (live) this.flushPatches(live)
     this.lastSummaries.set(sessionId, json)
-    this.deps.events.summary(summary)
+    if (live?.prepared) this.deps.events.summary(summary, [live.prepared.portId])
+    else this.deps.events.summary(summary)
   }
 
   private updateBadge(): void {
@@ -673,6 +737,8 @@ export class SessionManager {
     if (changes.error) live.errorSeen = this.inFront(live.id)
     this.emit(live, [{ op: 'session.update', changes }])
     if ('status' in changes) this.refreshRelease(live)
+    // New session shows a prepared session through its summary, not its patches.
+    if (live.prepared && ('config' in changes || 'status' in changes)) this.touch(live.id)
   }
 
   private scheduleFlush(live: Live): void {
@@ -991,6 +1057,7 @@ export class SessionManager {
       first: null,
       startValues: {},
       background: false,
+      prepared: null,
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
@@ -1336,6 +1403,8 @@ export class SessionManager {
   }
 
   portClosed(portId: string): void {
+    const slot = this.preparedSlots.get(portId)
+    for (const live of [slot?.current, slot?.next]) if (live) void this.dropPrepared(live)
     this.shown.delete(portId)
     for (const [sessionId, ports] of this.watchers) {
       if (ports.delete(portId) && ports.size === 0) this.watchers.delete(sessionId)
@@ -1362,9 +1431,14 @@ export class SessionManager {
     parentId?: string
     options?: Record<string, string | boolean>
     prompt?: UserContent[]
+    preparedId?: string
   }): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    if (params.preparedId !== undefined) {
+      const adopted = await this.adopt({ ...params, preparedId: params.preparedId })
+      if (adopted) return adopted
+    }
     const prompt = params.prompt && this.hydrate(params.prompt)
     if (params.projectPath === null && params.parentId !== undefined) {
       throw invalidParams('A sub-session belongs to the project of its parent')
@@ -1418,6 +1492,298 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
+  // Prepared sessions: the session New session's first message will use, opened ahead of it so
+  // the menu shows what the agent reports for it.
+
+  /**
+   * The window's prepared session for the agent and folder: the one it holds when it asks again
+   * for the same, unless `replace`, else a new one, which replaces the window's last once it
+   * answers. Resolves once `session/new` has answered and the start values are set.
+   */
+  async prepare(
+    params: PrepareParams & { options?: Record<string, string | boolean>; replace?: boolean },
+    portId: string,
+  ): Promise<SessionSummary> {
+    if (!this.deps.agents.has(params.agentId)) {
+      throw invalidParams(`Unknown agent ${params.agentId}`)
+    }
+    const key = preparedKey(params)
+    const slot = this.slotOf(portId)
+    const held = slot.next ?? (slot.stale ? null : slot.current)
+    if (!params.replace && held?.prepared?.key === key) {
+      await held.prepared.opening
+      if (params.options && held.prepared && held.connection) {
+        await this.applyStartOptions(held, held.connection, params.options)
+        const set = Object.keys(params.options)
+        held.prepared.notices = held.prepared.notices.filter((n) => !set.includes(n.optionId))
+        this.touch(held.id)
+      }
+      return this.summary(held.id)
+    }
+    const live = await this.openPrepared(params, portId, key)
+    if (slot.next && slot.next !== live) void this.dropPrepared(slot.next)
+    slot.next = live
+    try {
+      await live.prepared!.opening
+    } catch (error) {
+      if (slot.next === live) slot.next = null
+      throw error
+    }
+    if (slot.next === live) {
+      const previous = slot.current
+      slot.current = live
+      slot.next = null
+      slot.stale = false
+      if (previous && previous !== live) void this.dropPrepared(previous)
+    }
+    return this.summary(live.id)
+  }
+
+  /** Removes a prepared session that was not adopted; one already adopted or gone is left. */
+  async discard(sessionId: string): Promise<void> {
+    const live = this.live.get(sessionId)
+    if (live?.prepared) await this.dropPrepared(live)
+  }
+
+  private slotOf(portId: string): PreparedSlot {
+    let slot = this.preparedSlots.get(portId)
+    if (!slot) {
+      slot = { current: null, next: null, stale: false }
+      this.preparedSlots.set(portId, slot)
+    }
+    return slot
+  }
+
+  private async openPrepared(
+    params: PrepareParams & { options?: Record<string, string | boolean> },
+    portId: string,
+    key: string,
+  ): Promise<Live> {
+    const { projects, scratch } = this.deps
+    let projectPath: string
+    if (params.parentId !== undefined) {
+      projectPath = this.recordOf(params.parentId).projectPath
+      if (
+        params.projectPath !== null &&
+        !samePath(params.projectPath, projectPath, this.deps.platform)
+      ) {
+        throw invalidParams('A sub-session belongs to the project of its parent')
+      }
+    } else {
+      projectPath =
+        params.projectPath === null
+          ? await scratch.create()
+          : await projects.resolveDirectory(params.projectPath)
+    }
+    const now = this.now()
+    const record: SessionRecord = {
+      id: randomUUID(),
+      agentId: params.agentId,
+      acpSessionId: '',
+      projectPath,
+      title: null,
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      parentId: params.parentId ?? null,
+      origin: 'user',
+      description: null,
+      branch: null,
+    }
+    const { [ULTRACODE_OPTION_ID]: ultracode, ...options } = params.options ?? {}
+    if (typeof ultracode === 'boolean' && hasUltracode(record.agentId)) record.ultracode = ultracode
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    const prepared: Prepared = {
+      portId,
+      key,
+      params: {
+        agentId: params.agentId,
+        projectPath: params.projectPath,
+        ...(params.parentId !== undefined ? { parentId: params.parentId } : {}),
+      },
+      openedAt: now,
+      notices: [],
+      opening: Promise.resolve(),
+      scratch: params.projectPath === null && params.parentId === undefined,
+      unwatch: null,
+    }
+    live.prepared = prepared
+    prepared.opening = this.runPrepare(live, options).catch(async (error: unknown) => {
+      if (live.prepared === prepared) await this.dropPrepared(live)
+      throw error
+    })
+    // A failure reaches the caller that waits; a replacement nobody waits for only logs it.
+    prepared.opening.catch((error: unknown) => {
+      if (error instanceof HostError && error.code === 'not_found') return
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not prepare a ${record.agentId} session: ${agentError(error).message}`,
+      )
+    })
+    return live
+  }
+
+  /** `session/new` in the session's folder, then the remembered values and the window's picks. */
+  private async runPrepare(live: Live, picks: Record<string, string | boolean>): Promise<void> {
+    const { agentId } = live.record
+    const gone = (): boolean => live.closing || this.live.get(live.id) !== live
+    const runtime = await this.deps.agents.ensureReady(agentId)
+    void this.removeLeftovers(runtime)
+    if (gone()) throw removedWhileStarting()
+    let setup
+    try {
+      setup = await runtime.connection.newSession(
+        live.record.projectPath,
+        sessionMeta(live.record),
+        this.mcpServers(live.id, live.record, runtime),
+      )
+    } catch (error) {
+      if (gone()) throw removedWhileStarting()
+      const mapped = agentError(error)
+      if (mapped.code === 'auth_required') this.deps.agents.authRequired(agentId)
+      throw mapped
+    }
+    this.deps.prepared?.add({
+      agentId,
+      acpSessionId: setup.acpSessionId,
+      cwd: live.record.projectPath,
+    })
+    if (gone()) {
+      await this.removeUnlisted(live.id, runtime, setup.acpSessionId)
+      this.deps.prepared?.remove(agentId, setup.acpSessionId)
+      throw removedWhileStarting()
+    }
+    live.record.acpSessionId = setup.acpSessionId
+    this.attach(live, runtime.connection)
+    // The cache names values the session no longer lists, so it is read before it takes them.
+    const cached = this.deps.options?.get(agentId)?.config ?? []
+    const own = withUltracode({ agentId }, setup.config)
+    const replaced =
+      this.deps.options?.started(
+        agentId,
+        own,
+        pathKey(live.record.projectPath, this.deps.platform),
+      ) ?? []
+    this.update(live, {
+      acpSessionId: setup.acpSessionId,
+      config: withUltracode(live.record, setup.config),
+      error: null,
+    })
+    const wanted = { ...this.deps.options?.rememberedOf(agentId), ...picks }
+    const config = await this.applyStartOptions(live, runtime.connection, wanted, {
+      stop: () => gone() || runtime.connection.isClosed,
+    })
+    if (gone()) throw removedWhileStarting()
+    if (live.prepared) {
+      live.prepared.notices = [
+        ...replaced.map((r) => replacedNotice(r, config, cached)),
+        ...unmetValues(wanted, own, config, cached),
+      ]
+      this.watchPrepared(live)
+    }
+    this.update(live, { status: 'ready' })
+    this.deps.agents.signedIn(agentId)
+  }
+
+  /** Replaces the prepared session once the agent's settings change on disk. */
+  private watchPrepared(live: Live): void {
+    const prepared = live.prepared
+    const targets =
+      prepared && this.deps.settingsTargets?.(live.record.agentId, live.record.projectPath)
+    if (!prepared || !targets?.length) return
+    prepared.unwatch = watchSettings(
+      targets,
+      () => {
+        const slot = this.preparedSlots.get(prepared.portId)
+        if (!slot || live.prepared !== prepared || slot.current !== live) return
+        slot.stale = true
+        this.prepare({ ...prepared.params, replace: true }, prepared.portId).catch(() => {})
+      },
+      this.timings.settingsDelayMs,
+      (message) => this.deps.diagnostics.log('warn', message),
+    )
+  }
+
+  /** Takes the prepared session off its window and removes it from its agent, leaving no trace. */
+  private async dropPrepared(live: Live, { agentGone = false } = {}): Promise<void> {
+    const prepared = live.prepared
+    if (!prepared) return
+    live.prepared = null
+    prepared.unwatch?.()
+    const slot = this.preparedSlots.get(prepared.portId)
+    if (slot?.current === live) slot.current = null
+    if (slot?.next === live) slot.next = null
+    if (slot && !slot.current && !slot.next) this.preparedSlots.delete(prepared.portId)
+    live.closing = true
+    const { agentId, acpSessionId, projectPath } = live.record
+    const connected = live.connection !== null && !!acpSessionId
+    if (this.live.get(live.id) === live) this.dropLive(live)
+    this.forget(live.id, [prepared.portId])
+    const runtime = this.deps.agents.runtime(agentId)
+    // An agent that exited took the session with it, but for one that stores it the record stays
+    // for the next start to remove.
+    if (connected && runtime && !agentGone) {
+      await this.removeUnlisted(live.id, runtime, acpSessionId)
+      this.deps.prepared?.remove(agentId, acpSessionId)
+    }
+    if (prepared.scratch) await this.deps.scratch.removeIfEmpty(projectPath)
+  }
+
+  /** The prepared sessions a host that stopped without removing them left in the agent. */
+  private async removeLeftovers(runtime: AgentRuntime): Promise<void> {
+    for (const left of this.deps.prepared?.takeLeftovers(runtime.agentId) ?? []) {
+      await this.removeUnlisted(`left by an earlier run in ${left.cwd}`, runtime, left.acpSessionId)
+      this.deps.prepared?.remove(left.agentId, left.acpSessionId)
+    }
+  }
+
+  /**
+   * The first send's session: the window's prepared one, with the values it was set to, or the
+   * one opening in its place when the agent's settings changed. Null when none is ready to use,
+   * so the caller creates the session afresh.
+   */
+  private async adopt(params: {
+    agentId: AgentId
+    preparedId: string
+    prompt?: UserContent[]
+  }): Promise<SessionSummary | null> {
+    const asked = this.live.get(params.preparedId)
+    if (!asked?.prepared || asked.record.agentId !== params.agentId) return null
+    const { portId, key } = asked.prepared
+    const slot = this.preparedSlots.get(portId)
+    const live = slot?.stale && slot.next?.prepared?.key === key ? slot.next : asked
+    try {
+      await live.prepared?.opening
+    } catch {
+      return null
+    }
+    if (!live.prepared || this.live.get(live.id) !== live || !live.connection) return null
+    if (live.thread.session.status !== 'ready') return null
+    const prepared = live.prepared
+    live.prepared = null
+    prepared.unwatch?.()
+    if (slot) {
+      for (const other of [slot.current, slot.next]) {
+        if (other && other !== live) void this.dropPrepared(other)
+      }
+      this.preparedSlots.delete(portId)
+    }
+    this.deps.prepared?.remove(live.record.agentId, live.record.acpSessionId)
+    const { projectPath } = live.record
+    if (!this.deps.scratch.contains(projectPath)) await this.deps.projects.add(projectPath)
+    const now = this.now()
+    Object.assign(live.record, { createdAt: now, updatedAt: now, lastViewedAt: now })
+    live.used = true
+    live.hiddenSince = this.inFront(live.id) ? null : now
+    const prompt = params.prompt && this.hydrate(params.prompt)
+    const entryId = prompt ? this.addPrompt(live, prompt, now) : null
+    this.save(live)
+    this.touch(live.id)
+    if (prompt && entryId) this.startTurn(live, prompt, now, entryId)
+    return this.summary(live.id)
+  }
+
   /**
    * `session/new`, then the start values that differ from the new session's own; on
    * `auth_required` the session waits in that state and stays live. It enters the index once
@@ -1452,18 +1818,26 @@ export class SessionManager {
     live.record.acpSessionId = setup.acpSessionId
     this.attach(live, runtime.connection)
     live.failure = null
+    const { agentId } = live.record
     // As the agent's defaults: ultracode off, whatever this session starts with.
-    this.deps.options?.started(
-      live.record.agentId,
-      withUltracode({ agentId: live.record.agentId }, setup.config),
-    )
+    const own = withUltracode({ agentId }, setup.config)
+    const replaced =
+      this.deps.options?.started(
+        agentId,
+        own,
+        pathKey(live.record.projectPath, this.deps.platform),
+      ) ?? []
+    // A remembered value that a later change outside OverBench replaced is not set again.
+    for (const { option, wanted } of replaced) {
+      if (live.startValues[option.id] === wanted) delete live.startValues[option.id]
+    }
     this.update(live, {
       acpSessionId: setup.acpSessionId,
       config: withUltracode(live.record, setup.config),
       error: null,
     })
     this.save(live)
-    await this.applyStartOptions(live, runtime.connection, live.startValues, {
+    const config = await this.applyStartOptions(live, runtime.connection, live.startValues, {
       stop: () => gone() || runtime.connection.isClosed,
     })
     if (gone()) {
@@ -1473,11 +1847,32 @@ export class SessionManager {
       return
     }
     this.update(live, { status: 'ready' })
-    this.deps.agents.signedIn(live.record.agentId)
+    this.deps.agents.signedIn(agentId)
     this.touch(live.id)
     const first = live.first
     live.first = null
-    if (first) this.startTurn(live, first.content, this.now(), first.entryId)
+    if (!first) return
+    // The first message never goes out with a value the user did not choose.
+    const wanted = Object.entries(live.startValues).flatMap(([id, value]): ConfigOption[] => {
+      const option = config.find((o) => o.id === id) ?? own.find((o) => o.id === id)
+      return option && id !== ULTRACODE_OPTION_ID ? [{ ...option, value }] : []
+    })
+    const notice = lostValuesNotice(lostValues(wanted, config), { subject: 'start', held: true })
+    if (!notice) {
+      this.startTurn(live, first.content, this.now(), first.entryId)
+      return
+    }
+    this.emit(live, [
+      { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
+    ])
+    this.update(live, {
+      queue: [
+        { id: randomUUID(), content: first.content, at: this.now() },
+        ...live.thread.session.queue,
+      ],
+      queuePaused: true,
+    })
+    this.persist(live)
   }
 
   /**
@@ -1797,8 +2192,13 @@ export class SessionManager {
   private agentExited(agentId: AgentId): void {
     const name = this.deps.agents.name(agentId)
     const held: SessionRecord[] = []
-    for (const live of this.live.values()) {
+    for (const live of [...this.live.values()]) {
       if (live.record.agentId !== agentId) continue
+      // New session prepares another once it needs one.
+      if (live.prepared) {
+        void this.dropPrepared(live, { agentGone: true })
+        continue
+      }
       // A session takes its connection only once it has attached, so its turn was never sent.
       const attaching = live.connection === null
       live.connection = null
@@ -3257,6 +3657,11 @@ export class SessionManager {
         this.update(live, { config: next })
         this.deps.options?.chose(live.record.agentId, option, value, next)
       }
+      if (live.prepared) {
+        // Chosen again, so whatever the notice said of it no longer holds.
+        live.prepared.notices = live.prepared.notices.filter((n) => n.optionId !== optionId)
+        this.touch(live.id)
+      }
     } catch (error) {
       throw agentError(error)
     }
@@ -3488,18 +3893,19 @@ export class SessionManager {
     })
   }
 
-  private forget(sessionId: string): void {
+  private forget(sessionId: string, portIds?: readonly string[]): void {
     const known = this.records.delete(sessionId) || this.lastSummaries.has(sessionId)
     this.lastSummaries.delete(sessionId)
     this.missing.delete(sessionId)
     this.watchers.delete(sessionId)
     this.seqs.delete(sessionId)
-    if (known) this.deps.events.removed(sessionId)
+    if (known) this.deps.events.removed(sessionId, portIds)
   }
 
   /** Clears the index; the agents keep their transcripts. */
   async removeAll(): Promise<void> {
     await Promise.allSettled([...this.reviving.values(), ...this.releasing.values()])
+    await Promise.all([...this.live.values()].map((l) => this.dropPrepared(l)))
     const live = [...this.live.values()]
     await this.closeAll(
       live.filter((l) => l.record.origin === 'user').map((l) => l.record),
@@ -3515,6 +3921,11 @@ export class SessionManager {
   /** Removes a project's sessions from the index, closing live ones first. */
   async removeProject(projectPath: string): Promise<void> {
     const key = pathKey(projectPath, this.deps.platform)
+    await Promise.all(
+      [...this.live.values()]
+        .filter((l) => l.prepared && pathKey(l.record.projectPath, this.deps.platform) === key)
+        .map((l) => this.dropPrepared(l)),
+    )
     const inProject = this.list().filter((s) => pathKey(s.projectPath, this.deps.platform) === key)
     await Promise.all(inProject.map((summary) => this.settled(summary.id)))
     for (const summary of inProject) {
@@ -3871,4 +4282,67 @@ function sumModelTokens(models: ModelTokens[], usage: TokenTotals | null): Token
 function modelOf(config: readonly ConfigOption[]): string | null {
   const option = config.find((o) => o.category === 'model' && typeof o.value === 'string')
   return typeof option?.value === 'string' ? option.value : null
+}
+
+/** Which prepared session a request asks for: the agent, the folder and the parent. */
+function preparedKey(params: PrepareParams): string {
+  return JSON.stringify([params.agentId, params.projectPath, params.parentId ?? null])
+}
+
+/** What a user reads for a value: its name in the session's list, else in the cached one. */
+function nameOf(
+  option: ConfigOption,
+  value: string | boolean,
+  cached: readonly ConfigOption[],
+): string | boolean {
+  if (typeof value === 'boolean') return value
+  const choice =
+    option.choices?.find((c) => c.value === value) ??
+    cached.find((o) => o.id === option.id)?.choices?.find((c) => c.value === value)
+  return choice?.name ?? value
+}
+
+function replacedNotice(
+  replaced: ReplacedValue,
+  config: readonly ConfigOption[],
+  cached: readonly ConfigOption[],
+): StartNotice {
+  const { option, wanted } = replaced
+  const now = config.find((o) => o.id === option.id) ?? option
+  return {
+    reason: 'replaced',
+    optionId: option.id,
+    category: option.category,
+    option: option.name,
+    type: option.type,
+    wanted: nameOf(option, wanted, cached),
+    actual: nameOf(now, now.value, cached),
+  }
+}
+
+/** The values a prepared session was meant to start with and does not hold, and why. */
+function unmetValues(
+  wanted: Record<string, string | boolean>,
+  own: readonly ConfigOption[],
+  config: readonly ConfigOption[],
+  cached: readonly ConfigOption[],
+): StartNotice[] {
+  const out: StartNotice[] = []
+  for (const [id, value] of Object.entries(wanted)) {
+    if (id === ULTRACODE_OPTION_ID) continue
+    const option = config.find((o) => o.id === id)
+    if (option?.value === value) continue
+    const known = option ?? own.find((o) => o.id === id) ?? cached.find((o) => o.id === id)
+    if (!known) continue
+    out.push({
+      reason: option && isValueOf(option, value) ? 'refused' : 'not_offered',
+      optionId: id,
+      category: known.category,
+      option: known.name,
+      type: known.type,
+      wanted: nameOf(known, value, cached),
+      actual: option ? nameOf(option, option.value, cached) : null,
+    })
+  }
+  return out
 }

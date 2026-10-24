@@ -243,10 +243,27 @@
       "retry": "Retry",
       "signInLong": "Sign in to {{agent}} to use it.",
       "signInAction": "Sign in…",
-      "noModels": "{{agent}} lists its models after its first session. It starts with its default model, and you can change it in the session.",
       "modelsOnStart": "{{agent}} lists its models once it has started.",
       "useAgent": "Use {{agent}}",
-      "noMatch": "No matching agents or models"
+      "noMatch": "No matching agents or models",
+      "checking": "Checking {{agent}}'s models…",
+      "prepareFailed": "{{agent}} could not open a session: {{error}}"
+    },
+    "startNotice": {
+      "model": {
+        "not_offered": "{{agent}} no longer offers {{wanted}}, so it starts with {{actual}}.",
+        "refused": "{{agent}} did not accept {{wanted}}, so it starts with {{actual}}.",
+        "replaced": "{{agent}}'s default changed to {{actual}} outside OverBench, so it starts with that instead of {{wanted}}."
+      },
+      "option": {
+        "not_offered": "{{agent}} no longer offers {{option}} {{wanted}}, so it starts with {{actual}}.",
+        "refused": "{{agent}} did not accept {{option}} {{wanted}}, so it starts with {{actual}}.",
+        "replaced": "{{agent}}'s default {{option}} changed to {{actual}} outside OverBench, so it starts with that instead of {{wanted}}."
+      },
+      "noOption": "{{agent}} has no {{option}} option now, so {{wanted}} is not used.",
+      "noSwitch": "{{agent}} has no {{option}} option now, so it cannot be turned on.",
+      "switchOff": "{{agent}} starts with {{option}} off, not on.",
+      "switchOn": "{{agent}} starts with {{option}} on, not off."
     }
   },
   "signIn": {

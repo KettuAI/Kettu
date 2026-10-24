@@ -258,6 +258,7 @@ export function PromptBox({
                   disabled={disabled}
                   onKeyDown={keyDown}
                   onPaste={box.onPaste}
+                  onFocus={box.onActivity}
                   onSelect={(event) => {
                     const el = event.currentTarget
                     setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null)

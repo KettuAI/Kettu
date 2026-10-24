@@ -61,8 +61,11 @@ export function lostValues(
   return lost.sort((a, b) => a.rank - b.rank).map(({ value }) => value)
 }
 
-/** What the notice speaks of: a new fork, or a session that attached to its agent again. */
-export type NoticeSubject = 'fork' | 'session'
+/**
+ * What the notice speaks of: a new fork, a session that attached to its agent again, or a new
+ * session that could not start with the values chosen for it.
+ */
+export type NoticeSubject = 'fork' | 'session' | 'start'
 
 // A switch has a sentence for each case, not its value in a slot: "on" and "off" would be
 // translated words glued into the sentence. A switch that was off and is missing lost nothing.

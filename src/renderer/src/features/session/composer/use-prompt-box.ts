@@ -39,11 +39,14 @@ export function usePromptBox({
   sessionId,
   projectPath,
   disabled,
+  onActivity,
 }: {
   draft: string
   sessionId: string | null
   projectPath: string | null
   disabled: boolean
+  /** Typing in the box or focusing it, as New session's prepared session watches for. */
+  onActivity?: () => void
 }) {
   const { t } = useTranslation('composer')
   const [text, setText] = useState(() => readDraft(draft))
@@ -127,6 +130,7 @@ export function usePromptBox({
   const update = (next: string, at?: number) => {
     setText(next)
     writeDraft(draft, next)
+    onActivity?.()
     if (!next.startsWith('/')) setSlashDismissed(false)
     if (at !== undefined) {
       pendingCaret.current = at
@@ -186,6 +190,7 @@ export function usePromptBox({
     full,
     pick,
     onPaste,
+    onActivity,
     limitError,
   }
 }

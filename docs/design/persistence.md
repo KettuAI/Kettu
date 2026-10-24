@@ -10,26 +10,27 @@ All files live in `app.getPath('userData')` ([per platform](./agent-host.md#plat
 
 An unpackaged run, such as `pnpm dev` or `electron .`, does not use the installed app's folder. It keeps its own, `OverBench Dev`, beside it in the platform's application data folder, which starts empty: no projects or sessions, and the adapters install again on first use. `OVERBENCH_USER_DATA` names another folder, resolved from the working directory when it is relative, so that each worktree can have its own. Electron's `--user-data-dir=<dir>` switch beats both, which is how the tools that start a production build give it a fresh folder; Electron ignores the switch without a value, as in `--user-data-dir <dir>`, and the rules above then apply. A packaged build, which includes the unpacked app `pnpm package` writes to `dist/`, ignores the variable and uses and locks the installed app's folder unless it is started with `--user-data-dir=<dir>`. Main sets the folder before anything reads it, and Electron keys the single-instance lock on it: runs on different folders run side by side, and a second run on the same folder quits and brings the first forward.
 
-| File                         | Owner      | Contents                                                                                                                                           |
-| ---------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state/projects.json`        | Agent host | Recent project folders                                                                                                                             |
-| `state/sessions.json`        | Agent host | The session index                                                                                                                                  |
-| `state/agent-processes.json` | Agent host | The agent processes running and what they left, until seen gone, for the next host to stop ([process trees](./agent-host.md#process-trees))        |
-| `state/agents.json`          | Agent host | The account, plan limits and capabilities each agent last reported, kept until it reports again ([sign-in](./agent-host.md#sign-in))               |
-| `state/agent-options.json`   | Agent host | Each agent's config options from its last new session, and the values last chosen, for [New session](./session-model.md#config-options)            |
-| `state/agent-updates.json`   | Agent host | What the last [update check](./agent-host.md#checking-for-updates) found for each package agent, shown after a restart                             |
-| `state/threads.db`           | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                             |
-| `state/usage.db`             | Agent host | The token usage OverBench recorded and imported from the agents' logs, in its own worker ([usage statistics](./usage.md#storage))                  |
-| `settings.json`              | Main       | [Settings](#settings)                                                                                                                              |
-| `window-state.json`          | Main       | Window size, position and maximized state                                                                                                          |
-| `app-state.json`             | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                        |
-| `agents/`                    | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and install                                                     |
-| `scratch/`                   | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                           |
-| `state/attachments.json`     | Agent host | The attachments of drafts and queued prompts, until sent or removed ([attachments](./session-model.md#where-the-bytes-live))                       |
-| `attachments/`               | Agent host | Their saved bytes by SHA-256: pasted images and text, picked and dropped images as read when added, and images scaled to fit                       |
-| `artifacts/content/`         | Agent host | Each [artifact](./artifacts.md#store) version's HTML, one file per hash, removed with the last version that names it                               |
-| `artifacts/thumbnails/`      | Main       | [Artifact thumbnails](./artifacts.md#thumbnails), one image per version, trimmed to the newest 500                                                 |
-| `localStorage`               | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts) |
+| File                           | Owner      | Contents                                                                                                                                                      |
+| ------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state/projects.json`          | Agent host | Recent project folders                                                                                                                                        |
+| `state/sessions.json`          | Agent host | The session index                                                                                                                                             |
+| `state/agent-processes.json`   | Agent host | The agent processes running and what they left, until seen gone, for the next host to stop ([process trees](./agent-host.md#process-trees))                   |
+| `state/agents.json`            | Agent host | The account, plan limits and capabilities each agent last reported, kept until it reports again ([sign-in](./agent-host.md#sign-in))                          |
+| `state/agent-options.json`     | Agent host | Each agent's cached config options, its own values in the folders seen last, and the values last chosen, for [New session](./session-model.md#config-options) |
+| `state/prepared-sessions.json` | Agent host | The [prepared sessions](./session-model.md#prepared-sessions) not yet adopted or removed, for the next host to remove after a crash                           |
+| `state/agent-updates.json`     | Agent host | What the last [update check](./agent-host.md#checking-for-updates) found for each package agent, shown after a restart                                        |
+| `state/threads.db`             | Agent host | Every session's thread, read a page at a time ([threads](#threads)), with its `-wal` and `-shm` files while it is open                                        |
+| `state/usage.db`               | Agent host | The token usage OverBench recorded and imported from the agents' logs, in its own worker ([usage statistics](./usage.md#storage))                             |
+| `settings.json`                | Main       | [Settings](#settings)                                                                                                                                         |
+| `window-state.json`            | Main       | Window size, position and maximized state                                                                                                                     |
+| `app-state.json`               | Main       | The last version that ran and the dismissed update notice ([updates](./updates.md#storage))                                                                   |
+| `agents/`                      | Agent host | [Installed adapters](./agent-host.md#installing-adapters), one directory per agent and install                                                                |
+| `scratch/`                     | Agent host | [Scratch folders](./session-model.md#sessions-without-a-project), one per session started with No project, never removed                                      |
+| `state/attachments.json`       | Agent host | The attachments of drafts and queued prompts, until sent or removed ([attachments](./session-model.md#where-the-bytes-live))                                  |
+| `attachments/`                 | Agent host | Their saved bytes by SHA-256: pasted images and text, picked and dropped images as read when added, and images scaled to fit                                  |
+| `artifacts/content/`           | Agent host | Each [artifact](./artifacts.md#store) version's HTML, one file per hash, removed with the last version that names it                                          |
+| `artifacts/thumbnails/`        | Main       | [Artifact thumbnails](./artifacts.md#thumbnails), one image per version, trimmed to the newest 500                                                            |
+| `localStorage`                 | Renderer   | Per-device view preferences, such as panel sizes, collapsed groups and whether the terminal panel is open, and [composer drafts](#composer-drafts)            |
 
 ```ts
 interface ProjectsFile {

@@ -9,6 +9,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
+import type { SessionSummary } from '@shared/agent-host'
 import type { Attachment, ThreadEntry, ToolEntry } from '@shared/thread'
 import { AgentRequestError } from './acp/connection'
 import { forkCut, unknownSession } from './sessions'
@@ -709,103 +710,256 @@ describe('starting with chosen options', () => {
   })
 })
 
-describe('options before a session exists', () => {
+describe('reading the options for the agent menu', () => {
   const sent = (t: TestHost, method: string) =>
     t.host.diagnostics
       .agentRecords('fake-agent')
       .traffic.filter((r) => r.direction === 'out' && r.method === method).length
-  // The sessions the fake agent itself still lists in the folder hidden sessions run in.
-  const leftovers = async (t: TestHost, port: TestPort) =>
+  // The sessions the fake agent itself still lists in a folder.
+  const leftovers = async (port: TestPort, folder: string) =>
     (
-      await port.request('agents.listSessions', {
-        agentId: 'fake-agent',
-        projectPath: path.join(t.dir, 'agent-reports'),
-      })
+      await port.request('agents.listSessions', { agentId: 'fake-agent', projectPath: folder })
     ).sessions.filter((s) => s.acpSessionId.startsWith('fake-'))
 
-  it('reads the models when the agent starts, in a session left in no list', async () => {
+  it('reads a running agent in the project, in a session left in no list', async () => {
     const { t, port } = await setup()
-    expect(await port.request('agents.options', undefined)).toEqual([])
-    await port.request('agents.start', { agentId: 'fake-agent' })
+    await t.host.agents.ensureReady('fake-agent')
+    await port.request('agents.readOptions', { agentId: 'fake-agent', projectPath: t.project })
     const [options] = await port.request('agents.options', undefined)
     expect(options?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
     expect(options?.config.at(-1)?.id).toBe('__ultracode')
-    expect(port.events.some((e) => e.type === 'agent.options')).toBe(true)
+    expect(Object.keys(options?.defaults ?? {})).toHaveLength(1)
     expect(sent(t, 'session/delete')).toBeGreaterThan(0)
-    expect(await leftovers(t, port)).toEqual([])
+    expect(await leftovers(port, t.project)).toEqual([])
     expect(await port.request('sessions.list', {})).toHaveLength(0)
   })
 
-  it('opens no session to read them once they are known', async () => {
+  it('reads them again only once they are stale', async () => {
     const { t, port } = await setup()
-    await port.request('agents.start', { agentId: 'fake-agent' })
-    await port.request('agents.start', { agentId: 'fake-agent' })
+    await t.host.agents.ensureReady('fake-agent')
+    await port.request('agents.readOptions', { agentId: 'fake-agent', projectPath: t.project })
+    await port.request('agents.readOptions', { agentId: 'fake-agent', projectPath: t.project })
     expect(sent(t, 'session/new')).toBe(1)
+  })
+
+  it('starts no agent to read them', async () => {
+    const { t, port } = await setup()
+    await port.request('agents.readOptions', { agentId: 'fake-agent', projectPath: t.project })
+    expect(await port.request('agents.options', undefined)).toEqual([])
+    const statuses = await port.request('agents.list', undefined)
+    expect(statuses.find((s) => s.id === 'fake-agent')?.state).not.toBe('ready')
+  })
+
+  it('reads nothing while the agent must sign in first', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_AUTH: 'required' } })
+    await t.host.agents.ensureReady('fake-agent')
+    await port.request('agents.readOptions', { agentId: 'fake-agent', projectPath: null })
+    expect(await port.request('agents.options', undefined)).toEqual([])
+    const statuses = await port.request('agents.list', undefined)
+    expect(statuses.find((s) => s.id === 'fake-agent')?.signIn).toBe('required')
   })
 
   it('keeps the options of the plan limits report', async () => {
     const { t, port } = await setup()
     await port.request('agents.refreshLimits', { agentId: 'fake-agent' })
-    await port.request('agents.start', { agentId: 'fake-agent' })
     const [options] = await port.request('agents.options', undefined)
     expect(options?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
     expect(sent(t, 'session/new')).toBe(1)
   })
+})
 
-  it("shows a loaded session's model as provisional, and still reads the defaults", async () => {
+describe('prepared sessions', () => {
+  const sent = (t: TestHost, method: string) =>
+    t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter((r) => r.direction === 'out' && r.method === method).length
+  const agentSessions = async (t: TestHost, port: TestPort) =>
+    (
+      await port.request('agents.listSessions', { agentId: 'fake-agent', projectPath: t.project })
+    ).sessions.filter((s) => s.acpSessionId.startsWith('fake-'))
+  const prepare = (t: TestHost, port: TestPort, extra: Record<string, unknown> = {}) =>
+    port.request('sessions.prepare', { agentId: 'fake-agent', projectPath: t.project, ...extra })
+  const modelOf = (summary: SessionSummary) =>
+    summary.prepared?.config.find((o) => o.id === 'model')?.value
+  const removed = (port: TestPort, sessionId: string) =>
+    port.events.some((e) => e.type === 'session.removed' && e.sessionId === sessionId)
+
+  it('opens the session New session shows, which no list holds', async () => {
     const { t, port } = await setup()
-    const imported = await port.request('sessions.import', {
+    const summary = await prepare(t, port)
+    expect(summary.status).toBe('ready')
+    expect(modelOf(summary)).toBe('balanced')
+    expect(summary.prepared?.notices).toEqual([])
+    expect(await port.request('sessions.list', {})).toEqual([])
+    // Only the window that prepared it hears of it.
+    const other = t.connect()
+    await other.request('agents.list', undefined)
+    expect(other.events.some((e) => e.type === 'session.summary')).toBe(false)
+  })
+
+  it("reuses the window's session for the same agent and folder", async () => {
+    const { t, port } = await setup()
+    const first = await prepare(t, port)
+    const again = await prepare(t, port)
+    expect(again.id).toBe(first.id)
+    expect(sent(t, 'session/new')).toBe(1)
+  })
+
+  it('adopts it with the first message, without another session/new', async () => {
+    const { t, port } = await setup()
+    const prepared = await prepare(t, port)
+    const summary = await port.request('sessions.create', {
       agentId: 'fake-agent',
       projectPath: t.project,
-      acpSessionId: 'cli-refactor-router',
+      preparedId: prepared.id,
+      prompt: [{ type: 'text', text: 'hello' }],
     })
-    await port.open(imported.id)
-    const [opened] = await port.request('agents.options', undefined)
-    expect(opened).toMatchObject({ provisional: true })
-    expect(opened?.config.find((o) => o.id === 'model')?.value).toBe('balanced')
-    expect(opened?.config.some((o) => o.category === 'mode')).toBe(false)
-    expect(opened?.config.some((o) => o.id === '__ultracode')).toBe(false)
-    await port.request('agents.start', { agentId: 'fake-agent' })
+    expect(summary.id).toBe(prepared.id)
+    expect(summary.prepared).toBeUndefined()
     expect(sent(t, 'session/new')).toBe(1)
-    const [options] = await port.request('agents.options', undefined)
-    expect(options?.provisional).toBeUndefined()
-    expect(options?.config.some((o) => o.category === 'mode')).toBe(true)
+    await port.open(summary.id)
+    await port.untilStatus(summary.id, 'ready')
+    expect(port.entries(summary.id).some((e) => e.kind === 'agent')).toBe(true)
+    expect((await port.request('sessions.list', {})).map((s) => s.id)).toEqual([summary.id])
+    // Adopted, it no longer goes with the window.
+    port.disconnect()
+    expect(await agentSessions(t, t.connect())).toHaveLength(1)
   })
 
-  it('opens one hidden session when the limits report and the read run together', async () => {
+  it('replaces it when asked, removing the old one', async () => {
     const { t, port } = await setup()
-    await Promise.all([
-      port.request('agents.refreshLimits', { agentId: 'fake-agent' }),
-      port.request('agents.start', { agentId: 'fake-agent' }),
-    ])
-    expect(sent(t, 'session/new')).toBe(1)
-    expect(await port.request('agents.options', undefined)).toHaveLength(1)
+    const first = await prepare(t, port)
+    const second = await prepare(t, port, { replace: true })
+    expect(second.id).not.toBe(first.id)
+    await port.until(() => removed(port, first.id))
+    await vi.waitFor(async () => expect(await agentSessions(t, port)).toHaveLength(1))
   })
 
-  it('starts the agent without options when it must sign in first', async () => {
-    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_AUTH: 'required' } })
-    await port.request('agents.start', { agentId: 'fake-agent' })
-    expect(await port.request('agents.options', undefined)).toEqual([])
-    const statuses = await port.request('agents.list', undefined)
-    expect(statuses.find((s) => s.id === 'fake-agent')?.signIn).toBe('required')
-    expect(await leftovers(t, port)).toEqual([])
+  it('goes without a trace when it is discarded or its window goes', async () => {
+    const { t, port } = await setup()
+    const summary = await prepare(t, port)
+    await port.request('sessions.discard', { sessionId: summary.id })
+    expect(removed(port, summary.id)).toBe(true)
+    expect(await agentSessions(t, port)).toEqual([])
+    await prepare(t, port)
+    port.disconnect()
+    const next = t.connect()
+    await vi.waitFor(async () => expect(await agentSessions(t, next)).toEqual([]))
   })
 
-  it('starts the agent without options when they do not come in time', async () => {
-    const { t, port } = await setup({
-      agentEnv: { FAKE_AGENT_NEW_SESSION_MS: '300' },
-      agentTimings: { optionsMs: 20 },
+  it('makes a scratch folder for No project, and removes it with the session', async () => {
+    const { port } = await setup()
+    const summary = await port.request('sessions.prepare', {
+      agentId: 'fake-agent',
+      projectPath: null,
     })
-    await port.request('agents.start', { agentId: 'fake-agent' })
-    expect(await port.request('agents.options', undefined)).toEqual([])
-    // The late answer opens a session, which goes once it comes.
-    const deadline = Date.now() + 5_000
-    while (sent(t, 'session/delete') === 0 && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
-    expect(await leftovers(t, port)).toEqual([])
-    await port.request('agents.start', { agentId: 'fake-agent' })
-    expect(sent(t, 'session/new')).toBe(1)
+    expect(summary.scratch).toBe(true)
+    expect(existsSync(summary.projectPath)).toBe(true)
+    await port.request('sessions.discard', { sessionId: summary.id })
+    expect(existsSync(summary.projectPath)).toBe(false)
+  })
+
+  it('starts with the remembered model, and tells what it could not set', async () => {
+    const { t, port } = await setup()
+    const first = await prepare(t, port)
+    await port.request('sessions.setConfigOption', {
+      sessionId: first.id,
+      optionId: 'model',
+      value: 'deep',
+    })
+    const next = await prepare(t, port, { replace: true, options: { thought_level: 'max' } })
+    expect(modelOf(next)).toBe('deep')
+    expect(next.prepared?.notices).toEqual([
+      {
+        reason: 'not_offered',
+        optionId: 'thought_level',
+        category: 'thought_level',
+        option: 'Reasoning',
+        type: 'select',
+        wanted: 'max',
+        actual: 'Medium',
+      },
+    ])
+  })
+
+  it('drops a remembered model once the project chose another outside OverBench', async () => {
+    const { t, port } = await setup()
+    const first = await prepare(t, port)
+    await port.request('sessions.setConfigOption', {
+      sessionId: first.id,
+      optionId: 'model',
+      value: 'deep',
+    })
+    await writeFile(path.join(t.project, '.fake-agent.json'), JSON.stringify({ model: 'swift' }))
+    const next = await prepare(t, port, { replace: true })
+    expect(modelOf(next)).toBe('swift')
+    expect(next.prepared?.notices).toMatchObject([
+      { reason: 'replaced', optionId: 'model', wanted: 'Fake Deep', actual: 'Fake Swift' },
+    ])
+    const [options] = await port.request('agents.options', undefined)
+    expect(options?.remembered).toEqual({})
+  })
+
+  it("is replaced when the agent's settings change on disk", async () => {
+    const { t, port } = await setup({ sessionTimings: { settingsDelayMs: 20 } })
+    const first = await prepare(t, port)
+    await writeFile(path.join(t.project, '.fake-agent.json'), JSON.stringify({ model: 'swift' }))
+    await port.until(() =>
+      port.events.some(
+        (e) =>
+          e.type === 'session.summary' &&
+          e.summary.id !== first.id &&
+          e.summary.status === 'ready' &&
+          modelOf(e.summary) === 'swift',
+      ),
+    )
+    await port.until(() => removed(port, first.id))
+  })
+
+  it('goes when its agent exits', async () => {
+    const { t, port } = await setup()
+    const summary = await prepare(t, port)
+    ;(t.launcher as InProcessLauncher).crash()
+    await port.until(() => removed(port, summary.id))
+  })
+
+  it('leaves a record that the next host removes it by', async () => {
+    const first = await startTestHost()
+    const port = first.connect()
+    await port.request('sessions.prepare', { agentId: 'fake-agent', projectPath: first.project })
+    const file = path.join(first.dir, 'state', 'prepared-sessions.json')
+    const read = async () =>
+      (JSON.parse(await readFile(file, 'utf8')) as { sessions: unknown[] }).sessions
+    // Stopped as by a crash: nothing removed it.
+    await first.host.shutdown()
+    expect(await read()).toHaveLength(1)
+    current = await startTestHost({ userDataPath: first.dir, projectDir: first.project })
+    const next = current.connect()
+    const summary = await next.request('sessions.prepare', {
+      agentId: 'fake-agent',
+      projectPath: first.project,
+    })
+    await next.request('sessions.discard', { sessionId: summary.id })
+    await vi.waitFor(async () => expect(await read()).toEqual([]))
+  })
+})
+
+describe('a first message that cannot start as chosen', () => {
+  it('waits in the paused queue with a notice', async () => {
+    const { t, port } = await setup()
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      options: { thought_level: 'max' },
+      prompt: [{ type: 'text', text: 'hello' }],
+    })
+    await port.open(summary.id)
+    const thread = port.thread(summary.id)
+    expect(thread.session.queuePaused).toBe(true)
+    expect(thread.session.queue).toHaveLength(1)
+    const notice = port.entries(summary.id).find((e) => e.kind === 'notice')
+    expect(notice).toMatchObject({ severity: 'warning' })
+    expect(port.entries(summary.id).some((e) => e.kind === 'agent')).toBe(false)
   })
 })
 

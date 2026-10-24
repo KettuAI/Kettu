@@ -74,6 +74,29 @@ export function startConfig(entry: AgentOptions, picks: OptionValues = {}): Conf
 }
 
 /**
+ * The prepared session's options, as its agent reports them, with what New session set that the
+ * agent has not answered yet. While a model is picked, the level is the one that model offered
+ * when last seen.
+ */
+export function preparedConfig(
+  config: readonly ConfigOption[],
+  levels: Record<string, ConfigOption>,
+  picks: OptionValues = {},
+): ConfigOption[] {
+  const model = config.find((o) => o.category === 'model' && o.type === 'select')
+  const modelPick = model ? picks[model.id] : undefined
+  const pickedModel = model && modelPick !== undefined && takes(model, modelPick) ? modelPick : null
+  return config.map((option) => {
+    const base =
+      option.category === 'thought_level' && typeof pickedModel === 'string'
+        ? (levels[pickedModel] ?? option)
+        : option
+    const pick = picks[base.id]
+    return pick !== undefined && takes(base, pick) ? { ...base, value: pick } : base
+  })
+}
+
+/**
  * What `sessions.create` takes: the start values that differ from the agent's own defaults, or
  * every value for a provisional entry, whose values need not be the agent's defaults.
  */

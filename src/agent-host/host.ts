@@ -32,6 +32,7 @@ import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
 import { pathKey } from './paths'
+import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
@@ -56,6 +57,9 @@ import type { LogReader } from './usage/model'
 import { LOG_READERS } from './usage/readers'
 import { UsageStore, type UsageWorkerFactory } from './usage/store'
 import { createValidators } from './validate'
+
+// The agent menu reads a running agent's options again once they are older than this.
+const OPTIONS_FRESH_MS = 5 * 60_000
 
 export interface HostOptions {
   userDataPath: string
@@ -104,6 +108,8 @@ export class AgentHost {
   private readonly updates: JsonFile<AgentUpdatesFile>
   /** Each agent's config options from its last new session, for New session. */
   private readonly agentOptions: AgentOptionsStore
+  /** New session's prepared sessions not yet adopted or removed, for the host after a crash. */
+  private readonly preparedRecords: PreparedRecords
   /** The agent processes and what they leave behind, until seen gone. */
   private readonly trees: AgentTrees
   readonly sessions: SessionManager
@@ -165,6 +171,7 @@ export class AgentHost {
       file: agentOptionsFile(options.userDataPath, log),
       changed: (changed) => this.hub.broadcast({ type: 'agent.options', options: changed }),
     })
+    this.preparedRecords = new PreparedRecords(preparedFile(options.userDataPath, log))
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
       control: options.processControl ?? processControl(platform),
@@ -282,13 +289,30 @@ export class AgentHost {
       git: () => this.git,
       options: this.agentOptions,
       ...(options.sessionTimings ? { timings: options.sessionTimings } : {}),
+      prepared: this.preparedRecords,
+      settingsTargets: (agentId, folder) =>
+        settingsTargets(
+          agentId,
+          folder,
+          (name) => this.env.get(name),
+          options.homeDir ?? os.homedir(),
+          platform,
+        ),
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
-        summary: (summary) => {
+        summary: (summary, portIds) => {
+          if (portIds) {
+            this.hub.send(portIds, { type: 'session.summary', summary })
+            return
+          }
           this.hub.broadcast({ type: 'session.summary', summary })
           if (summary.scratch) this.sendFolders()
         },
-        removed: (sessionId) => {
+        removed: (sessionId, portIds) => {
+          if (portIds) {
+            this.hub.send(portIds, { type: 'session.removed', sessionId })
+            return
+          }
           this.hub.broadcast({ type: 'session.removed', sessionId })
           this.sendFolders()
         },
@@ -332,6 +356,7 @@ export class AgentHost {
       host.updates.load(),
       host.trees.load(),
       host.agentOptions.load(),
+      host.preparedRecords.load(),
       host.attachments.load(),
       host.artifactService.start(),
     ])
@@ -502,6 +527,7 @@ export class AgentHost {
         this.updates.flush(),
         this.trees.close(),
         this.agentOptions.flush(),
+        this.preparedRecords.flush(),
         this.attachments.flush(),
         this.threads?.close(),
         this.usage.close(),
@@ -603,9 +629,14 @@ export class AgentHost {
       'agents.update': ({ agentId }) => agents.update(agentId),
       'agents.install': ({ agentId, method }) => agents.install(agentId, method),
       'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
-      'agents.start': async ({ agentId }) => {
-        await agents.ensureReady(agentId)
-        await agents.readOptions(agentId)
+      'agents.readOptions': async ({ agentId, projectPath }) => {
+        const entry = this.agentOptions.get(agentId)
+        if (entry && Date.now() - entry.observedAt < OPTIONS_FRESH_MS) return
+        const folder =
+          projectPath === null
+            ? null
+            : await projects.resolveDirectory(projectPath).catch(() => null)
+        await agents.readOptions(agentId, folder ?? undefined)
       },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.details': ({ agentId }) => agents.details(agentId),
@@ -627,6 +658,8 @@ export class AgentHost {
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
       'sessions.list': ({ projectPath }) => sessions.list(projectPath),
       'sessions.create': (params) => sessions.create(params),
+      'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
+      'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
       'sessions.open': ({ sessionId }) => sessions.open(sessionId),
       'sessions.snapshot': ({ sessionId, from }) => sessions.snapshot(sessionId, from),
