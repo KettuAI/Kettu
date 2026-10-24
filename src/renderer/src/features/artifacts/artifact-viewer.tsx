@@ -42,8 +42,8 @@ import {
   StatusBar,
 } from './viewer-parts'
 
-/** The bar over the page, for an earlier version or one in Recently deleted, keeps this clear. */
-const BAR_ROOM = 52
+/** The bar over the page, for an earlier version or one in Recently deleted, and a gap under it. */
+const BAR_ROOM = 64
 
 /**
  * An artifact in the main area, live, away from the app and the machine: a single page at the

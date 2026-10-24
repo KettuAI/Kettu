@@ -296,14 +296,17 @@ export function ArtifactSurface({
       />
     )
   }
+  // A page is laid out below the bar, so the bar never covers its top.
   return (
-    <PageFrame
-      key={url}
-      url={url}
-      src={pageUrl(url, shown.version)}
-      title={title}
-      reloads={reloads}
-      since={since}
-    />
+    <div className="absolute inset-x-0 bottom-0" style={{ top }}>
+      <PageFrame
+        key={url}
+        url={url}
+        src={pageUrl(url, shown.version)}
+        title={title}
+        reloads={reloads}
+        since={since}
+      />
+    </div>
   )
 }

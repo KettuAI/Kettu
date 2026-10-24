@@ -235,6 +235,14 @@ export const CanvasView = memo(function CanvasView({
     if (fitted.current) draw()
   }, [pages, draw])
 
+  // A bar that comes or goes moves the canvas with it, so it never covers what was in view.
+  const lastTop = useRef(top)
+  useEffect(() => {
+    const by = top - lastTop.current
+    lastTop.current = top
+    if (by !== 0 && fitted.current) moveTo({ ...camera.current, y: camera.current.y + by })
+  }, [top, moveTo])
+
   useEffect(() => {
     controls.publish({ selected, focused, count: pages.length })
   }, [controls, selected, focused, pages.length])
@@ -351,7 +359,8 @@ export const CanvasView = memo(function CanvasView({
               className={cn(
                 'absolute overflow-hidden bg-canvas',
                 i === selected
-                  ? 'shadow-[0_0_0_calc(2px*var(--unscale))_var(--text-primary)]'
+                  ? // A gap of the surface first, so the ring shows beside a page of any color.
+                    'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary)]'
                   : i === hovered
                     ? 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-strong)]'
                     : 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-default)]',

@@ -230,5 +230,7 @@ export function sessionCount(list: readonly ArtifactSummary[]): number {
 
 /** Whole days before Recently deleted removes an artifact for good: 30 on the day it went. */
 export function daysLeft(deletedAt: number, now: number): number {
-  return Math.max(1, Math.ceil((deletedAt + ARTIFACT_KEEP_DELETED_MS - now) / DAY))
+  // `now` ticks every 30 s, so a deletion just made can be newer than it.
+  const since = Math.max(0, now - deletedAt)
+  return Math.max(1, Math.ceil((ARTIFACT_KEEP_DELETED_MS - since) / DAY))
 }

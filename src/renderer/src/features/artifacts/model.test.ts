@@ -226,4 +226,8 @@ describe('daysLeft', () => {
     expect(daysLeft(NOW - 29 * DAY - HOUR, NOW)).toBe(1)
     expect(daysLeft(NOW - 31 * DAY, NOW)).toBe(1)
   })
+
+  it('says 30 for a deletion newer than the clock the view last read', () => {
+    expect(daysLeft(NOW + 40_000, NOW)).toBe(30)
+  })
 })
