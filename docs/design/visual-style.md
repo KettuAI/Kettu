@@ -254,7 +254,7 @@ How each state looks. When each one appears, and what it says, is in the [UX gui
 | ------------------- | -------------------------------------------------------------------------------------------------------- |
 | Rest                | Chrome in `--text-tertiary`, icons `--icon-default`; content in `--text-primary`                         |
 | Hover               | `--bg-hover` fill, text and icon to `--text-primary`, over `--duration-fast`                             |
-| Focus               | The `focus-ring`: 2 px of `--focus`, 2 px outside; a field's border also turns `--border-strong`         |
+| Focus               | The `focus-ring`: 2 px of `--focus`, 2 px outside; a text field's border turns `--border-strong` instead |
 | Pressed toggle      | The `quiet` button's `--pressed` fill and hairline ([toggle buttons](./design-system.md#toggle-buttons)) |
 | Open (menu trigger) | `--accent` fill while its menu is open                                                                   |
 | Selected, checked   | A `--bg-selected` row; a `Check` in a list; a `--text-primary` track on a switch                         |
