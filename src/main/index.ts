@@ -29,6 +29,7 @@ import {
   applyZoom,
   configureWindows,
   createMainWindow,
+  devIcon,
   showMainWindow,
   watchTheme,
   WindowStateStore,
@@ -80,6 +81,8 @@ async function start(): Promise<void> {
 
   await app.whenReady()
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
+  const icon = devIcon()
+  if (icon) app.dock?.setIcon(icon)
   restrictPermissions(
     session.defaultSession,
     isRendererUrl,
