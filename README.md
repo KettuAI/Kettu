@@ -1,6 +1,11 @@
 <div align="center">
 
-# OverBench
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/brand/lockup-horizontal-dark.svg">
+    <img src="./docs/brand/lockup-horizontal.svg" alt="OverBench" width="300">
+  </picture>
+</h1>
 
 **A calm desktop workbench for terminal coding agents.**
 

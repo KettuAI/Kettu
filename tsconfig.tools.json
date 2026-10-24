@@ -16,5 +16,7 @@
     "noFallthroughCasesInSwitch": true,
     "noEmit": true
   },
-  "include": ["tools/**/*.ts", "tools/**/*.mjs"]
+  "include": ["tools/**/*.ts", "tools/**/*.mjs"],
+  // Imports src/shared/brand.ts, which this NodeNext project would read as CommonJS.
+  "exclude": ["tools/brand"]
 }

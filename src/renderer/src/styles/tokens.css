@@ -78,7 +78,10 @@
   /* The top edge of a raised surface catching the light; dark theme only. */
   --highlight: 0 0 #0000;
 
-  /* Agent marks, the only brand colors in the interface. */
+  /* The OverBench mark: ink on light, paper on dark (docs/design/brand.md). */
+  --brand-overbench: #1c1b18;
+
+  /* Agent marks: with the OverBench mark, the only brand colors in the interface. */
   --brand-claude: #d97757;
   --brand-codex-1: #b1a7ff;
   --brand-codex-2: #7a9dff;
@@ -174,6 +177,8 @@
     --brand-opencode-frame: #ffffff;
     --brand-opencode-fill: #5a5858;
 
+    --brand-overbench: #f4f3ee;
+
     --agent-opencode: oklch(0.72 0 0);
     --agent-other: oklch(0.45 0 0);
     --heat-hue: oklch(0.66 0.15 255);
@@ -252,6 +257,8 @@
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
+
+  --brand-overbench: #f4f3ee;
 
   --agent-opencode: oklch(0.72 0 0);
   --agent-other: oklch(0.45 0 0);
