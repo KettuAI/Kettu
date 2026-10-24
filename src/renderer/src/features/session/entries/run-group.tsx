@@ -89,7 +89,9 @@ export const RunGroup = memo(function RunGroup({
         >
           <Summary parts={parts} failed={failed} />
         </CutLabel>
-        {running && <Spinner aria-label={t('status.running')} className="size-3 shrink-0" />}
+        {running && (
+          <Spinner aria-label={t('status.running')} className="size-3 shrink-0 text-info" />
+        )}
         <ChevronRightIcon
           aria-hidden
           className="size-3.5 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"

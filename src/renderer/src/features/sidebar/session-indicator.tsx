@@ -45,7 +45,7 @@ export function SessionIndicator({
       />
     )
   } else if (running) {
-    mark = <Spinner aria-label={t('indicator.running')} className="size-3 text-secondary" />
+    mark = <Spinner aria-label={t('indicator.running')} className="size-3 text-info" />
   } else if (summary.status === 'starting') {
     mark = <Spinner aria-label={t('indicator.starting')} className="size-3 text-secondary" />
   } else if (expiring) {

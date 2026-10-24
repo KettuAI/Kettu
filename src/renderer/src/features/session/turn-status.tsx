@@ -42,7 +42,7 @@ export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: s
       role="status"
       className="flex min-w-0 animate-in items-center gap-1.5 text-small text-muted-foreground animation-duration-(--duration-base) fade-in"
     >
-      <Spinner aria-hidden className="size-3.5 shrink-0" />
+      <Spinner aria-hidden className="size-3.5 shrink-0 text-info" />
       {/* Only the phase is announced; the clock and the count change too often to read out. */}
       {startedAt !== null && (
         <>

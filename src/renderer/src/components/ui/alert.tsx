@@ -11,11 +11,11 @@ const alertVariants = cva(
         destructive:
           'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
         warning:
-          'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-icon',
-        // Something to decide or a task under way, such as an agent update: neutral, no ring.
-        info: 'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-icon',
+          'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-warning',
+        // Something to decide or a task under way, such as an agent update: no ring, the icon in its color.
+        info: 'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-info',
         success:
-          'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-icon',
+          'bg-subtle text-primary shadow-none *:data-[slot=alert-description]:text-secondary *:[svg]:text-success',
         error:
           'bg-danger-tint text-primary shadow-[inset_0_0_0_var(--hairline)_var(--danger-border)] *:data-[slot=alert-description]:text-secondary *:[svg]:text-danger',
       },

@@ -482,7 +482,9 @@ function Pane({
           role="status"
           className="flex animate-in items-center gap-1.5 px-3.5 pt-2.5 pb-1.5 text-xs text-muted-foreground fade-in fill-mode-backwards delay-1000 animation-duration-(--duration-base)"
         >
-          <Spinner className="size-3 shrink-0" />
+          <Spinner
+            className={cn('size-3 shrink-0', status.state === 'installing' && 'text-info')}
+          />
           <span className="truncate shimmer">
             {t(status.state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
               agent: name,

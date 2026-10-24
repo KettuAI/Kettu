@@ -23,7 +23,7 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
               <span role="img" aria-label={t('state.ready')} className={cn(base, 'h-4 px-1')} />
             }
           >
-            <span className="size-1.5 rounded-full bg-current text-tertiary" />
+            <span className="size-1.5 rounded-full bg-current text-success" />
           </TooltipTrigger>
           <TooltipContent>{t('state.ready')}</TooltipContent>
         </Tooltip>
@@ -31,7 +31,7 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
     case 'sign-in':
       return (
         <span className={cn(base, 'text-secondary')}>
-          <span aria-hidden className="size-1.5 rounded-full bg-current text-tertiary" />
+          <span aria-hidden className="size-1.5 rounded-full bg-current text-warning" />
           {t('state.signIn')}
         </span>
       )
@@ -39,7 +39,7 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
     case 'starting':
       return (
         <span className={cn(base, 'text-tertiary')}>
-          <Spinner className="size-3" />
+          <Spinner className={cn('size-3', r.kind === 'installing' && 'text-info')} />
           {t(`state.${r.kind}`)}
         </span>
       )

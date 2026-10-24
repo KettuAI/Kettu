@@ -63,9 +63,9 @@ export function UpdateNotice() {
   const card = (
     <div className="flex min-h-9 items-center gap-2 rounded-[8px] bg-card pr-1.5 pl-2.5 text-xs shadow-card">
       {notice.kind === 'updated' ? (
-        <CircleCheckIcon className="size-[15px] shrink-0 text-icon" />
+        <CircleCheckIcon className="size-[15px] shrink-0 text-success" />
       ) : (
-        <CircleArrowUpIcon className="size-[15px] shrink-0 text-icon" />
+        <CircleArrowUpIcon className="size-[15px] shrink-0 text-info" />
       )}
       <span className="@container/notice flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (

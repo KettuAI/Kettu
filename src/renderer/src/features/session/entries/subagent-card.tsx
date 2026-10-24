@@ -90,7 +90,7 @@ export const SubagentCard = memo(function SubagentCard({
               {t('status.failed')}
             </span>
           ) : running ? (
-            <Spinner aria-label={t('status.running')} className="size-3.5" />
+            <Spinner aria-label={t('status.running')} className="size-3.5 text-info" />
           ) : child ? (
             <span className="text-xs">{t('status.done')}</span>
           ) : null}

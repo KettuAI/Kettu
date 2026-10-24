@@ -41,7 +41,7 @@ function SignInNotice() {
       onClick={() => openSettings('agents')}
       className="flex min-h-8 animate-in items-center gap-2 rounded-lg bg-subtle pr-2 pl-2.5 text-left text-xs text-secondary animation-duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1 outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
     >
-      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current text-tertiary" />
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current text-warning" />
       <span className="flex-1">{text}</span>
       <ArrowRightIcon className="size-3.5" />
     </button>

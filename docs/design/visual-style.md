@@ -185,7 +185,7 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 The maintainer's rules for the [palette](./design-system.md#palette), set on 2026-10-23 and revised on 2026-10-24 ([#207](https://github.com/overbench/overbench/issues/207)). The aim is a screen that reads clearly at a glance, not one without color: the chrome is neutral so that states stand out, and a state you tell apart by looking takes its color.
 
 1. **No pure black or white text.** Body text is `--text-primary`, in both themes.
-2. **Neutral chrome.** Surfaces, lines, text, navigation, buttons, controls that are on and things on offer are neutral. Color marks a state, never decoration.
+2. **Neutral chrome.** Surfaces, lines, text, navigation, buttons, and controls that are on are neutral. Color marks a state, never decoration.
 3. **States take their color**:
 
    | State                     | Token                                                       | For example                                                                                      |
@@ -194,6 +194,8 @@ The maintainer's rules for the [palette](./design-system.md#palette), set on 202
    | Running                   | `--info`                                                    | A running session's spinner, a tool call in progress, the running turn's spinner, pending checks |
    | Done or passing           | `--success`                                                 | Passing checks, "Installed", "Signed in", "Updated", an agent's **Ready** dot                    |
    | Failed or deleted         | `--danger`                                                  | A failed tool call, failing checks, conflicts, a deletion                                        |
+   | On offer                  | `--info`                                                    | An update or an install you can start: the **Install** and **Update** pills, "Update ready"      |
+   | Something to do           | `--warning`                                                 | Not signed in: the gh pill, "Sign in to continue", the sidebar's sign-in notice                  |
    | Usage warning             | `--warning`, `--danger`                                     | Usage from 80% and from 95% ([usage levels](./design-system.md#usage-levels))                    |
    | Pull request state        | per [repository state](./design-system.md#repository-state) | Open, draft, merged, closed ([#205](https://github.com/overbench/overbench/issues/205))          |
    | Diff lines                | `--success`, `--danger`                                     | Added and deleted lines and their counts                                                         |
@@ -207,7 +209,7 @@ The maintainer's rules for the [palette](./design-system.md#palette), set on 202
 9. **Icons** rest at `--icon-default` and turn `--text-primary` under the pointer; a status icon takes its state's color.
 
 - **Loud only when it needs you.** A sidebar row's running spinner is `--info` and its unread dot a neutral `--text-tertiary`; a session that is starting keeps a neutral spinner, so the two never look alike. `--attention` is the loudest color in the app and the only one that asks for you.
-- **Busy is not running.** A spinner for the app's own short wait, such as a busy button, "Checking for updates…" or "Reading…", stays its text color; `--info` is for work an agent, a check or an install is doing.
+- **Busy is not running.** A spinner for the app's own short wait, such as a busy button, "Checking for updates…" or "Reading…", stays its text color; `--info` is for work an agent, a check or an install is doing, and for an update or install on offer. A sign-in that is missing is something to do (`--warning`), not an approval (`--attention`). Decided 2026-10-24 ([#207](https://github.com/overbench/overbench/issues/207)).
 - **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exceptions.
 - **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` outside `tokens.css`, and no Tailwind palette utilities (`bg-white`, `text-red-500`); `pnpm lint` fails on either ([color checks](./testing.md#color-checks)). A new color is a token in `tokens.css` and a row in the design system first, in both themes, at 4.5:1 for text on every surface it sits on, and a pair in the contrast check. A state color shown only as an icon, a dot or a spinner needs 3:1, as WCAG asks of graphics.
 - **Not settled yet**: the search match's yellow (`--mark`), the file-type icons' own colors, the terminal's ANSI colors, the usage charts' agent series and heatmap, and the syntax highlighting theme keep their earlier colors until the maintainer decides them.

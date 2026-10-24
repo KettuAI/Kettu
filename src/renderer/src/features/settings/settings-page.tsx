@@ -261,7 +261,7 @@ function NavRow({
             role="img"
             aria-label={section.mark}
             title={section.mark}
-            className="size-1.5 shrink-0 rounded-full bg-current text-secondary"
+            className="size-1.5 shrink-0 rounded-full bg-current text-info"
           />
         )
       )}
