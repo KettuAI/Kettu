@@ -1,19 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowUpIcon, CircleAlertIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { startNewSession } from '@renderer/app/actions'
-import { onAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from '@renderer/components/ui/input-group'
+import { InputGroupButton } from '@renderer/components/ui/input-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { OptionMenu } from '@renderer/features/session/composer/control-row'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
@@ -35,7 +29,12 @@ import {
 } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openAgentSettings, openSession, useViewStore } from '@renderer/stores/view'
-import { flushDraft, NEW_SESSION_DRAFT, readDraft, writeDraft } from './composer/drafts'
+import { DropOverlay } from './attachments/drop-overlay'
+import { useFileDrop } from './attachments/use-file-drop'
+import { attachmentContent, attachmentsBlock } from './composer/attachments'
+import { NEW_SESSION_DRAFT } from './composer/drafts'
+import { PromptBox } from './composer/prompt-box'
+import { usePromptBox } from './composer/use-prompt-box'
 import { AgentMenu } from './new-session/agent-menu'
 import { ProjectMenu } from './new-session/project-menu'
 import {
@@ -74,13 +73,15 @@ export function NewSessionView({
   const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   const toolsPath = project?.path ?? (parent?.scratch ? parent.projectPath : null)
 
+  const drop = useFileDrop(NEW_SESSION_DRAFT, false)
+
   useEffect(() => {
     enterNewSession()
     return () => leaveNewSession()
   }, [])
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       {/* As in the reference, the screen's own bar names nothing and draws no line: the heading
           below says where you are. A sub-session still leads with its parent. */}
       <TopBar className="shadow-none">
@@ -111,9 +112,12 @@ export function NewSessionView({
           <RecentSessions />
         </div>
       </div>
+      <DropOverlay shown={drop.over} starting={false} agentName="" />
     </div>
   )
 }
+
+const NO_COMMANDS: SlashCommand[] = []
 
 function DraftComposer({
   agentId,
@@ -128,9 +132,7 @@ function DraftComposer({
 }) {
   const { t } = useTranslation('session')
   const { t: tc } = useTranslation('composer')
-  const [text, setText] = useState(() => readDraft(NEW_SESSION_DRAFT))
   const [projectError, setProjectError] = useState<string | null>(null)
-  const textarea = useRef<HTMLTextAreaElement>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const limits = useAgentsStore((s) => (agentId ? s.byId[agentId]?.limits : undefined))
   const waitingForNode = useAgentsStore(
@@ -141,8 +143,17 @@ function DraftComposer({
   // A sub-session of a session started with No project shares its parent's scratch folder.
   const inScratch = noProject || !!parent?.scratch
   const projectPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
+  const box = usePromptBox({
+    draft: NEW_SESSION_DRAFT,
+    sessionId: null,
+    projectPath,
+    disabled: false,
+    onActivity: noteActivity,
+  })
+  const { text, attachments, textarea } = box
   const ready = inScratch || (!!project && !project.missing)
-  const canSend = !!agentId && ready && text.trim().length > 0
+  const held = attachmentsBlock(attachments, text)
+  const canSend = !!agentId && ready && (text.trim().length > 0 || attachments.length > 0) && !held
   const tightest = limits ? tightestLimit(limits, now) : null
   const reached = tightest?.state === 'reached' ? tightest : null
   const sending = useRef(false)
@@ -161,44 +172,9 @@ function DraftComposer({
 
   useEffect(() => {
     textarea.current?.focus()
-    return () => flushDraft(NEW_SESSION_DRAFT)
-  }, [])
+  }, [textarea])
 
-  useEffect(
-    () =>
-      onAppEvent((event) => {
-        if (event.kind === 'focus-composer') textarea.current?.focus()
-        if (event.kind === 'insert-into-composer' && !event.sessionId) {
-          setText((current) => {
-            const next = current ? `${current.replace(/\s+$/, '')}\n\n${event.text}` : event.text
-            writeDraft(NEW_SESSION_DRAFT, next)
-            return next
-          })
-          requestAnimationFrame(() => {
-            const el = textarea.current
-            if (!el) return
-            el.focus()
-            el.setSelectionRange(el.value.length, el.value.length)
-          })
-        }
-      }),
-    [],
-  )
-
-  // As in the session's composer: keeps the last line off the box's edge while typing at the end.
-  useLayoutEffect(() => {
-    const el = textarea.current
-    if (!el || document.activeElement !== el || el.selectionEnd !== el.value.length) return
-    if (el.scrollHeight > el.clientHeight) el.scrollTop = el.scrollHeight
-  }, [text])
-
-  const update = (next: string) => {
-    setText(next)
-    writeDraft(NEW_SESSION_DRAFT, next)
-    noteActivity()
-  }
-
-  // The text leaves the draft with the request and comes back to it if the start fails.
+  // The message leaves the draft with the request and comes back to it if the start fails.
   const send = async () => {
     if (!canSend || sending.current) return
     sending.current = true
@@ -209,15 +185,17 @@ function DraftComposer({
       // Without a prepared session, the values New session showed go with the create.
       const options = entry ? startValues(entry, picks[agentId]) : null
       const preparedId = prepared?.agentId === agentId ? (prepared.summary?.id ?? null) : null
-      void startNewSession(agentId, projectPath, text, options, preparedId)
+      const content: UserContent[] = [
+        ...(text.trim() ? [{ type: 'text' as const, text }] : []),
+        ...attachmentContent(attachments),
+      ]
+      void startNewSession(agentId, projectPath, content, options, preparedId)
     } finally {
       sending.current = false
     }
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // IME composition: Enter confirms the candidate, it never sends.
-    if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (event.key !== 'Enter') return
     const sends = sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event)
     if (!sends) return
@@ -243,52 +221,46 @@ function DraftComposer({
       ? t('newSession.chooseProjectFirst')
       : project?.missing && !inScratch
         ? t('newSession.missingLine')
-        : null
+        : (held?.message ?? null)
 
   return (
     <div className="flex flex-col gap-1.5">
-      <InputGroup variant="composer">
-        <div className="flex min-w-0 flex-1 items-end self-stretch">
-          <InputGroupTextarea
-            ref={textarea}
-            rows={1}
-            value={text}
-            onChange={(event) => update(event.target.value)}
-            onFocus={noteActivity}
-            onKeyDown={onKeyDown}
-            aria-label={
-              name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')
-            }
-            placeholder={
-              reached?.resetsAt
-                ? tc('prompt.placeholder.limitReached', {
-                    limit: limitLabel(reached),
-                    time: resetTime(reached.resetsAt),
-                  })
-                : name
-                  ? t('newSession.askAgent', { agent: name })
-                  : t('newSession.describeTask')
-            }
-            className="max-h-[min(40svh,24rem)] min-h-28 pt-3.5 pr-1 pb-3 pl-5 text-prose leading-6 placeholder:text-placeholder md:text-prose"
-          />
-          <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
-            <Tooltip>
-              <TooltipTrigger render={<span />}>
-                <InputGroupButton
-                  size="round"
-                  variant={canSend ? 'default' : 'secondary'}
-                  aria-label={t('newSession.send')}
-                  disabled={!canSend}
-                  onClick={() => void send()}
-                >
-                  <ArrowUpIcon />
-                </InputGroupButton>
-              </TooltipTrigger>
-              <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
-            </Tooltip>
-          </InputGroupAddon>
-        </div>
-      </InputGroup>
+      <PromptBox
+        box={box}
+        agentId={agentId}
+        agentName={name ?? tc('attachments.theAgent')}
+        commands={NO_COMMANDS}
+        placeholder={
+          reached?.resetsAt
+            ? tc('prompt.placeholder.limitReached', {
+                limit: limitLabel(reached),
+                time: resetTime(reached.resetsAt),
+              })
+            : name
+              ? t('newSession.askAgent', { agent: name })
+              : t('newSession.describeTask')
+        }
+        label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
+        className="min-h-17 pt-3.5 pr-5 pb-1 pl-5"
+        stacked
+        onKeyDown={onKeyDown}
+        end={
+          <Tooltip>
+            <TooltipTrigger render={<span />}>
+              <InputGroupButton
+                size="round"
+                variant={canSend ? 'default' : 'secondary'}
+                aria-label={t('newSession.send')}
+                disabled={!canSend}
+                onClick={() => void send()}
+              >
+                <ArrowUpIcon />
+              </InputGroupButton>
+            </TooltipTrigger>
+            <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
+          </Tooltip>
+        }
+      />
       {/* Where and with what the session starts, under the box as in the reference. */}
       <div className="flex h-control min-w-0 items-center gap-0.5 px-2.5">
         {parent ? (
@@ -304,6 +276,11 @@ function DraftComposer({
       {(projectError || (project?.missing && !inScratch)) && (
         <p className="truncate px-5 text-xs text-danger" title={projectError ?? undefined}>
           {projectError ?? t('newSession.missingLine')}
+        </p>
+      )}
+      {(box.error || held?.notice) && (
+        <p className="animate-in px-5 text-xs text-danger fade-in" role="alert">
+          {box.error ?? held?.message}
         </p>
       )}
       {agentId && <StartNotices agentId={agentId} />}

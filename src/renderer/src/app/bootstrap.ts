@@ -7,6 +7,7 @@ import {
   usePendingSession,
 } from '@renderer/app/actions'
 import { launchTarget } from '@renderer/app/restore'
+import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
@@ -168,6 +169,8 @@ export function bootstrap(): Promise<unknown> {
   const settingsReady = initSettings()
   void initUpdates()
   initTerminals()
+  // Before any composer shows, so each finds its draft's attachments.
+  void restoreDraftAttachments()
   // Asked first, so the host reads the threads before the ones the launch opens.
   void removeEmptySessions()
   const sessionState = loadSessionState()

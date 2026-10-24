@@ -1435,11 +1435,16 @@ export class SessionManager {
   }): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    // Before a prepared session is taken over, so a refused prompt leaves it prepared.
+    const prompt = params.prompt && this.hydrate(params.prompt)
     if (params.preparedId !== undefined) {
-      const adopted = await this.adopt({ ...params, preparedId: params.preparedId })
+      const adopted = await this.adopt({
+        agentId: params.agentId,
+        preparedId: params.preparedId,
+        prompt,
+      })
       if (adopted) return adopted
     }
-    const prompt = params.prompt && this.hydrate(params.prompt)
     if (params.projectPath === null && params.parentId !== undefined) {
       throw invalidParams('A sub-session belongs to the project of its parent')
     }
@@ -1743,10 +1748,11 @@ export class SessionManager {
    * one opening in its place when the agent's settings changed. Null when none is ready to use,
    * so the caller creates the session afresh.
    */
+  /** `prompt` is already hydrated. */
   private async adopt(params: {
     agentId: AgentId
     preparedId: string
-    prompt?: UserContent[]
+    prompt: UserContent[] | undefined
   }): Promise<SessionSummary | null> {
     const asked = this.live.get(params.preparedId)
     if (!asked?.prepared || asked.record.agentId !== params.agentId) return null
@@ -1776,7 +1782,7 @@ export class SessionManager {
     Object.assign(live.record, { createdAt: now, updatedAt: now, lastViewedAt: now })
     live.used = true
     live.hiddenSince = this.inFront(live.id) ? null : now
-    const prompt = params.prompt && this.hydrate(params.prompt)
+    const { prompt } = params
     const entryId = prompt ? this.addPrompt(live, prompt, now) : null
     this.save(live)
     this.touch(live.id)

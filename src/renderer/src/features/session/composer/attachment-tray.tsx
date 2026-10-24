@@ -233,7 +233,10 @@ function draftView(
     kind: item.kind,
     thumb: item.thumb,
     status: item.status,
-    detail: item.status === 'failed' ? t('attachments.cannotRead') : size,
+    detail:
+      item.status === 'failed'
+        ? t(item.gone ? 'attachments.unavailable' : 'attachments.cannotRead')
+        : size,
     tooltip: `${facts}\n${note}`,
     warn: item.status === 'ready' && noImages,
   }

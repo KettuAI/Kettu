@@ -755,6 +755,7 @@ export class AgentHost {
       'attachments.read': ({ id }) => this.attachments.read(id),
       'attachments.update': ({ id, thumb, scaled }) => this.attachments.update(id, thumb, scaled),
       'attachments.remove': ({ id }) => this.attachments.remove(id),
+      'attachments.held': ({ ids }) => this.attachments.held(ids),
       'files.list': ({ projectPath }) =>
         this.filesCall(projectPath, (root) => this.files.list(root)),
       'files.read': ({ projectPath, path }) =>

@@ -18,6 +18,8 @@ export interface DraftAttachment {
   pixels: { width: number; height: number } | null
   scaled: { width: number; height: number } | null
   error: string | null
+  /** Failed because the host no longer holds its record, as when a kept draft outlived it. */
+  gone?: boolean
 }
 
 interface AttachmentsStore {

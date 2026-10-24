@@ -81,7 +81,8 @@ export function SentAttachments({
   sessionId,
   attachments,
 }: {
-  sessionId: string
+  /** Null for a first message whose session does not exist yet, which nothing has sent. */
+  sessionId: string | null
   attachments: Attachment[]
 }) {
   const { t } = useTranslation('composer')
@@ -98,7 +99,7 @@ export function SentAttachments({
     setViewing({
       name: attachment.name,
       read: () =>
-        hash
+        hash && sessionId
           ? host('sessions.blob', { sessionId, hash })
           : host('attachments.read', { id: attachment.id }),
     })
