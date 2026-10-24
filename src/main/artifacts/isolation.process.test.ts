@@ -69,12 +69,18 @@ const notServed = async (path) => {
   const response = await fetch(path)
   return response.status === 404 && !(await response.text()).includes('SECRET')
 }
-// A peer connection's servers decide where it goes; what reaches the listeners tells.
+// A peer connection's servers decide where it goes; what reaches the listeners tells. Gathering
+// completes once every server has answered or failed, so by then all it would send has been sent.
 const peerConnection = async (iceServers) => {
   const connection = new RTCPeerConnection({ iceServers })
+  const gathered = new Promise((resolve) => {
+    connection.onicegatheringstatechange = () => {
+      if (connection.iceGatheringState === 'complete') resolve()
+    }
+  })
   connection.createDataChannel('probe')
   await connection.setLocalDescription(await connection.createOffer())
-  await sleep(2000)
+  await gathered
   connection.close()
   return true
 }
@@ -201,13 +207,15 @@ const attempts = {
 window.__probe = { done: false, results: [], camera: null }
 ;(async () => {
   for (const [name, attempt] of Object.entries(attempts)) {
+    const start = performance.now()
     let held
     try {
-      held = await Promise.race([Promise.resolve().then(attempt), sleep(5000).then(() => 'timed out')])
+      // Each attempt settles on its own, so only a hang meets this guard, and a hang is not held.
+      held = await Promise.race([Promise.resolve().then(attempt), sleep(15000).then(() => 'timed out')])
     } catch (error) {
       held = true
     }
-    window.__probe.results.push({ name, held })
+    window.__probe.results.push({ name, held, ms: Math.round(performance.now() - start) })
   }
   window.__probe.done = true
 })()
@@ -268,7 +276,8 @@ interface ProbeResult {
   proxies: Record<'cdn' | 'loopback' | 'other', string>
   updaterProxy: string
   held: { waits: (number | string)[] }
-  attempts: { name: string; held: boolean | string }[]
+  /** Each attempt's outcome, and how long it took to settle in ms. */
+  attempts: { name: string; held: boolean | string; ms: number }[]
   /** 'allowed' if the camera request ever gave a stream, however late. */
   camera: string | null
   processes: Record<'app' | 'page', { pid: number; sandboxed: boolean | null }>
@@ -426,7 +435,6 @@ async function probe(policy: boolean): Promise<ProbeResult> {
     canvas: ids.canvas,
     hang: ids.hang,
     unopened: ids.unopened,
-    commitTimeoutMs: 1_000,
     exfil,
     netLog: path.join(run, 'net-log.json'),
   }
@@ -438,10 +446,14 @@ async function probe(policy: boolean): Promise<ProbeResult> {
     ),
   )
   env.OVERBENCH_PROBE = path.join(run, 'config.json')
+  env.OVERBENCH_PROBE_PARENT = String(process.pid)
   const args = [
     path.join(dir, 'harness', 'main.cjs'),
     `--user-data-dir=${path.join(run, 'data')}`,
     '--enable-logging=stderr',
+    // Chromium counts a window covered by others as hidden: it throttles the page's timers, and the
+    // artifact's frame learns a new theme only once the window shows again.
+    '--disable-backgrounding-occluded-windows',
     // CI's Ubuntu restricts the user namespaces Chromium's sandbox needs.
     ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
   ]
@@ -507,6 +519,8 @@ describe.each([
   })
 
   it('holds every attempt, and nothing reaches another host', () => {
+    const slowest = [...result.attempts].sort((a, b) => b.ms - a.ms).slice(0, 3)
+    console.info(`Slowest attempts: ${slowest.map((a) => `${a.name} ${a.ms} ms`).join(', ')}`)
     expect(result.attempts.length).toBeGreaterThanOrEqual(27)
     const held = (attempt: { name: string; held: boolean | string }) =>
       attempt.held === true || (attempt.name === 'the camera' && attempt.held === 'pending')

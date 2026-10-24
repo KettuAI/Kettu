@@ -29,12 +29,10 @@ export interface ProbeConfig {
   files: Record<string, string>
   probe: string
   canvas: string
-  /** Opens, but its content never answers after that, so its frame never commits. */
+  /** Opens, but its frame's request is never answered, so the frame never commits. */
   hang: string
   /** Served if opened, but never opened. */
   unopened: string
-  /** The frame guard's commit timeout, short for the test. */
-  commitTimeoutMs: number
   /** Hosts the page names for DNS alone, and `control`, which main looks up itself. */
   exfil: Record<string, string> & { control: string }
   netLog: string
@@ -45,11 +43,33 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 registerArtifactScheme()
 disableDnsPrefetching()
+// No Dock icon, and no activation that would take the user's focus.
+if (process.platform === 'darwin') app.setActivationPolicy('accessory')
+
+/** The step the probe is on, for a run that never finishes. */
+let stage = 'starting'
 
 function report(result: unknown): void {
-  writeFileSync(config.resultFile, JSON.stringify(result, null, 2))
-  app.exit(0)
+  try {
+    writeFileSync(config.resultFile, JSON.stringify(result, null, 2))
+    app.exit(0)
+  } catch {
+    // The test gave up on the run and took its folder away.
+    app.exit(1)
+  }
 }
+
+// The probe never outlives its test: it reports before the test's own timeout, and it ends when
+// the test's process does, which a killed run would otherwise leave it running without.
+setTimeout(() => report({ error: `The probe did not finish within 100 s, at ${stage}` }), 100_000)
+const parent = Number(process.env.OVERBENCH_PROBE_PARENT)
+setInterval(() => {
+  try {
+    process.kill(parent, 0)
+  } catch {
+    app.exit(1)
+  }
+}, 500)
 
 async function until<T>(read: () => Promise<T | null> | T | null, timeoutMs: number): Promise<T> {
   const end = Date.now() + timeoutMs
@@ -69,9 +89,6 @@ async function run(): Promise<unknown> {
   const asked: string[] = []
   const content = (id: string): Promise<ArtifactContentResult> => {
     asked.push(id)
-    if (id === config.hang && asked.filter((asking) => asking === id).length > 1) {
-      return new Promise(() => {})
-    }
     const path = config.files[id]
     return Promise.resolve(
       path ? { kind: 'found', path, version: 1, title: 'Page' } : { kind: 'not_found' },
@@ -88,31 +105,37 @@ async function run(): Promise<unknown> {
   app.configureHostResolver({ enableBuiltInResolver: true, secureDnsMode: 'off' })
   await ses.netLog.startLogging(config.netLog)
   await artifacts.install(ses)
-  if (!config.policy) {
-    ses.protocol.unhandle(ARTIFACT_SCHEME)
-    ses.protocol.handle(ARTIFACT_SCHEME, async (request) => {
-      const source = {
-        contentDir: config.contentDir,
-        artifactOf: (host: string) => artifacts.origins.artifactOf(host),
-        content: (id: string) => content(id),
-      }
-      const response = await respond(request, source)
-      const headers = new Headers(response.headers)
-      headers.delete('Content-Security-Policy')
-      return new Response(response.body, { status: response.status, headers })
-    })
+  // Main's protocol as serveArtifacts registers it, without the policy when the run has none, and
+  // with no answer at all for the hang's frame: a host that never answers costs a frame only a 503,
+  // which commits within the frame guard's timeout.
+  const source = {
+    contentDir: config.contentDir,
+    artifactOf: (host: string) => artifacts.origins.artifactOf(host),
+    content: (id: string) => content(id),
   }
+  ses.protocol.unhandle(ARTIFACT_SCHEME)
+  ses.protocol.handle(ARTIFACT_SCHEME, async (request) => {
+    if (artifactHost(request.url) === originId(config.hang)) return new Promise<Response>(() => {})
+    const response = await respond(request, source)
+    if (config.policy) return response
+    const headers = new Headers(response.headers)
+    headers.delete('Content-Security-Policy')
+    return new Response(response.body, { status: response.status, headers })
+  })
   restrictPermissions(ses, isRendererUrl, (wc) => isRevoked(wc) || hasPendingFrame(wc))
   registerIpcHandlers({ artifacts, perf: false } as unknown as IpcDeps)
 
   let revocations = 0
   const inputs: { key: string; inArtifact: boolean }[] = []
   app.on('browser-window-created', (_, window) => {
+    // Shown without focus, see-through and click-through, so a run never gets in the user's way.
+    window.show = () => window.showInactive()
+    window.setOpacity(0)
+    window.setIgnoreMouseEvents(true)
     const contents = window.webContents
     watchSubframes(contents, {
       isOpenedArtifact: (url) => artifacts.origins.isOpenedIn(contents, url),
       onRevoked: () => revocations++,
-      commitTimeoutMs: config.commitTimeoutMs,
     })
     artifacts.watchWindow(contents)
     contents.on('before-input-event', (_, input) => {
@@ -162,6 +185,7 @@ async function run(): Promise<unknown> {
     })()`)
 
   // The probe: its frame, and the calls made while it was pending.
+  stage = 'the attempts'
   const { url } = await page<{ url: string }>(`overbench.open(${JSON.stringify(config.probe)})`)
   const held = await frameWithCalls(url)
   const probeFrame = await until(() => frameOf(config.probe) ?? null, 10_000)
@@ -186,6 +210,7 @@ async function run(): Promise<unknown> {
   // The page navigates itself to another host. The app's policy refuses it and leaves an error
   // page, so the frame loads the page again, as the viewer does.
   // A frame that runs no script, such as an error page, never answers.
+  stage = 'leaving its origin'
   const ready = (id: string) =>
     until(async () => {
       const state = await Promise.race([
@@ -209,10 +234,13 @@ async function run(): Promise<unknown> {
     appUrl: contents.mainFrame.url,
   }
 
-  // An app shortcut typed in the page's frame.
-  contents.focus()
+  // An app shortcut typed in the page's frame, focused from the app's page as the viewer does. The
+  // frame's own window.focus() would ask for the window's focus, which can land after the frame's.
+  stage = 'the keys'
   await page(`document.querySelector('iframe').focus()`)
-  await probeFrame.executeJavaScript('window.focus()')
+  await until(() => artifactHost(contents.focusedFrame?.origin) !== null || null, 5_000).catch(
+    () => false,
+  )
   const mod = process.platform === 'darwin' ? 'meta' : 'control'
   contents.sendInputEvent({ type: 'keyDown', keyCode: 'L', modifiers: [mod] })
   contents.sendInputEvent({ type: 'keyUp', keyCode: 'L', modifiers: [mod] })
@@ -220,6 +248,7 @@ async function run(): Promise<unknown> {
 
   // The page follows the app's theme. Each side is read until it matches or 3 s pass, and main's
   // and the app page's view are kept too, so a failure tells a late theme from a wrong one.
+  stage = 'the theme'
   const darkQuery = `matchMedia('(prefers-color-scheme: dark)').matches`
   const darkOf = async (frame: WebFrameMain | undefined): Promise<boolean | null> => {
     const dark = await Promise.race([
@@ -251,6 +280,7 @@ async function run(): Promise<unknown> {
   })()`)
 
   // The page's process stops, and the frame loads again, still in the app's theme.
+  stage = 'a stopped page'
   nativeTheme.themeSource = 'dark'
   process.kill(frameOf(config.probe)!.osProcessId, 'SIGKILL')
   const stopped = await until(async () => {
@@ -274,6 +304,7 @@ async function run(): Promise<unknown> {
     ['an origin main did not open', `${ARTIFACT_SCHEME}://${originId(config.unopened)}/`],
     ['a frame that never commits', null],
   ] as const) {
+    stage = `a frame on ${name}`
     await reload()
     const before = revocations
     const target =
@@ -283,6 +314,7 @@ async function run(): Promise<unknown> {
   }
 
   // A canvas of 24 pages, opening while calls go on.
+  stage = 'the canvas'
   await reload()
   const canvas = await page<{ waits: number[]; loaded: number }>(`(async () => {
     const { url } = await overbench.open(${JSON.stringify(config.canvas)})
@@ -311,6 +343,7 @@ async function run(): Promise<unknown> {
   const canvasTrusted = !isRevoked(contents)
 
   // A lookup of main's own, so the net log's silence on the page's hosts means something.
+  stage = 'the net log'
   await ses.resolveHost(config.exfil.control).catch(() => null)
   await ses.netLog.stopLogging()
   const netLog = readFileSync(config.netLog, 'utf8')
