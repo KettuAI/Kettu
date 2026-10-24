@@ -320,13 +320,6 @@
     outline-offset: 2px;
   }
 }
-/* An input group's ring, only while its text control has focus: a button inside rings itself. */
-@utility focus-ring-control {
-  &:has([data-slot='input-group-control']:focus-visible) {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-  }
-}
 
 @utility tabular {
   font-variant-numeric: tabular-nums;

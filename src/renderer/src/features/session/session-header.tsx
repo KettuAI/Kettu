@@ -74,7 +74,7 @@ export function SessionHeader({
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            className="field-sizing-content h-control min-w-16 rounded-lg border border-strong bg-background px-1.5 text-control font-medium focus-ring aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+            className="field-sizing-content h-control min-w-16 rounded-lg border border-strong bg-background px-1.5 text-control font-medium aria-invalid:border-destructive dark:bg-input/30 dark:aria-invalid:border-destructive/50"
           />
         ) : (
           <Button
