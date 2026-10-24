@@ -38,6 +38,9 @@
   --link-hover: #1d4ed8;
   --focus: rgb(37 99 235 / 55%);
   --selection: rgb(37 99 235 / 18%);
+  /* An edit in place: macOS's own focus ring and text highlight. */
+  --edit-ring: #2a79d7;
+  --edit-selection: #b3d6fe;
 
   /* A turn that ended abnormally, and other failure notices. */
   --danger-tint: #fdf6f5;
@@ -132,6 +135,8 @@
     --link-hover: #60a5fa;
     --focus: rgb(96 165 250 / 60%);
     --selection: rgb(96 165 250 / 28%);
+    --edit-ring: #3a8ee6;
+    --edit-selection: #3f638b;
 
     --danger-tint: #2a1d1b;
     --danger-border: #4a2c28;
@@ -203,6 +208,8 @@
   --link-hover: #60a5fa;
   --focus: rgb(96 165 250 / 60%);
   --selection: rgb(96 165 250 / 28%);
+  --edit-ring: #3a8ee6;
+  --edit-selection: #3f638b;
 
   --danger-tint: #2a1d1b;
   --danger-border: #4a2c28;
