@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentCli, AgentCliSource, AgentOptions, AgentStatus } from '@shared/agent-host'
+import type {
+  AgentCli,
+  AgentCliSource,
+  AgentOptions,
+  AgentStatus,
+  InstalledCli,
+} from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
 import {
   agentNeed,
@@ -246,29 +252,30 @@ describe('agentNeed', () => {
   })
 
   it('sets up a package agent without its adapter on first use when its own CLI runs', () => {
-    const found = { path: '/usr/local/bin/codex', variable: null, problem: null }
-    const cli = (runs: AgentCliSource, version: string | null): AgentCli => ({
+    const cli = (runs: AgentCliSource, installed: Partial<InstalledCli> = {}): AgentCli => ({
       command: 'codex',
       prefer: 'installed',
       runs,
       active: null,
-      installed: { ...found, version },
+      installed: {
+        path: '/usr/local/bin/codex',
+        version: '0.163.0',
+        variable: null,
+        problem: null,
+        ...installed,
+      },
       needsCopy: false,
       copyMegabytes: 300,
     })
-    const codex = status({ package: adapter(false), cli: cli('installed', '0.163.0') })
+    const codex = status({ package: adapter(false), cli: cli('installed') })
     expect(agentNeed(codex)).toBe('setup')
     expect(canStart(codex)).toBe(true)
+    // A program set by CODEX_PATH runs whether or not its version could be read.
+    const unread = cli('installed', { variable: 'CODEX_PATH', version: null })
+    expect(agentNeed(status({ package: adapter(false), cli: unread }))).toBe('setup')
     // The copy is to run, so the first start downloads Codex too.
-    expect(agentNeed(status({ package: adapter(false), cli: cli('bundled', '0.163.0') }))).toBe(
-      'adapter',
-    )
-    expect(agentNeed(status({ package: adapter(false), cli: cli('installed', null) }))).toBe(
-      'adapter',
-    )
-    expect(agentNeed(status({ package: adapter(true), cli: cli('installed', '0.163.0') }))).toBe(
-      null,
-    )
+    expect(agentNeed(status({ package: adapter(false), cli: cli('bundled') }))).toBe('adapter')
+    expect(agentNeed(status({ package: adapter(true), cli: cli('installed') }))).toBeNull()
   })
 
   it('cannot start an agent missing from PATH or without Node.js', () => {

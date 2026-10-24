@@ -424,7 +424,11 @@ function Pane({
       )
     } else if (need === 'setup') {
       notice = (
-        <Notice text={t('newSession.agentMenu.setsUpLong', { agent: name })}>{install}</Notice>
+        <Notice
+          text={t('newSession.agentMenu.setsUpLong', { agent: name, command: status.cli?.command })}
+        >
+          {install}
+        </Notice>
       )
     } else if (need === 'failed') {
       notice = (
