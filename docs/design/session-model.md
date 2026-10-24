@@ -136,6 +136,7 @@ type ThreadEntry =
     }
   | { kind: 'turn_end'; id: string; stopReason: StopReason; durationMs: number }
   | GitEntry // OverBench's own observation of the repository, see the git design
+  | ArtifactEntry // OverBench's own record of a write to the artifacts service, see the artifacts design
 
 type GitEntry =
   | {
@@ -148,6 +149,17 @@ type GitEntry =
   | { kind: 'git'; id: string; event: 'push'; upstream: string; count: number }
   | { kind: 'git'; id: string; event: 'branch'; branch: string }
   | { kind: 'git'; id: string; event: 'pull_request'; url: string }
+
+interface ArtifactEntry {
+  kind: 'artifact'
+  id: string
+  artifactId: string
+  title: string // as of the latest write it records
+  action: 'create' | 'update' | 'restore' | 'delete' // the first write of its turn; a delete stands alone
+  version: number | null // the latest version written in its turn; null for a delete
+  writes: number // how many writes of its turn it records
+  after: string | null // the agent's entry before it, to put it back after a replay
+}
 
 interface ToolEntry {
   kind: 'tool'
@@ -273,6 +285,7 @@ A snapshot carries the latest page of the thread, not all of it, and older pages
 - Tool calls: `t:<toolCallId>`.
 - Compactions: `c:<compactionId>`.
 - Git events: `g:<n>`, from the same counter as `e:<n>`.
+- Artifact entries: `a:<n>`, from the same counter.
 - Subagent announcements: `s:<child session id>`.
 - Session messages: `sm:<messageId>`.
 - Everything else: `e:<n>`, from a per-session counter in the host. That includes the user entry the host adds when it sends a prompt, and messages without a `messageId`.

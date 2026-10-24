@@ -110,6 +110,8 @@ What all three advertised in `initialize`:
 | Prompt `image` and `embeddedContext`                                |      ✓      |   ✓   |    ✓     |
 | MCP over HTTP / SSE                                                 |    ✓ / ✓    | ✓ / – |  ✓ / –   |
 
+A new agent also has to meet what the artifacts service needs, MCP over HTTP and a way to tell which session calls ([what an agent needs](./design/artifacts.md#what-an-agent-needs)).
+
 Agent-specific extensions (`_meta`) such as steering, prompt queueing and auth status exist but are unstable. Since M0's acceptance OverBench uses one of them, `_session/steering`, where an agent advertises it and honours `idleBehavior` ([queue and steering](./design/session-model.md#queue-and-steering)); the queue itself is OverBench's own.
 
 ### Client capabilities

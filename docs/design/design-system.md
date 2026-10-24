@@ -419,6 +419,24 @@ The tiles a message's [attachments](./ui.md#attachments) show as, in the compose
 - Once the media [viewer](./ui.md#viewer) is built, an attached image opens there instead of in the image dialog, and a pasted text keeps the dialog (proposed with the [media design](./media.md); to be agreed).
 - Thumbnails are 224 px on their long side, twice the tile, as WebP at 82%. At 192 px, for a 2880 × 1800 px screenshot of a test run, one took 41 to 87 ms in a worker and came to 2 kB (2026-10-22, the options page in Chromium on macOS); a photo comes out larger.
 
+### Artifact entries
+
+How a write to the [artifacts service](./artifacts.md#opening-from-a-session) shows in the thread; option B of three, chosen for [#213](https://github.com/overbench/overbench/issues/213) on 2026-10-24. The reference's artifact card gave the structure, a tile, a title over one line of detail and **Open** on the right; OverBench takes it in its own tokens, with the version's thumbnail for the tile and a neutral button.
+
+| Part      | Look                                                                                                                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Card      | One button: `--bg-surface`, a hairline `--border-default` ring (`shadow-card`), `rounded-xl`, at least 56 px tall and at most 480 px wide, never wider than the column; 8 px padding, 10 px on the right, and 12 px between its parts      |
+| Thumbnail | 64 by 40 px (16:10), `rounded-md`, the version's [thumbnail](./artifacts.md#thumbnails) with a hairline `--border-default` ring drawn over it; a `Skeleton` while it loads, and `ImageOff` at 14 px on `--bg-subtle` when it cannot render |
+| Title     | `text-ui`, weight 500, `--text-primary`, one line cut with an ellipsis                                                                                                                                                                     |
+| Caption   | `text-xs` in `--text-tertiary`, `tabular-nums`: what the turn did and the latest version, "Created · v1", "Updated · v4", "Restored v2 · v5", then "· 3 versions this turn" when the turn wrote it more than once                          |
+| Open      | A label inside the card, not a control of its own: `Shapes` at 14 px and "Open" at the control step, 28 px tall, 10 px padding, `rounded-lg`, a hairline `--border-strong` ring                                                            |
+| States    | Hover: `--bg-hover` and a `--border-strong` ring. Focus: the `focus-ring`. Pressed, while the side panel shows its artifact: `aria-pressed`, the `--pressed` fill, and **Open** on `--bg-app` without its ring                             |
+| Deleted   | In Recently deleted: the thumbnail in greyscale at 50% and the caption ending "· Deleted". Deleted permanently: the same, "· Deleted permanently", and the card disabled                                                                   |
+| Deletion  | Not a card: a 24 px muted line like a [git event](./ui.md#thread), `Trash2` at 14 px in `--icon-default`, "Deleted artifact" in `--text-tertiary` and the title in `--text-primary`, at the `text-small` step                              |
+
+- The card names the artifact's title as its accessible name, "Open Hello Bucky", with the caption as its description.
+- A later write in the same turn changes the card in place: the thumbnail crossfades over `--duration-fast`, and nothing moves.
+
 ## Motion
 
 ### Tokens
