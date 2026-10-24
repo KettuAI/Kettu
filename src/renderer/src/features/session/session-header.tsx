@@ -73,12 +73,12 @@ export function SessionHeader({
           <AgentMark agent={summary.agentId} size={14} className="ml-1.5 shrink-0" />
         )}
         {rename.renaming ? (
-          // Sits where the button's text was, so the title does not move.
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            style={{ minWidth: titleWidth }}
-            className="field-sizing-content h-control rounded-lg border border-strong bg-background px-1.5 text-control font-medium aria-invalid:border-destructive dark:bg-input/30 dark:aria-invalid:border-destructive/50"
+            // Hugs the text; the margins make up the button's padding, so nothing moves.
+            style={{ minWidth: Math.max(titleWidth - 8, 0) }}
+            className="mx-1 field-sizing-content h-6 rounded-sm border border-strong bg-background px-0.5 text-control font-medium aria-invalid:border-destructive dark:bg-input/30 dark:aria-invalid:border-destructive/50"
           />
         ) : (
           <Button
