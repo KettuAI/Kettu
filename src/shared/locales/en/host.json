@@ -89,6 +89,7 @@
     "cannotInstall": "{{agent}} cannot be installed",
     "busyInstalling": "{{agent}} is already being installed or started",
     "closeSessionsFirst": "Close the sessions that use {{agent}} first",
+    "stillRunning": "{{agent}} did not stop and is still running; try again once it has exited",
     "noLogout": "{{agent}} does not support signing out",
     "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",
     "exit": {

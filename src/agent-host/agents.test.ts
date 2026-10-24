@@ -3,7 +3,7 @@
 import { chmod, mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AgentCliSource, AgentStatus, AgentUpdate } from '@shared/agent-host'
 import type { HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
@@ -42,6 +42,20 @@ import {
   loadFakeAgent,
   type FakeAgentModule,
 } from './testing/harness'
+
+/** A delete that fails as Windows fails it while a process runs from the folder. */
+const removal = vi.hoisted(() => ({ fail: null as Error | null, calls: 0 }))
+vi.mock('./adapter-install', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./adapter-install')>()
+  return {
+    ...actual,
+    removeInstall: async (dir: string) => {
+      removal.calls++
+      if (removal.fail) throw removal.fail
+      return actual.removeInstall(dir)
+    },
+  }
+})
 
 let module: FakeAgentModule
 
@@ -378,6 +392,98 @@ describe('AgentManager', () => {
     expect(m.agents.runtime('fake-agent')).toBe(second)
     expect(m.state()).toBe('ready')
     await m.agents.stopAll()
+  })
+
+  /** A package agent whose install is on disk, with a first process that ignores its stop. */
+  async function reinstallable() {
+    const given = stopFails()
+    const root = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const def: AgentDefinition = {
+      ...fakeAgent(FAKE_AGENT_MAIN),
+      launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
+    }
+    const installs: InstallOptions[] = []
+    const installed: InstalledAdapter = {
+      version: '2.0.0',
+      dir: path.join(root, 'fake-agent', '2.0.0'),
+      entry: '/a/2.0.0/index.js',
+      installedAt: 1,
+    }
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [def],
+        launcher: given.launcher,
+        detect: (d, ctx) =>
+          detectAgent(d, {
+            ...ctx,
+            node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
+            installed: async () => [installed],
+          }),
+        install: async (options) => {
+          installs.push(options)
+          return installed
+        },
+      },
+    )
+    await mkdir(installed.dir, { recursive: true })
+    // Windows refuses to delete a folder a process runs from.
+    removal.calls = 0
+    removal.fail = Object.assign(
+      new Error(`EBUSY: resource busy or locked, rmdir '${installed.dir}'`),
+      { code: 'EBUSY' },
+    )
+    const end = async () => {
+      removal.fail = null
+      await given.exitFirst()
+      await m.agents.stopAll()
+    }
+    return { ...given, m, installs, end }
+  }
+
+  const stillRunning = {
+    name: 'HostError',
+    code: 'busy',
+    message: 'Fake agent did not stop and is still running; try again once it has exited',
+  }
+
+  it('refuses a reinstall before deleting anything when its stop leaves the agent running', async () => {
+    const { m, pids, installs, end } = await reinstallable()
+    try {
+      await m.agents.ensureReady('fake-agent')
+      await expect(m.agents.reinstall('fake-agent')).rejects.toMatchObject(stillRunning)
+      // The stop gave the process up, so it still runs from the folder the reinstall would delete.
+      expect(pids(m)).toEqual([4242])
+      expect(removal.calls).toBe(0)
+      expect(installs).toEqual([])
+      expect(m.state()).toBe('available')
+    } finally {
+      await end()
+    }
+  })
+
+  it('refuses a reinstall while a process an earlier stop gave up still runs', async () => {
+    const { m, installs, launches, exitFirst, end } = await reinstallable()
+    try {
+      await m.agents.ensureReady('fake-agent')
+      await m.agents.stop('fake-agent')
+      // A new process runs beside the one the stop gave up, and the refusal leaves it running.
+      const running = await m.agents.ensureReady('fake-agent')
+      await expect(m.agents.reinstall('fake-agent')).rejects.toMatchObject(stillRunning)
+      expect(m.state()).toBe('ready')
+      expect(m.agents.runtime('fake-agent')).toBe(running)
+      expect(launches()).toBe(2)
+      expect(removal.calls).toBe(0)
+      // Once it has ended, the reinstall goes ahead.
+      removal.fail = null
+      await exitFirst()
+      await m.agents.reinstall('fake-agent')
+      expect(removal.calls).toBe(1)
+      expect(installs).toHaveLength(1)
+    } finally {
+      await end()
+    }
   })
 
   it('kills a given-up process that still runs when the quit cuts the stops short', async () => {
