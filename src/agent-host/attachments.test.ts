@@ -361,8 +361,9 @@ describe('granted files and folders', () => {
       bytes: toArrayBuffer(jpeg),
       mimeType: 'image/jpeg',
     })
+    const rejected = expect(updating).rejects.toMatchObject({ code: 'not_found' })
     await attachments.remove(pasted.id)
-    await expect(updating).rejects.toMatchObject({ code: 'not_found' })
+    await rejected
     expect(await readdir(path.join(dir, 'attachments'))).toEqual([])
   })
 })
