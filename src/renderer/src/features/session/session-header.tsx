@@ -57,6 +57,9 @@ export function SessionHeader({
   const [deleting, setDeleting] = useState(false)
   const titleButton = useRef<HTMLButtonElement>(null)
   const rename = useRenaming(() => titleButton.current)
+  // The field starts at the button's width, so a short title does not jump wider.
+  const [titleWidth, setTitleWidth] = useState(0)
+  const measureTitle = () => setTitleWidth(titleButton.current?.offsetWidth ?? 0)
   const title = sessionTitle(summary)
 
   return (
@@ -74,7 +77,8 @@ export function SessionHeader({
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            className="field-sizing-content h-control min-w-16 rounded-lg border border-strong bg-background px-1.5 text-control font-medium aria-invalid:border-destructive dark:bg-input/30 dark:aria-invalid:border-destructive/50"
+            style={{ minWidth: titleWidth }}
+            className="field-sizing-content h-control rounded-lg border border-strong bg-background px-1.5 text-control font-medium aria-invalid:border-destructive dark:bg-input/30 dark:aria-invalid:border-destructive/50"
           />
         ) : (
           <Button
@@ -83,7 +87,10 @@ export function SessionHeader({
             size="compact"
             title={`${title} · ${agentName(summary.agentId)}`}
             className="min-w-0 shrink px-1.5"
-            onClick={rename.start}
+            onClick={() => {
+              measureTitle()
+              rename.start()
+            }}
           >
             <span className="truncate">{title}</span>
           </Button>
@@ -104,7 +111,10 @@ export function SessionHeader({
           <DropdownMenuContent finalFocus={rename.menu.finalFocus}>
             <SessionMenuItems
               summary={summary}
-              onRename={rename.menu.onRename}
+              onRename={() => {
+                measureTitle()
+                rename.menu.onRename()
+              }}
               onNewSubSession={rename.menu.onLeave}
               onDelete={() => setDeleting(true)}
             />

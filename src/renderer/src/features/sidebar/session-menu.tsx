@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { type CSSProperties, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
@@ -93,10 +93,12 @@ export function SessionTitleField({
   summary,
   onDone,
   className,
+  style,
 }: {
   summary: SessionSummary
   onDone: (restoreFocus: boolean) => void
   className?: string
+  style?: CSSProperties
 }) {
   const { t } = useTranslation('sidebar')
   const current = sessionTitle(summary)
@@ -132,6 +134,7 @@ export function SessionTitleField({
       autoComplete="off"
       spellCheck={false}
       className={cn('min-w-0 outline-none', className)}
+      style={style}
       onFocus={(event) => event.currentTarget.select()}
       onChange={() => setError(null)}
       // Leaving a field that failed to save gives up instead of trying again.
