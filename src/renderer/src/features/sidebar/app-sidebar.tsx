@@ -13,7 +13,6 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, PlanLimit, Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { BrandLockup } from '@renderer/components/brand'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -84,7 +83,6 @@ export function AppSidebar() {
     <Sidebar collapsible="none" className="w-full" aria-label={t('nav.label')}>
       <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-2 pr-2.5 pl-4">
         {isMac && <span aria-hidden className="w-(--traffic-lights)" />}
-        <BrandLockup fontSize={14} />
         <span className="flex-1" />
         <SidebarToggle />
       </div>

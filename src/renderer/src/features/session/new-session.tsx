@@ -99,11 +99,9 @@ export function NewSessionView({
       {/* Raised 28 px above centre, so the eye lands on the composer. */}
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pb-14">
         <div className="my-auto flex w-full max-w-thread flex-col gap-7 px-6 pt-6">
-          <div className="flex animate-in flex-col items-center gap-5 fade-in animation-duration-(--duration-slow)">
-            <BrandMark width={48} />
-            <h1 className="text-center font-serif text-greeting text-balance">
-              {t('newSession.heading')}
-            </h1>
+          <div className="flex animate-in items-center justify-center gap-4 fade-in animation-duration-(--duration-slow)">
+            <BrandMark width={52} />
+            <h1 className="font-serif text-greeting text-balance">{t('newSession.heading')}</h1>
           </div>
           <DraftComposer
             agentId={agentId}

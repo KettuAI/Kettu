@@ -57,14 +57,13 @@ The guidelines also define a light macOS icon; it is not shipped, since an `.icn
 
 ## In the app
 
-| Where                                | What                                                                                 |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| [Sidebar](./ui.md#sidebar) header    | The horizontal lockup at 14 px, after the traffic lights on macOS, before the toggle |
-| [New session](./ui.md#new-session)   | The mark, 48 px wide, centred above the heading                                      |
-| [Launch](./ui.md#launch), when slow  | The mark, 72 px wide, above "Starting OverBench…"                                    |
-| Settings › [About](./ui.md#settings) | The horizontal lockup at 22 px in place of the title, named "OverBench"              |
+| Where                                | What                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| [New session](./ui.md#new-session)   | The mark, 52 px wide, 16 px before the heading, centred on its line     |
+| [Launch](./ui.md#launch), when slow  | The mark, 72 px wide, above "Starting OverBench…"                       |
+| Settings › [About](./ui.md#settings) | The horizontal lockup at 22 px in place of the title, named "OverBench" |
 
-The marks are decorative where text beside them already says OverBench; the lockup is an image named "OverBench".
+The marks are decorative where text beside them already says OverBench; the lockup is an image named "OverBench". The sidebar header carries no brand, so the chrome stays quiet.
 
 ## Outside the app
 
