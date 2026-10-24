@@ -43,7 +43,7 @@ Every design passes through these steps: a new screen, a component, an interacti
 ## 7. Review
 
 - Present what changed with the screenshots, the rules it follows, any rule it changes and why, and what is not done or not checked.
-- The maintainer accepts the design. The reason for a rejection becomes a rule in the guides, so the same detail is not corrected twice.
+- The maintainer accepts the design in the conversation, before it is built; its docs and its code then go in one pull request ([workflow](../workflow.md#3-design)). The reason for a rejection becomes a rule in the guides, so the same detail is not corrected twice.
 
 ## Changing the rules
 

@@ -29,7 +29,7 @@ flowchart TD
   T -->|needs a new decision| D{{needs-decision}}
   D -->|accepted| R
   D -->|accepted, needs design| N[needs-design]
-  N --> DP{{design PR merged}}
+  N --> DP{{design agreed in the chat}}
   DP --> R
   R --> P[in-progress, draft PR]
   P --> V[review and checks]
@@ -61,7 +61,9 @@ An agent takes each `state:needs-triage` issue through these steps:
 
 ### 3. Design
 
-A `state:needs-design` issue goes through the [design process](./design/design-process.md): the rules first, the best existing implementations, options to try, then the docs. The result is a pull request that changes docs only, linked with `Refs #N`, with the options in its description. Merging it is the acceptance: the issue then moves to `state:ready`, and work that needs more than one pull request is split into sub-issues.
+A `state:needs-design` issue goes through the [design process](./design/design-process.md): the rules first, the best existing implementations, options to try, then the docs. The agent settles it with the maintainer in the conversation: the options, a recommendation, and the maintainer's choice. A design has no pull request of its own: once the maintainer agrees, the issue moves to `state:ready` and is built, and the design docs change in the same pull request as the code. Work that needs more than one pull request is split into sub-issues.
+
+Every pull request carries a working change. A design, a plan or a docs update goes in with the code it is for, never ahead of it; only a fix to the docs themselves is a docs pull request. Decided by the maintainer on 2026-10-24: while development moves fast, a docs pull request ahead of the code only waits for a merge and runs CI twice.
 
 ### 4. Build
 
@@ -81,7 +83,7 @@ An agent that stops before the end comments what is left and puts the issue back
 - A change under `src/` or `tools/`, to `package.json`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
 - Once the review leaves nothing open, the reviewing agent turns on auto-merge (`gh pr merge <N> --auto --squash`), and GitHub merges the pull request when the required `CI` check passes. Auto-merge is allowed in the repository settings since 2026-10-23: only the project opens pull requests, so a reviewed change with green CI needs no one to press the button.
 - A push after that keeps auto-merge on, so a change made after the review goes back to the reviewer: the author turns auto-merge off (`gh pr merge <N> --disable-auto`) before pushing it.
-- Design and release pull requests are the exception: the maintainer merges them, as their [gates](#gates) say. The maintainer can also merge any pull request at once, or hold one by turning its auto-merge off.
+- Release pull requests are the exception: the maintainer merges them, as their [gate](#gates) says. The maintainer can also merge any pull request at once, or hold one by turning its auto-merge off.
 - The merge is a squash: the pull request's title becomes the commit subject on `main`, the branch is deleted, and `Closes #N` in its description closes the issue.
 
 A pull request that does only part of an issue says `Refs #N` instead, and the issue stays open with a comment on what is left.
@@ -109,7 +111,7 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 | Gate    | When                                                                                     | The maintainer                                                                    |
 | ------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Accept  | An issue in `state:needs-decision`                                                       | Accepts it (it moves to `ready` or `needs-design`, with a milestone) or closes it |
-| Design  | A design pull request                                                                    | Tries the options, then merges it or asks for changes                             |
+| Design  | A design, laid out in the conversation before it is built                                | Chooses among the options or asks for changes; the build starts on the agreement  |
 | Close   | Closing an issue without a merged pull request: a duplicate, not planned, not reproduced | Confirms                                                                          |
 | Release | Each version                                                                             | Confirms the release pull request, the tag and the publication                    |
 
@@ -134,7 +136,7 @@ One issue is one pull request. An issue gets sub-issues only when it cannot be d
 
 Never split:
 
-- by step (design, tests, implementation) or by layer (main process, renderer) when the pieces land together; a design pull request links the issue with `Refs #N` and needs no sub-issue;
+- by step (design, tests, implementation) or by layer (main process, renderer) when the pieces land together, which is why a design is never a pull request of its own;
 - for work that needs no pull request, such as labels, milestones or repository settings: it is done under the issue that needs it and recorded in a comment there;
 - only to work in parallel on files the pieces share.
 
@@ -216,7 +218,7 @@ A ruleset on `main`:
 | Role    | Takes                                        | Produces                                       | Never                                            |
 | ------- | -------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ |
 | Triage  | `state:needs-triage` issues                  | Labels, states, reproductions, comments        | Closes an issue or changes code                  |
-| Design  | `state:needs-design` issues                  | A docs pull request with options to try        | Builds beyond prototypes                         |
+| Design  | `state:needs-design` issues                  | Options and a recommendation in the chat       | Opens a pull request for a design alone          |
 | Build   | `state:ready` issues                         | A pull request                                 | Works outside the issue's scope                  |
 | Review  | Pull requests ready for review               | Review comments, then auto-merge               | Approves, merges by hand or pushes to the branch |
 | Release | A release issue, or the maintainer's request | The release pull request and the draft release | Tags or publishes without the maintainer's yes   |
