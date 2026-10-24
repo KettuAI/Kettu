@@ -101,7 +101,7 @@ Environment variables, read when the agent starts:
 | `FAKE_AGENT_RESUME_CONFIG=reset`     | `session/resume` and `session/load` answer at the defaults, as codex-acp's do                                             |
 | `FAKE_AGENT_RESUME_CONFIG=locked`    | The same, and the session then refuses every setting                                                                      |
 
-A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise, and a session resumed or loaded in the same process keeps its own unless `FAKE_AGENT_RESUME_CONFIG` does. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN` is set.
+A fork keeps the source's mode, model, level and Fast mode unless `FAKE_AGENT_FORK_CONFIG` says otherwise, and a session resumed or loaded in the same process keeps its own unless `FAKE_AGENT_RESUME_CONFIG` does. The fake agent keeps its sessions in memory. `session/load` replays what happened in the same process; a session it does not know, such as one from before a restart, gets a short synthesized history, and `session/resume` takes it up as a new one unless `FAKE_AGENT_RESUME_UNKNOWN` is `fail` or `no-rollout`.
 
 ## Color checks
 

@@ -317,7 +317,7 @@ describe('attaching on use', () => {
       const { t: first, port: before } = await setup()
       const sessionId = await newSession(first, before)
       if (use === 'after a refused prompt') {
-        // As a model the account cannot use: the agent answers with an error and nothing else.
+        // The agent answers the first prompt with an error and nothing else.
         await before.request('sessions.prompt', { sessionId, content: text('/error --silent') })
         await before.untilEntry(sessionId, (entry) => entry.kind === 'notice')
         await before.untilStatus(sessionId, 'ready')
@@ -337,10 +337,21 @@ describe('attaching on use', () => {
       const renewed = port.thread(sessionId).session.acpSessionId
       expect(renewed).not.toBe(acpSessionId)
       expect(port.thread(sessionId).session.status).toBe('ready')
+      const level = () =>
+        port.thread(sessionId).session.config.find((o) => o.id === 'thought_level')?.value
+      if (use !== 'prompt') await port.until(() => level() === 'high')
       await vi.waitFor(async () => {
         const thread = await t.host.threads!.load(sessionId)
         expect(thread?.head.acpSessionId).toBe(renewed)
+        if (use !== 'prompt') {
+          const stored = thread?.session.config.find((o) => o.id === 'thought_level')
+          expect(stored?.value).toBe('high')
+        }
       })
+      // The thread stays as it was, the refused prompt and its notice included.
+      if (use === 'after a refused prompt') {
+        expect(port.entries(sessionId).map((entry) => entry.kind)).toEqual(['user', 'notice'])
+      }
     }
   })
 

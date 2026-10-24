@@ -97,7 +97,7 @@ export interface ScenarioOptions {
   holdMs: number // requests: how long the turn stays open after its request, not scaled
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
-  silent: boolean // error: fails before writing anything, as a refused model does
+  silent: boolean // error: fails before writing anything
 }
 
 export interface ScenarioChoice {

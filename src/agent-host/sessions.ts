@@ -3530,7 +3530,7 @@ const INTERNAL_ERROR = -32603
 const NO_ROLLOUT = 'no rollout found for thread id'
 
 /** The agent does not have the session it was asked to resume. */
-function unknownSession(error: AgentRequestError): boolean {
+export function unknownSession(error: AgentRequestError): boolean {
   if (error.code === RESOURCE_NOT_FOUND) return true
   if (error.code !== INTERNAL_ERROR) return false
   const details = (error.data as { details?: unknown } | undefined)?.details
