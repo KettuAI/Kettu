@@ -46,6 +46,7 @@ import { AttachmentTray } from './attachment-tray'
 import {
   attachFiles,
   attachImages,
+  attachMention,
   attachmentContent,
   attachmentsBlock,
   pastedImages,
@@ -53,10 +54,25 @@ import {
 } from './attachments'
 import { ControlRow } from './control-row'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
+import { MentionFooter, MentionHeader, MentionItem } from './mention-popover'
+import {
+  insertAt,
+  mentionAt,
+  mentionName,
+  mentionShown,
+  popoverKey,
+  replaceMention,
+  type MentionRow,
+} from './mentions'
+import { useMentionList } from './use-mention-list'
 
 type BaseUIKeyboardEvent = KeyboardEvent<HTMLTextAreaElement> & {
   preventBaseUIHandler?: () => void
 }
+
+type PopoverItem = SlashCommand | MentionRow
+
+const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 
 /** The prompt box and the session's controls under it. */
 export function Composer({ session, agentName }: { session: SessionView; agentName: string }) {
@@ -65,6 +81,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const [text, setText] = useState(() => readDraft(sessionId))
   const [error, setError] = useState<string | null>(null)
   const [slashDismissed, setSlashDismissed] = useState(false)
+  // The caret, or null while a range is selected, for telling which `@` word it is in.
+  const [caret, setCaret] = useState<number | null>(null)
+  // The `@` whose popover Esc or a click elsewhere closed.
+  const [mentionDismissed, setMentionDismissed] = useState<number | null>(null)
+  // While an input method composes: whether the mention popover was open when it started.
+  const [composition, setComposition] = useState<{ open: boolean } | null>(null)
+  const pendingCaret = useRef<number | null>(null)
+  const highlighted = useRef<PopoverItem | undefined>(undefined)
   const textarea = useRef<HTMLTextAreaElement>(null)
   const group = useRef<HTMLDivElement>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
@@ -146,6 +170,15 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     [sessionId],
   )
 
+  // A chosen mention or `@` from the menu puts the caret after what it wrote.
+  useLayoutEffect(() => {
+    const at = pendingCaret.current
+    const el = textarea.current
+    if (at === null || !el) return
+    pendingCaret.current = null
+    el.setSelectionRange(at, at)
+  }, [text])
+
   // A textarea scrolls only the caret into view, not its padding, so typing at the end of a long
   // draft would leave the last line on the box's edge.
   useLayoutEffect(() => {
@@ -159,16 +192,25 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     if (status === 'ready' && document.activeElement === document.body) textarea.current?.focus()
   }, [status])
 
-  const update = (next: string) => {
+  const update = (next: string, at?: number) => {
     setText(next)
     writeDraft(sessionId, next)
     if (!next.startsWith('/')) setSlashDismissed(false)
+    if (at !== undefined) {
+      pendingCaret.current = at
+      setCaret(at)
+      return
+    }
+    const el = textarea.current
+    setCaret(el && el.selectionStart === el.selectionEnd ? el.selectionStart : null)
   }
 
   const take = (): { prompt: string; held: DraftAttachment[] } => {
     const prompt = text
     const held = attachments
     setText('')
+    // A draft put back after a failed send opens no mention until the caret moves.
+    setCaret(null)
     clearDraft(sessionId)
     setDraftAttachments(sessionId, [])
     setError(null)
@@ -222,16 +264,57 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const slashMatches =
     slashQuery === null ? [] : commands.filter((c) => c.name.toLowerCase().includes(slashQuery))
   const slashOpen = slashQuery !== null && slashMatches.length > 0 && !slashDismissed
+
+  const mention = mentionAt(text, caret)
+  if (mentionDismissed !== null && mention?.start !== mentionDismissed) setMentionDismissed(null)
+  const shown = mentionShown(mention, mentionDismissed, composition)
+  const mentions = useMentionList(sessionId, session.projectPath, shown ? mention!.query : null)
+  const filesReady = !!mentions.files && !(mentions.files.error && !mentions.files.paths.length)
+  // With nothing typed it shows the files the session used and how many there are to search;
+  // typed, only while something matches.
+  const mentionOpen =
+    shown && (mentions.used || mentions.rows.length > 0 || (mention!.query !== '' && !filesReady))
+  const choose = (row: MentionRow) => {
+    if (!mention) return
+    const next = replaceMention(text, mention, mentionName(row))
+    update(next.text, next.caret)
+    const left = attachMention(sessionId, session.projectPath, row.path, row.folder)
+    setError(left > 0 ? t('attachments.limit') : null)
+  }
+  const startMention = () => {
+    const el = textarea.current
+    const from = el?.selectionStart ?? text.length
+    const next = insertAt(text, from, el?.selectionEnd ?? from)
+    update(next.text, next.caret)
+    el?.focus()
+  }
   const hint = (() => {
     const match = /^\/(\S+)\s$/.exec(text)
     return match ? commands.find((c) => c.name === match[1])?.inputHint : undefined
   })()
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // IME composition: Enter confirms the candidate, it never sends.
-    if (event.nativeEvent.isComposing || event.keyCode === 229) return
-    if (slashOpen && (event.key === 'Enter' || event.key === 'Tab' || event.key === 'Escape'))
+    const handling = popoverKey(event.key, {
+      composing: event.nativeEvent.isComposing || event.keyCode === 229,
+      shift: event.shiftKey,
+      slashOpen,
+      mentionOpen,
+      mentionRows: mentions.rows.length > 0,
+    })
+    // IME composition: no key reaches a popover, and Enter confirms the candidate, never sends.
+    if (handling === 'block') {
+      ;(event as BaseUIKeyboardEvent).preventBaseUIHandler?.()
       return
+    }
+    if (handling === 'popover') return
+    if (handling === 'choose') {
+      const item = highlighted.current
+      if (item && isMentionRow(item)) {
+        event.preventDefault()
+        choose(item)
+      }
+      return
+    }
     // With no list open, Base UI's autocomplete clears its input on Escape, which here is the draft.
     if (event.key === 'Escape') (event as BaseUIKeyboardEvent).preventBaseUIHandler?.()
     if (event.key === 'Escape' && running) {
@@ -283,19 +366,30 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   return (
     <div className="flex flex-col gap-1">
-      <Autocomplete.Root
-        items={commands}
+      <Autocomplete.Root<PopoverItem>
+        items={mentionOpen ? mentions.rows : commands}
+        filteredItems={mentionOpen ? mentions.rows : undefined}
         value={text}
         onValueChange={(value) => update(value)}
-        open={slashOpen}
+        open={slashOpen || mentionOpen}
         onOpenChange={(open) => {
-          if (!open) setSlashDismissed(true)
+          if (open) return
+          if (slashOpen) setSlashDismissed(true)
+          if (mentionOpen && mention) setMentionDismissed(mention.start)
         }}
-        filter={(command: SlashCommand, query: string) =>
-          query.startsWith('/') && command.name.toLowerCase().includes(query.slice(1).toLowerCase())
+        onItemHighlighted={(item) => {
+          highlighted.current = item
+        }}
+        filter={(item: PopoverItem, query: string) =>
+          !isMentionRow(item) &&
+          query.startsWith('/') &&
+          item.name.toLowerCase().includes(query.slice(1).toLowerCase())
         }
-        itemToStringValue={(command: SlashCommand) => `/${command.name} `}
-        autoHighlight
+        itemToStringValue={(item: PopoverItem) =>
+          isMentionRow(item) ? `@${mentionName(item)} ` : `/${item.name} `
+        }
+        // A mention's first row is always the one Enter or Tab chooses.
+        autoHighlight={mentionOpen ? 'always' : true}
       >
         <InputGroup
           ref={group}
@@ -326,6 +420,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 update('/')
                 textarea.current?.focus()
               }}
+              onMention={startMention}
             />
           </InputGroupAddon>
           {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
@@ -340,6 +435,12 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   disabled={starting}
                   onKeyDown={onKeyDown}
                   onPaste={onPaste}
+                  onSelect={(event) => {
+                    const el = event.currentTarget
+                    setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null)
+                  }}
+                  onCompositionStart={() => setComposition({ open: mentionOpen })}
+                  onCompositionEnd={() => setComposition(null)}
                   className="max-h-[min(40svh,24rem)] min-h-(--composer-min) py-4 pr-1 pl-1.5 text-prose leading-6 placeholder:text-placeholder md:text-prose"
                 />
               }
@@ -448,20 +549,39 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             className="isolate z-50 outline-none"
           >
             <Autocomplete.Popup className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] flex origin-(--transform-origin) flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-              <Autocomplete.List className="min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain p-1">
-                {(command: SlashCommand) => (
-                  <Autocomplete.Item
-                    key={command.name}
-                    value={command}
-                    className="flex min-h-row cursor-default items-baseline gap-2 rounded-md px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
-                  >
-                    <span className="shrink-0 font-mono text-xs">/{command.name}</span>
-                    <span className="min-w-0 truncate text-muted-foreground">
-                      {command.description}
-                    </span>
-                  </Autocomplete.Item>
+              {mentionOpen && mentions.used && mentions.rows.length > 0 && (
+                <MentionHeader id={`${sessionId}-used`} />
+              )}
+              <Autocomplete.List
+                aria-labelledby={mentionOpen && mentions.used ? `${sessionId}-used` : undefined}
+                aria-label={mentionOpen && !mentions.used ? t('mentions.label') : undefined}
+                className={cn(
+                  'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain p-1',
+                  mentionOpen && mentions.rows.length === 0 && 'hidden',
                 )}
+              >
+                {(item: PopoverItem) =>
+                  isMentionRow(item) ? (
+                    <MentionItem
+                      key={`${item.folder ? 'd' : 'f'}:${item.path}`}
+                      row={item}
+                      onChoose={choose}
+                    />
+                  ) : (
+                    <Autocomplete.Item
+                      key={item.name}
+                      value={item}
+                      className="flex min-h-row cursor-default items-baseline gap-2 rounded-md px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
+                    >
+                      <span className="shrink-0 font-mono text-xs">/{item.name}</span>
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {item.description}
+                      </span>
+                    </Autocomplete.Item>
+                  )
+                }
               </Autocomplete.List>
+              {mentionOpen && <MentionFooter list={mentions} />}
             </Autocomplete.Popup>
           </Autocomplete.Positioner>
         </Autocomplete.Portal>
@@ -480,7 +600,10 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   )
 }
 
-/** **+**: adds files, photos or a folder through the system dialog, or starts a slash command. */
+/**
+ * **+**: adds files, photos or a folder through the system dialog, or starts a mention or a
+ * slash command.
+ */
 function AddMenu({
   agentName,
   starting,
@@ -490,6 +613,7 @@ function AddMenu({
   textarea,
   onPick,
   onSlash,
+  onMention,
 }: {
   agentName: string
   starting: boolean
@@ -499,6 +623,7 @@ function AddMenu({
   textarea: RefObject<HTMLTextAreaElement | null>
   onPick: (kind: 'files' | 'folder') => void
   onSlash: () => void
+  onMention: () => void
 }) {
   const { t } = useTranslation('composer')
   const shortcut = formatShortcut('Mod+U')
@@ -542,16 +667,18 @@ function AddMenu({
           {t('attachments.addFolder')}
           {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onMention}>
+          {t('attachments.mentionFile')}
+          <DropdownMenuShortcut>@</DropdownMenuShortcut>
+        </DropdownMenuItem>
         {commands && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={!emptyDraft} onClick={onSlash}>
-              {t('attachments.slashCommands')}
-              <DropdownMenuShortcut>
-                {emptyDraft ? '/' : t('attachments.slashNeedsEmpty')}
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </>
+          <DropdownMenuItem disabled={!emptyDraft} onClick={onSlash}>
+            {t('attachments.slashCommands')}
+            <DropdownMenuShortcut>
+              {emptyDraft ? '/' : t('attachments.slashNeedsEmpty')}
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

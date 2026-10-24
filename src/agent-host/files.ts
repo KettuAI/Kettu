@@ -210,6 +210,31 @@ export class FilesService {
   }
 
   /**
+   * A file or folder of the project for an `@` mention, checked as `read` checks a path: its path
+   * under `root`, as the project names it, and what it is.
+   */
+  async locate(
+    root: string,
+    relativePath: string,
+  ): Promise<{ path: string; kind: 'file' | 'folder' }> {
+    const relative = this.normalize(relativePath)
+    const real = await this.resolveInside(root, relative)
+    let info
+    try {
+      info = await stat(real)
+    } catch (error) {
+      throw this.fsError(error, relative)
+    }
+    if (!info.isFile() && !info.isDirectory()) {
+      throw invalidParams(`${relative} is not a file or a folder`)
+    }
+    return {
+      path: this.paths.join(root, ...relative.split('/')),
+      kind: info.isDirectory() ? 'folder' : 'file',
+    }
+  }
+
+  /**
    * Replaces the text of a file that exists. With a `version`, the file must still have it, or
    * nothing is written and the answer is `conflict`; null writes regardless.
    */

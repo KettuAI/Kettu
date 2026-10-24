@@ -314,7 +314,7 @@ ACP v1 has neither, and the v2 prompt work leaves both out, so the queue is Over
 
 ## Attachments
 
-> Decided 2026-10-23 for #40, with the [interface](./ui.md#attachments). Pasted images are built (#134), and picked and dropped files, photos and folders (#135); the rest is to be built.
+> Decided 2026-10-23 for #40, with the [interface](./ui.md#attachments). Pasted images are built (#134), picked and dropped files, photos and folders (#135), and `@` mentions (#137); the rest is to be built.
 
 Files, images and folders the user adds to a prompt. The renderer sends each as an attachment ref that names a record the host holds; at send time the host builds its content block from that record and from what the agent advertised in `initialize`'s `promptCapabilities`, which `AgentStatus.capabilities.prompt` passes on (`image`, `audio`, `embeddedContext`). claude-agent-acp 0.94.0, codex-acp 2.2.2 and OpenCode 2.0.32 all advertise `image` and `embeddedContext`, and none `audio` (observed 2026-10-22).
 
@@ -345,7 +345,7 @@ The renderer never names a path for the host to read. An attachment comes from o
 
 - **Picked**: **Add files or photos…** and **Add folder…** call `dialog:add-attachments` in main, which shows the system dialog, checks each chosen path with `stat`, and hands the host a grant, `{ grantId, path, kind }`, over its own port (`host:grant`). The renderer receives only the grant ids, names and sizes.
 - **Dropped or pasted files**: the preload turns each `File` into its path with `webUtils.getPathForFile` and passes the paths to main (`attachments:grant`), which grants them the same way. A page script can give the preload only `File` objects, and only a drop, a paste or a file input yields one with a path, so it cannot name a path of its own. A pasted image or text with no file behind it goes to the host as bytes.
-- **Mentioned**: an `@` path is relative to the session's folder and passes the same containment as `files.read` ([project files](./agent-host.md#project-files)).
+- **Mentioned**: an `@` path is relative to the session's folder and passes the same containment as `files.read` ([project files](./agent-host.md#project-files)) when it is added: the folder must be a registered project or a scratch folder, and the path must name a file or a folder inside it. The record keeps the path as the project names it, and from then on is read as a grant is.
 - The host resolves a grant with `realpath` when it reads it, checks that it is still a regular file or a directory, and reads that path alone. A grant serves its one attachment and never widens what `files.*` may read.
 
 ### Where the bytes live

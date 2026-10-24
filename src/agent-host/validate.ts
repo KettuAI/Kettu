@@ -559,11 +559,16 @@ export function createValidators(platform: Platform): Validators {
         source:
           source.grantId !== undefined
             ? { grantId: string(source, 'grantId', ID_CHARS) }
-            : {
-                bytes: bytes(source, 'bytes', ATTACHMENT_BYTES),
-                mimeType: string(source, 'mimeType', ID_CHARS),
-                name: string(source, 'name', TEXT_CHARS),
-              },
+            : source.projectPath !== undefined
+              ? {
+                  projectPath: absolutePath(source, 'projectPath', platform),
+                  path: relativePath(source, 'path', platform),
+                }
+              : {
+                  bytes: bytes(source, 'bytes', ATTACHMENT_BYTES),
+                  mimeType: string(source, 'mimeType', ID_CHARS),
+                  name: string(source, 'name', TEXT_CHARS),
+                },
         thumb: thumbnail(o),
       }
     },

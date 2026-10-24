@@ -1,5 +1,6 @@
-// A composer's attachments: adding pasted images, and picked or dropped files and folders, through
-// the host, removing them, and the content refs a message carries. See docs/design/ui.md#attachments.
+// A composer's attachments: adding pasted images, picked or dropped files and folders, and the
+// project's files and folders an `@` mention names, through the host, removing them, and the
+// content refs a message carries. See docs/design/ui.md#attachments.
 
 import {
   ATTACHMENT_LIMIT,
@@ -174,10 +175,23 @@ export async function attachFiles(draft: string, files: readonly File[]): Promis
 }
 
 /**
- * Adds one granted file or folder. An image's thumbnail and scaled copy are made from the dropped
- * File, or from the bytes the host read for a picked one, and handed back with `attachments.update`.
+ * Adds a file or folder of the project that an `@` mention chose, by its path relative to the
+ * project. Returns how many did not fit under the limit: 1 when the composer is full.
  */
-async function addGranted(
+export function attachMention(
+  draft: string,
+  projectPath: string,
+  path: string,
+  folder: boolean,
+): number {
+  if (attachmentRoom(draft) === 0) return 1
+  const item = addingTile(path.slice(path.lastIndexOf('/') + 1), null, folder)
+  setDraftAttachments(draft, [...draftAttachments(draft), item])
+  void addFromHost(draft, item, { projectPath, path }, null)
+  return 0
+}
+
+function addGranted(
   draft: string,
   item: DraftAttachment,
   grant: GrantedAttachment,
@@ -187,9 +201,23 @@ async function addGranted(
     kind: grant.kind === 'folder' ? 'folder' : item.kind,
     size: grant.size,
   })
+  return addFromHost(draft, item, { grantId: grant.grantId }, file)
+}
+
+/**
+ * Adds one granted or mentioned file or folder. An image's thumbnail and scaled copy are made from
+ * the dropped File, or from the bytes the host read for a picked or mentioned one, and handed back
+ * with `attachments.update`.
+ */
+async function addFromHost(
+  draft: string,
+  item: DraftAttachment,
+  source: { grantId: string } | { projectPath: string; path: string },
+  file: File | null,
+): Promise<void> {
   let attachment: Attachment | null = null
   try {
-    attachment = await host('attachments.add', { source: { grantId: grant.grantId }, thumb: null })
+    attachment = await host('attachments.add', { source, thumb: null })
     if (attachment.type === 'image') {
       patchDraftAttachment(draft, item.key, { kind: 'image' })
       const id = attachment.id

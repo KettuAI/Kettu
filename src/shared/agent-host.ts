@@ -407,10 +407,14 @@ export interface HostContract {
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
   'git.tools': { params: void; result: GitTools }
   // A draft's attachment, kept until it is sent or removed; see attachments in the session model.
-  // `grantId`: a file or folder main granted for a pick or a drop.
+  // `grantId`: a file or folder main granted for a pick or a drop. `projectPath` and `path`: one
+  // an `@` mention named, relative to the project and checked as `files.read` checks a path.
   'attachments.add': {
     params: {
-      source: { bytes: ArrayBuffer; mimeType: string; name: string } | { grantId: string }
+      source:
+        | { bytes: ArrayBuffer; mimeType: string; name: string }
+        | { grantId: string }
+        | { projectPath: string; path: string }
       thumb: string | null
     }
     result: Attachment

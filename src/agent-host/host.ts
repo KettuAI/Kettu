@@ -614,7 +614,13 @@ export class AgentHost {
       'git.currentPullRequest': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),
       'git.tools': () => this.gitCall((g) => g.tools()),
-      'attachments.add': ({ source, thumb }) => this.attachments.add(source, thumb),
+      'attachments.add': ({ source, thumb }) =>
+        'projectPath' in source
+          ? this.filesCall(source.projectPath, async (root) => {
+              const found = await this.files.locate(root, source.path)
+              return this.attachments.addPath(found.path, found.kind, thumb)
+            })
+          : this.attachments.add(source, thumb),
       'attachments.read': ({ id }) => this.attachments.read(id),
       'attachments.update': ({ id, thumb, scaled }) => this.attachments.update(id, thumb, scaled),
       'attachments.remove': ({ id }) => this.attachments.remove(id),

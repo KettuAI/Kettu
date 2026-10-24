@@ -1,8 +1,8 @@
 // The attachments of drafts and queued prompts: their records in state/attachments.json, the
-// paths main granted for picked and dropped files, and the image bytes they were read as or the
-// renderer handed over in attachments/, named by SHA-256 and extension, until a prompt sends them
-// or the user removes them; and in attachments/sent/, the copies that links sent to an agent point
-// to. See docs/design/session-model.md#where-the-bytes-live.
+// paths main granted for picked and dropped files or an `@` mention named, and the image bytes
+// they were read as or the renderer handed over in attachments/, named by SHA-256 and extension,
+// until a prompt sends them or the user removes them; and in attachments/sent/, the copies that
+// links sent to an agent point to. See docs/design/session-model.md#where-the-bytes-live.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readdir, readFile, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises'
@@ -38,7 +38,7 @@ export interface AttachmentRecord {
   size: number | null
   /** SHA-256 of an image's saved bytes, as pasted, read when added, or scaled. */
   hash: string | null
-  /** What main granted, for a picked or dropped file or folder; the only path a record reads. */
+  /** What main granted, or a mention named, for a file or folder; the only path a record reads. */
   path: string | null
   thumb: string | null
   addedAt: number
@@ -297,20 +297,25 @@ export class Attachments {
     return attachmentOf(record)
   }
 
-  /**
-   * A granted file or folder. An image a model takes is read now, as its thumbnail is made from
-   * this read; a text file is read once more when it is sent, so the agent gets it as it is then.
-   */
-  private async addGranted(grantId: string, thumb: string | null): Promise<Attachment> {
+  private addGranted(grantId: string, thumb: string | null): Promise<Attachment> {
     const grant = this.grants.get(grantId)
     this.grants.delete(grantId)
     if (!grant || grant.at < this.now() - GRANT_MAX_AGE_MS)
       throw invalidParams(`No grant ${grantId}`)
-    const name = path.basename(grant.path) || grant.path
-    const resolved = await resolvePath(grant.path, grant.kind, name)
-    const base = { id: randomUUID(), name, path: grant.path, thumb: null, addedAt: this.now() }
+    return this.addPath(grant.path, grant.kind, thumb)
+  }
+
+  /**
+   * A granted file or folder, or a project's one an `@` mention named once it passed the project's
+   * containment. An image a model takes is read now, as its thumbnail is made from this read; a
+   * text file is read once more when it is sent, so the agent gets it as it is then.
+   */
+  async addPath(added: string, kind: 'file' | 'folder', thumb: string | null): Promise<Attachment> {
+    const name = path.basename(added) || added
+    const resolved = await resolvePath(added, kind, name)
+    const base = { id: randomUUID(), name, path: added, thumb: null, addedAt: this.now() }
     let record: AttachmentRecord
-    if (grant.kind === 'folder') {
+    if (kind === 'folder') {
       record = { ...base, type: 'folder', mimeType: null, size: null, hash: null }
     } else {
       const extension = path.extname(name).toLowerCase()

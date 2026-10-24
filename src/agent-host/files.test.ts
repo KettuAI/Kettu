@@ -340,6 +340,48 @@ describe('read', () => {
   })
 })
 
+describe('locate', () => {
+  it('names a file or a folder of the project by its path under the project', async () => {
+    const dir = await plain()
+    await s.write(dir, 'src/a.txt', 'x')
+    expect(await service().locate(dir, 'src/a.txt')).toEqual({
+      path: join(dir, 'src', 'a.txt'),
+      kind: 'file',
+    })
+    expect(await service().locate(dir, './src/')).toEqual({
+      path: join(dir, 'src'),
+      kind: 'folder',
+    })
+  })
+
+  it('refuses what read refuses, and answers not_found for a missing path', async () => {
+    const dir = await plain()
+    await s.write(dir, 'a.txt', 'x')
+    const outside = join(s.root, 'secret.txt')
+    await writeFile(outside, 'secret')
+    for (const path of ['../secret.txt', 'sub/../../secret.txt', outside, '', '.', 'a\0.txt']) {
+      await expect(service().locate(dir, path), path).rejects.toMatchObject({
+        code: 'invalid_params',
+      })
+    }
+    await expect(service().locate(dir, 'nope')).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  posixOnly('refuses a symbolic link that leads out of the project', async () => {
+    const dir = await plain()
+    const outside = await plain()
+    await s.write(outside, 'secret.txt', 'secret')
+    await symlink(join(outside, 'secret.txt'), join(dir, 'link.txt'))
+    await symlink(outside, join(dir, 'folder-link'))
+    await expect(service().locate(dir, 'link.txt')).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    await expect(service().locate(dir, 'folder-link')).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+  })
+})
+
 describe('search in a repository', () => {
   it('finds lines ignoring case, with their line numbers, in tracked and untracked files', async () => {
     const dir = await repo()
