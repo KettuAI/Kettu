@@ -102,6 +102,7 @@
     "add": "Add files, photos or a folder",
     "addFiles": "Add files or photos…",
     "addFolder": "Add folder…",
+    "mentionFile": "Mention a file",
     "slashCommands": "Slash commands",
     "atMost": "20 attachments at most",
     "waitForAgent": "Wait for {{agent}} to start",
@@ -114,5 +115,12 @@
     "dropHint": "Files, photos or folders · up to 20",
     "slashNeedsEmpty": "In an empty message",
     "notOnDisk": "It isn't a file on disk, so it can't be attached."
+  },
+  "mentions": {
+    "label": "Files and folders",
+    "used": "Used in this session",
+    "toSearch_one": "Type to search {{count, number}} file and its folders",
+    "toSearch_other": "Type to search {{count, number}} files and their folders",
+    "loading": "Listing the project's files…"
   }
 }

@@ -130,6 +130,27 @@ describe('attachments', () => {
     })
   })
 
+  it('sends a mentioned file with its contents and a mentioned folder as a link', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await mkdir(path.join(t.project, 'src'), { recursive: true })
+    const file = path.join(t.project, 'src', 'notes.md')
+    await writeFile(file, '# Notes\n')
+    const mention = (relative: string) =>
+      port.request('attachments.add', {
+        source: { projectPath: t.project, path: relative },
+        thumb: null,
+      })
+    const added = await mention('src/notes.md')
+    const folder = await mention('src')
+    await sendWith(port, sessionId, added.id, folder.id)
+    const text = reply(port, sessionId)
+    expect(text).toContain(`- resource ${pathToFileURL(file).href} text/markdown, 8 characters`)
+    expect(text.split('\n')).toContain(
+      `- resource_link src ${pathToFileURL(path.join(t.project, 'src')).href}/`,
+    )
+  })
+
   it('links a text file for an agent without embedded context', async () => {
     const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'embeddedContext' } })
     const sessionId = await newSession(t, port)

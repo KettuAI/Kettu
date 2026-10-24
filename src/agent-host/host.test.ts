@@ -3,6 +3,7 @@
 
 import { mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
 import type { AgentLauncher } from './agents'
@@ -560,6 +561,37 @@ describe('project files', () => {
     await expect(
       port.request('files.read', { projectPath: t.project, path: '../outside.txt' }),
     ).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+})
+
+describe('mentioned files', () => {
+  it("adds a registered project's file or folder, and nothing outside it", async () => {
+    const { t, port } = await setup()
+    await mkdir(path.join(t.project, 'src'), { recursive: true })
+    await writeFile(path.join(t.project, 'src', 'a.txt'), 'x')
+    await writeFile(path.join(t.dir, 'outside.txt'), 'secret')
+    const mention = (file: string) =>
+      port.request('attachments.add', {
+        source: { projectPath: t.project, path: file },
+        thumb: null,
+      })
+    await expect(mention('src/a.txt')).rejects.toMatchObject({ code: 'not_found' })
+
+    await port.request('projects.add', { path: t.project })
+    expect(await mention('src/a.txt')).toMatchObject({
+      type: 'file',
+      name: 'a.txt',
+      uri: pathToFileURL(path.join(t.project, 'src', 'a.txt')).href,
+      mimeType: 'text/plain',
+      size: 1,
+    })
+    expect(await mention('src')).toMatchObject({ type: 'folder', name: 'src', size: null })
+    await expect(
+      mention(path.relative(t.project, path.join(t.dir, 'outside.txt'))),
+    ).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    await expect(mention('gone.txt')).rejects.toMatchObject({ code: 'not_found' })
   })
 })
 

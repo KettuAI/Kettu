@@ -14,6 +14,19 @@ describe('matchPath', () => {
     expect(name.score).toBeGreaterThan(spread.score)
   })
 
+  it("takes a folder's last segment as its name", () => {
+    const folder = matchPath('views', 'src/views/')!
+    const inside = matchPath('views', 'src/views/thread.tsx')!
+    expect(folder.positions).toEqual([4, 5, 6, 7, 8])
+    expect(folder.score).toBeGreaterThan(inside.score)
+    expect(matchPath('src/', 'src/')?.positions).toEqual([0, 1, 2, 3])
+  })
+
+  it('matches a character outside the Basic Multilingual Plane', () => {
+    expect(matchPath('\u{1F600}', 'a\u{1F600}x.ts')?.positions).toEqual([1, 2])
+    expect(matchPath('\u{1F600}', 'ax.ts')).toBeNull()
+  })
+
   it('ignores spaces in the query and matches everything with an empty one', () => {
     expect(matchPath('st ts', 'src/thread.ts')).not.toBeNull()
     expect(matchPath('', 'a/b')?.score).toBe(0)

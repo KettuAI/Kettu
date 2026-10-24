@@ -253,6 +253,17 @@ async function run() {
   await press('Escape', 27)
   await sleep(300)
 
+  // The @ popover with nothing typed: the files the turn read or edited.
+  await cdp.evaluate(`document.querySelector('textarea').focus()`)
+  await cdp.send('Input.insertText', { text: '@' })
+  await waitFor(`document.body.innerText.includes('Used in this session')`, 'the @ popover')
+  await sleep(400)
+  await shoot('mention')
+  await press('Escape', 27)
+  await cdp.evaluate(`document.querySelector('textarea').select()`)
+  await press('Backspace', 8)
+  await sleep(300)
+
   await prompt('/permission')
   await waitFor(
     `[...document.querySelectorAll('button')].some((b) => /allow/i.test(b.textContent))`,

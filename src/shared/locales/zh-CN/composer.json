@@ -98,6 +98,7 @@
     "add": "添加文件、照片或文件夹",
     "addFiles": "添加文件或照片…",
     "addFolder": "添加文件夹…",
+    "mentionFile": "提及文件",
     "slashCommands": "斜杠命令",
     "atMost": "最多 20 个附件",
     "waitForAgent": "等 {{agent}} 启动后再添加",
@@ -110,5 +111,11 @@
     "dropHint": "文件、照片或文件夹 · 最多 20 个",
     "slashNeedsEmpty": "仅限空消息",
     "notOnDisk": "它不是磁盘上的文件，无法添加。"
+  },
+  "mentions": {
+    "label": "文件和文件夹",
+    "used": "本会话用过",
+    "toSearch_other": "输入以搜索 {{count, number}} 个文件及其文件夹",
+    "loading": "正在列出项目文件…"
   }
 }

@@ -13,38 +13,87 @@ const SEPARATORS = new Set(['/', '-', '_', '.', ' '])
 /**
  * Whether the query's characters appear in the path in order, ignoring case, and how well:
  * consecutive characters, characters at the start of a word and characters in the file name
- * count for more, and a shorter path wins a tie. Null when they do not appear.
+ * count for more, and a shorter path wins a tie. Null when they do not appear. A folder's path
+ * ends in `/`, and its last segment is its name.
  */
 export function matchPath(query: string, path: string): PathMatch | null {
-  const q = query.toLowerCase().replace(/\s+/g, '')
+  const q = normalizeQuery(query)
   if (!q) return { path, score: 0, positions: [] }
-  const p = path.toLowerCase()
-  const nameStart = path.lastIndexOf('/') + 1
+  const positions = new Array<number>(q.length)
+  const score = scorePath(q, path, path.toLowerCase(), positions)
+  return score === null ? null : { path, score, positions }
+}
+
+function normalizeQuery(query: string): string {
+  return query.toLowerCase().replace(/\s+/g, '')
+}
+
+/**
+ * The score of `path`, whose lowercase form is `lower`, for a normalized query, with the indexes
+ * of the matched characters written into `positions`; null when they do not appear in order.
+ */
+function scorePath(q: string, path: string, lower: string, positions: number[]): number | null {
+  const nameStart = path.lastIndexOf('/', path.length - 2) + 1
   // As fzf's first algorithm: forward to the end of the first full match, then back from there,
   // which settles on the shortest stretch that ends there.
   let at = 0
-  for (const char of q) {
-    at = p.indexOf(char, at)
+  for (let i = 0; i < q.length; i++) {
+    at = lower.indexOf(q[i]!, at)
     if (at < 0) return null
     at++
   }
-  const positions: number[] = []
   at--
   for (let i = q.length - 1; i >= 0; i--) {
-    while (p[at] !== q[i]) at--
-    positions.push(at)
+    while (lower[at] !== q[i]) at--
+    positions[i] = at
     at--
   }
-  positions.reverse()
   let score = 0
-  for (let i = 0; i < positions.length; i++) {
+  for (let i = 0; i < q.length; i++) {
     const index = positions[i]!
     score += 1
     if (i > 0 && positions[i - 1] === index - 1) score += 5
     if (index === 0 || SEPARATORS.has(path[index - 1]!)) score += 4
     if (index >= nameStart) score += 2
   }
-  return { path, score: score - path.length / 1000, positions }
+  return score - path.length / 1000
+}
+
+const ranksBefore = (score: number, path: string, other: PathMatch): boolean =>
+  score > other.score || (score === other.score && path < other.path)
+
+const lowerCase = new WeakMap<readonly string[], string[]>()
+
+/**
+ * The best `limit` matches, ranked as `filterPaths` ranks them, without sorting every match, for
+ * a list too long to rank on each keystroke. A list's lowercase form is kept while it lives.
+ */
+export function bestPaths(query: string, paths: readonly string[], limit: number): PathMatch[] {
+  if (limit <= 0) return []
+  const q = normalizeQuery(query)
+  let lower = lowerCase.get(paths)
+  if (!lower) {
+    lower = paths.map((path) => path.toLowerCase())
+    lowerCase.set(paths, lower)
+  }
+  const best: PathMatch[] = []
+  const positions = new Array<number>(q.length)
+  for (let i = 0; i < paths.length; i++) {
+    const path = paths[i]!
+    const score = q ? scorePath(q, path, lower[i]!, positions) : 0
+    if (score === null) continue
+    if (best.length === limit && !ranksBefore(score, path, best[limit - 1]!)) continue
+    let low = 0
+    let high = best.length
+    while (low < high) {
+      const middle = (low + high) >> 1
+      if (ranksBefore(score, path, best[middle]!)) high = middle
+      else low = middle + 1
+    }
+    best.splice(low, 0, { path, score, positions: positions.slice() })
+    if (best.length > limit) best.pop()
+  }
+  return best
 }
 
 /** The paths that match, best first, at most `limit` of them, and how many matched in all. */

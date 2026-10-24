@@ -435,6 +435,24 @@ describe('attachments', () => {
     rejects(() => posix['attachments.add']({ source: { path: '/etc/passwd' }, thumb: null }))
   })
 
+  it('takes a mention as a path relative to an absolute project path', () => {
+    const source = { projectPath: '/work/app', path: 'src/a.ts' }
+    expect(posix['attachments.add']({ source, thumb: null })).toEqual({ source, thumb: null })
+    expect(
+      posix['attachments.add']({
+        source: { ...source, bytes: new Uint8Array([1]).buffer },
+        thumb: null,
+      }),
+    ).toEqual({ source, thumb: null })
+    rejects(() =>
+      posix['attachments.add']({ source: { ...source, path: '/etc/passwd' }, thumb: null }),
+    )
+    rejects(() =>
+      posix['attachments.add']({ source: { ...source, projectPath: 'app' }, thumb: null }),
+    )
+    rejects(() => posix['attachments.add']({ source: { projectPath: '/work/app' }, thumb: null }))
+  })
+
   it('checks what attachments.update is handed', () => {
     const bytes = new Uint8Array([1, 2, 3]).buffer
     const thumb = 'data:image/webp;base64,AAAA'

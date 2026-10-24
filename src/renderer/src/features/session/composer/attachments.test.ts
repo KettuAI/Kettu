@@ -10,6 +10,7 @@ import type { GrantedAttachment } from '@shared/attachments'
 import {
   attachFiles,
   attachImages,
+  attachMention,
   attachmentContent,
   attachmentsBlock,
   dropAttachments,
@@ -240,10 +241,12 @@ describe('picked and dropped files', () => {
   beforeEach(() => {
     vi.stubGlobal('window', { overbench: { attachments: { pick, fromFiles } } })
     request.mockImplementation((async (method: string, params: Record<string, unknown>) => {
-      const source = params.source as { grantId: string; name?: string } | undefined
+      const source = params.source as
+        { grantId?: string; name?: string; projectPath?: string; path?: string } | undefined
       if (method === 'attachments.add' && source?.name) return record('pasted', source.name)
       if (method === 'attachments.add') {
-        const name = source!.grantId.slice(2)
+        const name =
+          source!.path?.slice(source!.path.lastIndexOf('/') + 1) ?? source!.grantId!.slice(2)
         return hostRecord(name, /\.png$/.test(name) ? 'image' : name === 'src' ? 'folder' : 'file')
       }
       if (method === 'attachments.read') return { mimeType: 'image/png', bytes: new ArrayBuffer(8) }
@@ -369,6 +372,44 @@ describe('picked and dropped files', () => {
       status: 'failed',
       error: "The agent host isn't running.",
     })
+  })
+
+  it('adds a mentioned file or folder by its path in the project', async () => {
+    expect(attachMention(DRAFT, '/p', 'docs/notes.md', false)).toBe(0)
+    expect(attachMention(DRAFT, '/p', 'src', true)).toBe(0)
+    expect(draftAttachments(DRAFT).map((i) => [i.name, i.kind, i.status])).toEqual([
+      ['notes.md', 'file', 'adding'],
+      ['src', 'folder', 'adding'],
+    ])
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[1]?.status).toBe('ready'))
+    expect(request).toHaveBeenCalledWith('attachments.add', {
+      source: { projectPath: '/p', path: 'docs/notes.md' },
+      thumb: null,
+    })
+    expect(draftAttachments(DRAFT)[0]).toMatchObject({
+      status: 'ready',
+      attachment: { id: 'r-notes.md' },
+    })
+  })
+
+  it('makes a mentioned image its thumbnail from the bytes the host read', async () => {
+    attachMention(DRAFT, '/p', 'shots/shot.png', false)
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+    expect(request).toHaveBeenCalledWith('attachments.read', { id: 'r-shot.png' })
+    expect(draftAttachments(DRAFT)[0]).toMatchObject({
+      kind: 'image',
+      thumb: 'data:image/webp;base64,AAAA',
+    })
+  })
+
+  it('adds no mention past 20', () => {
+    setDraftAttachments(
+      DRAFT,
+      Array.from({ length: 20 }, (_, i) => item({ key: `k${i}` })),
+    )
+    expect(attachMention(DRAFT, '/p', 'notes.md', false)).toBe(1)
+    expect(draftAttachments(DRAFT)).toHaveLength(20)
+    expect(request).not.toHaveBeenCalled()
   })
 
   it('removes the record of a file removed while it was being added', async () => {
