@@ -6,7 +6,6 @@ import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { startNewSession } from '@renderer/app/actions'
-import { BrandMark } from '@renderer/components/brand'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroupButton } from '@renderer/components/ui/input-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -99,11 +98,9 @@ export function NewSessionView({
       {/* Raised 28 px above centre, so the eye lands on the composer. */}
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pb-14">
         <div className="my-auto flex w-full max-w-thread flex-col gap-7 px-6 pt-6">
-          <div className="flex animate-in items-center justify-center gap-3 fade-in animation-duration-(--duration-slow)">
-            {/* At 36 px the mark is as tall as the capitals and sits on the baseline in the text color, like a letter. */}
-            <BrandMark width={36} className="text-foreground" />
-            <h1 className="font-serif text-greeting text-balance">{t('newSession.heading')}</h1>
-          </div>
+          <h1 className="animate-in text-center font-serif text-greeting text-balance fade-in animation-duration-(--duration-slow)">
+            {t('newSession.heading')}
+          </h1>
           <DraftComposer
             agentId={agentId}
             project={project}
