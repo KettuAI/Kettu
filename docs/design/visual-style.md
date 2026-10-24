@@ -140,7 +140,8 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 | A label that names a thing: a project, a selected row, a card title     | Interface, 500 | `--text-primary`                  |
 | A sentence that explains a screen: an `Empty` state                     | Interface      | `--text-secondary`                |
 | A dialog's description                                                  | Small          | `--text-secondary`                |
-| Tool call rows and fold lines, their file names `--text-primary`        | Small          | `--text-tertiary`                 |
+| Fold lines, their file names `--text-primary`                           | Interface      | `--text-tertiary`                 |
+| Tool call rows, their file names `--text-primary`                       | Small          | `--text-tertiary`                 |
 | Model names and reasoning levels                                        | Control        | `--text-secondary`                |
 | Segments, `compact` buttons, select triggers                            | Control        | `--text-tertiary`, chosen in full |
 | Secondary text: descriptions, hints, the top bar's information          | Caption        | `--text-secondary`                |

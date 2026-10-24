@@ -170,6 +170,22 @@ describe('buildItems', () => {
     expect(done.map((i) => i.key)).toEqual(['u1', 'run:x1'])
   })
 
+  it('shows a lone call at the end of a live turn as it is until a message follows it', () => {
+    const running = state([user('u1'), agent('a1'), tool('x1', 'execute')])
+    expect(buildItems(running.order, signatureOf(running), true).map((i) => i.key)).toEqual([
+      'u1',
+      'a1',
+      'x1',
+    ])
+    const followed = state([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2')])
+    expect(buildItems(followed.order, signatureOf(followed), true).map((i) => i.key)).toEqual([
+      'u1',
+      'a1',
+      'run:x1',
+      'a2',
+    ])
+  })
+
   it("folds a live turn's earlier runs once a message follows them", () => {
     const s = state([
       user('u1'),

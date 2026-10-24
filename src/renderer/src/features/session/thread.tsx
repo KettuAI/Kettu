@@ -101,6 +101,7 @@ export const Thread = memo(function Thread({
   agentName,
   working,
   progressNotes,
+  onGutter,
 }: {
   sessionId: string
   projectPath: string
@@ -109,6 +110,8 @@ export const Thread = memo(function Thread({
   working: boolean
   /** The agent's messages that more work follows are progress notes, folded with the work. */
   progressNotes: boolean
+  /** Told the width the viewport's scrollbar takes, so the composer can leave the same. */
+  onGutter: (width: number) => void
 }) {
   const { t } = useTranslation('session')
   const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
@@ -124,13 +127,29 @@ export const Thread = memo(function Thread({
   const sent = lastSent(order ?? [], signature)
   const shownFrom = useShownFrom(items.length)
   const hasOlder = useThreadsStore((s) => (s.replicas[sessionId]?.older ?? null) !== null)
-  const viewport = useRef<HTMLDivElement>(null)
+  const viewport = useRef<HTMLDivElement | null>(null)
   const nearStart = useCallback(() => {
     const el = viewport.current
     if (el && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) loadOlder(sessionId)
   }, [sessionId, hasOlder, shownFrom])
   // Also after each prepend, and for a page too short to scroll.
   useEffect(nearStart, [nearStart, items.length])
+  // Where scrollbars take room (Windows, and macOS set to show them), the column centres in what
+  // the gutter leaves; this reports the gutter whenever the viewport changes size.
+  const viewportRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      viewport.current = el
+      if (!el) return
+      const observer = new ResizeObserver(() => onGutter(el.offsetWidth - el.clientWidth))
+      observer.observe(el)
+      return () => {
+        observer.disconnect()
+        viewport.current = null
+        onGutter(0)
+      }
+    },
+    [onGutter],
+  )
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
@@ -139,10 +158,10 @@ export const Thread = memo(function Thread({
           top, inset, for keyboard focus only. */}
       <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay after:pointer-events-none after:absolute after:inset-0 after:opacity-0 after:ring-2 after:ring-focus after:ring-inset has-[>[data-slot=message-scroller-viewport]:focus-visible]:after:opacity-100">
         <MessageScrollerViewport
-          ref={viewport}
+          ref={viewportRef}
           onScroll={nearStart}
           aria-label={t('thread.label')}
-          className="outline-none [scroll-timeline:--scroll-fade-top_y] [scrollbar-gutter:stable_both-edges]"
+          className="outline-none [scroll-timeline:--scroll-fade-top_y]"
         >
           <MessageScrollerContent
             className="mx-auto w-full max-w-thread gap-0 px-6 pt-5 pb-8"
@@ -156,6 +175,9 @@ export const Thread = memo(function Thread({
                   messageId={item.key}
                   onPointerEnter={() => hoverReply(replies[index] ?? null)}
                   className={cn(
+                    // content-visibility's paint containment clips at the item's edge, but fold
+                    // lines and tool rows reach 6 px past the column and their focus ring 4 px more.
+                    '[overflow-clip-margin:10px]',
                     index > 0 && spacing(item, items[index - 1]!, steps),
                     // The growing tail would flip between skipped and rendered on every chunk,
                     // recalculating its whole subtree each time.

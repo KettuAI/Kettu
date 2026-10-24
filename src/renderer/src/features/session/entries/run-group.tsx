@@ -30,9 +30,9 @@ interface RunGroupProps {
 }
 
 /**
- * Two or more steps of work between messages, folded into one line that says what they did
- * ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to the steps. A step waiting
- * for permission holds it open.
+ * The work between messages, two or more steps or a lone tool call, folded into one line that
+ * says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to the
+ * steps. A step waiting for permission holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,

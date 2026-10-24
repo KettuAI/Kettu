@@ -669,6 +669,8 @@
     align-items: center;
     gap: 3px;
     margin-left: 4px;
+    /* The line counts the chip as 18 px, so it never makes a 1.45 line taller, down to 14 px. */
+    margin-block: -1px;
     border-radius: 5px;
     background: var(--muted);
     padding: 0 6px;

@@ -22,7 +22,6 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.permission) return 'w'
   if (
     entry.status === 'completed' &&
-    !entry.permission &&
     (entry.toolKind === 'read' || entry.toolKind === 'search' || entry.toolKind === 'fetch')
   ) {
     return 'g'
@@ -68,7 +67,7 @@ export type Item =
       turnStart: boolean
     }
   | { key: string; type: 'group'; ids: string[] }
-  // Two or more steps between messages, folded into one summary line.
+  // The work between messages, two or more steps or a lone tool call, folded into one line.
   | { key: string; type: 'run'; ids: string[]; signature: string }
   // The actions under a turn's reply, with its turn-end marker when it has one.
   | { key: string; type: 'reply'; agentIds: string[]; endId: string | null; latest: boolean }
