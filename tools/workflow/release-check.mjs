@@ -21,8 +21,6 @@ const PERIOD = 7 * 24 * HOUR
 const STALE = 48 * HOUR
 const VERSION = /^v(\d+)\.(\d+)\.(\d+)$/
 const RELEASE_ISSUE = /^Release (v\d+\.\d+\.\d+)$/
-const RELEASE_PULL = /^chore\(release\): (v\d+\.\d+\.\d+)$/
-const RELEASE_COMMIT = /^chore\(release\): (v\d+\.\d+\.\d+)(?: \(#\d+\))?$/
 const LIKE_RELEASE_ISSUE = /^release v\d/i
 const STEPS = 'https://github.com/overbench/overbench/blob/main/docs/workflow.md#6-release'
 const ISSUE = { type: 'Task', labels: ['state:ready', 'area:build'] }
@@ -47,7 +45,6 @@ const PAGE = 25
  * @property {Release[]} releases
  * @property {Milestone[]} milestones the open ones
  * @property {Item[]} openIssues
- * @property {Item[]} openPulls
  * @property {Record<string, Pull>} pulls by commit sha, the pull request each commit came from
  */
 
@@ -90,12 +87,6 @@ function iso(date) {
 
 /** @param {string} subject */
 const typeOf = (subject) => parseTitle(subject)?.type ?? ''
-
-/** @param {string} title */
-function isReleaseScope(title) {
-  const parts = parseTitle(title)
-  return parts?.type === 'chore' && parts.scope === 'release'
-}
 
 /**
  * @param {string[]} tags
@@ -180,11 +171,11 @@ export function releaseTarget(milestones, lastTag) {
 }
 
 /**
- * @param {Pick<Input, 'tags' | 'commits' | 'releases' | 'openIssues' | 'openPulls'>} input
+ * @param {Pick<Input, 'tags' | 'releases' | 'openIssues'>} input
  * @returns {{ open: Open | null, warnings: string[] }} the release under way, if any, and the
- *   issues, pull requests and commits that look like one but do not count
+ *   issues that look like one but do not count
  */
-export function releaseOpen({ tags, commits, releases, openIssues, openPulls }) {
+export function releaseOpen({ tags, releases, openIssues }) {
   const lastTag = latestTag(tags.map((tag) => tag.name))
   const last = lastTag ? parseVersion(lastTag) : null
   /** @param {string} version */
@@ -210,34 +201,6 @@ export function releaseOpen({ tags, commits, releases, openIssues, openPulls }) 
     } else if (LIKE_RELEASE_ISSUE.test(issue.title)) {
       warnings.push(
         `#${issue.number}, "${issue.title}", does not count as an open release: only the exact title "Release vX.Y.Z" does.`,
-      )
-    }
-  }
-  for (const pull of openPulls) {
-    const version = RELEASE_PULL.exec(pull.title)?.[1]
-    if (version && pending(version)) {
-      found.push({ reason: `#${pull.number}, "${pull.title}", is open.`, since: null })
-    } else if (version) {
-      warnings.push(
-        `#${pull.number}, "${pull.title}", is open, but ${version} is not above the last tag, ${lastTag}, so it does not count as an open release.`,
-      )
-    } else if (isReleaseScope(pull.title)) {
-      warnings.push(
-        `#${pull.number}, "${pull.title}", does not count as a release pull request: only the exact title "chore(release): vX.Y.Z" does.`,
-      )
-    }
-  }
-  for (const commit of commits) {
-    const version = RELEASE_COMMIT.exec(commit.subject)?.[1]
-    const tagged = tags.some((tag) => tag.name === version)
-    if (version && !tagged && !published(version)) {
-      found.push({
-        reason: `"${commit.subject}" has merged, and ${version} is not tagged yet.`,
-        since: new Date(commit.date),
-      })
-    } else if (!version && isReleaseScope(commit.subject)) {
-      warnings.push(
-        `"${commit.subject}" does not count as a release: only "chore(release): vX.Y.Z" does.`,
       )
     }
   }
@@ -302,7 +265,7 @@ export function decide(input) {
   let failure = null
   if (fired.length > 0 && open) {
     outcome = 'release-open'
-    // A merged release without a tag, or a tag without a release, has nothing open tracking it.
+    // A tag without a published release has nothing open tracking it.
     if (open.since && now.getTime() - open.since.getTime() >= STALE) {
       failure = `${due}, but ${open.reason} That has held since ${iso(open.since)}, over 48 hours; finish that release.`
     } else if (open.since) {
@@ -626,13 +589,14 @@ function main() {
     '--jq',
     '.[] | {number, title, openIssues: .open_issues}',
   ])
-  // A list, not a search: the search index lags behind an issue opened moments ago.
-  const open = ghLines([
+  // A list, not a search: the search index lags behind an issue opened moments ago. The list
+  // holds pull requests too, which the filter drops.
+  const openIssues = ghLines([
     'api',
     '--paginate',
     `repos/${repo}/issues?state=open&per_page=100`,
     '--jq',
-    '.[] | {number, title, pull: (.pull_request != null)}',
+    '.[] | select(.pull_request == null) | {number, title}',
   ])
   const { pulls, warnings } = pullsOf(owner, name, commits)
   const decision = decide({
@@ -641,8 +605,7 @@ function main() {
     commits,
     releases,
     milestones,
-    openIssues: open.filter((item) => !item.pull),
-    openPulls: open.filter((item) => item.pull),
+    openIssues,
     pulls,
   })
   for (const line of summary(decision)) console.log(line)

@@ -1,0 +1,27 @@
+name: PR
+
+on:
+  # A workflow of its own, so an edit to the title or description reruns only this.
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The name is a check the ruleset on main requires.
+  pr:
+    name: PR
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # The title and description reach the script through the environment, never the script
+      # text, where they could inject commands.
+      - run: node tools/workflow/pr-check.mjs
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}

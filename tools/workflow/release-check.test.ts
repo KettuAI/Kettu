@@ -49,7 +49,6 @@ const base: Input = {
     { number: 3, title: 'v0.0.2', openIssues: 5 },
   ],
   openIssues: [{ number: 12, title: 'Use the installed agents' }],
-  openPulls: [{ number: 52, title: 'fix(agents): run the installed claude and codex' }],
   pulls: {},
 }
 const input = (overrides: Partial<Input>): Input => ({ ...base, ...overrides })
@@ -274,73 +273,13 @@ describe('releaseOpen', () => {
     })
   })
 
-  it('counts an open pull request titled exactly "chore(release): vX.Y.Z" above the last tag', () => {
-    expect(
-      releaseOpen(
-        input({ openPulls: [...base.openPulls, { number: 60, title: 'chore(release): v0.0.2' }] }),
-      ),
-    ).toEqual({
-      open: { reason: '#60, "chore(release): v0.0.2", is open.', since: null },
-      warnings: [],
-    })
-  })
-
-  it('warns about other chore(release) pull requests, and does not count them', () => {
-    expect(
-      releaseOpen(
-        input({
-          openPulls: [
-            { number: 71, title: 'chore(release): drop the intel mac build' },
-            { number: 72, title: 'chore(release): v0.0.1' },
-            { number: 62, title: 'chore: release notes' },
-          ],
-        }),
-      ),
-    ).toEqual({
-      open: null,
-      warnings: [
-        '#71, "chore(release): drop the intel mac build", does not count as a release pull request: only the exact title "chore(release): vX.Y.Z" does.',
-        '#72, "chore(release): v0.0.1", is open, but v0.0.1 is not above the last tag, v0.0.1, so it does not count as an open release.',
-      ],
-    })
-  })
-
-  it('counts a merged release commit while its version has neither a tag nor a release', () => {
-    expect(
-      releaseOpen(
-        input({
-          commits: [commit('fix: a (#58)'), commit('chore(release): v0.0.2 (#60)', 'r', 5)],
-        }),
-      ),
-    ).toEqual({
-      open: {
-        reason: '"chore(release): v0.0.2 (#60)" has merged, and v0.0.2 is not tagged yet.',
-        since: new Date(hoursAgo(5)),
-      },
-      warnings: [],
-    })
-  })
-
-  it('warns about a tooling chore(release) commit, and does not count it', () => {
-    expect(
-      releaseOpen(
-        input({ commits: [...fixes(2), commit('chore(release): sign the macos build (#70)')] }),
-      ),
-    ).toEqual({
-      open: null,
-      warnings: [
-        '"chore(release): sign the macos build (#70)" does not count as a release: only "chore(release): vX.Y.Z" does.',
-      ],
-    })
-  })
-
   it('clears a release whose tag sits on a commit outside main', () => {
     expect(
       releaseOpen(
         input({
           tags: [tag('v0.0.1', 200), tag('v0.0.2', 31)],
           releases: [published('v0.0.1', 200), published('v0.0.2', 30)],
-          commits: [commit('chore(release): v0.0.2 (#60)'), ...fixes(3)],
+          commits: fixes(3),
         }),
       ),
     ).toEqual({ open: null, warnings: [] })
@@ -358,9 +297,6 @@ describe('releaseOpen', () => {
     const draft = { tag: 'v0.0.2', draft: true, prerelease: false, publishedAt: null }
     expect(releaseOpen(input({ tags, releases: [draft, ...base.releases] }))).toEqual(expected)
     expect(releaseOpen(input({ tags }))).toEqual(expected)
-    expect(releaseOpen(input({ tags, commits: [commit('chore(release): v0.0.2 (#60)')] }))).toEqual(
-      expected,
-    )
   })
 })
 
@@ -498,16 +434,7 @@ describe('decide', () => {
     })
   })
 
-  it('warns while an untagged or unpublished release holds back a trigger', () => {
-    expect(
-      decide(input({ commits: [commit('chore(release): v0.0.2 (#60)', 'r', 47), ...fixes(10)] })),
-    ).toMatchObject({
-      outcome: 'release-open',
-      warnings: [
-        'A release is due (Count), but "chore(release): v0.0.2 (#60)" has merged, and v0.0.2 is not tagged yet.',
-      ],
-      failure: null,
-    })
+  it('warns while an unpublished release holds back a trigger', () => {
     expect(
       decide(input({ tags: [tag('v0.0.1', 200), tag('v0.0.2', 47)], commits: fixes(10) })),
     ).toMatchObject({
@@ -519,13 +446,13 @@ describe('decide', () => {
     })
   })
 
-  it('fails once an untagged or unpublished release has held a trigger back for 48 hours', () => {
+  it('fails once an unpublished release has held a trigger back for 48 hours', () => {
     expect(
-      decide(input({ commits: [commit('chore(release): v0.0.2 (#60)', 'r', 48), ...fixes(10)] })),
+      decide(input({ tags: [tag('v0.0.1', 200), tag('v0.0.2', 48)], commits: fixes(10) })),
     ).toMatchObject({
       outcome: 'release-open',
       warnings: [],
-      failure: `A release is due (Count), but "chore(release): v0.0.2 (#60)" has merged, and v0.0.2 is not tagged yet. That has held since ${hoursAgo(48).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
+      failure: `A release is due (Count), but v0.0.2 is tagged, and no release of it is published yet. That has held since ${hoursAgo(48).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
     })
     expect(
       decide(
@@ -668,7 +595,7 @@ describe('summary', () => {
         decide(
           input({
             commits: fixes(10),
-            openPulls: [{ number: 60, title: 'chore(release): v0.0.2' }],
+            openIssues: [...base.openIssues, { number: 60, title: 'Release v0.0.2' }],
           }),
         ),
       ),
@@ -677,7 +604,7 @@ describe('summary', () => {
       'Since v0.0.1: 10 commits, 10 user-visible.',
       'Version: v0.0.2, the earliest open patch milestone.',
       'Fired: Count, 10 user-visible changes have merged since v0.0.1.',
-      'Release open: #60, "chore(release): v0.0.2", is open.',
+      'Release open: #60, "Release v0.0.2", is open.',
       'Decision: no new issue, because a release is open.',
     ])
     expect(

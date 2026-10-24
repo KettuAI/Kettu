@@ -1,12 +1,21 @@
 name: Release
 
+# The full check before a release (docs/workflow.md#6-release): every installer builds and tests on
+# its own runner, and the app starts on each platform. With a version, a run on main then uploads
+# everything to a draft release of that commit, and publishing the draft creates the tag. Without
+# one it touches no release, which checks a branch, or new macOS signing secrets before a release
+# depends on them.
 on:
-  push:
-    tags: ['v*']
-  # A run started by hand builds and tests every installer and joins the update files, without
-  # touching a release. With the macOS signing secrets set, it also signs, notarizes and checks
-  # the macOS builds, which is how new secrets are verified before a release depends on them.
   workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, such as 0.0.4; empty to only check
+        type: string
+        default: ''
+      notes:
+        description: Release notes, needed with a version
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -16,6 +25,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check the version
+        if: inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "A release is built from main, not $GITHUB_REF" >&2
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version $VERSION is not X.Y.Z" >&2
+            exit 1
+          fi
+          if [ -z "$NOTES" ]; then
+            echo "A release needs its notes" >&2
+            exit 1
+          fi
+          # 2 means no such tag; anything else is a tag already there or a failed lookup.
+          status=0
+          git ls-remote --exit-code --tags "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "refs/tags/v$VERSION" > /dev/null || status=$?
+          if [ "$status" != 2 ]; then
+            echo "v$VERSION is already tagged, or the tags could not be read" >&2
+            exit 1
+          fi
+
   # Decides once per run: macOS is signed with the Developer ID when every signing secret is set,
   # and stays ad-hoc signed when none is; a half-configured set fails the run here. See
   # docs/design/updates.md#macos-signing.
@@ -47,7 +88,7 @@ jobs:
 
   build:
     name: ${{ matrix.os }}
-    needs: mac-signing
+    needs: [version, mac-signing]
     strategy:
       fail-fast: false
       matrix:
@@ -83,17 +124,23 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Check that the tag matches package.json
-        if: github.ref_type == 'tag'
-        shell: bash
-        run: |
-          version="v$(node -p "require('./package.json').version")"
-          if [ "$version" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
-            exit 1
-          fi
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      - if: runner.os != 'Windows'
+        run: pnpm test
+      # os.tmpdir() is on the C: system drive; the tests' temp folders move to the checkout's drive.
+      - if: runner.os == 'Windows'
+        run: pnpm test
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+      # main keeps 0.0.0, so a release needs no version commit; installers and update files take it
+      # from package.json.
+      - name: Set the version
+        if: inputs.version != ''
+        shell: bash
+        run: npm pkg set "version=$VERSION"
+        env:
+          VERSION: ${{ inputs.version }}
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
@@ -184,13 +231,20 @@ jobs:
             dist/latest*.yml
           if-no-files-found: error
 
+  screenshots:
+    needs: version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/screenshots.yml
+
   publish:
-    needs: [mac-signing, build]
+    needs: [mac-signing, build, screenshots]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+          pattern: release-*
       - name: Join the update files
         env:
           MAC_SIGNED: ${{ needs.mac-signing.outputs.signed }}
@@ -216,19 +270,26 @@ jobs:
           done
           ls -l release
           tail -n +1 release/*.yml
+      # A draft creates no tag: publishing it tags the commit it targets. A run after a fix moves the
+      # draft to the newer commit.
       - name: Upload to a draft release
-        if: github.ref_type == 'tag'
+        if: inputs.version != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
         run: |
-          draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          tag="v$VERSION"
+          draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)"
           if [ -z "$draft" ]; then
-            gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag \
-              --title "OverBench ${GITHUB_REF_NAME#v}" --notes ''
+            gh release create "$tag" release/* --draft --target "$GITHUB_SHA" \
+              --title "OverBench $VERSION" --notes "$NOTES"
           elif [ "$draft" = true ]; then
-            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+            gh release edit "$tag" --target "$GITHUB_SHA" --notes "$NOTES"
+            gh release upload "$tag" release/* --clobber
           else
-            echo "Release $GITHUB_REF_NAME is published; turn it back into a draft to rebuild it" >&2
+            # Publishing created its tag, which a draft again could not move.
+            echo "Release $tag is published; release the fix as a new version" >&2
             exit 1
           fi

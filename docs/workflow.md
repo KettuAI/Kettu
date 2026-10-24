@@ -71,7 +71,7 @@ Every pull request carries a working change. A design, a plan or a docs update g
 2. **Claim** it: replace `state:ready` with `state:in-progress`.
 3. **Branch** from the latest `origin/main`, in a worktree of its own: one issue, one session, one worktree, one branch. The branch name follows [branches](#branches).
 4. **Build** to the definition of done in [AGENTS.md](../AGENTS.md#definition-of-done). A bug fix starts with a test that fails.
-5. **Open a draft pull request** after the first push, so CI starts early and the claim is visible.
+5. **Open a draft pull request** after the first push, so the claim is visible. CI skips drafts: the checks in the definition of done run locally first.
 6. **Mark it ready for review** once the definition of done holds, and report the link.
 
 An agent that stops before the end comments what is left and puts the issue back to `state:ready`.
@@ -79,11 +79,12 @@ An agent that stops before the end comments what is left and puts the issue back
 ### 5. Review and merge
 
 - Every pull request is reviewed by an agent that did not write it, for correctness and against the design rules and their checklists, as review comments. The author fixes or answers each one.
-- The required `CI` check must pass: all three platforms and the title and issue link. Editing the title or description runs all of it again.
-- A change under `src/` or `tools/`, to `package.json`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
-- Once the review leaves nothing open, the reviewing agent turns on auto-merge (`gh pr merge <N> --auto --squash`), and GitHub merges the pull request when the required `CI` check passes. Auto-merge is allowed in the repository settings since 2026-10-23: only the project opens pull requests, so a reviewed change with green CI needs no one to press the button.
+- Two required checks must pass: `CI`, the code on Linux, and `PR`, the title and issue link. CI runs once the pull request is ready for review and on each push after that; editing the title or description reruns only `PR`.
+- Windows and macOS are checked before each [release](#6-release), not on each pull request. Decided by the maintainer on 2026-10-24: while development moves fast, the three platforms on every push held each pull request up for longer than the platform problems they caught early. A change likely to behave differently by platform, such as spawning processes, paths, shells, native modules or packaging, runs the [Release workflow](../.github/workflows/release.yml) on its branch before it is marked ready (`gh workflow run release.yml --ref <branch>`, which touches no release), and its description links the run.
+- A ready pull request with a change under `src/` or `tools/`, to `package.json`, or to the Screenshots workflow itself, also runs the Screenshots workflow, whose captures show it on each platform.
+- Once the review leaves nothing open, the reviewing agent turns on auto-merge (`gh pr merge <N> --auto --squash`), and GitHub merges the pull request when the required checks pass. Auto-merge is allowed in the repository settings since 2026-10-23: only the project opens pull requests, so a reviewed change with green CI needs no one to press the button.
 - A push after that keeps auto-merge on, so a change made after the review goes back to the reviewer: the author turns auto-merge off (`gh pr merge <N> --disable-auto`) before pushing it.
-- Release pull requests are the exception: the maintainer merges them, as their [gate](#gates) says. The maintainer can also merge any pull request at once, or hold one by turning its auto-merge off.
+- The maintainer can merge any pull request at once, or hold one by turning its auto-merge off.
 - The merge is a squash: the pull request's title becomes the commit subject on `main`, the branch is deleted, and `Closes #N` in its description closes the issue.
 
 A pull request that does only part of an issue says `Refs #N` instead, and the issue stays open with a comment on what is left.
@@ -102,9 +103,10 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 - **User-visible change**: a squash commit on `main` of type `feat`, `fix` or `perf`. Docs, CI, refactors and other tasks never trigger a release; they ship with the next one.
 - **At most one a day.** A count or time release comes at least 24 hours after the previous release, so a burst of merges ships as one update. Urgent and asked releases go out at once.
 - **The numbers**: 10 changes are about what one look at the release notes can take in, and 7 days is the longest a fix waits when little is merging. Both get revisited once a few releases show how fast work lands.
-- **Checked by CI**: a [`Release check` workflow](./design/testing.md#release-check) runs on every push to `main` and once a day. When a trigger has fired and no release is open, it opens a Task issue, "Release vX.Y.Z", that names the trigger. An agent takes it through the steps below; an asked release starts the same way, from the maintainer's words.
+- **Checked by CI**: a [`Release check` workflow](./design/testing.md#release-check) runs on every push to `main` and once a day. When a trigger has fired and no release is open, it opens a Task issue, "Release vX.Y.Z", that names the trigger. An agent takes it through the steps below. An asked release starts the same way: the agent opens that issue first, from the maintainer's words. The issue stays open until the release is published, because the check cannot see a draft release and so sees a release under way only through the issue.
 - **Versions**: minor versions carry the big plans, and patch versions are the small iterations toward them. `v0.1.0` is the full release: it completes [M0](./milestones/m0.md) and adds artifacts, the built-in browser, attachments, media and Routines. The iterations before it are `v0.0.2`, `v0.0.3` and on, and those after it `v0.1.1`, `v0.1.2` and on. A release takes the version of the earliest open patch milestone, and that milestone's unfinished issues move to the next one; once nothing is left before the minor's own milestone and its last issue has closed, the release is the minor.
-- **How**: an agent opens `chore(release): vX.Y.Z`, which bumps `package.json`; its description is the release notes, grouped by type and drafted from the squash commits since the last tag. After it merges come CI and Screenshots green on all three platforms for that commit, the tag, the [Release workflow](../.github/workflows/release.yml)'s draft, which the maintainer can install and try, and then publishing. The notes live on the GitHub release only.
+- **How**: an agent drafts the release notes, grouped by type, from the squash commits since the last tag, and asks the maintainer to release `vX.Y.Z` from `main` with them. On the yes, it runs the [Release workflow](../.github/workflows/release.yml) on `main` with both (`gh workflow run release.yml --ref main -f version=X.Y.Z -f notes="..."`). That run is the full check before a release: every installer builds and passes the tests on its own runner, and Screenshots starts the app on each platform. Only when all of it passes does it upload the installers to a draft release of that commit, which the maintainer installs and tries. A failure is fixed through the usual pull requests and the run started again, which moves the draft to the newer commit. Publishing the draft creates the tag, and the agent then closes the release issue.
+- **No release pull request**: `package.json` on `main` stays at `0.0.0`, and the run sets the version from its input, so a release adds no commit and waits for no other CI. The notes live on the GitHub release only.
 
 ## Gates
 
@@ -113,7 +115,7 @@ A release goes out when one of four triggers fires, not on a fixed day and not f
 | Accept  | An issue in `state:needs-decision`                                                       | Accepts it (it moves to `ready` or `needs-design`, with a milestone) or closes it |
 | Design  | A design, laid out in the conversation before it is built                                | Chooses among the options or asks for changes; the build starts on the agreement  |
 | Close   | Closing an issue without a merged pull request: a duplicate, not planned, not reproduced | Confirms                                                                          |
-| Release | Each version                                                                             | Confirms the release pull request, the tag and the publication                    |
+| Release | Each version                                                                             | Confirms the version and notes, which start the release run, then the publication |
 
 A bug needs no gate before work starts or ends. The docs already decided what should happen, and the review and CI see the fix. A merge, automatic or the maintainer's, closes the issues the pull request names with `Closes`.
 
@@ -206,7 +208,7 @@ A ruleset on `main`:
 - requires a pull request, with no required approvals, because the maintainer cannot approve pull requests from their own account;
 - allows squash merges only and keeps history linear;
 - blocks force pushes and deletion;
-- requires one combined check, `CI`, which passes when the three platform jobs and the pull request checks pass, so that renaming a matrix job never breaks protection;
+- requires two checks from GitHub Actions: `CI`, the code on Linux, and `PR`, the title and issue link;
 - does not require branches to be up to date before merging, because parallel pull requests would keep rebasing each other. A merge queue comes in if `main` starts breaking from changes that pass alone and clash together;
 - has no bypass. In an emergency, the maintainer turns the rule off and says why in the pull request.
 
@@ -215,13 +217,13 @@ A ruleset on `main`:
 - **One issue, one session, one worktree, one branch.** The main checkout stays on a clean `main` and is only pulled. Sessions sharing one checkout used to take the same feedback number and the same dev ports; separate worktrees end that. Parallel sessions take issues in different areas, so that two sessions never touch the same files.
 - **Roles.** A session plays one role at a time, and may play several in a row, such as triage and then build for the same bug. It never reviews its own pull request.
 
-| Role    | Takes                                        | Produces                                       | Never                                            |
-| ------- | -------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ |
-| Triage  | `state:needs-triage` issues                  | Labels, states, reproductions, comments        | Closes an issue or changes code                  |
-| Design  | `state:needs-design` issues                  | Options and a recommendation in the chat       | Opens a pull request for a design alone          |
-| Build   | `state:ready` issues                         | A pull request                                 | Works outside the issue's scope                  |
-| Review  | Pull requests ready for review               | Review comments, then auto-merge               | Approves, merges by hand or pushes to the branch |
-| Release | A release issue, or the maintainer's request | The release pull request and the draft release | Tags or publishes without the maintainer's yes   |
+| Role    | Takes                                        | Produces                                 | Never                                               |
+| ------- | -------------------------------------------- | ---------------------------------------- | --------------------------------------------------- |
+| Triage  | `state:needs-triage` issues                  | Labels, states, reproductions, comments  | Closes an issue or changes code                     |
+| Design  | `state:needs-design` issues                  | Options and a recommendation in the chat | Opens a pull request for a design alone             |
+| Build   | `state:ready` issues                         | A pull request                           | Works outside the issue's scope                     |
+| Review  | Pull requests ready for review               | Review comments, then auto-merge         | Approves, merges by hand or pushes to the branch    |
+| Release | A release issue, or the maintainer's request | The notes, the release run and its draft | Starts it or publishes without the maintainer's yes |
 
 - **Reporting.** An agent reports every issue, pull request and comment it creates, with its link, and asks at every [gate](#gates).
 - **Not yet.** Agents run in sessions the maintainer starts. Event-driven bots on GitHub (triage on open, stale and duplicate bots) wait until volume asks for them; the first step then is a scheduled triage run over `state:needs-triage`.
