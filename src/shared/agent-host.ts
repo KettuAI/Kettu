@@ -187,6 +187,8 @@ export interface AgentOptions {
   config: ConfigOption[] // from the agent's last `session/new`, at the agent's own values
   levels: Record<string, ConfigOption> // the `thought_level` option each model offered, by model
   remembered: Record<string, string | boolean> // the user's last values, by option id
+  // The agent's own values in each folder, by `pathKey`, as its last `session/new` there gave them.
+  defaults?: Record<string, Record<string, string | boolean>>
   observedAt: number
   provisional?: boolean // from a loaded or resumed session, so not the agent's own defaults
 }
@@ -253,6 +255,28 @@ export interface SessionSummary {
   model: string | null // the model option then, for an estimate of the cache's lifetime
   pinnedAt: number | null // when the user pinned it; a top-level session only
   archivedAt: number | null // when the user archived it; off the sidebar while set
+  prepared?: PreparedInfo // a prepared session, outside the index until its first message
+}
+
+/**
+ * Why a prepared session starts with another value than the one chosen: the agent does not offer
+ * it, refused it, or a change outside OverBench replaced a remembered one. Names, not values.
+ */
+export interface StartNotice {
+  reason: 'not_offered' | 'refused' | 'replaced'
+  optionId: string
+  category: ConfigOption['category']
+  option: string
+  type: 'select' | 'boolean'
+  wanted: string | boolean
+  actual: string | boolean | null // null when the session has no such option
+}
+
+/** What only a prepared session carries: New session shows its options before the first message. */
+export interface PreparedInfo {
+  config: ConfigOption[]
+  notices: StartNotice[]
+  openedAt: number
 }
 
 export interface ImportableSession {
@@ -311,7 +335,8 @@ export interface HostContract {
   }
   // Stops a running task, or clears a failed one.
   'agents.cancelTask': { params: { agentId: AgentId }; result: void }
-  'agents.start': { params: { agentId: AgentId }; result: void }
+  // Reads the options of a running agent again, in the project's folder, when they are stale.
+  'agents.readOptions': { params: { agentId: AgentId; projectPath: string | null }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
   'agents.refreshAccount': { params: { agentId: AgentId }; result: void }
@@ -329,15 +354,29 @@ export interface HostContract {
     // projectPath null: No project, in a new scratch folder.
     // options: config values to start with, by option id.
     // prompt: the first message, sent as the first turn once the session has started.
+    // preparedId: the window's prepared session, adopted instead of a new `session/new`.
     params: {
       agentId: AgentId
       projectPath: string | null
       parentId?: string
       options?: Record<string, string | boolean>
       prompt?: UserContent[]
+      preparedId?: string
     }
     result: SessionSummary
   }
+  // The window's prepared session for New session; `replace` opens a new one even when it holds one.
+  'sessions.prepare': {
+    params: {
+      agentId: AgentId
+      projectPath: string | null
+      parentId?: string
+      options?: Record<string, string | boolean>
+      replace?: boolean
+    }
+    result: SessionSummary
+  }
+  'sessions.discard': { params: { sessionId: string }; result: void }
   'sessions.import': {
     params: { agentId: AgentId; projectPath: string; acpSessionId: string }
     result: SessionSummary
@@ -503,7 +542,7 @@ export const HOST_METHODS = [
   'agents.update',
   'agents.install',
   'agents.cancelTask',
-  'agents.start',
+  'agents.readOptions',
   'agents.refreshLimits',
   'agents.details',
   'agents.refreshAccount',
@@ -515,6 +554,8 @@ export const HOST_METHODS = [
   'projects.touch',
   'sessions.list',
   'sessions.create',
+  'sessions.prepare',
+  'sessions.discard',
   'sessions.import',
   'sessions.open',
   'sessions.snapshot',

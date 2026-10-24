@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
+import { ArrowUpIcon, CircleAlertIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { Project, SessionSummary } from '@shared/agent-host'
+import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { startNewSession, warmAgent } from '@renderer/app/actions'
+import { startNewSession } from '@renderer/app/actions'
 import { onAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
@@ -23,7 +23,7 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { basename, limitLabel, resetTime, shortAgo } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -38,7 +38,15 @@ import { openAgentSettings, openSession, useViewStore } from '@renderer/stores/v
 import { flushDraft, NEW_SESSION_DRAFT, readDraft, writeDraft } from './composer/drafts'
 import { AgentMenu } from './new-session/agent-menu'
 import { ProjectMenu } from './new-session/project-menu'
-import { canStart, noAgentCanStart, startValues } from './new-session/start-options'
+import {
+  enterNewSession,
+  leaveNewSession,
+  noteActivity,
+  prepareFor,
+  setOption,
+  settleOptions,
+} from './new-session/prepared'
+import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { ParentLink } from './session-header'
 
@@ -66,10 +74,10 @@ export function NewSessionView({
   const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   const toolsPath = project?.path ?? (parent?.scratch ? parent.projectPath : null)
 
-  // The agent starts while the message is written; the first send then waits for the session only.
   useEffect(() => {
-    if (agentId) warmAgent(agentId)
-  }, [agentId])
+    enterNewSession()
+    return () => leaveNewSession()
+  }, [])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -137,6 +145,19 @@ function DraftComposer({
   const canSend = !!agentId && ready && text.trim().length > 0
   const tightest = limits ? tightestLimit(limits, now) : null
   const reached = tightest?.state === 'reached' ? tightest : null
+  const sending = useRef(false)
+  // An agent that must sign in first opens no session until it has.
+  const signIn = useAgentsStore((s) => {
+    const status = agentId ? s.byId[agentId] : undefined
+    return !!status && agentNeed(status) === 'sign-in'
+  })
+  const parentId = parent?.id ?? null
+
+  // The session the first message will use opens while it is written, so the menu shows what the
+  // agent reports for it and the send only adopts it.
+  useEffect(() => {
+    prepareFor(agentId && ready && !signIn ? { agentId, projectPath, parentId } : null)
+  }, [agentId, ready, signIn, projectPath, parentId])
 
   useEffect(() => {
     textarea.current?.focus()
@@ -174,15 +195,24 @@ function DraftComposer({
   const update = (next: string) => {
     setText(next)
     writeDraft(NEW_SESSION_DRAFT, next)
+    noteActivity()
   }
 
   // The text leaves the draft with the request and comes back to it if the start fails.
-  const send = () => {
-    if (!canSend) return
-    const { byId, picks } = useAgentOptionsStore.getState()
-    const entry = byId[agentId]
-    const options = entry ? startValues(entry, picks[agentId]) : null
-    void startNewSession(agentId, projectPath, text, options)
+  const send = async () => {
+    if (!canSend || sending.current) return
+    sending.current = true
+    try {
+      await settleOptions()
+      const { byId, picks, prepared } = useAgentOptionsStore.getState()
+      const entry = byId[agentId]
+      // Without a prepared session, the values New session showed go with the create.
+      const options = entry ? startValues(entry, picks[agentId]) : null
+      const preparedId = prepared?.agentId === agentId ? (prepared.summary?.id ?? null) : null
+      void startNewSession(agentId, projectPath, text, options, preparedId)
+    } finally {
+      sending.current = false
+    }
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -192,15 +222,18 @@ function DraftComposer({
     const sends = sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event)
     if (!sends) return
     event.preventDefault()
-    send()
+    void send()
   }
 
   const choose = (id: AgentId, model: string | null) => {
     useViewStore.setState((s) => (s.main.kind === 'new' ? { main: { ...s.main, agentId: id } } : s))
-    const modelOption = useAgentOptionsStore
-      .getState()
-      .byId[id]?.config.find((o) => o.category === 'model')
-    if (model !== null && modelOption) pickOption(id, modelOption.id, model)
+    const { byId, prepared } = useAgentOptionsStore.getState()
+    const config =
+      prepared?.agentId === id && prepared.summary?.prepared
+        ? prepared.summary.prepared.config
+        : byId[id]?.config
+    const modelOption = config?.find((o) => o.category === 'model')
+    if (model !== null && modelOption) setOption(id, modelOption.id, model)
     requestAnimationFrame(() => textarea.current?.focus())
   }
 
@@ -221,6 +254,7 @@ function DraftComposer({
             rows={1}
             value={text}
             onChange={(event) => update(event.target.value)}
+            onFocus={noteActivity}
             onKeyDown={onKeyDown}
             aria-label={
               name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')
@@ -245,7 +279,7 @@ function DraftComposer({
                   variant={canSend ? 'default' : 'secondary'}
                   aria-label={t('newSession.send')}
                   disabled={!canSend}
-                  onClick={send}
+                  onClick={() => void send()}
                 >
                   <ArrowUpIcon />
                 </InputGroupButton>
@@ -272,9 +306,64 @@ function DraftComposer({
           {projectError ?? t('newSession.missingLine')}
         </p>
       )}
+      {agentId && <StartNotices agentId={agentId} />}
       {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} />}
     </div>
   )
+}
+
+const NO_NOTICES: StartNotice[] = []
+
+/** Each value the session will not start with as chosen, and why, before the first message. */
+function StartNotices({ agentId }: { agentId: AgentId }) {
+  const { t } = useTranslation('session')
+  const all = useAgentOptionsStore((s) =>
+    s.prepared?.agentId === agentId
+      ? (s.prepared.summary?.prepared?.notices ?? NO_NOTICES)
+      : NO_NOTICES,
+  )
+  // A switch meant to be off that the session lacks loses nothing.
+  const notices = all.filter((n) => !(n.type === 'boolean' && n.actual === null && !n.wanted))
+  if (notices.length === 0) return null
+  const agent = agentName(agentId)
+  return (
+    <ul className="flex flex-col gap-0.5 px-5">
+      {notices.map((notice) => {
+        const text = noticeText(t, agent, notice)
+        return (
+          <li
+            key={notice.optionId}
+            className="flex min-w-0 items-start gap-1.5 text-xs text-secondary"
+          >
+            <CircleAlertIcon className="mt-0.5 size-3 shrink-0 text-warning" aria-hidden />
+            <span className="min-w-0">{text}</span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function noticeText(
+  t: ReturnType<typeof useTranslation<'session'>>['t'],
+  agent: string,
+  notice: StartNotice,
+): string {
+  const { option, wanted, actual, reason } = notice
+  if (notice.type === 'boolean') {
+    if (actual === null) return t('newSession.startNotice.noSwitch', { agent, option })
+    return t(wanted ? 'newSession.startNotice.switchOff' : 'newSession.startNotice.switchOn', {
+      agent,
+      option,
+    })
+  }
+  if (actual === null) {
+    return t('newSession.startNotice.noOption', { agent, option, wanted: String(wanted) })
+  }
+  const values = { agent, option, wanted: String(wanted), actual: String(actual) }
+  return notice.category === 'model'
+    ? t(`newSession.startNotice.model.${reason}`, values)
+    : t(`newSession.startNotice.option.${reason}`, values)
 }
 
 /** While no agent can start: why, in one line, and the way to Settings › Agents to fix it. */
@@ -374,7 +463,7 @@ function ModeMenu({ agentId }: { agentId: AgentId | null }) {
       option={mode}
       side="bottom"
       onSelect={(optionId, value) => {
-        pickOption(agentId, optionId, value)
+        setOption(agentId, optionId, value)
         return Promise.resolve(true)
       }}
     />

@@ -1,7 +1,7 @@
 // A scripted ACP agent for development and tests. It never calls a model.
 
 import { createHash } from 'node:crypto'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -83,6 +83,24 @@ const DEFAULT_CONFIG: Pick<FakeSessionState, 'mode' | 'model' | 'thought' | 'fas
   model: 'balanced',
   thought: 'medium',
   fast: false,
+}
+
+/**
+ * The folder's own defaults from `.fake-agent.json`, read for every new session as the real agents
+ * read a project's settings, so a change to the file shows on the next one.
+ */
+function projectDefaults(cwd: string): Partial<Pick<FakeSessionState, 'model' | 'thought'>> {
+  const file = join(cwd, '.fake-agent.json')
+  if (!existsSync(file)) return {}
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+    return {
+      ...(typeof parsed.model === 'string' ? { model: parsed.model } : {}),
+      ...(typeof parsed.thought === 'string' ? { thought: parsed.thought } : {}),
+    }
+  } catch {
+    return {}
+  }
 }
 
 const SCENARIO_TITLES: Partial<Record<ScenarioName | 'compact', string>> = {
@@ -485,6 +503,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       const slowMs = Number(env.FAKE_AGENT_NEW_SESSION_MS ?? '') || 0
       if (slowMs > 0) await new Promise((resolve) => setTimeout(resolve, slowMs))
       const session = newSession(nextId('fake'), ctx.params.cwd, ctx.params.mcpServers)
+      Object.assign(session, projectDefaults(ctx.params.cwd))
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return { sessionId: session.id, ...sessionSetup(session) }
     })

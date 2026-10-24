@@ -80,14 +80,14 @@ describe('the port envelope', () => {
     expect(reloaded).toHaveLength(4)
   })
 
-  it('starts an agent before any session needs it, and refuses one that cannot run', async () => {
+  it('starts an agent to prepare a session, and refuses one that cannot run', async () => {
     const { port } = await setup()
-    await port.request('agents.start', { agentId: 'fake-agent' })
+    await port.request('sessions.prepare', { agentId: 'fake-agent', projectPath: null })
     const agents = await port.request('agents.list', undefined)
     expect(agents.find((a) => a.id === 'fake-agent')?.state).toBe('ready')
-    await expect(port.request('agents.start', { agentId: 'codex' })).rejects.toMatchObject({
-      code: 'agent_unavailable',
-    })
+    await expect(
+      port.request('sessions.prepare', { agentId: 'codex', projectPath: null }),
+    ).rejects.toMatchObject({ code: 'agent_unavailable' })
   })
 
   it('tells where an agent keeps its configuration, without needing the agent to run', async () => {

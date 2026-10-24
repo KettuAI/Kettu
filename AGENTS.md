@@ -15,7 +15,9 @@ Every change goes through an issue and a pull request, as [docs/workflow.md](./d
 - One issue, one session, one worktree, one branch, one pull request. Branch from the latest `origin/main`; the main checkout stays on a clean `main`.
 - Never push to `main`. Open a draft pull request after your first push, and mark it ready once the definition of done holds.
 - Search for an existing issue before you file one. A bug you find on the side becomes its own issue, not part of your pull request.
-- The gates are the maintainer's: accepting, designs (and merging their pull requests), closing without a merged pull request, and releasing. Ask at each, and report every issue, pull request and comment you create, with its link.
+- The gates are the maintainer's: accepting, designs, closing without a merged pull request, and releasing.
+- A design is agreed with the maintainer in the conversation, then built: its docs change in the same pull request as its code. Every pull request carries a working change; never open one for a design or docs alone ahead of the code ([design](./docs/workflow.md#3-design)).
+- Ask at each gate, and report every issue, pull request and comment you create, with its link.
 - Every other pull request merges by itself: once a review by another agent leaves nothing open, that agent turns on auto-merge, and GitHub squash-merges it when CI passes ([review and merge](./docs/workflow.md#5-review-and-merge)).
 
 ## Core philosophy: beauty is productivity (颜值也是生产力)

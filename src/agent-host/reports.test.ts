@@ -33,7 +33,8 @@ const HIDDEN = {
 describe('hidden sessions', () => {
   it("read the options without the user's hooks or a transcript", async () => {
     const { t, port } = await setup()
-    await port.request('agents.start', { agentId: 'fake-agent' })
+    await t.host.agents.ensureReady('fake-agent')
+    await port.request('agents.readOptions', { agentId: 'fake-agent', projectPath: null })
     expect(sent(t, 'session/new')).toEqual([HIDDEN])
   })
 

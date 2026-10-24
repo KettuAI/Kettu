@@ -121,6 +121,82 @@ describe('AgentOptionsStore', () => {
     expect(entry.levels.large?.choices?.map((c) => c.value)).toEqual(['high', 'max'])
   })
 
+  it("keeps a remembered value while the agent's own value in the folder holds", () => {
+    const { options } = store()
+    options.started('codex', [model('small')], 'p')
+    options.chose('codex', model('small'), 'large', [model('large')])
+    expect(options.started('codex', [model('small')], 'p')).toEqual([])
+    expect(options.rememberedOf('codex')).toEqual({ model: 'large' })
+  })
+
+  it('drops a remembered value once the own value changed outside OverBench', () => {
+    const { options } = store()
+    options.started('codex', [model('small')], 'p')
+    options.chose('codex', model('small'), 'small', [model('small')])
+    // The agent's own model became large outside OverBench, after small was chosen.
+    expect(options.started('codex', [model('large')], 'p')).toEqual([
+      { option: model('large'), wanted: 'small' },
+    ])
+    expect(options.rememberedOf('codex')).toEqual({})
+  })
+
+  it('reports a dropped value that differs from the new own value', () => {
+    const { options } = store()
+    options.started('codex', [model('small')], 'p')
+    options.chose('codex', model('small'), 'large', [model('large')])
+    options.started('codex', [model('small'), level('high', ['high'])], 'q')
+    const replaced = options.started('codex', [model('large')], 'p')
+    expect(replaced).toEqual([])
+    const entry = options.get('codex')!
+    expect(entry.defaults).toEqual({ q: { model: 'small', effort: 'high' }, p: { model: 'large' } })
+  })
+
+  it('tells the replaced value when the own value moved elsewhere', () => {
+    const { options } = store()
+    const tiny: ConfigOption = {
+      ...model('small'),
+      choices: [...model('small').choices!, { value: 'tiny', name: 'Tiny' }],
+    }
+    options.started('codex', [model('small')], 'p')
+    options.chose('codex', model('small'), 'large', [model('large')])
+    const replaced = options.started('codex', [{ ...tiny, value: 'tiny' }], 'p')
+    expect(replaced).toEqual([{ option: { ...tiny, value: 'tiny' }, wanted: 'large' }])
+    expect(options.rememberedOf('codex')).toEqual({})
+  })
+
+  it('keeps a remembered value in a folder seen for the first time', () => {
+    const { options } = store()
+    options.started('codex', [model('small')], 'p')
+    options.chose('codex', model('small'), 'large', [model('large')])
+    expect(options.started('codex', [model('small')], 'q')).toEqual([])
+    expect(options.rememberedOf('codex')).toEqual({ model: 'large' })
+  })
+
+  it('keeps the own values of the latest 50 folders', () => {
+    const { options } = store()
+    for (let i = 0; i < 52; i++) options.started('codex', [model('small')], `f${i}`)
+    const keys = Object.keys(options.get('codex')!.defaults!)
+    expect(keys).toHaveLength(50)
+    expect(keys[0]).toBe('f2')
+  })
+
+  it("takes the models an opened session lists, keeping the agent's own value", () => {
+    const { options } = store()
+    options.started('codex', [model('small')])
+    const more: ConfigOption = {
+      ...model('large'),
+      choices: [
+        { value: 'large', name: 'Large' },
+        { value: 'huge', name: 'Huge' },
+      ],
+    }
+    options.opened('codex', [more])
+    // Small is gone from the list, so the cached value falls back to the session's.
+    expect(options.get('codex')!.config).toEqual([more])
+    options.opened('codex', [{ ...more, value: 'huge' }])
+    expect(options.get('codex')!.config).toEqual([more])
+  })
+
   it('ignores a choice for an agent that has not started a session', () => {
     const { options, changed } = store()
     options.chose('codex', model('small'), 'large', [model('large')])

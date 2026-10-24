@@ -43,7 +43,7 @@ import { limitLabel } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { pickOption, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
@@ -53,10 +53,12 @@ import {
   itemKey,
   menuGroups,
   parseItemKey,
+  preparedConfig,
   startConfig,
   type MenuAgent,
   type MenuGroup,
 } from './start-options'
+import { refreshOnMenu, retryPrepare, setOption } from './prepared'
 import { useStartConfig } from './use-start-config'
 
 const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
@@ -84,10 +86,10 @@ export function AgentMenu({
   const entries = useAgentOptionsStore((s) => s.byId)
   const picks = useAgentOptionsStore((s) => s.picks)
   const loaded = useAgentOptionsStore((s) => s.loaded)
+  const prepared = useAgentOptionsStore((s) => s.prepared)
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<AgentId | null>(agentId)
-  const starting = useAgentOptionsStore((s) => !!shown && (s.starting[shown] ?? 0) > 0)
-  const started = useAgentOptionsStore((s) => !!shown && s.started[shown] === true)
+  const shownPrepared = shown && prepared?.agentId === shown ? prepared : null
   const [query, setQuery] = useState('')
   const { contains } = useComboboxFilter()
   const body = useRef<HTMLDivElement>(null)
@@ -97,10 +99,13 @@ export function AgentMenu({
     const map = new Map<AgentId, ConfigOption[]>()
     for (const status of statuses) {
       const entry = entries[status.id]
-      if (entry) map.set(status.id, startConfig(entry, picks[status.id]))
+      const live = prepared?.agentId === status.id ? prepared.summary?.prepared : undefined
+      if (live)
+        map.set(status.id, preparedConfig(live.config, entry?.levels ?? {}, picks[status.id]))
+      else if (entry) map.set(status.id, startConfig(entry, picks[status.id]))
     }
     return map
-  }, [statuses, entries, picks])
+  }, [statuses, entries, picks, prepared])
   const agents: MenuAgent[] = statuses.map((status) => {
     const model = configs.get(status.id)?.find((o) => o.category === 'model')
     return {
@@ -156,6 +161,7 @@ export function AgentMenu({
         console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
       )
     }
+    refreshOnMenu(statuses.filter((s) => s.state === 'ready').map((s) => s.id))
   }
 
   // The menu keeps the size it opened with while a search narrows it, so nothing jumps.
@@ -237,8 +243,8 @@ export function AgentMenu({
                 status={statuses.find((s) => s.id === shown) ?? null}
                 config={shown ? (configs.get(shown) ?? null) : null}
                 loaded={loaded}
-                starting={starting}
-                started={started}
+                opening={shownPrepared?.opening ?? false}
+                failure={shownPrepared?.error ?? null}
                 searching={searching}
                 groups={groups}
                 agents={agents}
@@ -361,8 +367,8 @@ function Pane({
   status,
   config,
   loaded,
-  starting,
-  started,
+  opening,
+  failure,
   searching,
   groups,
   agents,
@@ -371,10 +377,10 @@ function Pane({
   status: AgentStatus | null
   config: ConfigOption[] | null
   loaded: boolean
-  /** New session's start of the agent runs, which reads its options when none are known. */
-  starting: boolean
-  /** New session's start of the agent has finished, so a read with no options failed. */
-  started: boolean
+  /** The agent's prepared session is opening, so what shows may still change. */
+  opening: boolean
+  /** Why the agent's prepared session could not open. */
+  failure: string | null
   searching: boolean
   groups: MenuGroup[]
   agents: MenuAgent[]
@@ -386,7 +392,7 @@ function Pane({
   const need = agentNeed(status)
   const installed = need !== 'install'
   // The options load with the list, and with a start until the agent has reported them.
-  const startingUp = loaded && !config && (starting || status.state === 'starting')
+  const startingUp = loaded && !config && (opening || status.state === 'starting')
   const loading = !loaded || startingUp
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
@@ -461,15 +467,19 @@ function Pane({
           </Button>
         </Notice>
       )
-    } else if (!loading && !config) {
+    } else if (failure && !opening) {
       notice = (
         <Notice
-          text={t(
-            started ? 'newSession.agentMenu.noModels' : 'newSession.agentMenu.modelsOnStart',
-            { agent: name },
-          )}
-        />
+          text={t('newSession.agentMenu.prepareFailed', { agent: name, error: failure })}
+          error
+        >
+          <Button variant="outline" size="xs" onClick={retryPrepare}>
+            {t('newSession.agentMenu.retry')}
+          </Button>
+        </Notice>
       )
+    } else if (!loading && !config) {
+      notice = <Notice text={t('newSession.agentMenu.modelsOnStart', { agent: name })} />
     }
   }
 
@@ -489,6 +499,18 @@ function Pane({
             {t(status.state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
               agent: name,
             })}
+          </span>
+        </div>
+      )}
+      {!searching && installed && config && opening && (
+        // The cached models stand in until the prepared session answers.
+        <div
+          role="status"
+          className="flex animate-in items-center gap-1.5 px-3.5 pt-2.5 pb-1.5 text-xs text-muted-foreground fade-in fill-mode-backwards delay-1000 animation-duration-(--duration-base)"
+        >
+          <Spinner className="size-3 shrink-0" />
+          <span className="truncate shimmer">
+            {t('newSession.agentMenu.checking', { agent: name })}
           </span>
         </div>
       )}
@@ -526,7 +548,7 @@ function Pane({
               <EffortSegments
                 effort={effort}
                 value={String(effort.value)}
-                onPick={(v) => pickOption(status.id, effort.id, v)}
+                onPick={(v) => setOption(status.id, effort.id, v)}
                 plain
               />
             </>
@@ -629,7 +651,7 @@ function SwitchRow({ agentId, option }: { agentId: AgentId; option: ConfigOption
         id={id}
         size="sm"
         checked={option.value === true}
-        onCheckedChange={(checked) => pickOption(agentId, option.id, checked)}
+        onCheckedChange={(checked) => setOption(agentId, option.id, checked)}
       />
     </label>
   )
