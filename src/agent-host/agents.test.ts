@@ -763,6 +763,8 @@ function cliManager(
     settings?: AgentManagerDeps['settings']
     /** Runs before each install records its directory. */
     beforeInstall?: (request: InstallOptions) => Promise<void>
+    /** Runs before each detection. */
+    beforeDetect?: () => Promise<void>
   } = {},
 ) {
   const def: AgentDefinition = {
@@ -804,14 +806,16 @@ function cliManager(
       launcher,
       ...(options.cliVersions ? { cliVersions: options.cliVersions } : {}),
       ...(options.settings ? { settings: options.settings } : {}),
-      detect: (d, ctx) =>
-        detectAgent(d, {
+      detect: async (d, ctx) => {
+        await options.beforeDetect?.()
+        return detectAgent(d, {
           ...ctx,
           node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
           installed: async () => adapters.toSorted((a, b) => compareInstalls(b, a)),
           ...cliFound(options.cli ?? '2.0.0'),
           ...(options.cliVersions && ctx.probeCli ? { probeCli: ctx.probeCli } : {}),
-        }),
+        })
+      },
       install: async (request) => {
         installs.push(request)
         await options.beforeInstall?.(request)
@@ -1027,6 +1031,44 @@ describe('the CLI the user installed', () => {
     held.end?.(new Error('npm did not finish within 900 s.'))
     await start.catch(() => {})
     expect(aborted).toBe(true)
+    expect(m.state()).toBe('available')
+    await m.agents.stopAll()
+  })
+
+  it('cancels the install of the copy that Install asked for', async () => {
+    const { held, beforeInstall } = holdSecondInstall()
+    const m = cliManager({ minimum: '3.0.0', beforeInstall })
+    const install = m.agents.install('fake-agent')
+    await until(() => held.request !== undefined)
+    await m.agents.cancelTask('fake-agent')
+    await expect(install).resolves.toBeUndefined()
+    expect(m.state()).toBe('available')
+    await m.agents.stopAll()
+  })
+
+  it('does not start the copy when the cancel comes before its install', async () => {
+    const detection: { held?: boolean; release?: () => void } = {}
+    let installedWithoutCli = false
+    const m = cliManager({
+      minimum: '3.0.0',
+      beforeInstall: async (request) => {
+        if (request.withoutCli) installedWithoutCli = true
+      },
+      // Holds the detection that follows the install without the copy.
+      beforeDetect: () => {
+        if (!installedWithoutCli || detection.held) return Promise.resolve()
+        detection.held = true
+        return new Promise<void>((resolve) => (detection.release = resolve))
+      },
+    })
+    const start = m.agents.ensureReady('fake-agent')
+    await until(() => detection.held === true)
+    const cancel = m.agents.cancelTask('fake-agent')
+    detection.release?.()
+    await cancel
+    await start.catch(() => {})
+    expect(m.installs.map((i) => i.withoutCli ?? false)).toEqual([true])
+    expect(m.launches).toEqual([])
     expect(m.state()).toBe('available')
     await m.agents.stopAll()
   })

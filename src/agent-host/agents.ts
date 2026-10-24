@@ -728,6 +728,8 @@ export class AgentManager {
         if (!spec) throw new Error(`${adapter.package} ${version} is incomplete on disk.`)
         return spec
       }
+      // A cancel that came while this install was being detected stops the copy before it starts.
+      abort.signal.throwIfAborted()
     } catch (error) {
       const message = (error as Error).message
       diagnostics.event(agentId, 'install failed', message)
