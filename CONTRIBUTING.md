@@ -1,6 +1,6 @@
 # Contributing to OverBench
 
-Thanks for helping shape OverBench. For setup and the available scripts, see [Run from source](./README.md#run-from-source).
+Thanks for helping shape OverBench.
 
 ## How to contribute
 
@@ -8,6 +8,30 @@ OverBench takes issues from outside, not code: fixes and features are written by
 
 - **Bugs and ideas**: open an issue through the [issue forms](https://github.com/overbench/overbench/issues/new/choose), in any language. A screenshot helps.
 - **Security problems**: follow [SECURITY.md](./SECURITY.md); never post them in a public issue.
+
+## Run from source
+
+You need Node.js 22.13 or later and pnpm 10:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+`pnpm dev` keeps its data in its own folder, `OverBench Dev`, so it never touches the sessions of an installed OverBench. To run several worktrees at once, give each one a folder of its own with `OVERBENCH_USER_DATA`, such as `OVERBENCH_USER_DATA=/tmp/overbench-feature-x pnpm dev`; a second run on the same folder quits ([persistence](./docs/design/persistence.md#what-is-stored-and-where)).
+
+Development builds also list a **Fake agent**, which needs no account or network and plays scripted scenarios such as a long answer, a burst of tool calls or three approvals at once. Type `/` in its composer to see them, or read the [fake agent](./docs/design/testing.md#fake-agent) docs.
+
+| Command                                               | What it does                                         |
+| ----------------------------------------------------- | ---------------------------------------------------- |
+| `pnpm dev`                                            | Start the app in development mode with hot reload    |
+| `pnpm test`                                           | Run the unit, integration and process tests          |
+| `pnpm lint` / `pnpm typecheck` / `pnpm format`        | Lint, type-check and format the code                 |
+| `pnpm build`                                          | Type-check and build the app into `out/`             |
+| `pnpm package`                                        | Build an unpacked app into `dist/` for local testing |
+| `pnpm dist:mac` / `pnpm dist:win` / `pnpm dist:linux` | Build installers for each platform                   |
+
+The [architecture](./docs/architecture.md) explains how the pieces fit, and the [M0 plan](./docs/milestones/m0.md) lists what is in and out of the first milestone.
 
 ## Project work
 
@@ -19,8 +43,6 @@ pnpm lint
 pnpm typecheck
 pnpm test
 ```
-
-`pnpm dev` keeps its data in its own folder, `OverBench Dev`, apart from the installed app's. To run several worktrees at once, give each one a folder of its own with `OVERBENCH_USER_DATA`, such as `OVERBENCH_USER_DATA=/tmp/overbench-feature-x pnpm dev`; a second run on the same folder quits ([persistence](./docs/design/persistence.md#what-is-stored-and-where)).
 
 The design documents in [docs/](./docs/README.md) describe how each part is meant to work; read the one for the part you change. Any UI work follows the [design process](./docs/design/design-process.md) and the rules in [visual style](./docs/design/visual-style.md) and [UX guidelines](./docs/design/ux-guidelines.md).
 

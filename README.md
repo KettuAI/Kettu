@@ -12,7 +12,7 @@
 Claude Code, Codex CLI and opencode side by side in one window,<br>
 with readable threads, clear approvals, git and a terminal beside every session.
 
-[**Download**](https://github.com/overbench/overbench/releases/latest) · [Docs](./docs/README.md) · [简体中文](./README.zh-CN.md)
+[**Download**](https://github.com/overbench/overbench/releases/latest) · [Feedback](https://github.com/overbench/overbench/issues/new/choose) · [简体中文](./README.zh-CN.md)
 
 </div>
 
@@ -23,6 +23,14 @@ with readable threads, clear approvals, git and a terminal beside every session.
 
 > [!NOTE]
 > v0.0.2 is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues). Artifacts and attachments are on `main` and ship with v0.0.3.
+
+## What is OverBench
+
+Coding agents like Claude Code, Codex and opencode can now plan a change, edit the code and run the tests on their own. Working with them in a terminal still means walls of scrolling text, approvals that are easy to miss, and sessions scattered across tabs and windows.
+
+OverBench is a desktop home for that work. Every agent you use opens side by side in one window, each session sits under its project, and you can see at a glance which agent is working, which one is waiting for you and which one is done. Answers read like documents instead of logs, what the agent changed is shown as a diff, and a question from an agent comes to you as a card you answer with one key.
+
+It drives the agents you already have, with your own installation, account and settings, so nothing about how they work changes: OverBench only gives them a better place to work in.
 
 ## Features
 
@@ -37,6 +45,12 @@ with readable threads, clear approvals, git and a terminal beside every session.
 - **Git, files and a terminal** — the branch, sync state and changes in the top bar, pull requests with their checks through the GitHub CLI, a files pane to read, preview and edit files, and a terminal for each project.
 - **Crafted details** — light and dark themes, English and Simplified Chinese, restrained motion that honors reduce motion, and shortcuts for the common actions.
 
+## Your agents, your data
+
+- **Bring your own agents.** OverBench implements no agent of its own. It talks to each one over the open [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so your models, settings, rules and tools stay exactly as you set them up.
+- **Sign in where you always do.** Each agent signs in with its own flow, and OverBench never sees your credentials.
+- **Local by default.** OverBench has no account and no server of its own and collects no telemetry. Your sessions stay on your computer, and each agent talks only to its own provider, as it does in your terminal.
+
 ## Install
 
 Download the installer for your system from [Releases](https://github.com/overbench/overbench/releases/latest). Preview builds are not signed by Apple or Microsoft yet, so your system asks once before the first launch.
@@ -49,7 +63,7 @@ On Windows and Linux, new versions download in the background and install when O
 
 ### Agents
 
-OverBench drives the agent CLIs you already use, with your installation, your account and your configuration. Install at least one of them first; you sign in with each agent's own flow, so OverBench never sees your credentials.
+Install at least one of these agents first; OverBench finds it on your system.
 
 | Agent                                                    | How OverBench runs it                                                           |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -61,9 +75,7 @@ The two adapters need Node.js 22 or later with npm, which OverBench finds throug
 
 ## Why OverBench
 
-Terminal coding agents can plan, edit and test code on their own, yet working with them still means walls of scrolling text and sessions scattered across tabs. OverBench gives them a home built for long working days. It is only the interface: it implements no agent itself and talks to each one over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so you keep the agents exactly as you set them up.
-
-It rests on one belief, **beauty is productivity**:
+It rests on one belief, **beauty is productivity**: a tool you spend whole days in should be a pleasure to look at, and that pleasure is what lets you work faster.
 
 - **Start from the best.** Study the strongest implementations of each piece, from terminals to diff viewers, and bring them together instead of reinventing them.
 - **Optimize to the limit.** Quick to start and smooth through the longest transcript, with no dropped frames.
@@ -85,33 +97,11 @@ It rests on one belief, **beauty is productivity**:
 - [ ] Search across sessions and a command palette
 - [ ] Signed and notarized builds
 
-The [M0 plan](./docs/milestones/m0.md) lists what is in and out, and the [architecture](./docs/architecture.md) explains how the pieces fit.
+## Feedback
 
-## Run from source
+Early feedback shapes OverBench the most, and ideas about design and workflow are especially welcome. Open an [issue](https://github.com/overbench/overbench/issues/new/choose) to report a bug or start a conversation, in any language; a screenshot helps. Security problems go through [SECURITY.md](./SECURITY.md), never a public issue.
 
-You need Node.js 22.13 or later and pnpm 10:
-
-```bash
-pnpm install
-pnpm dev
-```
-
-A development run keeps its data in its own folder, `OverBench Dev`, so it never touches the sessions of an installed OverBench; `OVERBENCH_USER_DATA` points it at another folder.
-
-Development builds also list a **Fake agent**, which needs no account or network and plays scripted scenarios such as a long answer, a burst of tool calls or three approvals at once. Type `/` in its composer to see them, or read the [fake agent](./docs/design/testing.md#fake-agent) docs.
-
-| Command                                               | What it does                                         |
-| ----------------------------------------------------- | ---------------------------------------------------- |
-| `pnpm dev`                                            | Start the app in development mode with hot reload    |
-| `pnpm test`                                           | Run the unit, integration and process tests          |
-| `pnpm lint` / `pnpm typecheck` / `pnpm format`        | Lint, type-check and format the code                 |
-| `pnpm build`                                          | Type-check and build the app into `out/`             |
-| `pnpm package`                                        | Build an unpacked app into `dist/` for local testing |
-| `pnpm dist:mac` / `pnpm dist:win` / `pnpm dist:linux` | Build installers for each platform                   |
-
-## Contributing
-
-Early feedback shapes OverBench the most, and ideas about design and workflow are especially welcome: open an [issue](https://github.com/overbench/overbench/issues/new/choose) to start the conversation, in any language. OverBench takes issues, not pull requests; [CONTRIBUTING.md](./CONTRIBUTING.md) explains how to contribute.
+Want to build OverBench yourself? [CONTRIBUTING.md](./CONTRIBUTING.md) has the setup.
 
 ## License
 
