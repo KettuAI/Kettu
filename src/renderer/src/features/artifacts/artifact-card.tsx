@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type RefObject } from 'react'
-import { EllipsisIcon, ImageOffIcon } from 'lucide-react'
+import { EllipsisIcon, ImageOffIcon, MessageSquareIcon, ShapesIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactSummary } from '@shared/artifacts'
 import { Button } from '@renderer/components/ui/button'
@@ -65,6 +65,7 @@ export const ArtifactCard = memo(function ArtifactCard({
     <>
       <DropdownMenuGroup>
         <DropdownMenuItem onClick={() => openFromPage(artifact.id)}>
+          <ShapesIcon />
           {t('card.open')}
         </DropdownMenuItem>
       </DropdownMenuGroup>
@@ -73,6 +74,7 @@ export const ArtifactCard = memo(function ArtifactCard({
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={() => openItsSession(artifact.sessionId)}>
+              <MessageSquareIcon />
               {t('card.openSession')}
             </DropdownMenuItem>
           </DropdownMenuGroup>
