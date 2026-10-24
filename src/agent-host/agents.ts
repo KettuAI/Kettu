@@ -722,12 +722,14 @@ export class AgentManager {
       await this.detect(slot)
       const detected = slot.detection?.state === 'available' ? slot.detection : null
       // The user's CLI turned out older than the adapter just installed needs: the copy comes too.
-      if (withoutCli && !detected?.spec && detected?.adapter?.cli?.needsCopy) {
-        return this.installPackage(slot, request.fallback === false ? { fallback: false } : {})
+      const copyToo = withoutCli && !detected?.spec && detected?.adapter?.cli?.needsCopy
+      if (!copyToo) {
+        const spec = detected?.spec ?? null
+        if (!spec) throw new Error(`${adapter.package} ${version} is incomplete on disk.`)
+        return spec
       }
-      const spec = detected?.spec ?? null
-      if (!spec) throw new Error(`${adapter.package} ${version} is incomplete on disk.`)
-      return spec
+      // A cancel that came while this install was being detected stops the copy before it starts.
+      abort.signal.throwIfAborted()
     } catch (error) {
       const message = (error as Error).message
       diagnostics.event(agentId, 'install failed', message)
@@ -745,6 +747,9 @@ export class AgentManager {
     } finally {
       slot.installAbort = null
     }
+    // Once this install has settled, so that the install of the copy holds the abort while it runs,
+    // and its cancel or failure reaches the caller as its own.
+    return this.installPackage(slot, request.fallback === false ? { fallback: false } : {})
   }
 
   /**
