@@ -322,11 +322,13 @@ export interface HostContract {
   'sessions.create': {
     // projectPath null: No project, in a new scratch folder.
     // options: config values to start with, by option id.
+    // prompt: the first message, sent as the first turn once the session has started.
     params: {
       agentId: AgentId
       projectPath: string | null
       parentId?: string
       options?: Record<string, string | boolean>
+      prompt?: UserContent[]
     }
     result: SessionSummary
   }

@@ -42,6 +42,10 @@
       "description": "{{agent}} cannot replay sessions, so this one continues without its history."
     },
     "signInNeeded": "{{agent}} needs you to sign in",
+    "closedBeforeSent": {
+      "title": "The session closed before your message was sent",
+      "description": "It waits in the queue until you resume it."
+    },
     "turnFailed": "The turn failed",
     "stopped": {
       "title": "{{agent}} exited before finishing this turn"

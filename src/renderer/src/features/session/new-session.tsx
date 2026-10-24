@@ -176,7 +176,7 @@ function DraftComposer({
     writeDraft(NEW_SESSION_DRAFT, next)
   }
 
-  // The text stays in the draft until the session exists, so a failed start loses nothing.
+  // The text leaves the draft with the request and comes back to it if the start fails.
   const send = () => {
     if (!canSend) return
     const { byId, picks } = useAgentOptionsStore.getState()

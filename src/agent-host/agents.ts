@@ -355,6 +355,10 @@ export class AgentManager {
     return this.slots.get(agentId)?.def.name ?? agentId
   }
 
+  mcpServersByName(agentId: AgentId): boolean {
+    return this.slots.get(agentId)?.def.mcpServersByName ?? false
+  }
+
   private slot(agentId: AgentId): Slot {
     const slot = this.slots.get(agentId)
     if (!slot) throw invalidParams(`Unknown agent ${agentId}`)

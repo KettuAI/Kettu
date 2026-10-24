@@ -18,6 +18,7 @@ import {
   type AnyMessage,
   type ClientConnection,
   type InitializeResponse,
+  type McpServer,
   type SessionUpdate,
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
@@ -119,6 +120,8 @@ export interface AgentInit {
     logout: boolean
     /** `_session/steering`, an extension advertised in the response's own `_meta`. */
     steering: boolean
+    /** MCP servers over HTTP, which the artifacts service needs. */
+    mcpHttp: boolean
     prompt: PromptCapabilities
   }
   authMethods: AuthMethodInfo[]
@@ -386,6 +389,7 @@ export class AgentConnection {
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
             ?.supported === true,
+        mcpHttp: caps.mcpCapabilities?.http === true,
         prompt: {
           image: caps.promptCapabilities?.image === true,
           audio: caps.promptCapabilities?.audio === true,
@@ -410,11 +414,12 @@ export class AgentConnection {
   async newSession(
     cwd: string,
     meta?: Record<string, unknown>,
+    mcpServers: McpServer[] = [],
   ): Promise<SessionSetup & { acpSessionId: string }> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.new, {
         cwd,
-        mcpServers: [],
+        mcpServers,
         ...(meta ? { _meta: meta } : {}),
       }),
     )
@@ -428,12 +433,13 @@ export class AgentConnection {
     acpSessionId: string,
     cwd: string,
     meta?: Record<string, unknown>,
+    mcpServers: McpServer[] = [],
   ): Promise<SessionSetup> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.load, {
         sessionId: acpSessionId,
         cwd,
-        mcpServers: [],
+        mcpServers,
         ...(meta ? { _meta: meta } : {}),
       }),
     )
@@ -444,12 +450,13 @@ export class AgentConnection {
     acpSessionId: string,
     cwd: string,
     meta?: Record<string, unknown>,
+    mcpServers: McpServer[] = [],
   ): Promise<SessionSetup> {
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.resume, {
         sessionId: acpSessionId,
         cwd,
-        mcpServers: [],
+        mcpServers,
         ...(meta ? { _meta: meta } : {}),
       }),
     )
@@ -465,13 +472,14 @@ export class AgentConnection {
     cwd: string,
     meta?: Record<string, unknown>,
     point?: ForkPoint,
+    mcpServers: McpServer[] = [],
   ): Promise<SessionSetup & { acpSessionId: string }> {
     const forkMeta = point ? { ...meta, ...forkPointMeta(point) } : meta
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.fork, {
         sessionId: acpSessionId,
         cwd,
-        mcpServers: [],
+        mcpServers,
         ...(forkMeta ? { _meta: forkMeta } : {}),
       }),
     )

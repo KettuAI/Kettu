@@ -16,6 +16,7 @@ import {
   type ClientCapabilities,
   type ContentBlock,
   type InitializeResponse,
+  type McpServer,
   type SessionConfigOption,
   type SessionInfo,
   type SessionModeState,
@@ -241,10 +242,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     return match ? Number(match[1]) : null
   }
 
-  const newSession = (id: string, cwd: string): FakeSession => {
+  const newSession = (id: string, cwd: string, mcpServers: McpServer[] = []): FakeSession => {
     const session: FakeSession = {
       id,
       cwd,
+      mcpServers,
       title: null,
       turns: 0,
       usedTokens: 0,
@@ -261,7 +263,9 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   }
 
   /** Like codex-acp, which opens every session it resumes or loads at its defaults. */
-  const reopened = (session: FakeSession): void => {
+  const reopened = (session: FakeSession, mcpServers: McpServer[] = []): void => {
+    // Like the real agents, it connects to the servers of the latest attach.
+    session.mcpServers = mcpServers
     if (resumeConfig === 'keep') return
     Object.assign(session, DEFAULT_CONFIG)
     if (resumeConfig === 'locked') lockedSessions.add(session.id)
@@ -443,7 +447,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
             image: !without.has('image'),
             embeddedContext: !without.has('embeddedContext'),
           },
-          mcpCapabilities: { http: false, sse: false },
+          mcpCapabilities: { http: !without.has('mcp'), sse: false },
           sessionCapabilities: sessionCapabilities(),
           auth: { logout: {} },
           _meta: { authStatus: {} },
@@ -479,7 +483,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       // Not scaled: it stands for an agent that is slow to open a session, whatever the pace.
       const slowMs = Number(env.FAKE_AGENT_NEW_SESSION_MS ?? '') || 0
       if (slowMs > 0) await new Promise((resolve) => setTimeout(resolve, slowMs))
-      const session = newSession(nextId('fake'), ctx.params.cwd)
+      const session = newSession(nextId('fake'), ctx.params.cwd, ctx.params.mcpServers)
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return { sessionId: session.id, ...sessionSetup(session) }
     })
@@ -495,7 +499,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       }
       await replay(ctx.client, session)
       announceCommands(ctx.client, session.id)
-      reopened(session)
+      reopened(session, ctx.params.mcpServers)
       return sessionSetup(session)
     })
     .onRequest(methods.agent.session.resume, (ctx) => {
@@ -510,7 +514,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         session = newSession(ctx.params.sessionId, ctx.params.cwd)
         session.title = 'Restored session'
       }
-      reopened(session)
+      reopened(session, ctx.params.mcpServers)
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
       return sessionSetup(session)
     })
@@ -554,7 +558,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       const source = sessions.get(ctx.params.sessionId)
       if (!source) throw RequestError.resourceNotFound(ctx.params.sessionId)
       const end = forkEnd(source, ctx.params._meta)
-      const fork = newSession(nextId('fake'), ctx.params.cwd)
+      const fork = newSession(nextId('fake'), ctx.params.cwd, ctx.params.mcpServers ?? [])
       fork.title = source.title
       fork.turnStarts = source.turnStarts.filter((start) => start < end)
       fork.turns = end < source.history.length ? fork.turnStarts.length : source.turns

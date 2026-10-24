@@ -100,6 +100,17 @@ describe('createValidators', () => {
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
   })
 
+  it('takes a first message as prompt content', () => {
+    const prompt = [{ type: 'text', text: 'Fix the build' }]
+    expect(posix['sessions.create']({ agentId: 'codex', projectPath: null, prompt })).toEqual({
+      agentId: 'codex',
+      projectPath: null,
+      prompt,
+    })
+    rejects(() => posix['sessions.create']({ agentId: 'codex', projectPath: null, prompt: [] }))
+    rejects(() => posix['sessions.create']({ agentId: 'codex', projectPath: null, prompt: 'hi' }))
+  })
+
   it('takes start values as strings or booleans by option id', () => {
     const options = { model: 'opus', fast: true }
     expect(
@@ -281,6 +292,9 @@ describe('createValidators', () => {
     expect(rename({ id, title: 'Traffic report' })).toEqual({ id, title: 'Traffic report' })
     expect(rename({ id, title: 'x'.repeat(120) }).title).toHaveLength(120)
     rejects(() => rename({ id, title: 'x'.repeat(121) }))
+    // Counted in code points, as the agents' tools count a title.
+    expect(rename({ id, title: '\u{1F600}'.repeat(120) }).title).toHaveLength(240)
+    rejects(() => rename({ id, title: '\u{1F600}'.repeat(121) }))
     rejects(() => rename({ id, title: '   ' }))
     rejects(() => rename({ id }))
 

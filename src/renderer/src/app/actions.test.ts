@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
 
 const request = vi.fn()
@@ -321,48 +321,69 @@ describe('createSession with a first message', () => {
     writeDraft(NEW_SESSION_DRAFT, 'Fix the build')
   })
 
-  it('sends it once the session exists, then shows the session with its thread loaded', async () => {
+  const withPrompt = {
+    agentId: 'codex',
+    projectPath: '/repo',
+    prompt: [{ type: 'text', text: 'Fix the build' }],
+  }
+
+  it('hands it to the host with the request, then shows the session with its thread', async () => {
     let shownWhileLoading: string | null = null
     request.mockImplementation(async (method: string) => {
-      if (method === 'sessions.create') return created('ready')
+      if (method === 'sessions.create') return created('running')
       if (method === 'sessions.open') shownWhileLoading = useViewStore.getState().main.kind
       return undefined
     })
     await createSession('codex', '/repo', null, 'Fix the build')
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       'sessions.create',
-      'sessions.prompt',
       'sessions.watch',
       'sessions.open',
     ])
-    expect(request).toHaveBeenCalledWith('sessions.prompt', {
-      sessionId: 'n1',
-      content: [{ type: 'text', text: 'Fix the build' }],
-    })
+    expect(request).toHaveBeenCalledWith('sessions.create', withPrompt)
     expect(shownWhileLoading).toBe('new')
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
     expect(readDraft('n1')).toBe('')
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
   })
 
-  it("leaves it in the session's composer when the agent asks to sign in first", async () => {
+  it('takes it out of the draft as the request goes, so a reload meanwhile cannot send it twice', async () => {
+    let answer: (summary: SessionSummary) => void = () => {}
+    request.mockImplementation((method: string) =>
+      method === 'sessions.create'
+        ? new Promise<SessionSummary>((resolve) => (answer = resolve))
+        : Promise.resolve(undefined),
+    )
+    const creating = createSession('codex', '/repo', null, 'Fix the build')
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+    answer(created('running'))
+    await creating
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+  })
+
+  it('does not write it over a draft typed while the start failed', async () => {
+    let fail: (error: Error) => void = () => {}
+    request.mockImplementation((method: string) =>
+      method === 'sessions.create'
+        ? new Promise((_, reject) => (fail = reject))
+        : Promise.resolve(undefined),
+    )
+    const creating = createSession('codex', '/repo', null, 'Fix the build')
+    writeDraft(NEW_SESSION_DRAFT, 'Something else')
+    fail(new Error('spawn failed'))
+    await creating
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else')
+    expect(usePendingSession.getState().pending).toMatchObject({ prompt: 'Fix the build' })
+  })
+
+  it('leaves it with the host, which sends it after a sign-in, when one is needed', async () => {
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('auth_required') : undefined,
     )
     await createSession('codex', '/repo', null, 'Fix the build')
     expect(request).not.toHaveBeenCalledWith('sessions.prompt', expect.anything())
-    expect(readDraft('n1')).toBe('Fix the build')
+    expect(readDraft('n1')).toBe('')
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
-  })
-
-  it("leaves it in the session's composer when the agent turns it down", async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    request.mockImplementation(async (method: string) => {
-      if (method === 'sessions.create') return created('ready')
-      throw new Error('The session is failed')
-    })
-    await createSession('codex', '/repo', null, 'Fix the build')
-    expect(readDraft('n1')).toBe('Fix the build')
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
   })
 
@@ -387,30 +408,55 @@ describe('createSession with a first message', () => {
     })
   })
 
-  it("leaves it in the session's composer when the session is closed while it starts", async () => {
+  it("leaves it in the host's queue when the session is closed while it starts", async () => {
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('closed') : undefined,
     )
     await createSession('codex', '/repo', null, 'Fix the build')
-    expect(request).not.toHaveBeenCalledWith('sessions.prompt', expect.anything())
-    expect(readDraft('n1')).toBe('Fix the build')
+    expect(readDraft('n1')).toBe('')
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
   })
 
-  it('keeps it when the agent cannot start, and sends it after a retry', async () => {
+  it('keeps it when the agent cannot start, and sends it with a retry', async () => {
+    const stored = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => stored.set(key, value),
+      removeItem: (key: string) => stored.delete(key),
+    })
+    onTestFinished(() => {
+      vi.stubGlobal('localStorage', undefined)
+    })
     request.mockRejectedValueOnce(new Error('spawn failed'))
     await createSession('codex', '/repo', null, 'Fix the build')
     expect(usePendingSession.getState().pending).toMatchObject({ prompt: 'Fix the build' })
-    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
+    // Stored at once, since a quit can close the window before a later write.
+    expect(stored.get(`draft:${NEW_SESSION_DRAFT}`)).toBe('Fix the build')
 
     request.mockImplementation(async (method: string) =>
-      method === 'sessions.create' ? created('ready') : undefined,
+      method === 'sessions.create' ? created('running') : undefined,
     )
     retryPendingSession()
     await vi.waitFor(() =>
       expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' }),
     )
-    expect(request).toHaveBeenCalledWith('sessions.prompt', expect.anything())
+    expect(request).toHaveBeenLastCalledWith('sessions.open', expect.anything())
+    expect(request).toHaveBeenCalledWith('sessions.create', withPrompt)
+  })
+
+  it('leaves a draft written since the failure when it retries', async () => {
+    request.mockRejectedValueOnce(new Error('spawn failed'))
+    await createSession('codex', '/repo', null, 'Fix the build')
+    writeDraft(NEW_SESSION_DRAFT, 'Something else')
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('running') : undefined,
+    )
+    retryPendingSession()
+    await vi.waitFor(() =>
+      expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' }),
+    )
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else')
   })
 })
 
@@ -548,10 +594,7 @@ describe('New sub-session', () => {
       agentId: 'opencode',
       projectPath: '/repo',
       parentId: 'p1',
-    })
-    expect(request).toHaveBeenCalledWith('sessions.prompt', {
-      sessionId: 'c1',
-      content: [{ type: 'text', text: 'Write the tests' }],
+      prompt: [{ type: 'text', text: 'Write the tests' }],
     })
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'c1' })
   })
@@ -571,6 +614,7 @@ describe('New sub-session', () => {
     expect(request).toHaveBeenCalledWith('sessions.create', {
       agentId: 'opencode',
       projectPath: '/repo',
+      prompt: [{ type: 'text', text: 'Write the tests' }],
     })
   })
 

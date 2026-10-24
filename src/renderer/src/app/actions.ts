@@ -3,7 +3,9 @@ import type { AgentId } from '@shared/thread'
 import {
   clearDraft,
   draftedSessions,
+  flushDraft,
   NEW_SESSION_DRAFT,
+  readDraft,
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
 import { dropAttachments } from '@renderer/features/session/composer/attachments'
@@ -99,17 +101,21 @@ export async function createSession(
     settings: { ...s.settings, open: false },
   }))
   preloadRenderers()
+  // The host sends the first message once the session has started, also after a sign-in. It
+  // leaves the draft as it goes, so a window reloaded meanwhile does not offer it again; a retry
+  // leaves alone a draft written since.
+  if (prompt !== null && readDraft(NEW_SESSION_DRAFT) === prompt) clearDraft(NEW_SESSION_DRAFT)
   try {
     const summary = await host('sessions.create', {
       agentId,
       projectPath,
       ...(parentId ? { parentId } : {}),
       ...(options && Object.keys(options).length > 0 ? { options } : {}),
+      ...(prompt !== null ? { prompt: [{ type: 'text', text: prompt }] } : {}),
     })
     // The host now remembers what carries over; the rest starts afresh next time.
     if (options) clearPicks(agentId)
     useSessionsStore.getState().upsert(summary)
-    if (prompt !== null) await sendFirstPrompt(summary, prompt)
     // The session shows with its thread and renderer ready, so no skeleton flashes in between.
     await Promise.all([focusSession(summary.id), loadMarkdown().catch(() => {})])
     const current = usePendingSession.getState().pending
@@ -118,8 +124,13 @@ export async function createSession(
       openSession(summary.id, summary.projectPath)
     }
   } catch (error) {
-    // Deleted, or its project removed, while it started: nothing is left to show, and the first
-    // message is still New session's draft.
+    // Back to New session's draft, unless something else was written there meanwhile, and stored
+    // at once, since a quit can close the window before a later write.
+    if (prompt !== null && !readDraft(NEW_SESSION_DRAFT).trim()) {
+      writeDraft(NEW_SESSION_DRAFT, prompt)
+      flushDraft(NEW_SESSION_DRAFT)
+    }
+    // Deleted, or its project removed, while it started: nothing is left to show.
     if (removedWhileStarting(error)) {
       const current = usePendingSession.getState().pending
       if (current?.agentId === agentId && current.projectPath === projectPath) {
@@ -158,29 +169,6 @@ export function startNewSession(
   return parent
     ? createSession(agentId, parent.projectPath, parent.id, prompt, options)
     : createSession(agentId, projectPath, null, prompt, options)
-}
-
-/**
- * Sends the New session screen's message into the session it started. One the session cannot
- * take yet, as when its agent asks to sign in first, waits in that session's composer.
- */
-async function sendFirstPrompt(summary: SessionSummary, prompt: string): Promise<void> {
-  clearDraft(NEW_SESSION_DRAFT)
-  if (summary.status === 'ready') {
-    try {
-      await host('sessions.prompt', {
-        sessionId: summary.id,
-        content: [{ type: 'text', text: prompt }],
-      })
-      return
-    } catch (error) {
-      console.warn(
-        `Could not send the first message to ${summary.id}; keeping it as a draft`,
-        error,
-      )
-    }
-  }
-  writeDraft(summary.id, prompt)
 }
 
 /**
