@@ -2,7 +2,7 @@
 // and Codex's `/status` for the current use of the plan limits, and Claude Code's `/context` for
 // what fills a session's context. Each runs in a hidden session that OverBench makes for it and
 // removes afterwards, so it shows in no thread and stays in none of the agent's history. All
-// three run in the agent itself, without a model call.
+// three run in the agent itself, without a model call of their own.
 
 import type { PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
