@@ -26,10 +26,10 @@ The first desktop version benchmarks the Claude Desktop app, through the analysi
 
 ## Color
 
-Every color, line color and shadow color in the renderer is a token in `src/renderer/src/styles/tokens.css`, the only file there that may hold a color literal. The palette is the maintainer's, set on 2026-10-23 ([#39](https://github.com/overbench/overbench/issues/39)): warm neutrals a trace off pure grey, and color only where it means something, by the rules in [visual style: color](./visual-style.md#color). Two checks in `pnpm lint` guard it ([color checks](./testing.md#color-checks)): no color literal outside the token file, and every text token at 4.5:1 on the surfaces it sits on.
+Every color, line color and shadow color in the renderer is a token in `src/renderer/src/styles/tokens.css`, the only file there that may hold a color literal. The palette is the maintainer's, set on 2026-10-23 ([#39](https://github.com/overbench/overbench/issues/39)): warm neutrals a trace off pure grey for the chrome, and a color for each state you tell apart at a glance, by the rules in [visual style: color](./visual-style.md#color). Two checks in `pnpm lint` guard it ([color checks](./testing.md#color-checks)): no color literal outside the token file, and every text token at 4.5:1 on the surfaces it sits on.
 
 - **Themes**: light values sit on `:root`, dark ones on `[data-theme='dark']`, which the settings store sets on `<html>`, and under `prefers-color-scheme: dark` until it has; the two dark blocks are identical, and the contrast check fails if they drift. A subtree can take a theme of its own with `data-theme`, as the theme tiles in Settings do. Tailwind's `dark:` variant follows `data-theme`.
-- **Utilities**: Tailwind reads the tokens through `@theme inline` in `globals.css`: `bg-app`, `bg-sidebar`, `bg-surface`, `bg-subtle`, `bg-hover`, `bg-selected`, `bg-code-inline`, `bg-code-block`; `border-default`, `border-subtle`, `border-strong`; `text-primary`, `text-secondary`, `text-tertiary`, `text-placeholder`, `text-disabled`, `text-icon`; and `attention`, `attention-dot`, `danger`, `success`, `merged`, `warning`, `link` and `focus` in every color utility. A fill in a text color is `bg-current` with that text utility.
+- **Utilities**: Tailwind reads the tokens through `@theme inline` in `globals.css`: `bg-app`, `bg-sidebar`, `bg-surface`, `bg-subtle`, `bg-hover`, `bg-selected`, `bg-code-inline`, `bg-code-block`; `border-default`, `border-subtle`, `border-strong`; `text-primary`, `text-secondary`, `text-tertiary`, `text-placeholder`, `text-disabled`, `text-icon`; and `attention`, `attention-dot`, `danger`, `success`, `info`, `merged`, `warning`, `link` and `focus` in every color utility. A fill in a text color is `bg-current` with that text utility.
 - `BACKGROUND_COLOR` in `src/main/window.ts` is `--bg-app` of each theme, so the first frame does not flash; the Windows and Linux window controls draw their symbols in `--text-primary`.
 
 ### Palette
@@ -55,9 +55,10 @@ Every color, line color and shadow color in the renderer is a token in `src/rend
 | `--icon-default`                   | `#6B6B6B`                    | `#9A9994`              | Icons at rest; `--text-primary` under the pointer                                                                                                                    |
 | `--attention`                      | `#C2410C`, its dot `#EA580C` | `#FB923C`              | Waiting for your approval                                                                                                                                            |
 | `--danger`                         | `#B42318`                    | `#F87171`              | Failure, deletion, a diff's deleted lines                                                                                                                            |
-| `--success`                        | `#15803D`                    | `#4ADE80`              | A diff's added lines, nothing else                                                                                                                                   |
+| `--success`                        | `#15803D`                    | `#4ADE80`              | Done and passing states, an open pull request's icon, a diff's added lines                                                                                           |
 | `--merged`                         | `#6D28D9`                    | `#A78BFA`              | A merged pull request's icon, nothing else                                                                                                                           |
-| `--warning`                        | `#B45309`                    | `#FBBF24`              | Usage from 80%                                                                                                                                                       |
+| `--info`                           | `#2563EB`                    | `#60A5FA`              | Running work                                                                                                                                                         |
+| `--warning`                        | `#B45309`                    | `#FBBF24`              | Usage from 80%, the `warning` pill                                                                                                                                   |
 | `--link`                           | `#2563EB`, hover `#1D4ED8`   | `#60A5FA`              | Links                                                                                                                                                                |
 | `--focus`                          | `rgba(37,99,235,.55)`        | `rgba(96,165,250,.6)`  | The keyboard focus ring                                                                                                                                              |
 | `--selection`                      | `rgba(37,99,235,.18)`        | `rgba(96,165,250,.28)` | Selected text, in the thread and the terminal                                                                                                                        |
@@ -68,7 +69,7 @@ Every color, line color and shadow color in the renderer is a token in `src/rend
 | `--scrollbar-thumb`                | `rgba(0,0,0,.18)`            | `rgba(255,255,255,.2)` | Scrollbar thumbs, on a transparent track                                                                                                                             |
 | `--canvas`                         | `#FFFFFF`                    | `#FFFFFF`              | The page under an [SVG code block](./ui.md#markdown)'s picture: an SVG with no background is drawn for a white page, so its dark strokes would vanish on a dark card |
 
-- `--border-strong` and the dark `--link-hover`, which is `--link` itself, are the two values the palette did not give; they were derived here and wait for the maintainer's confirmation. `--merged` was added later and confirmed by the maintainer on 2026-10-24 ([#205](https://github.com/overbench/overbench/issues/205)).
+- `--border-strong`, the dark `--link-hover`, which is `--link` itself, and `--info`, which takes `--link`'s values, are the values the palette did not give; they were derived here and wait for the maintainer's confirmation. `--info` is a token of its own so that running and a link can part later without touching either's callers. `--merged` was added later and confirmed by the maintainer on 2026-10-24 ([#205](https://github.com/overbench/overbench/issues/205)).
 - The light theme was moved onto the reference's neutral greys on 2026-10-23 ([#127](https://github.com/overbench/overbench/issues/127)), sampled from its screenshots: a pure white canvas, a `#FAFAFA` sidebar, a `#E0E0E0` current row and text at `#141414`. The text steps below primary, the meaning colors and the dark theme keep the palette's values; the reference's lighter greys would fall under AA. The dark theme has no reference screenshot yet.
 - Lines are opaque and keep their hairline width (`--hairline`: 1 px, 0.5 px on 2× displays and 1/3 px on 3×), so a line is one device pixel of its color on every display.
 - Neither theme uses pure black or white for text.
@@ -95,7 +96,7 @@ shadcn/ui's components use their own names, which `tokens.css` points at the pal
 | `--ring`, `--sidebar-ring`                                                                                 | `--focus`          |
 
 - `--segment-thumb` is `--bg-surface` in the light theme and `--bg-selected` in the dark one, so the thumb stays lighter than its track in both. `--pressed-hover` is `--bg-selected` with 5% of `--text-primary`.
-- The derived meaning tokens: `--diff-add` is `--success` at 9% and `--diff-del` `--danger` at 8%; `--destructive-tint` is `--danger-tint` and `--destructive-tint-hover` `--danger` at 13%; `--attention-ring` and `--attention-halo` are `--attention` at 80% and 20%; `--attention-foreground`, a count on an attention fill, is `--bg-surface`.
+- The derived meaning tokens: `--diff-add` is `--success` at 9% and `--diff-del` `--danger` at 8%; `--destructive-tint` is `--danger-tint` and `--destructive-tint-hover` `--danger` at 13%; `--attention-ring` and `--attention-halo` are `--attention` at 80% and 20%; `--attention-foreground`, a count on an attention fill, is `--bg-surface`; `--success-tint`, `--info-tint` and `--warning-tint`, the pills' fills, are their color at 8% over `--bg-surface`, like `--diff-del`, and the contrast check holds each pill's text at 4.5:1 on its tint.
 - `--mark` (a soft yellow, `oklch(0.88 0.15 90 / 55%)` light and `oklch(0.8 0.14 85 / 32%)` dark), the text a search matched, keeps its value until the maintainer decides it; `--scrim`, black at 10% behind a dialog, likewise.
 
 ### Usage levels
@@ -108,12 +109,13 @@ A model's name and its reasoning level are `--text-secondary` wherever they show
 
 ### Repository state
 
-Git states are neutral, except what failed. A pull request's state icon takes its state's color, the one people know from GitHub, and each state keeps its own Lucide icon, so the shape tells them apart without the color ([#205](https://github.com/overbench/overbench/issues/205)).
+Git and pull request states take the [state colors](./visual-style.md#color): a pull request's state icon takes the color people know from GitHub ([#205](https://github.com/overbench/overbench/issues/205)), and each state keeps its own Lucide icon, so the shape tells them apart without the color.
 
 | State                                      | Icon                                                                        | Color                                                     |
 | ------------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------- |
 | Open, draft, merged or closed pull request | `GitPullRequest`, `GitPullRequestDraft`, `GitMerge`, `GitPullRequestClosed` | `--success`, `--icon-default`, `--merged`, `--danger`     |
-| Checks passing or pending                  | `CircleCheck`, `CircleDot`                                                  | `--icon-default`                                          |
+| Checks passing                             | `CircleCheck`                                                               | `--success`                                               |
+| Checks pending                             | `CircleDot`                                                                 | `--info`                                                  |
 | Checks failing                             | `CircleX`                                                                   | `--danger`                                                |
 | Commits not pushed                         | `ArrowUp` with the count                                                    | `--text-primary`; pushed and in sync is `--text-tertiary` |
 | Conflicts                                  | `TriangleAlert`                                                             | `--danger`; a rebase in progress is neutral               |
@@ -122,7 +124,7 @@ Git states are neutral, except what failed. A pull request's state icon takes it
 - Branch names and commit ids are monospace, at 12 px, with ids cut to 7 characters; in the top bar the branch and the change counts are `--text-secondary`.
 - Pull request chips are neutral apart from the state icon: `--muted` fill with a `--border-soft` ring and `--foreground` text. The state word stays `--text-secondary`.
 - Without `gh` the state is unknown, and the icon is a neutral `GitPullRequest`.
-- A state color is an icon's, at 3:1 or more on every row and chip it sits on, as WCAG asks of icons; it never colors text.
+- A pull request's state color is an icon's, at 3:1 or more on every row and chip it sits on, as WCAG asks of icons; it never colors text.
 
 ### Terminal
 
@@ -358,20 +360,20 @@ A state shown in a row, such as "Signed in", "Not found on PATH" or an agent's u
 
 | Variant   | Fill and text                               | Used for                                               |
 | --------- | ------------------------------------------- | ------------------------------------------------------ |
-| `success` | `--bg-subtle`, `--text-secondary`           | Found, signed in, updated                              |
-| `info`    | `--bg-subtle`, `--text-secondary`           | Something on offer or under way: an update, an install |
-| `warning` | `--bg-subtle`, `--text-secondary`           | Something to do: not signed in                         |
+| `success` | `--success-tint`, `--success`               | Found, signed in, updated                              |
+| `info`    | `--info-tint`, `--info`                     | Something on offer or under way: an update, an install |
+| `warning` | `--warning-tint`, `--warning`               | Something to do: not signed in                         |
 | `error`   | `--danger-tint`, `--danger`                 | A failure, with its retry                              |
 | `neutral` | `--muted`, `--muted-foreground`, weight 400 | A plain value, such as the shell in use                |
 
 - A pill can be the action itself, rendered as a `button` (`render`), and then keeps its states inside it: the offer, a `Spinner` with a small × that cancels, the failure with `RotateCw`, and the result. The row around it never changes its layout ([Settings › Agents](./ui.md#settings--agents)).
 - A pill never shows a percentage it does not have: a task with no measured progress shows the `Spinner` and its words.
-- `success`, `info` and `warning` keep their names, so a caller says what a pill means, but share one neutral look: only a failure is colored. The icon in the leading slot tells them apart.
-- The notices that go with pills are `Alert`s with no shadow, so Settings keeps to no cards and no shadows: `info`, `success` and `warning` on `--bg-subtle` with the icon in `--icon-default`, and `error` on `--danger-tint` with a `--danger-border` hairline and the icon in `--danger`, the text `--text-primary` and the description `--text-secondary`; the line that ends a cut turn is this notice. The `destructive` variant, a card, stays for surfaces that have cards. A log or a command inside a notice sits on `--card` with no ring.
+- Each variant takes its state's color, and the icon in its leading slot tells them apart too, so color is never the only sign ([#207](https://github.com/overbench/overbench/issues/207)).
+- The notices that go with pills are `Alert`s with no shadow, so Settings keeps to no cards and no shadows: `info`, `success` and `warning` on `--bg-subtle` with the icon in its pill's color, and `error` on `--danger-tint` with a `--danger-border` hairline and the icon in `--danger`, the text `--text-primary` and the description `--text-secondary`; the line that ends a cut turn is this notice. The `destructive` variant, a card, stays for surfaces that have cards. A log or a command inside a notice sits on `--card` with no ring.
 
 ### Toggle buttons
 
-An icon button that stays on, such as a side pane's toggle in the top bar, says so with `aria-pressed`, and the `quiet` button shows it sunk into its bar: a `--pressed` fill (`--bg-selected`), a hairline `--border` edge inside it, and the icon in `--foreground`; hover deepens the fill to `--pressed-hover`. The reference marks the same state with a blue tint. OverBench keeps to its neutral palette and makes the state plain through the fill and the edge, so it reads at a glance without a color of its own; an open menu's trigger keeps the lighter `--accent`.
+An icon button that stays on, such as a side pane's toggle in the top bar, says so with `aria-pressed`, and the `quiet` button shows it sunk into its bar: a `--pressed` fill (`--bg-selected`), a hairline `--border` edge inside it, and the icon in `--foreground`; hover deepens the fill to `--pressed-hover`. The reference marks the same state with a blue tint. OverBench keeps its chrome neutral and makes the state plain through the fill and the edge, so it reads at a glance without a color of its own; an open menu's trigger keeps the lighter `--accent`.
 
 ### Menus and dialogs
 
@@ -468,7 +470,7 @@ Each pattern names what provides it. OverBench writes its own keyframes only whe
 | Thinking, waiting | shadcn's `shimmer` utility on the status text                                                                                                                                                                                                               | None                                                                                               |
 | Loading           | shadcn `Skeleton` and `Spinner`                                                                                                                                                                                                                             | None                                                                                               |
 | Scroll-edge fades | shadcn's `scroll-fade` utilities (scroll-driven, no JavaScript); `MessageScrollerViewport` applies them itself. The thread's top edge uses `scroll-fade-top-overlay`, a gradient over the scroller, since a mask there repaints the thread while it streams | `--scroll-fade-size: 28px`                                                                         |
-| Running           | The shared `Spinner` at 12 px in `--muted-foreground`, at the end of a sidebar row                                                                                                                                                                          | None                                                                                               |
+| Running           | The shared `Spinner` at 12 px in `--info`, at the end of a sidebar row                                                                                                                                                                                      | None                                                                                               |
 | Copy feedback     | The copy button in Streamdown's code blocks                                                                                                                                                                                                                 | None                                                                                               |
 | Staggered entry   | tw-animate-css: `animate-in fade-in slide-in-from-bottom-1 fill-mode-both`, with a growing `animation-delay`                                                                                                                                                | `--duration-slow`, `--ease-out-quint`; the first item after 60 ms, each next one 30 ms later, once |
 | Attention         | Own keyframe: the attention halo grows to 6 px and settles at 3 px, once                                                                                                                                                                                    | `--duration-slower`; it does not loop, because the sidebar indicator keeps the signal              |
