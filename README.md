@@ -22,16 +22,19 @@ with readable threads, clear approvals, git and a terminal beside every session.
 </picture>
 
 > [!NOTE]
-> v0.0.2 is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues).
+> v0.0.2 is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues). Artifacts and attachments are on `main` and ship with v0.0.3.
 
 ## Features
 
-- **Every agent, one window** — Claude Code, Codex CLI and opencode sessions side by side in the same project. The sidebar shows which are running, which wait for you and which are done, with subagents under their parent.
-- **Threads that read well** — answers stream as Markdown with highlighted code, edits show as inline diffs, and a run of steps folds into one line. Queue your next message while the agent works, or steer it mid-turn.
+- **Every agent, one window** — Claude Code, Codex CLI and opencode sessions side by side in the same project. The sidebar shows which are running, which wait for you and which are done, with subagents under their parent; pin the sessions you come back to and archive the ones you are done with.
+- **Threads that read well** — answers stream as Markdown with highlighted code, edits show as inline diffs, images the agent names show in place, and a run of steps folds into one line. Queue your next message while the agent works, or steer it mid-turn.
 - **Approvals at a glance** — permission requests are cards you answer with a click or a number key, and a system notification tells you when a session needs you.
-- **Each agent's own controls** — mode, model and reasoning, slash commands, context usage and, where the agent reports them, your plan limits.
+- **Attach anything** — paste images, attach files and folders, or mention a project file with `@`, from the first message on.
+- **Artifacts** — agents publish HTML pages and multi-page canvases through OverBench's built-in artifacts service. Each one keeps its versions, opens in a viewer isolated from the app, and is collected on the Artifacts page and on New session.
+- **Each agent's own controls** — mode, model and reasoning, slash commands, context usage, when the prompt cache expires and, where the agent reports them, your plan limits.
+- **Usage at a glance** — tokens across every agent by day, model and project, with each plan's limits, from OverBench's own record and, if you choose, the agents' local logs.
 - **Sessions that last** — every session is kept with its project, reopens with its full history, survives an agent crash, and can be imported from the agent.
-- **Git, files and a terminal** — the branch, sync state and changes in the top bar, pull requests with their checks through the GitHub CLI, a files pane to read and edit files, and a terminal for each project.
+- **Git, files and a terminal** — the branch, sync state and changes in the top bar, pull requests with their checks through the GitHub CLI, a files pane to read, preview and edit files, and a terminal for each project.
 - **Crafted details** — light and dark themes, English and Simplified Chinese, restrained motion that honors reduce motion, and shortcuts for the common actions.
 
 ## Install
@@ -72,10 +75,13 @@ It rests on one belief, **beauty is productivity**:
 - [x] Session history, parallel sessions and sub-sessions
 - [x] Git status, pull requests, files and a built-in terminal
 - [x] Preview builds for macOS, Windows and Linux
+- [x] Attachments and `@` file mentions in the composer
+- [x] Artifacts: the pages and canvases agents create, with their versions
+- [x] Token usage across agents, with plan limits
 - [ ] M0 accepted on all three platforms
 - [ ] A changes panel for reviewing diffs
-- [ ] `@` file mentions and images in the composer
-- [ ] Images, audio and video in the thread and the Files pane
+- [ ] Audio and video in the thread and the Files pane
+- [ ] Routines: agent tasks that run on a schedule
 - [ ] Search across sessions and a command palette
 - [ ] Signed and notarized builds
 
