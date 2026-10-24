@@ -74,7 +74,7 @@ describe('drafts', () => {
     vi.advanceTimersByTime(299)
     expect(storage.getItem('draft:s1')).toBeNull()
     vi.advanceTimersByTime(1)
-    expect(storage.getItem('draft:s1')).toBe('he')
+    expect(parseDraft(storage.getItem('draft:s1')!)).toEqual({ text: 'he', attachments: [] })
   })
 
   it('reads the unsaved text before it is written', () => {
@@ -103,7 +103,7 @@ describe('drafts', () => {
 })
 
 describe('drafts with attachments', () => {
-  it('stores text and attachments as JSON, and text alone as it is', () => {
+  it('stores text and attachments as JSON, text alone too', () => {
     writeDraft('t1', 'Look at this')
     writeDraftAttachments('t1', [saved])
     vi.advanceTimersByTime(300)
@@ -113,7 +113,10 @@ describe('drafts with attachments', () => {
     })
     writeDraftAttachments('t1', [])
     vi.advanceTimersByTime(300)
-    expect(storage.getItem('draft:t1')).toBe('Look at this')
+    expect(JSON.parse(storage.getItem('draft:t1')!)).toEqual({
+      text: 'Look at this',
+      attachments: [],
+    })
   })
 
   it('reads both back after a restart, and keeps one when the other changes', () => {
@@ -133,6 +136,13 @@ describe('drafts with attachments', () => {
     writeDraftAttachments('t3', [])
     flushDraft('t3')
     expect(storage.getItem('draft:t3')).toBeNull()
+  })
+
+  it('keeps typed text that looks like a stored draft as it was typed', () => {
+    const typed = JSON.stringify({ text: 'x', attachments: [] })
+    writeDraft('t5', typed)
+    flushDraft('t5')
+    expect(parseDraft(storage.getItem('draft:t5')!).text).toBe(typed)
   })
 
   it('reads text that only looks like JSON as text, and drops attachments that do not parse', () => {

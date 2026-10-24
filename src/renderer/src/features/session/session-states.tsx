@@ -12,6 +12,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { contentAttachments } from './composer/attachments'
 import { SentAttachments, UserContentView } from './entries/user-content'
 
 /**
@@ -131,28 +132,28 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
   const { t } = useTranslation('session')
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
   const installing = useAgentsStore((s) => s.byId[agentId]?.state === 'installing')
-  const attachments = content.flatMap((c) =>
-    c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
-  )
+  const attachments = contentAttachments(content)
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
     <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
       <div className="mx-auto flex w-full max-w-thread flex-col px-6 pt-5">
         {/* As the thread shows a user entry, so nothing moves when the session takes over. */}
-        {attachments.length > 0 && (
-          <div className="flex w-full justify-end pb-1">
-            <SentAttachments sessionId={null} attachments={attachments} />
-          </div>
-        )}
-        {rest.length > 0 && (
-          <Message align="end">
-            <Bubble variant="muted" className="max-w-[85%]">
-              <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
-                <UserContentView content={rest} />
-              </BubbleContent>
-            </Bubble>
-          </Message>
-        )}
+        <div className="flex flex-col items-end gap-0.5">
+          {attachments.length > 0 && (
+            <div className="flex w-full justify-end pb-1">
+              <SentAttachments sessionId={null} attachments={attachments} />
+            </div>
+          )}
+          {rest.length > 0 && (
+            <Message align="end">
+              <Bubble variant="muted" className="max-w-[85%]">
+                <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
+                  <UserContentView content={rest} />
+                </BubbleContent>
+              </Bubble>
+            </Message>
+          )}
+        </div>
         <div role="status" className="flex flex-col gap-0.5 pt-2.5">
           <p className="text-prose text-muted-foreground">
             <span className="shimmer">

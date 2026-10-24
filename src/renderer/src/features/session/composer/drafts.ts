@@ -1,9 +1,10 @@
 import { isAttachment, type Attachment } from '@shared/thread'
 import { removeKey } from '@renderer/lib/storage'
 
-// Unsent composer text and attachments per session, in localStorage under `draft:<sessionId>`,
-// written 300 ms after the last change. Text alone is stored as it is; with attachments, as JSON
-// `{ text, attachments }`. A draft that is too large or fails to save stays in memory.
+// Unsent composer text and attachments per session, in localStorage under `draft:<sessionId>` as
+// JSON `{ text, attachments }`, written 300 ms after the last change. One stored as plain text,
+// before drafts had attachments, reads as text alone. A draft that is too large or fails to save
+// stays in memory.
 
 /** The New session screen's draft, kept like a session's until the session it starts exists. */
 export const NEW_SESSION_DRAFT = 'new'
@@ -61,10 +62,6 @@ export function parseDraft(raw: string): Draft {
   return { text: raw, attachments: [] }
 }
 
-function serialize(draft: Draft): string {
-  return draft.attachments.length > 0 ? JSON.stringify(draft) : draft.text
-}
-
 function read(sessionId: string): Draft {
   const kept = memory.get(sessionId)
   if (kept) return kept
@@ -114,7 +111,7 @@ export function flushDraft(sessionId: string): void {
     memory.delete(sessionId)
     return
   }
-  const value = serialize(draft)
+  const value = JSON.stringify(draft)
   if (value.length * 2 > MAX_DRAFT_BYTES) {
     console.warn(`Draft for ${sessionId} is over 1 MB; keeping it in memory only`)
     return

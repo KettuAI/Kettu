@@ -435,7 +435,9 @@ describe('createSession with a first message', () => {
     await createSession('codex', '/repo', null, fixTheBuild)
     expect(usePendingSession.getState().pending).toMatchObject({ prompt: fixTheBuild })
     // Stored at once, since a quit can close the window before a later write.
-    expect(stored.get(`draft:${NEW_SESSION_DRAFT}`)).toBe('Fix the build')
+    expect(JSON.parse(stored.get(`draft:${NEW_SESSION_DRAFT}`)!)).toMatchObject({
+      text: 'Fix the build',
+    })
 
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('running') : undefined,
@@ -473,7 +475,7 @@ describe('createSession with a first message', () => {
         attachment: shot,
         thumb: null,
         size: 3,
-        pixels: null,
+        pixels: { width: 4, height: 3 },
         scaled: null,
         error: null,
       },
@@ -491,14 +493,14 @@ describe('createSession with a first message', () => {
     expect(request).not.toHaveBeenCalledWith('attachments.remove', expect.anything())
   })
 
-  it('puts its attachments back in the draft when the start fails', async () => {
+  it('puts its attachments back in the draft as they were when the start fails', async () => {
     holdShot()
     request.mockRejectedValueOnce(new Error('spawn failed'))
     await createSession('codex', '/repo', null, withShot)
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
-    expect(draftAttachments(NEW_SESSION_DRAFT).map((i) => [i.attachment?.id, i.status])).toEqual([
-      ['a1', 'ready'],
-    ])
+    expect(
+      draftAttachments(NEW_SESSION_DRAFT).map((i) => [i.attachment?.id, i.status, i.pixels]),
+    ).toEqual([['a1', 'ready', { width: 4, height: 3 }]])
     setDraftAttachments(NEW_SESSION_DRAFT, [])
   })
 

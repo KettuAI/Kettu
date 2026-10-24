@@ -16,7 +16,11 @@ import {
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { clearPicks, noteStarting, type OptionValues } from '@renderer/stores/agent-options'
-import { draftAttachments, setDraftAttachments } from '@renderer/stores/attachments'
+import {
+  draftAttachments,
+  setDraftAttachments,
+  type DraftAttachment,
+} from '@renderer/stores/attachments'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -126,7 +130,9 @@ export async function createSession(
   // The host sends the first message once the session has started, also after a sign-in. It
   // leaves the draft as it goes, so a window reloaded meanwhile does not offer it again; a retry
   // leaves alone a draft written since. The host keeps the attachments' records for the message.
+  let held: DraftAttachment[] | null = null
   if (prompt !== null && draftIsPrompt(prompt)) {
+    held = draftAttachments(NEW_SESSION_DRAFT)
     clearDraft(NEW_SESSION_DRAFT)
     setDraftAttachments(NEW_SESSION_DRAFT, [])
   }
@@ -153,7 +159,9 @@ export async function createSession(
     // at once, since a quit can close the window before a later write.
     if (prompt !== null && draftIsEmpty()) {
       writeDraft(NEW_SESSION_DRAFT, promptText(prompt))
-      restoreAttachments(NEW_SESSION_DRAFT, prompt)
+      // The tiles it left with keep their pixel sizes; a retry's are rebuilt from the message.
+      if (held) setDraftAttachments(NEW_SESSION_DRAFT, held)
+      else restoreAttachments(NEW_SESSION_DRAFT, prompt)
       flushDraft(NEW_SESSION_DRAFT)
     }
     // Deleted, or its project removed, while it started: nothing is left to show.
