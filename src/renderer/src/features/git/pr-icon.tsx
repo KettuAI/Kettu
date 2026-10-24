@@ -12,13 +12,13 @@ import type { PullRequest, PullRequestState } from '@shared/git'
 import { cn } from '@renderer/lib/utils'
 
 const STATE = {
-  open: { Icon: GitPullRequestIcon, label: 'pr.icon.open' },
-  draft: { Icon: GitPullRequestDraftIcon, label: 'pr.icon.draft' },
-  merged: { Icon: GitMergeIcon, label: 'pr.icon.merged' },
-  closed: { Icon: GitPullRequestClosedIcon, label: 'pr.icon.closed' },
+  open: { Icon: GitPullRequestIcon, color: 'text-success', label: 'pr.icon.open' },
+  draft: { Icon: GitPullRequestDraftIcon, color: 'text-icon', label: 'pr.icon.draft' },
+  merged: { Icon: GitMergeIcon, color: 'text-merged', label: 'pr.icon.merged' },
+  closed: { Icon: GitPullRequestClosedIcon, color: 'text-danger', label: 'pr.icon.closed' },
 } as const
 
-/** A pull request's state icon, neutral in every state; `null` is the icon without gh. */
+/** A pull request's state icon in its state's color; `null` is the neutral icon without gh. */
 export function PrIcon({
   state,
   size = 14,
@@ -40,14 +40,14 @@ export function PrIcon({
       />
     )
   }
-  const { Icon, label } = STATE[state]
+  const { Icon, color, label } = STATE[state]
   return (
     <Icon
       role="img"
       aria-label={t(label)}
       style={{ width: size, height: size }}
 
-      className={cn('shrink-0 text-icon', className)}
+      className={cn('shrink-0', color, className)}
     />
   )
 }

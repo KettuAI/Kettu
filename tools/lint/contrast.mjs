@@ -59,7 +59,11 @@ export const PAIR_GROUPS = [
       '--danger-tint',
     ],
   },
-  { fg: '--success', on: ['--bg-app', '--bg-surface', '--bg-code-block'] },
+  { fg: '--success', on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-code-block'] },
+  {
+    fg: '--merged',
+    on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-subtle', '--bg-hover', '--bg-selected'],
+  },
   { fg: '--warning', on: ['--bg-app', '--bg-sidebar', '--bg-surface'] },
   { fg: '--link', on: ['--bg-app', '--bg-surface', '--bg-subtle'] },
   { fg: '--link-hover', on: ['--bg-app', '--bg-surface', '--bg-subtle'] },
