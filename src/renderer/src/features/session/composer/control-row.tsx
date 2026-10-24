@@ -68,11 +68,17 @@ export function ControlRow({
   session,
   onCompact,
   ultracode = false,
+  modelMenu,
+  outOfCredit = false,
 }: {
   session: SessionView
   onCompact: (() => void) | null
   /** The draft turns on Claude Code's ultracode for its message. */
   ultracode?: boolean
+  /** The model menu's open state, so the out-of-credit strip can open it. */
+  modelMenu: { open: boolean; onOpenChange: (open: boolean) => void }
+  /** The model's provider refused the latest turn for want of credit. */
+  outOfCredit?: boolean
 }) {
   const { t } = useTranslation('composer')
   const agent = useAgentsStore((s) => s.byId[session.agentId])
@@ -144,6 +150,9 @@ export function ControlRow({
           switches={switches}
           running={running}
           onSelect={set}
+          open={modelMenu.open}
+          onOpenChange={modelMenu.onOpenChange}
+          outOfCredit={outOfCredit}
         />
       )}
       <UsageButton
@@ -254,15 +263,20 @@ function ModelMenu({
   switches,
   running,
   onSelect,
+  open,
+  onOpenChange: setOpen,
+  outOfCredit,
 }: {
   model: SelectOption | undefined
   effort: SelectOption | undefined
   switches: ConfigOption[]
   running: boolean
   onSelect: Select
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  outOfCredit: boolean
 }) {
   const { t } = useTranslation('composer')
-  const [open, setOpen] = useState(false)
   const [modelValue, pickModel] = usePick(model, onSelect)
   const [effortValue, pickEffort] = usePick(effort, onSelect)
   const level = effort ? levelsOf(effort, effortValue) : null
@@ -304,12 +318,19 @@ function ModelMenu({
           <Button
             variant="quiet"
             size="compact"
-            aria-label={t('controls.model')}
-            title={model ? choiceName(model, modelValue) : undefined}
+            aria-label={outOfCredit ? t('controls.modelOutOfCredit') : t('controls.model')}
+            title={
+              model
+                ? outOfCredit
+                  ? t('outOfCredit.modelTitle', { model: choiceName(model, modelValue) })
+                  : choiceName(model, modelValue)
+                : undefined
+            }
             className="min-w-0 shrink gap-1 px-2"
           />
         }
       >
+        {outOfCredit && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-warning" />}
         {model && (
           <span className="truncate text-secondary">
             {splitName(choiceName(model, modelValue))[1]}

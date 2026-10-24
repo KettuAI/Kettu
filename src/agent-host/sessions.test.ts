@@ -2114,6 +2114,79 @@ describe('sign-in', () => {
   })
 })
 
+describe('out of credit', () => {
+  const users = (port: TestPort, sessionId: string) =>
+    port.entries(sessionId).filter((entry) => entry.kind === 'user')
+
+  it("ends the turn with a warning that names the session's model", async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/out-of-credit')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+    await port.untilStatus(sessionId, 'ready')
+    const notice = port.entries(sessionId).find((entry) => entry.kind === 'notice')
+    expect(notice).toMatchObject({
+      severity: 'warning',
+      cause: 'out_of_credit',
+      model: 'balanced',
+      title: 'Fake Balanced is out of credit',
+      description: expect.stringContaining('Insufficient Balance'),
+    })
+  })
+
+  it('sends the refused prompt again on retry, without a second user entry', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/out-of-credit')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+    await port.untilStatus(sessionId, 'ready')
+    await port.request('sessions.retry', { sessionId })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'agent')
+    await port.untilStatus(sessionId, 'ready')
+    expect(users(port, sessionId)).toHaveLength(1)
+    expect(port.thread(sessionId).session.error).toBeNull()
+    // Answered now, so another retry has nothing to send.
+    const count = port.entries(sessionId).length
+    await port.request('sessions.retry', { sessionId })
+    expect(port.thread(sessionId).session.status).toBe('ready')
+    expect(port.entries(sessionId)).toHaveLength(count)
+  })
+
+  it('sends it again after a restart of the host', async () => {
+    const first = await startTestHost()
+    let port = first.connect()
+    const sessionId = await newSession(first, port)
+    await turn(port, sessionId, '/out-of-credit')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+    await port.untilStatus(sessionId, 'ready')
+    await first.host.shutdown()
+
+    current = await startTestHost({ userDataPath: first.dir })
+    port = current.connect()
+    const before = new Set((await port.open(sessionId)).entries.map((entry) => entry.id))
+    await port.request('sessions.retry', { sessionId })
+    // A new agent process may refuse it again; either way the prompt went out once more.
+    await port.untilEntry(sessionId, (entry) => !before.has(entry.id))
+    await port.untilStatus(sessionId, 'ready')
+    expect(users(port, sessionId)).toHaveLength(1)
+  })
+
+  it('leaves a retry alone once a later turn has started', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/out-of-credit')
+    await port.untilStatus(sessionId, 'ready')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+    await turn(port, sessionId, 'Hello')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'agent')
+    await port.untilStatus(sessionId, 'ready')
+    const count = port.entries(sessionId).length
+    await port.request('sessions.retry', { sessionId })
+    expect(port.thread(sessionId).session.status).toBe('ready')
+    expect(port.entries(sessionId)).toHaveLength(count)
+  })
+})
+
 describe('updates', () => {
   it('maps every variant and records the unknown one', async () => {
     const { t, port } = await setup()

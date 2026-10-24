@@ -252,6 +252,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       usedTokens: 0,
       largeHistory: id.startsWith('large-history') ? historyEntries(env) : historySize(id),
       signedOut: false,
+      outOfCredit: false,
       ...DEFAULT_CONFIG,
       history: [],
       turnStarts: [],

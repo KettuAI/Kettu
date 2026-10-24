@@ -19,6 +19,7 @@ import {
   applyPatchInPlace,
   coalescePatches,
   entryMessageId,
+  outOfCreditTurn,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -83,6 +84,7 @@ import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
+import { isOutOfCredit } from './out-of-credit'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
 import {
@@ -1874,17 +1876,34 @@ export class SessionManager {
     }
   }
 
-  /** Re-runs what failed: the sign-in retry, a resume, or a load after a failed resume. */
+  /**
+   * Re-runs what failed: the sign-in retry, a resume, a load after a failed resume, or a turn the
+   * model provider refused for want of credit.
+   */
   async retry(sessionId: string): Promise<void> {
-    const live = this.live.get(sessionId)
+    let live = this.live.get(sessionId)
     if (!live) {
-      await this.open(sessionId)
-      return
+      const snapshot = await this.open(sessionId)
+      // A turn refused for want of credit is sent again after a restart too, from its stored thread.
+      if (
+        this.recordOf(sessionId).origin === 'subagent' ||
+        !outOfCreditTurn(threadFromSnapshot(snapshot))
+      ) {
+        return
+      }
+      live = await this.revive(sessionId)
     }
     if (live.opening) return live.opening
     // A subagent recovers with its parent; its own failures are the agent's to retry.
     if (live.record.origin === 'subagent') return
     const status = live.thread.session.status
+    const unpaid = canSend(status) ? outOfCreditTurn(live.thread) : null
+    if (unpaid) {
+      // The same prompt again, under its own entry; the turn attaches the session if it has to.
+      live.used = true
+      this.startTurn(live, unpaid.prompt.content, this.now(), unpaid.prompt.id)
+      return
+    }
     const failure = live.failure
     if (status !== 'failed' && status !== 'auth_required') return
     if (this.deps.agents.status(live.record.agentId).state === 'failed') {
@@ -2987,7 +3006,13 @@ export class SessionManager {
               }
             : closed
               ? stoppedNotice(this.deps.agents.name(live.record.agentId))
-              : { title: t('notice.turnFailed'), description: mapped.message }),
+              : isOutOfCredit(mapped)
+                ? outOfCreditNotice(
+                    this.deps.agents.name(live.record.agentId),
+                    live.thread.session.config,
+                    mapped.message,
+                  )
+                : { title: t('notice.turnFailed'), description: mapped.message }),
         },
       },
     ])
@@ -3805,6 +3830,32 @@ function turnEndText(stopReason: StopReason): string {
 
 function busyError(status: SessionStatus): HostError {
   return new HostError('busy', t('session.busy', { status: t(`session.status.${status}`) }))
+}
+
+// Something for the user to do rather than a fault, so a warning; the composer offers Retry.
+function outOfCreditNotice(
+  agent: string,
+  config: readonly ConfigOption[],
+  message: string,
+): {
+  severity: 'warning'
+  title: string
+  description: string
+  cause: 'out_of_credit'
+  model?: string
+} {
+  const model = modelOf(config)
+  const option = config.find((o) => o.category === 'model')
+  const name = model && (option?.choices?.find((c) => c.value === model)?.name ?? model)
+  return {
+    severity: 'warning',
+    title: name
+      ? t('notice.outOfCredit.title', { model: name.slice(name.lastIndexOf('/') + 1) })
+      : t('notice.outOfCredit.titleNoModel', { agent }),
+    description: message,
+    cause: 'out_of_credit',
+    ...(model ? { model } : {}),
+  }
 }
 
 // The exit event and the failed prompt race, so both say the same thing. The notice ends the cut

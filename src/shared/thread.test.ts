@@ -5,6 +5,7 @@ import {
   coalescePatches,
   entryMessageId,
   isThreadEntry,
+  outOfCreditTurn,
   prependEntries,
   threadEntries,
   threadFromSnapshot,
@@ -247,6 +248,14 @@ describe('isThreadEntry', () => {
     { kind: 'plan', id: 'e:2', items: [{ content: 'x', priority: 'low', status: 'pending' }] },
     { kind: 'notice', id: 'e:3', severity: 'info', title: 'x' },
     { kind: 'notice', id: 'e:5', severity: 'error', title: 'x', cause: 'agent_stopped' },
+    {
+      kind: 'notice',
+      id: 'e:6',
+      severity: 'warning',
+      title: 'x',
+      cause: 'out_of_credit',
+      model: 'deepseek-v4.1-flash',
+    },
     { kind: 'compaction', id: 'c:1', status: 'completed', summary: '' },
     { kind: 'turn_end', id: 'e:4', stopReason: 'end_turn', durationMs: 5 },
     { kind: 'git', id: 'g:1', event: 'commit', commits: [{ oid: 'a', subject: 'b' }], more: 0 },
@@ -280,6 +289,9 @@ describe('isThreadEntry', () => {
     expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'error', title: 'x', cause: 'other' }),
     ).toBe(false)
+    expect(
+      isThreadEntry({ kind: 'notice', id: 'n', severity: 'warning', title: 'x', model: 1 }),
+    ).toBe(false)
   })
 })
 
@@ -294,5 +306,46 @@ describe('entryMessageId', () => {
     expect(entryMessageId('e:12')).toBeNull()
     expect(entryMessageId('t:call_1')).toBeNull()
     expect(entryMessageId('sm:msg_1')).toBeNull()
+  })
+})
+
+describe('outOfCreditTurn', () => {
+  const thread = (...entries: ThreadEntry[]): Pick<ThreadState, 'order' | 'byId'> => ({
+    order: entries.map((e) => e.id),
+    byId: Object.fromEntries(entries.map((e) => [e.id, e])),
+  })
+  const prompt: ThreadEntry = { kind: 'user', id: 'u1', content: [{ type: 'text', text: 'hi' }] }
+  const notice: ThreadEntry = {
+    kind: 'notice',
+    id: 'n1',
+    severity: 'warning',
+    title: 'x is out of credit',
+    cause: 'out_of_credit',
+    model: 'x',
+  }
+
+  it("gives the latest turn's prompt and notice when credit ran out", () => {
+    const steered: ThreadEntry = { ...prompt, id: 'u2', steered: true }
+    expect(outOfCreditTurn(thread(prompt, steered, notice))).toEqual({ notice, prompt })
+  })
+
+  it('gives null once a later turn started, or when the turn failed otherwise', () => {
+    expect(outOfCreditTurn(thread(prompt, notice, { ...prompt, id: 'u3' }))).toBeNull()
+    expect(
+      outOfCreditTurn(thread(prompt, { kind: 'notice', id: 'n2', severity: 'error', title: 'x' })),
+    ).toBeNull()
+    expect(outOfCreditTurn(thread(notice))).toBeNull()
+  })
+
+  it('gives null once the retried turn has answered under the same prompt', () => {
+    const reply: ThreadEntry = {
+      kind: 'agent',
+      id: 'm1',
+      markdown: 'Done',
+      attachments: [],
+      streaming: false,
+    }
+    const end: ThreadEntry = { kind: 'turn_end', id: 'e1', stopReason: 'end_turn', durationMs: 5 }
+    expect(outOfCreditTurn(thread(prompt, notice, reply, end))).toBeNull()
   })
 })
