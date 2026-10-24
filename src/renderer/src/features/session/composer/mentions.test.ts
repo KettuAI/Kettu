@@ -3,6 +3,7 @@ import type { ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
 import {
   foldersOf,
   insertAt,
+  markedRuns,
   matchMentions,
   MENTION_LIMIT,
   mentionAt,
@@ -85,7 +86,8 @@ describe('usedFiles', () => {
       tool('t2', 'execute', ['/work/app/README.md']),
       tool('t3', 'edit', ['/work/app/src/b.ts']),
       tool('t4', 'read', ['/work/app/src/a.ts']),
-      tool('t5', 'read', ['/elsewhere/x.ts', '/work/app/gone.ts']),
+      tool('t5', 'read', ['/elsewhere/x.ts']),
+      tool('t6', 'read', ['/work/app/gone.ts']),
     ])
     expect(usedFiles(state, '/work/app', known)).toEqual(['src/a.ts', 'src/b.ts'])
     expect(usedFiles(null, '/work/app', known)).toEqual([])
@@ -124,6 +126,21 @@ describe('choosing a row', () => {
     })
   })
 
+  it('marks each run of matched characters once, counting UTF-16 units', () => {
+    expect(markedRuns('thread.tsx', 4, [4, 5, 6, 10])).toEqual([
+      { text: 'thr', marked: true },
+      { text: 'ead', marked: false },
+      { text: '.', marked: true },
+      { text: 'tsx', marked: false },
+    ])
+    expect(markedRuns('a\u{1F600}x.ts', 0, [1, 2, 3])).toEqual([
+      { text: 'a', marked: false },
+      { text: '\u{1F600}x', marked: true },
+      { text: '.ts', marked: false },
+    ])
+    expect(markedRuns('plain', 0, [])).toEqual([{ text: 'plain', marked: false }])
+  })
+
   it('puts @ at the caret at the start of a word', () => {
     expect(insertAt('', 0, 0)).toEqual({ text: '@', caret: 1 })
     expect(insertAt('fix ', 4, 4)).toEqual({ text: 'fix @', caret: 5 })
@@ -135,7 +152,7 @@ describe('choosing a row', () => {
 describe('keys', () => {
   const closed = {
     composing: false,
-    shift: false,
+    modified: false,
     slashOpen: false,
     mentionOpen: false,
     mentionRows: false,
@@ -154,7 +171,13 @@ describe('keys', () => {
     expect(popoverKey('Enter', open)).toBe('popover')
     expect(popoverKey('Escape', open)).toBe('popover')
     expect(popoverKey('Tab', open)).toBe('choose')
-    expect(popoverKey('Tab', { ...open, shift: true })).toBe('composer')
+  })
+
+  it('leaves a key with a modifier to the composer, as Base UI does', () => {
+    for (const key of ['Enter', 'Tab', 'Escape']) {
+      expect(popoverKey(key, { ...open, modified: true })).toBe('composer')
+      expect(popoverKey(key, { ...closed, slashOpen: true, modified: true })).toBe('composer')
+    }
   })
 
   it('sends with Enter when the popover has no row to choose', () => {

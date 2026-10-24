@@ -64,7 +64,7 @@ import {
   replaceMention,
   type MentionRow,
 } from './mentions'
-import { useMentionList } from './use-mention-list'
+import { useMentionList, type MentionList } from './use-mention-list'
 
 type BaseUIKeyboardEvent = KeyboardEvent<HTMLTextAreaElement> & {
   preventBaseUIHandler?: () => void
@@ -87,6 +87,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const [mentionDismissed, setMentionDismissed] = useState<number | null>(null)
   // While an input method composes: whether the mention popover was open when it started.
   const [composition, setComposition] = useState<{ open: boolean } | null>(null)
+  const [popover, setPopover] = useState<'slash' | MentionList | null>(null)
   const pendingCaret = useRef<number | null>(null)
   const highlighted = useRef<PopoverItem | undefined>(undefined)
   const textarea = useRef<HTMLTextAreaElement>(null)
@@ -274,6 +275,10 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   // typed, only while something matches.
   const mentionOpen =
     shown && (mentions.used || mentions.rows.length > 0 || (mention!.query !== '' && !filesReady))
+  // What the popup shows, kept after it closes so it fades out as it was.
+  const showing = slashOpen ? 'slash' : mentionOpen ? mentions : popover
+  if (showing !== popover) setPopover(showing)
+  const listing = typeof showing === 'object' ? showing : null
   const choose = (row: MentionRow) => {
     if (!mention) return
     const next = replaceMention(text, mention, mentionName(row))
@@ -296,7 +301,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     const handling = popoverKey(event.key, {
       composing: event.nativeEvent.isComposing || event.keyCode === 229,
-      shift: event.shiftKey,
+      modified: event.shiftKey || event.ctrlKey || event.altKey || event.metaKey,
       slashOpen,
       mentionOpen,
       mentionRows: mentions.rows.length > 0,
@@ -367,10 +372,18 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   return (
     <div className="flex flex-col gap-1">
       <Autocomplete.Root<PopoverItem>
-        items={mentionOpen ? mentions.rows : commands}
-        filteredItems={mentionOpen ? mentions.rows : undefined}
+        items={listing ? listing.rows : commands}
+        filteredItems={listing ? listing.rows : undefined}
         value={text}
-        onValueChange={(value) => update(value)}
+        onValueChange={(value, details) => {
+          // A row the pointer was released on: the composer writes the mention, not Base UI.
+          if (details.reason === 'item-press' && mentionOpen) {
+            const item = highlighted.current
+            if (item && isMentionRow(item)) choose(item)
+            return
+          }
+          update(value)
+        }}
         open={slashOpen || mentionOpen}
         onOpenChange={(open) => {
           if (open) return
@@ -549,15 +562,15 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             className="isolate z-50 outline-none"
           >
             <Autocomplete.Popup className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] flex origin-(--transform-origin) flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
-              {mentionOpen && mentions.used && mentions.rows.length > 0 && (
+              {listing?.used && listing.rows.length > 0 && (
                 <MentionHeader id={`${sessionId}-used`} />
               )}
               <Autocomplete.List
-                aria-labelledby={mentionOpen && mentions.used ? `${sessionId}-used` : undefined}
-                aria-label={mentionOpen && !mentions.used ? t('mentions.label') : undefined}
+                aria-labelledby={listing?.used ? `${sessionId}-used` : undefined}
+                aria-label={listing && !listing.used ? t('mentions.label') : undefined}
                 className={cn(
                   'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain p-1',
-                  mentionOpen && mentions.rows.length === 0 && 'hidden',
+                  listing?.rows.length === 0 && 'hidden',
                 )}
               >
                 {(item: PopoverItem) =>
@@ -581,7 +594,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   )
                 }
               </Autocomplete.List>
-              {mentionOpen && <MentionFooter list={mentions} />}
+              {listing && <MentionFooter list={listing} />}
             </Autocomplete.Popup>
           </Autocomplete.Positioner>
         </Autocomplete.Portal>

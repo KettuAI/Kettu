@@ -5,7 +5,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { folderOf } from '@renderer/features/files/paths'
 import { cn } from '@renderer/lib/utils'
-import type { MentionRow } from './mentions'
+import { markedRuns, type MentionRow } from './mentions'
 import type { MentionList } from './use-mention-list'
 
 /** A mention's row: the type icon, the name with its matched characters marked, then the folder. */
@@ -17,8 +17,7 @@ export function MentionItem({
   onChoose: (row: MentionRow) => void
 }) {
   const nameStart = row.path.lastIndexOf('/') + 1
-  const name = row.path.slice(nameStart)
-  const marked = new Set(row.positions)
+  const runs = markedRuns(row.path.slice(nameStart), nameStart, row.positions)
   const folder = folderOf(row.path)
   return (
     <Autocomplete.Item
@@ -34,13 +33,13 @@ export function MentionItem({
       <FileTypeIcon path={row.path} folder={row.folder} className="size-4 shrink-0" />
       <span className="flex min-w-0 items-baseline gap-1.5">
         <span className="shrink-0">
-          {[...name].map((char, i) =>
-            marked.has(nameStart + i) ? (
+          {runs.map((run, i) =>
+            run.marked ? (
               <mark key={i} className="rounded-xs bg-mark text-primary">
-                {char}
+                {run.text}
               </mark>
             ) : (
-              char
+              run.text
             ),
           )}
           {row.folder && '/'}

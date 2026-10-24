@@ -22,6 +22,11 @@ describe('matchPath', () => {
     expect(matchPath('src/', 'src/')?.positions).toEqual([0, 1, 2, 3])
   })
 
+  it('matches a character outside the Basic Multilingual Plane', () => {
+    expect(matchPath('\u{1F600}', 'a\u{1F600}x.ts')?.positions).toEqual([1, 2])
+    expect(matchPath('\u{1F600}', 'ax.ts')).toBeNull()
+  })
+
   it('ignores spaces in the query and matches everything with an empty one', () => {
     expect(matchPath('st ts', 'src/thread.ts')).not.toBeNull()
     expect(matchPath('', 'a/b')?.score).toBe(0)

@@ -150,7 +150,8 @@ export function popoverKey(
   key: string,
   state: {
     composing: boolean
-    shift: boolean
+    /** Shift, Ctrl, Alt or Cmd is held; Base UI leaves such keys to the composer. */
+    modified: boolean
     slashOpen: boolean
     mentionOpen: boolean
     /** The mention popover has rows to choose from. */
@@ -158,12 +159,13 @@ export function popoverKey(
   },
 ): PopoverKey {
   if (state.composing) return 'block'
+  if (state.modified) return 'composer'
   if (state.slashOpen && (key === 'Enter' || key === 'Tab' || key === 'Escape')) return 'popover'
   if (!state.mentionOpen) return 'composer'
   if (key === 'Escape') return 'popover'
   // With no row to choose, Enter sends as usual.
   if (key === 'Enter') return state.mentionRows ? 'popover' : 'composer'
-  if (key === 'Tab' && !state.shift && state.mentionRows) return 'choose'
+  if (key === 'Tab' && state.mentionRows) return 'choose'
   return 'composer'
 }
 
@@ -177,4 +179,24 @@ export function mentionShown(
   composition: { open: boolean } | null,
 ): boolean {
   return mention !== null && mention.start !== dismissed && (composition?.open ?? true)
+}
+
+/**
+ * A name cut into runs of matched and unmatched characters, so each run is marked once. `offset`
+ * is where the name starts in the path the positions index, in UTF-16 units as they are.
+ */
+export function markedRuns(
+  name: string,
+  offset: number,
+  positions: readonly number[],
+): { text: string; marked: boolean }[] {
+  const marked = new Set(positions)
+  const runs: { text: string; marked: boolean }[] = []
+  let start = 0
+  for (let i = 1; i <= name.length; i++) {
+    if (i < name.length && marked.has(offset + i) === marked.has(offset + start)) continue
+    runs.push({ text: name.slice(start, i), marked: marked.has(offset + start) })
+    start = i
+  }
+  return runs
 }
