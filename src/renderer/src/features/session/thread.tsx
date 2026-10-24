@@ -135,12 +135,15 @@ export const Thread = memo(function Thread({
   // Also after each prepend, and for a page too short to scroll.
   useEffect(nearStart, [nearStart, items.length])
   // Where scrollbars take room (Windows, and macOS set to show them), the column centres in what
-  // the gutter leaves; this reports the gutter whenever the viewport changes size.
+  // the gutter leaves; this reports the gutter whenever the viewport changes size. The first
+  // report is made here, in the commit, so the thread's first frame already has it.
   const viewportRef = useCallback(
     (el: HTMLDivElement | null) => {
       viewport.current = el
       if (!el) return
-      const observer = new ResizeObserver(() => onGutter(el.offsetWidth - el.clientWidth))
+      const report = () => onGutter(el.offsetWidth - el.clientWidth)
+      report()
+      const observer = new ResizeObserver(report)
       observer.observe(el)
       return () => {
         observer.disconnect()
