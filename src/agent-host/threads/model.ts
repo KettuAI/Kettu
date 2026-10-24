@@ -155,6 +155,46 @@ export function settled(entry: ThreadEntry): ThreadEntry {
   }
 }
 
+/**
+ * Tool entries stored with the artifact link of #156 become the tool entry without it and, for a
+ * write, an artifact entry right after it; null when there is none.
+ */
+export function splitLinks(entries: readonly ThreadEntry[]): ThreadEntry[] | null {
+  let out: ThreadEntry[] | null = null
+  entries.forEach((entry, i) => {
+    const link = entry.kind === 'tool' ? (entry as { artifact?: unknown }).artifact : undefined
+    if (link === undefined) {
+      out?.push(entry)
+      return
+    }
+    out ??= entries.slice(0, i)
+    const tool = { ...entry }
+    delete (tool as { artifact?: unknown }).artifact
+    out.push(tool)
+    if (isRecord(link) && typeof link.id === 'string' && typeof link.title === 'string') {
+      const { action, version } = link
+      if (
+        action === 'create' ||
+        action === 'update' ||
+        action === 'restore' ||
+        action === 'delete'
+      ) {
+        out.push({
+          kind: 'artifact',
+          id: `a:${entry.id}`,
+          artifactId: link.id,
+          title: link.title,
+          action,
+          version: typeof version === 'number' && action !== 'delete' ? version : null,
+          writes: 1,
+          after: entry.id,
+        })
+      }
+    }
+  })
+  return out
+}
+
 /** Whether `entry` starts a turn: a prompt of its own, or whatever follows the end of one. */
 export function opensTurn(entry: ThreadEntry, previous: { kind: string } | null): boolean {
   if (entry.kind === 'user') return entry.steered !== true

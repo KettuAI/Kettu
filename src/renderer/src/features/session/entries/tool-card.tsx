@@ -12,16 +12,14 @@ import {
   GlobeIcon,
   RepeatIcon,
   SearchIcon,
-  ShapesIcon,
   SquareTerminalIcon,
   Trash2Icon,
-  TrashIcon,
   WrenchIcon,
   XIcon,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { ArtifactLink, PermissionKind, ToolContent, ToolEntry, ToolKind } from '@shared/thread'
+import type { PermissionKind, ToolContent, ToolEntry, ToolKind } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
 import { Card } from '@renderer/components/ui/card'
@@ -41,7 +39,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { basename, dirname, relativePath } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
-import { toggleArtifactPane, useViewStore } from '@renderer/stores/view'
 import { Clamp } from '../clamp'
 import { Diff, Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -146,7 +143,6 @@ export const ToolCard = memo(function ToolCard({
       <ToolHeader
         entry={entry}
         label={label}
-        projectPath={projectPath}
         toggle={hasBody && !permission}
         open={open}
         framed={framed}
@@ -198,24 +194,19 @@ export const ToolCard = memo(function ToolCard({
 function ToolHeader({
   entry,
   label,
-  projectPath,
   toggle,
   open,
   framed,
 }: {
   entry: ToolEntry
   label: ReturnType<typeof toolLabel>
-  projectPath: string
   toggle: boolean
   open: boolean
   framed: boolean
 }) {
-  const { t } = useTranslation('session')
-  const opens = !framed && !!entry.artifact && WRITES.has(entry.artifact.action)
-  const Icon = entry.artifact ? ARTIFACT_ICON[entry.artifact.action] : KIND_ICON[entry.toolKind]
+  const Icon = KIND_ICON[entry.toolKind]
   const stats = useDiffStats(entry.content)
-  const link = entry.artifact
-  const lead = (
+  const content = (
     <>
       <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
         <Icon
@@ -238,15 +229,6 @@ function ToolHeader({
         {label.verb && <span className="shrink-0 font-medium">{label.verb}</span>}
         {label.target && <Target label={label} />}
       </span>
-    </>
-  )
-  const trail = (
-    <>
-      {link && link.version !== null && (
-        <span className="shrink-0 font-mono text-xs text-tertiary tabular-nums">
-          {t('tool.artifact.version', { version: link.version })}
-        </span>
-      )}
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
         <span className="shrink-0 animate-in font-mono text-[11.5px] tabular animation-duration-(--duration-base) fade-in">
           <span className="text-success">+{stats.insertions}</span>{' '}
@@ -256,7 +238,6 @@ function ToolHeader({
       {!entry.permission && entry.permissionResult && (
         <PermissionAnswer result={entry.permissionResult} />
       )}
-      {opens && link && <ArtifactOpen projectPath={projectPath} link={link} />}
       <ToolStatus entry={entry} />
     </>
   )
@@ -264,27 +245,6 @@ function ToolHeader({
   const row = framed
     ? 'group/tool flex h-card-header w-full min-w-0 items-center gap-2 px-3 text-left outline-none'
     : 'group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[13px] leading-[1.6] text-muted-foreground outline-none'
-  // Open is a button of its own, so the row's toggle covers only the icon and the label.
-  if (opens) {
-    return (
-      <div className={cn(row, 'transition-colors duration-(--duration-fast) hover:bg-hover')}>
-        {toggle ? (
-          <CollapsibleTrigger className="-ml-1.5 flex min-w-0 flex-1 cursor-default items-center gap-2 self-stretch rounded-md pl-1.5 text-left outline-none focus-ring">
-            {lead}
-          </CollapsibleTrigger>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-2">{lead}</div>
-        )}
-        {trail}
-      </div>
-    )
-  }
-  const content = (
-    <>
-      {lead}
-      {trail}
-    </>
-  )
   if (!toggle) return <div className={row}>{content}</div>
   return (
     <CollapsibleTrigger
@@ -296,52 +256,6 @@ function ToolHeader({
     >
       {content}
     </CollapsibleTrigger>
-  )
-}
-
-/** The calls whose artifact the row opens: those that wrote a version. */
-const WRITES = new Set(['create', 'update', 'restore'])
-
-const ARTIFACT_ICON: Record<ArtifactLink['action'], LucideIcon> = {
-  create: ShapesIcon,
-  update: ShapesIcon,
-  restore: ShapesIcon,
-  delete: TrashIcon,
-  read: FileTextIcon,
-}
-
-/**
- * Opens the call's artifact beside the thread; pressed while the pane shows it, and pressing it
- * again closes the pane, as the pane toggles do.
- */
-function ArtifactOpen({ projectPath, link }: { projectPath: string; link: ArtifactLink }) {
-  const { t } = useTranslation('session')
-  const pressed = useViewStore(
-    (s) => s.sidePane[projectPath] === 'artifact' && s.sideArtifact[projectPath] === link.id,
-  )
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="quiet"
-            size="xs"
-            aria-pressed={pressed}
-            aria-label={t('tool.artifact.openArtifact', { title: link.title })}
-            onClick={() => toggleArtifactPane(projectPath, link.id)}
-            className={cn(
-              'shrink-0 gap-1.5 text-foreground transition-opacity duration-(--duration-fast)',
-              !pressed &&
-                'opacity-0 group-hover/tool:opacity-100 group-has-focus-visible/tool:opacity-100 focus-visible:opacity-100',
-            )}
-          />
-        }
-      >
-        <ShapesIcon />
-        {t('tool.artifact.open')}
-      </TooltipTrigger>
-      <TooltipContent>{t('tool.artifact.openTip')}</TooltipContent>
-    </Tooltip>
   )
 }
 
@@ -360,8 +274,6 @@ function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
       <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
         {target.split('\n')[0]}
       </span>
-    ) : label.kind === 'artifact' ? (
-      <span className="min-w-0 truncate text-foreground">{target}</span>
     ) : (
       <span className="min-w-0 truncate">{target}</span>
     )

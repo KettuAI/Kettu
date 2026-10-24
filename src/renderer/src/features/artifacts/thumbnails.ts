@@ -21,11 +21,14 @@ export type Thumbnail =
   | { state: 'ready'; src: string; pages: PageBox[] | null }
   | { state: 'failed' }
 
+/** What a thumbnail is made from: the version, and whether it is a canvas. */
+export type ThumbnailOf = Pick<ArtifactSummary, 'id' | 'version' | 'pages'>
+
 /** About two hundred cards' worth of images; older ones are asked for again. */
 const KEPT = 200
 
 const made = new Map<string, Thumbnail>()
-const waiting: { key: string; artifact: ArtifactSummary }[] = []
+const waiting: { key: string; artifact: ThumbnailOf }[] = []
 const listeners = new Set<() => void>()
 let busy = false
 
@@ -42,7 +45,7 @@ function settle(key: string, thumbnail: Thumbnail): void {
   for (const listener of listeners) listener()
 }
 
-async function render(artifact: ArtifactSummary): Promise<Thumbnail> {
+async function render(artifact: ThumbnailOf): Promise<Thumbnail> {
   let layout = null
   if (artifact.pages >= 2) {
     const { html, version } = await host('artifacts.read', {
@@ -85,7 +88,7 @@ function pump(): void {
 }
 
 /** Queues the card's thumbnail, unless it is made or already waits. */
-function ask(artifact: ArtifactSummary): void {
+function ask(artifact: ThumbnailOf): void {
   const key = keyOf(artifact)
   if (made.has(key) || waiting.some((w) => w.key === key)) return
   waiting.push({ key, artifact })
@@ -93,7 +96,7 @@ function ask(artifact: ArtifactSummary): void {
 }
 
 /** A card that left the view before its turn waits no more. */
-function drop(artifact: ArtifactSummary): void {
+function drop(artifact: ThumbnailOf): void {
   const at = waiting.findIndex((w) => w.key === keyOf(artifact))
   if (at >= 0) waiting.splice(at, 1)
 }
@@ -104,7 +107,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 /** The card's thumbnail, asked for while `inView`. */
-export function useThumbnail(artifact: ArtifactSummary, inView: boolean): Thumbnail {
+export function useThumbnail(artifact: ThumbnailOf, inView: boolean): Thumbnail {
   const key = keyOf(artifact)
   const thumbnail = useSyncExternalStore(subscribe, () => made.get(key) ?? LOADING)
   useEffect(() => {

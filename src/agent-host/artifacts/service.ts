@@ -9,9 +9,8 @@ import type { AddressInfo } from 'node:net'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type { ArtifactLink } from '@shared/thread'
 import type { LogFn } from '../storage'
-import { artifactLink } from './links'
+import { artifactWrite, type ArtifactWrite } from './entries'
 import {
   ArtifactTools,
   INSTRUCTIONS,
@@ -53,8 +52,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
    * it runs under; null for an id OverBench does not have.
    */
   sessionOf(process: AgentProcess, id: string): string | null
-  /** A call of the session's acted on one artifact, for its tool call in the thread. */
-  linked?(sessionId: string, tool: string, link: ArtifactLink): void
+  /** A call of the session's, or of a subagent of it, wrote to an artifact. */
+  wrote?(sessionId: string, write: ArtifactWrite): void
 }
 
 /** A token for one session. */
@@ -319,25 +318,25 @@ export class ArtifactService {
     await transport.handleRequest(req, res)
   }
 
-  /** Hands the thread the artifact a call acted on; a failure only costs the row its link. */
-  private async link(
+  /** Hands the calling session's thread what a call wrote; a failure only costs the thread its entry. */
+  private async record(
     sessionId: string,
     tool: string,
     input: unknown,
     result: CallToolResult,
   ): Promise<void> {
-    const { linked, store } = this.deps
-    if (!linked) return
+    const { wrote, store } = this.deps
+    if (!wrote) return
     const titleOf = (id: string) =>
       store.get(id).then(
         (found) => found.artifact.title,
         () => null,
       )
     try {
-      const link = await artifactLink(tool, input, result, titleOf)
-      if (link) linked(sessionId, tool, link)
+      const write = await artifactWrite(tool, input, result, titleOf)
+      if (write) wrote(sessionId, write)
     } catch (error) {
-      this.deps.log('warn', `Could not link ${tool} to its tool call: ${(error as Error).message}`)
+      this.deps.log('warn', `Could not add ${tool} to the thread: ${(error as Error).message}`)
     }
   }
 
@@ -362,7 +361,7 @@ export class ArtifactService {
       try {
         const result = await this.tools.call(caller, name, input)
         // Before the answer, while the agent still shows its tool call as running.
-        await this.link(caller.sessionId, name, input, result)
+        await this.record(caller.sessionId, name, input, result)
         return result
       } catch (error) {
         this.deps.log('error', `${name} failed: ${(error as Error).message}`)

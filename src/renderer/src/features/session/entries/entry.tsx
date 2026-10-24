@@ -11,6 +11,7 @@ import {
   TurnEndEntry,
   UserEntry,
 } from './basic'
+import { ArtifactEntry } from './artifact-entry'
 import { SubagentCard } from './subagent-card'
 import { ToolCard } from './tool-card'
 
@@ -51,6 +52,8 @@ export const Entry = memo(function Entry({
       return <TurnEndEntry {...props} />
     case 'git':
       return <GitEventEntry {...props} />
+    case 'artifact':
+      return <ArtifactEntry {...props} projectPath={projectPath} />
     default:
       return null
   }

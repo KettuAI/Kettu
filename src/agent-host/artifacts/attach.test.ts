@@ -4,6 +4,7 @@
 import { mkdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
+import type { ArtifactEntry } from '@shared/thread'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   startTestHost,
@@ -62,6 +63,11 @@ async function run(port: TestPort, sessionId: string, text: string): Promise<str
   return reply?.kind === 'agent' ? reply.markdown : ''
 }
 
+/** The artifact entries of a session's thread, in order. */
+function cards(port: TestPort, sessionId: string): ArtifactEntry[] {
+  return port.entries(sessionId).filter((entry) => entry.kind === 'artifact')
+}
+
 function tokenOf(servers: McpServer[]): string {
   const server = servers[0] as { headers: { name: string; value: string }[] }
   return server.headers.find((h) => h.name === 'Authorization')!.value
@@ -81,29 +87,81 @@ async function listTools(url: string, authorization: string): Promise<number> {
 }
 
 describe('the artifacts service in sessions', () => {
-  it("links each call to the agent's tool call, with the artifact as the call left it", async () => {
+  it('adds one entry per artifact and turn after the call that wrote it, and none for reads', async () => {
     const { port, create } = await setup()
     const sessionId = await create()
     await run(port, sessionId, '/artifacts')
     await run(port, sessionId, '/artifacts')
     const [artifact] = await port.request('artifacts.list', {})
-    const links = port
+    const order = port
       .entries(sessionId)
-      .flatMap((entry) => (entry.kind === 'tool' ? [[entry.title, entry.artifact ?? null]] : []))
-    const link = (action: string, version: number) => ({
-      id: artifact!.id,
-      title: 'Fake canvas',
-      action,
-      version,
-    })
-    expect(links).toEqual([
-      ['mcp__overbench__list_artifacts', null],
-      ['mcp__overbench__create_artifact', link('create', 1)],
-      ['mcp__overbench__read_artifact', link('read', 1)],
-      ['mcp__overbench__list_artifacts', null],
-      ['mcp__overbench__update_artifact', link('update', 2)],
-      ['mcp__overbench__read_artifact', link('read', 2)],
+      .filter((entry) => entry.kind === 'tool' || entry.kind === 'artifact')
+      .map((entry) => (entry.kind === 'tool' ? entry.title : `${entry.action} v${entry.version}`))
+    expect(order).toEqual([
+      'mcp__overbench__list_artifacts',
+      'mcp__overbench__create_artifact',
+      'create v1',
+      'mcp__overbench__read_artifact',
+      'mcp__overbench__list_artifacts',
+      'mcp__overbench__update_artifact',
+      'update v2',
+      'mcp__overbench__read_artifact',
     ])
+    expect(cards(port, sessionId)[0]).toEqual({
+      kind: 'artifact',
+      id: expect.stringMatching(/^a:\d+$/),
+      artifactId: artifact!.id,
+      title: 'Fake canvas',
+      action: 'create',
+      version: 1,
+      writes: 1,
+      after: 't:overbench-1-2',
+    })
+  })
+
+  it('shows every write from code an execute call runs, as one entry for the turn', async () => {
+    const { port, create } = await setup()
+    const sessionId = await create()
+    await run(port, sessionId, '/artifacts --execute')
+    const entries = port.entries(sessionId)
+    const tools = entries.filter((entry) => entry.kind === 'tool')
+    expect(tools.map((entry) => entry.title)).toEqual(['execute'])
+    expect(cards(port, sessionId)).toEqual([
+      expect.objectContaining({ action: 'create', version: 2, writes: 2, after: tools[0]!.id }),
+    ])
+    const at = entries.findIndex((entry) => entry.kind === 'artifact')
+    expect(entries[at - 1]?.id).toBe(tools[0]!.id)
+  })
+
+  it('adds a write that comes after the turn ended to the latest turn', async () => {
+    const { port, attached, create } = await setup()
+    const sessionId = await create()
+    await run(port, sessionId, '/artifacts')
+    const [artifact] = await port.request('artifacts.list', {})
+    const token = tokenOf(attached[0]!.servers)
+    const url = (attached[0]!.servers[0] as { url: string }).url
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: token,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'delete_artifact', arguments: { id: artifact!.id } },
+      }),
+    })
+    expect(response.status).toBe(200)
+    await port.until(() => cards(port, sessionId).length === 2)
+    expect(port.entries(sessionId).at(-1)).toMatchObject({
+      kind: 'artifact',
+      action: 'delete',
+      version: null,
+      title: 'Fake canvas',
+    })
   })
 
   it('passes the service with a token of its own on every attach', async () => {
@@ -279,10 +337,10 @@ describe('the artifacts service in sessions', () => {
       expect(artifact).toMatchObject({ sessionId: b.id, project: a.projectPath })
       const versions = await port.request('artifacts.versions', { id: artifact!.id })
       expect(versions.map((v) => v.author)).toEqual([b.id, b.id, a.id])
-      const tool = port
-        .entries(a.id)
-        .find((entry) => entry.kind === 'tool' && entry.title.includes('create_artifact'))
-      expect(tool).toMatchObject({ title: 'mcp__overbench__create_artifact' })
+      // Each write shows in the session the call named; a subagent's in the one it runs under.
+      expect(cards(port, a.id).map((e) => e.version)).toEqual([1])
+      expect(cards(port, b.id).map((e) => e.version)).toEqual([2, 3])
+      expect(port.replicas.has('sub-1') ? cards(port, 'sub-1') : []).toEqual([])
 
       // No session id, one OverBench does not know, and one of another folder.
       const foreign = port.thread(c.id).session.acpSessionId

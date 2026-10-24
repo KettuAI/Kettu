@@ -23,21 +23,11 @@ const FILE_KINDS: Partial<Record<ToolKind, FileKind>> = {
   move: 'move',
 }
 
-/**
- * What the header names: a verb with a path or command, the artifact a call to the artifacts
- * service acted on, or the agent's own title.
- */
+/** What the header names: a verb with a path or command, or the agent's own title. */
 export function toolLabel(
-  entry: Pick<ToolEntry, 'toolKind' | 'title' | 'locations' | 'rawInput' | 'artifact'>,
+  entry: Pick<ToolEntry, 'toolKind' | 'title' | 'locations' | 'rawInput'>,
   projectPath: string,
-): { verb: string | null; target: string | null; kind: 'path' | 'command' | 'title' | 'artifact' } {
-  if (entry.artifact) {
-    return {
-      verb: i18n.t(`session:tool.artifact.${entry.artifact.action}`),
-      target: entry.artifact.title,
-      kind: 'artifact',
-    }
-  }
+): { verb: string | null; target: string | null; kind: 'path' | 'command' | 'title' } {
   const fileKind = FILE_KINDS[entry.toolKind]
   const location = entry.locations[0]?.path
   if (fileKind && location) {

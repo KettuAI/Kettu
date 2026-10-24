@@ -23,7 +23,6 @@ import {
   threadFromSnapshot,
   UnknownEntryError,
   type AgentId,
-  type ArtifactLink,
   type ConfigOption,
   type OlderPage,
   type Patch,
@@ -49,7 +48,7 @@ import {
   type SessionTarget,
 } from './acp/connection'
 import type { ForkPoint } from './acp/fork-point'
-import { callsTool } from './artifacts/links'
+import { ReplayKeeper, writePatch, type ArtifactWrite } from './artifacts/entries'
 import {
   addTokenTotals,
   isStopReason,
@@ -100,6 +99,7 @@ import {
   changesStored,
   pageStart,
   settled,
+  splitLinks,
   storedSession,
   type PositionedEntry,
   type StoredBlob,
@@ -259,11 +259,8 @@ interface Live {
   partial: boolean
   /** Bytes of sent attachments for the next checkpoint, by hash. */
   blobs: Map<string, StoredBlob>
-  /**
-   * The artifacts its tool calls acted on, by entry id: the agent's replay of the history does not
-   * carry them, so they are put back on the entries it sends again.
-   */
-  links: Map<string, ArtifactLink>
+  /** The thread's artifact entries while a replay rebuilds it, which the agent does not send. */
+  keeper: ReplayKeeper | null
   checkpointTimer: ReturnType<typeof setTimeout> | null
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
@@ -596,70 +593,55 @@ export class SessionManager {
   }
 
   private emit(live: Live, patches: readonly Patch[]): void {
-    for (let patch of patches) {
-      if (patch.op === 'thread.reset') this.keepLinks(live)
-      else if (patch.op === 'entry.add') patch = this.withLink(live, patch)
-      try {
-        live.thread = applyPatchInPlace(live.thread, patch)
-      } catch (error) {
-        if (!(error instanceof UnknownEntryError)) throw error
-        // A bug in the mapper, not in the agent: recorded, and the patch is not sent.
-        this.deps.diagnostics.log('error', `Session ${live.id}: ${error.message}`)
-        continue
+    for (const patch of patches) {
+      if (patch.op === 'thread.reset') {
+        const keeper = new ReplayKeeper(live.thread)
+        live.keeper = keeper.empty ? null : keeper
       }
-      this.track(live, patch)
-      live.queue.push(patch)
+      const { keeper } = live
+      if (keeper && patch.op === 'entry.add') {
+        for (const entry of keeper.before(patch.entry)) this.apply(live, { op: 'entry.add', entry })
+      }
+      if (!this.apply(live, patch)) continue
+      if (keeper && patch.op === 'entry.add') {
+        for (const entry of keeper.after(patch.entry)) this.apply(live, { op: 'entry.add', entry })
+      }
     }
     this.scheduleFlush(live)
     this.scheduleCheckpoint(live)
   }
 
-  /** Keeps the artifact links of the thread a replay is about to replace. */
-  private keepLinks(live: Live): void {
-    for (const entry of Object.values(live.thread.byId)) {
-      if (entry.kind === 'tool' && entry.artifact) live.links.set(entry.id, entry.artifact)
+  /** Applies one patch and queues it to send; false for one the thread could not take. */
+  private apply(live: Live, patch: Patch): boolean {
+    try {
+      live.thread = applyPatchInPlace(live.thread, patch)
+    } catch (error) {
+      if (!(error instanceof UnknownEntryError)) throw error
+      // A bug in the mapper, not in the agent: recorded, and the patch is not sent.
+      this.deps.diagnostics.log('error', `Session ${live.id}: ${error.message}`)
+      return false
     }
+    this.track(live, patch)
+    live.queue.push(patch)
+    return true
   }
 
-  /** A tool call the replay sends again gets back the artifact it acted on. */
-  private withLink(live: Live, patch: Extract<Patch, { op: 'entry.add' }>): Patch {
-    const { entry } = patch
-    if (entry.kind !== 'tool' || entry.artifact) return patch
-    const link = live.links.get(entry.id)
-    return link ? { ...patch, entry: { ...entry, artifact: link } } : patch
+  /** A write to the artifacts service by the session, or by a subagent of it, goes in its thread. */
+  artifactWritten(sessionId: string, write: ArtifactWrite): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    this.emit(live, [writePatch(live.thread, write, () => this.nextId(live, 'a'))])
   }
 
-  /**
-   * A call to the artifacts service acted on an artifact: the session's tool call that names the
-   * same tool, while it runs, carries it from then on; of several such calls, the first, as they
-   * reach the service in order. A subagent's call counts as its session's, so its threads are
-   * searched too.
-   */
-  linkArtifactCall(sessionId: string, tool: string, link: ArtifactLink): void {
-    const tree = [sessionId, ...this.descendants(sessionId, 'subagent').map((r) => r.id)]
-    for (const id of tree) {
-      const live = this.live.get(id)
-      if (!live) continue
-      const { order, byId } = live.thread
-      let found: string | null = null
-      // Running calls belong to the turn that runs now.
-      for (let i = order.length - 1; i >= 0; i--) {
-        const entry = byId[order[i]!]
-        if (!entry || entry.kind === 'turn_end') break
-        if (
-          entry.kind === 'tool' &&
-          !entry.artifact &&
-          (entry.status === 'pending' || entry.status === 'in_progress') &&
-          callsTool(entry.title, tool)
-        ) {
-          found = entry.id
-        }
-      }
-      if (found === null) continue
-      live.links.set(found, link)
-      this.emit(live, [{ op: 'entry.update', id: found, changes: { artifact: link } }])
-      return
-    }
+  /** A replay ended: the artifact entries it never came back to go at its end. */
+  private restoreKept(live: Live): void {
+    const { keeper } = live
+    if (!keeper) return
+    live.keeper = null
+    this.emit(
+      live,
+      keeper.rest().map((entry) => ({ op: 'entry.add', entry })),
+    )
   }
 
   /** Notes what a patch changed for the next checkpoint. */
@@ -798,7 +780,9 @@ export class SessionManager {
       )
       return null
     }
-    return page && this.isCurrent(record, page.head) ? page : null
+    if (!page || !this.isCurrent(record, page.head)) return null
+    const split = splitLinks(page.entries)
+    return split ? { ...page, entries: split } : page
   }
 
   private async readThread(record: SessionRecord): Promise<StoredThread | null> {
@@ -999,7 +983,7 @@ export class SessionManager {
       rewrite: false,
       partial: false,
       blobs: new Map(),
-      links: new Map(),
+      keeper: null,
       checkpointTimer: null,
       used: false,
       first: null,
@@ -1784,10 +1768,12 @@ export class SessionManager {
   private finishReplay(live: Live, ok: boolean): void {
     live.replaying = false
     live.partial = !ok
+    this.restoreKept(live)
     for (const record of this.descendants(live.id, 'subagent')) {
       const child = this.live.get(record.id)
       if (!child) continue
       child.replaying = false
+      this.restoreKept(child)
       if (ok && child.mentioned) {
         if (child.thread.session.status === 'starting') this.update(child, { status: 'ready' })
         this.touch(child.id)
@@ -2052,7 +2038,14 @@ export class SessionManager {
   private fill(live: Live, stored: StoredThread): void {
     const order: string[] = []
     const byId: Record<string, ThreadEntry> = {}
-    for (const { pos, entry } of stored.entries) {
+    let { entries } = stored
+    const split = splitLinks(entries.map((item) => item.entry))
+    if (split) {
+      // New entries between stored ones: the thread is stored again whole, numbered afresh.
+      entries = split.map((entry, pos) => ({ pos, entry }))
+      live.rewrite = true
+    }
+    for (const { pos, entry } of entries) {
       const shown = settled(entry)
       if (shown !== entry) live.dirty.add(entry.id)
       order.push(entry.id)
