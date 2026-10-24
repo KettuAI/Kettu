@@ -69,6 +69,8 @@
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
   --color-focus: var(--focus);
+  --color-edit-ring: var(--edit-ring);
+  --color-edit-selection: var(--edit-selection);
 
   /* shadcn/ui's names, which tokens.css points at the palette. */
   --color-sidebar-ring: var(--sidebar-ring);

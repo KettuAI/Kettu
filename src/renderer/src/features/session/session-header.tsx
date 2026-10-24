@@ -76,9 +76,10 @@ export function SessionHeader({
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            // Hugs the text; the margins make up the button's padding, so nothing moves.
-            style={{ minWidth: Math.max(titleWidth - 8, 0) }}
-            className="mx-1 field-sizing-content h-6 rounded-sm border border-strong bg-background px-0.5 text-control font-medium aria-invalid:border-destructive dark:bg-input/30 dark:aria-invalid:border-destructive/50"
+            // As tall as the text with no padding, the ring 1 px outside it; the margins make up
+            // the button's padding, so the text and the chevron stay put.
+            style={{ minWidth: Math.max(titleWidth - 14, 0) }}
+            className="mx-[7px] field-sizing-content h-5 rounded-[3px] bg-transparent p-0 text-control font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <Button
