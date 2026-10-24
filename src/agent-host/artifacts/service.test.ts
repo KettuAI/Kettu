@@ -1,5 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import http from 'node:http'
+import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -87,7 +88,14 @@ function send(
   options: { method?: string; headers?: Record<string, string>; body?: string | Buffer } = {},
 ): Promise<Reply> {
   return new Promise((resolve, reject) => {
-    const req = http.request(url, { method: options.method ?? 'POST', headers: options.headers })
+    // A connection of its own: before Node 24.20, a keep-alive agent took back the socket of a
+    // body whose write failed after the answer, and the write's EPIPE went unhandled
+    // (https://github.com/nodejs/node/pull/64847).
+    const req = http.request(url, {
+      method: options.method ?? 'POST',
+      headers: options.headers,
+      agent: false,
+    })
     req.on('response', (res) => {
       const chunks: Buffer[] = []
       res.on('data', (chunk: Buffer) => chunks.push(chunk))
@@ -276,11 +284,12 @@ describe('the artifacts service', () => {
         method: 'tools/call',
         params: { name: 'create_artifact', arguments: { title: 'Big', html } },
       })
+    // A declared length over the limit is refused before any of the body is read, so none is sent:
+    // the service would close the connection while it was still being written.
     const tooBig = await send(url, {
-      headers: headers(token),
-      body: call('x'.repeat(BODY_BYTES)),
-    }).catch((error: NodeJS.ErrnoException) => ({ status: error.code ?? 'error' }))
-    expect([413, 'ECONNRESET', 'EPIPE']).toContain(tooBig.status)
+      headers: headers(token, { 'Content-Length': String(BODY_BYTES + 1) }),
+    })
+    expect(tooBig.status).toBe(413)
     // Within the request limit, the HTML limit answers as a tool error.
     const html = await send(url, {
       headers: headers(token),
@@ -414,5 +423,28 @@ describe('the artifacts service', () => {
     await service.start()
     const reply = await send(service.url!, { headers: headers(token), body: LIST })
     expect(reply.status).toBe(401)
+  })
+})
+
+describe('send', () => {
+  it('leaves no error unhandled when the server answers and closes during the body', async () => {
+    // Answers before reading the body, then closes, as the service does for an oversized body
+    // whose drain times out.
+    const server = net.createServer((socket) => {
+      socket.on('error', () => {})
+      socket.once('data', () => {
+        socket.pause()
+        socket.write('HTTP/1.1 413 Payload Too Large\r\nContent-Length: 0\r\n\r\n')
+        setTimeout(() => socket.destroy(), 30)
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())))
+    const { port } = server.address() as net.AddressInfo
+    // More than the loopback buffers take, so the write is still pending when the socket closes.
+    const reply = await send(`http://127.0.0.1:${port}/`, { body: 'x'.repeat(16 * 1024 * 1024) })
+    expect(reply.status).toBe(413)
+    // The failed write of the rest of the body surfaces after the answer.
+    await new Promise((resolve) => setTimeout(resolve, 100))
   })
 })
