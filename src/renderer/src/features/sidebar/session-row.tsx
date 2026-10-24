@@ -29,6 +29,7 @@ import { CacheTip } from './cache-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionIndicator } from './session-indicator'
 import { DeleteSessionDialog, SessionMenuItems, SessionTitleField } from './session-menu'
+import { runSessionMenuAccelerator } from './session-menu-model'
 import { useRenaming } from './use-renaming'
 
 /** The sidebar indents two levels at most and lists deeper sub-sessions at the second level. */
@@ -220,7 +221,10 @@ export const SessionRow = memo(function SessionRow({
                   {expiring ? <CacheTip cache={expiring} /> : gone && <span>{gone}</span>}
                 </TooltipContent>
               </Tooltip>
-              <ContextMenuContent finalFocus={rename.menu.finalFocus}>
+              <ContextMenuContent
+                finalFocus={rename.menu.finalFocus}
+                onKeyDown={runSessionMenuAccelerator}
+              >
                 {menuItems}
               </ContextMenuContent>
             </ContextMenu>
@@ -242,7 +246,11 @@ export const SessionRow = memo(function SessionRow({
               >
                 <EllipsisIcon />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" finalFocus={rename.menu.finalFocus}>
+              <DropdownMenuContent
+                align="start"
+                finalFocus={rename.menu.finalFocus}
+                onKeyDown={runSessionMenuAccelerator}
+              >
                 {menuItems}
               </DropdownMenuContent>
             </DropdownMenu>

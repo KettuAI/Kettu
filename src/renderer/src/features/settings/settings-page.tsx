@@ -20,6 +20,7 @@ import { FlashContext, highlight, matches, type RowDef, type SectionDef } from '
 import { SectionBody } from './rows'
 import {
   useAboutSection,
+  useArchivedSection,
   useAdvancedSection,
   useAgentsSection,
   useAppearanceSection,
@@ -45,7 +46,7 @@ export default function SettingsPage() {
   const clusters: SectionDef[][] = [
     [useGeneralSection(), useAppearanceSection(), useNotificationsSection(), useShortcutsSection()],
     [useAgentsSection(), useUsageSection(), useTerminalSection(), useGitSection()],
-    [useAdvancedSection(), useAboutSection()],
+    [useArchivedSection(), useAdvancedSection(), useAboutSection()],
   ]
   const sections = clusters.flat()
   const [query, setQuery] = useState('')

@@ -45,10 +45,16 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { sessionTree, useSessionsStore } from '@renderer/stores/sessions'
+import { inPinnedTree, pinnedTree, sessionTree, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
-import { NO_PROJECT_GROUP, openArtifacts, openUsage, useViewStore } from '@renderer/stores/view'
+import {
+  NO_PROJECT_GROUP,
+  openArtifacts,
+  openUsage,
+  PINNED_GROUP,
+  useViewStore,
+} from '@renderer/stores/view'
 import { ImportSessionsDialog } from './import-sessions'
 import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
 import { SessionRow } from './session-row'
@@ -113,6 +119,7 @@ export function AppSidebar() {
             </SidebarMenu>
           ) : (
             <>
+              <PinnedGroup />
               {projects.length === 0 ? (
                 <p className="px-2 py-1 text-xs leading-normal text-secondary">{t('nav.empty')}</p>
               ) : (
@@ -274,15 +281,9 @@ function ProjectGroup({
     () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath),
     [summaries, projectPath],
   )
-  if (!project && summaries.length === 0) return null
+  if (!project && tree.length === 0) return null
 
-  const toggle = () =>
-    useViewStore.setState((s) => {
-      const collapsedProjects = { ...s.collapsedProjects }
-      if (collapsedProjects[key]) delete collapsedProjects[key]
-      else collapsedProjects[key] = true
-      return { collapsedProjects }
-    })
+  const toggle = () => toggleGroup(key)
 
   const row = (
     <SidebarMenuButton
@@ -394,6 +395,62 @@ function ProjectGroup({
         )}
       </div>
       {open && tree.length > 0 && (
+        <SidebarMenu className="gap-px">
+          {tree.map((node) => (
+            <SessionRow key={node.summary.id} node={node} />
+          ))}
+        </SidebarMenu>
+      )}
+    </div>
+  )
+}
+
+function toggleGroup(key: string): void {
+  useViewStore.setState((s) => {
+    const collapsedProjects = { ...s.collapsedProjects }
+    if (collapsedProjects[key]) delete collapsedProjects[key]
+    else collapsedProjects[key] = true
+    return { collapsedProjects }
+  })
+}
+
+/** The pinned sessions across the projects, above them, while there are any. */
+function PinnedGroup() {
+  const { t } = useTranslation('sidebar')
+  const open = useViewStore((s) => !s.collapsedProjects[PINNED_GROUP])
+  const summaries = useSessionsStore(
+    useShallow((s) => Object.values(s.byId).filter((x) => inPinnedTree(s.byId, x))),
+  )
+  const tree = useMemo(
+    () => pinnedTree(Object.fromEntries(summaries.map((x) => [x.id, x]))),
+    [summaries],
+  )
+  if (tree.length === 0) return null
+  const toggle = () => toggleGroup(PINNED_GROUP)
+  return (
+    <div className="flex flex-col gap-px">
+      <SidebarMenuButton
+        size="row"
+        data-sidebar-row=""
+        tabIndex={-1}
+        aria-expanded={open}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowRight' && !open) toggle()
+          else if (event.key === 'ArrowLeft' && open) toggle()
+        }}
+        className="gap-1 text-small font-medium text-secondary"
+      >
+        <span className="min-w-0 truncate">{t('pinned.label')}</span>
+        <span className="grid size-3 shrink-0 place-items-center text-icon">
+          {open ? (
+            <ChevronDownIcon className="size-3!" />
+          ) : (
+            <ChevronRightIcon className="size-3!" />
+          )}
+        </span>
+      </SidebarMenuButton>
+      {open && (
         <SidebarMenu className="gap-px">
           {tree.map((node) => (
             <SessionRow key={node.summary.id} node={node} />

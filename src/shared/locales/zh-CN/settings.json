@@ -8,7 +8,8 @@
     "notifications": "通知",
     "shortcuts": "键盘快捷键",
     "advanced": "高级",
-    "about": "关于"
+    "about": "关于",
+    "archived": "已归档会话"
   },
   "page": {
     "title": "设置",
@@ -436,7 +437,8 @@
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 OverBench 保存在这台电脑上的数据。",
-    "about": "OverBench 和它所依赖的运行环境。"
+    "about": "OverBench 和它所依赖的运行环境。",
+    "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。"
   },
   "footer": {
     "about": "关于 OverBench",
@@ -444,5 +446,12 @@
     "ready": "{{version}} 已就绪",
     "available": "{{version}} 已发布",
     "downloading": "正在下载 {{percent}}%"
+  },
+  "archived": {
+    "description": "{{project}} · {{when}}归档",
+    "restore": "恢复",
+    "delete": "删除…",
+    "empty": "没有已归档的会话。可以在侧边栏会话的菜单里归档。",
+    "keywords": "归档 恢复 archive"
   }
 }

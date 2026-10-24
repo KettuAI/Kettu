@@ -26,7 +26,7 @@ Where a function lives. A function goes to the narrowest scope it acts on, and t
 | ------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | The app             | The app menu (macOS), the sidebar's top rows and footer, Settings                                        | New session, Settings, updates, zoom      |
 | A project           | Its group row in the sidebar: name, chevron, **+**, and its menu (context menu and **More**)             | A new session, importing sessions         |
-| A session           | Its sidebar row (context menu and **More**) and the top bar's title and title menu, from one shared list | Rename, new sub-session, close, delete    |
+| A session           | Its sidebar row (context menu and **More**) and the top bar's title and title menu, from one shared list | Pin, rename, fork, archive, delete        |
 | A message or turn   | The message's action row                                                                                 | Copy, fork                                |
 | The next prompt     | The composer, its control row and the model menu                                                         | Mode, model, reasoning level, attachments |
 | The project's tools | One pane at a time in the side panel, each opened by its toggle in the top bar                           | Files, terminal                           |

@@ -133,6 +133,9 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Import sessions an agent already has                              | `History`                | `Import`                          |
 | Mention a file                                                    | `AtSign`                 |                                   |
 | Slash commands                                                    | `Slash`                  | `SquareSlash`                     |
+| Pin a session, unpin it                                           | `Pin`, `PinOff`          | `Bookmark`                        |
+| Mark as unread, mark as read                                      | `CircleDot`, `Circle`    | `Mail`, `MailOpen`                |
+| Archive a session; Archived sessions                              | `Archive`                | `ArchiveRestore`                  |
 
 ## Typography
 

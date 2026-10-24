@@ -24,8 +24,9 @@ type PageView =
 // An artifact in the viewer, which Back leaves for what the main area showed before.
 export type MainView = PageView | { kind: 'artifact'; id: string; back: PageView }
 
-// The No project group's key in `collapsedProjects`, which no folder's path can take.
+// The No project and Pinned groups' keys in `collapsedProjects`, which no folder's path can take.
 export const NO_PROJECT_GROUP = 'no-project'
+export const PINNED_GROUP = 'pinned'
 
 /** What the side panel shows; one pane at a time. */
 export type SidePane = 'terminal' | 'files'
@@ -39,6 +40,7 @@ export type SettingsSection =
   | 'notifications'
   | 'usage'
   | 'shortcuts'
+  | 'archived'
   | 'advanced'
   | 'about'
 
@@ -51,7 +53,7 @@ interface ViewStore {
    */
   settings: { open: boolean; section: SettingsSection | null; agent: AgentId | null }
   sidebarCollapsed: boolean
-  /** Project groups the user collapsed, by path or `NO_PROJECT_GROUP`; open by default. */
+  /** Groups the user collapsed, by path, `NO_PROJECT_GROUP` or `PINNED_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
   /** Parent sessions the user collapsed or expanded; others follow activity. */
   expandedParents: Record<string, boolean>

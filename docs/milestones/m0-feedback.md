@@ -437,7 +437,7 @@ The list is complete and no longer edited: new problems go to [GitHub issues](ht
   - The menu's order and grouping, its destructive item last, and the same set in the top bar's title menu.
   - The rule changes in [Interface: sidebar](../design/ui.md#sidebar), [Interface: session](../design/ui.md#session) and the [session lifecycle](../design/session-model.md#session-lifecycle).
 - **Partly fixed**: **Rename…** (a dialog; an empty title returns to the agent's, and the user's title is kept in the index and wins over later titles from the agent, [session model: titles](../design/session-model.md#titles)), and the hover **More** button. The row's context menu, its **More** menu and the top bar's title menu render one shared item list (`SessionMenuItems`); the button shows on hover and keyboard focus, sits over the status slot so the title keeps its width, and the context menu key opens it too. Still open: pin, archive and the rest of the reference's menu (mark as unread, open in, move), which need their places designed.
-- **Tracked**: what is left is in [#36](https://github.com/overbench/overbench/issues/36).
+- **Tracked**: what was left is [#36](https://github.com/overbench/overbench/issues/36), built on 2026-10-24 as the [session menu](../design/ui.md#session-menu) with the Pinned group and Settings › Archived sessions.
 
 ## 31. Earlier replies show actions only on hover, and no Fork
 
@@ -486,7 +486,7 @@ The list is complete and no longer edited: new problems go to [GitHub issues](ht
   - Whether the title button's hit area and hover fill include the mark, so it reads as one control.
   - The rule changes in [Interface: session](../design/ui.md#session).
 - **Partly fixed**: the agent's name is gone from the top bar and its mark (14 px) leads the title inside the title button; a subagent's session keeps its `Bot` icon. The button's tooltip gives the full title and the agent. The menu holds the shared items of [problem 30](#30-the-session-context-menu-lacks-rename-pin-and-archive). The panel's polish against the reference is still open.
-- **Tracked**: what is left is in [#36](https://github.com/overbench/overbench/issues/36).
+- **Tracked**: what was left is [#36](https://github.com/overbench/overbench/issues/36), built on 2026-10-24 as the [session menu](../design/ui.md#session-menu) with the Pinned group and Settings › Archived sessions.
 
 ## 34. The slash command popover looks crude
 

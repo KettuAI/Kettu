@@ -26,6 +26,7 @@
     "attachmentMissing": "An attachment is no longer available. Remove it and add it again.",
     "attachmentUnreadable": "OverBench can't read {{name}}.",
     "attachmentDenied": "OverBench isn't allowed to read {{name}}.",
+    "topLevelOnly": "Only a top-level session can be pinned or archived",
     "subagent": {
       "noPrompt": "A subagent session takes its instructions from its parent",
       "noFork": "A subagent session cannot be forked",

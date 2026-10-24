@@ -610,6 +610,10 @@ export class AgentHost {
         sessions.setConfigOption(sessionId, optionId, value),
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
+      'sessions.pin': ({ sessionId, pinned }) => sessions.pin(sessionId, pinned),
+      'sessions.archive': ({ sessionId }) => sessions.archive(sessionId),
+      'sessions.unarchive': ({ sessionId }) => sessions.unarchive(sessionId),
+      'sessions.markUnread': ({ sessionId, unread }) => sessions.markUnread(sessionId, unread),
       'sessions.delete': async ({ sessionId }) => {
         await sessions.delete(sessionId)
         this.options.send({ type: 'host:media-revoke', sessionId })

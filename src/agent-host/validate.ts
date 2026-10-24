@@ -178,6 +178,12 @@ function optionalFlag(o: Fields, key: string): boolean | undefined {
   return value
 }
 
+function flag(o: Fields, key: string): boolean {
+  const value = optionalFlag(o, key)
+  if (value === undefined) throw invalidParams(`${key} must be a boolean`)
+  return value
+}
+
 function artifactId(o: Fields): string {
   const value = string(o, 'id', ID_CHARS)
   if (!ARTIFACT_ID.test(value)) throw invalidParams('id is not an artifact id')
@@ -445,6 +451,16 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), title: o.title === null ? null : string(o, 'title', 200) }
     },
     'sessions.close': session,
+    'sessions.pin': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), pinned: flag(o, 'pinned') }
+    },
+    'sessions.archive': session,
+    'sessions.unarchive': session,
+    'sessions.markUnread': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), unread: flag(o, 'unread') }
+    },
     'sessions.delete': session,
     'sessions.removeEmpty': (params) => {
       const keep = fields(params).keep

@@ -1,4 +1,5 @@
 import {
+  ArchiveIcon,
   BellIcon,
   BotIcon,
   ChartNoAxesColumnIcon,
@@ -12,11 +13,14 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus } from '@shared/agent-host'
+import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { listedInstalled } from '@renderer/features/agents/readiness'
+import { basename } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { useProjectsStore } from '@renderer/stores/projects'
+import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useUsageStore } from '@renderer/stores/usage'
@@ -30,6 +34,7 @@ import {
   UpdateRow,
 } from './about-section'
 import { AgentListItem, AgentsGroupActions, EnvironmentFooter } from './agents-section'
+import { ArchivedRow } from './archived-section'
 import { useAppInfo } from './use-app-info'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
@@ -605,5 +610,35 @@ export function useAboutSection(): SectionDef {
         render: () => <LinkRow name={t('about.issues.name')} url={ISSUES_URL} />,
       },
     ],
+  }
+}
+
+export function useArchivedSection(): SectionDef {
+  const { t } = useTranslation(['settings', 'sidebar'])
+  const en = english()
+  const archived = useSessionsStore(useShallow((s) => archivedSessions(s.byId)))
+  const projects = useProjectsStore((s) => s.projects)
+  const where = (summary: SessionSummary) =>
+    summary.scratch
+      ? t('sidebar:project.noProject')
+      : (projects.find((p) => p.path === summary.projectPath)?.name ??
+        basename(summary.projectPath))
+  return {
+    id: 'archived',
+    title: t('sections.archived'),
+    description: t('pages.archived'),
+    icon: ArchiveIcon,
+    rows: archived.map((summary) => ({
+      id: summary.id,
+      name: sessionTitle(summary),
+      description: where(summary),
+      keywords: `${agentName(summary.agentId)} ${t('archived.keywords')}`,
+      english: en('sections.archived'),
+      layout: 'custom',
+      render: () => <ArchivedRow summary={summary} where={where(summary)} />,
+    })),
+    footer: archived.length === 0 && (
+      <p className="px-1 text-small text-secondary">{t('archived.empty')}</p>
+    ),
   }
 }

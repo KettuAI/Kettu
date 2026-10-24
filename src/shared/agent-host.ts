@@ -251,6 +251,8 @@ export interface SessionSummary {
   pr: { number: number; state: PullRequestState; url: string } | null
   cache: PromptCache | null // the main thread's prompt cache as its last turn or request left it
   model: string | null // the model option then, for an estimate of the cache's lifetime
+  pinnedAt: number | null // when the user pinned it; a top-level session only
+  archivedAt: number | null // when the user archived it; off the sidebar while set
 }
 
 export interface ImportableSession {
@@ -370,6 +372,11 @@ export interface HostContract {
   // title null: back to the agent's title.
   'sessions.rename': { params: { sessionId: string; title: string | null }; result: void }
   'sessions.close': { params: { sessionId: string }; result: void }
+  'sessions.pin': { params: { sessionId: string; pinned: boolean }; result: void }
+  'sessions.archive': { params: { sessionId: string }; result: void }
+  'sessions.unarchive': { params: { sessionId: string }; result: void }
+  // unread false: seen, as showing it would mark it.
+  'sessions.markUnread': { params: { sessionId: string; unread: boolean }; result: void }
   'sessions.delete': { params: { sessionId: string }; result: void }
   // Once per index: the sessions left with no message go, except `keep`, those with a draft.
   'sessions.removeEmpty': { params: { keep: string[] }; result: void }
@@ -528,6 +535,10 @@ export const HOST_METHODS = [
   'sessions.setConfigOption',
   'sessions.rename',
   'sessions.close',
+  'sessions.pin',
+  'sessions.archive',
+  'sessions.unarchive',
+  'sessions.markUnread',
   'sessions.delete',
   'sessions.removeEmpty',
   'sessions.removeAll',

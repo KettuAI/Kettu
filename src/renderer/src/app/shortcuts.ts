@@ -3,11 +3,12 @@ import { stepZoom, type ZoomStep } from '@shared/settings'
 import { errorMessage } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { flattenTree, sessionTree, useSessionsStore } from '@renderer/stores/sessions'
+import { flattenTree, pinnedTree, sessionTree, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   settingsBack,
   NO_PROJECT_GROUP,
+  PINNED_GROUP,
   openSession,
   openSettings,
   toggleSidebar,
@@ -116,7 +117,7 @@ function isEditable(target: EventTarget | null): boolean {
   )
 }
 
-/** Previous or next session in sidebar order, across projects and No project. */
+/** Previous or next session in sidebar order, across Pinned, the projects and No project. */
 function stepSession(delta: -1 | 1): void {
   const view = useViewStore.getState()
   const { byId } = useSessionsStore.getState()
@@ -124,9 +125,13 @@ function stepSession(delta: -1 | 1): void {
     ...useProjectsStore.getState().projects.map((p) => p.path),
     null,
   ]
-  const order = groups
-    .filter((p) => !view.collapsedProjects[p ?? NO_PROJECT_GROUP])
-    .flatMap((p) => flattenTree(sessionTree(byId, p), (id) => view.expandedParents[id] ?? false))
+  const expanded = (id: string) => view.expandedParents[id] ?? false
+  const order = [
+    ...(view.collapsedProjects[PINNED_GROUP] ? [] : flattenTree(pinnedTree(byId), expanded)),
+    ...groups
+      .filter((p) => !view.collapsedProjects[p ?? NO_PROJECT_GROUP])
+      .flatMap((p) => flattenTree(sessionTree(byId, p), expanded)),
+  ]
   if (!order.length) return
   const currentId = view.main.kind === 'session' ? view.main.sessionId : null
   const at = currentId ? order.indexOf(currentId) : -1

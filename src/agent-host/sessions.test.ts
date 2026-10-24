@@ -2388,6 +2388,98 @@ describe('unread and viewing', () => {
   })
 })
 
+describe('pinning, archiving and marking unread', () => {
+  it('pins and unpins a top-level session, and keeps the pin across a restart', async () => {
+    const first = await startTestHost()
+    let port = first.connect()
+    const sessionId = await newSession(first, port)
+    await port.request('sessions.pin', { sessionId, pinned: true })
+    const pinnedAt = port.summary(sessionId)?.pinnedAt
+    expect(pinnedAt).toEqual(expect.any(Number))
+    // Pinning again keeps its place in the order.
+    await port.request('sessions.pin', { sessionId, pinned: true })
+    expect(port.summary(sessionId)?.pinnedAt).toBe(pinnedAt)
+    await first.host.shutdown()
+
+    current = await startTestHost({ userDataPath: first.dir })
+    port = current.connect()
+    const [summary] = await port.request('sessions.list', {})
+    expect(summary).toMatchObject({ id: sessionId, pinnedAt })
+    await port.request('sessions.pin', { sessionId, pinned: false })
+    expect(port.summary(sessionId)?.pinnedAt).toBeNull()
+  })
+
+  it('archives a session that waits for approval: closed, unpinned and kept', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await port.request('sessions.pin', { sessionId, pinned: true })
+    await turn(port, sessionId, '/permission')
+    await port.until(() => port.summary(sessionId)?.permissionCount === 1)
+    await port.request('sessions.archive', { sessionId })
+    expect(port.summary(sessionId)).toMatchObject({
+      status: 'closed',
+      permissionCount: 0,
+      pinnedAt: null,
+      archivedAt: expect.any(Number),
+    })
+    const listed = await port.request('sessions.list', {})
+    expect(listed.map((s) => s.id)).toContain(sessionId)
+  })
+
+  it('brings an archived session back when a prompt is sent to it', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await port.request('sessions.archive', { sessionId })
+    expect(port.summary(sessionId)?.archivedAt).toEqual(expect.any(Number))
+    await turn(port, sessionId, 'hello')
+    await port.untilStatus(sessionId, 'ready')
+    expect(port.summary(sessionId)?.archivedAt).toBeNull()
+  })
+
+  it('restores an archived session with unarchive', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await port.request('sessions.archive', { sessionId })
+    await port.request('sessions.unarchive', { sessionId })
+    expect(port.summary(sessionId)?.archivedAt).toBeNull()
+  })
+
+  it('pins and archives top-level sessions only', async () => {
+    const { t, port } = await setup()
+    const parentId = await newSession(t, port)
+    await turn(port, parentId, '/subagent')
+    await port.until(() =>
+      port.events.some((e) => e.type === 'session.summary' && e.summary.parentId === parentId),
+    )
+    const childId = port.events.flatMap((e) =>
+      e.type === 'session.summary' && e.summary.parentId === parentId ? [e.summary.id] : [],
+    )[0]!
+    await expect(
+      port.request('sessions.pin', { sessionId: childId, pinned: true }),
+    ).rejects.toMatchObject({ code: 'restricted' })
+    await expect(port.request('sessions.archive', { sessionId: childId })).rejects.toMatchObject({
+      code: 'restricted',
+    })
+  })
+
+  it('marks a session unread until it is shown, across a restart, and read again', async () => {
+    const first = await startTestHost()
+    let port = first.connect()
+    const sessionId = await newSession(first, port)
+    await port.request('sessions.show', { sessionId: null })
+    await port.request('sessions.markUnread', { sessionId, unread: true })
+    expect(port.summary(sessionId)?.attention).toBe('unread')
+    await first.host.shutdown()
+
+    current = await startTestHost({ userDataPath: first.dir })
+    port = current.connect()
+    const [summary] = await port.request('sessions.list', {})
+    expect(summary).toMatchObject({ id: sessionId, attention: 'unread' })
+    await port.request('sessions.markUnread', { sessionId, unread: false })
+    expect(port.summary(sessionId)?.attention).toBe('none')
+  })
+})
+
 describe('the index', () => {
   it('imports a session the agent lists, following nextCursor', async () => {
     const { t, port } = await setup({ agentEnv: { FAKE_AGENT_LIST_PAGE: '1' } })

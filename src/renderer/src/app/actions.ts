@@ -219,14 +219,26 @@ export function retryPendingSession(): void {
   }
 }
 
-/** Drops the live state of the session and its sub-sessions; opening one loads it again. */
-export async function closeSession(sessionId: string): Promise<void> {
+export async function pinSession(sessionId: string, pinned: boolean): Promise<void> {
+  await host('sessions.pin', { sessionId, pinned })
+}
+
+/** Closes the session with its sub-sessions and takes it off the list; Settings lists it. */
+export async function archiveSession(sessionId: string): Promise<void> {
   const summary = useSessionsStore.getState().byId[sessionId]
-  const closed = [sessionId, ...descendantIds(sessionId)]
-  await host('sessions.close', { sessionId })
-  for (const id of closed) forgetSession(id)
+  const archived = [sessionId, ...descendantIds(sessionId)]
+  await host('sessions.archive', { sessionId })
+  for (const id of archived) forgetSession(id)
   const { main } = useViewStore.getState()
-  if (main.kind === 'session' && closed.includes(main.sessionId)) leaveSession(summary)
+  if (main.kind === 'session' && archived.includes(main.sessionId)) leaveSession(summary)
+}
+
+export async function unarchiveSession(sessionId: string): Promise<void> {
+  await host('sessions.unarchive', { sessionId })
+}
+
+export async function markSessionUnread(sessionId: string, unread: boolean): Promise<void> {
+  await host('sessions.markUnread', { sessionId, unread })
 }
 
 /** A null or empty title goes back to the agent's. */

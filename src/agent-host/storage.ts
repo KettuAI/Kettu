@@ -234,6 +234,8 @@ export interface SessionRecord {
   customTitle?: string // the user's own title, which wins over the agent's
   cache?: PromptCache // the main thread's prompt cache as its last turn left it, for the sidebar
   model?: string // the model option as its last turn left it, which an estimate of the cache needs
+  pinnedAt?: number // when the user pinned it, which orders the Pinned group
+  archivedAt?: number // when the user archived it; off the sidebar while set
 }
 
 export interface SessionsFile {
@@ -391,6 +393,8 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isString(item.customTitle) ? { customTitle: item.customTitle } : {}),
       ...cacheOf(item.cache),
       ...(isString(item.model) ? { model: item.model } : {}),
+      ...(isTime(item.pinnedAt) ? { pinnedAt: item.pinnedAt } : {}),
+      ...(isTime(item.archivedAt) ? { archivedAt: item.archivedAt } : {}),
     })
   }
   return {

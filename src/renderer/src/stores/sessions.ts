@@ -41,7 +41,7 @@ export function recentSessions(
   count: number,
 ): SessionSummary[] {
   return Object.values(byId)
-    .filter((s) => s.parentId === null && s.origin === 'user')
+    .filter((s) => s.parentId === null && s.origin === 'user' && !s.archivedAt)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, count)
 }
@@ -62,23 +62,57 @@ export interface SessionNode {
 
 /**
  * The project's sessions as a tree, newest first, with attention summed up from descendants;
- * null for the sessions started with No project, across their scratch folders.
+ * null for the sessions started with No project, across their scratch folders. Pinned and archived
+ * sessions are listed elsewhere, with their sub-sessions.
  */
 export function sessionTree(
   byId: Record<string, SessionSummary>,
   projectPath: string | null,
 ): SessionNode[] {
-  const inProject = Object.values(byId).filter((s) =>
-    projectPath === null ? s.scratch : s.projectPath === projectPath,
-  )
+  return buildTree(
+    byId,
+    (s) => (projectPath === null ? s.scratch : s.projectPath === projectPath),
+    (s) => !s.pinnedAt && !s.archivedAt,
+  ).sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
+}
+
+/** The pinned sessions across the projects as trees, in the order they were pinned. */
+export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] {
+  return buildTree(
+    byId,
+    () => true,
+    (s) => !!s.pinnedAt && !s.archivedAt,
+  ).sort((a, b) => (a.summary.pinnedAt ?? 0) - (b.summary.pinnedAt ?? 0))
+}
+
+/** Whether the session is a pinned top-level session not archived, or one of its sub-sessions. */
+export function inPinnedTree(byId: Record<string, SessionSummary>, s: SessionSummary): boolean {
+  let root = s
+  while (root.parentId && byId[root.parentId]) root = byId[root.parentId]!
+  return !!root.pinnedAt && !root.archivedAt
+}
+
+/** The archived top-level sessions, the most recently archived first. */
+export function archivedSessions(byId: Record<string, SessionSummary>): SessionSummary[] {
+  return Object.values(byId)
+    .filter((s) => s.parentId === null && !!s.archivedAt)
+    .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
+}
+
+function buildTree(
+  byId: Record<string, SessionSummary>,
+  within: (s: SessionSummary) => boolean,
+  rootKept: (s: SessionSummary) => boolean,
+): SessionNode[] {
   const children = new Map<string, SessionSummary[]>()
   const roots: SessionSummary[] = []
-  for (const s of inProject) {
+  for (const s of Object.values(byId)) {
+    if (!within(s)) continue
     if (s.parentId && byId[s.parentId]) {
       const list = children.get(s.parentId) ?? []
       list.push(s)
       children.set(s.parentId, list)
-    } else {
+    } else if (rootKept(s)) {
       roots.push(s)
     }
   }
@@ -93,7 +127,7 @@ export function sessionTree(
       running: isActive(summary) || kids.some((k) => k.running),
     }
   }
-  return roots.sort((a, b) => b.updatedAt - a.updatedAt).map(build)
+  return roots.map(build)
 }
 
 function isActive(summary: SessionSummary): boolean {

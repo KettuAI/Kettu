@@ -540,6 +540,8 @@ export class SessionManager {
       pr: pr ? { number: pr.number, state: pr.state, url: pr.url } : null,
       cache: record.cache ?? null,
       model: record.model ?? null,
+      pinnedAt: record.pinnedAt ?? null,
+      archivedAt: record.archivedAt ?? null,
     }
   }
 
@@ -2303,6 +2305,7 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
+    this.unarchive(sessionId)
     const hydrated = this.hydrate(content)
     const live = await this.revive(sessionId)
     if (!canSend(live.thread.session.status)) throw busyError(live.thread.session.status)
@@ -2490,6 +2493,7 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
+    this.unarchive(sessionId)
     const content = this.hydrate(input)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
@@ -3234,6 +3238,57 @@ export class SessionManager {
     const value = title?.trim().replace(/\s+/g, ' ') || null
     if (value === null) delete record.customTitle
     else record.customTitle = value
+    if (this.records.has(sessionId)) this.saveIndex()
+    this.touch(sessionId)
+  }
+
+  pin(sessionId: string, pinned: boolean): void {
+    const record = this.topLevel(sessionId)
+    if (pinned === (record.pinnedAt !== undefined)) return
+    if (pinned) record.pinnedAt = this.now()
+    else delete record.pinnedAt
+    this.saveRecord(sessionId)
+  }
+
+  /** Takes a top-level session and its sub-sessions off the list, closed; the index keeps them. */
+  async archive(sessionId: string): Promise<void> {
+    const record = this.topLevel(sessionId)
+    if (record.archivedAt !== undefined) return
+    await this.settled(sessionId)
+    await this.closeAll([...this.descendants(sessionId), record], true)
+    delete record.pinnedAt
+    record.archivedAt = this.now()
+    this.saveRecord(sessionId)
+  }
+
+  /** Brings back the archived session at the top of this one's tree, if it is archived. */
+  unarchive(sessionId: string): void {
+    let record = this.recordOf(sessionId)
+    while (record.parentId !== null && this.has(record.parentId)) {
+      record = this.recordOf(record.parentId)
+    }
+    if (record.archivedAt === undefined) return
+    delete record.archivedAt
+    this.saveRecord(record.id)
+  }
+
+  markUnread(sessionId: string, unread: boolean): void {
+    const record = this.recordOf(sessionId)
+    if (!unread) return this.markViewed(sessionId, record)
+    // Earlier than any update, so it stays unread after a restart until it is shown.
+    record.lastViewedAt = 0
+    const live = this.live.get(sessionId)
+    if (live) live.unread = true
+    this.saveRecord(sessionId)
+  }
+
+  private topLevel(sessionId: string): SessionRecord {
+    const record = this.recordOf(sessionId)
+    if (record.parentId !== null) throw new HostError('restricted', t('session.topLevelOnly'))
+    return record
+  }
+
+  private saveRecord(sessionId: string): void {
     if (this.records.has(sessionId)) this.saveIndex()
     this.touch(sessionId)
   }

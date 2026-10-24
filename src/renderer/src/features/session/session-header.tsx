@@ -18,6 +18,7 @@ import {
   SessionMenuItems,
   SessionTitleField,
 } from '@renderer/features/sidebar/session-menu'
+import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
@@ -101,7 +102,10 @@ export function SessionHeader({
           >
             <ChevronDownIcon className="size-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent finalFocus={rename.menu.finalFocus}>
+          <DropdownMenuContent
+            finalFocus={rename.menu.finalFocus}
+            onKeyDown={runSessionMenuAccelerator}
+          >
             <SessionMenuItems
               summary={summary}
               onRename={rename.menu.onRename}
