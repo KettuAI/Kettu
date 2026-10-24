@@ -1,6 +1,6 @@
 # Media
 
-> Status: Draft, pending the maintainer's pick of the [options](#options) · Screens in [Interface: media](./ui.md#media) and [files](./ui.md#files) · Types in the [session model](./session-model.md#thread-entries) · Issue [#43](https://github.com/overbench/overbench/issues/43)
+> Status: Accepted 2026-10-24 with option A, built in steps from a [first version](#first-version); the steps after it are refined once it is accepted · Screens in [Interface: media](./ui.md#media) and [files](./ui.md#files) · Types in the [session model](./session-model.md#thread-entries) · Issue [#43](https://github.com/overbench/overbench/issues/43)
 
 How OverBench finds, serves and shows the images, audio and video an agent sends or names: in the thread, in the viewer and in the Files pane. Sending media from the composer is the composer's design ([Interface: composer](./ui.md#composer)); this document covers what comes back and what is on disk.
 
@@ -8,13 +8,25 @@ How OverBench finds, serves and shows the images, audio and video an agent sends
 
 Three presentations were offered on 2026-10-22, each on a [page to try](https://claude.ai/artifact/Sv32T9zwbKJbUN9crodw8x), in both themes, with the measurements below. They share everything in this document except how media sits in a reply.
 
-| Option                       | In a reply                                                                                                                  | Players                                        |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **A. In place**, recommended | Each image, clip and sound shows under the paragraph that names it; a click on an image or **Open larger** opens the viewer | Chromium's own controls, in a hairline frame   |
-| B. Gallery strip             | The text stays whole; the message's media gathers into a strip of 96 px tiles at its end                                    | A player bar of our own, drawn from the tokens |
-| C. Chips and the side panel  | Media stays a file chip in the text; a click shows it big in the side panel beside the conversation                         | Chromium's own controls, in the side panel     |
+| Option                      | In a reply                                                                                                                  | Players                                        |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **A. In place**, chosen     | Each image, clip and sound shows under the paragraph that names it; a click on an image or **Open larger** opens the viewer | Chromium's own controls, in a hairline frame   |
+| B. Gallery strip            | The text stays whole; the message's media gathers into a strip of 96 px tiles at its end                                    | A player bar of our own, drawn from the tokens |
+| C. Chips and the side panel | Media stays a file chip in the text; a click shows it big in the side panel beside the conversation                         | Chromium's own controls, in the side panel     |
 
-A is recommended: it plays where the reply names it, as [problem 49](../milestones/m0-feedback.md#49-no-multimodal-support-images-audio-and-video) asks, and the platform's controls bring keyboard, seeking, speed, picture-in-picture, fullscreen and screen reader support that B would have to rebuild. [Interface: media](./ui.md#media) describes A; the choice is recorded here once made.
+A was recommended: it plays where the reply names it, as [problem 49](../milestones/m0-feedback.md#49-no-multimodal-support-images-audio-and-video) asks, and the platform's controls bring keyboard, seeking, speed, picture-in-picture, fullscreen and screen reader support that B would have to rebuild. [Interface: media](./ui.md#media) describes A.
+
+> Decided 2026-10-24: the maintainer chose A on the page, and asked for a simple version to accept first and refine step by step after it.
+
+## First version
+
+The first build covers the case that started it, a screenshot an agent saved and named by its path ([#43](https://github.com/overbench/overbench/issues/43#issuecomment-6379889027)):
+
+- **Images in replies, in place.** A Markdown image that names a local file, spaces in its path included ([spaces in a path](#spaces-in-a-path)), loads from the [media scheme](#the-media-scheme) under the grant rules as written; image blocks show from their bytes, as they do today. Images only: the scheme answers a whole file, without ranges.
+- **States**: loading, missing, format not supported, read error and remote ([states](#states)), without **Open with default app** and **Show in Finder**.
+- **A plain viewer**: a click or `Enter` opens the picture fitted on the dark scrim, with its name and sizes in the bar and **Close**; `Esc` or a click on the scrim closes it, and focus returns to the picture. It fades in and out.
+
+Later steps, each its own issue once the first version is accepted: video and audio with Chromium's players, and the scheme's range requests; zoom, pan, stepping and the shared-element motion in the viewer; **Copy image**, **Save as…** and **Show in Files**; media in tool calls; media in the Files pane; attached images in the viewer; audio and video bytes carried in the conversation, with their 20 MB cap. The decisions this document marks to be agreed wait for the step that needs them; the grant rules are part of the first version, since nothing is served without them.
 
 ## What counts as media
 
