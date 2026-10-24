@@ -1,7 +1,7 @@
 // The Artifacts page's list: the filter, then the groups and their order. See
 // docs/design/artifacts.md#artifacts-page.
 
-import type { ArtifactSummary } from '@shared/artifacts'
+import { ARTIFACT_KEEP_DELETED_MS, NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import { basename } from '@renderer/lib/format'
 
 export type ArtifactGrouping = 'project-session' | 'project' | 'date' | 'none'
@@ -43,6 +43,8 @@ export interface ListContext {
   session(id: string): { title: string; updatedAt: number } | null
   /** What a session no longer in the index is called. */
   deletedSession: string
+  /** What the artifacts the user imported show under, in place of a session. */
+  imported: string
   /** Names in the interface language, with numbers in numeric order. */
   collator: Intl.Collator
   now: number
@@ -194,12 +196,13 @@ function sessionSections(
     else bySession.set(artifact.sessionId, [artifact])
   }
   const rows = [...bySession].map(([sessionId, artifacts]) => {
-    const session = context.session(sessionId)
+    const session = sessionId === NO_SESSION ? null : context.session(sessionId)
     return {
       sessionId,
       artifacts,
-      title: session?.title ?? context.deletedSession,
-      // A deleted session last changed with its newest artifact.
+      title:
+        session?.title ?? (sessionId === NO_SESSION ? context.imported : context.deletedSession),
+      // A deleted session, and the imports, last changed with their newest artifact.
       updatedAt: session?.updatedAt ?? Math.max(...artifacts.map((a) => a.updatedAt)),
     }
   })
@@ -218,7 +221,14 @@ function sessionSections(
   }))
 }
 
-/** How many sessions the artifacts come from. */
+/** How many sessions the artifacts come from; the user's imports come from none. */
 export function sessionCount(list: readonly ArtifactSummary[]): number {
-  return new Set(list.map((artifact) => artifact.sessionId)).size
+  const sessions = new Set(list.map((artifact) => artifact.sessionId))
+  sessions.delete(NO_SESSION)
+  return sessions.size
+}
+
+/** Whole days before Recently deleted removes an artifact for good: 30 on the day it went. */
+export function daysLeft(deletedAt: number, now: number): number {
+  return Math.max(1, Math.ceil((deletedAt + ARTIFACT_KEEP_DELETED_MS - now) / DAY))
 }

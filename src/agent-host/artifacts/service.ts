@@ -8,7 +8,10 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { ArtifactLink } from '@shared/thread'
 import type { LogFn } from '../storage'
+import { artifactLink } from './links'
 import {
   ArtifactTools,
   INSTRUCTIONS,
@@ -50,6 +53,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
    * it runs under; null for an id OverBench does not have.
    */
   sessionOf(process: AgentProcess, id: string): string | null
+  /** A call of the session's acted on one artifact, for its tool call in the thread. */
+  linked?(sessionId: string, tool: string, link: ArtifactLink): void
 }
 
 /** A token for one session. */
@@ -314,6 +319,28 @@ export class ArtifactService {
     await transport.handleRequest(req, res)
   }
 
+  /** Hands the thread the artifact a call acted on; a failure only costs the row its link. */
+  private async link(
+    sessionId: string,
+    tool: string,
+    input: unknown,
+    result: CallToolResult,
+  ): Promise<void> {
+    const { linked, store } = this.deps
+    if (!linked) return
+    const titleOf = (id: string) =>
+      store.get(id).then(
+        (found) => found.artifact.title,
+        () => null,
+      )
+    try {
+      const link = await artifactLink(tool, input, result, titleOf)
+      if (link) linked(sessionId, tool, link)
+    } catch (error) {
+      this.deps.log('warn', `Could not link ${tool} to its tool call: ${(error as Error).message}`)
+    }
+  }
+
   /** A server for one request with the token, as a stateless transport needs. */
   private mcpServer(sdk: Sdk, grant: Grant): Server {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
@@ -333,7 +360,10 @@ export class ArtifactService {
       }
       if (!isToolName(name)) throw new McpError(ErrorCode.InvalidParams, `Unknown tool ${name}`)
       try {
-        return await this.tools.call(caller, name, input)
+        const result = await this.tools.call(caller, name, input)
+        // Before the answer, while the agent still shows its tool call as running.
+        await this.link(caller.sessionId, name, input, result)
+        return result
       } catch (error) {
         this.deps.log('error', `${name} failed: ${(error as Error).message}`)
         throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

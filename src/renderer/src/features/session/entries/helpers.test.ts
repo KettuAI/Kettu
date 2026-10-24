@@ -13,6 +13,16 @@ import {
 const base = { title: 'Do something', locations: [], rawInput: undefined }
 
 describe('toolLabel', () => {
+  it('names a call to the artifacts service by what it did and the artifact', () => {
+    const artifact = { id: 'art_1', title: 'Onboarding', action: 'create', version: 1 } as const
+    expect(
+      toolLabel(
+        { ...base, title: 'mcp.overbench.create_artifact', toolKind: 'execute', artifact },
+        '/repo',
+      ),
+    ).toEqual({ verb: 'Created artifact', target: 'Onboarding', kind: 'artifact' })
+  })
+
   it('names a file tool by its verb and the path inside the project', () => {
     expect(
       toolLabel({ ...base, toolKind: 'edit', locations: [{ path: '/repo/src/a.ts' }] }, '/repo'),

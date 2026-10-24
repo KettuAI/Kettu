@@ -19,16 +19,19 @@ import { toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { SidePanelContext } from './side-panel'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
+const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
 
 // Each pane is a panel of its own, so each keeps its width: the terminal needs less room than a
 // file beside its tree. The terminal keeps the id it had when it was the only pane.
 const PANES = {
   terminal: { id: 'side-panel', defaultSize: '340px', minSize: '280px' },
   files: { id: 'side-panel-files', defaultSize: '560px', minSize: '360px' },
+  artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
 } as const
 
 /**
- * The main area with the project's side panel on its right, holding the terminal or the files.
+ * The main area with the project's side panel on its right, holding the terminal, the files or,
+ * opened from the thread, an artifact.
  * Opening or closing it changes the content's width at once. Maximized, the panel covers the
  * whole area while the layout underneath keeps its sizes, so restoring returns to exactly the
  * widths before.
@@ -41,6 +44,7 @@ export function SidePanelArea({
   children: ReactNode
 }) {
   const pane = useViewStore((s) => s.sidePane[projectPath])
+  const artifact = useViewStore((s) => s.sideArtifact[projectPath])
   const maximized = useViewStore((s) => s.sidePaneMaximized) && !!pane
   const open = pane === 'terminal'
   const layout = useDefaultLayout({
@@ -115,7 +119,18 @@ export function SidePanelArea({
                 <TerminalPanel projectPath={projectPath} maximized={maximized} />
               ) : (
                 <Suspense fallback={<div className="h-full bg-sidebar" />}>
-                  <FilesPanel projectPath={projectPath} maximized={maximized} />
+                  {pane === 'files' ? (
+                    <FilesPanel projectPath={projectPath} maximized={maximized} />
+                  ) : (
+                    artifact && (
+                      <ArtifactPane
+                        key={artifact}
+                        projectPath={projectPath}
+                        id={artifact}
+                        maximized={maximized}
+                      />
+                    )
+                  )}
                 </Suspense>
               )}
             </ResizablePanel>

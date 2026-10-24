@@ -5,6 +5,7 @@ import { mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { ARTIFACT_ID, NO_SESSION } from '@shared/artifacts'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
 import type { AgentLauncher } from './agents'
 import type { GitEventDraft, GitServiceApi } from './git/api'
@@ -761,12 +762,67 @@ describe('artifacts', () => {
       {
         type: 'host:artifact-content',
         requestId: 1,
-        result: { kind: 'found', path: expect.stringContaining(contentDir), version: 1 },
+        result: {
+          kind: 'found',
+          path: expect.stringContaining(contentDir),
+          version: 1,
+          title: 'Report',
+        },
       },
       expect.objectContaining({ requestId: 2, result: expect.objectContaining({ version: 1 }) }),
       { type: 'host:artifact-content', requestId: 3, result: { kind: 'not_found' } },
       { type: 'host:artifact-content', requestId: 4, result: { kind: 'not_found' } },
     ])
+  })
+
+  it('imports a file the user chose as version 1 by the user, in a project or No project', async () => {
+    const { t, port } = await setup()
+    await port.request('projects.add', { path: t.project })
+    const file = path.join(t.dir, 'Plan v2.html')
+    const html = '<title>Roadmap</title><section data-page="A"></section><section data-page="B">'
+    await writeFile(file, html)
+    const big = path.join(t.dir, 'big.html')
+    await writeFile(big, 'x'.repeat(5 * 1024 * 1024 + 1))
+    const answers = () =>
+      t.sent.flatMap((message) => (message.type === 'host:artifact-import' ? [message] : []))
+
+    await t.host.artifactImport(1, file, t.project)
+    await t.host.artifactImport(2, file, null)
+    await t.host.artifactImport(3, big, t.project)
+    await t.host.artifactImport(4, path.join(t.dir, 'missing.html'), t.project)
+    await t.host.artifactImport(5, file, path.join(t.dir, 'other-folder'))
+    const ids = answers().flatMap(({ result }) => ('id' in result ? [result.id] : []))
+    expect(ids).toHaveLength(2)
+    const [first = '', second = ''] = ids
+    expect(answers().slice(2)).toEqual([
+      { type: 'host:artifact-import', requestId: 3, result: { failed: 'too_large' } },
+      { type: 'host:artifact-import', requestId: 4, result: { failed: 'unreadable' } },
+      { type: 'host:artifact-import', requestId: 5, result: { failed: 'unavailable' } },
+    ])
+    expect(first).toMatch(ARTIFACT_ID)
+    expect(second).toMatch(ARTIFACT_ID)
+
+    const listed = await port.request('artifacts.list', {})
+    expect(listed).toHaveLength(2)
+    expect(listed).toContainEqual(
+      expect.objectContaining({
+        id: first,
+        title: 'Roadmap',
+        project: t.project,
+        scratch: false,
+        sessionId: NO_SESSION,
+        version: 1,
+        pages: 2,
+      }),
+    )
+    expect(listed).toContainEqual(
+      expect.objectContaining({ id: second, scratch: true, sessionId: NO_SESSION }),
+    )
+    expect(await port.request('artifacts.versions', { id: first })).toEqual([
+      { version: 1, createdAt: expect.any(Number), author: null, note: null, size: html.length },
+    ])
+    expect(await port.request('artifacts.read', { id: first })).toMatchObject({ html })
+    expect(port.events.some((e) => e.type === 'artifacts.changed')).toBe(true)
   })
 
   it('keeps the artifacts of a deleted session', async () => {

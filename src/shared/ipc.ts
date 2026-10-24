@@ -1,5 +1,5 @@
 import type { AgentsApi, DiagnosticsBundle } from './agent-host'
-import type { ThumbnailPage } from './artifacts'
+import type { ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
@@ -115,6 +115,10 @@ export interface IpcInvokeContract {
     args: [id: string, version: number, layout: ThumbnailPage[] | null]
     result: string | null
   }
+  'artifact:open-external': { args: [id: string, version: number]; result: void }
+  'artifact:export': { args: [id: string, version: number]; result: boolean }
+  // `project`: a registered project's folder, or null for No project.
+  'artifact:import': { args: [project: string | null]; result: ArtifactImportResult }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -188,6 +192,15 @@ export interface OverbenchApi {
      * its pages laid out, which main cannot find without parsing the HTML.
      */
     thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null>
+    /** Opens a copy of the version in the default browser, outside the app's isolation. */
+    openExternal(id: string, version: number): Promise<void>
+    /** Asks where to save the version's HTML; false when the user cancelled. */
+    export(id: string, version: number): Promise<boolean>
+    /**
+     * Asks for an HTML file and makes it an artifact in the project, or in No project when null;
+     * null when the user cancelled.
+     */
+    import(project: string | null): Promise<ArtifactImportResult>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
   }

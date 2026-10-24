@@ -162,6 +162,17 @@ export interface ToolEntry {
   permissionResult: { optionId: string; kind: PermissionKind } | 'cancelled' | 'withdrawn' | null
   rawInput?: string // the command or input as text, when the agent sent one
   description?: string // what a command does, in the agent's words (Claude Code's Bash)
+  artifact?: ArtifactLink // set by the host on a call to OverBench's artifacts service
+}
+
+/** What a call to OverBench's artifacts service did, linked by the host to the agent's tool call. */
+export interface ArtifactLink {
+  id: string
+  /** As it was when the call ran. */
+  title: string
+  action: 'create' | 'update' | 'restore' | 'delete' | 'read'
+  /** The version the call wrote or read; null for a delete. */
+  version: number | null
 }
 
 export type ToolContent =
@@ -493,6 +504,7 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         isListOf(value.content, isToolContent) &&
         isListOf(value.locations, isRecord) &&
         (value.description === undefined || typeof value.description === 'string') &&
+        (value.artifact === undefined || isArtifactLink(value.artifact)) &&
         (value.permission == null ||
           (isRecord(value.permission) && isListOf(value.permission.options, isRecord)))
       )
@@ -535,4 +547,14 @@ export function coalescePatches(patches: readonly Patch[]): Patch[] {
     }
   }
   return out
+}
+
+function isArtifactLink(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    ['create', 'update', 'restore', 'delete', 'read'].includes(value.action as string) &&
+    (value.version === null || typeof value.version === 'number')
+  )
 }

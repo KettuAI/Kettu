@@ -91,13 +91,25 @@ export interface PlacedPage extends CanvasPage {
   y: number
 }
 
-/** Each page's place in canvas pixels; a row wraps after six pages. */
-export function layoutCanvas(rows: readonly CanvasRow[]): {
+/** A group's title over the first line of its row, which may wrap. */
+export interface RowTitle {
+  title: string
+  x: number
+  y: number
+  width: number
+}
+
+export interface CanvasLayout {
   pages: PlacedPage[]
+  titles: RowTitle[]
   width: number
   height: number
-} {
+}
+
+/** Each page's place in canvas pixels; a row wraps after six pages. */
+export function layoutCanvas(rows: readonly CanvasRow[]): CanvasLayout {
   const pages: PlacedPage[] = []
+  const titles: RowTitle[] = []
   let y = 0
   let width = 0
   for (const row of rows) {
@@ -109,11 +121,12 @@ export function layoutCanvas(rows: readonly CanvasRow[]): {
         x += p.width + PAGE_GAP
         height = Math.max(height, p.height)
       }
+      if (start === 0 && row.title) titles.push({ title: row.title, x: 0, y, width: x - PAGE_GAP })
       width = Math.max(width, x - PAGE_GAP)
       y += height + ROW_GAP
     }
   }
-  return { pages, width, height: Math.max(0, y - ROW_GAP) }
+  return { pages, titles, width, height: Math.max(0, y - ROW_GAP) }
 }
 
 /** A canvas's thumbnail layout, or null when its markup holds fewer than two pages. */

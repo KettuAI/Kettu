@@ -1,14 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
   ArrowDownUpIcon,
+  ArrowLeftIcon,
   ChevronDownIcon,
   CircleAlertIcon,
+  FileUpIcon,
   Rows3Icon,
   ShapesIcon,
+  TrashIcon,
+  XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { ArtifactSummary } from '@shared/artifacts'
+import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import { SearchField } from '@renderer/components/search-field'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
@@ -16,6 +20,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -23,6 +28,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -35,16 +41,26 @@ import { basename, longAgo } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import {
-  artifactsPageShown,
+  artifactListShown,
+  dismissImportFailure,
+  importArtifact,
   retryArtifacts,
   setArtifactsFilter,
   useArtifactsStore,
+  type ImportFailure,
 } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { openSession, setArtifactsView, useViewStore } from '@renderer/stores/view'
-import { ArtifactCard, CardSkeleton } from './artifact-card'
 import {
+  openRecentlyDeleted,
+  openSession,
+  setArtifactsView,
+  useViewStore,
+} from '@renderer/stores/view'
+import { ArtifactCard, CardSkeleton } from './artifact-card'
+import { isEditable } from './keys'
+import {
+  daysLeft,
   filterByTitle,
   groupArtifacts,
   GROUPINGS,
@@ -67,60 +83,76 @@ interface SessionInfo {
 /** Where the list was scrolled when the viewer opened, for Back. */
 let scrolledTo = 0
 
-/** Every artifact as a card, grouped by project and session or as the user chooses. */
-export default function ArtifactsPage() {
+/**
+ * Every artifact as a card, grouped by project and session or as the user chooses; with
+ * `deleted`, the page's Recently deleted view.
+ */
+export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const { t, i18n } = useTranslation(['artifacts', 'common'])
   const list = useArtifactsStore((s) => s.list)
+  const trash = useArtifactsStore((s) => s.deleted)
   const error = useArtifactsStore((s) => s.error)
   const filter = useArtifactsStore((s) => s.filter)
+  const importFailed = useArtifactsStore((s) => s.importFailed)
   const { group, sort } = useViewStore(useShallow((s) => s.artifactsView))
   const projects = useProjectsStore((s) => s.projects)
-  const sessions = useSessionInfo(list)
+  const sessions = useSessionInfo(list, trash)
   const now = useNow()
   const scroller = useRef<HTMLDivElement>(null)
   const filterField = useRef<HTMLInputElement>(null)
   const [active, setActive] = useState<string | null>(null)
 
   useEffect(() => {
-    artifactsPageShown(true)
-    return () => artifactsPageShown(false)
+    artifactListShown(true)
+    return () => artifactListShown(false)
   }, [])
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
       if (event.defaultPrevented || useViewStore.getState().settings.open) return
-      if (isMod(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
+      // Not while a menu or tooltip of the page takes the key.
+      const onPage =
+        event.target === document.body || scroller.current?.contains(event.target as Node)
+      if (deleted) {
+        if (event.key === 'Escape' && onPage && !isEditable(event.target)) {
+          event.preventDefault()
+          openRecentlyDeleted(false)
+        }
+      } else if (
+        isMod(event) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'f'
+      ) {
         event.preventDefault()
         filterField.current?.focus()
         filterField.current?.select()
-      } else if (
-        event.key === 'Escape' &&
-        useArtifactsStore.getState().filter &&
-        // Not while a menu or tooltip of the page takes the key.
-        (event.target === document.body || scroller.current?.contains(event.target as Node))
-      ) {
+      } else if (event.key === 'Escape' && useArtifactsStore.getState().filter && onPage) {
         event.preventDefault()
         setArtifactsFilter('')
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [deleted])
 
   // Back from the viewer: the same scroll, and the card it opened has the focus again.
-  const ready = list !== null
+  const ready = (deleted ? trash : list) !== null
   useLayoutEffect(() => {
-    if (!ready) return
     const view = scroller.current
+    if (!view) return
     const { opened } = useArtifactsStore.getState()
-    if (!view || !opened) return
+    if (!ready || !opened) {
+      view.scrollTop = 0
+      return
+    }
     view.scrollTop = scrolledTo
-    setActive(opened)
+    // Its focus event makes it the cards' Tab stop.
     view
       .querySelector<HTMLElement>(`[data-artifact-card="${opened}"]`)
       ?.focus({ preventScroll: true })
     useArtifactsStore.setState({ opened: null })
-  }, [ready])
+  }, [ready, deleted])
 
   const collator = useMemo(
     () => new Intl.Collator(i18n.language, { numeric: true, sensitivity: 'base' }),
@@ -138,6 +170,7 @@ export default function ArtifactsPage() {
           : null
       },
       deletedSession: t('page.deletedSession'),
+      imported: t('page.imported'),
       collator,
       now: day,
     })
@@ -148,60 +181,93 @@ export default function ArtifactsPage() {
       ? t('page.noProject')
       : (projects.find((p) => p.path === artifact.project)?.name ?? basename(artifact.project))
   const sessionName = (id: string): string => {
+    if (id === NO_SESSION) return t('page.imported')
     const info = sessions.get(id)
     if (!info) return t('page.deletedSession')
     return info.title ?? t('common:untitledSession')
   }
-
-  const cards = groups.flatMap((g) => g.sections.flatMap((s) => s.artifacts))
-  const tabbable = cards.some((a) => a.id === active) ? active : (cards[0]?.id ?? null)
+  const card = (artifact: ArtifactSummary, lead: string, tabbable: string | null) => (
+    <ArtifactCard
+      key={artifact.id}
+      artifact={artifact}
+      lead={lead}
+      project={projectName(artifact)}
+      session={sessionName(artifact.sessionId)}
+      tabbable={artifact.id === tabbable}
+    />
+  )
+  const cardsProps = {
+    className: 'flex flex-col gap-7',
+    onKeyDown: moveCardFocus,
+    onFocus: (event: React.FocusEvent) => {
+      const id = (event.target as HTMLElement).dataset.artifactCard
+      if (id) setActive(id)
+    },
+  }
 
   let body
-  if (list === null && error) body = <ListError error={error} />
-  else if (list === null) body = <LoadingList />
-  else if (list.length === 0) body = <NoArtifacts />
-  else if (groups.length === 0) body = <NoMatch />
-  else {
-    body = (
-      <>
-        {error && <ListError error={error} />}
-        <div
-          className="flex flex-col gap-7"
-          onKeyDown={moveCardFocus}
-          onFocus={(event) => {
-            const id = (event.target as HTMLElement).dataset.artifactCard
-            if (id) setActive(id)
-          }}
-        >
-          {groups.map((g) => (
-            <GroupView
-              key={g.key}
-              group={g}
-              grouping={group}
-              sessions={sessions}
-              now={now}
-              render={(artifact) => (
-                <ArtifactCard
-                  key={artifact.id}
-                  artifact={artifact}
-                  lead={
+  if (deleted) {
+    const tabbable = trash?.some((a) => a.id === active) ? active : (trash?.[0]?.id ?? null)
+    if (trash === null && error) body = <ListError error={error} />
+    else if (trash === null) body = <LoadingList />
+    else if (trash.length === 0) body = <NothingDeleted />
+    else {
+      body = (
+        <>
+          {error && <ListError error={error} />}
+          <div {...cardsProps}>
+            <div className={GRID}>
+              {trash.map((artifact) =>
+                card(
+                  artifact,
+                  t('card.daysLeft', {
+                    project: projectName(artifact),
+                    count: daysLeft(artifact.deletedAt ?? now, now),
+                  }),
+                  tabbable,
+                ),
+              )}
+            </div>
+          </div>
+        </>
+      )
+    }
+  } else {
+    const cards = groups.flatMap((g) => g.sections.flatMap((s) => s.artifacts))
+    const tabbable = cards.some((a) => a.id === active) ? active : (cards[0]?.id ?? null)
+    if (list === null && error) body = <ListError error={error} />
+    else if (list === null) body = <LoadingList />
+    else if (list.length === 0) body = <NoArtifacts />
+    else if (groups.length === 0) body = <NoMatch />
+    else {
+      body = (
+        <>
+          {error && <ListError error={error} />}
+          <div {...cardsProps}>
+            {groups.map((g) => (
+              <GroupView
+                key={g.key}
+                group={g}
+                grouping={group}
+                sessions={sessions}
+                now={now}
+                render={(artifact) =>
+                  card(
+                    artifact,
                     group === 'project-session'
                       ? t('card.version', { version: artifact.version })
                       : group === 'project'
                         ? sessionName(artifact.sessionId)
-                        : projectName(artifact)
-                  }
-                  project={projectName(artifact)}
-                  session={sessionName(artifact.sessionId)}
-                  sessionGone={!sessions.has(artifact.sessionId)}
-                  tabbable={artifact.id === tabbable}
-                />
-              )}
-            />
-          ))}
-        </div>
-      </>
-    )
+                        : projectName(artifact),
+                    tabbable,
+                  )
+                }
+              />
+            ))}
+          </div>
+        </>
+      )
+    }
   }
 
   const controls = list === null ? !error : list.length > 0
@@ -215,52 +281,113 @@ export default function ArtifactsPage() {
         className="min-h-0 flex-1 overflow-y-auto px-7 pt-4 pb-14 [scrollbar-gutter:stable]"
       >
         <div className="@container mx-auto flex max-w-240 flex-col">
-          <header className="mb-7 flex items-end gap-4">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-title">{t('page.title')}</h1>
-              {list && list.length > 0 && (
-                <p className="mt-1 text-xs text-secondary">
-                  {t('page.summary', { count: list.length, sessions: sessionCount(list) })}
-                </p>
-              )}
-              {list === null && !error && (
-                <div className="mt-1 flex h-4 items-center">
-                  <Skeleton className="h-3 w-33" />
-                </div>
-              )}
-            </div>
-            {controls && (
-              <div className="flex shrink-0 items-center gap-2">
-                <div className="flex items-center gap-0.5">
-                  <ChoiceMenu
-                    icon={<Rows3Icon data-icon="inline-start" />}
-                    title={t('page.groupBy')}
-                    name={(choice) => t('page.groupByChoice', { choice })}
-                    choices={GROUPINGS.map((g) => [g, t(`page.groupings.${g}`)] as const)}
-                    value={group}
-                    onPick={(g: ArtifactGrouping) => setArtifactsView({ group: g })}
-                  />
-                  <ChoiceMenu
-                    icon={<ArrowDownUpIcon data-icon="inline-start" />}
-                    title={t('page.sort')}
-                    name={(choice) => t('page.sortChoice', { choice })}
-                    choices={SORTS.map((s) => [s, t(`page.sorts.${s}`)] as const)}
-                    value={sort}
-                    onPick={(s: ArtifactSort) => setArtifactsView({ sort: s })}
-                  />
-                </div>
-                <SearchField
-                  value={filter}
-                  onChange={setArtifactsFilter}
-                  label={t('page.filter')}
-                  clearLabel={t('page.clearFilter')}
-                  inputRef={filterField}
-                  className="w-50 @min-[47.5rem]:w-65"
-                />
+          {deleted ? (
+            <header className="mb-7">
+              <div className="flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="quiet"
+                        size="icon-compact"
+                        aria-label={t('page.backToArtifacts')}
+                        onClick={() => openRecentlyDeleted(false)}
+                        className="-ml-0.5 text-foreground"
+                      />
+                    }
+                  >
+                    <ArrowLeftIcon />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t('viewer.back')} <span className="opacity-60">Esc</span>
+                  </TooltipContent>
+                </Tooltip>
+                <h1 className="text-title">{t('page.recentlyDeleted')}</h1>
               </div>
-            )}
-          </header>
+              <p className="mt-1 pl-8.5 text-xs text-secondary">{t('page.deletedDescription')}</p>
+            </header>
+          ) : (
+            <header className="mb-7 flex items-end gap-4">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-title">{t('page.title')}</h1>
+                {list && list.length > 0 && (
+                  <p className="mt-1 text-xs text-secondary">
+                    {t('page.summary', { count: list.length, sessions: sessionCount(list) })}
+                  </p>
+                )}
+                {list === null && !error && (
+                  <div className="mt-1 flex h-4 items-center">
+                    <Skeleton className="h-3 w-33" />
+                  </div>
+                )}
+              </div>
+              {controls && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex items-center gap-0.5">
+                    <ChoiceMenu
+                      icon={<Rows3Icon data-icon="inline-start" />}
+                      title={t('page.groupBy')}
+                      name={(choice) => t('page.groupByChoice', { choice })}
+                      choices={GROUPINGS.map((g) => [g, t(`page.groupings.${g}`)] as const)}
+                      value={group}
+                      onPick={(g: ArtifactGrouping) => setArtifactsView({ group: g })}
+                    />
+                    <ChoiceMenu
+                      icon={<ArrowDownUpIcon data-icon="inline-start" />}
+                      title={t('page.sort')}
+                      name={(choice) => t('page.sortChoice', { choice })}
+                      choices={SORTS.map((s) => [s, t(`page.sorts.${s}`)] as const)}
+                      value={sort}
+                      onPick={(s: ArtifactSort) => setArtifactsView({ sort: s })}
+                    />
+                  </div>
+                  <SearchField
+                    value={filter}
+                    onChange={setArtifactsFilter}
+                    label={t('page.filter')}
+                    clearLabel={t('page.clearFilter')}
+                    inputRef={filterField}
+                    className="w-50 @min-[47.5rem]:w-65"
+                  />
+                  <ImportMenu align="end">
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="quiet"
+                                size="icon-compact"
+                                aria-label={t('page.import')}
+                              />
+                            }
+                          />
+                        }
+                      >
+                        <FileUpIcon className="size-4" />
+                      </TooltipTrigger>
+                      <TooltipContent>{t('page.import')}</TooltipContent>
+                    </Tooltip>
+                  </ImportMenu>
+                </div>
+              )}
+            </header>
+          )}
+          {!deleted && importFailed && <ImportError failure={importFailed} />}
           {body}
+          {!deleted && list !== null && trash !== null && trash.length > 0 && (
+            <div className="mt-10 pt-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+              <button
+                type="button"
+                onClick={() => openRecentlyDeleted(true)}
+                className="-ml-2 flex h-row items-center gap-2 rounded-lg px-2 text-ui text-secondary outline-none hover:bg-hover focus-ring"
+              >
+                <TrashIcon className="size-4 text-icon" />
+                {t('page.recentlyDeleted')}
+                <span className="text-meta text-tertiary">{trash.length}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -322,7 +449,7 @@ function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefin
   if (!info) {
     return (
       <span className="flex h-row items-center truncate font-medium text-secondary">
-        {t('page.deletedSession')}
+        {t(id === NO_SESSION ? 'page.imported' : 'page.deletedSession')}
       </span>
     )
   }
@@ -459,8 +586,12 @@ function nearestInNextRow(
 }
 
 /** The title, update time and folder of each session the artifacts show under. */
-function useSessionInfo(list: ArtifactSummary[] | null): Map<string, SessionInfo> {
-  const ids = useMemo(() => [...new Set(list?.map((a) => a.sessionId))], [list])
+function useSessionInfo(...lists: (ArtifactSummary[] | null)[]): Map<string, SessionInfo> {
+  const [list, trash] = lists
+  const ids = useMemo(
+    () => [...new Set([...(list ?? []), ...(trash ?? [])].map((a) => a.sessionId))],
+    [list, trash],
+  )
   // Flat values, so a running session's other changes do not render the page again.
   const flat = useSessionsStore(
     useShallow((s) =>
@@ -521,7 +652,70 @@ function NoArtifacts() {
         <EmptyTitle>{t('page.emptyTitle')}</EmptyTitle>
         <EmptyDescription>{t('page.emptyDescription')}</EmptyDescription>
       </EmptyHeader>
+      <EmptyContent>
+        <ImportMenu align="start">
+          <DropdownMenuTrigger render={<Button variant="outline" size="compact" />}>
+            <FileUpIcon data-icon="inline-start" />
+            {t('page.importEllipsis')}
+          </DropdownMenuTrigger>
+        </ImportMenu>
+      </EmptyContent>
     </Empty>
+  )
+}
+
+function NothingDeleted() {
+  const { t } = useTranslation('artifacts')
+  return (
+    <div className="flex flex-col items-center gap-1 py-26 text-center">
+      <p className="text-ui text-secondary">{t('page.nothingDeleted')}</p>
+      <p className="text-xs text-tertiary">{t('page.nothingDeletedHint')}</p>
+    </div>
+  )
+}
+
+/** "Import into": the sidebar's projects in its order, then No project; each opens the dialog. */
+function ImportMenu({ align, children }: { align: 'start' | 'end'; children: React.ReactNode }) {
+  const { t } = useTranslation('artifacts')
+  const projects = useProjectsStore((s) => s.projects)
+  return (
+    <DropdownMenu>
+      {children}
+      <DropdownMenuContent align={align} className="min-w-50">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('page.importInto')}</DropdownMenuLabel>
+          {projects.map((project) => (
+            <DropdownMenuItem key={project.path} onClick={() => void importArtifact(project.path)}>
+              <span className="truncate">{project.name}</span>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem onClick={() => void importArtifact(null)}>
+            {t('page.noProject')}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function ImportError({ failure }: { failure: ImportFailure }) {
+  const { t } = useTranslation(['artifacts', 'common'])
+  return (
+    <Alert variant="destructive" className="mb-7">
+      <CircleAlertIcon />
+      <AlertTitle>{t('page.importFailedTitle')}</AlertTitle>
+      <AlertDescription>{t(`page.importFailed.${failure}`)}</AlertDescription>
+      <AlertAction>
+        <Button
+          variant="quiet"
+          size="icon-sm"
+          aria-label={t('page.dismiss')}
+          onClick={dismissImportFailure}
+        >
+          <XIcon />
+        </Button>
+      </AlertAction>
+    </Alert>
   )
 }
 

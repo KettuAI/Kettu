@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
-import type { ArtifactState } from '@shared/artifacts'
+import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
 import {
   contentHash,
@@ -742,14 +742,18 @@ export class ThreadDb {
     })
   }
 
-  /** Makes an artifact with its first version, written by the session that creates it. */
+  /**
+   * Makes an artifact with its first version, written by the session that creates it, or by the
+   * user when `sessionId` is NO_SESSION.
+   */
   createArtifact(params: ArtifactCalls['create']['params']): { version: number } {
     return this.must((sql, db) =>
       this.transaction(db, () => {
         const { id, project, sessionId, title, pages, note, at } = params
         const { hash, size } = this.putHtml(params.html)
         sql.insertArtifact.run(id, project, title, sessionId, at, at)
-        sql.insertVersion.run(id, 1, hash, size, pages, sessionId, note, at)
+        const author = sessionId === NO_SESSION ? null : sessionId
+        sql.insertVersion.run(id, 1, hash, size, pages, author, note, at)
         return { version: 1 }
       }),
     )

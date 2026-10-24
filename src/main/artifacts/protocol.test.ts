@@ -97,7 +97,7 @@ describe('respond', () => {
     const file = path.join(contentDir, 'ab', `ab${'0'.repeat(62)}.html`)
     await writeFile(file, '<html><head></head><body><section data-page="A">A</section></body>')
     await writeFile(path.join(dir, 'secret.txt'), 'secret')
-    found = { kind: 'found', path: file, version: 2 }
+    found = { kind: 'found', path: file, version: 2, title: 'Page' }
     asked.length = 0
   })
 
@@ -164,11 +164,16 @@ describe('respond', () => {
   })
 
   it('refuses a file outside the content folder, whatever the host says', async () => {
-    found = { kind: 'found', path: path.join(dir, 'secret.txt'), version: 1 }
+    found = { kind: 'found', path: path.join(dir, 'secret.txt'), version: 1, title: 'Page' }
     const response = await respond(new Request(`${ORIGIN}/`), source())
     expect(response.status).toBe(404)
     expect(await response.text()).not.toContain('secret')
-    found = { kind: 'found', path: path.join(contentDir, '..', 'content-x', 'a.html'), version: 1 }
+    found = {
+      kind: 'found',
+      path: path.join(contentDir, '..', 'content-x', 'a.html'),
+      version: 1,
+      title: 'Page',
+    }
     expect((await respond(new Request(`${ORIGIN}/`), source())).status).toBe(404)
   })
 

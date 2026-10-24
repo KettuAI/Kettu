@@ -1,11 +1,18 @@
 // Main's side of artifacts: the protocol, its guards, and the origins each window opened.
 
 import { join } from 'node:path'
-import { app, session as sessions, type Session, type WebContents } from 'electron'
-import { ARTIFACT_ID } from '@shared/artifacts'
+import {
+  app,
+  type BrowserWindow,
+  session as sessions,
+  type Session,
+  type WebContents,
+} from 'electron'
+import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
 import type { ArtifactContentResult } from '@shared/host-control'
 import type { ArtifactOpenResult } from '@shared/ipc'
 import { sendEvent } from '../events'
+import { ArtifactFiles, parseVersion } from './files'
 import { filterArtifactRequests, guardArtifactFrames } from './guards'
 import { ArtifactOrigins } from './origins'
 import { WINDOW_PROXY } from './policy'
@@ -27,12 +34,15 @@ export interface ArtifactsDeps {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   contentDir: string
   thumbnailDir: string
+  /** Has the host make an artifact of a file, in a project, or in No project when null. */
+  importFile(path: string, project: string | null): Promise<NonNullable<ArtifactImportResult>>
 }
 
 export class Artifacts {
   readonly origins = new ArtifactOrigins()
   private readonly source: ArtifactSource
   private readonly thumbnails: Thumbnails
+  private readonly files: ArtifactFiles
 
   constructor(private readonly deps: ArtifactsDeps) {
     this.source = {
@@ -45,6 +55,11 @@ export class Artifacts {
       dir: deps.thumbnailDir,
       source: this.source,
       serve: (id) => this.origins.serve(id),
+    })
+    this.files = new ArtifactFiles({
+      content: (id, version) => deps.content(id, version),
+      contentDir: deps.contentDir,
+      importFile: (path, project) => deps.importFile(path, project),
     })
   }
 
@@ -87,9 +102,23 @@ export class Artifacts {
 
   /** `artifact:thumbnail`. */
   async thumbnail(id: unknown, version: unknown, layout: unknown): Promise<string | null> {
-    if (typeof id !== 'string' || !ARTIFACT_ID.test(id)) throw new Error('Not an artifact id')
-    if (!Number.isSafeInteger(version) || (version as number) < 1) throw new Error('Not a version')
-    return this.thumbnails.thumbnail(id, version as number, parseLayout(layout))
+    const wanted = parseVersion(id, version)
+    return this.thumbnails.thumbnail(wanted.id, wanted.version, parseLayout(layout))
+  }
+
+  /** `artifact:open-external`. */
+  openExternal(id: unknown, version: unknown): Promise<void> {
+    return this.files.openExternal(id, version)
+  }
+
+  /** `artifact:export`. */
+  export(window: BrowserWindow | null, id: unknown, version: unknown): Promise<boolean> {
+    return this.files.export(window, id, version)
+  }
+
+  /** `artifact:import`. */
+  import(window: BrowserWindow | null, project: unknown): Promise<ArtifactImportResult> {
+    return this.files.import(window, project)
   }
 
   /** `artifact:close`. */

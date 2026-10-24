@@ -11,6 +11,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
+import { NO_SESSION } from '@shared/artifacts'
 import type { ThreadEntry } from '@shared/thread'
 import { contentHash, contentPath, putContent } from '../artifacts/content'
 import type { ArtifactCalls } from '../artifacts/model'
@@ -119,6 +120,18 @@ describe('artifacts in the thread database', () => {
       path.join(hash.slice(0, 2), `${hash}.html`),
     )
     expect(html(content, hash)).toBe('<p>one</p>')
+    db.close()
+  })
+
+  it('makes the user the author of an imported artifact, which has no session', () => {
+    const { db } = setup()
+    create(db, { sessionId: NO_SESSION })
+    const { artifact, version } = db.getArtifact({ id: 'art_a', version: null, project: null })
+    expect(artifact.sessionId).toBe(NO_SESSION)
+    expect(version.author).toBeNull()
+    expect(db.listArtifacts({ project: '/p' })).toEqual([
+      expect.objectContaining({ id: 'art_a', sessionId: NO_SESSION }),
+    ])
     db.close()
   })
 

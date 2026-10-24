@@ -36,7 +36,25 @@
     "emptyDescription": "Agent 为你制作的页面会按项目和会话显示在这里。可以让 Agent 做一份报告、一套幻灯片或几个设计方案。",
     "noMatch": "没有匹配的 Artifact",
     "noMatchHint": "按 Esc 清除筛选",
-    "errorTitle": "无法列出你的 Artifact"
+    "errorTitle": "无法列出你的 Artifact",
+    "imported": "导入的",
+    "import": "导入 HTML 文件",
+    "importEllipsis": "导入 HTML 文件…",
+    "importInto": "导入到",
+    "importFailedTitle": "无法导入这个文件",
+    "importFailed": {
+      "too_large": "文件超过 5 MiB，超出了一个 artifact 的上限。",
+      "not_utf8": "文件不是 UTF-8 文本。",
+      "unreadable": "无法读取这个文件。",
+      "unavailable": "Agent host 暂时无法接收，请稍后再试。",
+      "failed": "出了点问题，请重试。"
+    },
+    "dismiss": "关闭",
+    "recentlyDeleted": "最近删除",
+    "backToArtifacts": "返回 Artifacts",
+    "deletedDescription": "删除的 artifact 会在这里保留 30 天，之后它和它的所有版本都会被永久移除。",
+    "nothingDeleted": "最近删除中没有内容",
+    "nothingDeletedHint": "你或 Agent 删除的内容会在这里保留 30 天"
   },
   "card": {
     "version": "v{{version}}",
@@ -45,8 +63,28 @@
     "more": "{{title}} 的更多操作",
     "where": "{{project}} · {{session}}",
     "when": "v{{version}} · {{time}}",
+    "daysLeft_other": "{{project}} · 剩 {{count}} 天",
+    "editing": "编辑中"
+  },
+  "menu": {
     "open": "打开",
-    "openSession": "打开会话"
+    "openInBrowser": "在浏览器中打开",
+    "export": "导出…",
+    "rename": "重命名…",
+    "versionHistory": "版本历史",
+    "openSession": "打开会话",
+    "delete": "删除",
+    "restore": "恢复",
+    "erase": "永久删除…"
+  },
+  "dialog": {
+    "renameTitle": "重命名 artifact",
+    "title": "标题",
+    "titleTooLong": "标题最多 {{count}} 个字符。",
+    "rename": "重命名",
+    "eraseTitle": "永久删除“{{title}}”？",
+    "eraseDescription_other": "它的 {{count}} 个版本将从这台电脑上移除，此操作无法撤销。",
+    "erase": "删除"
   },
   "viewer": {
     "back": "返回",
@@ -59,9 +97,41 @@
     "stoppedTitle": "页面已停止",
     "stoppedDescription": "它的进程已结束。重新加载即可再次显示。",
     "errorTitle": "无法打开此 Artifact",
-    "errorNotFound": "它已不在 OverBench 中。",
-    "errorUnavailable": "Agent 后台进程暂时无法显示它，请稍后重试。",
-    "errorFailed": "出现了问题，请重试。",
-    "retry": "重试"
+    "retry": "重试",
+    "more": "更多",
+    "error": {
+      "notFound": "它已不在 OverBench 中。",
+      "unavailable": "Agent host 暂时无法显示它，请稍后再试。",
+      "failed": "出了点问题，请重试。"
+    },
+    "earlierLead": "版本 {{version}} / {{head}}",
+    "restoreVersion": "恢复这个版本",
+    "inTrash": "在最近删除中",
+    "daysLeft_other": " · 剩 {{count}} 天",
+    "goneTitle": "这个 artifact 已被删除",
+    "goneDescription": "它会在最近删除中保留 30 天。",
+    "editing": "{{session}} 正在编辑",
+    "editingLabel": "{{session}} 正在编辑这个 artifact。打开会话",
+    "places_other": "在 {{count}} 处打开",
+    "placesTip_other": "这个 artifact 在 OverBench 中的 {{count}} 处打开"
+  },
+  "canvas": {
+    "role": "画布",
+    "page": "第 {{number}} 页",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "zoom": "{{percent}}%",
+    "zoomToFit": "缩放至适合",
+    "previous": "上一页",
+    "next": "下一页",
+    "counter": "{{number}} / {{count}}",
+    "backToCanvas": "返回画布"
+  },
+  "history": {
+    "title": "版本历史",
+    "close": "关闭版本历史",
+    "version": "版本 {{version}}",
+    "latest": "最新",
+    "you": "你"
   }
 }

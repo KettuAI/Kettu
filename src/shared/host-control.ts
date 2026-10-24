@@ -1,5 +1,6 @@
 // Messages between main and the two utility processes, over `utilityProcess` messaging.
 
+import type { ArtifactImportResult } from './artifacts'
 import type { AttachmentGrant } from './attachments'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
@@ -37,11 +38,19 @@ export type MainToHost =
   | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
   // `artifact.content`: the file of a version, the latest when `version` is null.
   | { type: 'host:artifact-content-request'; requestId: number; id: string; version: number | null }
+  // `artifact.import`: a file the user chose in main's dialog, made an artifact in `project`, or
+  // in a new scratch folder when `project` is null.
+  | {
+      type: 'host:artifact-import-request'
+      requestId: number
+      path: string
+      project: string | null
+    }
   | { type: 'host:shutdown' }
 
 /** The host's answer to `host:artifact-content-request`. */
 export type ArtifactContentResult =
-  | { kind: 'found'; path: string; version: number } // `path` lies in artifacts/content/
+  | { kind: 'found'; path: string; version: number; title: string } // `path` lies in artifacts/content/
   | { kind: 'not_found' }
   | { kind: 'failed' }
 
@@ -68,6 +77,7 @@ export type HostToMain =
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
   | { type: 'host:granted'; requestId: number }
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }
+  | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
   | { type: 'host:log'; level: 'info' | 'warn' | 'error'; message: string }

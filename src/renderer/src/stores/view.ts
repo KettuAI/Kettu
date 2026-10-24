@@ -19,16 +19,19 @@ type PageView =
   // of that session, in its project.
   | { kind: 'new'; agentId: AgentId | null; noProject: boolean; parentId?: string }
   | { kind: 'usage' } // the usage page, opened from the sidebar
-  | { kind: 'artifacts' } // the Artifacts page, opened from the sidebar
+  // The Artifacts page, opened from the sidebar; with `deleted`, its Recently deleted view.
+  | { kind: 'artifacts'; deleted?: true }
 
-// An artifact in the viewer, which Back leaves for what the main area showed before.
-export type MainView = PageView | { kind: 'artifact'; id: string; back: PageView }
+// An artifact in the viewer, which Back leaves for what the main area showed before; `history`
+// opens it with its version history.
+export type MainView =
+  PageView | { kind: 'artifact'; id: string; back: PageView; history?: boolean }
 
 // The No project group's key in `collapsedProjects`, which no folder's path can take.
 export const NO_PROJECT_GROUP = 'no-project'
 
-/** What the side panel shows; one pane at a time. */
-export type SidePane = 'terminal' | 'files'
+/** What the side panel shows; one pane at a time. An artifact's pane opens from the thread. */
+export type SidePane = 'terminal' | 'files' | 'artifact'
 
 export type SettingsSection =
   | 'general'
@@ -57,6 +60,8 @@ interface ViewStore {
   expandedParents: Record<string, boolean>
   /** The open side pane per project; none when the panel is closed. */
   sidePane: Record<string, SidePane>
+  /** The artifact each project's artifact pane shows. */
+  sideArtifact: Record<string, string>
   sidePaneMaximized: boolean
   /** How the Artifacts page groups and sorts, for the whole app. */
   artifactsView: { group: ArtifactGrouping; sort: ArtifactSort }
@@ -91,6 +96,7 @@ export const useViewStore = create<ViewStore>()(() => ({
         .filter(([, open]) => open)
         .map(([path]) => [path, 'terminal' as const]),
     ),
+  sideArtifact: {},
   sidePaneMaximized: false,
   artifactsView: {
     group: oneOf(GROUPINGS, saved.artifactsView?.group, 'project-session'),
@@ -114,7 +120,10 @@ useViewStore.subscribe((state) => {
       sidebarCollapsed: state.sidebarCollapsed,
       collapsedProjects: state.collapsedProjects,
       expandedParents: state.expandedParents,
-      sidePane: state.sidePane,
+      // An artifact's pane is not remembered: it opens from the thread, for the work at hand.
+      sidePane: Object.fromEntries(
+        Object.entries(state.sidePane).filter(([, pane]) => pane !== 'artifact'),
+      ),
       artifactsView: state.artifactsView,
     }
     writeJson(KEY, persisted)
@@ -147,14 +156,26 @@ export function openArtifacts(): void {
   }))
 }
 
+/** The Artifacts page's Recently deleted view; Back returns to the list. */
+export function openRecentlyDeleted(deleted: boolean): void {
+  useViewStore.setState({
+    main: deleted ? { kind: 'artifacts', deleted: true } : { kind: 'artifacts' },
+  })
+}
+
 export function setArtifactsView(patch: Partial<ViewStore['artifactsView']>): void {
   useViewStore.setState((s) => ({ artifactsView: { ...s.artifactsView, ...patch } }))
 }
 
 /** Shows an artifact in the viewer, in place of what the main area shows. */
-export function openArtifact(id: string): void {
+export function openArtifact(id: string, { history = false }: { history?: boolean } = {}): void {
   useViewStore.setState((s) => ({
-    main: { kind: 'artifact', id, back: s.main.kind === 'artifact' ? s.main.back : s.main },
+    main: {
+      kind: 'artifact',
+      id,
+      back: s.main.kind === 'artifact' ? s.main.back : s.main,
+      ...(history && { history }),
+    },
     settings: { ...s.settings, open: false },
   }))
 }
@@ -266,6 +287,28 @@ export function toggleSidePane(projectPath: string, pane: SidePane, open?: boole
     else sidePane[projectPath] = pane
     return { sidePane, sidePaneMaximized: false }
   })
+}
+
+/** Shows the artifact beside the thread, or closes the pane when it already shows it. */
+export function toggleArtifactPane(projectPath: string, id: string, open?: boolean): void {
+  useViewStore.setState((s) => {
+    const shown = s.sidePane[projectPath] === 'artifact' && s.sideArtifact[projectPath] === id
+    if ((open ?? !shown) === shown) return s
+    const sidePane = { ...s.sidePane }
+    if (shown) delete sidePane[projectPath]
+    else sidePane[projectPath] = 'artifact'
+    return {
+      sidePane,
+      sideArtifact: shown ? s.sideArtifact : { ...s.sideArtifact, [projectPath]: id },
+      sidePaneMaximized: false,
+    }
+  })
+}
+
+/** The session, with the artifact beside its thread. */
+export function openSessionWithArtifact(sessionId: string, projectPath: string, id: string): void {
+  openSession(sessionId, projectPath)
+  toggleArtifactPane(projectPath, id, true)
 }
 
 export function toggleTerminal(projectPath: string, open?: boolean): void {

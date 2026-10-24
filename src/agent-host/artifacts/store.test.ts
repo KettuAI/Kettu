@@ -81,7 +81,7 @@ describe('the artifact store', () => {
     ])
     expect(await store.list({ project: '/q' })).toEqual([])
     const content = await store.content(id)
-    expect(content.version).toBe(1)
+    expect(content).toMatchObject({ version: 1, title: 'Report' })
     expect(existsSync(content.path)).toBe(true)
   })
 

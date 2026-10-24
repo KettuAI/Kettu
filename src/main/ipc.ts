@@ -301,6 +301,9 @@ export function registerIpcHandlers({
   handle('artifact:thumbnail', 3, (_, id, version, layout) =>
     artifacts.thumbnail(id, version, layout),
   )
+  handle('artifact:open-external', 2, (_, id, version) => artifacts.openExternal(id, version))
+  handle('artifact:export', 2, ({ window }, id, version) => artifacts.export(window, id, version))
+  handle('artifact:import', 1, ({ window }, project) => artifacts.import(window, project))
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))

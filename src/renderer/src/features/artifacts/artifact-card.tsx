@@ -11,29 +11,22 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
-import { useSessionsStore } from '@renderer/stores/sessions'
-import { openArtifact, openSession } from '@renderer/stores/view'
+import { openArtifact } from '@renderer/stores/view'
+import { ArtifactMenuItems } from './artifact-menu'
 import { useThumbnail, type Thumbnail } from './thumbnails'
 
 /** Opens the viewer; Back returns to the page with this card focused. */
-function openFromPage(id: string): void {
+function openFromPage(id: string, history = false): void {
   useArtifactsStore.setState({ opened: id })
-  openArtifact(id)
-}
-
-function openItsSession(sessionId: string): void {
-  const session = useSessionsStore.getState().byId[sessionId]
-  if (session) openSession(session.id, session.projectPath)
+  openArtifact(id, { history })
 }
 
 /** One artifact on the page: its thumbnail, title and caption, and its menu. */
@@ -42,15 +35,14 @@ export const ArtifactCard = memo(function ArtifactCard({
   lead,
   project,
   session,
-  sessionGone,
   tabbable,
 }: {
   artifact: ArtifactSummary
-  /** What the grouping hides: the version, the session or the project. */
+  /** What the grouping hides: the version, the session or the project; in Recently deleted, the
+   * project and the days left. */
   lead: string
   project: string
   session: string
-  sessionGone: boolean
   tabbable: boolean
 }) {
   const { t } = useTranslation('artifacts')
@@ -62,23 +54,18 @@ export const ArtifactCard = memo(function ArtifactCard({
     .join(' · ')
 
   const items = (
-    <>
-      <DropdownMenuGroup>
-        <DropdownMenuItem onClick={() => openFromPage(artifact.id)}>
-          {t('card.open')}
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-      {!sessionGone && (
-        <>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => openItsSession(artifact.sessionId)}>
-              {t('card.openSession')}
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </>
-      )}
-    </>
+    <ArtifactMenuItems
+      target={{
+        id: artifact.id,
+        title: artifact.title,
+        version: artifact.version,
+        versions: artifact.version,
+        sessionId: artifact.sessionId,
+        deletedAt: artifact.deletedAt,
+      }}
+      onOpen={() => openFromPage(artifact.id)}
+      onVersionHistory={() => openFromPage(artifact.id, true)}
+    />
   )
 
   const button = (
@@ -98,6 +85,7 @@ export const ArtifactCard = memo(function ArtifactCard({
     >
       <span className="relative block aspect-16/10 w-full overflow-hidden bg-subtle">
         <ThumbnailImage thumbnail={thumbnail} />
+        {artifact.editing.length > 0 && <EditingPill />}
       </span>
       <span className="block py-3 pr-11 pl-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
         <span className="block truncate text-ui font-medium text-primary">{artifact.title}</span>
@@ -170,6 +158,17 @@ function ThumbnailImage({ thumbnail }: { thumbnail: Thumbnail }) {
           }}
         />
       ))}
+    </span>
+  )
+}
+
+/** While a session's running turn changes the artifact. */
+function EditingPill() {
+  const { t } = useTranslation('artifacts')
+  return (
+    <span className="absolute top-2.5 left-2.5 flex h-6 items-center gap-1.5 rounded-full bg-surface pr-2.5 pl-2 text-xs text-secondary shadow-outline">
+      <Spinner className="size-3" />
+      {t('card.editing')}
     </span>
   )
 }

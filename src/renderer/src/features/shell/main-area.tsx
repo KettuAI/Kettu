@@ -51,14 +51,14 @@ export function MainArea() {
   if (main.kind === 'artifacts') {
     return (
       <Suspense fallback={null}>
-        <ArtifactsPage />
+        <ArtifactsPage deleted={main.deleted === true} />
       </Suspense>
     )
   }
   if (main.kind === 'artifact') {
     return (
       <Suspense fallback={null}>
-        <ArtifactViewer key={main.id} id={main.id} />
+        <ArtifactViewer key={main.id} id={main.id} history={main.history === true} />
       </Suspense>
     )
   }

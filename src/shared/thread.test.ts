@@ -240,6 +240,7 @@ describe('isThreadEntry', () => {
       permission: { requestId: 'p1', options: [{ id: 'o', name: 'Allow', kind: 'allow_once' }] },
       permissionResult: null,
       description: 'Rewrite a.ts',
+      artifact: { id: 'art_1', title: 'Deck', action: 'update', version: 2 },
     },
     { kind: 'subagent', id: 's:1', sessionId: 'child' },
     { kind: 'session_message', id: 'sm:1', senderId: null, content: [] },
@@ -272,6 +273,9 @@ describe('isThreadEntry', () => {
     ).toBe(false)
     expect(isThreadEntry({ ...valid[3], permission: { requestId: 'p' } })).toBe(false)
     expect(isThreadEntry({ ...valid[3], description: 1 })).toBe(false)
+    expect(
+      isThreadEntry({ ...valid[3], artifact: { id: 'art_1', title: 'x', action: 'move' } }),
+    ).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
     expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'error', title: 'x', cause: 'other' }),

@@ -58,7 +58,18 @@
     "copyCommand": "复制命令",
     "showAll": "显示全部",
     "showFullDiff": "显示完整差异",
-    "image": "图片"
+    "image": "图片",
+    "artifact": {
+      "create": "创建了 artifact",
+      "update": "更新了 artifact",
+      "restore": "恢复了版本",
+      "delete": "删除了 artifact",
+      "read": "读取了 artifact",
+      "open": "打开",
+      "openArtifact": "打开 {{title}}",
+      "openTip": "在对话旁边打开",
+      "version": "v{{version}}"
+    }
   },
   "permission": {
     "ask": {
