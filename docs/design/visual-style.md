@@ -15,7 +15,7 @@ OverBench is a flat, technical workbench. Its look comes from hairlines, small s
 
 1. **Flat.** Nothing at rest has a shadow, a gradient or a raised card. Only what floats above the canvas casts a shadow ([elevation](#lines-and-elevation)).
 2. **Linear.** Icons are thin outlines, borders are hairlines, separators are inset to the text they divide.
-3. **Restrained, not grey.** The chrome is neutral. Color appears only where it carries meaning ([color](#color)), and there it is clear rather than timid ([problem 35](../milestones/m0-feedback.md#35-the-palette-is-black-and-grey-and-reads-as-cheap)).
+3. **Clear, not grey.** The chrome is neutral, so the states on it stand out: a state you tell apart at a glance takes its color, and the color is clear rather than timid ([color](#color), [problem 35](../milestones/m0-feedback.md#35-the-palette-is-black-and-grey-and-reads-as-cheap)).
 4. **Content first.** The agent's work has the highest contrast on screen. Secondary chrome steps back: muted at rest, full contrast only under the pointer, pressed or chosen. The app's own navigation, the sidebar's rows and the top bar's buttons, is drawn in the text color, as in the reference ([#127](https://github.com/overbench/overbench/issues/127)).
 5. **Less on screen.** Every element says something the user needs now. A word that repeats what a shape already says, a time on every row, or a hint the menu already gives is removed, not styled ([problems 8, 25, 28](../milestones/m0-feedback.md)).
 
@@ -57,7 +57,7 @@ Four sizes, chosen by context:
 ### Color and placement
 
 - An icon takes the color of its text (`currentColor`): `--icon-default` (`text-icon`) at rest, `--text-primary` under the pointer, pressed or chosen. Chrome icons, the sidebar's nav rows and the top bar's buttons, are `--text-primary` at rest too, as in the reference, where they measure near black.
-- Only a status icon takes a color: `--danger` for a failure and `--attention` for something waiting for your approval. A completed step, a passing check or an open pull request stays `--icon-default` ([repository states](./design-system.md#repository-state)). A neutral action never takes a color.
+- Only a status icon takes a color, its state's ([state colors](#color)): `--attention` for something waiting for your approval, `--info` for work running, `--success` for something done or passing, `--danger` for a failure, and a pull request's state color ([repository states](./design-system.md#repository-state)). A completed tool call stays `--icon-default`, and a neutral action never takes a color.
 - In a button, an icon sits in the `data-icon="inline-start"` or `"inline-end"` slot, so the padding adjusts. Inline with text, it sits at `vertical-align: -0.125em`.
 - A busy button swaps its icon for a `Spinner` of the same size and keeps its label and width.
 - An icon-only button has an accessible name and a tooltip that gives the name and the shortcut.
@@ -177,20 +177,34 @@ Every piece of text takes one of these roles. A size, weight, line height or col
 
 ## Color
 
-The maintainer's rules for the [palette](./design-system.md#palette), set on 2026-10-23:
+The maintainer's rules for the [palette](./design-system.md#palette), set on 2026-10-23 and revised on 2026-10-24 ([#207](https://github.com/overbench/overbench/issues/207)). The aim is a screen that reads clearly at a glance, not one without color: the chrome is neutral so that states stand out, and a state you tell apart by looking takes its color.
 
 1. **No pure black or white text.** Body text is `--text-primary`, in both themes.
-2. **Color only where it means something**: waiting for your approval (`--attention`), a failure or a deletion (`--danger`), a diff's added and deleted lines (`--success`, `--danger`), links (`--link`) and usage warnings (`--warning`, `--danger`). Everything else is neutral: surfaces, lines, text, icons, controls that are on, things on offer, states in progress.
-3. **Success has no color.** A tool call that succeeded shows no green check, a finished turn is not green, and "Installed", "Signed in", "Copied", passing checks and open pull requests are neutral.
-4. **Model names and reasoning levels**, such as "Xhigh", are `--text-secondary`, never orange or a gradient ([model names](./design-system.md#model-names-and-reasoning-levels)).
-5. **Usage hints**, such as "7 days 57%", are `--text-tertiary`, `--warning` from 80% and `--danger` from 95% ([usage levels](./design-system.md#usage-levels)).
-6. **Brand colors stay on the agent marks.** An agent's color never colors text, a border or a state.
-7. **Icons** rest at `--icon-default` and turn `--text-primary` under the pointer; only a status icon can be `--attention` or `--danger`.
-8. **One color per region.** One area of the screen shows at most one meaning color, apart from a diff's paired added and deleted counts.
+2. **Neutral chrome.** Surfaces, lines, text, navigation, buttons, controls that are on and things on offer are neutral. Color marks a state, never decoration.
+3. **States take their color**:
 
-- **Quiet unless it needs you.** A sidebar row's running and unread marks are neutral, a `--text-secondary` `Spinner` and a `--text-tertiary` dot. `--attention` is the loudest color in the app.
+   | State                     | Token                                                       | For example                                                                                      |
+   | ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+   | Waiting for your approval | `--attention`                                               | A session row's waiting dot, a permission request                                                |
+   | Running                   | `--info`                                                    | A running session's spinner, a tool call in progress, the running turn's spinner, pending checks |
+   | Done or passing           | `--success`                                                 | Passing checks, "Installed", "Signed in", "Updated", an agent's **Ready** dot                    |
+   | Failed or deleted         | `--danger`                                                  | A failed tool call, failing checks, conflicts, a deletion                                        |
+   | Usage warning             | `--warning`, `--danger`                                     | Usage from 80% and from 95% ([usage levels](./design-system.md#usage-levels))                    |
+   | Pull request state        | per [repository state](./design-system.md#repository-state) | Open, draft, merged, closed ([#205](https://github.com/overbench/overbench/issues/205))          |
+   | Diff lines                | `--success`, `--danger`                                     | Added and deleted lines and their counts                                                         |
+   | Links                     | `--link`                                                    | Links                                                                                            |
+
+4. **Routine stays neutral.** What happens on every turn gets no color, so the thread never fills with it: a tool call that succeeded shows a check in `--icon-default`, a finished turn is not green, and action feedback such as "Copied" is neutral. A state is colored when you check it, not because it happened.
+5. **Color stays small.** A state color sits on an icon, a dot, a spinner, a pill or a short word, never on a surface, a container's border or a whole row's text. A row or a control shows one state color, apart from a diff's paired counts.
+6. **Model names and reasoning levels**, such as "Xhigh", are `--text-secondary`, never orange or a gradient ([model names](./design-system.md#model-names-and-reasoning-levels)).
+7. **Usage hints**, such as "7 days 57%", are `--text-tertiary` below 80% ([usage levels](./design-system.md#usage-levels)).
+8. **Brand colors stay on the agent marks.** An agent's color never colors text, a border or a state.
+9. **Icons** rest at `--icon-default` and turn `--text-primary` under the pointer; a status icon takes its state's color.
+
+- **Loud only when it needs you.** A sidebar row's running spinner is `--info` and its unread dot a neutral `--text-tertiary`; a session that is starting keeps a neutral spinner, so the two never look alike. `--attention` is the loudest color in the app and the only one that asks for you.
+- **Busy is not running.** A spinner for the app's own short wait, such as a busy button, "Checking for updates…" or "Reading…", stays its text color; `--info` is for work an agent, a check or an install is doing.
 - **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exceptions.
-- **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` outside `tokens.css`, and no Tailwind palette utilities (`bg-white`, `text-red-500`); `pnpm lint` fails on either ([color checks](./testing.md#color-checks)). A new color is a token in `tokens.css` and a row in the design system first, in both themes, at 4.5:1 for text on every surface it sits on, and a pair in the contrast check.
+- **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` outside `tokens.css`, and no Tailwind palette utilities (`bg-white`, `text-red-500`); `pnpm lint` fails on either ([color checks](./testing.md#color-checks)). A new color is a token in `tokens.css` and a row in the design system first, in both themes, at 4.5:1 for text on every surface it sits on, and a pair in the contrast check. A state color shown only as an icon, a dot or a spinner needs 3:1, as WCAG asks of graphics.
 - **Not settled yet**: the search match's yellow (`--mark`), the file-type icons' own colors, the terminal's ANSI colors, the usage charts' agent series and heatmap, and the syntax highlighting theme keep their earlier colors until the maintainer decides them.
 
 ## Shape
@@ -290,7 +304,7 @@ Before a UI change goes up for review, with the [UX checklist](./ux-guidelines.m
 1. Every icon is in the [vocabulary](#vocabulary) or added to it, at 12, 14 or 16 px, with no stroke or fill of its own.
 2. Every text has a [role](#roles); no size, weight or opacity outside them.
 3. No raw color, Tailwind palette color, arbitrary radius or arbitrary size; every value is a token.
-4. Color appears only by the [color rules](#color), at most one per region, and never alone.
+4. Color marks states only, by the [color rules](#color): small, one state color per row or control, and never alone.
 5. One border per surface; separators inset; no shadow on anything that does not float.
 6. Rows follow their [anatomy](#rows), and nothing shifts between states.
 7. Every state in the [table](#states) that applies is drawn.
