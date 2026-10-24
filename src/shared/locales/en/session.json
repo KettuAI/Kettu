@@ -286,7 +286,11 @@
       "working": "Working"
     },
     "resume": "Resume",
-    "continuePrompt": "Continue"
+    "continuePrompt": "Continue",
+    "outOfCredit": {
+      "details": "Details",
+      "copy": "Copy the message"
+    }
   },
   "link": {
     "title": "Open this link?",

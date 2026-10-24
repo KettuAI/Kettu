@@ -114,7 +114,9 @@ export type ThreadEntry =
       severity: 'info' | 'warning' | 'error'
       title: string
       description?: string
-      cause?: 'agent_stopped' // the agent exited mid-turn, so the notice ends the turn
+      // The notice ends the turn: the agent exited mid-turn, or its model provider is out of credit.
+      cause?: 'agent_stopped' | 'out_of_credit'
+      model?: string // out_of_credit: the session's model when the turn failed
     }
   | {
       kind: 'compaction'
@@ -276,6 +278,24 @@ export function threadFromSnapshot(snapshot: Omit<SessionSnapshot, 'older' | 'pl
 
 export function threadEntries(state: ThreadState): ThreadEntry[] {
   return state.order.map((id) => state.byId[id]!)
+}
+
+/** The latest turn, when its model provider refused it for want of credit: its notice and prompt. */
+export function outOfCreditTurn(state: Pick<ThreadState, 'order' | 'byId'>): {
+  notice: Extract<ThreadEntry, { kind: 'notice' }>
+  prompt: Extract<ThreadEntry, { kind: 'user' }>
+} | null {
+  let notice: Extract<ThreadEntry, { kind: 'notice' }> | null = null
+  for (let i = state.order.length - 1; i >= 0; i--) {
+    const entry = state.byId[state.order[i]!]
+    if (!entry) continue
+    if (entry.kind === 'user' && !entry.steered) return notice && { notice, prompt: entry }
+    if (notice) continue
+    if (entry.kind === 'notice' && entry.cause === 'out_of_credit') notice = entry
+    // A retry runs under the same prompt, so work after the notice means it went through.
+    else if (entry.kind !== 'notice' && entry.kind !== 'git') return null
+  }
+  return null
 }
 
 /** The id the agent gave a message, from its entry id (`m:<messageId>`); null when it gave none. */
@@ -516,7 +536,10 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       return (
         typeof value.severity === 'string' &&
         typeof value.title === 'string' &&
-        (value.cause === undefined || value.cause === 'agent_stopped')
+        (value.cause === undefined ||
+          value.cause === 'agent_stopped' ||
+          value.cause === 'out_of_credit') &&
+        (value.model === undefined || typeof value.model === 'string')
       )
     case 'compaction':
       return typeof value.status === 'string' && typeof value.summary === 'string'

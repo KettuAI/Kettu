@@ -20,6 +20,8 @@ export interface FakeSessionState {
   largeHistory: number | null
   /** Its last prompt signed the agent out with the auth-required scenario. */
   signedOut: boolean
+  /** Its last prompt failed with the out-of-credit scenario. */
+  outOfCredit: boolean
   mode: string
   model: string
   thought: string

@@ -47,6 +47,10 @@
       "title": "The session closed before your message was sent",
       "description": "It waits in the queue until you resume it."
     },
+    "outOfCredit": {
+      "title": "{{model}} is out of credit",
+      "titleNoModel": "{{agent}}'s model provider is out of credit"
+    },
     "turnFailed": "The turn failed",
     "stopped": {
       "title": "{{agent}} exited before finishing this turn"

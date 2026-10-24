@@ -20,10 +20,17 @@
     "ultracodeOn": "Ultracode is on for this session: dynamic workflows on substantial tasks",
     "ultracodeNext": "This message runs with ultracode: dynamic workflows on the task",
     "model": "Model",
+    "modelOutOfCredit": "Model, out of credit",
     "options": "Options",
     "changesBetweenTurns": "Changes between turns",
     "useFallback": "Use {{name}}",
     "useDefault": "Use the agent's default"
+  },
+  "outOfCredit": {
+    "modelTitle": "{{model}} is out of credit",
+    "strip": "The provider's balance for {{model}} ran out. Top up, or pick another model to keep going.",
+    "stripNoModel": "The model provider's balance ran out. Top up to keep going.",
+    "switchModel": "Switch model"
   },
   "usage": {
     "title": "Usage",

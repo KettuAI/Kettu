@@ -47,6 +47,10 @@
       "title": "会话在消息发出前已关闭",
       "description": "消息会留在队列中，点击「继续」后才会发出。"
     },
+    "outOfCredit": {
+      "title": "{{model}} 余额不足",
+      "titleNoModel": "{{agent}} 的模型服务商余额不足"
+    },
     "turnFailed": "本轮对话失败",
     "stopped": {
       "title": "{{agent}} 在本轮对话完成前退出了"

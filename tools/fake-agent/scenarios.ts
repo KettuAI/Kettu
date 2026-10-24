@@ -495,6 +495,20 @@ const authRequired: Scenario = async (turn) => {
   throw RequestError.authRequired(undefined, 'Sign in to the fake agent to continue')
 }
 
+// A provider's reply as an adapter passes it on; sent again, as after a top-up, the turn answers.
+const outOfCredit: Scenario = async (turn) => {
+  if (turn.session.outOfCredit) {
+    turn.session.outOfCredit = false
+    await stream(turn, 'Topped up, so the turn goes through this time.')
+    return 'end_turn'
+  }
+  turn.session.outOfCredit = true
+  throw RequestError.internalError(
+    undefined,
+    'Insufficient Balance (request_id: 38feb58f-1d93-45e0-8b50-717b16b1390d)',
+  )
+}
+
 const largeHistory: Scenario = async (turn) => {
   const entries = turn.options.entries
   turn.session.largeHistory = entries
@@ -1267,6 +1281,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   crash,
   error,
   'auth-required': authRequired,
+  'out-of-credit': outOfCredit,
   'large-history': largeHistory,
   'slow-start': slowStart,
   'all-updates': allUpdates,

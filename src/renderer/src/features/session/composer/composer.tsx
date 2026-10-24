@@ -19,6 +19,7 @@ import {
   SlashIcon,
   SquareIcon,
 } from 'lucide-react'
+import { AnimatePresence } from 'motion/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import type { SessionView, SlashCommand, UserContent } from '@shared/thread'
@@ -73,7 +74,9 @@ import {
   replaceMention,
   type MentionRow,
 } from './mentions'
+import { OutOfCreditStrip } from './out-of-credit-strip'
 import { useMentionList, type MentionList } from './use-mention-list'
+import { useOutOfCredit } from './use-out-of-credit'
 
 type BaseUIKeyboardEvent = KeyboardEvent<HTMLTextAreaElement> & {
   preventBaseUIHandler?: () => void
@@ -106,6 +109,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
   const attachments = useAttachmentsStore(selectDraft(sessionId))
   const [viewing, setViewing] = useState<ImageDialogTarget | null>(null)
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const outOfCredit = useOutOfCredit(sessionId)
 
   const status = session.status
   const starting = status === 'starting'
@@ -417,8 +422,19 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           ref={group}
           variant="composer"
           data-disabled={starting || undefined}
-          className={cn(attachments.length > 0 && 'flex-wrap')}
+          className={cn((attachments.length > 0 || outOfCredit) && 'flex-wrap')}
         >
+          <AnimatePresence initial={false}>
+            {outOfCredit && !starting && (
+              <OutOfCreditStrip
+                key={outOfCredit.id}
+                sessionId={sessionId}
+                notice={outOfCredit}
+                config={session.config}
+                onSwitchModel={() => setModelMenuOpen(true)}
+              />
+            )}
+          </AnimatePresence>
           <AttachmentTray
             draft={sessionId}
             agentId={session.agentId}
@@ -615,7 +631,15 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             {error ?? blocked?.message}
           </p>
         )}
-        {!starting && <ControlRow session={session} onCompact={compact} ultracode={ultracode} />}
+        {!starting && (
+          <ControlRow
+            session={session}
+            onCompact={compact}
+            ultracode={ultracode}
+            modelMenu={{ open: modelMenuOpen, onOpenChange: setModelMenuOpen }}
+            outOfCredit={!!outOfCredit}
+          />
+        )}
       </div>
       <ImageDialog target={viewing} onClose={() => setViewing(null)} />
     </div>

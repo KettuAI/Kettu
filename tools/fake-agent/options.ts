@@ -11,6 +11,7 @@ export const SCENARIOS = [
   'crash',
   'error',
   'auth-required',
+  'out-of-credit',
   'large-history',
   'slow-start',
   'all-updates',
@@ -54,6 +55,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   error: { description: 'Fails the turn with an internal error', hint: '--silent' },
   'auth-required': {
     description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
+  },
+  'out-of-credit': {
+    description: 'Fails the turn as a provider out of credit does; the retry answers',
   },
   'large-history': {
     description: 'Makes reopening this session replay 1,000 entries',

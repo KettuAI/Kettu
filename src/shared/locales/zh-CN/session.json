@@ -268,7 +268,11 @@
       "working": "处理中"
     },
     "resume": "继续",
-    "continuePrompt": "继续"
+    "continuePrompt": "继续",
+    "outOfCredit": {
+      "details": "详情",
+      "copy": "复制原始信息"
+    }
   },
   "link": {
     "title": "打开此链接？",
