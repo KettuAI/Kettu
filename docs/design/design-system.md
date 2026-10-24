@@ -153,7 +153,7 @@ The 16 ANSI colors are VS Code's defaults for its light and dark themes (MIT), t
 
 ### Agent marks
 
-Each agent is shown with its official mark in its own colors. They are the only brand colors in the interface.
+Each agent is shown with its official mark in its own colors. With OverBench's own [mark](./brand.md#color), they are the only brand colors in the interface.
 
 | Agent       | Mark and colors                                                                                    | Source                                                                       |
 | ----------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |

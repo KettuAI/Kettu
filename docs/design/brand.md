@@ -43,11 +43,11 @@ In the app the mark takes `--brand-overbench`: ink in the light theme, paper in 
 
 ## Misuse
 
-Never stretch or squash it, rotate or skew it, draw it as an outline, drop the cuts or the bench, add shadows or glows, set it on a ground without enough contrast, change the wordmark's typeface or the lockup's proportions, or use the standard version below 48 px.
+Never stretch or squash it, rotate or skew it, draw it as an outline, drop the cuts or the bench, add shadows or glows, set it on a ground without enough contrast, change the wordmark's typeface or the lockup's proportions, or use the standard version below 48 px outside an [app icon](#app-icons).
 
 ## App icons
 
-`pnpm exec electron tools/brand/build.mjs`, run on macOS, draws every size from `src/shared/brand.ts` and writes the icons to `build/`, where electron-builder picks them up, and the vector files and the preview image to `docs/brand/`. Each size is drawn at its own pixel size; the mark is 62% of the tile's width and centred on its outer box, and tiles from 48 px take the standard version.
+`pnpm exec electron tools/brand/build.mjs`, run on macOS, draws every size from `src/shared/brand.ts` and writes the icons to `build/`, where electron-builder picks them up, and the vector files and the preview image to `docs/brand/`. Each size is drawn at its own pixel size; the mark is 62% of the tile's width and centred on its outer box, and tiles from 48 px take the standard version. App icons are the one exception to choosing the version by the mark's own width: they choose it by the tile's, as the guidelines' icon sizes do, so a 64 px tile carries a 40 px standard mark.
 
 - **macOS** (`build/icon.icns`, the default dark icon): Apple's grid, an 824 px tile on a 1024 px canvas, 22.5% corners, a gradient from `#2C2B28` to `#161513` with a lit top edge, and a soft shadow; the mark in paper.
 - **Windows** (`build/icon.ico`, 16 to 256 px): a flat ink square filling the canvas, 12% corners; at 16 px the mark grows to 69% so its cuts still show.
