@@ -395,8 +395,9 @@ describe('AgentManager', () => {
   })
 
   /** A package agent whose install is on disk, with a first process that ignores its stop. */
-  function reinstallable() {
+  async function reinstallable() {
     const given = stopFails()
+    const root = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
     const def: AgentDefinition = {
       ...fakeAgent(FAKE_AGENT_MAIN),
       launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
@@ -404,7 +405,7 @@ describe('AgentManager', () => {
     const installs: InstallOptions[] = []
     const installed: InstalledAdapter = {
       version: '2.0.0',
-      dir: 'C:\\Users\\me\\AppData\\Roaming\\OverBench\\agents\\fake-agent\\2.0.0',
+      dir: path.join(root, 'fake-agent', '2.0.0'),
       entry: '/a/2.0.0/index.js',
       installedAt: 1,
     }
@@ -426,6 +427,7 @@ describe('AgentManager', () => {
         },
       },
     )
+    await mkdir(installed.dir, { recursive: true })
     // Windows refuses to delete a folder a process runs from.
     removal.calls = 0
     removal.fail = Object.assign(
@@ -443,13 +445,13 @@ describe('AgentManager', () => {
   const stillRunning = {
     name: 'HostError',
     code: 'busy',
-    message: 'Fake agent is still running after it was stopped; try again once it has ended',
+    message: 'Fake agent did not stop and is still running; try again once it has exited',
   }
 
   it('refuses a reinstall before deleting anything when its stop leaves the agent running', async () => {
-    const { m, pids, installs, end } = reinstallable()
-    await m.agents.ensureReady('fake-agent')
+    const { m, pids, installs, end } = await reinstallable()
     try {
+      await m.agents.ensureReady('fake-agent')
       await expect(m.agents.reinstall('fake-agent')).rejects.toMatchObject(stillRunning)
       // The stop gave the process up, so it still runs from the folder the reinstall would delete.
       expect(pids(m)).toEqual([4242])
@@ -462,11 +464,16 @@ describe('AgentManager', () => {
   })
 
   it('refuses a reinstall while a process an earlier stop gave up still runs', async () => {
-    const { m, installs, exitFirst, end } = reinstallable()
-    await m.agents.ensureReady('fake-agent')
-    await m.agents.stop('fake-agent')
+    const { m, installs, launches, exitFirst, end } = await reinstallable()
     try {
+      await m.agents.ensureReady('fake-agent')
+      await m.agents.stop('fake-agent')
+      // A new process runs beside the one the stop gave up, and the refusal leaves it running.
+      const running = await m.agents.ensureReady('fake-agent')
       await expect(m.agents.reinstall('fake-agent')).rejects.toMatchObject(stillRunning)
+      expect(m.state()).toBe('ready')
+      expect(m.agents.runtime('fake-agent')).toBe(running)
+      expect(launches()).toBe(2)
       expect(removal.calls).toBe(0)
       // Once it has ended, the reinstall goes ahead.
       removal.fail = null

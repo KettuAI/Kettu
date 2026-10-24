@@ -89,7 +89,7 @@
     "cannotInstall": "无法安装 {{agent}}",
     "busyInstalling": "{{agent}} 正在安装或启动",
     "closeSessionsFirst": "请先关闭使用 {{agent}} 的会话",
-    "stillRunning": "{{agent}} 停止后仍在运行，请等它结束后再试",
+    "stillRunning": "{{agent}} 未能停止，仍在运行，请等它退出后再试",
     "noLogout": "{{agent}} 不支持退出登录",
     "initializeTimeout": "{{agent}} 没有在 {{seconds}} 秒内响应 initialize。",
     "exit": {
