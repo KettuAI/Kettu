@@ -1,34 +1,32 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, CircleAlertIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
+import { ArrowUpIcon, CircleAlertIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
+import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { startNewSession } from '@renderer/app/actions'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroupButton } from '@renderer/components/ui/input-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { ArtifactCard, CardSkeleton } from '@renderer/features/artifacts/artifact-card'
 import { OptionMenu } from '@renderer/features/session/composer/control-row'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { basename, limitLabel, resetTime, shortAgo } from '@renderer/lib/format'
+import { basename, limitLabel, resetTime } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
+import { cn } from '@renderer/lib/utils'
 import { useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import {
-  isScratchFolder,
-  recentSessions,
-  sessionTitle,
-  useSessionsStore,
-} from '@renderer/stores/sessions'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { openAgentSettings, openSession, useViewStore } from '@renderer/stores/view'
+import { openAgentSettings, openArtifacts, useViewStore } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { attachmentContent, attachmentsBlock } from './composer/attachments'
@@ -51,7 +49,7 @@ import { ParentLink } from './session-header'
 
 /**
  * The New session screen: where to work, which agent and model, and the first message, all in one
- * composer under a heading, with the sessions used last below it. The session is created on the
+ * composer under a heading, with the artifacts changed last below it. The session is created on the
  * first send, which also sends the message; opened for a sub-session, under its parent, in the
  * parent's project.
  */
@@ -109,7 +107,7 @@ export function NewSessionView({
             noProject={noProject}
             parent={parent}
           />
-          <RecentSessions />
+          <RecentArtifacts />
         </div>
       </div>
       <DropOverlay shown={drop.over} starting={false} agentName="" />
@@ -385,7 +383,6 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
           <span className="flex h-control min-w-12 shrink-10 items-center gap-1 overflow-hidden px-2 text-control text-muted-foreground" />
         }
       >
-        <FolderIcon className="size-3.5 shrink-0" />
         <span className="truncate font-medium text-foreground">
           {scratch ? t('newSession.noProject') : project?.name}
         </span>
@@ -449,42 +446,68 @@ function ModeMenu({ agentId }: { agentId: AgentId | null }) {
 
 const RECENT = 3
 
-/** The sessions used last, in any project, to pick up where they left off. */
-function RecentSessions() {
+/** The artifacts changed last, in any project, to open again; with none, nothing shows. */
+function RecentArtifacts() {
   const { t } = useTranslation('session')
-  const now = useNow()
-  const recent = useSessionsStore(useShallow((s) => recentSessions(s.byId, RECENT)))
-  // Only whether each folder is a scratch one, so other sessions' updates do not re-render the list.
-  const scratch = useSessionsStore(
-    useShallow((s) => recent.map((summary) => isScratchFolder(s.byId, summary.projectPath))),
-  )
+  const { t: ta } = useTranslation('artifacts')
+  const recent = useArtifactsStore(useShallow((s) => s.list?.slice(0, RECENT) ?? null))
+  const failed = useArtifactsStore((s) => s.error !== null)
   const projects = useProjectsStore((s) => s.projects)
-  if (recent.length === 0) return null
-  const where = (summary: SessionSummary, index: number) =>
-    scratch[index]
+  // Only the cards' session names, so other sessions' updates do not re-render the list.
+  const sessions = useSessionsStore(
+    useShallow((s) =>
+      (recent ?? []).map(({ sessionId }) => {
+        if (sessionId === NO_SESSION) return ta('page.imported')
+        const summary = s.byId[sessionId]
+        return summary ? sessionTitle(summary) : ta('page.deletedSession')
+      }),
+    ),
+  )
+
+  useEffect(() => {
+    artifactListShown(true)
+    return () => artifactListShown(false)
+  }, [])
+
+  // Before the first read, cards hold their places; a failed read hides the group.
+  if (recent ? recent.length === 0 : failed) return null
+  const where = (artifact: ArtifactSummary) =>
+    artifact.scratch
       ? t('newSession.noProject')
-      : (projects.find((p) => p.path === summary.projectPath)?.name ??
-        basename(summary.projectPath))
+      : (projects.find((p) => p.path === artifact.project)?.name ?? basename(artifact.project))
   return (
-    <section aria-label={t('newSession.recentLabel')} className="flex flex-col px-1">
-      <h2 className="px-2 pb-1.5 text-ui text-secondary">{t('newSession.recent')}</h2>
-      {recent.map((summary, index) => (
-        <button
-          key={summary.id}
-          type="button"
-          onClick={() => openSession(summary.id, summary.projectPath)}
-          className="flex min-h-row items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
-        >
-          <AgentMark agent={summary.agentId} size={14} />
-          <span className="min-w-0 flex-1 truncate">{sessionTitle(summary)}</span>
-          <span className="max-w-40 shrink-0 truncate text-xs text-muted-foreground">
-            {where(summary, index)}
-          </span>
-          <span className="w-12 shrink-0 text-right font-mono text-meta text-muted-foreground tabular">
-            {shortAgo(summary.updatedAt, now)}
-          </span>
-        </button>
-      ))}
+    <section
+      aria-label={t('newSession.recentArtifacts')}
+      className="@container flex flex-col gap-2 px-1"
+    >
+      <div className="flex items-center justify-between pl-2">
+        <h2 className="text-ui text-secondary">{t('newSession.recentArtifacts')}</h2>
+        <Button variant="quiet" size="sm" onClick={openArtifacts}>
+          {t('newSession.viewAll')}
+        </Button>
+      </div>
+      {/* Two across in a narrow window, so a canvas's pages still read. */}
+      <div className="grid grid-cols-3 gap-3 @max-[32.5rem]:grid-cols-2">
+        {(recent ?? Array.from({ length: RECENT }, () => null)).map((artifact, index) => (
+          <div
+            key={artifact?.id ?? index}
+            className={cn('min-w-0', index === RECENT - 1 && '@max-[32.5rem]:hidden')}
+          >
+            {artifact ? (
+              <ArtifactCard
+                artifact={artifact}
+                lead={where(artifact)}
+                project={where(artifact)}
+                session={sessions[index] ?? ''}
+                tabbable
+                variant="recent"
+              />
+            ) : (
+              <CardSkeleton variant="recent" />
+            )}
+          </div>
+        ))}
+      </div>
     </section>
   )
 }

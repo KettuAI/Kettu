@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
-import { shallow } from 'zustand/shallow'
 import {
   archivedSessions,
   inPinnedTree,
   isScratchFolder,
   pinnedTree,
-  recentSessions,
   sessionTree,
 } from './sessions'
 
@@ -66,11 +64,8 @@ describe('pinned and archived sessions', () => {
     expect(inPinnedTree(sessions, sessions.e!)).toBe(false)
   })
 
-  it('lists the archived ones, the most recently archived first, out of the recent list', () => {
+  it('lists the archived ones, the most recently archived first', () => {
     expect(archivedSessions(sessions).map((s) => s.id)).toEqual(['e', 'd'])
-    const users = Object.values(sessions).map((s) => ({ ...s, origin: 'user' as const }))
-    const recent = recentSessions(Object.fromEntries(users.map((s) => [s.id, s])), 9)
-    expect(recent.map((s) => s.id)).toEqual(['c', 'b', 'a'])
   })
 })
 
@@ -78,30 +73,5 @@ describe('isScratchFolder', () => {
   it("knows a scratch session's folder from a project's", () => {
     expect(isScratchFolder(byId, '/data/scratch/a')).toBe(true)
     expect(isScratchFolder(byId, '/repo')).toBe(false)
-  })
-})
-
-describe('recentSessions', () => {
-  const user = (id: string, updatedAt: number, extra: Partial<SessionSummary> = {}) =>
-    session(id, '/repo', { origin: 'user', updatedAt, ...extra })
-  const sessions = Object.fromEntries(
-    [
-      user('a', 1),
-      user('b', 4),
-      user('c', 3),
-      user('d', 2),
-      user('child', 9, { parentId: 'b' }),
-      session('sub', '/repo', { origin: 'subagent', updatedAt: 8 }),
-    ].map((s) => [s.id, s]),
-  )
-
-  it("lists the user's top-level sessions, most recently updated first", () => {
-    expect(recentSessions(sessions, 3).map((s) => s.id)).toEqual(['b', 'c', 'd'])
-  })
-
-  it('keeps its items when a session outside them changes', () => {
-    const before = recentSessions(sessions, 3)
-    const after = recentSessions({ ...sessions, a: { ...sessions.a!, status: 'running' } }, 3)
-    expect(shallow(before, after)).toBe(true)
   })
 })
