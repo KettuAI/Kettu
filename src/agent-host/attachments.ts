@@ -23,7 +23,10 @@ import { t } from './i18n'
 import { JsonFile, type LogFn } from './storage'
 import type { StoredBlob } from './threads/model'
 
-/** A record nothing sent or removed in this long, or a sent copy this old, goes when the host starts. */
+/**
+ * A record nothing sent, removed or named in a draft in this long, or a sent copy this old, goes
+ * when the host starts.
+ */
 export const ATTACHMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
 /** A grant the renderer never used, as for files past the limit, goes after this long. */
@@ -42,6 +45,8 @@ export interface AttachmentRecord {
   path: string | null
   thumb: string | null
   addedAt: number
+  /** When a draft last named it, as the renderer checks its drafts at launch; the age counts from here. */
+  heldAt?: number
 }
 
 export interface AttachmentsFile {
@@ -179,7 +184,8 @@ function attachmentRecord(value: unknown): AttachmentRecord | null {
     !isStringOrNull(value.mimeType) ||
     (value.size !== null && typeof value.size !== 'number') ||
     !isStringOrNull(value.thumb) ||
-    typeof value.addedAt !== 'number'
+    typeof value.addedAt !== 'number' ||
+    (value.heldAt !== undefined && typeof value.heldAt !== 'number')
   ) {
     return null
   }
@@ -205,6 +211,7 @@ function attachmentRecord(value: unknown): AttachmentRecord | null {
     path: granted,
     thumb: value.thumb,
     addedAt: value.addedAt,
+    ...(value.heldAt !== undefined ? { heldAt: value.heldAt as number } : {}),
   }
 }
 
@@ -249,7 +256,7 @@ export class Attachments {
     const data = await this.file.load()
     const cutoff = this.now() - ATTACHMENT_MAX_AGE_MS
     for (const record of data.attachments) {
-      if (record.addedAt >= cutoff) this.records.set(record.id, record)
+      if ((record.heldAt ?? record.addedAt) >= cutoff) this.records.set(record.id, record)
     }
     if (this.records.size !== data.attachments.length) this.save()
     const kept = savedNames(this.records.values())
@@ -387,6 +394,24 @@ export class Attachments {
     const record = this.records.get(id)
     if (!record) throw notFound(t('session.attachmentMissing'))
     return record
+  }
+
+  /**
+   * Which of these records the host still holds, for the drafts that name them; each one's age
+   * counts from now, so a draft kept across launches keeps its attachments.
+   */
+  held(ids: readonly string[]): string[] {
+    const at = this.now()
+    const held: string[] = []
+    for (const id of ids) {
+      const record = this.records.get(id)
+      if (!record) continue
+      // In place: `update` tells a removal from a changed record by its identity.
+      record.heldAt = at
+      held.push(id)
+    }
+    if (held.length > 0) this.save()
+    return held
   }
 
   /** The attachment as the composer and the thread show it, before it is sent. */

@@ -43,7 +43,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
       </div>
     )
   } else if (pending.prompt) {
-    body = <FirstMessage agentId={pending.agentId} text={pending.prompt} />
+    body = <FirstMessage agentId={pending.agentId} content={pending.prompt} />
   } else {
     body = (
       <div className="flex min-h-0 flex-1 flex-col">

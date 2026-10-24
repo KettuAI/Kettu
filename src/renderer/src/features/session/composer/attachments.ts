@@ -1,6 +1,7 @@
 // A composer's attachments: adding pasted images, picked or dropped files and folders, and the
-// project's files and folders an `@` mention names, through the host, removing them, and the
-// content refs a message carries. See docs/design/ui.md#attachments.
+// project's files and folders an `@` mention names, through the host, removing them, keeping them
+// with the draft across a restart, and the content refs a message carries. See
+// docs/design/ui.md#attachments.
 
 import {
   ATTACHMENT_LIMIT,
@@ -15,8 +16,15 @@ import {
   draftAttachments,
   patchDraftAttachment,
   setDraftAttachments,
+  useAttachmentsStore,
   type DraftAttachment,
 } from '@renderer/stores/attachments'
+import {
+  draftIds,
+  readDraftAttachments,
+  writeDraftAttachments,
+  type SavedAttachment,
+} from './drafts'
 import { prepareImage } from './image-work'
 
 let nextKey = 1
@@ -324,28 +332,36 @@ export function attachmentContent(items: readonly DraftAttachment[]): UserConten
   )
 }
 
+/** An attachment the host holds, as a ready tile. */
+function readyTile({ attachment, pixels, scaled }: SavedAttachment): DraftAttachment {
+  return {
+    key: `a${nextKey++}`,
+    name: attachment.name,
+    kind: attachment.type,
+    status: 'ready',
+    attachment,
+    thumb: attachment.thumb,
+    size: attachment.size,
+    pixels,
+    scaled,
+    error: null,
+  }
+}
+
+/** The attachment refs of a message, as they were before it was sent. */
+export function contentAttachments(content: readonly UserContent[]): Attachment[] {
+  return content.flatMap((c) =>
+    c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
+  )
+}
+
 /**
- * Attachments a queued message held, back in a composer as added ones. Returns how many did not
- * fit under the limit; their records go.
+ * Attachments a queued or unsent message held, back in a composer as added ones. Returns how many
+ * did not fit under the limit; their records go.
  */
 export function restoreAttachments(draft: string, content: readonly UserContent[]): number {
-  const restored: DraftAttachment[] = content.flatMap((c) =>
-    c.type === 'ref' && c.ref.kind === 'attachment'
-      ? [
-          {
-            key: `a${nextKey++}`,
-            name: c.ref.attachment.name,
-            kind: c.ref.attachment.type,
-            status: 'ready' as const,
-            attachment: c.ref.attachment,
-            thumb: c.ref.attachment.thumb,
-            size: c.ref.attachment.size,
-            pixels: null,
-            scaled: null,
-            error: null,
-          },
-        ]
-      : [],
+  const restored = contentAttachments(content).map((attachment) =>
+    readyTile({ attachment, pixels: null, scaled: null }),
   )
   if (restored.length === 0) return 0
   const items = draftAttachments(draft)
@@ -362,4 +378,76 @@ export function dropAttachments(draft: string): void {
   if (items.length === 0) return
   setDraftAttachments(draft, [])
   for (const item of items) removeRecord(item)
+}
+
+/** What a draft keeps of its attachments: the added ones, in order. */
+function savedOf(items: readonly DraftAttachment[]): SavedAttachment[] {
+  return items.flatMap((item) =>
+    item.status === 'ready' && item.attachment
+      ? [{ attachment: item.attachment, pixels: item.pixels, scaled: item.scaled }]
+      : [],
+  )
+}
+
+const idsOf = (saved: readonly SavedAttachment[]) => saved.map((s) => s.attachment.id).join('\n')
+
+let keeping = false
+
+/**
+ * Puts the attachments each draft kept back in its composer, and from then on keeps a composer's
+ * added attachments with its draft. The host then says which records it still holds; one it no
+ * longer does fails as "No longer available". See docs/design/persistence.md#composer-drafts.
+ */
+export async function restoreDraftAttachments(): Promise<void> {
+  if (keeping) return
+  keeping = true
+  const written = new Map<string, string>()
+  const ids: string[] = []
+  for (const draft of draftIds()) {
+    const saved = readDraftAttachments(draft)
+    if (saved.length === 0 || draftAttachments(draft).length > 0) continue
+    setDraftAttachments(draft, saved.map(readyTile))
+    written.set(draft, idsOf(saved))
+    ids.push(...saved.map((s) => s.attachment.id))
+  }
+  useAttachmentsStore.subscribe((state, previous) => {
+    if (state.byDraft === previous.byDraft) return
+    for (const draft of new Set([
+      ...Object.keys(state.byDraft),
+      ...Object.keys(previous.byDraft),
+    ])) {
+      const items = state.byDraft[draft]
+      if (items === previous.byDraft[draft]) continue
+      // Most changes are a tile being added; the draft is written only when its added ones change.
+      const saved = savedOf(items ?? [])
+      const key = idsOf(saved)
+      if ((written.get(draft) ?? '') === key) continue
+      written.set(draft, key)
+      writeDraftAttachments(draft, saved)
+    }
+  })
+  if (ids.length === 0) return
+  let held: Set<string>
+  try {
+    held = new Set(await host('attachments.held', { ids }))
+  } catch (error) {
+    // Sending then names the missing one, as the host refuses it.
+    console.warn(`Could not check the drafts' attachments: ${errorMessage(error)}`)
+    return
+  }
+  const asked = new Set(ids)
+  const { byDraft } = useAttachmentsStore.getState()
+  for (const [draft, items] of Object.entries(byDraft)) {
+    for (const item of items) {
+      const id = item.attachment?.id
+      if (!id || !asked.has(id) || held.has(id)) continue
+      // With no record left, removing the tile has nothing to remove.
+      patchDraftAttachment(draft, item.key, {
+        status: 'failed',
+        attachment: null,
+        gone: true,
+        error: i18n.t('composer:attachments.unavailableLong'),
+      })
+    }
+  }
 }

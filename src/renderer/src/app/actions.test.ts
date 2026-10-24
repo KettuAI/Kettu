@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
+import type { UserContent } from '@shared/thread'
 
 const request = vi.fn()
 const openProject = vi.fn()
@@ -25,6 +26,7 @@ const {
 } = await import('./actions')
 const { clearDraft, draftedSessions, NEW_SESSION_DRAFT, readDraft, writeDraft } =
   await import('@renderer/features/session/composer/drafts')
+const { draftAttachments, setDraftAttachments } = await import('@renderer/stores/attachments')
 const { pickOption, useAgentOptionsStore } = await import('@renderer/stores/agent-options')
 const { useProjectsStore } = await import('@renderer/stores/projects')
 const { useSessionsStore } = await import('@renderer/stores/sessions')
@@ -34,6 +36,7 @@ const { chooseNewSessionProject, openNewSubSession, useViewStore } =
   await import('@renderer/stores/view')
 
 const summary = { id: 's1', projectPath: '/repo' } as SessionSummary
+const fixTheBuild: UserContent[] = [{ type: 'text', text: 'Fix the build' }]
 const scratch = { id: 'x1', projectPath: '/data/scratch/a', scratch: true } as SessionSummary
 
 const setDefaultAgent = (defaultAgent: 'codex' | null) => {
@@ -334,7 +337,7 @@ describe('createSession with a first message', () => {
       if (method === 'sessions.open') shownWhileLoading = useViewStore.getState().main.kind
       return undefined
     })
-    await createSession('codex', '/repo', null, 'Fix the build')
+    await createSession('codex', '/repo', null, fixTheBuild)
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       'sessions.create',
       'sessions.watch',
@@ -354,7 +357,7 @@ describe('createSession with a first message', () => {
         ? new Promise<SessionSummary>((resolve) => (answer = resolve))
         : Promise.resolve(undefined),
     )
-    const creating = createSession('codex', '/repo', null, 'Fix the build')
+    const creating = createSession('codex', '/repo', null, fixTheBuild)
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
     answer(created('running'))
     await creating
@@ -368,19 +371,19 @@ describe('createSession with a first message', () => {
         ? new Promise((_, reject) => (fail = reject))
         : Promise.resolve(undefined),
     )
-    const creating = createSession('codex', '/repo', null, 'Fix the build')
+    const creating = createSession('codex', '/repo', null, fixTheBuild)
     writeDraft(NEW_SESSION_DRAFT, 'Something else')
     fail(new Error('spawn failed'))
     await creating
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else')
-    expect(usePendingSession.getState().pending).toMatchObject({ prompt: 'Fix the build' })
+    expect(usePendingSession.getState().pending).toMatchObject({ prompt: fixTheBuild })
   })
 
   it('leaves it with the host, which sends it after a sign-in, when one is needed', async () => {
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('auth_required') : undefined,
     )
-    await createSession('codex', '/repo', null, 'Fix the build')
+    await createSession('codex', '/repo', null, fixTheBuild)
     expect(request).not.toHaveBeenCalledWith('sessions.prompt', expect.anything())
     expect(readDraft('n1')).toBe('')
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
@@ -394,7 +397,7 @@ describe('createSession with a first message', () => {
         data: { reason: 'removed_while_starting' },
       }),
     )
-    await createSession('codex', '/repo', null, 'Fix the build')
+    await createSession('codex', '/repo', null, fixTheBuild)
     expect(usePendingSession.getState().pending).toBeNull()
     expect(useViewStore.getState().main).toMatchObject({ kind: 'new' })
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
@@ -402,7 +405,7 @@ describe('createSession with a first message', () => {
 
   it('shows any other not_found, such as a parent that went', async () => {
     request.mockRejectedValueOnce(Object.assign(new Error('No session p1'), { code: 'not_found' }))
-    await createSession('codex', '/repo', 'p1', 'Fix the build')
+    await createSession('codex', '/repo', 'p1', fixTheBuild)
     expect(usePendingSession.getState().pending).toMatchObject({
       error: { message: 'No session p1', code: 'not_found' },
     })
@@ -412,7 +415,7 @@ describe('createSession with a first message', () => {
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('closed') : undefined,
     )
-    await createSession('codex', '/repo', null, 'Fix the build')
+    await createSession('codex', '/repo', null, fixTheBuild)
     expect(readDraft('n1')).toBe('')
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' })
@@ -429,10 +432,12 @@ describe('createSession with a first message', () => {
       vi.stubGlobal('localStorage', undefined)
     })
     request.mockRejectedValueOnce(new Error('spawn failed'))
-    await createSession('codex', '/repo', null, 'Fix the build')
-    expect(usePendingSession.getState().pending).toMatchObject({ prompt: 'Fix the build' })
+    await createSession('codex', '/repo', null, fixTheBuild)
+    expect(usePendingSession.getState().pending).toMatchObject({ prompt: fixTheBuild })
     // Stored at once, since a quit can close the window before a later write.
-    expect(stored.get(`draft:${NEW_SESSION_DRAFT}`)).toBe('Fix the build')
+    expect(JSON.parse(stored.get(`draft:${NEW_SESSION_DRAFT}`)!)).toMatchObject({
+      text: 'Fix the build',
+    })
 
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('running') : undefined,
@@ -445,9 +450,77 @@ describe('createSession with a first message', () => {
     expect(request).toHaveBeenCalledWith('sessions.create', withPrompt)
   })
 
+  const shot = {
+    id: 'a1',
+    type: 'image',
+    name: 'Image 1',
+    uri: null,
+    mimeType: 'image/png',
+    size: 3,
+    sent: null,
+    thumb: null,
+    blob: null,
+  } as const
+  const withShot: UserContent[] = [
+    ...fixTheBuild,
+    { type: 'ref', ref: { kind: 'attachment', attachment: shot } },
+  ]
+  const holdShot = () =>
+    setDraftAttachments(NEW_SESSION_DRAFT, [
+      {
+        key: 'k1',
+        name: 'Image 1',
+        kind: 'image',
+        status: 'ready',
+        attachment: shot,
+        thumb: null,
+        size: 3,
+        pixels: { width: 4, height: 3 },
+        scaled: null,
+        error: null,
+      },
+    ])
+
+  it('sends its attachments with it and takes them out of the draft too', async () => {
+    holdShot()
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('running') : undefined,
+    )
+    await createSession('codex', '/repo', null, withShot)
+    expect(request).toHaveBeenCalledWith('sessions.create', { ...withPrompt, prompt: withShot })
+    expect(draftAttachments(NEW_SESSION_DRAFT)).toEqual([])
+    // The host still holds the record for the message, so nothing removes it.
+    expect(request).not.toHaveBeenCalledWith('attachments.remove', expect.anything())
+  })
+
+  it('sends its attachments through the prepared session it adopts', async () => {
+    holdShot()
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('running') : undefined,
+    )
+    await createSession('codex', '/repo', null, withShot, null, 'prepared-1')
+    expect(request).toHaveBeenCalledWith('sessions.create', {
+      ...withPrompt,
+      prompt: withShot,
+      preparedId: 'prepared-1',
+    })
+    expect(draftAttachments(NEW_SESSION_DRAFT)).toEqual([])
+  })
+
+  it('puts its attachments back in the draft as they were when the start fails', async () => {
+    holdShot()
+    request.mockRejectedValueOnce(new Error('spawn failed'))
+    await createSession('codex', '/repo', null, withShot)
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
+    expect(
+      draftAttachments(NEW_SESSION_DRAFT).map((i) => [i.attachment?.id, i.status, i.pixels]),
+    ).toEqual([['a1', 'ready', { width: 4, height: 3 }]])
+    setDraftAttachments(NEW_SESSION_DRAFT, [])
+  })
+
   it('leaves a draft written since the failure when it retries', async () => {
     request.mockRejectedValueOnce(new Error('spawn failed'))
-    await createSession('codex', '/repo', null, 'Fix the build')
+    await createSession('codex', '/repo', null, fixTheBuild)
     writeDraft(NEW_SESSION_DRAFT, 'Something else')
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? created('running') : undefined,
@@ -589,7 +662,7 @@ describe('New sub-session', () => {
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? child : undefined,
     )
-    await startNewSession('opencode', '/repo', 'Write the tests', null)
+    await startNewSession('opencode', '/repo', [{ type: 'text', text: 'Write the tests' }], null)
     expect(request).toHaveBeenCalledWith('sessions.create', {
       agentId: 'opencode',
       projectPath: '/repo',
@@ -610,7 +683,7 @@ describe('New sub-session', () => {
     request.mockImplementation(async (method: string) =>
       method === 'sessions.create' ? { ...child, parentId: null } : undefined,
     )
-    await startNewSession('opencode', '/repo', 'Write the tests', null)
+    await startNewSession('opencode', '/repo', [{ type: 'text', text: 'Write the tests' }], null)
     expect(request).toHaveBeenCalledWith('sessions.create', {
       agentId: 'opencode',
       projectPath: '/repo',

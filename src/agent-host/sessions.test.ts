@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { SessionSummary } from '@shared/agent-host'
-import type { Attachment, ThreadEntry, ToolEntry } from '@shared/thread'
+import type { Attachment, ThreadEntry, ToolEntry, UserContent } from '@shared/thread'
 import { AgentRequestError } from './acp/connection'
 import { forkCut, unknownSession } from './sessions'
 import {
@@ -824,6 +824,67 @@ describe('prepared sessions', () => {
     // Adopted, it no longer goes with the window.
     port.disconnect()
     expect(await agentSessions(t, t.connect())).toHaveLength(1)
+  })
+
+  it('sends the attachments of the first message it is adopted with', async () => {
+    const { t, port } = await setup()
+    const prepared = await prepare(t, port)
+    const attachment = await port.request('attachments.add', {
+      source: {
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer,
+        mimeType: 'image/png',
+        name: 'Image 1',
+      },
+      thumb: null,
+    })
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      preparedId: prepared.id,
+      prompt: [
+        { type: 'text', text: 'hello' },
+        { type: 'ref', ref: { kind: 'attachment', attachment } },
+      ],
+    })
+    expect(summary.id).toBe(prepared.id)
+    await port.open(summary.id)
+    await port.untilStatus(summary.id, 'ready')
+    const user = port.entries(summary.id).find((e) => e.kind === 'user')
+    expect(user?.kind === 'user' && user.content[1]).toMatchObject({
+      ref: { kind: 'attachment', attachment: { id: attachment.id, sent: 'image' } },
+    })
+    // Sent, the draft's record goes.
+    await expect(port.request('attachments.read', { id: attachment.id })).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('refuses a first message naming an attachment no longer held, and stays prepared', async () => {
+    const { t, port } = await setup()
+    const prepared = await prepare(t, port)
+    const attachment = await port.request('attachments.add', {
+      source: {
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer,
+        mimeType: 'image/png',
+        name: 'Image 1',
+      },
+      thumb: null,
+    })
+    await port.request('attachments.remove', { id: attachment.id })
+    const create = (prompt: UserContent[]) =>
+      port.request('sessions.create', {
+        agentId: 'fake-agent',
+        projectPath: t.project,
+        preparedId: prepared.id,
+        prompt,
+      })
+    await expect(
+      create([{ type: 'ref', ref: { kind: 'attachment', attachment } }]),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    expect(await port.request('sessions.list', {})).toEqual([])
+    const summary = await create([{ type: 'text', text: 'hello' }])
+    expect(summary.id).toBe(prepared.id)
+    expect(sent(t, 'session/new')).toBe(1)
   })
 
   it('replaces it when asked, removing the old one', async () => {
