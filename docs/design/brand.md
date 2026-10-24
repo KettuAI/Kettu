@@ -47,13 +47,13 @@ Never stretch or squash it, rotate or skew it, draw it as an outline, drop the c
 
 ## App icons
 
-`pnpm exec electron tools/brand/build.mjs`, run on macOS, draws every size from `src/shared/brand.ts` and writes the icons to `build/`, where electron-builder picks them up, and the vector files and the preview image to `docs/brand/`. Each size is drawn at its own pixel size; the mark is 62% of the tile's width and centred on its outer box, and tiles from 48 px take the standard version. App icons are the one exception to choosing the version by the mark's own width: they choose it by the tile's, as the guidelines' icon sizes do, so a 64 px tile carries a 40 px standard mark.
+`pnpm exec electron tools/brand/build.mjs` draws every icon from `src/shared/brand.ts` and writes them to `build/`, where electron-builder picks them up, and the vector files and the preview image to `docs/brand/`. Each bitmap size is drawn at its own pixel size; the mark is 62% of the tile's width and centred on its outer box, and tiles from 48 px take the standard version. App icons are the one exception to choosing the version by the mark's own width: they choose it by the tile's, as the guidelines' icon sizes do, so a 64 px tile carries a 40 px standard mark.
 
-- **macOS** (`build/icon.icns`, the default dark icon): Apple's grid, an 824 px tile on a 1024 px canvas, 22.5% corners, a gradient from `#2C2B28` to `#161513` with a lit top edge, and a soft shadow; the mark in paper.
+- **macOS** (`build/icon.icon`, the default dark icon): an Icon Composer document, which macOS 26 and later draw in Liquid Glass. Its 1024 px canvas is the tile, filled with a gradient from `#2C2B28` to `#161513`, and its one layer is the standard mark in paper, flat and without a shadow, as the mark's rules ask. The system draws the tile's shape, edge and shadow, scales the one vector to every size, and derives the dark, clear and tinted appearances. electron-builder compiles the document with Xcode's `actool` into `Assets.car`, which macOS 12 to 15 read as well, and an `.icns` fallback, so packaging for macOS needs Xcode 26 or later.
 - **Windows** (`build/icon.ico`, 16 to 256 px): a flat ink square filling the canvas, 12% corners; at 16 px the mark grows to 69% so its cuts still show.
-- **Linux** (`build/icon.png`, 1024 px): the macOS tile.
+- **Linux** (`build/icon.png`, 1024 px, and `docs/brand/icon-macos.svg`): the tile on Apple's grid before Liquid Glass, an 824 px tile on a 1024 px canvas, 22.5% corners, the same gradient with a lit top edge, and a soft shadow; the mark in paper.
 
-The guidelines also define a light macOS icon; it is not shipped, since an `.icns` has one appearance.
+The guidelines also define a light macOS icon; it is not shipped. An Icon Composer document can carry it as the light appearance.
 
 ## In the app
 

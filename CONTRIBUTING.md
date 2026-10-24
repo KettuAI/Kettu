@@ -31,6 +31,8 @@ Development builds also list a **Fake agent**, which needs no account or network
 | `pnpm package`                                        | Build an unpacked app into `dist/` for local testing |
 | `pnpm dist:mac` / `pnpm dist:win` / `pnpm dist:linux` | Build installers for each platform                   |
 
+Packaging on macOS also needs Xcode 26 or later, whose `actool` compiles the [app icon](./docs/design/brand.md#app-icons).
+
 The [architecture](./docs/architecture.md) explains how the pieces fit, and the [M0 plan](./docs/milestones/m0.md) lists what is in and out of the first milestone.
 
 ## Project work

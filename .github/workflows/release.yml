@@ -97,6 +97,15 @@ jobs:
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
+      # The Icon Composer app icon compiles only with Xcode 26's actool or later, which the macOS 15
+      # image has but does not select.
+      - name: Select Xcode 26 or later
+        if: runner.os == 'macOS'
+        run: |
+          if [ "$(xcodebuild -version | head -1 | cut -d' ' -f2 | cut -d. -f1)" -lt 26 ]; then
+            sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          fi
+          xcodebuild -version
       - name: Package
         if: env.MAC_SIGNED != 'true'
         run: pnpm exec electron-builder ${{ matrix.target }} --publish never

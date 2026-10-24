@@ -26,6 +26,8 @@ publish:
 
 mac:
   category: public.app-category.developer-tools
+  # Compiled by Xcode 26's actool into Assets.car and an .icns for older macOS.
+  icon: build/icon.icon
   # Without a Developer ID the update links to the release, so the dmg is all a release needs.
   # electron-builder.mac-signed.yml adds the zip that Squirrel.Mac installs from.
   target:
