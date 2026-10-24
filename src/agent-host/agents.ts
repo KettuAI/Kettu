@@ -798,9 +798,14 @@ export class AgentManager {
     if (this.hooks.liveSessions(agentId) > 0) {
       throw new HostError('busy', t('agent.closeSessionsFirst', { agent: slot.def.name }))
     }
+    const stillRunning = (): HostError =>
+      new HostError('busy', t('agent.stillRunning', { agent: slot.def.name }))
+    if (this.givenUpRuns(slot)) throw stillRunning()
     const run = (async () => {
       await this.detectAll()
       await this.stopProcess(slot)
+      // A process its stop gave up may still run from the install, which must not go under it.
+      if (this.givenUpRuns(slot)) throw stillRunning()
       // The install a start runs goes, and the same version comes back.
       const detected = slot.detection?.state === 'available' ? slot.detection.adapter : null
       const removed = detected?.current ?? null
@@ -1372,6 +1377,11 @@ export class AgentManager {
     } finally {
       slot.stopping = null
     }
+  }
+
+  /** Whether a process of the agent that its stop gave up still runs. */
+  private givenUpRuns(slot: Slot): boolean {
+    return [...this.givenUp].some(([launched, owner]) => owner === slot && !launched.hasExited)
   }
 
   /**
