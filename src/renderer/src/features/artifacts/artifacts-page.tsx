@@ -223,7 +223,11 @@ export default function ArtifactsPage() {
                   {t('page.summary', { count: list.length, sessions: sessionCount(list) })}
                 </p>
               )}
-              {list === null && !error && <Skeleton className="mt-1.5 h-3 w-33" />}
+              {list === null && !error && (
+                <div className="mt-1 flex h-4 items-center">
+                  <Skeleton className="h-3 w-33" />
+                </div>
+              )}
             </div>
             {controls && (
               <div className="flex shrink-0 items-center gap-2">
