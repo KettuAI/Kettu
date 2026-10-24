@@ -29,7 +29,7 @@ with readable threads, clear approvals, git and a terminal beside every session.
 </picture>
 
 > [!NOTE]
-> v0.0.2 is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues). Artifacts and attachments are on `main` and ship with v0.0.3.
+> v0.0.3 is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues).
 
 ## What is OverBench
 
@@ -66,7 +66,7 @@ Download the installer for your system from [Releases](https://github.com/overbe
 - **Windows**: run `OverBench-<version>-x64-setup.exe`, or `OverBench-<version>-arm64-setup.exe` on Arm. When SmartScreen says it protected your PC, choose **More info**, then **Run anyway**.
 - **Linux**: make `OverBench-<version>-x86_64.AppImage`, or `OverBench-<version>-arm64.AppImage` on Arm, executable with `chmod +x`, then run it. AppImages need FUSE 2: `libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later.
 
-On Windows and Linux, new versions download in the background and install when OverBench restarts; on macOS, OverBench links to the download until its builds are signed. v0.0.1 cannot find updates, so install v0.0.2 over it once by hand.
+On Windows and Linux, new versions download in the background and install when OverBench restarts; on macOS, OverBench links to the download until its builds are signed. v0.0.1 cannot find updates, so install the latest version over it once by hand.
 
 ### Agents
 

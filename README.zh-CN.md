@@ -29,7 +29,7 @@ Claude Code、Codex CLI 和 opencode 并排在同一个窗口里，<br>
 </picture>
 
 > [!NOTE]
-> v0.0.2 是预览版，由仍在验收中的第一个里程碑 M0 构建而来，难免还有粗糙之处，欢迎[反馈问题](https://github.com/overbench/overbench/issues)。Artifacts 和附件已在 `main` 上，将随 v0.0.3 发布。
+> v0.0.3 是预览版，由仍在验收中的第一个里程碑 M0 构建而来，难免还有粗糙之处，欢迎[反馈问题](https://github.com/overbench/overbench/issues)。
 
 ## OverBench 是什么
 
@@ -66,7 +66,7 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 - **Windows**：运行 `OverBench-<版本>-x64-setup.exe`，Arm 设备运行 `OverBench-<版本>-arm64-setup.exe`。SmartScreen 提示「Windows 已保护你的电脑」时，点击「更多信息」，再点击「仍要运行」。
 - **Linux**：用 `chmod +x` 给 `OverBench-<版本>-x86_64.AppImage`（Arm 设备为 `OverBench-<版本>-arm64.AppImage`）加上执行权限后运行。AppImage 需要 FUSE 2：`libfuse2`，Ubuntu 24.04 及以上为 `libfuse2t64`。
 
-在 Windows 和 Linux 上，新版本会在后台下载，并在 OverBench 重启时安装；在 macOS 上，安装包完成签名之前，OverBench 会给出新版本的下载链接。v0.0.1 无法发现更新，请手动安装一次 v0.0.2 覆盖它。
+在 Windows 和 Linux 上，新版本会在后台下载，并在 OverBench 重启时安装；在 macOS 上，安装包完成签名之前，OverBench 会给出新版本的下载链接。v0.0.1 无法发现更新，请手动安装一次最新版本覆盖它。
 
 ### Agent
 
