@@ -9,7 +9,7 @@
 
 [![Release](https://img.shields.io/github/v/release/overbench/overbench?include_prereleases&label=release&style=flat-square&labelColor=555555&color=2563eb)](https://github.com/overbench/overbench/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/overbench/overbench/total?label=downloads&style=flat-square&labelColor=555555&color=15803d)](https://github.com/overbench/overbench/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/overbench/overbench/ci.yml?branch=main&label=CI&style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/overbench/overbench/release.yml?branch=main&label=CI&style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/actions/workflows/release.yml)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-6d28d9?style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/releases/latest)
 [![Agent Client Protocol](https://img.shields.io/badge/protocol-ACP-c2410c?style=flat-square&labelColor=555555)](https://agentclientprotocol.com)
 [![License](https://img.shields.io/github/license/overbench/overbench?style=flat-square&labelColor=555555&color=b45309)](./LICENSE)

@@ -232,6 +232,7 @@ jobs:
           if-no-files-found: error
 
   screenshots:
+    needs: version
     permissions:
       contents: read
     uses: ./.github/workflows/screenshots.yml
@@ -288,6 +289,7 @@ jobs:
             gh release edit "$tag" --target "$GITHUB_SHA" --notes "$NOTES"
             gh release upload "$tag" release/* --clobber
           else
-            echo "Release $tag is published; turn it back into a draft to rebuild it" >&2
+            # Publishing created its tag, which a draft again could not move.
+            echo "Release $tag is published; release the fix as a new version" >&2
             exit 1
           fi

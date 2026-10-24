@@ -9,7 +9,7 @@
 
 [![版本](https://img.shields.io/github/v/release/overbench/overbench?include_prereleases&label=%E7%89%88%E6%9C%AC&style=flat-square&labelColor=555555&color=2563eb)](https://github.com/overbench/overbench/releases/latest)
 [![下载量](https://img.shields.io/github/downloads/overbench/overbench/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&style=flat-square&labelColor=555555&color=15803d)](https://github.com/overbench/overbench/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/overbench/overbench/ci.yml?branch=main&label=CI&style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/overbench/overbench/release.yml?branch=main&label=CI&style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/actions/workflows/release.yml)
 [![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux-6d28d9?style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/releases/latest)
 [![Agent Client Protocol](https://img.shields.io/badge/%E5%8D%8F%E8%AE%AE-ACP-c2410c?style=flat-square&labelColor=555555)](https://agentclientprotocol.com)
 [![许可证](https://img.shields.io/github/license/overbench/overbench?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&style=flat-square&labelColor=555555&color=b45309)](./LICENSE)
