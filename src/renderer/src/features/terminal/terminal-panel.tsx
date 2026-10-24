@@ -283,7 +283,7 @@ function TerminalTab({
         className={cn(
           'group/tab relative flex h-6 max-w-48 min-w-20 items-center rounded-md text-xs transition-[color,background-color,box-shadow] duration-(--duration-fast)',
           editing
-            ? 'bg-background text-primary focus-ring-within'
+            ? 'bg-background text-primary ring-1 ring-border-strong ring-inset'
             : // The selected tab is raised like a segmented control's thumb, apart from the hover fill.
               selected || isDragging
               ? 'bg-segment-thumb text-primary shadow-segment'
