@@ -7,11 +7,11 @@ import {
   usePendingSession,
 } from '@renderer/app/actions'
 import { launchTarget } from '@renderer/app/restore'
-import { installArtifactDevTools } from '@renderer/features/artifacts/dev'
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { useAgentsStore } from '@renderer/stores/agents'
+import { artifactsChanged } from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
 import {
   loadGitTools,
@@ -74,6 +74,9 @@ function onHostEvent(event: HostEvent): void {
     case 'usage.status':
       receiveUsageStatus(event.status)
       break
+    case 'artifacts.changed':
+      artifactsChanged()
+      break
   }
 }
 
@@ -129,7 +132,6 @@ export function bootstrap(): Promise<unknown> {
   // Platform styles, such as the Windows scrollbars, key off this.
   document.documentElement.dataset.platform = platform
   installPerfCounters()
-  if (import.meta.env.DEV) installArtifactDevTools()
   const agents = window.overbench.agents
   agents.onEvent(onHostEvent)
   agents.onConnection((state) => {
@@ -143,6 +145,7 @@ export function bootstrap(): Promise<unknown> {
     // A host that stopped before it recorded the removal runs it now; one that did does nothing.
     void removeEmptySessions()
     void loadHostState()
+    artifactsChanged()
     rewatchAll()
     showFront(true)
     rewatchGit()

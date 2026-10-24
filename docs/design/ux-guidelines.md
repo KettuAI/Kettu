@@ -34,7 +34,7 @@ Where a function lives. A function goes to the narrowest scope it acts on, and t
 | A preference        | Settings, in the section of the thing it changes                                                         | Theme, default agent, proxy               |
 
 - An action that appears in several menus comes from one item list, so the menus never differ ([problem 30](../milestones/m0-feedback.md#30-the-session-context-menu-lacks-rename-pin-and-archive)).
-- A feature that is not built does not show. The exceptions are named in [Interface](./ui.md) with their reason, such as the disabled **Artifacts** row.
+- A feature that is not built does not show. An exception is named in [Interface](./ui.md) with its reason.
 - Settings holds what the user sets once; what the user changes during work, such as the model, lives where the work is.
 
 ## Navigation and focus

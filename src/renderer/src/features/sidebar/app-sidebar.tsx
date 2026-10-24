@@ -47,7 +47,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { sessionTree, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
-import { NO_PROJECT_GROUP, openUsage, useViewStore } from '@renderer/stores/view'
+import { NO_PROJECT_GROUP, openArtifacts, openUsage, useViewStore } from '@renderer/stores/view'
 import { ImportSessionsDialog } from './import-sessions'
 import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
 import { SessionRow } from './session-row'
@@ -61,6 +61,13 @@ export function AppSidebar() {
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
   const drafting = useViewStore((s) => s.main.kind === 'new' && !s.settings.open)
+  // The viewer opened from the page belongs to it.
+  const artifactsShown = useViewStore(
+    (s) =>
+      !s.settings.open &&
+      (s.main.kind === 'artifacts' ||
+        (s.main.kind === 'artifact' && s.main.back.kind === 'artifacts')),
+  )
   // One dialog serves every project; it mounts the first time a project asks for it.
   const [importing, setImporting] = useState<{ project: Project; open: boolean } | null>(null)
   const importSessions = (project: Project) => setImporting({ project, open: true })
@@ -80,13 +87,12 @@ export function AppSidebar() {
           current={drafting}
           onClick={() => newSession()}
         />
-        <Tooltip>
-          {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
-          <TooltipTrigger render={<span className="flex" />}>
-            <NavRow icon={<ShapesIcon />} label={t('nav.artifacts')} disabled />
-          </TooltipTrigger>
-          <TooltipContent side="right">{t('nav.artifactsLater')}</TooltipContent>
-        </Tooltip>
+        <NavRow
+          icon={<ShapesIcon />}
+          label={t('nav.artifacts')}
+          current={artifactsShown}
+          onClick={openArtifacts}
+        />
         <UsageNavRow />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
@@ -137,7 +143,6 @@ export function NavRow({
   label,
   shortcut,
   current,
-  disabled,
   onClick,
   extra,
 }: {
@@ -145,7 +150,6 @@ export function NavRow({
   label: string
   shortcut?: string
   current?: boolean
-  disabled?: boolean
   onClick?: () => void
   extra?: React.ReactNode
 }) {
@@ -153,7 +157,6 @@ export function NavRow({
     <SidebarMenuButton
       size="row"
       isActive={current}
-      disabled={disabled}
       onClick={onClick}
       className="[&_svg]:size-5 data-active:font-medium"
     >

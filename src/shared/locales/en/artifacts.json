@@ -1,4 +1,55 @@
 {
+  "page": {
+    "title": "Artifacts",
+    "summary_one": "{{count}} artifact from $t(page.sessions, {\"count\": {{sessions}} })",
+    "summary_other": "{{count}} artifacts from $t(page.sessions, {\"count\": {{sessions}} })",
+    "sessions_one": "{{count}} session",
+    "sessions_other": "{{count}} sessions",
+    "loading": "Loading artifacts",
+    "groupBy": "Group by",
+    "groupByChoice": "Group by: {{choice}}",
+    "sort": "Sort",
+    "sortChoice": "Sort: {{choice}}",
+    "groupings": {
+      "project-session": "Project and session",
+      "project": "Project",
+      "date": "Date",
+      "none": "None"
+    },
+    "sorts": {
+      "newest": "Newest first",
+      "oldest": "Oldest first",
+      "name": "Name, A to Z",
+      "name-desc": "Name, Z to A"
+    },
+    "filter": "Filter by title",
+    "clearFilter": "Clear the filter",
+    "noProject": "No project",
+    "dates": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "week": "Previous 7 days",
+      "month": "Previous 30 days",
+      "older": "Older"
+    },
+    "deletedSession": "Deleted session",
+    "openSession": "Open the session",
+    "emptyTitle": "No artifacts yet",
+    "emptyDescription": "Pages your agents make for you show here, by project and session. Ask an agent for a report, a deck or design options.",
+    "noMatch": "No matching artifacts",
+    "noMatchHint": "Esc clears the filter",
+    "errorTitle": "Your artifacts could not be listed"
+  },
+  "card": {
+    "version": "v{{version}}",
+    "canvas_other": "Canvas, {{count}} pages",
+    "noPreview": "No preview",
+    "more": "More for {{title}}",
+    "where": "{{project}} · {{session}}",
+    "when": "v{{version}} · {{time}}",
+    "open": "Open",
+    "openSession": "Open the session"
+  },
   "viewer": {
     "back": "Back",
     "version": "v{{version}}",

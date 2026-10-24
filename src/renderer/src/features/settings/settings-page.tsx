@@ -1,20 +1,11 @@
-import {
-  Fragment,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react'
-import { ArrowLeftIcon, ChevronRightIcon, CircleArrowUpIcon, SearchIcon, XIcon } from 'lucide-react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowLeftIcon, ChevronRightIcon, CircleArrowUpIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { SearchField } from '@renderer/components/search-field'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@renderer/components/ui/empty'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
-import { Kbd } from '@renderer/components/ui/kbd'
-import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
+import { isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useUpdatesStore } from '@renderer/stores/updates'
@@ -113,7 +104,7 @@ export default function SettingsPage() {
   }, [flash])
 
   useEffect(() => {
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if (isMod(event) && !event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         search.current?.focus()
@@ -124,13 +115,6 @@ export default function SettingsPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Escape') return
-    event.stopPropagation()
-    if (query) setQuery('')
-    else event.currentTarget.blur()
-  }
-
   return (
     <div className="flex h-full animate-in bg-background fade-in animation-duration-(--duration-fast)">
       <aside className="flex w-[244px] shrink-0 flex-col bg-sidebar">
@@ -140,39 +124,13 @@ export default function SettingsPage() {
         </div>
         <div className="flex flex-col gap-3 px-3 pt-1.5 pb-3.5">
           <h1 className="px-1 text-heading font-semibold">{t('page.title')}</h1>
-          <InputGroup className="h-control bg-card shadow-outline">
-            <InputGroupAddon>
-              <SearchIcon className="size-3.5" />
-            </InputGroupAddon>
-            <InputGroupInput
-              ref={search}
-              value={query}
-              placeholder={t('page.search')}
-              aria-label={t('page.search')}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onSearchKey}
-              className="text-ui"
-            />
-            <InputGroupAddon align="inline-end">
-              {query ? (
-                <button
-                  type="button"
-                  aria-label={t('page.clearSearch')}
-                  onClick={() => {
-                    setQuery('')
-                    search.current?.focus()
-                  }}
-                  className="flex size-5 items-center justify-center rounded-md hover:bg-hover hover:text-primary"
-                >
-                  <XIcon className="size-3" />
-                </button>
-              ) : (
-                <Kbd className="h-auto bg-transparent p-0 font-normal">
-                  {formatShortcut('Mod+F')}
-                </Kbd>
-              )}
-            </InputGroupAddon>
-          </InputGroup>
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            label={t('page.search')}
+            clearLabel={t('page.clearSearch')}
+            inputRef={search}
+          />
         </div>
         <nav
           aria-label={t('page.sections')}

@@ -687,7 +687,7 @@ describe('artifacts', () => {
       note: 'Second',
     })
     expect(await port.request('artifacts.list', {})).toEqual([
-      expect.objectContaining({ id, title: 'Report', version: 2, editing: [] }),
+      expect.objectContaining({ id, title: 'Report', version: 2, editing: [], scratch: false }),
     ])
     expect(await port.request('artifacts.read', { id, version: 1 })).toEqual({
       title: 'Report',
@@ -786,6 +786,29 @@ describe('artifacts', () => {
     await port.request('sessions.delete', { sessionId: session.id })
     expect(await port.request('artifacts.list', {})).toEqual([
       expect.objectContaining({ id, sessionId: session.id, project: t.project }),
+    ])
+  })
+
+  it('marks the artifacts of No project, whether or not their session is still there', async () => {
+    const { t, port } = await setup()
+    const session = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: null,
+    })
+    const { id } = await t.host.artifacts.create({
+      project: session.projectPath,
+      sessionId: session.id,
+      title: 'Sketch',
+      html: '<p>one</p>',
+      pages: 1,
+      note: null,
+    })
+    expect(await port.request('artifacts.list', {})).toEqual([
+      expect.objectContaining({ id, project: session.projectPath, scratch: true }),
+    ])
+    await port.request('sessions.delete', { sessionId: session.id })
+    expect(await port.request('artifacts.list', {})).toEqual([
+      expect.objectContaining({ id, scratch: true }),
     ])
   })
 })

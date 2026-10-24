@@ -6,7 +6,6 @@ import { readFile } from 'node:fs/promises'
 import {
   ARTIFACT_KEEP_DELETED_MS,
   type ArtifactState,
-  type ArtifactSummary,
   type VersionSummary,
 } from '@shared/artifacts'
 import { HostError } from '../errors'
@@ -14,7 +13,13 @@ import type { LogFn } from '../storage'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
 import { contentPath } from './content'
 import { newArtifactId } from './ids'
-import type { ArtifactCallName, ArtifactCalls, ArtifactRecord, VersionRecord } from './model'
+import type {
+  ArtifactCallName,
+  ArtifactCalls,
+  ArtifactRecord,
+  StoredSummary,
+  VersionRecord,
+} from './model'
 
 const PURGE_EVERY_MS = 24 * 60 * 60 * 1000
 
@@ -147,7 +152,7 @@ export class ArtifactStore {
   // Reading.
 
   /** Newest first. Recently deleted is the user's alone, by when each artifact went. */
-  async list(reach: { project: string } | { deleted?: boolean } = {}): Promise<ArtifactSummary[]> {
+  async list(reach: { project: string } | { deleted?: boolean } = {}): Promise<StoredSummary[]> {
     const listed = await this.call(
       'list',
       'project' in reach

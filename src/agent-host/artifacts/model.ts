@@ -23,7 +23,10 @@ export interface VersionRecord {
   createdAt: number
 }
 
-export type ArtifactListing = Omit<ArtifactSummary, 'editing'>
+/** A summary as the store knows it; the host adds whether its project is a scratch folder. */
+export type StoredSummary = Omit<ArtifactSummary, 'scratch'>
+
+export type ArtifactListing = Omit<StoredSummary, 'editing'>
 
 /**
  * `project` is the reach of a session: the artifacts of its project, outside Recently deleted.

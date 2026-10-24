@@ -700,7 +700,11 @@ export class AgentHost {
       'usage.sync': () => this.usage.sync(),
       'usage.reimport': ({ agentId }) => this.usage.reimport(agentId),
       'usage.clearRecord': () => this.usage.clearRecord(),
-      'artifacts.list': ({ deleted }) => artifacts.list({ deleted: deleted ?? false }),
+      'artifacts.list': async ({ deleted }) =>
+        (await artifacts.list({ deleted: deleted ?? false })).map((artifact) => ({
+          ...artifact,
+          scratch: this.scratch.contains(artifact.project),
+        })),
       'artifacts.read': async ({ id, version }) => {
         const read = await artifacts.read(id, version === undefined ? {} : { version })
         return { title: read.artifact.title, version: read.version.version, html: read.html }

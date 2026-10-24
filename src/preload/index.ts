@@ -85,6 +85,7 @@ const api: OverbenchApi = {
   artifacts: {
     open: (id) => invoke('artifact:open', id),
     close: (url) => invoke('artifact:close', url),
+    thumbnail: (id, version, layout) => invoke('artifact:thumbnail', id, version, layout),
     onBlocked: onArtifactBlocked,
     onStopped: onArtifactStopped,
   },

@@ -4,6 +4,7 @@
 
 import { once } from 'node:events'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { app, BrowserWindow, nativeTheme, session, shell, type WebFrameMain } from 'electron'
 import { ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import type { ArtifactContentResult } from '@shared/host-control'
@@ -74,7 +75,11 @@ async function run(): Promise<unknown> {
     const path = config.files[id]
     return Promise.resolve(path ? { kind: 'found', path, version: 1 } : { kind: 'not_found' })
   }
-  const artifacts = new Artifacts({ content, contentDir: config.contentDir })
+  const artifacts = new Artifacts({
+    content,
+    contentDir: config.contentDir,
+    thumbnailDir: join(config.contentDir, '..', 'thumbnails'),
+  })
   const ses = session.defaultSession
   // The built-in resolver logs each DNS query, on every platform, which getaddrinfo does not.
   app.configureHostResolver({ enableBuiltInResolver: true, secureDnsMode: 'off' })
