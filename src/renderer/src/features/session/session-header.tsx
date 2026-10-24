@@ -57,6 +57,9 @@ export function SessionHeader({
   const [deleting, setDeleting] = useState(false)
   const titleButton = useRef<HTMLButtonElement>(null)
   const rename = useRenaming(() => titleButton.current)
+  // The field starts at the button's width, so a short title does not jump wider.
+  const [titleWidth, setTitleWidth] = useState(0)
+  const measureTitle = () => setTitleWidth(titleButton.current?.offsetWidth ?? 0)
   const title = sessionTitle(summary)
 
   return (
@@ -70,20 +73,24 @@ export function SessionHeader({
           <AgentMark agent={summary.agentId} size={14} className="ml-1.5 shrink-0" />
         )}
         {rename.renaming ? (
-          // Sits where the button's text was, so the title does not move.
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            className="field-sizing-content h-control min-w-16 rounded-lg border border-strong bg-background px-1.5 text-control font-medium focus-ring aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+            // The ring's outer edge is the button's box (25 px tall, text 4 px in, 6 px radius), so
+            // the hover fill and the ring match and the text does not move.
+            style={{ minWidth: Math.max(titleWidth - 5, 0) }}
+            className="mx-[5.5px] field-sizing-content h-5 rounded-[3.5px] bg-transparent px-[1.5px] py-0 text-control font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <Button
             ref={titleButton}
             variant="ghost"
-            size="compact"
             title={`${title} · ${agentName(summary.agentId)}`}
-            className="min-w-0 shrink px-1.5"
-            onClick={rename.start}
+            className="mx-[3px] h-[25px] min-w-0 shrink rounded-[6px] px-[3px] text-control focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
+            onClick={() => {
+              measureTitle()
+              rename.start()
+            }}
           >
             <span className="truncate">{title}</span>
           </Button>
@@ -104,7 +111,10 @@ export function SessionHeader({
           <DropdownMenuContent finalFocus={rename.menu.finalFocus}>
             <SessionMenuItems
               summary={summary}
-              onRename={rename.menu.onRename}
+              onRename={() => {
+                measureTitle()
+                rename.menu.onRename()
+              }}
               onNewSubSession={rename.menu.onLeave}
               onDelete={() => setDeleting(true)}
             />

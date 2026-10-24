@@ -69,6 +69,8 @@
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
   --color-focus: var(--focus);
+  --color-edit-ring: var(--edit-ring);
+  --color-edit-selection: var(--edit-selection);
 
   /* shadcn/ui's names, which tokens.css points at the palette. */
   --color-sidebar-ring: var(--sidebar-ring);
@@ -316,13 +318,6 @@
 /* The same ring on a container while something inside it has keyboard focus. */
 @utility focus-ring-within {
   &:has(:focus-visible) {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-  }
-}
-/* An input group's ring, only while its text control has focus: a button inside rings itself. */
-@utility focus-ring-control {
-  &:has([data-slot='input-group-control']:focus-visible) {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
   }
