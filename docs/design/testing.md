@@ -71,7 +71,7 @@ React components have no automated tests in M0; they are checked by running the 
 | `attachments`          | Lists the images, files and links the prompt carried, one per line with their type, size and URI, so a test can tell how each attachment was sent                                                                                                               |
 | `artifacts`            | Through the artifacts service and the official MCP client: makes "Fake canvas", a canvas of two pages, or edits the project's one, then reads it; `--read <id>` reads that one instead; `--until-cancel` keeps the turn running                                 |
 
-Without a scenario it plays `basic-turn`. `/compact` streams a compaction with its summary. Replies stream with tens of milliseconds between chunks, like a real agent.
+`/artifacts` names the session in `_meta` on every call, as OpenCode does; `--child <id>` makes its calls a subagent's, sent with OpenCode's child-session updates, `--meta <id>` names another session and `--meta none` none. Without a scenario it plays `basic-turn`. `/compact` streams a compaction with its summary. Replies stream with tens of milliseconds between chunks, like a real agent.
 
 Environment variables, read when the agent starts:
 

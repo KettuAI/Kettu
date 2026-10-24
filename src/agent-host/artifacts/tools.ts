@@ -50,7 +50,7 @@ export class ToolError extends Error {
   }
 }
 
-/** The session a token names, and its project or scratch folder: all it reaches. */
+/** The session a call is from, and its project or scratch folder: all it reaches. */
 export interface Caller {
   sessionId: string
   project: string

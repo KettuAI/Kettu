@@ -1,6 +1,7 @@
 // The artifacts service: the `overbench` MCP server on 127.0.0.1, which each attached session
-// reaches with a token of its own. Streamable HTTP in plain JSON, one stateless transport per
-// request. See docs/design/artifacts.md, The artifacts service.
+// reaches with a token of its own, or for OpenCode with its process and folder's token. Streamable
+// HTTP in plain JSON, one stateless transport per request. See docs/design/artifacts.md, The
+// artifacts service.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
@@ -8,12 +9,21 @@ import type { AddressInfo } from 'node:net'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type { LogFn } from '../storage'
-import { ArtifactTools, INSTRUCTIONS, isToolName, TOOLS, type ArtifactToolsDeps } from './tools'
+import {
+  ArtifactTools,
+  INSTRUCTIONS,
+  isToolName,
+  TOOLS,
+  type ArtifactToolsDeps,
+  type Caller,
+} from './tools'
 
 export const SERVICE_NAME = 'overbench'
 export const SERVICE_PATH = '/mcp'
 export const BODY_BYTES = 6 * 1024 * 1024
 const TOKEN_BYTES = 32
+/** Where OpenCode names the calling session on each `tools/call`, a subagent's own included. */
+const SESSION_META = 'ai.opencode/sessionID'
 
 // The SDK loads with the first request rather than with the host, which starts faster without it.
 function loadSdk() {
@@ -26,23 +36,53 @@ function loadSdk() {
 
 type Sdk = Awaited<ReturnType<typeof loadSdk>>
 
+/** An agent process that keeps one server of a name per folder, such as OpenCode's. */
+export interface AgentProcess {
+  /** Settles when the process exits, which ends its tokens. */
+  readonly closed: Promise<void>
+}
+
 export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   log: LogFn
   appVersion: string
+  /**
+   * The session in memory that a call of `process` names, a subagent's counting as the session
+   * it runs under; null for an id OverBench does not have.
+   */
+  sessionOf(process: AgentProcess, id: string): string | null
 }
 
-interface Grant {
+/** A token for one session. */
+interface SessionGrant {
   token: string
-  sessionId: string
   project: string
+  sessionId: string
 }
 
-/**
- * A name of the session's own, for an agent that keeps one server of each name per folder until
- * it exits: 12 hex characters of the session id, 48 bits, so two sessions there do not share one.
- */
-export function sessionServiceName(sessionId: string): string {
-  return `${SERVICE_NAME}-${sessionId.replace(/-/g, '').slice(0, 12).toLowerCase()}`
+/** A token for one agent process and folder, whose calls name their session in `_meta`. */
+interface FolderGrant {
+  token: string
+  project: string
+  process: AgentProcess
+  /** The sessions in memory that attached through it. */
+  sessions: Set<string>
+}
+
+type Grant = SessionGrant | FolderGrant
+
+function newToken(): string {
+  return randomBytes(TOKEN_BYTES).toString('base64url')
+}
+
+function entry(url: string, token: string): McpServer[] {
+  return [
+    {
+      type: 'http',
+      name: SERVICE_NAME,
+      url,
+      headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
+    },
+  ]
 }
 
 function digest(token: string): string {
@@ -64,8 +104,10 @@ export class ArtifactService {
   private port: number | null = null
   /** The live tokens by their SHA-256, so a lookup compares no secret byte by byte. */
   private readonly grants = new Map<string, Grant>()
-  /** Each session's current token, by its digest. */
+  /** The token each session attached with, by its digest. */
   private readonly sessions = new Map<string, string>()
+  /** Each agent process's folder tokens by folder, kept until the process exits. */
+  private readonly folders = new Map<AgentProcess, Map<string, string>>()
   private readonly tools: ArtifactTools
   private sdk: Promise<Sdk> | null = null
 
@@ -111,6 +153,7 @@ export class ArtifactService {
     this.port = null
     this.grants.clear()
     this.sessions.clear()
+    this.folders.clear()
     if (!server) return
     server.closeAllConnections()
     await new Promise<void>((resolve) => server.close(() => resolve()))
@@ -125,37 +168,101 @@ export class ArtifactService {
    * made at its first attach and kept while it stays in memory, since Codex ignores new servers
    * when it resumes a session it still holds open. Empty while the service is not running.
    */
-  servers(sessionId: string, project: string, name = SERVICE_NAME): McpServer[] {
+  servers(sessionId: string, project: string): McpServer[] {
     const url = this.url
     if (!url) return []
     const held = this.sessions.get(sessionId)
     let grant = held === undefined ? undefined : this.grants.get(held)
-    if (grant?.project !== project) {
+    if (!grant || !('sessionId' in grant) || grant.project !== project) {
       this.revoke(sessionId)
-      const token = randomBytes(TOKEN_BYTES).toString('base64url')
-      grant = { token, sessionId, project }
-      const key = digest(token)
-      this.grants.set(key, grant)
-      this.sessions.set(sessionId, key)
+      grant = { token: newToken(), sessionId, project }
+      this.sessions.set(sessionId, this.add(grant))
     }
-    const { token } = grant
-    return [
-      {
-        type: 'http',
-        name,
-        url,
-        headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      },
-    ]
+    return entry(url, grant.token)
   }
 
-  /** The session's token ends: it closed, was released or was deleted. */
+  /**
+   * The same for an agent that keeps one server of a name per folder and names the session on
+   * each call: one token for the process and folder, kept while a session there stays in memory
+   * and the process runs, since each attach there replaces the folder's server for every session.
+   */
+  folderServers(process: AgentProcess, folder: string, sessionId: string): McpServer[] {
+    const url = this.url
+    if (!url) return []
+    let byFolder = this.folders.get(process)
+    if (!byFolder) {
+      byFolder = new Map()
+      this.folders.set(process, byFolder)
+      const exited = (): void => this.exited(process)
+      void process.closed.then(exited, exited)
+    }
+    let key = byFolder.get(folder)
+    let grant = key === undefined ? undefined : this.grants.get(key)
+    if (key === undefined || !grant || 'sessionId' in grant) {
+      grant = { token: newToken(), project: folder, process, sessions: new Set() }
+      key = this.add(grant)
+      byFolder.set(folder, key)
+    }
+    if (this.sessions.get(sessionId) !== key) {
+      this.leave(sessionId)
+      grant.sessions.add(sessionId)
+      this.sessions.set(sessionId, key)
+    }
+    return entry(url, grant.token)
+  }
+
+  /** The session left memory: it closed, was released or was deleted. */
   revoke(sessionId: string): void {
     this.tools.forget(sessionId)
+    this.leave(sessionId)
+  }
+
+  private add(grant: Grant): string {
+    const key = digest(grant.token)
+    this.grants.set(key, grant)
+    return key
+  }
+
+  /** Its own token ends; a folder's ends with the last session there. */
+  private leave(sessionId: string): void {
     const key = this.sessions.get(sessionId)
     if (key === undefined) return
     this.sessions.delete(sessionId)
+    const grant = this.grants.get(key)
+    if (!grant) return
+    if ('sessionId' in grant) {
+      this.grants.delete(key)
+      return
+    }
+    grant.sessions.delete(sessionId)
+    if (grant.sessions.size > 0) return
     this.grants.delete(key)
+    const byFolder = this.folders.get(grant.process)
+    if (byFolder?.get(grant.project) === key) byFolder.delete(grant.project)
+  }
+
+  /** The process exited: its folder tokens end, and its sessions get new ones as they attach. */
+  private exited(process: AgentProcess): void {
+    const byFolder = this.folders.get(process)
+    if (!byFolder) return
+    this.folders.delete(process)
+    for (const key of byFolder.values()) {
+      const grant = this.grants.get(key)
+      this.grants.delete(key)
+      if (!grant || 'sessionId' in grant) continue
+      for (const sessionId of grant.sessions) {
+        if (this.sessions.get(sessionId) === key) this.sessions.delete(sessionId)
+      }
+    }
+  }
+
+  /** Who a call is from: the token's session, or the session a folder token's call names. */
+  private callerOf(grant: Grant, meta: Record<string, unknown> | undefined): Caller | null {
+    if ('sessionId' in grant) return { sessionId: grant.sessionId, project: grant.project }
+    const id = meta?.[SESSION_META]
+    const sessionId = typeof id === 'string' ? this.deps.sessionOf(grant.process, id) : null
+    if (sessionId === null || !grant.sessions.has(sessionId)) return null
+    return { sessionId, project: grant.project }
   }
 
   private grantOf(header: string | undefined): Grant | null {
@@ -193,7 +300,7 @@ export class ArtifactService {
       throw error
     })
     const sdk = await this.sdk
-    const server = this.mcpServer(sdk, { sessionId: grant.sessionId, project: grant.project })
+    const server = this.mcpServer(sdk, grant)
     const transport = new sdk.StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -207,8 +314,8 @@ export class ArtifactService {
     await transport.handleRequest(req, res)
   }
 
-  /** A server for one request of the caller, as a stateless transport needs. */
-  private mcpServer(sdk: Sdk, caller: { sessionId: string; project: string }): Server {
+  /** A server for one request with the token, as a stateless transport needs. */
+  private mcpServer(sdk: Sdk, grant: Grant): Server {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
     const server = new sdk.Server(
       { name: SERVICE_NAME, title: 'OverBench', version: this.deps.appVersion },
@@ -216,7 +323,14 @@ export class ArtifactService {
     )
     server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }))
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: input } = request.params
+      const { name, arguments: input, _meta: meta } = request.params
+      const caller = this.callerOf(grant, meta)
+      if (!caller) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          'The call names no session of this agent in this folder',
+        )
+      }
       if (!isToolName(name)) throw new McpError(ErrorCode.InvalidParams, `Unknown tool ${name}`)
       try {
         return await this.tools.call(caller, name, input)

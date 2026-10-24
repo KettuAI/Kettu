@@ -4,10 +4,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import { afterEach, describe, expect, it } from 'vitest'
 import { inThreadWorker } from '../testing/thread-worker'
 import { ThreadStore } from '../threads/store'
-import { ArtifactService, BODY_BYTES, sessionServiceName } from './service'
+import { ArtifactService, BODY_BYTES, type AgentProcess } from './service'
 import { ArtifactStore } from './store'
 import { INSTRUCTIONS } from './tools'
 
@@ -17,7 +18,14 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
-async function setup() {
+/** An agent process whose exit the test decides. */
+function agentProcess(): AgentProcess & { exit(): void } {
+  let exit = (): void => {}
+  const closed = new Promise<void>((resolve) => (exit = resolve))
+  return { closed, exit: () => exit() }
+}
+
+async function setup(sessionOf: (process: AgentProcess, id: string) => string | null = () => null) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifact-service-'))
   const contentDir = path.join(dir, 'artifacts', 'content')
   const logs: string[] = []
@@ -40,6 +48,7 @@ async function setup() {
     store,
     sessionTitle: () => 'A session',
     runningTurn: () => null,
+    sessionOf,
     log,
     appVersion: '0.0.0-test',
   })
@@ -52,8 +61,8 @@ async function setup() {
     rmSync(dir, { recursive: true, force: true })
   })
   /** Connects the official MCP client with what an attach passed. */
-  const connect = async (sessionId: string, project: string) => {
-    const [server] = service.servers(sessionId, project)
+  const connect = async (sessionId: string, project: string, given?: McpServer[]) => {
+    const [server] = given ?? service.servers(sessionId, project)
     if (!server || !('headers' in server) || !('url' in server)) throw new Error('No server')
     const client = new Client({ name: 'test-agent', version: '1.0.0' })
     const headers = Object.fromEntries(server.headers.map((h) => [h.name, h.value]))
@@ -119,13 +128,6 @@ describe('the artifacts service', () => {
       (server as { headers: { value: string }[] }).headers[0]!.value
     expect(token(one)).toMatch(/^Bearer [A-Za-z0-9_-]{43}$/)
     expect(token(one)).not.toBe(token(two))
-    expect(service.servers('s3', '/p', 'overbench-1a2b')[0]).toMatchObject({
-      name: 'overbench-1a2b',
-    })
-    // 48 bits, so two sessions in one folder do not share a name.
-    expect(sessionServiceName('1A2B3C4D-5E6F-4000-8000-000000000000')).toBe(
-      'overbench-1a2b3c4d5e6f',
-    )
   })
 
   it('keeps a session token while the session stays, and makes a new one after', async () => {
@@ -309,6 +311,98 @@ describe('the artifacts service', () => {
     })
     expect(newer.status).toBeGreaterThanOrEqual(400)
     expect(JSON.parse(newer.body)).toMatchObject({ error: { code: expect.any(Number) } })
+  })
+
+  it('gives an agent process one token per folder and tells the session from each call', async () => {
+    const agent = agentProcess()
+    const other = agentProcess()
+    const ids = new Map([
+      ['acp-1', 's1'],
+      ['acp-2', 's2'],
+      ['child-of-2', 's2'],
+    ])
+    const { service, store, connect } = await setup((process, id) =>
+      process === agent ? (ids.get(id) ?? null) : null,
+    )
+    const one = service.folderServers(agent, '/p', 's1')
+    expect(service.folderServers(agent, '/p', 's2')).toEqual(one)
+    expect(one).toEqual([
+      expect.objectContaining({ type: 'http', name: 'overbench', url: service.url }),
+    ])
+    const token = (servers: McpServer[]) =>
+      (servers[0] as { headers: { value: string }[] }).headers[0]!.value
+    expect(token(service.folderServers(agent, '/q', 's3'))).not.toBe(token(one))
+    expect(token(service.folderServers(other, '/p', 's4'))).not.toBe(token(one))
+
+    const { client } = await connect('s1', '/p', one)
+    const created = await client.callTool({
+      name: 'create_artifact',
+      arguments: { title: 'Shared folder', html: '<p>1</p>' },
+      _meta: { 'ai.opencode/sessionID': 'acp-1' },
+    })
+    const { id } = created.structuredContent as { id: string }
+    await client.callTool({
+      name: 'update_artifact',
+      arguments: { id, base_version: 1, html: '<p>2</p>' },
+      _meta: { 'ai.opencode/sessionID': 'child-of-2' },
+    })
+    const versions = await store.versions(id, { project: '/p' })
+    expect(versions.map((v) => v.author)).toEqual(['s2', 's1'])
+  })
+
+  it('refuses a call that names no session of its process and folder', async () => {
+    const agent = agentProcess()
+    const ids = new Map([
+      ['acp-1', 's1'],
+      ['acp-3', 's3'],
+    ])
+    const { service, connect } = await setup((process, id) =>
+      process === agent ? (ids.get(id) ?? null) : null,
+    )
+    const servers = service.folderServers(agent, '/p', 's1')
+    service.folderServers(agent, '/q', 's3')
+    const { client } = await connect('s1', '/p', servers)
+    expect((await client.listTools()).tools).toHaveLength(7)
+    const list = (meta?: Record<string, unknown>) =>
+      client.callTool({ name: 'list_artifacts', arguments: {}, ...(meta ? { _meta: meta } : {}) })
+    expect(await list({ 'ai.opencode/sessionID': 'acp-1' })).toMatchObject({
+      structuredContent: { artifacts: [] },
+    })
+    // No id, an id OverBench does not know, one of another folder, and one that is not text.
+    for (const meta of [
+      undefined,
+      { 'ai.opencode/sessionID': 'acp-9' },
+      { 'ai.opencode/sessionID': 'acp-3' },
+      { 'ai.opencode/sessionID': 1 },
+    ]) {
+      await expect(list(meta)).rejects.toThrow(/names no session of this agent in this folder/)
+    }
+  })
+
+  it('ends a folder token when its last session leaves, or its process exits', async () => {
+    const agent = agentProcess()
+    const other = agentProcess()
+    const { service } = await setup()
+    const url = service.url!
+    const token = (servers: McpServer[]) =>
+      (servers[0] as { headers: { value: string }[] }).headers[0]!.value.slice('Bearer '.length)
+    const shared = token(service.folderServers(agent, '/p', 's1'))
+    service.folderServers(agent, '/p', 's2')
+    service.revoke('s1')
+    expect((await send(url, { headers: headers(shared), body: LIST })).status).toBe(200)
+    service.revoke('s2')
+    expect((await send(url, { headers: headers(shared), body: LIST })).status).toBe(401)
+    const next = token(service.folderServers(agent, '/p', 's1'))
+    expect(next).not.toBe(shared)
+
+    const elsewhere = token(service.folderServers(agent, '/q', 's3'))
+    const kept = token(service.folderServers(other, '/p', 's4'))
+    agent.exit()
+    await new Promise((resolve) => setImmediate(resolve))
+    for (const ended of [next, elsewhere]) {
+      expect((await send(url, { headers: headers(ended), body: LIST })).status).toBe(401)
+    }
+    expect((await send(url, { headers: headers(kept), body: LIST })).status).toBe(200)
   })
 
   it('ends every token when it stops', async () => {

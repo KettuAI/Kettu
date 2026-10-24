@@ -170,6 +170,9 @@ const CLIENT_CAPABILITIES = {
 const PENDING_SESSIONS = 32
 const PENDING_UPDATES = 2_000
 const PENDING_TTL_MS = 60_000
+// OpenCode marks a subagent's updates, which it sends on the session the subagent runs under.
+const CHILD_SESSION_META = 'opencode/child-session'
+const CHILD_SESSIONS = 1_000
 // Sessions OverBench closed: their late updates are dropped, not kept for a later register.
 const CLOSED_SESSIONS = 256
 
@@ -180,6 +183,8 @@ export class AgentConnection {
   private readonly unregistered = new Set<string>()
   /** Sessions OverBench runs a report in, which no thread shows. */
   private readonly collectors = new Map<string, (update: SessionUpdate) => void>()
+  /** OpenCode's subagent sessions, to the session each runs under. */
+  private readonly children = new Map<string, string>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -263,6 +268,7 @@ export class AgentConnection {
   }
 
   private deliver(acpSessionId: string, update: SessionUpdate): void {
+    this.learnChild(acpSessionId, update)
     const target = this.targets.get(acpSessionId)
     if (target) {
       target.apply(mapSessionUpdate(update, target.context()))
@@ -297,6 +303,26 @@ export class AgentConnection {
       this.pending.set(acpSessionId, entry)
     }
     if (entry.updates.length < PENDING_UPDATES) entry.updates.push(update)
+  }
+
+  private learnChild(acpSessionId: string, update: SessionUpdate): void {
+    const child = (
+      update._meta as Record<string, { id?: unknown } | undefined> | null | undefined
+    )?.[CHILD_SESSION_META]
+    const id = child?.id
+    if (typeof id !== 'string' || id === acpSessionId || this.children.get(id) === acpSessionId) {
+      return
+    }
+    this.children.delete(id)
+    this.children.set(id, acpSessionId)
+    if (this.children.size > CHILD_SESSIONS) {
+      this.children.delete(this.children.keys().next().value!)
+    }
+  }
+
+  /** The session `id` runs under: its own if OverBench has it, else as OpenCode reported it. */
+  rootOf(id: string): string {
+    return this.targets.has(id) ? id : (this.children.get(id) ?? id)
   }
 
   /** Routes a session's updates to `target`, first replaying any that arrived early. */
