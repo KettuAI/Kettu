@@ -88,11 +88,12 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Information                                                       | `Info`                   |                                   |
 | Help, an unknown value                                            | `CircleHelp`             |                                   |
 | Delete; Recently deleted                                          | `Trash`                  | `Trash2`                          |
+| Restore from Recently deleted                                     | `Undo2`                  | `ArchiveRestore`, `RotateCcw`     |
 | Rename, edit                                                      | `Pencil`                 | `SquarePen`                       |
 | A web link, open outside the app                                  | `ExternalLink`           |                                   |
 | A folder, show in the file manager, the Files pane                | `Folder`                 | `FolderOpen`                      |
 | A file                                                            | `File`                   |                                   |
-| Save a file; save a report to disk                                | `Save`; `FileDown`       |                                   |
+| Save a file; save a report or export an artifact to disk          | `Save`; `FileDown`       |                                   |
 | Import a file, such as an HTML file as an artifact                | `FileUp`                 | `Upload`, `Import`                |
 | Terminal                                                          | `SquareTerminal`         | `Terminal`                        |
 | Search, filter                                                    | `Search`                 | `Filter`                          |
@@ -131,6 +132,7 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Ask the agent about a selection                                   | `MessageSquareText`      |                                   |
 | A session, open a session                                         | `MessageSquare`          | `MessagesSquare`                  |
 | Import sessions an agent already has                              | `History`                | `Import`                          |
+| An artifact's version history                                     | `History`                | `FileClock`, `Clock`              |
 | Mention a file                                                    | `AtSign`                 |                                   |
 | Slash commands                                                    | `Slash`                  | `SquareSlash`                     |
 

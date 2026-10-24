@@ -1,3 +1,13 @@
+import {
+  ExternalLinkIcon,
+  FileDownIcon,
+  HistoryIcon,
+  MessageSquareIcon,
+  PencilIcon,
+  ShapesIcon,
+  TrashIcon,
+  Undo2Icon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { NO_SESSION } from '@shared/artifacts'
 import {
@@ -50,6 +60,7 @@ export function ArtifactMenuItems({
           <DropdownMenuItem
             onClick={() => void restoreArtifact(target.id).catch(failed('restore'))}
           >
+            <Undo2Icon />
             {t('menu.restore')}
           </DropdownMenuItem>
         </DropdownMenuGroup>
@@ -66,6 +77,7 @@ export function ArtifactMenuItems({
               })
             }
           >
+            <TrashIcon />
             {t('menu.erase')}
           </DropdownMenuItem>
         </DropdownMenuGroup>
@@ -76,7 +88,12 @@ export function ArtifactMenuItems({
   return (
     <>
       <DropdownMenuGroup>
-        {onOpen && <DropdownMenuItem onClick={onOpen}>{t('menu.open')}</DropdownMenuItem>}
+        {onOpen && (
+          <DropdownMenuItem onClick={onOpen}>
+            <ShapesIcon />
+            {t('menu.open')}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onClick={() =>
             void window.overbench.artifacts
@@ -84,6 +101,7 @@ export function ArtifactMenuItems({
               .catch(failed('open in the browser'))
           }
         >
+          <ExternalLinkIcon />
           {t('menu.openInBrowser')}
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -93,14 +111,19 @@ export function ArtifactMenuItems({
               .catch(failed('export'))
           }
         >
+          <FileDownIcon />
           {t('menu.export')}
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => askArtifactDialog({ kind: 'rename', id: target.id, title: target.title })}
         >
+          <PencilIcon />
           {t('menu.rename')}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onVersionHistory}>{t('menu.versionHistory')}</DropdownMenuItem>
+        <DropdownMenuItem onClick={onVersionHistory}>
+          <HistoryIcon />
+          {t('menu.versionHistory')}
+        </DropdownMenuItem>
       </DropdownMenuGroup>
       {session && (
         <>
@@ -109,6 +132,7 @@ export function ArtifactMenuItems({
             <DropdownMenuItem
               onClick={() => openSessionWithArtifact(session.id, session.projectPath, target.id)}
             >
+              <MessageSquareIcon />
               {t('menu.openSession')}
             </DropdownMenuItem>
           </DropdownMenuGroup>
@@ -122,6 +146,7 @@ export function ArtifactMenuItems({
             deleteArtifact(target.id).then(onDeleted, failed('delete'))
           }}
         >
+          <TrashIcon />
           {t('menu.delete')}
         </DropdownMenuItem>
       </DropdownMenuGroup>
