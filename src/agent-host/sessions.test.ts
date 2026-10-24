@@ -10,7 +10,8 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { Attachment, ThreadEntry, ToolEntry } from '@shared/thread'
-import { forkCut } from './sessions'
+import { AgentRequestError } from './acp/connection'
+import { forkCut, unknownSession } from './sessions'
 import {
   startTestHost,
   type InProcessLauncher,
@@ -1256,6 +1257,27 @@ describe('forking with the source config', () => {
       expect(port.entries(forkId).filter((entry) => entry.kind === 'notice')).toEqual([])
       expect(values(port, forkId)).toMatchObject({ model: 'deep', thought_level: 'high' })
     })
+  })
+})
+
+describe('unknownSession', () => {
+  const failed = (code: number, data?: unknown) =>
+    new AgentRequestError('agent_error', 'Internal error', code, data)
+
+  it("takes Claude Code's not found and codex-acp's missing rollout", () => {
+    expect(unknownSession(failed(-32002))).toBe(true)
+    expect(
+      unknownSession(failed(-32603, { details: 'no rollout found for thread id 0199a2c3' })),
+    ).toBe(true)
+  })
+
+  it('leaves any other failure to fail the attach', () => {
+    expect(unknownSession(failed(-32603))).toBe(false)
+    expect(unknownSession(failed(-32603, { details: 'thread/read failed: disk full' }))).toBe(false)
+    expect(unknownSession(failed(-32603, 'no rollout found for thread id 0199a2c3'))).toBe(false)
+    expect(unknownSession(failed(-32600, { details: 'no rollout found for thread id x' }))).toBe(
+      false,
+    )
   })
 })
 

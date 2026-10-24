@@ -50,7 +50,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     description: 'Thinks, reads, runs commands and edits until you cancel, as the context grows',
   },
   crash: { description: 'Exits mid-turn with a non-zero code', hint: '--code <n>' },
-  error: { description: 'Fails the turn with an internal error' },
+  error: { description: 'Fails the turn with an internal error', hint: '--silent' },
   'auth-required': {
     description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
   },
@@ -104,6 +104,7 @@ export interface ScenarioOptions {
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
   read: string | null // artifacts: the artifact to read instead
   untilCancel: boolean // artifacts: the turn runs on after its calls until it is cancelled
+  silent: boolean // error: fails before writing anything
 }
 
 export interface ScenarioChoice {
@@ -190,6 +191,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     atEnd: flagValue(args, 'at-end') !== undefined,
     read: flagValue(args, 'read') || null,
     untilCancel: flagValue(args, 'until-cancel') !== undefined,
+    silent: flagValue(args, 'silent') !== undefined,
   }
   return { scenario, options, text }
 }
