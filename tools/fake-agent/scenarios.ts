@@ -28,6 +28,7 @@ import {
   longMarkdown,
   tokenChunks,
 } from './content.ts'
+import { artifacts } from './artifacts.ts'
 import type { ScenarioName } from './options.ts'
 import type { Scenario, Turn } from './turn.ts'
 
@@ -1194,6 +1195,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   recall,
   attachments,
   chinese,
+  artifacts,
 }
 
 export const compact: Scenario = async (turn) => {

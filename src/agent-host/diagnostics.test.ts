@@ -33,6 +33,52 @@ describe('Diagnostics', () => {
     expect(lines).toEqual(['[acp opencode] -> {"method":"initialize"}'])
   })
 
+  it('keeps the values of MCP server headers out, which hold session tokens', () => {
+    const lines: string[] = []
+    const diagnostics = new Diagnostics({ mirrorTraffic: true, write: (line) => lines.push(line) })
+    const server = {
+      type: 'http',
+      name: 'overbench',
+      url: 'http://127.0.0.1:4100/mcp',
+      headers: [
+        { name: 'Authorization', value: 'Bearer secret-token' },
+        { name: 'X-Other', value: 'also-secret' },
+      ],
+    }
+    for (const method of ['session/new', 'session/load', 'session/resume', 'session/fork']) {
+      diagnostics.traffic('claude-code', 'out', {
+        jsonrpc: '2.0',
+        id: 1,
+        method,
+        params: { cwd: '/p', mcpServers: [server] },
+      })
+    }
+    const records = diagnostics.agentRecords('claude-code').traffic
+    expect(records).toHaveLength(4)
+    for (const record of records) {
+      expect(record.message).toMatchObject({
+        method: record.method,
+        params: {
+          cwd: '/p',
+          mcpServers: [
+            {
+              name: 'overbench',
+              url: 'http://127.0.0.1:4100/mcp',
+              headers: [
+                { name: 'Authorization', value: '<redacted>' },
+                { name: 'X-Other', value: '<redacted>' },
+              ],
+            },
+          ],
+        },
+      })
+    }
+    expect(lines.join('\n')).not.toMatch(/secret/)
+    expect(JSON.stringify(records)).not.toMatch(/secret/)
+    // The message the agent gets is left as it was.
+    expect(server.headers[0]!.value).toBe('Bearer secret-token')
+  })
+
   it('keeps stderr, events and the host log', () => {
     const diagnostics = new Diagnostics({ now: () => 9 })
     const seen: string[] = []

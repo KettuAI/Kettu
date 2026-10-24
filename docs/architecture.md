@@ -190,7 +190,7 @@ Each core logic of OverBench has a section here: what it is, its model, its inte
 
 ### Artifacts
 
-> Decided by the maintainer on 2026-10-23 for [issue #11](https://github.com/overbench/overbench/issues/11); the store is built, the service, the surface and the interface are not yet. Details: [artifacts](./design/artifacts.md).
+> Decided by the maintainer on 2026-10-23 for [issue #11](https://github.com/overbench/overbench/issues/11); the store and the service are built, the surface and the interface are not yet. Details: [artifacts](./design/artifacts.md).
 
 An artifact is a page an agent makes for the user to look at, such as a report, a slide deck or a set of design options: one HTML file, kept by OverBench with every version. Agents create and change artifacts through OverBench's own MCP service, not by writing files into the project. OverBench stores them on this machine and shows them in a surface that keeps them away from the app and the machine.
 
@@ -230,13 +230,13 @@ A version's HTML is stored once per hash, so restoring a version or writing the 
 6. **An artifact leaves the machine by three roads only**: what an agent reads or writes goes to its model, as all of its context does; a page loads scripts, styles and fonts from the CDN list, without a referrer; and the user exports a version or opens it in the browser.
 7. **Isolation in five layers**:
 
-   | Layer       | What holds it                                                                                                                                                               |
-   | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | The page    | An origin of its own, a sandboxed frame in a process of its own, the network policy, every permission denied, and the frame guard's exception for it alone                  |
-   | The content | Served from OverBench's store: a page sees its own HTML and nothing on disk, not even another artifact                                                                      |
-   | The service | `127.0.0.1` only, a random token per session compared in constant time, requests that carry a browser's `Origin` refused, every argument validated, limits on size and rate |
-   | The scope   | A token names one session and its project; the artifacts of other projects do not exist for it                                                                              |
-   | The store   | Records in the thread database and each version's HTML in a file named by its hash, removed together                                                                        |
+   | Layer       | What holds it                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+   | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+   | The page    | An origin of its own, a sandboxed frame in a process of its own, the network policy, every permission denied, and the frame guard's exception for it alone                                                                                                                                                                                                                                                                                                               |
+   | The content | Served from OverBench's store: a page sees its own HTML and nothing on disk, not even another artifact                                                                                                                                                                                                                                                                                                                                                                   |
+   | The service | `127.0.0.1` only, a random token per session compared in constant time, held by the host and the session's agent alone and redacted from diagnostics (an accepted risk: Claude Code's CLI gets it in its `--mcp-config` argument, which other local users who can list process arguments can see, for that session's project only, until the session leaves memory), requests that carry a browser's `Origin` refused, every argument validated, limits on size and rate |
+   | The scope   | A token names one session and its project; the artifacts of other projects do not exist for it                                                                                                                                                                                                                                                                                                                                                                           |
+   | The store   | Records in the thread database and each version's HTML in a file named by its hash, removed together                                                                                                                                                                                                                                                                                                                                                                     |
 
 8. **Presence is local.** A viewer shows how many places in OverBench have the artifact open, and which sessions are changing it: a session whose running turn created, updated or restored it, until that turn ends. A session shows by its title, not by its agent.
 
@@ -303,7 +303,7 @@ src/
 │   ├── git/               Repository status, watchers, pull requests through gh
 │   ├── storage.ts         JSON persistence
 │   ├── threads/           The thread database: its worker, SQLite pages, and the host's store
-│   ├── artifacts/         Artifacts: their content files, ids, and the store the host serves
+│   ├── artifacts/         Artifacts: their content files, ids, the store and the MCP service
 │   ├── usage/             Token usage: the record, the agents' log readers, its database and worker
 │   ├── diagnostics.ts     Traffic and stderr ring buffers
 │   └── i18n.ts            The text the host writes for the user, in the chosen language

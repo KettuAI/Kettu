@@ -4,6 +4,19 @@
 export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/
 
 export const ARTIFACT_TITLE_CHARS = 120
+
+/** Longer than `max` as JSON Schema counts length: in code points, not UTF-16 units. */
+export function longer(text: string, max: number): boolean {
+  if (text.length <= max) return false
+  let n = 0
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i)
+    if (c >= 0xd800 && c <= 0xdbff) i++
+    if (++n > max) return true
+  }
+  return false
+}
+
 /** How long a deleted artifact stays in Recently deleted before the purge removes it. */
 export const ARTIFACT_KEEP_DELETED_MS = 30 * 24 * 60 * 60 * 1000
 

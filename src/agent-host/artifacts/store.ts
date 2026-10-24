@@ -65,6 +65,20 @@ export interface Reach {
   project?: string
 }
 
+/**
+ * The session whose running turn makes a change, which then counts as editing until the turn
+ * ends. `current` says, once the change is written, whether that same turn still runs: one that
+ * ended meanwhile already cleared what it edited.
+ */
+export interface Editor {
+  session: string
+  current(): boolean
+}
+
+export interface Editing {
+  editor?: Editor
+}
+
 export function versionSummary(record: VersionRecord): VersionSummary {
   const { version, createdAt, author, note, size } = record
   return { version, createdAt, author, note, size }
@@ -73,6 +87,8 @@ export function versionSummary(record: VersionRecord): VersionSummary {
 export class ArtifactStore {
   /** The watches of each artifact, counted per port, since one window can show it twice. */
   private readonly watches = new Map<string, Map<string, number>>()
+  /** The sessions editing each artifact: their running turn created, changed or restored it. */
+  private readonly editors = new Map<string, Set<string>>()
   private timer: ReturnType<typeof setInterval> | null = null
 
   constructor(private readonly deps: ArtifactStoreDeps) {}
@@ -138,15 +154,23 @@ export class ArtifactStore {
         ? { project: reach.project }
         : { project: null, deleted: reach.deleted ?? false },
     )
-    return listed.map((artifact) => ({ ...artifact, editing: this.editing() }))
+    return listed.map((artifact) => ({ ...artifact, editing: this.editing(artifact.id) }))
+  }
+
+  /** The artifact and one of its versions, the latest by default, without the HTML. */
+  get(
+    id: string,
+    { version, project }: Reach & { version?: number } = {},
+  ): Promise<{ artifact: ArtifactRecord; version: VersionRecord }> {
+    return this.call('get', { id, version: version ?? null, project: project ?? null })
   }
 
   /** A version, the latest by default, with its HTML. */
   async read(
     id: string,
-    { version, project }: Reach & { version?: number } = {},
+    reach: Reach & { version?: number } = {},
   ): Promise<{ artifact: ArtifactRecord; version: VersionRecord; html: string }> {
-    const found = await this.call('get', { id, version: version ?? null, project: project ?? null })
+    const found = await this.get(id, reach)
     const file = contentPath(this.deps.contentDir, found.version.hash)
     let html: string
     try {
@@ -167,7 +191,7 @@ export class ArtifactStore {
 
   /** The file of a version, the latest by default, for main to serve. */
   async content(id: string, version?: number): Promise<{ path: string; version: number }> {
-    const found = await this.call('get', { id, version: version ?? null, project: null })
+    const found = await this.get(id, version === undefined ? {} : { version })
     return {
       path: contentPath(this.deps.contentDir, found.version.hash),
       version: found.version.version,
@@ -177,17 +201,21 @@ export class ArtifactStore {
   // Writing.
 
   /** A new artifact in the session's project, at version 1, written by that session. */
-  async create(input: {
-    project: string
-    sessionId: string
-    title: string
-    html: string
-    pages: number
-    note: string | null
-  }): Promise<{ id: string; version: number }> {
+  async create(
+    input: {
+      project: string
+      sessionId: string
+      title: string
+      html: string
+      pages: number
+      note: string | null
+    } & Editing,
+  ): Promise<{ id: string; version: number }> {
+    const { editor, ...rest } = input
     const at = this.now()
     const id = newArtifactId(at)
-    const { version } = await this.call('create', { ...input, id, at })
+    const { version } = await this.call('create', { ...rest, id, at })
+    this.edited(id, editor)
     this.deps.changed()
     return { id, version }
   }
@@ -201,14 +229,16 @@ export class ArtifactStore {
       pages: number
       author: string | null
       note: string | null
-    } & Reach,
+    } & Reach &
+      Editing,
   ): Promise<{ version: number }> {
-    const { project, ...rest } = input
+    const { project, editor, ...rest } = input
     const { version } = await this.call('write', {
       ...rest,
       project: project ?? null,
       at: this.now(),
     })
+    this.edited(input.id, editor)
     this.versioned(input.id, version)
     return { version }
   }
@@ -221,15 +251,17 @@ export class ArtifactStore {
       baseVersion: number
       author: string | null
       note?: string | null
-    } & Reach,
+    } & Reach &
+      Editing,
   ): Promise<{ version: number }> {
-    const { project, note, ...rest } = input
+    const { project, note, editor, ...rest } = input
     const { version } = await this.call('restore', {
       ...rest,
       project: project ?? null,
       note: note ?? null,
       at: this.now(),
     })
+    this.edited(input.id, editor)
     this.versioned(input.id, version)
     return { version }
   }
@@ -241,8 +273,13 @@ export class ArtifactStore {
   }
 
   /** Changes the title, which is not versioned. */
-  async rename(id: string, title: string, { project }: Reach = {}): Promise<void> {
+  async rename(
+    id: string,
+    title: string,
+    { project, editor }: Reach & Editing = {},
+  ): Promise<void> {
     await this.call('rename', { id, title, project: project ?? null })
+    this.edited(id, editor)
     this.deps.changed()
   }
 
@@ -274,9 +311,34 @@ export class ArtifactStore {
 
   // Presence.
 
-  // TODO(#151): the sessions whose running turn wrote the artifact, once the service serves them.
-  private editing(): string[] {
-    return []
+  private editing(id: string): string[] {
+    return [...(this.editors.get(id) ?? [])]
+  }
+
+  /** Counts the editor's change; called before the change is announced, so lists include it. */
+  private edited(id: string, editor: Editor | undefined): void {
+    if (!editor?.current()) return
+    let sessions = this.editors.get(id)
+    if (!sessions) {
+      sessions = new Set()
+      this.editors.set(id, sessions)
+    }
+    if (sessions.has(editor.session)) return
+    sessions.add(editor.session)
+    this.sendActivity(id)
+  }
+
+  /** The session's turn ended, or the session went: it edits nothing now. */
+  stopEditing(sessionId: string): void {
+    let stopped = false
+    for (const [id, sessions] of [...this.editors]) {
+      if (!sessions.delete(sessionId)) continue
+      stopped = true
+      if (sessions.size === 0) this.editors.delete(id)
+      this.sendActivity(id)
+    }
+    // The page's cards show who edits from the list, which no new version refreshes now.
+    if (stopped) this.deps.changed()
   }
 
   private sendActivity(id: string): void {
@@ -284,7 +346,7 @@ export class ArtifactStore {
     if (!ports) return
     let viewers = 0
     for (const count of ports.values()) viewers += count
-    this.deps.activity(ports.keys(), { id, viewers, editing: this.editing() })
+    this.deps.activity(ports.keys(), { id, viewers, editing: this.editing(id) })
   }
 
   /** Counts a viewer of the artifact, which brings the port its new versions. */
