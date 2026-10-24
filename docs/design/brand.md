@@ -53,6 +53,8 @@ Never stretch or squash it, rotate or skew it, draw it as an outline, drop the c
 - **Windows** (`build/icon.ico`, 16 to 256 px): a flat ink square filling the canvas, 12% corners; at 16 px the mark grows to 69% so its cuts still show.
 - **Linux** (`build/icon.png`, 1024 px): the macOS tile.
 
+A development run would show Electron's icon, so it sets `build/icon.png` as the Dock icon on macOS and as the window icon on Windows and Linux.
+
 The guidelines also define a light macOS icon; it is not shipped, since an `.icns` has one appearance.
 
 ## In the app
