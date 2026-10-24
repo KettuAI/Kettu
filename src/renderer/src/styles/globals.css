@@ -65,6 +65,7 @@
   --color-danger-tint: var(--danger-tint);
   --color-danger-border: var(--danger-border);
   --color-success: var(--success);
+  --color-merged: var(--merged);
   --color-warning: var(--warning);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
