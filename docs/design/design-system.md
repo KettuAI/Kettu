@@ -193,7 +193,7 @@ The [usage page](./usage.md#interface) draws amounts. Its colors carry two meani
 | Composer, tool call cards, code blocks, diffs, attachments, dialogs, menus, popovers | Agent text, the user bubble (a fill only), sidebar rows, buttons inside a container |
 
 - Inside a bordered container, parts are separated by a hairline `Separator` or a surface step, never by a second border.
-- The sidebar and the side panel, on `--bg-sidebar`, meet the thread's `--bg-app` at a `--border-subtle` hairline, drawn by the resizable handle between them at rest, which turns `--border-strong` on hover and drag; the top bar's lower edge is the same hairline. The surface step alone read as an edge that was missing. A collapsed sidebar takes its line with it.
+- The sidebar and the side panel, on `--bg-sidebar`, meet the thread's `--bg-app` at a `--border-subtle` hairline, drawn by the resizable handle between them, which keeps its color; on hover a grip, 4 by 48 px and fully rounded, shows centered on the line in `--muted-foreground`, and while pressed or dragged it turns `--foreground`, fading over `--duration-fast`; the top bar's lower edge is the same hairline. The surface step alone read as an edge that was missing. A collapsed sidebar takes its line with it.
 - Borders are drawn as an inset ring (`box-shadow`, Tailwind's `ring-inset`). A ring takes no layout space, follows the radius exactly, and can change on hover without moving anything.
 - `--hairline` is 1 px, 0.5 px on 2× displays and 1/3 px on 3× displays (`@media (resolution >= 2x)`), so lines are as fine as the display allows.
 

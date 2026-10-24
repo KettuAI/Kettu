@@ -104,7 +104,10 @@ export function SidePanelArea({
         </ResizablePanel>
         {pane && (
           <>
-            <ResizableHandle className={cn('bg-border-soft', maximized && 'pointer-events-none')} />
+            <ResizableHandle
+              withHandle={!maximized}
+              className={cn('bg-border-soft', maximized && 'pointer-events-none')}
+            />
             <ResizablePanel
               key={pane}
               {...PANES[pane]}

@@ -160,6 +160,7 @@ function Workbench() {
       {/* The sidebar's edge, as the reference's soft hairline. Collapsed, the handle takes no
           width, so nothing shows at the window's edge. */}
       <ResizableHandle
+        withHandle={!collapsed}
         className={cn('bg-border-soft', collapsed && 'pointer-events-none w-0')}
         onPointerDown={() => sliding.current && endSlide()}
       />
