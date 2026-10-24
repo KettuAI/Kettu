@@ -131,7 +131,7 @@ Four levels, from quiet to loud. A signal takes the lowest level that is true.
 - **The agent's names stand.** Models, reasoning levels and commands show as the agent names them; OverBench does not relabel them ([problem 4](../milestones/m0-feedback.md#4-the-model-menu-does-not-look-polished)).
 - **Before it acts, show what it will do.** A permission request shows the exact command or change and answers with one key.
 - **Stop is always one key away** while a turn runs: `Esc`, or the Stop button.
-- **Never spend the user's quota unasked.** What OverBench reads for display, such as usage, limits and titles, comes from what costs no model call.
+- **Never spend the user's quota unasked.** What OverBench reads for display, such as usage, limits and titles, comes from what costs no model call. The one exception, accepted on 2026-10-23 ([#143](https://github.com/overbench/overbench/issues/143)), is the title Claude Code's adapter may ask for after a long `/usage` report ([reading the limits from `/usage`](./session-model.md#reading-the-limits-from-usage)).
 - **Output streams.** The agent's text and tool calls appear as they arrive, never held back until the turn ends.
 
 ## Platforms
