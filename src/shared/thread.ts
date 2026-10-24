@@ -435,7 +435,7 @@ const SENT_AS = new Set(['image', 'embedded', 'linked', 'inline'])
 const isStringOrNull = (value: unknown): value is string | null =>
   value === null || typeof value === 'string'
 
-function isAttachment(value: unknown): value is Attachment {
+export function isAttachment(value: unknown): value is Attachment {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&

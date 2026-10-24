@@ -65,7 +65,9 @@ export function MentionFooter({ list }: { list: MentionList }) {
   const { t } = useTranslation('composer')
   const { files } = list
   let line
-  if (!files) {
+  if (list.noProject) {
+    line = t('mentions.chooseProject')
+  } else if (!files) {
     line = (
       <span className="flex items-center gap-2">
         <Spinner className="size-3.5" />

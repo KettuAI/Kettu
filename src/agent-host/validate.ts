@@ -20,6 +20,8 @@ const URL_CHARS = 2_048
 const PROMPT_ITEMS = 1_000
 // Sessions with a draft, which the one-time removal keeps.
 const KEPT_SESSIONS = 100_000
+// Attachments the drafts name, checked once at launch.
+const HELD_ATTACHMENTS = 100_000
 const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
   'brew',
   'script',
@@ -612,6 +614,20 @@ export function createValidators(platform: Platform): Validators {
       return { id: string(o, 'id', ID_CHARS), thumb: thumbnail(o), scaled }
     },
     'attachments.remove': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
+    'attachments.held': (params) => {
+      const ids = fields(params).ids
+      if (!Array.isArray(ids) || ids.length > HELD_ATTACHMENTS) {
+        throw invalidParams(`ids must be an array of at most ${HELD_ATTACHMENTS} attachment ids`)
+      }
+      return {
+        ids: ids.map((id: unknown, index) => {
+          if (typeof id !== 'string' || id.length === 0 || id.length > ID_CHARS) {
+            throw invalidParams(`ids[${index}] must be an attachment id`)
+          }
+          return id
+        }),
+      }
+    },
     'files.list': project,
     'files.read': (params) => {
       const o = fields(params)

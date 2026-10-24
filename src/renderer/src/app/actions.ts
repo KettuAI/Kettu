@@ -1,5 +1,5 @@
 import { REMOVED_WHILE_STARTING, type SessionSummary } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, UserContent } from '@shared/thread'
 import {
   clearDraft,
   draftedSessions,
@@ -8,10 +8,15 @@ import {
   readDraft,
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
-import { dropAttachments } from '@renderer/features/session/composer/attachments'
+import {
+  contentAttachments,
+  dropAttachments,
+  restoreAttachments,
+} from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { clearPicks, noteStarting, type OptionValues } from '@renderer/stores/agent-options'
+import { draftAttachments, setDraftAttachments } from '@renderer/stores/attachments'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -25,7 +30,7 @@ export interface PendingSession {
   projectPath: string | null // null: No project, whose folder the host makes
   parentId: string | null
   /** The first message, from the New session screen, sent once the session exists. */
-  prompt: string | null
+  prompt: UserContent[] | null
   /** The config values New session chose, set once the session exists. */
   options: OptionValues | null
   error: { message: string; code: string | null } | null
@@ -80,6 +85,23 @@ function newSessionStart(
   ]
 }
 
+const promptText = (content: readonly UserContent[]): string =>
+  content.flatMap((c) => (c.type === 'text' ? [c.text] : [])).join('\n\n')
+
+/** Whether New session's draft still is this first message, its text and its attachments. */
+function draftIsPrompt(prompt: readonly UserContent[]): boolean {
+  const ids = contentAttachments(prompt).map((a) => a.id)
+  const items = draftAttachments(NEW_SESSION_DRAFT)
+  return (
+    readDraft(NEW_SESSION_DRAFT).trim() === promptText(prompt).trim() &&
+    items.length === ids.length &&
+    items.every((item, i) => item.attachment?.id === ids[i])
+  )
+}
+
+const draftIsEmpty = () =>
+  !readDraft(NEW_SESSION_DRAFT).trim() && draftAttachments(NEW_SESSION_DRAFT).length === 0
+
 function removedWhileStarting(error: unknown): boolean {
   const data = (error as { data?: { reason?: unknown } } | null)?.data
   return errorCode(error) === 'not_found' && data?.reason === REMOVED_WHILE_STARTING
@@ -90,7 +112,7 @@ export async function createSession(
   agentId: AgentId,
   projectPath: string | null,
   parentId: string | null = null,
-  prompt: string | null = null,
+  prompt: UserContent[] | null = null,
   options: OptionValues | null = null,
 ): Promise<void> {
   usePendingSession.setState({
@@ -103,15 +125,18 @@ export async function createSession(
   preloadRenderers()
   // The host sends the first message once the session has started, also after a sign-in. It
   // leaves the draft as it goes, so a window reloaded meanwhile does not offer it again; a retry
-  // leaves alone a draft written since.
-  if (prompt !== null && readDraft(NEW_SESSION_DRAFT) === prompt) clearDraft(NEW_SESSION_DRAFT)
+  // leaves alone a draft written since. The host keeps the attachments' records for the message.
+  if (prompt !== null && draftIsPrompt(prompt)) {
+    clearDraft(NEW_SESSION_DRAFT)
+    setDraftAttachments(NEW_SESSION_DRAFT, [])
+  }
   try {
     const summary = await host('sessions.create', {
       agentId,
       projectPath,
       ...(parentId ? { parentId } : {}),
       ...(options && Object.keys(options).length > 0 ? { options } : {}),
-      ...(prompt !== null ? { prompt: [{ type: 'text', text: prompt }] } : {}),
+      ...(prompt !== null ? { prompt } : {}),
     })
     // The host now remembers what carries over; the rest starts afresh next time.
     if (options) clearPicks(agentId)
@@ -126,8 +151,9 @@ export async function createSession(
   } catch (error) {
     // Back to New session's draft, unless something else was written there meanwhile, and stored
     // at once, since a quit can close the window before a later write.
-    if (prompt !== null && !readDraft(NEW_SESSION_DRAFT).trim()) {
-      writeDraft(NEW_SESSION_DRAFT, prompt)
+    if (prompt !== null && draftIsEmpty()) {
+      writeDraft(NEW_SESSION_DRAFT, promptText(prompt))
+      restoreAttachments(NEW_SESSION_DRAFT, prompt)
       flushDraft(NEW_SESSION_DRAFT)
     }
     // Deleted, or its project removed, while it started: nothing is left to show.
@@ -158,7 +184,7 @@ export async function createSession(
 export function startNewSession(
   agentId: AgentId,
   projectPath: string | null,
-  prompt: string,
+  prompt: UserContent[],
   options: OptionValues | null,
 ): Promise<void> {
   const { main } = useViewStore.getState()

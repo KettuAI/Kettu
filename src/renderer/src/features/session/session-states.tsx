@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowUpIcon, CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, UserContent } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import { Button } from '@renderer/components/ui/button'
@@ -12,7 +12,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
-import { UserContentView } from './entries/user-content'
+import { SentAttachments, UserContentView } from './entries/user-content'
 
 /**
  * A thread's shape while it loads: a message and a reply at their real sizes and spacing. It fades
@@ -127,20 +127,32 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
  * The first message of a session being created, as its thread will show it, with what the session
  * waits for under it, so a send shows at once.
  */
-export function FirstMessage({ agentId, text }: { agentId: AgentId; text: string }) {
+export function FirstMessage({ agentId, content }: { agentId: AgentId; content: UserContent[] }) {
   const { t } = useTranslation('session')
   const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
   const installing = useAgentsStore((s) => s.byId[agentId]?.state === 'installing')
+  const attachments = content.flatMap((c) =>
+    c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
+  )
+  const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
     <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
       <div className="mx-auto flex w-full max-w-thread flex-col px-6 pt-5">
-        <Message align="end">
-          <Bubble variant="muted" className="max-w-[85%]">
-            <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
-              <UserContentView content={[{ type: 'text', text }]} />
-            </BubbleContent>
-          </Bubble>
-        </Message>
+        {/* As the thread shows a user entry, so nothing moves when the session takes over. */}
+        {attachments.length > 0 && (
+          <div className="flex w-full justify-end pb-1">
+            <SentAttachments sessionId={null} attachments={attachments} />
+          </div>
+        )}
+        {rest.length > 0 && (
+          <Message align="end">
+            <Bubble variant="muted" className="max-w-[85%]">
+              <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
+                <UserContentView content={rest} />
+              </BubbleContent>
+            </Bubble>
+          </Message>
+        )}
         <div role="status" className="flex flex-col gap-0.5 pt-2.5">
           <p className="text-prose text-muted-foreground">
             <span className="shimmer">

@@ -520,5 +520,8 @@ describe('attachments', () => {
     rejects(() => posix['sessions.blob']({ hash }))
     expect(posix['attachments.read']({ id: 'a1', more: 1 })).toEqual({ id: 'a1' })
     rejects(() => posix['attachments.remove']({}))
+    expect(posix['attachments.held']({ ids: ['a1', 'a2'] })).toEqual({ ids: ['a1', 'a2'] })
+    rejects(() => posix['attachments.held']({ ids: 'a1' }))
+    rejects(() => posix['attachments.held']({ ids: ['a1', ''] }))
   })
 })

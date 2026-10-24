@@ -96,6 +96,8 @@
     "adding": "Adding…",
     "removeFailed": "Remove the attachments that could not be added",
     "cannotRead": "Can't be read",
+    "unavailable": "No longer available",
+    "unavailableLong": "The copy kept for this draft is gone. Remove it and add it again.",
     "imageTooLarge": "This image is too large to send, even scaled down",
     "cannotOpen": "This image can't be opened.",
     "sentAsImage": "Sent as an image",
@@ -121,13 +123,15 @@
     "dropTitle": "Drop to attach",
     "dropHint": "Files, photos or folders · up to 20",
     "slashNeedsEmpty": "In an empty message",
-    "notOnDisk": "It isn't a file on disk, so it can't be attached."
+    "notOnDisk": "It isn't a file on disk, so it can't be attached.",
+    "theAgent": "The agent"
   },
   "mentions": {
     "label": "Files and folders",
     "used": "Used in this session",
     "toSearch_one": "Type to search {{count, number}} file and its folders",
     "toSearch_other": "Type to search {{count, number}} files and their folders",
-    "loading": "Listing the project's files…"
+    "loading": "Listing the project's files…",
+    "chooseProject": "Choose a project to mention its files"
   }
 }

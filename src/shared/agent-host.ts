@@ -441,6 +441,8 @@ export interface HostContract {
     result: Attachment
   }
   'attachments.remove': { params: { id: string }; result: void }
+  // The ids of these the host still holds, for the drafts that name them; each is kept from now.
+  'attachments.held': { params: { ids: string[] }; result: string[] }
   'files.list': { params: { projectPath: string }; result: FileList }
   'files.read': { params: { projectPath: string; path: string }; result: FileContent }
   'files.search': { params: { projectPath: string; query: string }; result: FileSearch }
@@ -562,6 +564,7 @@ export const HOST_METHODS = [
   'attachments.read',
   'attachments.update',
   'attachments.remove',
+  'attachments.held',
   'files.list',
   'files.read',
   'files.search',

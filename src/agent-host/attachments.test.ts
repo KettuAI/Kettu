@@ -149,6 +149,22 @@ describe('Attachments', () => {
     expect(file.attachments.map((r: AttachmentRecord) => r.id)).toEqual([fresh.id])
   })
 
+  it('keeps the records a draft names past 30 days from when they were added', async () => {
+    const attachments = store()
+    const named = await attachments.add(image(), null)
+    const unnamed = await attachments.add(image(new Uint8Array([9, 9]), 'Image 2'), null)
+    now += 20 * DAY
+    expect(attachments.held([named.id, 'gone'])).toEqual([named.id])
+    await attachments.flush()
+
+    now += 20 * DAY
+    const reopened = store()
+    await reopened.load()
+    expect(reopened.view(named.id).name).toBe('Image 1')
+    expect(() => reopened.get(unnamed.id)).toThrow()
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([`${sha(PNG)}.png`])
+  })
+
   it('starts with no attachments folder', async () => {
     await mkdir(path.join(dir, 'state'), { recursive: true })
     const attachments = store()
@@ -371,9 +387,11 @@ describe('parseAttachmentsFile', () => {
           record,
           { ...record, id: 'a2', hash: '../escape' },
           { ...record, type: 'pdf' },
+          { ...record, id: 'a3', heldAt: 9 },
+          { ...record, id: 'a4', heldAt: 'later' },
         ],
       }),
-    ).toEqual({ version: 1, attachments: [record] })
+    ).toEqual({ version: 1, attachments: [record, { ...record, id: 'a3', heldAt: 9 }] })
     expect(parseAttachmentsFile({ attachments: {} })).toBe('attachments is not a list')
   })
 

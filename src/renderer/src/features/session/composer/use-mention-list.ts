@@ -10,6 +10,8 @@ export interface MentionList {
   /** Nothing is typed, so the rows are the files the session used. */
   used: boolean
   files: ProjectFiles | undefined
+  /** No project is chosen yet, as on New session, so there are no files to mention. */
+  noProject: boolean
 }
 
 const NO_PATHS: string[] = []
@@ -40,10 +42,10 @@ function usedIn(
  */
 export function useMentionList(
   sessionId: string,
-  projectPath: string,
+  projectPath: string | null,
   query: string | null,
 ): MentionList {
-  const active = query !== null
+  const active = query !== null && projectPath !== null
   useEffect(() => {
     if (active) void loadFiles(projectPath)
   }, [active, projectPath])
@@ -53,7 +55,7 @@ export function useMentionList(
   const typed = useDeferredValue(query)
   const used = useThreadsStore(
     useShallow((s) =>
-      typed === '' && files
+      typed === '' && files && projectPath
         ? usedIn(s.replicas[sessionId]?.state, projectPath, files.known)
         : NO_PATHS,
     ),
@@ -67,10 +69,11 @@ export function useMentionList(
     [used],
   )
   // The same object while nothing changed, so the composer can tell when the list did.
+  const noProject = projectPath === null
   return useMemo(() => {
-    if (typed === null) return { rows: NO_ROWS, used: false, files }
+    if (typed === null || noProject) return { rows: NO_ROWS, used: false, files, noProject }
     return typed === ''
-      ? { rows: usedRows, used: true, files }
-      : { rows: matched, used: false, files }
-  }, [typed, usedRows, matched, files])
+      ? { rows: usedRows, used: true, files, noProject }
+      : { rows: matched, used: false, files, noProject }
+  }, [typed, usedRows, matched, files, noProject])
 }
