@@ -257,6 +257,46 @@ A version's HTML is stored once per hash, so restoring a version or writing the 
 
 **Sharing later.** Ids need no server, and versions are immutable and named by their content, so a later sync can carry them as they are. Who may see or change a shared artifact needs accounts, which OverBench does not have, and is designed together with sharing.
 
+### Session options
+
+> Designed on 2026-10-24 for [issue #218](https://github.com/overbench/overbench/issues/218), in the direction the maintainer chose: show what the agent really reports, whatever it costs. It replaces the options read once and kept, decided on 2026-10-22. Details: [config options](./design/session-model.md#config-options) and [prepared sessions](./design/session-model.md#prepared-sessions).
+
+A session's options are its model, the model's options, its reasoning level, its mode and the agent's other settings. The agent owns them: it reads them from its own configuration, such as `~/.codex/config.toml`, a project's `.claude/settings.json` or a provider that a tool outside OverBench set up, and ACP lists them only in the answer to a request that opens a session (`session/new`, `session/load`, `session/resume`, `session/fork`). So New session can show the truth only from a session, and it gets one before the first message: a **prepared session**, the real session that the first send will use, opened in the folder it will work in.
+
+**Model**
+
+| Object            | Holds                                                                                                                                                                                                                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prepared session  | A live session not yet in the index: its agent, its folder, the parent of a sub-session, the config its agent reports, and when it was opened. At most one per window, for the agent and project New session shows there                                                                            |
+| Options cache     | Per agent, in `state/agent-options.json`: the options the agent last listed, from any session's answer; the agent's own values from its last `session/new` in each folder; the levels each model offered. It paints the menu before a prepared session answers, and lists the agents that have none |
+| Remembered values | Per agent: the model, model options and level the user last chose in OverBench, each with the time it was chosen                                                                                                                                                                                    |
+| Start notice      | A line New session shows while a prepared session differs from what the user chose: a value the agent no longer offers or refused, or a remembered value that a change outside OverBench replaced                                                                                                   |
+
+**Interface**
+
+- `sessions.prepare` opens a prepared session for an agent and a project, or for No project, and answers with its summary once `session/new` has answered and the remembered values are set. `sessions.discard` removes it. `sessions.create` with `preparedId` adopts it with the first message, so the message goes out at once, as the session's first turn.
+- A prepared session is watched like any session: its config arrives as patches, and `sessions.setConfigOption` sets a model, a level or a switch on it at once, through the agent.
+- `agents.options` and `agent.options` still carry the cache, for the menu's first paint and for the agents that are not chosen.
+
+**Rules**
+
+1. **What New session shows for the chosen agent is what its prepared session reports.** The cache stands in only until that session answers, and the menu then shows the answer, whatever the cache said.
+2. **A choice is made on the session itself.** Choosing a model, a level or a switch sets it on the prepared session through the agent, so what the agent refuses or does not offer shows before the first message, never after it.
+3. **The latest change wins.** A remembered value is set on every prepared session, unless the agent's own value for that option in that folder has changed since it was last seen there: then a change outside OverBench came after the user's choice, the remembered value is dropped, and the start notice says so.
+4. **Nothing is set silently instead.** A value that cannot be set, from the menu or remembered, leaves the agent's value in place, and the start notice names both. The sessions that attach again and the forks keep their own [notices](./design/session-model.md#config-options).
+5. **A prepared session never shows unless it is used.** It is not in the index, the sidebar or Recent, takes no title and sends nothing to the model. A discarded one is removed the way a [hidden session](./design/session-model.md#hidden-sessions) is, so the agent keeps nothing of it, and one a crash left behind is removed when its agent next starts.
+6. **It follows the agent's configuration.** It is replaced when the agent's settings change on disk, when it is older than 5 minutes as the agent menu opens, and when the agent restarts, so a change outside OverBench shows within a moment.
+7. **It costs what a session costs, only while it can be used.** It goes 60 s after New session leaves the front of its window and after 30 minutes untouched in front, as an idle session is [released](./design/session-model.md#how-the-host-keeps-sessions), and comes back on the next use of the screen.
+
+**Decisions**, made on 2026-10-24 for #218:
+
+| Question                                                        | Decided                                                                                                                                            | Instead of                                                                                                      |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Where New session's options come from                           | A prepared session, the real session the first message will use, in its own folder                                                                 | The options read once and kept; reading them again in an empty folder on each start and on each settings change |
+| When a remembered value and a change outside OverBench disagree | The later of the two wins                                                                                                                          | The remembered value always; never remembering a model                                                          |
+| A value that cannot be set                                      | A notice on New session, before the first message                                                                                                  | A line in the log                                                                                               |
+| The cost of a prepared session                                  | Accepted: one session of the chosen agent while New session is in use; a Claude Code one runs the user's `SessionStart` hooks, as any session does | Starting no session before the first message, which cannot show the truth                                       |
+
 ## Security
 
 OverBench drives agents that edit files and run commands, so every layer assumes the one next to it can be wrong.
