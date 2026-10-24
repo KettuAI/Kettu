@@ -61,7 +61,7 @@ Four sizes, chosen by context:
 - In a button, an icon sits in the `data-icon="inline-start"` or `"inline-end"` slot, so the padding adjusts. Inline with text, it sits at `vertical-align: -0.125em`.
 - A busy button swaps its icon for a `Spinner` of the same size and keeps its label and width.
 - An icon-only button has an accessible name and a tooltip that gives the name and the shortcut.
-- Menu items carry no icons ([menus](./design-system.md#menus-and-dialogs)); the exceptions are an agent mark and a file's type icon in the composer's `@` list.
+- A menu item that runs an action leads with its icon from the vocabulary below, at 14 px, so a long menu scans by shape ([menus](./design-system.md#menus-and-dialogs)). An item that picks a value, such as a model, a mode, a reasoning level, a project or a sort order, shows none; an agent shows its mark, and a file in the composer's `@` list its type icon. Decided 2026-10-24 ([#201](https://github.com/overbench/overbench/issues/201)).
 
 ### Vocabulary
 
@@ -125,6 +125,14 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Zoom to fit                                                       | `Scan`                   | `Fullscreen`, `Expand`            |
 | Previous page beside a counter, previous item in the media viewer | `ChevronLeft`            | `ArrowLeft`                       |
 | Next page beside a counter, next item in the media viewer         | `ChevronRight`           | `ArrowRight`                      |
+| Paste                                                             | `ClipboardPaste`         | `Clipboard`                       |
+| Select all                                                        | `TextSelect`             |                                   |
+| Clear the terminal                                                | `Eraser`                 | `Trash`                           |
+| Ask the agent about a selection                                   | `MessageSquareText`      |                                   |
+| A session, open a session                                         | `MessageSquare`          | `MessagesSquare`                  |
+| Import sessions an agent already has                              | `History`                | `Import`                          |
+| Mention a file                                                    | `AtSign`                 |                                   |
+| Slash commands                                                    | `Slash`                  | `SquareSlash`                     |
 
 ## Typography
 

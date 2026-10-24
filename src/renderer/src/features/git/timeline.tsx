@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { ArrowDownIcon, ChevronRightIcon } from 'lucide-react'
+import { ArrowDownIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ChangedFile, CommitSummary, GitStatus, LogCommit } from '@shared/git'
 import {
@@ -557,7 +557,10 @@ function CommitPart({
           </HoverCard>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={copyId}>{t('timeline.copyId')}</ContextMenuItem>
+          <ContextMenuItem onClick={copyId}>
+            <CopyIcon />
+            {t('timeline.copyId')}
+          </ContextMenuItem>
           <ContextMenuItem
             onClick={() =>
               void loadCommit(status.projectPath, commit.oid).then(
@@ -566,6 +569,7 @@ function CommitPart({
               )
             }
           >
+            <CopyIcon />
             {t('timeline.copyMessage')}
           </ContextMenuItem>
           {github && commit.pushed && (
@@ -580,6 +584,7 @@ function CommitPart({
                   />
                 }
               >
+                <ExternalLinkIcon />
                 {t('timeline.openOnGitHub')}
               </ContextMenuItem>
             </>

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { PencilIcon, PlusIcon, TrashIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
@@ -49,10 +50,16 @@ export function SessionMenuItems({
   return (
     <>
       <DropdownMenuGroup>
-        <DropdownMenuItem onClick={onRename}>{t('row.rename')}</DropdownMenuItem>
+        <DropdownMenuItem onClick={onRename}>
+          <PencilIcon />
+          {t('row.rename')}
+        </DropdownMenuItem>
         {summary.origin !== 'subagent' && (
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>{t('row.newSubSession')}</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>
+              <PlusIcon />
+              {t('row.newSubSession')}
+            </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {agents.map((agent) => (
                 <DropdownMenuItem
@@ -71,12 +78,14 @@ export function SessionMenuItems({
           </DropdownMenuSub>
         )}
         <DropdownMenuItem onClick={() => void closeSession(summary.id)}>
+          <XIcon />
           {t('common:actions.close')}
         </DropdownMenuItem>
       </DropdownMenuGroup>
       <DropdownMenuSeparator />
       <DropdownMenuGroup>
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
+          <TrashIcon />
           {t('row.deleteMenu')}
         </DropdownMenuItem>
       </DropdownMenuGroup>

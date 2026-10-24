@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageSquareTextIcon, RotateCwIcon } from 'lucide-react'
+import {
+  ClipboardPasteIcon,
+  CopyIcon,
+  EraserIcon,
+  MessageSquareTextIcon,
+  RotateCwIcon,
+  TextSelectIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { onAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
@@ -147,17 +154,21 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
             disabled={!instance?.term.hasSelection()}
             onClick={() => instance && void copySelection(instance)}
           >
+            <CopyIcon />
             {t('common:actions.copy')}
             <ContextMenuShortcut>{isMac ? '⌘C' : 'Ctrl+Shift+C'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance && void pasteClipboard(instance)}>
+            <ClipboardPasteIcon />
             {t('view.paste')}
             <ContextMenuShortcut>{isMac ? '⌘V' : 'Ctrl+Shift+V'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance?.term.selectAll()}>
+            <TextSelectIcon />
             {t('view.selectAll')}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance?.term.clear()}>
+            <EraserIcon />
             {t('view.clear')}
           </ContextMenuItem>
           <ContextMenuSeparator />
@@ -165,6 +176,7 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
             disabled={!instance?.term.hasSelection()}
             onClick={() => instance && askAboutSelection(instance)}
           >
+            <MessageSquareTextIcon />
             {ask}
             <ContextMenuShortcut>{formatShortcut('Mod+L')}</ContextMenuShortcut>
           </ContextMenuItem>

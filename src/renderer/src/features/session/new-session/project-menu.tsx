@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { FolderIcon } from 'lucide-react'
+import { FolderIcon, PlusIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
 import { addProjectFromDialog } from '@renderer/app/actions'
@@ -163,6 +163,7 @@ export function ProjectMenu({
                 <ComboboxCollection>
                   {(value: string) => (
                     <ComboboxItem key={value} value={value}>
+                      <PlusIcon className="size-3.5 text-icon" />
                       {t('newSession.openProject')}
                     </ComboboxItem>
                   )}
