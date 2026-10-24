@@ -31,7 +31,7 @@ export function AgentStateLine({ status, className }: { status: AgentStatus; cla
     case 'sign-in':
       return (
         <span className={cn(base, 'text-secondary')}>
-          <span aria-hidden className="size-1.5 rounded-full bg-current text-tertiary" />
+          <span aria-hidden className="size-1.5 rounded-full bg-current text-warning" />
           {t('state.signIn')}
         </span>
       )

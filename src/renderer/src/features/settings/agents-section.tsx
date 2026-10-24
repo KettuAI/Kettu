@@ -783,7 +783,10 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
     <>
       <span
         aria-hidden
-        className="mr-1.5 inline-block size-1.5 rounded-full bg-current align-[0.1em] text-tertiary"
+        className={cn(
+          'mr-1.5 inline-block size-1.5 rounded-full bg-current align-[0.1em]',
+          status.update ? 'text-info' : 'text-success',
+        )}
       />
       {status.update
         ? t(
