@@ -1,5 +1,4 @@
-// A canvas's pages, found in its markup without running it, and their places on the canvas. See
-// docs/design/artifacts.md#the-canvas-format.
+// A canvas's pages, found in its markup without running it, and their places on the canvas.
 
 import { THUMBNAIL_PAGES, type ThumbnailPage } from '@shared/artifacts'
 

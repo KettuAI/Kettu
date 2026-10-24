@@ -5,7 +5,7 @@ export const TOKEN_FILE = 'src/renderer/src/styles/tokens.css'
 
 /** @param {string} match */
 export const colorLiteralMessage = (match) =>
-  `Color literal '${match}': colors live in ${TOKEN_FILE} (see docs/design/design-system.md#color)`
+  `Color literal '${match}': colors live in ${TOKEN_FILE}`
 
 // Every CSS named color except transparent and the keywords (currentcolor, inherit, ...).
 const NAMED_COLORS = `aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond

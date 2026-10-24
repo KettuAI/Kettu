@@ -1,6 +1,5 @@
 // Card thumbnails: each version rendered once in an offscreen window, in a session of its own with
-// the window session's protocol and guards, and kept on disk named by its hash. See
-// docs/design/artifacts.md#thumbnails.
+// the window session's protocol and guards, and kept on disk named by its hash.
 
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'

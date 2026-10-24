@@ -143,7 +143,6 @@ export type GitEntry =
 /**
  * A write to the artifacts service, added by the host to the calling session's thread. Writes to
  * one artifact in one turn share an entry; a deletion stands alone.
- * See docs/design/artifacts.md#opening-from-a-session.
  */
 export interface ArtifactEntry {
   kind: 'artifact'

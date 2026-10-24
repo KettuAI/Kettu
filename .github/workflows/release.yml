@@ -1,10 +1,9 @@
 name: Release
 
-# The full check before a release (docs/workflow.md#6-release): every installer builds and tests on
-# its own runner, and the app starts on each platform. With a version, a run on main then uploads
-# everything to a draft release of that commit, and publishing the draft creates the tag. Without
-# one it touches no release, which checks a branch, or new macOS signing secrets before a release
-# depends on them.
+# The full check before a release: every installer builds and tests on its own runner, and the app
+# starts on each platform. With a version, a run on main then uploads everything to a draft release
+# of that commit, and publishing the draft creates the tag. Without one it touches no release, which
+# checks a branch, or new macOS signing secrets before a release depends on them.
 on:
   workflow_dispatch:
     inputs:
@@ -58,8 +57,7 @@ jobs:
           fi
 
   # Decides once per run: macOS is signed with the Developer ID when every signing secret is set,
-  # and stays ad-hoc signed when none is; a half-configured set fails the run here. See
-  # docs/design/updates.md#macos-signing.
+  # and stays ad-hoc signed when none is; a half-configured set fails the run here.
   mac-signing:
     name: macOS signing
     runs-on: ubuntu-24.04

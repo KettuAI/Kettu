@@ -1,5 +1,5 @@
 // The canvas's camera: where its pages show on screen, how it zooms and fits, which pages stay
-// live, and which labels have room. See docs/design/artifacts.md#canvas.
+// live, and which labels have room.
 
 import { ROW_GAP, type PlacedPage } from './canvas'
 

@@ -1,6 +1,6 @@
-// Builds the app icons and the brand images from src/shared/brand.ts, as docs/design/brand.md
-// specifies them, with `pnpm exec electron tools/brand/build.mjs`; Chromium draws every size from the
-// vector source. No dependencies.
+// Builds the app icons and the README's lockups from src/shared/brand.ts, with
+// `pnpm exec electron tools/brand/build.mjs`; Chromium draws every size from the vector source. No
+// dependencies.
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -130,13 +130,6 @@ function windowsIcon(size) {
   return svg(size, size, body)
 }
 
-/** The 1280 x 640 GitHub and website preview: the horizontal lockup on paper. */
-function socialPreview() {
-  const l = lockup('horizontal', 84, INK)
-  const body = `<rect width="1280" height="640" fill="${PAPER}"/><g transform="translate(${n((1280 - l.width) / 2)} ${n((640 - l.height) / 2)})">${l.body}</g>`
-  return svg(1280, 640, body)
-}
-
 let window
 async function render(svgText, width, height) {
   window.setContentSize(width, height)
@@ -181,20 +174,13 @@ async function main() {
     webPreferences: { offscreen: true },
   })
 
-  const brand = join(root, 'docs', 'brand')
+  const assets = join(root, 'assets')
   const build = join(root, 'build')
-  mkdirSync(brand, { recursive: true })
 
-  // Vector masters.
+  // The README's lockups, ink or paper with the reader's color scheme.
   const write = (path, text) => writeFileSync(path, `${text}\n`)
-  write(join(brand, 'mark.svg'), svg(80, 52, mark(0, 0, 80, INK, 'standard')))
-  write(join(brand, 'mark-small.svg'), svg(80, 52, mark(0, 0, 80, INK, 'small')))
-  write(join(brand, 'lockup-horizontal.svg'), lockupSvg('horizontal', 100, INK))
-  write(join(brand, 'lockup-horizontal-dark.svg'), lockupSvg('horizontal', 100, PAPER))
-  write(join(brand, 'lockup-vertical.svg'), lockupSvg('vertical', 100, INK))
-  write(join(brand, 'lockup-vertical-dark.svg'), lockupSvg('vertical', 100, PAPER))
-  write(join(brand, 'icon-macos.svg'), macIcon(1024))
-  write(join(brand, 'icon-windows.svg'), windowsIcon(256))
+  write(join(assets, 'lockup-horizontal.svg'), lockupSvg('horizontal', 100, INK))
+  write(join(assets, 'lockup-horizontal-dark.svg'), lockupSvg('horizontal', 100, PAPER))
 
   iconComposer(join(build, 'icon.icon'))
 
@@ -207,8 +193,6 @@ async function main() {
     pngs.push({ size, data: await render(windowsIcon(size), size, size) })
   }
   writeFileSync(join(build, 'icon.ico'), ico(pngs))
-
-  writeFileSync(join(brand, 'social-preview.png'), await render(socialPreview(), 1280, 640))
 }
 
 app.commandLine.appendSwitch('force-device-scale-factor', '1')

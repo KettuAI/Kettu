@@ -39,14 +39,14 @@ describe('decide', () => {
 
   it('fails on a certificate without its password, and the reverse', () => {
     expect(failure(['CSC_LINK', ...API_KEY])).toBe(
-      'macOS signing is half configured: CSC_LINK is set, but CSC_KEY_PASSWORD is not. Set all of the certificate (CSC_LINK and CSC_KEY_PASSWORD), or none of it. See docs/design/updates.md#macos-signing.',
+      'macOS signing is half configured: CSC_LINK is set, but CSC_KEY_PASSWORD is not. Set all of the certificate (CSC_LINK and CSC_KEY_PASSWORD), or none of it.',
     )
     expect(failure(['CSC_KEY_PASSWORD'])).toContain('CSC_KEY_PASSWORD is set, but CSC_LINK is not')
   })
 
   it('fails on a certificate with nothing to notarize with', () => {
     expect(failure(CERTIFICATE)).toBe(
-      'macOS signing is half configured: the certificate (CSC_LINK and CSC_KEY_PASSWORD) is set, but nothing to notarize with. Set the App Store Connect API key (APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER) or the Apple ID (APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID). See docs/design/updates.md#macos-signing.',
+      'macOS signing is half configured: the certificate (CSC_LINK and CSC_KEY_PASSWORD) is set, but nothing to notarize with. Set the App Store Connect API key (APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER) or the Apple ID (APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID).',
     )
   })
 

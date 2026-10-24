@@ -1,6 +1,6 @@
 // @ts-check
 // Decides whether a Release run signs macOS with the Developer ID, from which signing secrets are
-// set; docs/design/updates.md#macos-signing has the rules. The workflow passes only whether each
+// set. The workflow passes only whether each
 // secret is set, as HAS_<NAME>=true or false, never its value. Run it the same way:
 //
 //   HAS_CSC_LINK=true HAS_CSC_KEY_PASSWORD=false ... node tools/workflow/mac-signing.mjs
@@ -35,7 +35,6 @@ export const SETS = {
   },
 }
 export const SECRETS = Object.values(SETS).flatMap((set) => set.secrets)
-const HELP = 'See docs/design/updates.md#macos-signing.'
 
 /** @param {string[]} names */
 function list(names) {
@@ -68,7 +67,7 @@ export function decide(present) {
     const missing = set.secrets.filter((name) => !have.has(name))
     if (given.length > 0 && missing.length > 0) {
       return {
-        failure: `macOS signing is half configured: ${isAre(given)} set, but ${isAre(missing)} not. Set all of ${label(set.name)}, or none of it. ${HELP}`,
+        failure: `macOS signing is half configured: ${isAre(given)} set, but ${isAre(missing)} not. Set all of ${label(set.name)}, or none of it.`,
       }
     }
   }
@@ -78,13 +77,13 @@ export function decide(present) {
   if (!certificate && !apiKey && !appleId) return { signed: false }
   if (!certificate) {
     return {
-      failure: `macOS signing is half configured: notarization credentials are set, but ${label('certificate')} is not. ${HELP}`,
+      failure: `macOS signing is half configured: notarization credentials are set, but ${label('certificate')} is not.`,
     }
   }
   if (apiKey) return { signed: true, notarize: 'api-key', unused: appleId ? ['apple-id'] : [] }
   if (appleId) return { signed: true, notarize: 'apple-id', unused: [] }
   return {
-    failure: `macOS signing is half configured: ${label('certificate')} is set, but nothing to notarize with. Set ${label('api-key')} or ${label('apple-id')}. ${HELP}`,
+    failure: `macOS signing is half configured: ${label('certificate')} is set, but nothing to notarize with. Set ${label('api-key')} or ${label('apple-id')}.`,
   }
 }
 

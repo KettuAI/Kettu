@@ -1,7 +1,7 @@
 // @ts-check
-// Opens a "Release vX.Y.Z" issue when a trigger in docs/workflow.md#6-release has fired and no
-// release is open. CI runs it on every push to main and once a day; run it the same way, with
-// DRY_RUN=1 to print the decision without opening anything:
+// Opens a "Release vX.Y.Z" issue when a release trigger has fired and no release is open. CI runs
+// it on every push to main and once a day; run it the same way, with DRY_RUN=1 to print the
+// decision without opening anything:
 //
 //   DRY_RUN=1 node tools/workflow/release-check.mjs
 //
@@ -22,7 +22,6 @@ const STALE = 48 * HOUR
 const VERSION = /^v(\d+)\.(\d+)\.(\d+)$/
 const RELEASE_ISSUE = /^Release (v\d+\.\d+\.\d+)$/
 const LIKE_RELEASE_ISSUE = /^release v\d/i
-const STEPS = 'https://github.com/overbench/overbench/blob/main/docs/workflow.md#6-release'
 const ISSUE = { type: 'Task', labels: ['state:ready', 'area:build'] }
 const PAGE = 25
 
@@ -322,7 +321,7 @@ export function issueBody(decision) {
   return [
     ...triggers,
     '',
-    `The version is ${targetText(target)} The steps are in [release](${STEPS}).`,
+    `The version is ${targetText(target)}`,
     '',
     `User-visible changes and reverts ${lastTag ? `since ${lastTag}` : 'so far'}:`,
     '',

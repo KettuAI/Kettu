@@ -1,5 +1,5 @@
 # The macOS build signed with the Developer ID, which the Release workflow uses when the signing
-# secrets are set (docs/design/updates.md#macos-signing). Everything else is electron-builder.yml.
+# secrets are set. Everything else is electron-builder.yml.
 extends: electron-builder.yml
 mac:
   # Squirrel.Mac installs updates from the zip.

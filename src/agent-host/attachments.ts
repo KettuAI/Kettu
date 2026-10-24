@@ -2,7 +2,7 @@
 // paths main granted for picked and dropped files or an `@` mention named, and the image bytes
 // they were read as or the renderer handed over in attachments/, named by SHA-256 and extension,
 // until a prompt sends them or the user removes them; and in attachments/sent/, the copies that
-// links sent to an agent point to. See docs/design/session-model.md#where-the-bytes-live.
+// links sent to an agent point to.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readdir, readFile, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises'

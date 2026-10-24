@@ -1,5 +1,4 @@
-// Images that name local files: their spaces before parsing, their URLs after. See
-// docs/design/media.md#spaces-in-a-path.
+// Images that name local files: their spaces before parsing, their URLs after.
 
 interface MdNode {
   type: string

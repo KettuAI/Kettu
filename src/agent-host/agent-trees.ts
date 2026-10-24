@@ -27,7 +27,7 @@ export interface AgentTreesOptions {
 }
 
 // Main kills the host 6 s after `host:shutdown`, and the stops before `close` can take a listing,
-// the 2 s EOF wait and a taskkill: docs/design/agent-host.md has the sum.
+// the 2 s EOF wait and a taskkill: the longest quit adds up to 5.25 s.
 const CLOSE_WAIT_MS = 1_250
 
 interface Running {

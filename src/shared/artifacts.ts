@@ -1,4 +1,4 @@
-// Artifacts, as the agent host serves them to the interface. See docs/design/artifacts.md.
+// Artifacts, as the agent host serves them to the interface.
 
 /** `art_` and a ULID: 26 characters of Crockford's base32, the first ten the creation time. */
 export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/

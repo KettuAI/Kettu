@@ -2,8 +2,8 @@
 
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/brand/lockup-horizontal-dark.svg">
-    <img src="./docs/brand/lockup-horizontal.svg" alt="OverBench" width="300">
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/lockup-horizontal-dark.svg">
+    <img src="./assets/lockup-horizontal.svg" alt="OverBench" width="300">
   </picture>
 </h1>
 
@@ -24,8 +24,8 @@ with readable threads, clear approvals, git and a terminal beside every session.
 </div>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/images/screenshot-dark.webp">
-  <img src="./docs/images/screenshot-light.webp" alt="OverBench showing a Claude Code session that fixed a bug and asks to run the tests, with Codex and opencode sessions in the sidebar">
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshot-dark.webp">
+  <img src="./assets/screenshot-light.webp" alt="OverBench showing a Claude Code session that fixed a bug and asks to run the tests, with Codex and opencode sessions in the sidebar">
 </picture>
 
 > [!NOTE]

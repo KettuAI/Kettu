@@ -34,7 +34,7 @@ mac:
     - dmg
   entitlementsInherit: build/entitlements.mac.plist
   # Ad-hoc signing, for local builds and releases without the signing secrets; a Developer ID
-  # build uses electron-builder.mac-signed.yml (docs/design/updates.md#macos-signing). Left
+  # build uses electron-builder.mac-signed.yml. Left
   # unsigned, a downloaded build is reported as damaged; an ad-hoc signature keeps the bundle
   # valid, so Gatekeeper offers Open Anyway instead. The hardened runtime would refuse to load the
   # ad-hoc signed Electron framework (no Team ID), so it is on only with the Developer ID.

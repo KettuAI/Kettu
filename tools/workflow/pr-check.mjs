@@ -1,6 +1,7 @@
 // @ts-check
-// Checks a pull request's title and description against docs/workflow.md#pull-requests. CI passes
-// them in PR_TITLE and PR_BODY; run it the same way to check a pull request before opening it:
+// Checks a pull request's title and description against the Git conventions in AGENTS.md. CI
+// passes them in PR_TITLE and PR_BODY; run it the same way to check a pull request before opening
+// it:
 //
 //   PR_TITLE='fix(ui): close the model menu' PR_BODY='Closes #12' node tools/workflow/pr-check.mjs
 //

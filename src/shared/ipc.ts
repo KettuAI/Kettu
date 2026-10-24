@@ -37,7 +37,7 @@ export interface QuitRequest {
   unsaved: UnsavedFile[]
 }
 
-/** What a perf run (--overbench-perf) reads from main; see docs/design/testing.md. */
+/** What a perf run (--overbench-perf) reads from main. */
 export interface PerfMetrics {
   launchToInteractiveMs: number | null
   /** From `app.getAppMetrics()`; a utility process is named by the serviceName it was forked with. */

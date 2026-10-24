@@ -1,5 +1,5 @@
 // What a write to the artifacts service puts in the calling session's thread, and how those
-// entries outlive a replay. See docs/design/artifacts.md#opening-from-a-session.
+// entries outlive a replay.
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ArtifactAction, ArtifactEntry, Patch, ThreadEntry, ThreadState } from '@shared/thread'
