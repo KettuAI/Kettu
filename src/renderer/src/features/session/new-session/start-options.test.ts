@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentOptions, AgentStatus } from '@shared/agent-host'
+import type { AgentCli, AgentCliSource, AgentOptions, AgentStatus } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
 import {
   agentNeed,
@@ -243,6 +243,32 @@ describe('agentNeed', () => {
     const codex = status({ package: adapter(false) })
     expect(agentNeed(codex)).toBe('adapter')
     expect(canStart(codex)).toBe(true)
+  })
+
+  it('sets up a package agent without its adapter on first use when its own CLI runs', () => {
+    const found = { path: '/usr/local/bin/codex', variable: null, problem: null }
+    const cli = (runs: AgentCliSource, version: string | null): AgentCli => ({
+      command: 'codex',
+      prefer: 'installed',
+      runs,
+      active: null,
+      installed: { ...found, version },
+      needsCopy: false,
+      copyMegabytes: 300,
+    })
+    const codex = status({ package: adapter(false), cli: cli('installed', '0.163.0') })
+    expect(agentNeed(codex)).toBe('setup')
+    expect(canStart(codex)).toBe(true)
+    // The copy is to run, so the first start downloads Codex too.
+    expect(agentNeed(status({ package: adapter(false), cli: cli('bundled', '0.163.0') }))).toBe(
+      'adapter',
+    )
+    expect(agentNeed(status({ package: adapter(false), cli: cli('installed', null) }))).toBe(
+      'adapter',
+    )
+    expect(agentNeed(status({ package: adapter(true), cli: cli('installed', '0.163.0') }))).toBe(
+      null,
+    )
   })
 
   it('cannot start an agent missing from PATH or without Node.js', () => {

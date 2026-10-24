@@ -6,16 +6,19 @@ import type { OptionValues } from '@renderer/stores/agent-options'
 /**
  * What an agent needs before New session can start it, by the checks Settings › Agents lists it
  * with. `adapter` is a package agent whose adapter is not installed yet: its first start installs
- * it, so it can still be chosen. `install` cannot be chosen.
+ * it, so it can still be chosen. `setup` is the same while the user's own CLI is to run, so only
+ * the adapter is missing. `install` cannot be chosen.
  */
-export type AgentNeed = 'install' | 'installing' | 'failed' | 'adapter' | 'sign-in' | null
+export type AgentNeed = 'install' | 'installing' | 'failed' | 'adapter' | 'setup' | 'sign-in' | null
 
 export function agentNeed(status: AgentStatus): AgentNeed {
   const r = readiness(status)
   if (r.kind === 'missing') return 'install'
   if (r.kind === 'installing') return 'installing'
   if (r.kind === 'failed') return 'failed'
-  if (!listedInstalled(status)) return 'adapter'
+  if (!listedInstalled(status)) {
+    return status.cli?.runs === 'installed' && status.cli.installed?.version ? 'setup' : 'adapter'
+  }
   return r.kind === 'sign-in' ? 'sign-in' : null
 }
 
