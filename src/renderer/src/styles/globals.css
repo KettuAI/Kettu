@@ -48,6 +48,7 @@
   --background-color-code-inline: var(--bg-code-inline);
   --background-color-code-block: var(--bg-code-block);
   --background-color-scrim: var(--scrim);
+  --background-color-viewer-scrim: var(--viewer-scrim);
   --text-color-primary: var(--text-primary);
   --text-color-secondary: var(--text-secondary);
   --text-color-tertiary: var(--text-tertiary);

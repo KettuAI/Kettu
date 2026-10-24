@@ -564,6 +564,37 @@ describe('project files', () => {
   })
 })
 
+describe('media', () => {
+  it('grants an image outside the project once the thread names it, until the session goes', async () => {
+    const { t, port } = await setup()
+    await port.request('projects.add', { path: t.project })
+    const outside = path.join(t.dir, 'elsewhere', 'a shot.png')
+    await mkdir(path.dirname(outside), { recursive: true })
+    await writeFile(outside, Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'))
+    const created = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    await port.open(created.id)
+    const open = () =>
+      port.request('media.open', { projectPath: t.project, path: outside, sessionId: created.id })
+
+    expect(await open()).toEqual({ kind: 'forbidden' })
+    await port.request('sessions.prompt', {
+      sessionId: created.id,
+      content: [{ type: 'text', text: `Look at ${outside}` }],
+    })
+    expect(await open()).toMatchObject({ kind: 'granted', grant: { mimeType: 'image/png' } })
+    expect(t.sent).toContainEqual({
+      type: 'host:media-grant',
+      grant: expect.objectContaining({ path: await realpath(outside), sessionId: created.id }),
+    })
+
+    await port.request('sessions.delete', { sessionId: created.id })
+    expect(t.sent).toContainEqual({ type: 'host:media-revoke', sessionId: created.id })
+  })
+})
+
 describe('mentioned files', () => {
   it("adds a registered project's file or folder, and nothing outside it", async () => {
     const { t, port } = await setup()

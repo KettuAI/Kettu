@@ -3,12 +3,14 @@ import {
   isValidElement,
   memo,
   useDeferredValue,
+  useMemo,
   useState,
   type ComponentProps,
   type ReactNode,
 } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
+import { ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   defaultComponents,
@@ -31,8 +33,10 @@ import {
 import { FileLink } from '@renderer/features/files/file-link'
 import { useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
+import { LocalImage } from '@renderer/features/session/media/local-image'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
+import { localImageTarget, spacedImages } from './local-images'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
 import { SvgBlock } from './svg-block'
@@ -44,6 +48,7 @@ const plugins = {
 }
 
 const DefaultLink = defaultComponents.a
+const DefaultImage = defaultComponents.img
 
 /** A link: a pull request chip, a project file, or the default link with its safety check. */
 function Link(props: ComponentProps<'a'> & ExtraProps) {
@@ -56,6 +61,28 @@ function Link(props: ComponentProps<'a'> & ExtraProps) {
   // A local path that is not one of the project's files has nowhere to go.
   if (local !== null) return <span title={local}>{props.children}</span>
   return <DefaultLink {...props} />
+}
+
+/**
+ * An image: a local file from the media scheme, a remote one as a link to it, since the CSP
+ * loads nothing remote, or a `data:` or `blob:` picture as it comes. Anything else, such as
+ * `//host/x.png`, would resolve against the page, so it stays text.
+ */
+function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
+  const src = typeof props.src === 'string' ? props.src : ''
+  const local = localImageTarget(src)
+  if (local !== null) return <LocalImage key={local} path={local} alt={props.alt ?? ''} />
+  const remote = /^https?:/i.test(src) ? URL.parse(src) : null
+  if (remote) {
+    return (
+      <DefaultLink href={src}>
+        <ExternalLinkIcon className="mr-0.5 inline size-3 align-[-0.1em]" />
+        {remote.host}
+      </DefaultLink>
+    )
+  }
+  if (/^(?:data|blob):/i.test(src)) return <DefaultImage {...props} />
+  return <span title={src}>{props.alt}</span>
 }
 
 /** Inline code, which is a file chip when it is a path in the project. */
@@ -87,7 +114,12 @@ function Emphasis({ children, className }: ComponentProps<'em'> & ExtraProps) {
   )
 }
 
-const components: Components = { a: Link, inlineCode: InlineCode, em: Emphasis }
+const components: Components = {
+  a: Link,
+  img: MarkdownImage,
+  inlineCode: InlineCode,
+  em: Emphasis,
+}
 
 function LinkConfirm({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProps) {
   const { t } = useTranslation(['session', 'common'])
@@ -162,6 +194,7 @@ function MarkdownImpl({
 }
 
 const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: boolean }) {
+  const source = useMemo(() => spacedImages(markdown), [markdown])
   return (
     <Streamdown
       mode="streaming"
@@ -176,7 +209,7 @@ const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: 
       codeBlockMaxHeight={480}
       lineNumbers={false}
     >
-      {markdown}
+      {source}
     </Streamdown>
   )
 })

@@ -385,7 +385,7 @@ Fork starts a new session with the conversation up to the end of that reply's tu
 
 ### Media
 
-> Option A of the [media design](./media.md#options), pending the maintainer's pick. What counts as media, where it comes from and how files reach the renderer are in [media](./media.md).
+> Option A of the [media design](./media.md#options), chosen 2026-10-24 and built in steps from its [first version](./media.md#first-version). What counts as media, where it comes from and how files reach the renderer are in [media](./media.md).
 
 - **Where**: a Markdown image shows where it is written; a media file that a [file reference](#markdown) names shows under the block that names it (a paragraph, a list item, a table), in the order named and once per message; images and sounds the agent sent as content follow the text with the other attachments; media in a [tool call](#tool-calls) shows in its details. The file chip stays in the sentence and still opens the file in the [Files](#files) pane.
 - **Images**: at their own size, up to the column's width and 288 px high. A `rounded-xl` frame with a hairline `--border` ring drawn over the picture, `--border-strong` under the pointer; a transparent picture over `--checker` on `--card`. Images next to each other flow in a row, 6 px apart. Each is a button named "Open image" and its alt text, and a click or `Enter` opens the [viewer](#viewer).

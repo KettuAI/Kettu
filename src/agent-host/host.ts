@@ -25,6 +25,7 @@ import { Diagnostics } from './diagnostics'
 import { HostError } from './errors'
 import { setLocale, t } from './i18n'
 import { FilesService } from './files'
+import { MediaService } from './media'
 import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
@@ -120,6 +121,8 @@ export class AgentHost {
   /** Runs git for the project's files, with the agent environment. */
   private readonly execRunner: ExecRunner
   private readonly files: FilesService
+  /** Grants for the images a thread names, which main serves. */
+  private readonly media: MediaService
   private gitUnsubscribe: (() => void)[] = []
   /** Ports keeping a project's git status live, by path key. */
   private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
@@ -146,6 +149,12 @@ export class AgentHost {
     this.env.setProxy(options.settings.proxy)
     this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
     this.files = new FilesService({ exec: this.execRunner.exec, platform })
+    this.media = new MediaService({
+      platform,
+      homeDir: options.homeDir ?? os.homedir(),
+      names: (sessionId, text) => this.sessions.names(sessionId, text),
+      grant: (grant) => options.send({ type: 'host:media-grant', grant }),
+    })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
@@ -575,6 +584,7 @@ export class AgentHost {
         const record = projects.match(path)
         await sessions.removeProject(record.path)
         projects.remove(record)
+        this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
       'sessions.list': ({ projectPath }) => sessions.list(projectPath),
@@ -600,9 +610,15 @@ export class AgentHost {
         sessions.setConfigOption(sessionId, optionId, value),
       'sessions.rename': ({ sessionId, title }) => sessions.rename(sessionId, title),
       'sessions.close': ({ sessionId }) => sessions.close(sessionId),
-      'sessions.delete': ({ sessionId }) => sessions.delete(sessionId),
+      'sessions.delete': async ({ sessionId }) => {
+        await sessions.delete(sessionId)
+        this.options.send({ type: 'host:media-revoke', sessionId })
+      },
       'sessions.removeEmpty': ({ keep }) => sessions.removeEmptyOnce(keep),
-      'sessions.removeAll': () => sessions.removeAll(),
+      'sessions.removeAll': async () => {
+        await sessions.removeAll()
+        this.options.send({ type: 'host:media-revoke', sessionId: null })
+      },
       'permissions.respond': ({ sessionId, requestId, optionId }) =>
         sessions.respond(sessionId, requestId, optionId),
       'diagnostics.collect': () => this.collectDiagnostics(),
@@ -672,6 +688,11 @@ export class AgentHost {
         this.filesCall(projectPath, (root) => this.files.search(root, query)),
       'files.write': ({ projectPath, path, text, version }) =>
         this.filesCall(projectPath, (root) => this.files.write(root, path, text, version)),
+      'media.open': async ({ projectPath, path, sessionId }) => {
+        const root = await projects.resolveDirectory(projectPath)
+        if (!this.scratch.contains(root)) projects.match(root)
+        return this.media.open(root, path, sessionId)
+      },
       'usage.summary': ({ dayStarts, from, to, scope }) =>
         this.usage.summary(dayStarts, from, to, scope),
       'usage.total': ({ from, to }) => this.usage.total(from, to),

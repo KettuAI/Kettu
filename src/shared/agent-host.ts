@@ -2,6 +2,7 @@
 
 import type { ArtifactContent, ArtifactSummary, VersionSummary } from './artifacts'
 import type { FileContent, FileList, FileSearch, FileWritten } from './files'
+import type { MediaOpenResult } from './media'
 import type {
   ChangedFile,
   CommitDetails,
@@ -438,6 +439,12 @@ export interface HostContract {
     params: { projectPath: string; path: string; text: string; version: string | null }
     result: FileWritten
   }
+  // `path` as the thread writes it: absolute, `~/`, a `file:` URI, or relative to `projectPath`,
+  // the session's folder. `sessionId` lets a file outside it through when that thread names it.
+  'media.open': {
+    params: { projectPath: string; path: string; sessionId: string }
+    result: MediaOpenResult
+  }
   // `dayStarts`: the periods to sum, local days or a day's hours, as n + 1 ascending boundaries.
   'usage.summary': {
     params: { dayStarts: number[]; from: number; to: number; scope: UsageScope }
@@ -545,6 +552,7 @@ export const HOST_METHODS = [
   'files.read',
   'files.search',
   'files.write',
+  'media.open',
   'usage.summary',
   'usage.total',
   'usage.status',

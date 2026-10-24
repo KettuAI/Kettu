@@ -7,6 +7,7 @@ import type {
   HostToMain,
   MainToHost,
 } from '@shared/host-control'
+import { MEDIA_IMAGE_TYPES, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
@@ -26,6 +27,10 @@ export interface AgentHostDeps {
   onBadge(count: number): void
   onProjects(paths: string[]): void
   onAuthCommands(commands: string[]): void
+  /** A file the host granted, for the media scheme to serve. */
+  onMediaGrant(grant: MediaGrantRecord): void
+  /** A session's grants are gone, or every grant for null, as when the host stopped. */
+  onMediaRevoke(sessionId: string | null): void
 }
 
 const MAX_LIST = 10_000
@@ -55,6 +60,21 @@ function isContentResult(value: unknown): value is ArtifactContentResult {
     path.length <= MAX_STRING &&
     Number.isSafeInteger(version) &&
     (version as number) >= 1
+  )
+}
+
+function isMediaGrant(value: unknown): value is MediaGrantRecord {
+  if (typeof value !== 'object' || value === null) return false
+  const { token, path, mimeType, sessionId } = value as Record<string, unknown>
+  return (
+    typeof token === 'string' &&
+    MEDIA_TOKEN.test(token) &&
+    typeof path === 'string' &&
+    path.length > 0 &&
+    path.length <= MAX_STRING &&
+    typeof mimeType === 'string' &&
+    (MEDIA_IMAGE_TYPES as readonly string[]).includes(mimeType) &&
+    (sessionId === null || (typeof sessionId === 'string' && sessionId.length <= MAX_STRING))
   )
 }
 
@@ -236,6 +256,14 @@ export class AgentHost {
         resolve(isContentResult(message.result) ? message.result : { kind: 'failed' })
         break
       }
+      case 'host:media-grant':
+        if (isMediaGrant(message.grant)) this.deps.onMediaGrant(message.grant)
+        break
+      case 'host:media-revoke':
+        if (message.sessionId === null || typeof message.sessionId === 'string') {
+          this.deps.onMediaRevoke(message.sessionId)
+        }
+        break
       case 'host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
         if (message.level === 'error') log.error(text)
@@ -254,6 +282,7 @@ export class AgentHost {
     this.grants.failAll()
     for (const resolve of this.contentRequests.values()) resolve({ kind: 'failed' })
     this.contentRequests.clear()
+    this.deps.onMediaRevoke(null)
     this.deps.onBadge(0)
     const roots = this.agentProcesses
     this.agentProcesses = []

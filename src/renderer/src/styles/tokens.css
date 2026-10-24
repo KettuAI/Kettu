@@ -49,6 +49,8 @@
   --scrollbar-thumb: rgb(0 0 0 / 18%);
   /* The dimmed page behind a dialog or a sheet. */
   --scrim: rgb(0 0 0 / 10%);
+  /* Behind the media viewer, dark in both themes, since pictures read best on dark. */
+  --viewer-scrim: oklch(0.13 0 0 / 92%);
   /* A search match marked in its text. */
   --mark: oklch(0.88 0.15 90 / 55%);
   /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
@@ -137,6 +139,7 @@
     --canvas: #ffffff;
     --scrollbar-thumb: rgb(255 255 255 / 20%);
     --scrim: rgb(0 0 0 / 10%);
+    --viewer-scrim: oklch(0.13 0 0 / 92%);
     --mark: oklch(0.8 0.14 85 / 32%);
     --checker: rgb(255 255 255 / 7%);
 
@@ -207,6 +210,7 @@
   --canvas: #ffffff;
   --scrollbar-thumb: rgb(255 255 255 / 20%);
   --scrim: rgb(0 0 0 / 10%);
+  --viewer-scrim: oklch(0.13 0 0 / 92%);
   --mark: oklch(0.8 0.14 85 / 32%);
   --checker: rgb(255 255 255 / 7%);
 
