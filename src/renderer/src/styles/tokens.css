@@ -33,6 +33,7 @@
   --attention-dot: #ea580c;
   --danger: #b42318;
   --success: #15803d;
+  --merged: #6d28d9;
   --warning: #b45309;
   --link: #2563eb;
   --link-hover: #1d4ed8;
@@ -130,6 +131,7 @@
     --attention-dot: #fb923c;
     --danger: #f87171;
     --success: #4ade80;
+    --merged: #a78bfa;
     --warning: #fbbf24;
     --link: #60a5fa;
     --link-hover: #60a5fa;
@@ -203,6 +205,7 @@
   --attention-dot: #fb923c;
   --danger: #f87171;
   --success: #4ade80;
+  --merged: #a78bfa;
   --warning: #fbbf24;
   --link: #60a5fa;
   --link-hover: #60a5fa;

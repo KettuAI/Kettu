@@ -29,7 +29,7 @@ The first desktop version benchmarks the Claude Desktop app, through the analysi
 Every color, line color and shadow color in the renderer is a token in `src/renderer/src/styles/tokens.css`, the only file there that may hold a color literal. The palette is the maintainer's, set on 2026-10-23 ([#39](https://github.com/overbench/overbench/issues/39)): warm neutrals a trace off pure grey, and color only where it means something, by the rules in [visual style: color](./visual-style.md#color). Two checks in `pnpm lint` guard it ([color checks](./testing.md#color-checks)): no color literal outside the token file, and every text token at 4.5:1 on the surfaces it sits on.
 
 - **Themes**: light values sit on `:root`, dark ones on `[data-theme='dark']`, which the settings store sets on `<html>`, and under `prefers-color-scheme: dark` until it has; the two dark blocks are identical, and the contrast check fails if they drift. A subtree can take a theme of its own with `data-theme`, as the theme tiles in Settings do. Tailwind's `dark:` variant follows `data-theme`.
-- **Utilities**: Tailwind reads the tokens through `@theme inline` in `globals.css`: `bg-app`, `bg-sidebar`, `bg-surface`, `bg-subtle`, `bg-hover`, `bg-selected`, `bg-code-inline`, `bg-code-block`; `border-default`, `border-subtle`, `border-strong`; `text-primary`, `text-secondary`, `text-tertiary`, `text-placeholder`, `text-disabled`, `text-icon`; and `attention`, `attention-dot`, `danger`, `success`, `warning`, `link` and `focus` in every color utility. A fill in a text color is `bg-current` with that text utility.
+- **Utilities**: Tailwind reads the tokens through `@theme inline` in `globals.css`: `bg-app`, `bg-sidebar`, `bg-surface`, `bg-subtle`, `bg-hover`, `bg-selected`, `bg-code-inline`, `bg-code-block`; `border-default`, `border-subtle`, `border-strong`; `text-primary`, `text-secondary`, `text-tertiary`, `text-placeholder`, `text-disabled`, `text-icon`; and `attention`, `attention-dot`, `danger`, `success`, `merged`, `warning`, `link` and `focus` in every color utility. A fill in a text color is `bg-current` with that text utility.
 - `BACKGROUND_COLOR` in `src/main/window.ts` is `--bg-app` of each theme, so the first frame does not flash; the Windows and Linux window controls draw their symbols in `--text-primary`.
 
 ### Palette
@@ -56,6 +56,7 @@ Every color, line color and shadow color in the renderer is a token in `src/rend
 | `--attention`                      | `#C2410C`, its dot `#EA580C` | `#FB923C`              | Waiting for your approval                                                                                                                                            |
 | `--danger`                         | `#B42318`                    | `#F87171`              | Failure, deletion, a diff's deleted lines                                                                                                                            |
 | `--success`                        | `#15803D`                    | `#4ADE80`              | A diff's added lines, nothing else                                                                                                                                   |
+| `--merged`                         | `#6D28D9`                    | `#A78BFA`              | A merged pull request's icon, nothing else                                                                                                                           |
 | `--warning`                        | `#B45309`                    | `#FBBF24`              | Usage from 80%                                                                                                                                                       |
 | `--link`                           | `#2563EB`, hover `#1D4ED8`   | `#60A5FA`              | Links                                                                                                                                                                |
 | `--focus`                          | `rgba(37,99,235,.55)`        | `rgba(96,165,250,.6)`  | The keyboard focus ring                                                                                                                                              |
@@ -67,7 +68,7 @@ Every color, line color and shadow color in the renderer is a token in `src/rend
 | `--scrollbar-thumb`                | `rgba(0,0,0,.18)`            | `rgba(255,255,255,.2)` | Scrollbar thumbs, on a transparent track                                                                                                                             |
 | `--canvas`                         | `#FFFFFF`                    | `#FFFFFF`              | The page under an [SVG code block](./ui.md#markdown)'s picture: an SVG with no background is drawn for a white page, so its dark strokes would vanish on a dark card |
 
-- `--border-strong` and the dark `--link-hover`, which is `--link` itself, are the two values the palette did not give; they were derived here and wait for the maintainer's confirmation.
+- `--border-strong` and the dark `--link-hover`, which is `--link` itself, are the two values the palette did not give; they were derived here and wait for the maintainer's confirmation. `--merged` was added later and confirmed by the maintainer on 2026-10-24 ([#205](https://github.com/overbench/overbench/issues/205)).
 - The light theme was moved onto the reference's neutral greys on 2026-10-23 ([#127](https://github.com/overbench/overbench/issues/127)), sampled from its screenshots: a pure white canvas, a `#FAFAFA` sidebar, a `#E0E0E0` current row and text at `#141414`. The text steps below primary, the meaning colors and the dark theme keep the palette's values; the reference's lighter greys would fall under AA. The dark theme has no reference screenshot yet.
 - Lines are opaque and keep their hairline width (`--hairline`: 1 px, 0.5 px on 2× displays and 1/3 px on 3×), so a line is one device pixel of its color on every display.
 - Neither theme uses pure black or white for text.
@@ -107,11 +108,11 @@ A model's name and its reasoning level are `--text-secondary` wherever they show
 
 ### Repository state
 
-Git and pull request states are neutral, except what failed. Each state keeps its own Lucide icon, so the shape tells them apart.
+Git states are neutral, except what failed. A pull request's state icon takes its state's color, the one people know from GitHub, and each state keeps its own Lucide icon, so the shape tells them apart without the color ([#205](https://github.com/overbench/overbench/issues/205)).
 
 | State                                      | Icon                                                                        | Color                                                     |
 | ------------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Open, draft, merged or closed pull request | `GitPullRequest`, `GitPullRequestDraft`, `GitMerge`, `GitPullRequestClosed` | `--icon-default`, the state word `--text-secondary`       |
+| Open, draft, merged or closed pull request | `GitPullRequest`, `GitPullRequestDraft`, `GitMerge`, `GitPullRequestClosed` | `--success`, `--icon-default`, `--merged`, `--danger`     |
 | Checks passing or pending                  | `CircleCheck`, `CircleDot`                                                  | `--icon-default`                                          |
 | Checks failing                             | `CircleX`                                                                   | `--danger`                                                |
 | Commits not pushed                         | `ArrowUp` with the count                                                    | `--text-primary`; pushed and in sync is `--text-tertiary` |
@@ -119,7 +120,9 @@ Git and pull request states are neutral, except what failed. Each state keeps it
 | Lines added and removed                    | `+N`, `−N`                                                                  | `--success`, `--danger`                                   |
 
 - Branch names and commit ids are monospace, at 12 px, with ids cut to 7 characters; in the top bar the branch and the change counts are `--text-secondary`.
-- Pull request chips are neutral: `--muted` fill with a `--border-soft` ring and `--foreground` text.
+- Pull request chips are neutral apart from the state icon: `--muted` fill with a `--border-soft` ring and `--foreground` text. The state word stays `--text-secondary`.
+- Without `gh` the state is unknown, and the icon is a neutral `GitPullRequest`.
+- A state color is an icon's, at 3:1 or more on every row and chip it sits on, as WCAG asks of icons; it never colors text.
 
 ### Terminal
 
