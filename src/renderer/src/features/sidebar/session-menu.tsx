@@ -1,9 +1,30 @@
 import { type CSSProperties, useRef, useState } from 'react'
-import { PencilIcon, PlusIcon, TrashIcon, XIcon } from 'lucide-react'
+import {
+  ArchiveIcon,
+  CircleDotIcon,
+  CircleIcon,
+  FolderIcon,
+  GitForkIcon,
+  PencilIcon,
+  PinIcon,
+  PinOffIcon,
+  PlusIcon,
+  RotateCwIcon,
+  SquareIcon,
+  TrashIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
-import { closeSession, deleteSession, descendantCount, renameSession } from '@renderer/app/actions'
+import {
+  archiveSession,
+  deleteSession,
+  descendantCount,
+  forkSession,
+  markSessionUnread,
+  pinSession,
+  renameSession,
+} from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   AlertDialog,
@@ -19,19 +40,24 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { errorMessage } from '@renderer/lib/host'
+import { PrIcon } from '@renderer/features/git/pr-icon'
+import { errorMessage, host } from '@renderer/lib/host'
+import { fileManagerName } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle } from '@renderer/stores/sessions'
-import { openNewSubSession } from '@renderer/stores/view'
+import { openNewSubSession, useViewStore } from '@renderer/stores/view'
+import { ACCELERATORS, sessionMenuGroups, type SessionMenuItem } from './session-menu-model'
 
 /**
  * A session's actions. A context menu is a Base UI menu, so the same items serve the row's
- * context menu, its More button and the top bar's title menu.
+ * context menu, its More button and the top bar's title menu; each passes
+ * `runSessionMenuAccelerator` as its popup's `onKeyDown`.
  */
 export function SessionMenuItems({
   summary,
@@ -47,15 +73,79 @@ export function SessionMenuItems({
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  return (
-    <>
-      <DropdownMenuGroup>
-        <DropdownMenuItem onClick={onRename}>
-          <PencilIcon />
-          {t('row.rename')}
-        </DropdownMenuItem>
-        {summary.origin !== 'subagent' && (
-          <DropdownMenuSub>
+  const canFork = useAgentsStore((s) => !!s.byId[summary.agentId]?.capabilities?.forkSession)
+  const inFront = useViewStore(
+    (s) => s.main.kind === 'session' && s.main.sessionId === summary.id && !s.settings.open,
+  )
+  const unread = summary.attention === 'unread'
+  const { id } = summary
+
+  const item = (name: SessionMenuItem) => {
+    const accelerator = ACCELERATORS[name]
+    const shortcut = accelerator && <DropdownMenuShortcut>{accelerator}</DropdownMenuShortcut>
+    const props = { key: name, 'data-accelerator': accelerator }
+    switch (name) {
+      case 'stop':
+        return (
+          <DropdownMenuItem
+            {...props}
+            onClick={() => void host('sessions.cancel', { sessionId: id })}
+          >
+            <SquareIcon className="fill-current" />
+            {t('row.stop')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'retry':
+        return (
+          <DropdownMenuItem
+            {...props}
+            onClick={() => void host('sessions.retry', { sessionId: id })}
+          >
+            <RotateCwIcon />
+            {t('row.retry')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'pin':
+        return (
+          <DropdownMenuItem {...props} onClick={() => void pinSession(id, !summary.pinnedAt)}>
+            {summary.pinnedAt ? <PinOffIcon /> : <PinIcon />}
+            {summary.pinnedAt ? t('row.unpin') : t('row.pin')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'unread':
+        return (
+          <DropdownMenuItem
+            {...props}
+            disabled={inFront}
+            onClick={() => void markSessionUnread(id, !unread)}
+          >
+            {unread ? <CircleIcon /> : <CircleDotIcon />}
+            {unread ? t('row.markRead') : t('row.markUnread')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'rename':
+        return (
+          <DropdownMenuItem {...props} onClick={onRename}>
+            <PencilIcon />
+            {t('row.rename')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'fork':
+        return (
+          <DropdownMenuItem {...props} onClick={() => void forkSession(id)}>
+            <GitForkIcon />
+            {t('row.fork')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'newSubSession':
+        return (
+          <DropdownMenuSub key={name}>
             <DropdownMenuSubTrigger>
               <PlusIcon />
               {t('row.newSubSession')}
@@ -76,21 +166,56 @@ export function SessionMenuItems({
               ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
-        )}
-        <DropdownMenuItem onClick={() => void closeSession(summary.id)}>
-          <XIcon />
-          {t('common:actions.close')}
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator />
-      <DropdownMenuGroup>
-        <DropdownMenuItem variant="destructive" onClick={onDelete}>
-          <TrashIcon />
-          {t('row.deleteMenu')}
-        </DropdownMenuItem>
-      </DropdownMenuGroup>
-    </>
-  )
+        )
+      case 'pullRequest':
+        return (
+          summary.pr && (
+            <DropdownMenuItem
+              {...props}
+              render={<a href={summary.pr.url} target="_blank" rel="noreferrer" />}
+            >
+              <PrIcon state={summary.pr.state} />
+              {t('row.openPullRequest', { number: summary.pr.number })}
+              {shortcut}
+            </DropdownMenuItem>
+          )
+        )
+      case 'showInFolder':
+        return (
+          <DropdownMenuItem
+            {...props}
+            onClick={() => void window.overbench.shell.showItem(summary.projectPath)}
+          >
+            <FolderIcon />
+            {t('row.showIn', { name: fileManagerName() })}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'archive':
+        return (
+          <DropdownMenuItem {...props} onClick={() => void archiveSession(id)}>
+            <ArchiveIcon />
+            {t('row.archive')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'delete':
+        return (
+          <DropdownMenuItem {...props} variant="destructive" onClick={onDelete}>
+            <TrashIcon />
+            {t('row.deleteMenu')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+    }
+  }
+
+  return sessionMenuGroups(summary, canFork).map((group, index) => (
+    <DropdownMenuGroup key={group[0]}>
+      {index > 0 && <DropdownMenuSeparator />}
+      {group.map(item)}
+    </DropdownMenuGroup>
+  ))
 }
 
 /**

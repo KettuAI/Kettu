@@ -27,7 +27,17 @@
     "deleteTitle": "删除“{{title}}”？",
     "deleteBody": "Agent 也会删除它的对话记录。",
     "deleteBodyWithSub_other": "Agent 也会删除它的对话记录，它的 {{count}} 个子会话会一并删除。",
-    "more": "更多操作"
+    "more": "更多操作",
+    "stop": "停止",
+    "retry": "重试",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "markUnread": "标为未读",
+    "markRead": "标为已读",
+    "fork": "分叉",
+    "openPullRequest": "打开 Pull Request #{{number}}",
+    "showIn": "在{{name}}中显示",
+    "archive": "归档"
   },
   "import": {
     "title": "导入会话",
@@ -71,5 +81,8 @@
     "hoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
     "days": "{{count}} 天",
     "daysHours": "{{days}} 天 {{hours}} 小时"
+  },
+  "pinned": {
+    "label": "已置顶"
   }
 }

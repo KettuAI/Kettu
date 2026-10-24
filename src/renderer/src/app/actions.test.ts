@@ -9,7 +9,7 @@ vi.stubGlobal('window', {
 })
 
 const {
-  closeSession,
+  archiveSession,
   createSession,
   deleteSession,
   followShownSession,
@@ -53,7 +53,7 @@ const replica = {
   plan: null,
 } as const
 
-describe('closeSession', () => {
+describe('archiveSession', () => {
   beforeEach(() => {
     request.mockReset()
     request.mockResolvedValue(undefined)
@@ -66,13 +66,13 @@ describe('closeSession', () => {
 
   it('drops the replica, so opening the session again loads it afresh', async () => {
     useViewStore.setState({ main: { kind: 'usage' }, projectPath: '/repo' })
-    await closeSession('s1')
-    expect(request).toHaveBeenCalledWith('sessions.close', { sessionId: 's1' })
+    await archiveSession('s1')
+    expect(request).toHaveBeenCalledWith('sessions.archive', { sessionId: 's1' })
     expect(useThreadsStore.getState().replicas.s1).toBeUndefined()
     expect(useViewStore.getState().main).toEqual({ kind: 'usage' })
   })
 
-  it('drops its sub-sessions too, which the agent host closes with it', async () => {
+  it('drops its sub-sessions too, which the agent host archives with it', async () => {
     const child = { id: 's2', projectPath: '/repo', parentId: 's1' } as SessionSummary
     useSessionsStore.setState({ byId: { s1: summary, s2: child } })
     useThreadsStore.setState({
@@ -82,7 +82,7 @@ describe('closeSession', () => {
       },
     })
     useViewStore.setState({ main: { kind: 'session', sessionId: 's2' }, projectPath: '/repo' })
-    await closeSession('s1')
+    await archiveSession('s1')
     expect(useThreadsStore.getState().replicas).toEqual({})
     expect(useViewStore.getState().main).toEqual({
       kind: 'new',
@@ -91,22 +91,22 @@ describe('closeSession', () => {
     })
   })
 
-  it('leaves the closed session for New session in its project when it was shown', async () => {
+  it('leaves the archived session for New session in its project when it was shown', async () => {
     useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/other' })
-    await closeSession('s1')
+    await archiveSession('s1')
     expect(useViewStore.getState()).toMatchObject({
       main: { kind: 'new', agentId: 'codex', noProject: false },
       projectPath: '/repo',
     })
   })
 
-  it('leaves a closed scratch session for New session with No project', async () => {
+  it('leaves an archived scratch session for New session with No project', async () => {
     useSessionsStore.setState({ byId: { x1: scratch } })
     useViewStore.setState({
       main: { kind: 'session', sessionId: 'x1' },
       projectPath: scratch.projectPath,
     })
-    await closeSession('x1')
+    await archiveSession('x1')
     expect(useViewStore.getState().main).toEqual({ kind: 'new', agentId: 'codex', noProject: true })
   })
 })

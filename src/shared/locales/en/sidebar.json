@@ -29,7 +29,17 @@
     "deleteBody": "The agent deletes its transcript too.",
     "deleteBodyWithSub_one": "The agent deletes its transcript too. Its sub-session is deleted with it.",
     "deleteBodyWithSub_other": "The agent deletes its transcript too. Its {{count}} sub-sessions are deleted with it.",
-    "more": "More actions"
+    "more": "More actions",
+    "stop": "Stop",
+    "retry": "Retry",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "markUnread": "Mark as unread",
+    "markRead": "Mark as read",
+    "fork": "Fork",
+    "openPullRequest": "Open pull request #{{number}}",
+    "showIn": "Show in {{name}}",
+    "archive": "Archive"
   },
   "import": {
     "title": "Import sessions",
@@ -80,5 +90,8 @@
     "hoursMinutes": "{{hours}}h {{minutes}}m",
     "days": "{{count}}d",
     "daysHours": "{{days}}d {{hours}}h"
+  },
+  "pinned": {
+    "label": "Pinned"
   }
 }

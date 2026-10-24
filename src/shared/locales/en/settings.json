@@ -8,7 +8,8 @@
     "notifications": "Notifications",
     "shortcuts": "Keyboard shortcuts",
     "advanced": "Advanced",
-    "about": "About"
+    "about": "About",
+    "archived": "Archived sessions"
   },
   "page": {
     "title": "Settings",
@@ -439,7 +440,8 @@
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data OverBench keeps on this computer.",
-    "about": "OverBench and the versions it runs on."
+    "about": "OverBench and the versions it runs on.",
+    "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project."
   },
   "footer": {
     "about": "About OverBench",
@@ -447,5 +449,12 @@
     "ready": "{{version}} ready",
     "available": "{{version}} is out",
     "downloading": "{{percent}}% downloaded"
+  },
+  "archived": {
+    "description": "{{project}} · archived {{when}}",
+    "restore": "Restore",
+    "delete": "Delete…",
+    "empty": "No archived sessions. Archive one from its menu in the sidebar.",
+    "keywords": "archive restore"
   }
 }

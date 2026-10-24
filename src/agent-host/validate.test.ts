@@ -65,6 +65,20 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.removeEmpty']({ keep: ['x'.repeat(257)] }))
   })
 
+  it('takes a pin and an unread mark as booleans', () => {
+    const sessionId = 's1'
+    expect(posix['sessions.pin']({ sessionId, pinned: true })).toEqual({ sessionId, pinned: true })
+    expect(posix['sessions.markUnread']({ sessionId, unread: false })).toEqual({
+      sessionId,
+      unread: false,
+    })
+    rejects(() => posix['sessions.pin']({ sessionId }))
+    rejects(() => posix['sessions.pin']({ sessionId, pinned: 'yes' }))
+    rejects(() => posix['sessions.markUnread']({ sessionId, unread: 1 }))
+    expect(posix['sessions.archive']({ sessionId, extra: 1 })).toEqual({ sessionId })
+    rejects(() => posix['sessions.unarchive']({}))
+  })
+
   it('forks at an entry only when one is named', () => {
     expect(posix['sessions.fork']({ sessionId: 's' })).toEqual({ sessionId: 's' })
     expect(posix['sessions.fork']({ sessionId: 's', entryId: 'm:msg_1' })).toEqual({
