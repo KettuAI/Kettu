@@ -32,7 +32,7 @@ const TOOL_PHASES: Partial<Record<ToolKind, TurnPhase['phase']>> = {
 const WORKING: TurnPhase = { phase: 'working', count: 1 }
 
 // Entries that carry no output of their own, so the phase comes from what is before them.
-const QUIET = new Set(['plan', 'notice', 'git', 'subagent'])
+const QUIET = new Set(['plan', 'notice', 'git', 'artifact', 'subagent'])
 
 // The phase is read on every streamed chunk, so a long run of tool calls is read no further back.
 const LOOKBACK = 64

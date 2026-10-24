@@ -126,6 +126,7 @@ export type ThreadEntry =
     }
   | { kind: 'turn_end'; id: string; stopReason: StopReason; durationMs: number }
   | GitEntry // OverBench's own observation of the repository, see the git design
+  | ArtifactEntry // OverBench's own record of a write to the artifacts service
 
 export type GitEntry =
   | {
@@ -138,6 +139,29 @@ export type GitEntry =
   | { kind: 'git'; id: string; event: 'push'; upstream: string; count: number }
   | { kind: 'git'; id: string; event: 'branch'; branch: string }
   | { kind: 'git'; id: string; event: 'pull_request'; url: string }
+
+/**
+ * A write to the artifacts service, added by the host to the calling session's thread. Writes to
+ * one artifact in one turn share an entry; a deletion stands alone.
+ * See docs/design/artifacts.md#opening-from-a-session.
+ */
+export interface ArtifactEntry {
+  kind: 'artifact'
+  id: string
+  artifactId: string
+  /** As of the latest write it records. */
+  title: string
+  /** The first write of its turn. */
+  action: ArtifactAction
+  /** The latest version written in its turn; null for a deletion. */
+  version: number | null
+  /** How many writes of its turn it records. */
+  writes: number
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+export type ArtifactAction = 'create' | 'update' | 'restore' | 'delete'
 
 export type ToolKind =
   | 'read'
@@ -164,17 +188,6 @@ export interface ToolEntry {
   permissionResult: { optionId: string; kind: PermissionKind } | 'cancelled' | 'withdrawn' | null
   rawInput?: string // the command or input as text, when the agent sent one
   description?: string // what a command does, in the agent's words (Claude Code's Bash)
-  artifact?: ArtifactLink // set by the host on a call to OverBench's artifacts service
-}
-
-/** What a call to OverBench's artifacts service did, linked by the host to the agent's tool call. */
-export interface ArtifactLink {
-  id: string
-  /** As it was when the call ran. */
-  title: string
-  action: 'create' | 'update' | 'restore' | 'delete' | 'read'
-  /** The version the call wrote or read; null for a delete. */
-  version: number | null
 }
 
 export type ToolContent =
@@ -524,7 +537,6 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         isListOf(value.content, isToolContent) &&
         isListOf(value.locations, isRecord) &&
         (value.description === undefined || typeof value.description === 'string') &&
-        (value.artifact === undefined || isArtifactLink(value.artifact)) &&
         (value.permission == null ||
           (isRecord(value.permission) && isListOf(value.permission.options, isRecord)))
       )
@@ -549,6 +561,15 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       return value.event === 'commit'
         ? isListOf(value.commits, isRecord)
         : typeof value.event === 'string'
+    case 'artifact':
+      return (
+        typeof value.artifactId === 'string' &&
+        typeof value.title === 'string' &&
+        ARTIFACT_ACTIONS.has(value.action as string) &&
+        (value.version === null || typeof value.version === 'number') &&
+        typeof value.writes === 'number' &&
+        (value.after === null || typeof value.after === 'string')
+      )
     default:
       return false
   }
@@ -572,12 +593,4 @@ export function coalescePatches(patches: readonly Patch[]): Patch[] {
   return out
 }
 
-function isArtifactLink(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    typeof value.id === 'string' &&
-    typeof value.title === 'string' &&
-    ['create', 'update', 'restore', 'delete', 'read'].includes(value.action as string) &&
-    (value.version === null || typeof value.version === 'number')
-  )
-}
+const ARTIFACT_ACTIONS = new Set<string>(['create', 'update', 'restore', 'delete'])

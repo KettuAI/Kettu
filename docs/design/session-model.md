@@ -287,7 +287,7 @@ A snapshot carries the latest page of the thread, not all of it, and older pages
 - Tool calls: `t:<toolCallId>`.
 - Compactions: `c:<compactionId>`.
 - Git events: `g:<n>`, from the same counter as `e:<n>`.
-- Artifact entries: `a:<n>`, from the same counter.
+- Artifact entries: `a:<n>`, from the same counter; one converted from a stored link of #156, `a:` and its tool call's id.
 - Subagent announcements: `s:<child session id>`.
 - Session messages: `sm:<messageId>`.
 - Everything else: `e:<n>`, from a per-session counter in the host. That includes the user entry the host adds when it sends a prompt, and messages without a `messageId`.
