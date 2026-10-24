@@ -761,6 +761,8 @@ function cliManager(
     /** Asks versions through the manager's own cache, with this one's stubbed runs. */
     cliVersions?: CliVersions
     settings?: AgentManagerDeps['settings']
+    /** Runs before each install records its directory. */
+    beforeInstall?: (request: InstallOptions) => Promise<void>
   } = {},
 ) {
   const def: AgentDefinition = {
@@ -812,6 +814,7 @@ function cliManager(
         }),
       install: async (request) => {
         installs.push(request)
+        await options.beforeInstall?.(request)
         const install: InstalledAdapter = {
           version: request.version,
           dir: `/a/${request.version}~${installs.length}`,
@@ -995,6 +998,50 @@ describe('the CLI the user installed', () => {
       cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '3.0.0' } } },
     })
     await m.agents.stopAll()
+  })
+
+  /** Holds the install of the copy that follows an install without it until it is aborted. */
+  function holdSecondInstall() {
+    const held: { request?: InstallOptions; end?: (error: Error) => void } = {}
+    const beforeInstall = (request: InstallOptions) => {
+      if (!request.alongside) return Promise.resolve()
+      held.request = request
+      return new Promise<void>((_, reject) => {
+        held.end = reject
+        request.signal?.addEventListener('abort', () =>
+          reject(new Error('The install was stopped.')),
+        )
+      })
+    }
+    return { held, beforeInstall }
+  }
+
+  it('cancels the install of the copy that follows an install without it', async () => {
+    const { held, beforeInstall } = holdSecondInstall()
+    const m = cliManager({ minimum: '3.0.0', beforeInstall })
+    const start = m.agents.ensureReady('fake-agent')
+    await until(() => held.request !== undefined)
+    await m.agents.cancelTask('fake-agent')
+    const aborted = held.request?.signal?.aborted
+    // Ends an install the cancel did not stop, as npm's 15-minute limit would.
+    held.end?.(new Error('npm did not finish within 900 s.'))
+    await start.catch(() => {})
+    expect(aborted).toBe(true)
+    expect(m.state()).toBe('available')
+    await m.agents.stopAll()
+  })
+
+  it('stops the install of the copy that follows an install without it at a quit', async () => {
+    const { held, beforeInstall } = holdSecondInstall()
+    const m = cliManager({ minimum: '3.0.0', beforeInstall })
+    const start = m.agents.ensureReady('fake-agent').catch(() => {})
+    await until(() => held.request !== undefined)
+    const quit = m.agents.stopAll()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const reason = held.request?.signal?.reason
+    held.end?.(new Error('npm did not finish within 900 s.'))
+    await Promise.all([start, quit])
+    expect(reason).toBe(QUIT_REASON)
   })
 
   it('says which CLI the running adapter uses until it stops', async () => {
