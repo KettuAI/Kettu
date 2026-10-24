@@ -100,8 +100,8 @@ export function NewSessionView({
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pb-14">
         <div className="my-auto flex w-full max-w-thread flex-col gap-7 px-6 pt-6">
           <div className="flex animate-in items-center justify-center gap-3 fade-in animation-duration-(--duration-slow)">
-            {/* At 36 px the mark is as tall as the capitals and sits on the baseline, like a letter. */}
-            <BrandMark width={36} className="text-icon" />
+            {/* At 36 px the mark is as tall as the capitals and sits on the baseline in the text color, like a letter. */}
+            <BrandMark width={36} className="text-foreground" />
             <h1 className="font-serif text-greeting text-balance">{t('newSession.heading')}</h1>
           </div>
           <DraftComposer
