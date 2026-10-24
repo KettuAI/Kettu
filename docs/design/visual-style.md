@@ -116,6 +116,7 @@ What each common meaning is drawn with. Tool call kinds and git states keep thei
 | Decrease, increase a stepped value, such as zoom                  | `Minus`, `Plus`          | `ZoomOut`, `ZoomIn`               |
 | Toggle a preview and its source: Markdown files, SVG code blocks  | `BookOpen`, `Code`       |                                   |
 | Usage, the usage page                                             | `ChartNoAxesColumn`      | `ChartBar`, `ChartColumn`         |
+| The prompt cache and its time left                                | `Hourglass`              | `Timer`, `Clock`                  |
 | A date or a range of dates                                        | `Calendar`               | `CalendarDays`, `CalendarRange`   |
 | An artifact, the Artifacts page                                   | `Shapes`                 |                                   |
 | Zoom to fit                                                       | `Scan`                   | `Fullscreen`, `Expand`            |
@@ -177,7 +178,7 @@ The maintainer's rules for the [palette](./design-system.md#palette), set on 202
 8. **One color per region.** One area of the screen shows at most one meaning color, apart from a diff's paired added and deleted counts.
 
 - **Quiet unless it needs you.** A sidebar row's running and unread marks are neutral, a `--text-secondary` `Spinner` and a `--text-tertiary` dot. `--attention` is the loudest color in the app.
-- **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exception.
+- **Never color alone.** A color comes with a shape, an icon or a word, except where [Interface](./ui.md#sidebar) names the exceptions.
 - **Tokens only.** No raw `#hex`, `rgb()` or `oklch()` outside `tokens.css`, and no Tailwind palette utilities (`bg-white`, `text-red-500`); `pnpm lint` fails on either ([color checks](./testing.md#color-checks)). A new color is a token in `tokens.css` and a row in the design system first, in both themes, at 4.5:1 for text on every surface it sits on, and a pair in the contrast check.
 - **Not settled yet**: the search match's yellow (`--mark`), the file-type icons' own colors, the terminal's ANSI colors, the usage charts' agent series and heatmap, and the syntax highlighting theme keep their earlier colors until the maintainer decides them.
 

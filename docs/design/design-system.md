@@ -97,7 +97,7 @@ shadcn/ui's components use their own names, which `tokens.css` points at the pal
 
 ### Usage levels
 
-A usage hint, a plan window's percentage such as "7 days 57%" or the context's, is `--text-tertiary` below 80% used, `--warning` from 80% and `--danger` from 95% or once the limit is reached. Its bar and its ring take the same step, with a neutral `--text-tertiary` fill below 80%. Progress that is not usage, such as a download, stays neutral.
+A usage hint, a plan window's percentage such as "7 days 57%" or the context's, is `--text-tertiary` below 80% used, `--warning` from 80% and `--danger` from 95% or once the limit is reached. Its bar and its ring take the same step, with a neutral `--text-tertiary` fill below 80%. A prompt cache in its [last minutes](./ui.md#prompt-cache) is a usage warning too and takes `--warning`; nothing about the cache takes `--danger`. Progress that is not usage, such as a download, stays neutral.
 
 ### Model names and reasoning levels
 

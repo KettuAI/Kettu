@@ -151,7 +151,7 @@ What the session starts with is kept per agent and survives a restart: the agent
 
 ### Session
 
-The thread and the composer, described below. The top bar shows the agent's mark (14 px), the session title and a chevron button (`ChevronDown`, "More actions"). The mark names the agent, so its name is left out; a subagent's session leads with the `Bot` icon instead. The title's tooltip gives the full title and the agent.
+The thread and the composer, described below. The top bar shows the agent's mark (14 px), the session title and a chevron button (`ChevronDown`, "More actions"). The mark names the agent, so its name is left out; a subagent's session leads with the `Bot` icon instead. The title's tooltip gives the full title and the agent. After the chevron, the [prompt cache](#prompt-cache) chip says how long the session's cache has left.
 
 - **Renaming**: as in the reference, clicking the title renames the session in place. The title turns into a text field at the same place with its text selected, in shadcn's focus ring, and grows with its text, the git status giving way first. `Enter` or leaving the field keeps the title, `Esc` cancels, and an empty title returns to the agent's ([titles](./session-model.md#titles)). The field stays until the host has the new title, so the old one never shows in between. If the rename fails, the field stays, marked invalid with the error as its tooltip; `Enter` tries again and leaving it gives up.
 - **The menu**: the chevron opens **Rename**, which starts the same field, **New sub-session** (with a submenu of agents, each opening [New session](#for-a-sub-session) for a sub-session with that agent), **Close** and, after a separator, **Delete…** (in `--destructive`): the session's own items, one list shared with the sidebar row's context menu and **More** button, styled as in [menus](./design-system.md#menus-and-dialogs) ([session lifecycle](./session-model.md#session-lifecycle)). With the menu open the fill sits on the chevron alone. Closing or deleting the shown session, or its parent, leaves it for [New session](#new-session), and a closed session opens again from the sidebar with `session/load`.
@@ -260,12 +260,13 @@ The page scales to many agents: a list first, and a page of its own for each age
 - A project's row has a menu: hovering the row, or focusing it from the keyboard, shows a **More** button (`Ellipsis`) just before the **+** (at the row's end for a missing project), and it opens the same menu as a right-click, as does the context menu key (`Shift+F10`) on the focused row. The row keeps room for both buttons, so the name never runs under them. The menu holds **Import sessions…**, which opens a dialog of the sessions the agents already have for the folder (`agents.listSessions`), such as ones started in a terminal, grouped by agent, each with **Import**; an imported session joins the group and opens with its full history. This menu was decided while the maintainer was away (2026-10-22); to be reviewed.
 - Sessions started with **No project** form a last group, **No project**, shown while it has any. It folds like a project's group and its **+**, shown on hover, opens New session with No project. It has no menu, since it has no folder to import sessions from. While one of its sessions is shown, `Mod+N` starts New session at No project.
 - The sidebar's content is built from shadcn's `Sidebar` parts (`SidebarGroup`, `SidebarMenu`, `SidebarMenuButton` at `size="row"`, which is `--row-height`, 32 px, `SidebarMenuBadge`) with `collapsible="none"`, inside the `ResizablePanel` that owns its width. Rows have no border; hover and selection use the component's own fills, and a row keeps the hover fill while its context menu is open. The list scrolls behind [scroll-edge fades](./design-system.md#patterns), so rows fade out at the edges instead of being cut by the footer.
-- Each row: the agent's [mark](./design-system.md#agent-marks) at 14 px, title (truncated), and one status indicator in a 16 px slot at the row's end, kept when the row has none so a status appearing never moves the title. Rows show no time. The indicator, in this order of priority:
+- Each row: the agent's [mark](./design-system.md#agent-marks) at 14 px, grey once the session's [prompt cache](#in-the-sidebar) is gone, title (truncated), and one status indicator in a 16 px slot at the row's end, kept when the row has none so a status appearing never moves the title. Rows show no time. The indicator, in this order of priority:
   1. **Waiting for you** (`attention: 'permission'`): an 8 px `--attention-dot` dot, named with the count ("Waiting for you, 2 requests"). This is the loudest signal in the app.
   2. **Error** (`attention: 'error'`): a destructive `CircleAlert` icon, until the session has been in front of you ([attention](./session-model.md#how-the-host-keeps-sessions)).
   3. **Running** (`status: 'running'`): the shared `Spinner` at 12 px in `--text-secondary` ([patterns](./design-system.md#patterns)).
   4. **Starting** (`status: 'starting'`): the same `Spinner` while the agent starts or the session loads, named "Starting". Running wins when both apply, so a row never shows two.
-  5. **Unread** (`attention: 'unread'`): an 8 px `--text-tertiary` dot after a turn ended while the session was not in front, until you show it ([attention](./session-model.md#how-the-host-keeps-sessions)).
+  5. **Prompt cache expiring**: an 8 px ring, a 1.5 px `--warning` border with no fill, in the cache's [last minutes](#prompt-cache), named with the time left ("Prompt cache expires in 4 minutes"). It goes once the cache has expired, and an unread session gets its dot back.
+  6. **Unread** (`attention: 'unread'`): an 8 px `--text-tertiary` dot after a turn ended while the session was not in front, until you show it ([attention](./session-model.md#how-the-host-keeps-sessions)).
 - Hovering a row, or focusing it from the keyboard, shows a **More** button (`Ellipsis`) over the indicator's slot, so the title keeps its width. It opens the same menu as a right-click, and so does the context menu key (`Shift+F10`) on a focused row.
 - A session whose branch has a pull request shows its state icon after the title ([repository state](./design-system.md#repository-state)), as in the reference. Hovering the row shows the branch and the pull request in a tooltip.
 - **Sub-sessions** ([session model](./session-model.md#sub-sessions)) sit under their parent, indented 16 px along a hairline `--border` guide line. A subagent shows the `Bot` icon with its title and, muted, its description ("Explore · Find where the tests read the clock"); a sub-session you started shows its agent's mark and title.
@@ -273,7 +274,7 @@ The page scales to many agents: a list first, and a page of its own for each age
 - A parent's indicator includes its sub-sessions: the waiting dot's count adds up their permission requests, and it shows Running while any of them runs, so a collapsed parent still says where to look.
 - **New sub-session** is in the session's title menu and its row's menus. The row's context menu and **More** menu hold the same items as the title menu, from one definition: **Rename**, **New sub-session**, **Close**, a separator, and **Delete…**, which asks first in an `AlertDialog`.
 - Double-clicking a row, or **Rename** in its menus, renames the session in place, as in the reference: the title becomes a text field in the row, which keeps its fill and shows no ring, and it saves and cancels as the [top bar's](#session) does. The arrow keys, `Home` and `End` stay in the field.
-- A status never relies on color alone, with one exception: a dot named by its accessible name. A session row's waiting and unread dots fall under it ("Waiting for you, 2 requests", "Unread"), and so does an agent's **Ready** state ([Settings › Agents](#settings--agents)), whose neutral dot also has a tooltip. Error and running keep an icon and a spinner.
+- A status never relies on color alone, with two exceptions. The first is a dot named by its accessible name: a session row's waiting and unread dots fall under it ("Waiting for you, 2 requests", "Unread"), and so does an agent's **Ready** state ([Settings › Agents](#settings--agents)), whose neutral dot also has a tooltip. The second is an agent mark greyed for a [prompt cache](#in-the-sidebar) that is gone, which the row's accessible name also says ("Prompt cache expired"); decided 2026-10-24 for [#189](https://github.com/overbench/overbench/issues/189). Error and running keep an icon and a spinner.
 - The sidebar list has one Tab stop; the arrow keys move between rows.
 - The footer holds **Settings**, with no shortcut hint (`Mod+,` stays in the app menu and Settings › Keyboard shortcuts), and, above it, a neutral `--bg-subtle` notice when an agent needs sign-in ("Codex needs you to sign in"); signing in is not an approval, so it takes no color. The notice opens Settings at Agents and is hidden while that section is open. The [update notice](#updates) sits between the two.
 - Later, not in M0: pinned sessions with drag reordering, and grouping by status or date.
@@ -450,7 +451,7 @@ The layout follows the reference: the box holds the message, its text, its [atta
 - While a permission request is pending, the placeholder reads "Waiting for your approval" and the send button is disabled.
 - While the agent is starting, the text area is disabled and the control row is hidden, because the config options are not known yet.
 - **Usage**: a 16 px pie inside a thin ring showing `used / size` of the context, alone at first; a filling wedge, unlike a short arc, never reads as a spinner. From 80% it turns `--warning`, from 95% `--danger`, and shows the percentage next to it. When a plan limit of the agent's account reaches its warning state, its window and percentage appear in front of the ring in its [usage level](./design-system.md#usage-levels) ("5h 92%"); once a limit is reached, the composer's placeholder says when it resets. A click opens the [usage popover](#usage-popover).
-- **Prompt cache on the ring**: the ring stays as it is while the [prompt cache](./session-model.md#prompt-cache) is warm, and shows two quiet states between turns, in shape and not in color: in the cache's last minute its track turns dashed (twelve dashes), and once it has expired the wedge also fades to 35%, the dimming the data graphics use for what lies outside. The button's accessible name says which ("Context 5% used. The prompt cache has expired."), "probably" for an estimate. The states change on a timer set for the moment each one starts, and are checked again on each tick of the shared 30 s clock, since timers stand still while the computer sleeps and do not follow a change of its clock; a check that finds the state unchanged renders nothing, so the ring re-renders twice per request. During a turn the requests keep the cache in use, and the ring shows neither. Decided while the maintainer was away; to be reviewed.
+- **Prompt cache on the ring**: the ring stays as it is while the [prompt cache](./session-model.md#prompt-cache) is warm, and shows two quiet states between turns, in shape and not in color: in the cache's [last minutes](#prompt-cache) its track turns dashed (twelve dashes), and once it has expired the wedge also fades to 35%, the dimming the data graphics use for what lies outside. In both, the time shows before the ring, as [in the control row](#in-the-control-row) says. The button's accessible name says which ("Context 5% used. The prompt cache has expired."), "probably" for an estimate. The states change on a timer set for the moment each one starts, and are checked again on each tick of the shared 30 s clock, since timers stand still while the computer sleeps and do not follow a change of its clock; a check that finds the state unchanged renders nothing, so the ring re-renders twice per request. During a turn the requests keep the cache in use, and the ring shows neither. Reviewed 2026-10-24 for [#189](https://github.com/overbench/overbench/issues/189).
 
 ### Attachments
 
@@ -505,7 +506,10 @@ Files, photos and folders a message carries besides its text. The host sends eac
 │ This session   Input 1.2M  Output 48k        │
 │                Cache read 980k  write 64k    │
 │ Prompt cache             Expires in 52:10    │
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━──── │
 │ 1-hour cache · last request 7 minutes ago    │
+│ If it expires, the next message reads about  │
+│ 128k tokens again at full price.             │
 │                                   Compact    │
 ├──────────────────────────────────────────────┤
 │ Claude Max                     Plan limits   │
@@ -518,11 +522,64 @@ Files, photos and folders a message carries besides its text. The host sends eac
 
 - A shadcn `Popover`, 320 px wide, in two parts separated by a `Separator`.
 - **Context**, for this session: a `Progress` bar of `used / size`, the tokens used and left, and the session's token totals, summed over its turns, when the agent reports them (input, output, reasoning, cache read and write). The cost appears only when the account is not a subscription. **Compact** runs the agent's own `compact` command, and is shown only when the agent offers one among its slash commands.
-- **Prompt cache**, for the session's own thread ([prompt cache](./session-model.md#prompt-cache)), after the token totals: "Prompt cache" with a countdown in minutes and seconds ("Expires in 52:10"), and under it the cache's lifetime and how long ago the last request was ("1-hour cache · last request 7 minutes ago"). An expiry estimated from the provider's documented minimum says so: "Expires in about 4:07" over "Estimated 5-minute cache · …". Once the time is up it reads "Expired" ("Probably expired" for an estimate) over "The next message reads the whole context again at full price." ("If it has, …"). Without a known lifetime, one row says only "Last request" and how long ago. The countdown is the one part of the popover on a one-second clock, which runs only while the popover is open, so nothing else re-renders each second: with the popover open for 10 s, the countdown rendered 10 times and the composer, its control row and the usage button not once (measured 2026-10-23 on a production build).
+- **Prompt cache**, for the session's own thread ([prompt cache](./session-model.md#prompt-cache)), after the token totals: the same block as the top bar's [cache card](#in-the-top-bar). Without a known lifetime, one row says only "Last request" and how long ago. The countdown is the one part of the popover on a one-second clock, which runs only while the popover is open, so nothing else re-renders each second: with the popover open for 10 s, the countdown rendered 10 times and the composer, its control row and the usage button not once (measured 2026-10-23 on a production build).
 - **What fills the context**, for Claude Code: opening the popover while no turn runs reads the [context breakdown](./session-model.md#context-breakdown), which shows one row per category (name, tokens, share of the window) under the token line, then each list the report has (MCP tools, memory files, skills) as a `Collapsible` with its count. `Skeleton` rows stand in until the first one arrives; a later read dims the rows it replaces; a failure says so in one line. The breakdown is kept until the session's context changes. This is the existing layout with rows added; the popover's redesign is [problem 7](../milestones/m0-feedback.md#7-the-usage-popover-shows-too-little-and-needs-a-full-redesign).
 - **Plan limits**, for the agent's account: the plan label from the agent ("Claude Max"), then one row per window the agent has reported ([plan limits](./session-model.md#plan-limits)), which opening the popover reads afresh from the agent's report (Claude Code's `/usage`, Codex's `/status`): label, a bar, the percentage in `tabular-nums`, and the reset time (the clock time today, the weekday within six days, the date beyond, the full time in a tooltip). Each bar takes the window's [usage level](./design-system.md#usage-levels) (`usageTone`), as in Settings › Agents and the agent menu: `--success` below 60% used, `--attention` from 60%, `--destructive` from 90% or once reached, the percentage in the matching text color. On the usage page, under a card titled **Plan limits**, each agent's rows leave that title out. "Updated 3 min ago" tells how fresh the numbers are.
 - Agents that report no plan limits, today OpenCode, show the Context part only; an API key account shows its label without bars.
 - Settings › Agents shows the same plan windows in its list and on each agent's page, read afresh whenever they show, starting the agent if it is installed ([Settings › Agents](#settings--agents)). Until the read is back, the windows last reported, kept across runs, stand in.
+
+## Prompt cache
+
+> Decided 2026-10-24 for [#189](https://github.com/overbench/overbench/issues/189): of four places tried on the [prompt cache canvas](https://claude.ai/artifact/Urm9ZJsmfoHdAKaNFDw9Pt), the control row, the top bar, the thread's end and the sidebar, the maintainer chose the top bar, the control row and the sidebar together, each with a job of its own. For the sidebar, a greyed mark and one status were chosen over a countdown or an hourglass on every row, which read as too heavy.
+
+When a session's [prompt cache](./session-model.md#prompt-cache) expires, its next message reads the whole context again at full price. So the session page says how long the cache has left, and the sidebar tells sessions with a warm cache from cold ones. Three places share the work, so the same time never shows twice on one screen:
+
+| Place                              | Shows                                                      | When                                         |
+| ---------------------------------- | ---------------------------------------------------------- | -------------------------------------------- |
+| [Top bar](#in-the-top-bar)         | The time left, and a card with the details                 | From the first request on, between turns     |
+| [Control row](#in-the-control-row) | The time left, before the usage ring                       | In the last minutes, and once it has expired |
+| [Sidebar](#in-the-sidebar)         | A grey mark for a cache that is gone, a ring for one going | Always; the ring only in the last minutes    |
+
+- **The last minutes**: the last five of a cache that lasts an hour, the last one of a shorter cache. They are the time to act, so each place marks them in `--warning`, as a [usage warning](./design-system.md#usage-levels).
+- **Nothing to show**: during a turn, since its requests keep the cache in use, and while the cache's lifetime is not known. The sidebar then leaves the row as it is.
+- **The time**: over five minutes left, whole minutes, rounded down ("52 min"); in the last five, minutes and seconds ("4:07"). An [estimated](./session-model.md#prompt-cache) lifetime says "about" ("about 4:07"), and "probably" once it is up ("Probably expired").
+- **The cost of letting it expire** is the context the next message reads again, the session's `usage.used`, in the compact token format ("about 128k tokens").
+
+### In the top bar
+
+After the title's chevron, a chip: `Hourglass` at 12 px and "Cache 52 min", in 12 px `tabular-nums` `--text-tertiary` on `--bg-subtle`, 24 px high with a 6 px radius and 8 px of padding. In the last minutes the text and the icon turn `--warning`; once the cache has expired the chip reads "Cache expired" in `--text-tertiary` until the next request. The hourglass's sand shows the share of the lifetime left: the top bulb holds what is left, the bottom what has run out. The title truncates before the chip gives way.
+
+A click opens the **cache card**, a `Popover` 320 px wide under the chip:
+
+```text
+┌──────────────────────────────────────────────┐
+│ Prompt cache             Expires in 52:10    │
+│ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━──── │
+│ 1-hour cache · last request 7 minutes ago    │
+│ If it expires, the next message reads about  │
+│ 128k tokens again at full price.             │
+└──────────────────────────────────────────────┘
+```
+
+- "Prompt cache" and a countdown in minutes and seconds; a 4 px bar of the share left, `--text-tertiary` until the last minutes and `--warning` in them; the lifetime and how long ago the last request was; and the cost of letting it expire, in `--text-secondary`.
+- Once expired: "Expired" with no bar, over "The next message reads about 128k tokens again at full price."
+- An estimate: "Expires in about 4:07" over "Estimated 5-minute cache · last request …"; once it is up, "Probably expired" over "If it has expired, the next message reads …".
+- The [usage popover](#usage-popover) shows the same block after the token totals.
+
+### In the control row
+
+While the cache is warm the usage ring stands alone, since the top bar shows the time. In the last minutes the usage button shows the time before the ring, `Hourglass` at 13 px and "4:07" in `--warning`, so the warning sits where the next message is written; once the cache has expired it shows "Expired" in `--text-tertiary` until the next request. The time slides in as a plan limit in front of the ring does, and the ring keeps its [own states](#composer).
+
+### In the sidebar
+
+- **A cache that is gone**: the row's agent mark turns grey (`grayscale(1)` at 40% opacity) once the session's cache is known to be gone, because it expired or the session has no request on record. A row whose cache is warm, whose lifetime is not known, or that runs keeps its mark in color. A sub-session's mark follows its own cache; a subagent's `Bot` icon stays as it is.
+- **A cache about to go**: in the last minutes, the status slot shows the **Prompt cache expiring** ring, between Starting and Unread in [priority](#sidebar).
+- The row's accessible name ends with the cache's state ("Prompt cache expires in 4 minutes", "Prompt cache expired"), and the tooltip of the mark or the ring gives the time to the second ("Prompt cache expires in 4:07 · 1-hour cache"). Rows still show no time.
+
+### Clocks
+
+- The sidebar and the control row render only when a state starts: each change is on a timer set for its moment and checked again on each tick of the shared 30 s clock, as for the ring.
+- The top bar's chip renders once a minute while more than five minutes are left, and once a second in the last five. The card and the usage popover count each second only while they are open.
 
 ## Git in the top bar
 
