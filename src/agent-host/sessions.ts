@@ -299,6 +299,14 @@ function queuedAttachments(records: readonly SessionRecord[]): string[] {
   )
 }
 
+function entryHolds(entry: ThreadEntry, text: string): boolean {
+  if (entry.kind === 'agent') return entry.markdown.includes(text)
+  if (entry.kind === 'user') {
+    return entry.content.some((part) => part.type === 'text' && part.text.includes(text))
+  }
+  return false
+}
+
 /** Agents with OverBench's ultracode switch: Claude Code, and the fake agent that stands in for it. */
 function hasUltracode(agentId: AgentId): boolean {
   return agentId === 'claude-code' || agentId === 'fake-agent'
@@ -2449,6 +2457,17 @@ export class SessionManager {
     const stored = await this.storedBlob(sessionId, hash)
     if (!stored) throw notFound(`Session ${sessionId} keeps no attachment ${hash}`)
     return { mimeType: stored.mime, bytes: toArrayBuffer(stored.data) }
+  }
+
+  /**
+   * Whether an agent or user entry of the session's thread holds `text`: in memory first, since a
+   * reply that is still streaming is not stored yet, then in the thread store.
+   */
+  async names(sessionId: string, text: string): Promise<boolean> {
+    if (!this.records.has(sessionId)) return false
+    const thread = this.live.get(sessionId)?.thread
+    if (thread && Object.values(thread.byId).some((entry) => entryHolds(entry, text))) return true
+    return (await this.deps.threads?.mentions(sessionId, text)) ?? false
   }
 
   /** A sent attachment's bytes: from memory until the thread store has them. */

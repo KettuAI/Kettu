@@ -30,6 +30,7 @@ import { PANEL, stopReasonText } from './helpers'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { Markdown } from '../markdown'
+import { SessionIdContext } from '../media/grants'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
 import { UserActions } from './message-actions'
@@ -81,11 +82,13 @@ export const AgentEntry = memo(function AgentEntry({
   if (!entry) return null
   return (
     <div className={cn('min-w-0', note && 'text-muted-foreground', animation)} data-selectable="">
-      <Markdown
-        markdown={entry.markdown}
-        streaming={entry.streaming}
-        className={note ? 'markdown-muted' : undefined}
-      />
+      <SessionIdContext value={sessionId}>
+        <Markdown
+          markdown={entry.markdown}
+          streaming={entry.streaming}
+          className={note ? 'markdown-muted' : undefined}
+        />
+      </SessionIdContext>
       {entry.attachments.length > 0 && (
         <div className="mt-2 flex flex-wrap items-start gap-1.5">
           {entry.attachments.map((ref, i) =>

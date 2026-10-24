@@ -170,6 +170,11 @@ export class ThreadStore {
     return this.request({ op: 'blob', sessionId, hash })
   }
 
+  /** Whether an agent or user entry of the stored thread holds `text`. */
+  mentions(sessionId: string, text: string): Promise<boolean> {
+    return this.request({ op: 'mentions', sessionId, text })
+  }
+
   /** A call on the artifact records, which share the database. */
   artifact<K extends ArtifactCallName>(
     name: K,

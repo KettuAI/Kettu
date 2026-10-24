@@ -1,6 +1,7 @@
 // Messages between main and the two utility processes, over `utilityProcess` messaging.
 
 import type { AttachmentGrant } from './attachments'
+import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { HostSettings, TerminalSettings } from './settings'
 import type { AgentId } from './thread'
@@ -67,6 +68,8 @@ export type HostToMain =
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
   | { type: 'host:granted'; requestId: number }
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }
+  | { type: 'host:media-grant'; grant: MediaGrantRecord }
+  | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
   | { type: 'host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'host:stopped' }
 

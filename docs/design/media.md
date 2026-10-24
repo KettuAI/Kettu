@@ -22,9 +22,10 @@ A was recommended: it plays where the reply names it, as [problem 49](../milesto
 
 The first build covers the case that started it, a screenshot an agent saved and named by its path ([#43](https://github.com/overbench/overbench/issues/43#issuecomment-6379889027)):
 
-- **Images in replies, in place.** A Markdown image that names a local file, spaces in its path included ([spaces in a path](#spaces-in-a-path)), loads from the [media scheme](#the-media-scheme) under the grant rules as written; image blocks show from their bytes, as they do today. Images only: the scheme answers a whole file, without ranges.
+- **Images in replies, in place.** A Markdown image that names a local file, spaces in its path included ([spaces in a path](#spaces-in-a-path)), loads from the [media scheme](#the-media-scheme) under the grant rules as written; image blocks show from their bytes, as they do today. Images only: the scheme answers a whole file, without ranges or `Accept-Ranges`.
 - **States**: loading, missing, format not supported, read error and remote ([states](#states)), without **Open with default app** and **Show in Finder**.
 - **A plain viewer**: a click or `Enter` opens the picture fitted on the dark scrim, with its name and sizes in the bar and **Close**; `Esc` or a click on the scrim closes it, and focus returns to the picture. It fades in and out.
+- **Built so far**: only agent replies show local images; in thoughts, tool output and previews they stay text, and an image that is neither local, remote, `data:` nor `blob:`, such as `//host/x.png`, stays text too. The CSP allows the scheme in `img-src` only. A reply asks for its grants as it renders, and the pictures load lazily (`loading="lazy"`); the shared observer that holds back the grants too comes with video. The renderer keeps a grant for the run, up to 500, and asks again once when a picture fails to load, as after a session's grants were dropped.
 
 Later steps, each its own issue once the first version is accepted: video and audio with Chromium's players, and the scheme's range requests; zoom, pan, stepping and the shared-element motion in the viewer; **Copy image**, **Save as…** and **Show in Files**; media in tool calls; media in the Files pane; attached images in the viewer; audio and video bytes carried in the conversation, with their 20 MB cap. The decisions this document marks to be agreed wait for the step that needs them; the grant rules are part of the first version, since nothing is served without them.
 
@@ -69,7 +70,7 @@ The renderer finds these files in the entries it already has; they add nothing t
 
 #### Spaces in a path
 
-Agents write absolute paths as they are, spaces included: OpenCode, asked for a screenshot on 2026-10-24, replied `![desktop](/Users/…/Application Support/OverBench Dev/scratch/…/desktop-shot.png)` ([#43](https://github.com/overbench/overbench/issues/43#issuecomment-6379889027)). CommonMark ends a link destination at its first space unless it is written `<…>`, so that line renders as text. Before a reply is parsed, a remark step takes `![alt](` followed by a path that starts with `/`, `~/`, `./`, `../` or a drive letter, holds no `(`, `)` or line break, ends in a media file's extension and is followed by `)`, and reads it as if the destination were written `<…>`. Anything else keeps CommonMark's reading, so code spans and blocks, where Markdown is not parsed, and prose that only looks like an image stay text.
+Agents write absolute paths as they are, spaces included: OpenCode, asked for a screenshot on 2026-10-24, replied `![desktop](/Users/…/Application Support/OverBench Dev/scratch/…/desktop-shot.png)` ([#43](https://github.com/overbench/overbench/issues/43#issuecomment-6379889027)). CommonMark ends a link destination at its first space unless it is written `<…>`, so that line renders as text. Before a reply is parsed, a step takes `![alt](` followed by a path that starts with `/` (not `//`), `~/`, `./`, `../` or a drive letter, holds a space and no `(`, `)`, `<`, `>` or line break, ends in a media file's extension and is followed by `)`, and writes the destination as `<…>`, its backslashes before punctuation doubled so Windows separators survive. Since it runs on the text, a `~`, `*`, `_` or `www.` in the path is never read as Markdown. Anything else keeps CommonMark's reading, so code spans, fenced blocks and lines indented as code, where Markdown is not parsed, and prose that only looks like an image stay text.
 
 ## The media scheme
 
@@ -81,13 +82,13 @@ overbench-media://<grant>/<file name>?v=<mtime>
 
 ### Granting a file
 
-`media.open` ([host protocol](./host-protocol.md#requests)) asks the host for a grant: `{ projectPath, path, sessionId? }`. The host:
+`media.open` ([host protocol](./host-protocol.md#requests)) asks the host for a grant: `{ projectPath, path, sessionId }`, the session's folder, the path as the thread writes it, and the session whose thread is shown. It answers `granted` with a `MediaGrant`, or `not_found`, `forbidden` or `not_media`; a file it cannot read fails the request. The host:
 
-1. Resolves the path: a `file:` URI to its path, a leading `~/` to the home folder, a relative path against `projectPath`, which is the session's folder, its project or its scratch folder.
-2. Takes its real path (`realpath`) and requires a regular file.
-3. Allows it when the real path is inside that folder, by the [platform's path rules](./agent-host.md#platform-differences), git-ignored folders included; or, with a `sessionId`, when that session's thread names the path as written in an entry of the agent or the user, found in the live thread or in the [stored one](./persistence.md#threads). Anything else is `forbidden`, so the renderer cannot ask for a file no one named.
-4. Reads its first 4 KB and takes the kind and MIME type from them ([what counts](#what-counts-as-media)); a file that is not media is `not_media`.
-5. For an image, reads its pixel size when the header holds it (PNG, GIF, WebP, BMP and AVIF at their start, JPEG within its first 64 KB), so the thread reserves the exact box before it loads.
+1. Resolves the path: a `file:` URI to its path, a leading `~/` to the home folder, a relative path against `projectPath`, which is the session's folder, its project or its scratch folder. A path that is not there is tried once more percent-decoded, since some agents write spaces as `%20`. A network or device path (`\\host\share`, `\\?\`, `\\.\`, or a `file:` URI with a host) is `forbidden`, since opening one would reach out to its host, and so, on Windows, is a path that depends on the host's current drive (`\src`, `C:src`).
+2. Allows it when the resolved path is inside that folder, by the [platform's path rules](./agent-host.md#platform-differences), git-ignored folders included; or when that session's thread names the path as written in the text of an agent reply or a user message, found in the live thread or in the [stored one](./persistence.md#threads). Anything else is `forbidden` before the file system is touched, so the renderer can neither ask for a file no one named nor make the host look one up.
+3. Takes its real path (`realpath`), which must pass the same test, so a link in the folder that leads out of it needs the thread to name it, and requires a regular file.
+4. Reads its first 64 KB, which hold a JPEG's frame header behind its metadata too, and takes the kind and MIME type from them ([what counts](#what-counts-as-media)); a file that is not media is `not_media`.
+5. For an image, reads its pixel size when the header holds it (PNG, GIF, WebP and BMP at their start, JPEG within its first 64 KB, turned when its Exif orientation turns it a quarter), so the thread reserves the exact box before it loads. AVIF, icons and SVG have no size here and take the one they decode to.
 6. Registers the grant with main (`host:media-grant`, [main and host messages](./agent-host.md#main-and-host-messages)) and answers a `MediaGrant`:
 
    ```ts
@@ -101,15 +102,16 @@ overbench-media://<grant>/<file name>?v=<mtime>
    }
    ```
 
-- A grant is a random 128-bit token in base32. Grants live in main's memory only: a session's go when it closes or is deleted, all go when the host restarts, and past 2,000 the oldest go first. A renderer that meets a dropped grant asks again.
+- A grant is a random 128-bit token in base32. Grants live in main's memory only: a session's go when it is deleted, all go when a project or every session is removed or the host stops, and past 2,000 the oldest go first. A renderer that meets a dropped grant asks again.
 - `files.read` grants a media file of the Files pane itself and answers `media` with its URL instead of its bytes ([project files](./agent-host.md#project-files)), so the pane and the thread read media the same way.
 
 ### Serving
 
-- Main registers the scheme before `ready` with the `standard`, `secure` and `stream` privileges (`<video>` and `<audio>` expect a streamed response only from a `stream` scheme) and handles it with `protocol.handle` on the app's session. It answers only requests whose `initiatorOrigin` is OverBench's own page, as `isRendererUrl` tells it in main, so a frame on another origin in the same session, such as an agent's HTML page ([#11](https://github.com/overbench/overbench/issues/11)), and any other session, such as the built-in browser ([#47](https://github.com/overbench/overbench/issues/47)), cannot use a grant even if it learned one.
+- Main registers the scheme before `ready` with the `standard`, `secure` and `stream` privileges (`<video>` and `<audio>` expect a streamed response only from a `stream` scheme) and handles it with `protocol.handle` on the app's session. Main's request filter cancels a request on the scheme unless it comes from the main frame of OverBench's own page, as `isRendererUrl` tells by the frame's URL, so a frame on another origin in the same session, such as an agent's HTML page ([#11](https://github.com/overbench/overbench/issues/11)), and any other session, such as the built-in browser ([#47](https://github.com/overbench/overbench/issues/47)), cannot use a grant even if it learned one.
 - Each request looks the token up, takes the file's real path again and compares it with the grant's, so a file swapped for a link since the grant is refused, and takes its current size from `fs.stat`. A `Range: bytes=start-end` or suffix range answers `206` with `Content-Range` from `fs.createReadStream(path, { start, end })`; no range answers `200` with the whole file, streamed; a range past the end answers `416`. Everything is asynchronous: main never reads a whole file and never blocks.
 - Headers: `Content-Type` from the grant, `Accept-Ranges: bytes`, `Content-Length`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store` and `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`, so a response opened as a document, should one ever be, runs nothing.
 - `?v=` carries the file's modification time when it was granted, so a file the agent rendered again gets a new URL and loads fresh rather than mixing old and new ranges.
+- The host hands main a grant and the renderer its URL over different channels, so a request for a token main does not know yet waits up to 1 s for its grant.
 - An unknown token, a method other than `GET` or `HEAD`, or a file gone since the grant answers `404`, which the item shows as [missing](#states).
 
 Measured in a prototype with the same privileges and a CSP like the app's (Electron 44.9.2, macOS arm64, 2026-10-22): a 91 MB, 120 s 1080p H.264 file reached its metadata in 26 ms and seeked to 80% in 281 ms cold and 67 ms warm, reading 17 MB in three range requests; 5 s of its playback at 6 Mbit/s cost main 49 ms of CPU, 1%.

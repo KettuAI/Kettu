@@ -285,5 +285,11 @@
     "alt": "SVG image",
     "showSource": "Show source",
     "showPreview": "Show preview"
+  },
+  "media": {
+    "openImage": "Open image {{name}}",
+    "notFound": "Not found at {{path}}.",
+    "cannotRead": "Can't read {{name}}",
+    "unsupported": "This image's format can't be shown here."
   }
 }

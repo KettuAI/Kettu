@@ -236,6 +236,18 @@ describe('createValidators', () => {
     rejects(() => windows['files.read']({ projectPath: 'C:\\p', path: '\\Windows\\a.ini' }))
     expect(windows['files.read']({ projectPath: 'C:\\p', path: 'src/a.ts' })).toMatchObject({})
 
+    // A thread may name any path; the host decides what it grants.
+    const media = posix['media.open']
+    expect(media({ projectPath: '/p', path: '/etc/a b.png', sessionId: 's', extra: 1 })).toEqual({
+      projectPath: '/p',
+      path: '/etc/a b.png',
+      sessionId: 's',
+    })
+    rejects(() => media({ projectPath: '/p', path: '/a.png' }))
+    rejects(() => media({ projectPath: 'p', path: '/a.png', sessionId: 's' }))
+    rejects(() => media({ projectPath: '/p', path: 'a\0b.png', sessionId: 's' }))
+    rejects(() => media({ projectPath: '/p', path: '', sessionId: 's' }))
+
     const search = posix['files.search']
     expect(search({ projectPath: '/p', query: 'needle', extra: 1 })).toEqual({
       projectPath: '/p',

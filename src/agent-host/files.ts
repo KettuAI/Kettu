@@ -104,7 +104,7 @@ function isBinary(bytes: Buffer): boolean {
 const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i
 
 /** The picture format by its signature, not its name; null when it is none the preview shows. */
-function imageType(bytes: Buffer): ImageType | null {
+export function imageType(bytes: Buffer): ImageType | null {
   const ascii = (start: number, end: number) => bytes.toString('latin1', start, end)
   if (bytes[0] === 0x89 && ascii(1, 8) === 'PNG\r\n\x1a\n') return 'image/png'
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
@@ -116,7 +116,7 @@ function imageType(bytes: Buffer): ImageType | null {
   return null
 }
 
-async function readBytes(handle: FileHandle, length: number): Promise<Buffer> {
+export async function readBytes(handle: FileHandle, length: number): Promise<Buffer> {
   const buffer = Buffer.allocUnsafe(length)
   let filled = 0
   while (filled < length) {

@@ -5,6 +5,7 @@
 import type { Input, Session, WebContents, WebFrameMain } from 'electron'
 import type { ArtifactBlockedEvent, ArtifactStoppedEvent, ForwardedKey } from '@shared/ipc'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
+import { refuseRequests } from '../request-filter'
 import { mayRequest } from './policy'
 
 /** How often main looks for an artifact frame whose process stopped; Electron reports none. */
@@ -43,9 +44,9 @@ export function requestingArtifact(source: RequestSource): string | null {
 
 /** Cancels every request an artifact makes for anything but its own origin, `data:`, `blob:` or a CDN. */
 export function filterArtifactRequests(session: Session): void {
-  session.webRequest.onBeforeRequest((details, callback) => {
+  refuseRequests(session, (details) => {
     const host = requestingArtifact(details)
-    callback({ cancel: host !== null && !mayRequest(host, details.url) })
+    return host !== null && !mayRequest(host, details.url)
   })
 }
 
