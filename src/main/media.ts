@@ -90,23 +90,24 @@ export async function respondMedia(request: Request, grants: MediaGrants): Promi
     // A file swapped for a link since the grant leads somewhere no one granted.
     if ((await realpath(grant.path)) !== grant.path) return answer(404)
     const file = await open(grant.path, 'r')
-    const info = await file.stat()
-    if (!info.isFile()) {
-      await file.close()
-      return answer(404)
+    // The stream closes the file once it is handed one.
+    let streamed = false
+    try {
+      const info = await file.stat()
+      if (!info.isFile()) return answer(404)
+      const headers = {
+        ...HEADERS,
+        'Content-Type': grant.mimeType,
+        'Content-Length': String(info.size),
+      }
+      if (request.method === 'HEAD' || info.size === 0) return new Response(null, { headers })
+      // Exactly the size just read, so a file still being written cannot outrun its length.
+      const stream = file.createReadStream({ start: 0, end: info.size - 1 })
+      streamed = true
+      return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { headers })
+    } finally {
+      if (!streamed) await file.close()
     }
-    const headers = {
-      ...HEADERS,
-      'Content-Type': grant.mimeType,
-      'Content-Length': String(info.size),
-    }
-    if (request.method === 'HEAD' || info.size === 0) {
-      await file.close()
-      return new Response(null, { headers })
-    }
-    // Exactly the size just read, so a file still being written cannot outrun its length.
-    const stream = file.createReadStream({ start: 0, end: info.size - 1 })
-    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { headers })
   } catch {
     return answer(404)
   }

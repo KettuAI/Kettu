@@ -3,6 +3,7 @@ import {
   isValidElement,
   memo,
   useDeferredValue,
+  useMemo,
   useState,
   type ComponentProps,
   type ReactNode,
@@ -35,7 +36,7 @@ import { PrChip } from '@renderer/features/git/pr-chip'
 import { LocalImage } from '@renderer/features/session/media/local-image'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
-import { localImageTarget } from './local-images'
+import { localImageTarget, spacedImages } from './local-images'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
 import { SvgBlock } from './svg-block'
@@ -63,8 +64,9 @@ function Link(props: ComponentProps<'a'> & ExtraProps) {
 }
 
 /**
- * An image: a local file from the media scheme, or a remote one as a link to it, since the CSP
- * loads nothing remote. Others, such as `data:` pictures, render as they come.
+ * An image: a local file from the media scheme, a remote one as a link to it, since the CSP
+ * loads nothing remote, or a `data:` or `blob:` picture as it comes. Anything else, such as
+ * `//host/x.png`, would resolve against the page, so it stays text.
  */
 function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
   const src = typeof props.src === 'string' ? props.src : ''
@@ -79,7 +81,8 @@ function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
       </DefaultLink>
     )
   }
-  return <DefaultImage {...props} />
+  if (/^(?:data|blob):/i.test(src)) return <DefaultImage {...props} />
+  return <span title={src}>{props.alt}</span>
 }
 
 /** Inline code, which is a file chip when it is a path in the project. */
@@ -191,6 +194,7 @@ function MarkdownImpl({
 }
 
 const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: boolean }) {
+  const source = useMemo(() => spacedImages(markdown), [markdown])
   return (
     <Streamdown
       mode="streaming"
@@ -205,7 +209,7 @@ const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: 
       codeBlockMaxHeight={480}
       lineNumbers={false}
     >
-      {markdown}
+      {source}
     </Streamdown>
   )
 })

@@ -228,9 +228,15 @@ function prepareAll(db: DatabaseSync) {
       'INSERT OR IGNORE INTO blobs (session_id, hash, mime, data) VALUES (?, ?, ?, ?)',
     ),
     blob: sql('SELECT mime, data FROM blobs WHERE session_id = ? AND hash = ?'),
-    mentions: sql(
-      "SELECT 1 FROM entries WHERE session_id = ? AND kind IN ('agent', 'user') AND instr(json, ?) > 0 LIMIT 1",
-    ),
+    // `entries.json`, since json_each has a hidden column of that name.
+    mentions: sql(`SELECT 1 FROM entries WHERE session_id = ?1 AND (
+      (kind = 'agent' AND instr(json_extract(json, '$.markdown'), ?2) > 0)
+      OR (kind = 'user' AND EXISTS (
+        SELECT 1 FROM json_each(entries.json, '$.content') AS part
+        WHERE json_extract(part.value, '$.type') = 'text'
+          AND instr(json_extract(part.value, '$.text'), ?2) > 0
+      ))
+    ) LIMIT 1`),
     artifact: sql(
       'SELECT id, project, title, head, session_id, created_at, updated_at, deleted_at FROM artifacts WHERE id = ?',
     ),
@@ -643,14 +649,11 @@ export class ThreadDb {
   }
 
   /**
-   * Whether an agent or user entry of the session holds `text`. Entries are stored as JSON, so
-   * the text is looked for as JSON writes it inside a string.
+   * Whether the text of an agent reply or a user message of the session holds `text`, as the
+   * live thread tells it (`entryHolds`).
    */
   mentions(sessionId: string, text: string): boolean {
-    return this.guard(
-      (sql) => sql.mentions.get(sessionId, JSON.stringify(text).slice(1, -1)) !== undefined,
-      false,
-    )
+    return this.guard((sql) => sql.mentions.get(sessionId, text) !== undefined, false)
   }
 
   /** Drops the threads of these sessions, with their images, and returns the space. */

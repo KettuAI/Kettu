@@ -2,9 +2,16 @@ import { mkdtemp, realpath, rename, rm, symlink, writeFile } from 'node:fs/promi
 import os from 'node:os'
 import { join } from 'node:path'
 import type { WebFrameMain } from 'electron'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { MediaGrantRecord } from '@shared/media'
 import { MediaGrants, mayRequestMedia, respondMedia } from './media'
+
+const open = vi.hoisted(() => vi.fn())
+vi.mock('node:fs/promises', async (original) => {
+  const actual = await original<typeof import('node:fs/promises')>()
+  open.mockImplementation(actual.open)
+  return { ...actual, open }
+})
 
 const posixOnly = process.platform === 'win32' ? it.skip : it
 
@@ -95,6 +102,18 @@ describe('respondMedia', () => {
     expect((await respondMedia(new Request(url(1)), grants())).status).toBe(404)
     const bad = 'overbench-media://not-a-token/shot.png'
     expect((await respondMedia(new Request(bad), grants())).status).toBe(404)
+  })
+
+  it('closes the file when reading its size fails', async () => {
+    const close = vi.fn(async () => {})
+    open.mockResolvedValueOnce({
+      stat: async () => {
+        throw new Error('EIO')
+      },
+      close,
+    })
+    expect((await respondMedia(new Request(url(0)), grants())).status).toBe(404)
+    expect(close).toHaveBeenCalledOnce()
   })
 
   posixOnly('refuses a file swapped for a link since the grant', async () => {

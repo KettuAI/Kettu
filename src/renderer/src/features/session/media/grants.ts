@@ -2,7 +2,10 @@ import { createContext } from 'react'
 import type { MediaOpenResult } from '@shared/media'
 import { host } from '@renderer/lib/host'
 
-/** The session whose thread is shown, whose naming of a file lets its image through. */
+/**
+ * The session of the agent reply being rendered, whose naming of a file lets its image through.
+ * Only agent replies provide it, so images in thoughts, tool output and previews stay as text.
+ */
 export const SessionIdContext = createContext<string | null>(null)
 
 const MAX_GRANTS = 500

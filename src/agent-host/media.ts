@@ -161,11 +161,21 @@ export class MediaService {
 
   /**
    * A grant for the image `written` names, as a thread writes it. `root` is the session's
-   * canonical folder; a file outside it needs `sessionId`'s thread to name it.
+   * canonical folder; a file outside it needs `sessionId`'s thread to name it, and is not
+   * looked at until it does.
    */
   async open(root: string, written: string, sessionId: string): Promise<MediaOpenResult> {
+    let named: boolean | undefined
+    const allowed = async (file: string) =>
+      this.inside(root, file) || (named ??= await this.deps.names(sessionId, written))
+    const candidates = this.candidates(root, written)
     let real: string | null = null
-    for (const candidate of this.candidates(root, written)) {
+    let refused = candidates.length === 0
+    for (const candidate of candidates) {
+      if (!(await allowed(candidate))) {
+        refused = true
+        continue
+      }
       try {
         real = await realpath(candidate)
         break
@@ -173,12 +183,11 @@ export class MediaService {
         if (!isMissing(error)) throw error
       }
     }
-    if (real === null) return { kind: 'not_found' }
+    if (real === null) return { kind: refused ? 'forbidden' : 'not_found' }
+    // A link inside the folder can lead out of it.
+    if (!(await allowed(real))) return { kind: 'forbidden' }
     const info = await stat(real)
     if (!info.isFile()) return { kind: 'not_found' }
-    if (!this.inside(root, real) && !(await this.deps.names(sessionId, written))) {
-      return { kind: 'forbidden' }
-    }
     const name = this.paths.basename(real)
     if (!MEDIA_IMAGE_NAME.test(name)) return { kind: 'not_media' }
     const head = await readHead(real, Math.min(info.size, HEAD_BYTES))
@@ -199,19 +208,29 @@ export class MediaService {
     }
   }
 
-  /** Where `written` may lie: as written, then percent-decoded, as some agents write spaces. */
+  /**
+   * Where `written` may lie: as written, then percent-decoded, as some agents write spaces.
+   * Network and device paths are never tried, since opening one would reach out to its host.
+   */
   private candidates(root: string, written: string): string[] {
+    const windows = this.deps.platform === 'win32'
+    const local = (value: string) => (windows && /^[\\/]{2}/.test(value) ? null : value)
     const resolve = (value: string): string | null => {
       if (/^file:/i.test(value)) {
+        // The URL parser turns `localhost` into no host.
+        const url = URL.parse(value)
+        if (!url || url.hostname !== '') return null
         try {
-          return fileURLToPath(value, { windows: this.deps.platform === 'win32' })
+          return local(fileURLToPath(url, { windows }))
         } catch {
           return null
         }
       }
-      const home = /^~[\\/]/.test(value) && (this.deps.platform === 'win32' || value[1] === '/')
+      const home = /^~[\\/]/.test(value) && (windows || value[1] === '/')
       if (home) return this.paths.join(this.deps.homeDir, value.slice(2))
-      if (isAbsolutePath(value, this.deps.platform)) return value
+      if (isAbsolutePath(value, this.deps.platform)) return local(value)
+      // On Windows `\x` and `C:x` depend on the host's current drive and folder.
+      if (windows && /^(?:[\\/]|[a-z]:)/i.test(value)) return null
       return this.paths.resolve(root, value)
     }
     const found = [resolve(written)]

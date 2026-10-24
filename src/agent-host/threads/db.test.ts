@@ -355,7 +355,7 @@ describe('the thread database', () => {
       kind: 'agent',
       id: 'a',
       markdown: `Saved:\n\n![shot](${shot})`,
-      attachments: [],
+      attachments: [{ kind: 'link', uri: 'file:///tmp/linked.png', name: 'linked.png' }],
       streaming: false,
     }
     db.write('s1', {
@@ -369,6 +369,9 @@ describe('the thread database', () => {
     expect(db.mentions('s1', shot)).toBe(true)
     expect(db.mentions('s1', '~/a b.png')).toBe(true)
     expect(db.mentions('s1', '/tmp/y.png')).toBe(false)
+    // Only the text of a reply or a message, as the live thread looks.
+    expect(db.mentions('s1', '/tmp/linked.png')).toBe(false)
+    expect(db.mentions('s1', '"kind"')).toBe(false)
     // A tool call's text is not where a reply names its files.
     expect(db.mentions('s2', '/tmp/x.png')).toBe(false)
     expect(db.mentions('missing', shot)).toBe(false)

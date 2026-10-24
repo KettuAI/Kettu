@@ -37,6 +37,8 @@ export function LocalImage({ path, alt }: { path: string; alt: string }) {
   const [shown, setShown] = useState<Shown>({ kind: 'asking' })
   // Each retry, and a grant main no longer holds, asks the host again.
   const [asked, setAsked] = useState(0)
+  // A picture that fails to load is asked for once more, since main may have dropped its grant.
+  const [renewed, setRenewed] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [viewing, setViewing] = useState(false)
   const name = fileName(path)
@@ -59,10 +61,14 @@ export function LocalImage({ path, alt }: { path: string; alt: string }) {
     }
   }, [projectPath, sessionId, path, asked])
 
-  const retry = () => {
+  const ask = () => {
     setShown({ kind: 'asking' })
     setLoaded(false)
     setAsked((n) => n + 1)
+  }
+  const retry = () => {
+    setRenewed(false)
+    ask()
   }
 
   if (!projectPath || !sessionId || shown.kind === 'text') {
@@ -144,8 +150,12 @@ export function LocalImage({ path, alt }: { path: string; alt: string }) {
           onLoad={() => setLoaded(true)}
           onError={() => {
             // A grant main dropped answers 404; a fresh one tells that apart from a bad file.
-            if (asked === 0) retry()
-            else setShown({ kind: 'unsupported' })
+            if (renewed) {
+              setShown({ kind: 'unsupported' })
+            } else {
+              setRenewed(true)
+              ask()
+            }
           }}
           className={cn(
             'block checkerboard',

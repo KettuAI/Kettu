@@ -214,6 +214,47 @@ describe('MediaService', () => {
     if (result.kind === 'granted') expect(result.grant.width).toBeUndefined()
   })
 
+  it('looks at nothing outside the folder until the thread names it', async () => {
+    const missing = join(outside, 'gone.png')
+    const quiet = service()
+    expect(await quiet.media.open(root, missing, sessionId)).toEqual({ kind: 'forbidden' })
+    expect(await quiet.media.open(root, '../../elsewhere/gone.png', sessionId)).toEqual({
+      kind: 'forbidden',
+    })
+    const named = service([missing])
+    expect(await named.media.open(root, missing, sessionId)).toEqual({ kind: 'not_found' })
+  })
+
+  it('never tries a network or device path, even one the thread names', async () => {
+    const paths = [
+      '\\\\host\\share\\x.png',
+      '//host/share/x.png',
+      'file://host/share/x.png',
+      'file:////host/share/x.png',
+      '\\\\?\\C:\\x.png',
+      '\\\\.\\C:\\x.png',
+      '\\x.png',
+      'C:x.png',
+    ]
+    const media = new MediaService({
+      platform: 'win32',
+      homeDir: 'C:\\Users\\me',
+      names: async () => true,
+      grant: () => {},
+    })
+    for (const written of paths) {
+      expect(await media.open('C:\\work', written, sessionId)).toEqual({ kind: 'forbidden' })
+    }
+    // Decoded it would be a share, so it is only a file name in the folder.
+    expect(await media.open('C:\\work', '%5C%5Chost%5Cshare%5Cx.png', sessionId)).toEqual({
+      kind: 'not_found',
+    })
+    const { media: posix } = service(['file://host/share/x.png'])
+    expect(await posix.open(root, 'file://host/share/x.png', sessionId)).toEqual({
+      kind: 'forbidden',
+    })
+  })
+
   posixOnly('follows a link to where it leads before deciding', async () => {
     await symlink(join(outside, 'chart.png'), join(root, 'link.png'))
     expect(await service().media.open(root, 'link.png', sessionId)).toEqual({

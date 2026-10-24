@@ -1,11 +1,9 @@
-// A remark plugin for images that name local files. See docs/design/media.md#spaces-in-a-path.
+// Images that name local files: their spaces before parsing, their URLs after. See
+// docs/design/media.md#spaces-in-a-path.
 
 interface MdNode {
   type: string
   url?: string
-  value?: string
-  alt?: string | null
-  title?: string | null
   children?: MdNode[]
 }
 
@@ -15,29 +13,78 @@ const FILE_URI = /^file:/i
 const PREFIX = '/#local-image:'
 
 /**
- * `![alt](path)` that CommonMark leaves as text because the path has a space in it, as agents
- * write paths such as `~/Library/Application Support/...`: an absolute or `./` path, with no
- * parenthesis or line break, that ends in an image's extension and is closed by `)`.
+ * `![alt](path)` as agents write paths such as `~/Library/Application Support/...`: an absolute or
+ * `./` path, with no parenthesis, angle bracket or line break, that ends in an image's extension
+ * and is closed by `)`.
  */
-const SPACED_IMAGE =
-  /!\[([^\]\n]*)\]\(((?:\/|~[\\/]|\.{1,2}[\\/]|[a-z]:[\\/])[^()\n]*?\.(?:png|jpe?g|gif|webp|avif|bmp|ico|svg))\)/gi
+const LOCAL_IMAGE =
+  /!\[([^\]\n]*)\]\(((?:\/(?!\/)|~[\\/]|\.{1,2}[\\/]|[a-z]:[\\/])[^()<>\n]*\.(?:png|jpe?g|gif|webp|avif|bmp|ico|svg))\)/gi
+const FENCE = /^ {0,3}(`{3,}|~{3,})/
+const INDENTED = /^(?: {4}|\t)/
+// Inside `<...>` a backslash before punctuation escapes it, which would eat a Windows separator.
+const ESCAPABLE = /\\(?=[!-/:-@[-`{-~])/g
+
+function wrapImages(prose: string): string {
+  return prose.replace(LOCAL_IMAGE, (image, alt: string, path: string) =>
+    /\s/.test(path) ? `![${alt}](<${path.replace(ESCAPABLE, '\\\\')}>)` : image,
+  )
+}
+
+/** `wrapImages` on the text outside code spans, which pair backtick runs of the same length. */
+function outsideCodeSpans(text: string): string {
+  const runs = [...text.matchAll(/`+/g)]
+  let out = ''
+  let done = 0
+  for (let i = 0; i < runs.length; i++) {
+    const open = runs[i]!
+    const j = runs.findIndex((run, k) => k > i && run[0].length === open[0].length)
+    if (j === -1) continue
+    const end = runs[j]!.index + runs[j]![0].length
+    out += wrapImages(text.slice(done, open.index)) + text.slice(open.index, end)
+    done = end
+    i = j
+  }
+  return out + wrapImages(text.slice(done))
+}
+
+/**
+ * Writes the destination of a local image whose path has a space as `<...>`, the form in which
+ * CommonMark takes spaces, before the text is parsed. Code blocks, lines indented as code and
+ * code spans stay as written.
+ */
+export function spacedImages(markdown: string): string {
+  LOCAL_IMAGE.lastIndex = 0
+  if (!LOCAL_IMAGE.test(markdown)) return markdown
+  let out = ''
+  let prose = ''
+  let fence: string | null = null
+  for (const line of markdown.split(/(?<=\n)/)) {
+    if (fence !== null) {
+      out += line
+      const close = FENCE.exec(line)
+      const closes =
+        close !== null &&
+        close[1]![0] === fence[0] &&
+        close[1]!.length >= fence.length &&
+        line.slice(close[0].length).trim() === ''
+      if (closes) fence = null
+      continue
+    }
+    const open = FENCE.exec(line)
+    if (open || INDENTED.test(line)) {
+      out += outsideCodeSpans(prose) + line
+      prose = ''
+      if (open) fence = open[1]!
+      continue
+    }
+    prose += line
+  }
+  return out + outsideCodeSpans(prose)
+}
 
 function isLocal(url: string): boolean {
   if (url === '' || url.startsWith('#') || url.startsWith('//')) return false
   return !SCHEME.test(url) || DRIVE.test(url) || FILE_URI.test(url)
-}
-
-function splitText(value: string): MdNode[] | null {
-  const parts: MdNode[] = []
-  let last = 0
-  for (const match of value.matchAll(SPACED_IMAGE)) {
-    if (match.index > last) parts.push({ type: 'text', value: value.slice(last, match.index) })
-    parts.push({ type: 'image', url: match[2]!, alt: match[1]!, title: null })
-    last = match.index + match[0].length
-  }
-  if (parts.length === 0) return null
-  if (last < value.length) parts.push({ type: 'text', value: value.slice(last) })
-  return parts
 }
 
 /**
@@ -51,14 +98,7 @@ export function localImages() {
       node.url = PREFIX + encodeURIComponent(node.url)
       return
     }
-    if (!node.children) return
-    const children: MdNode[] = []
-    for (const child of node.children) {
-      const split = child.type === 'text' && child.value ? splitText(child.value) : null
-      children.push(...(split ?? [child]))
-    }
-    node.children = children
-    children.forEach(visit)
+    node.children?.forEach(visit)
   }
   return visit
 }
