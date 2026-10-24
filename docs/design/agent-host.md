@@ -345,6 +345,20 @@ ACP reports a missing sign-in as JSON-RPC error `-32000` (`auth_required`). The 
 - Claude Code and Codex also push `_auth/status_update`, an adapter extension that names the account and plan ("Claude Max", "ChatGPT Plus"). It sets the sign-in state without waiting for a failed request, and the plan label heads the [plan limits](./session-model.md#plan-limits). The catalog marks these agents (`reportsAccount`), which `agents.refreshAccount` starts for Settings › Agents. It also marks an agent that writes progress notes as messages (`progressNotes`, Codex), which the status passes on as `capabilities.progressNotes` for the thread to fold them ([Interface: tool calls](./ui.md#tool-calls)). The last account and plan limits each agent reported are kept in `state/agents.json` and shown after a restart until it reports again; a signed-out account is not kept, and **Sign out** forgets both. The capabilities of its last `initialize` are kept there too, with the `agentInfo` version that gave them, and the status reports them until the agent initializes again while the adapter a start would run is that version, so a reopened session shows Fork before its agent starts; a binary agent, whose version is known only once it runs, waits for its start. The host still checks the running agent's own answer before it acts.
 - OverBench never reads, stores or forwards credentials.
 
+## Out of credit
+
+ACP has no error for a model provider that refuses a request because the account has no credit left. The adapters pass the provider's reply on as an internal error (`-32603`) whose message carries the provider's words, as in "Internal error: Insufficient Balance (request_id: …)". The host takes a failed `session/prompt` as out of credit when its message or its `data`, read as text, holds one of these phrasings, compared without case, or when its `data` gives HTTP status 402 as a `status` or `statusCode` field:
+
+| Provider  | Phrasing                                            |
+| --------- | --------------------------------------------------- |
+| DeepSeek  | `Insufficient Balance`                              |
+| Anthropic | `credit balance is too low`                         |
+| OpenAI    | `insufficient_quota`, `exceeded your current quota` |
+
+- The phrasings are one table in the host, with a test for each row. A provider joins it with the words of a real error from it.
+- A rate limit (429) or a plan's usage limit is not out of credit: both pass with time, and plan limits have [their own display](./session-model.md#plan-limits).
+- The agent itself is fine: it stays started and the session `ready`, with the prompt kept for **Retry** ([prompt turns](./session-model.md#prompt-turns)). Any other agent error stays "The turn failed".
+
 ## Agent configuration
 
 Settings › Agents shows, in its list and on each agent's page, which CLI version its adapter runs and where the agent reads its own configuration, with a button to reveal each place in the system file manager. `agents.details` ([host protocol](./host-protocol.md#requests)) answers when they show; `src/agent-host/agent-details.ts` does the work. OverBench never reads or changes these files. It only checks whether they exist, and main reveals one with `shell:show-item`, which selects it in the file manager and never opens it.
