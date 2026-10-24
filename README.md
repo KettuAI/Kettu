@@ -29,7 +29,7 @@ with readable threads, clear approvals, git and a terminal beside every session.
 </picture>
 
 > [!NOTE]
-> v0.0.3 is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues).
+> OverBench is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues).
 
 ## What is OverBench
 

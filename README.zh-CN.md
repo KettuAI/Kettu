@@ -29,7 +29,7 @@ Claude Code、Codex CLI 和 opencode 并排在同一个窗口里，<br>
 </picture>
 
 > [!NOTE]
-> v0.0.3 是预览版，由仍在验收中的第一个里程碑 M0 构建而来，难免还有粗糙之处，欢迎[反馈问题](https://github.com/overbench/overbench/issues)。
+> OverBench 目前是预览版，由仍在验收中的第一个里程碑 M0 构建而来，难免还有粗糙之处，欢迎[反馈问题](https://github.com/overbench/overbench/issues)。
 
 ## OverBench 是什么
 

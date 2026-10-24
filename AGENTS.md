@@ -18,7 +18,8 @@ Every change goes through an issue and a pull request, as [docs/workflow.md](./d
 - The gates are the maintainer's: accepting, designs, closing without a merged pull request, and releasing.
 - A design is agreed with the maintainer in the conversation, then built: its docs change in the same pull request as its code. Every pull request carries a working change; never open one for a design or docs alone ahead of the code ([design](./docs/workflow.md#3-design)).
 - Ask at each gate, and report every issue, pull request and comment you create, with its link.
-- Every other pull request merges by itself: once a review by another agent leaves nothing open, that agent turns on auto-merge, and GitHub squash-merges it when CI passes ([review and merge](./docs/workflow.md#5-review-and-merge)).
+- Every pull request merges by itself: once a review by another agent leaves nothing open, that agent turns on auto-merge, and GitHub squash-merges it when its checks pass ([review and merge](./docs/workflow.md#5-review-and-merge)).
+- CI checks pull requests on Linux only; Windows and macOS run in the release run before each release. A change that may behave differently by platform runs the Release workflow on its branch before it is marked ready (`gh workflow run release.yml --ref <branch>`).
 
 ## Core philosophy: beauty is productivity (颜值也是生产力)
 

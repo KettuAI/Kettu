@@ -2,21 +2,20 @@ name: Screenshots
 
 on:
   workflow_dispatch:
-  # package.json is the only file a release commit changes, and the release needs its captures.
-  push:
-    branches: [main]
-    paths: ['src/**', 'tools/**', 'package.json', '.github/workflows/screenshots.yml']
+  # The release run calls it to see the app start on each platform.
+  workflow_call:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths: ['src/**', 'tools/**', 'package.json', '.github/workflows/screenshots.yml']
 
 concurrency:
   group: screenshots-${{ github.ref }}
-  # Every commit on main keeps its own result.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   capture:
     name: ${{ matrix.os }}
+    if: ${{ !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
