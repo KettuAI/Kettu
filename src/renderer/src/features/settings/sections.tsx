@@ -536,7 +536,7 @@ export function FontSize({ label }: { label: ReactNode }) {
 // ---- Git
 
 function StatusDot() {
-  return <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current text-tertiary" />
+  return <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
 }
 
 function ToolsPending() {

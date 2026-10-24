@@ -53,9 +53,9 @@ export function PrIcon({
 }
 
 const CHECKS = {
-  passing: { Icon: CircleCheckIcon, color: 'text-icon', label: 'pr.checks.passing' },
+  passing: { Icon: CircleCheckIcon, color: 'text-success', label: 'pr.checks.passing' },
   failing: { Icon: CircleXIcon, color: 'text-danger', label: 'pr.checks.failing' },
-  pending: { Icon: CircleDotIcon, color: 'text-icon', label: 'pr.checks.pending' },
+  pending: { Icon: CircleDotIcon, color: 'text-info', label: 'pr.checks.pending' },
 } as const
 
 export function ChecksIcon({

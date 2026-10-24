@@ -398,7 +398,7 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
       )
     case 'in_progress':
       return (
-        <Spinner key="running" aria-label={t('status.running')} className={cn(icon, 'text-icon')} />
+        <Spinner key="running" aria-label={t('status.running')} className={cn(icon, 'text-info')} />
       )
     case 'completed':
       return (

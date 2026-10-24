@@ -20,6 +20,9 @@ export const PAIR_GROUPS = [
       '--bg-hover',
       '--bg-selected',
       '--danger-tint',
+      '--success-tint',
+      '--info-tint',
+      '--warning-tint',
     ],
   },
   {
@@ -59,12 +62,16 @@ export const PAIR_GROUPS = [
       '--danger-tint',
     ],
   },
-  { fg: '--success', on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-code-block'] },
+  {
+    fg: '--success',
+    on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-code-block', '--success-tint'],
+  },
+  { fg: '--info', on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--info-tint'] },
   {
     fg: '--merged',
     on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-subtle', '--bg-hover', '--bg-selected'],
   },
-  { fg: '--warning', on: ['--bg-app', '--bg-sidebar', '--bg-surface'] },
+  { fg: '--warning', on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--warning-tint'] },
   { fg: '--link', on: ['--bg-app', '--bg-surface', '--bg-subtle'] },
   { fg: '--link-hover', on: ['--bg-app', '--bg-surface', '--bg-subtle'] },
   // Inverted fills: the send button's icon, tooltips, and a count on the attention fill.

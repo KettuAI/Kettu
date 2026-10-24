@@ -16,9 +16,9 @@ const badgeVariants = cva(
         ghost: 'hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50',
         link: 'text-primary underline-offset-4 hover:underline',
         // Status pills: a state's tint, never a decoration. Info and error can be the action itself.
-        success: 'bg-subtle text-secondary',
-        info: 'bg-subtle text-secondary [button]:hover:bg-hover',
-        warning: 'bg-subtle text-secondary',
+        success: 'bg-success-tint text-success',
+        info: 'bg-info-tint text-info [button]:hover:bg-info-tint-hover',
+        warning: 'bg-warning-tint text-warning',
         error: 'bg-danger-tint text-danger [button]:hover:bg-destructive-tint-hover',
         neutral: 'bg-muted font-normal text-muted-foreground',
       },

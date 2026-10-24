@@ -34,6 +34,8 @@
   --danger: #b42318;
   --success: #15803d;
   --merged: #6d28d9;
+  /* Running work. Link's blue for now, a token of its own so the two can part. */
+  --info: #2563eb;
   --warning: #b45309;
   --link: #2563eb;
   --link-hover: #1d4ed8;
@@ -46,6 +48,10 @@
   /* A turn that ended abnormally, and other failure notices. */
   --danger-tint: #fdf6f5;
   --danger-border: #f1d5d1;
+  /* Status pills: each state's color at 6% over --bg-surface. */
+  --success-tint: #f1f7f3;
+  --info-tint: #f2f6fe;
+  --warning-tint: #fbf5f0;
   /* What a queued message's card darkens toward as it sits further back in the stack. */
   --queue-back: #f4f4f4;
   /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
@@ -132,6 +138,7 @@
     --danger: #f87171;
     --success: #4ade80;
     --merged: #a78bfa;
+    --info: #60a5fa;
     --warning: #fbbf24;
     --link: #60a5fa;
     --link-hover: #60a5fa;
@@ -142,6 +149,9 @@
 
     --danger-tint: #2a1d1b;
     --danger-border: #4a2c28;
+    --success-tint: #252e28;
+    --info-tint: #272b2f;
+    --warning-tint: #302c22;
     --queue-back: #1e1e1d;
     --canvas: #ffffff;
     --scrollbar-thumb: rgb(255 255 255 / 20%);
@@ -206,6 +216,7 @@
   --danger: #f87171;
   --success: #4ade80;
   --merged: #a78bfa;
+  --info: #60a5fa;
   --warning: #fbbf24;
   --link: #60a5fa;
   --link-hover: #60a5fa;
@@ -216,6 +227,9 @@
 
   --danger-tint: #2a1d1b;
   --danger-border: #4a2c28;
+  --success-tint: #252e28;
+  --info-tint: #272b2f;
+  --warning-tint: #302c22;
   --queue-back: #1e1e1d;
   --canvas: #ffffff;
   --scrollbar-thumb: rgb(255 255 255 / 20%);
@@ -303,6 +317,7 @@
   --attention-halo: color-mix(in srgb, var(--attention) 20%, transparent);
   --destructive-tint: var(--danger-tint);
   --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
+  --info-tint-hover: color-mix(in srgb, var(--info) 13%, transparent);
   --diff-add: color-mix(in srgb, var(--success) 9%, transparent);
   --diff-del: color-mix(in srgb, var(--danger) 8%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);

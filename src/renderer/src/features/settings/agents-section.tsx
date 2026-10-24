@@ -153,7 +153,7 @@ function PillClose({
       onClick={onClick}
       className={cn(
         'grid size-4 place-items-center rounded-full outline-none focus-ring',
-        tone === 'info' ? 'hover:bg-hover' : 'hover:bg-destructive-tint-hover',
+        tone === 'info' ? 'hover:bg-info-tint-hover' : 'hover:bg-destructive-tint-hover',
       )}
     >
       <XIcon className="size-2.5" />
