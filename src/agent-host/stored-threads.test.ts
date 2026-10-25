@@ -6,6 +6,8 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { ThreadEntry } from '@shared/thread'
+import { processLauncher } from './agents'
+import { processControl, type ProcessControl } from './process-tree'
 import {
   startTestHost,
   type InProcessLauncher,
@@ -131,6 +133,18 @@ describe('checkpoints', () => {
 })
 
 describe('a first message the app stops before it goes', () => {
+  /** A listing slow enough that a pending `session/new` answers before the stop closes stdin. */
+  function slowListing(): ProcessControl {
+    const control = processControl(process.platform)
+    return {
+      ...control,
+      list: async (options) => {
+        await control.delay(600)
+        return control.list(options)
+      },
+    }
+  }
+
   it('waits in the paused queue at the next launch, and the thread says so', async () => {
     const { t: first, port: before } = await setup({
       agentEnv: { FAKE_AGENT_SET_CONFIG_MS: '1000' },
@@ -167,6 +181,52 @@ describe('a first message the app stops before it goes', () => {
       queue: [{ content: text('Fix the flaky login test') }],
       queuePaused: true,
     })
+  })
+
+  it('keeps the message when session/new answers as the quit stops the agent', async () => {
+    const { t: first, port: before } = await setup({
+      launcher: processLauncher(process.platform),
+      processControl: slowListing(),
+      agentEnv: {
+        FAKE_AGENT_DELAY_SCALE: '0',
+        FAKE_AGENT_NEW_SESSION_MS: '300',
+        FAKE_AGENT_IGNORE_EOF: '1',
+      },
+    })
+    const creating = before
+      .request('sessions.create', {
+        agentId: 'fake-agent',
+        projectPath: first.project,
+        options: { model: 'deep' },
+        prompt: text('Fix the flaky login test'),
+      })
+      .catch(() => null)
+    await vi.waitFor(() =>
+      expect(
+        first.host.diagnostics
+          .agentRecords('fake-agent')
+          .traffic.filter((r) => r.direction === 'out' && r.method === 'session/new'),
+      ).toHaveLength(1),
+    )
+    const sessionId = before.events.flatMap((e) =>
+      e.type === 'session.summary' ? [e.summary.id] : [],
+    )[0]!
+    const { port } = await restart(first)
+    await creating
+    const snapshot = await port.open(sessionId)
+    expect(snapshot.entries).toEqual([
+      expect.objectContaining({ kind: 'user', content: text('Fix the flaky login test') }),
+      expect.objectContaining({
+        kind: 'notice',
+        title: 'The session closed before your message was sent',
+      }),
+    ])
+    expect(snapshot.session).toMatchObject({
+      status: 'closed',
+      queue: [{ content: text('Fix the flaky login test') }],
+      queuePaused: true,
+    })
+    expect(snapshot.session.config.find((option) => option.id === 'model')?.value).toBe('deep')
   })
 })
 
