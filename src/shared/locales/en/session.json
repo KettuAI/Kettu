@@ -313,6 +313,12 @@
       "copy": "Copy the message"
     }
   },
+  "routine": {
+    "link": "Open the routine {{name}}",
+    "sent": "Sent by {{name}} · Run now",
+    "due": "Sent by {{name}} · due {{when}}",
+    "catchUp": "Sent by {{name}} · Catch-up for {{when}}"
+  },
   "link": {
     "title": "Open this link?",
     "open": "Open in browser"

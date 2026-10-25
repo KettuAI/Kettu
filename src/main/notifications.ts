@@ -13,6 +13,8 @@ const SETTING_FOR_KIND = {
   permission: 'permission',
   'turn-ended': 'turnEnded',
   error: 'error',
+  'routine-ended': 'routines',
+  'routine-paused': 'routines',
 } as const satisfies Record<Attention['kind'], keyof SettingsFile['notifications']>
 
 const MAX_TITLE = 120

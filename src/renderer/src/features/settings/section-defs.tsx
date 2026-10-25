@@ -241,6 +241,17 @@ export function useNotificationsSection(): SectionDef {
       ),
     },
     {
+      id: 'routines',
+      name: t('notifications.routines.name'),
+      english: en('notifications.routines.name'),
+      description: t('notifications.routines.description'),
+      keywords: t('notifications.routines.keywords'),
+      group: when,
+      render: () => (
+        <NotificationSwitch field="routines" label={t('notifications.routines.name')} />
+      ),
+    },
+    {
       id: 'error',
       name: t('notifications.error.name'),
       english: en('notifications.error.name'),

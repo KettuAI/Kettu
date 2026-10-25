@@ -1,0 +1,308 @@
+// How routines, their schedules and their runs read in the interface.
+
+import type { AgentOptions, Project } from '@shared/agent-host'
+import {
+  FAILED_RUN_STATUSES,
+  type Routine,
+  type RoutineOption,
+  type RoutineRun,
+  type RoutineView,
+  type Schedule,
+} from '@shared/routines'
+import { startConfig, startValues } from '@renderer/features/session/new-session/start-options'
+import { duration } from '@renderer/lib/format'
+import { i18n } from '@renderer/lib/i18n'
+import type { OptionValues } from '@renderer/stores/agent-options'
+
+const MINUTE = 60_000
+const DAY = 24 * 60 * MINUTE
+// A known Sunday, for the weekday names a weekly schedule reads with.
+const SUNDAY = new Date(2024, 0, 7).getTime()
+
+const formatters = new Map<string, ReturnType<typeof makeFormatters>>()
+
+function makeFormatters(locale: string) {
+  return {
+    weekday: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
+    monthDay: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
+    clock: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }),
+    list: new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }),
+  }
+}
+
+function format(): ReturnType<typeof makeFormatters> {
+  const locale = i18n.language
+  let made = formatters.get(locale)
+  if (!made) formatters.set(locale, (made = makeFormatters(locale)))
+  return made
+}
+
+const weekdayName = (day: number): string => format().weekday.format(SUNDAY + day * DAY)
+
+/** A schedule in words: "Weekdays at 9:00 AM", "Every 2 hours", "Cron 0 9 * * 1". */
+export function scheduleWords(schedule: Schedule): string {
+  switch (schedule.kind) {
+    case 'once': {
+      const at = localDate(schedule.at)
+      return i18n.t('routines:schedule.once', {
+        date: at ? format().monthDay.format(at) : schedule.at,
+        time: clip(schedule.at),
+      })
+    }
+    case 'every':
+      return schedule.minutes % 60 === 0
+        ? i18n.t('routines:schedule.everyHours', {
+            count: schedule.minutes / 60,
+          })
+        : i18n.t('routines:schedule.everyMinutes', { count: schedule.minutes })
+    case 'weekly': {
+      const days = [...schedule.days].sort((a, b) => a - b)
+      const time = clockOf(schedule.time)
+      if (days.length === 7) return i18n.t('routines:schedule.daily', { time })
+      if (days.join() === '1,2,3,4,5') return i18n.t('routines:schedule.weekdays', { time })
+      return i18n.t('routines:schedule.weekly', {
+        days: format().list.format(days.map(weekdayName)),
+        time,
+      })
+    }
+    case 'cron':
+      return i18n.t('routines:schedule.cron', { expression: schedule.expression })
+  }
+}
+
+function clip(at: string): string {
+  const time = /T(\d{2}):(\d{2})/.exec(at)
+  return time ? clockOf(`${time[1]}:${time[2]}`) : at
+}
+
+function clockOf(time: string): string {
+  const [hour = 0, minute = 0] = time.split(':').map(Number)
+  return format().clock.format(new Date(2000, 0, 1, hour, minute))
+}
+
+function localDate(at: string): Date | null {
+  const date = new Date(at)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/** A time as a sentence names it: "Today, 9:00 AM", "Tomorrow, 9:00 AM", "Mon, 9:00 AM". */
+export function dayTime(at: number, now = Date.now()): string {
+  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
+  const days = Math.round((day(at) - day(now)) / DAY)
+  const time = format().clock.format(at)
+  if (days === 0) return i18n.t('routines:when.today', { time })
+  if (days === 1) return i18n.t('routines:when.tomorrow', { time })
+  if (days > 1 && days <= 6) {
+    return i18n.t('routines:when.weekday', { weekday: format().weekday.format(at), time })
+  }
+  return i18n.t('routines:when.date', { date: format().monthDay.format(at), time })
+}
+
+/** A run's time: when it was due, or when it started for Run now. */
+export function runTime(run: RoutineRun, now = Date.now()): string | null {
+  if (run.trigger === 'manual') return run.startedAt === null ? null : dayTime(run.startedAt, now)
+  const at = run.scheduledFor ?? run.startedAt
+  return at === null ? null : dayTime(at, now)
+}
+
+/** "Run now", "Catch-up" or "Scheduled", after a run's time. */
+export function runTrigger(run: RoutineRun): string | null {
+  if (run.trigger === 'manual') return i18n.t('routines:trigger.manual')
+  if (run.trigger === 'catch-up') return i18n.t('routines:trigger.catchUp')
+  return null
+}
+
+/** What became of a run, or what it is doing. */
+export function runStatus(run: RoutineRun): string {
+  switch (run.status) {
+    case 'starting':
+      return i18n.t('routines:run.starting')
+    case 'running':
+      return i18n.t('routines:run.running')
+    case 'waiting':
+      return i18n.t('routines:run.waiting')
+    case 'queued':
+      return i18n.t('routines:run.queued')
+    case 'succeeded':
+      return i18n.t('routines:run.succeeded')
+    case 'failed':
+      return run.error?.message || i18n.t('routines:run.failed')
+    case 'timed_out':
+      return run.error?.message || i18n.t('routines:run.timedOut')
+    case 'cancelled':
+      return i18n.t('routines:run.cancelled')
+    case 'interrupted':
+      return i18n.t('routines:run.interrupted')
+    case 'skipped':
+      return run.reason === 'plan_limit'
+        ? i18n.t('routines:run.skippedLimit')
+        : i18n.t('routines:run.skippedOverlap')
+  }
+}
+
+/** Why a run failed, else the first line of its output, else what became of it. */
+export function runSummary(run: RoutineRun): string {
+  // A failed run's partial answer says less than its error.
+  if (run.status === 'failed' || run.status === 'timed_out') return runStatus(run)
+  const output = run.output ? firstLine(run.output) : ''
+  return output || runStatus(run)
+}
+
+export function firstLine(text: string): string {
+  const line = text.split('\n').find((part) => part.trim() !== '') ?? ''
+  return line
+    .trim()
+    .replace(/^#{1,6}\s+/, '')
+    .slice(0, 200)
+}
+
+/** How long a run worked, or has waited, at the meta role. */
+export function runDuration(run: RoutineRun, now = Date.now()): string | null {
+  if (run.startedAt === null) return null
+  if (run.endedAt !== null) return duration(run.workingMs)
+  if (run.status === 'waiting') {
+    return i18n.t('routines:run.waited', {
+      duration: duration(Math.max(0, now - run.startedAt - run.workingMs)),
+    })
+  }
+  if (run.status === 'starting' || run.status === 'running') {
+    return i18n.t('routines:run.working', {
+      duration: duration(Math.max(0, now - run.startedAt)),
+    })
+  }
+  return null
+}
+
+export function failedRun(run: RoutineRun | null): boolean {
+  return !!run && FAILED_RUN_STATUSES.includes(run.status)
+}
+
+export type RoutineState =
+  | { kind: 'waiting' }
+  | { kind: 'running'; status: 'starting' | 'running' }
+  | { kind: 'queued' }
+  | { kind: 'off' }
+  | { kind: 'done' }
+  | { kind: 'paused' }
+  | { kind: 'next'; at: number }
+  | { kind: 'on' }
+
+/** What a routine is doing, by the priority its row and page show: its run first. */
+export function routineState(routine: RoutineView): RoutineState {
+  const active = routine.activeRun
+  if (active?.status === 'waiting') return { kind: 'waiting' }
+  if (active?.status === 'starting' || active?.status === 'running') {
+    return { kind: 'running', status: active.status }
+  }
+  if (active?.status === 'queued') return { kind: 'queued' }
+  if (routine.state === 'off') return { kind: 'off' }
+  if (routine.state === 'done') return { kind: 'done' }
+  if (routine.state === 'paused') return { kind: 'paused' }
+  if (routine.nextRunAt !== null) return { kind: 'next', at: routine.nextRunAt }
+  return { kind: 'on' }
+}
+
+/** A routine's state as a sentence, for its page under the name. */
+export function stateText(routine: RoutineView): string {
+  const state = routineState(routine)
+  switch (state.kind) {
+    case 'waiting':
+      return i18n.t('routines:state.waiting')
+    case 'running':
+      return i18n.t(
+        state.status === 'starting' ? 'routines:state.starting' : 'routines:state.running',
+      )
+    case 'queued':
+      return i18n.t('routines:state.queued')
+    case 'off':
+      return i18n.t('routines:state.off')
+    case 'done':
+      return i18n.t('routines:state.done')
+    case 'paused':
+      return i18n.t('routines:state.paused')
+    case 'next':
+      return i18n.t('routines:state.next', { when: dayTime(state.at) })
+    case 'on':
+      return i18n.t('routines:state.on')
+  }
+}
+
+/** The routines under On, by their next run; those without one, by name. */
+export function onRoutines(routines: RoutineView[]): RoutineView[] {
+  return routines
+    .filter((routine) => routine.state !== 'off' && routine.state !== 'done')
+    .sort(
+      (a, b) =>
+        (a.nextRunAt ?? Infinity) - (b.nextRunAt ?? Infinity) || a.name.localeCompare(b.name),
+    )
+}
+
+/** The routines under Off, by name, with done one-time routines last. */
+export function offRoutines(routines: RoutineView[]): RoutineView[] {
+  const done = (routine: RoutineView) => (routine.state === 'done' ? 1 : 0)
+  return routines
+    .filter((routine) => routine.state === 'off' || routine.state === 'done')
+    .sort((a, b) => done(a) - done(b) || a.name.localeCompare(b.name))
+}
+
+/** A routine's strongest signal for the sidebar row, in a session row's priorities. */
+export type RoutineSignal =
+  { kind: 'waiting'; count: number } | { kind: 'failed' } | { kind: 'running' } | { kind: 'unread' }
+
+export function strongestSignal(routines: RoutineView[]): RoutineSignal | null {
+  let waiting = 0
+  let failed = false
+  let running = false
+  let unread = false
+  for (const routine of routines) {
+    if (routine.activeRun?.status === 'waiting') waiting++
+    if (routine.unseen.failed > 0) failed = true
+    if (routine.activeRun?.status === 'starting' || routine.activeRun?.status === 'running') {
+      running = true
+    }
+    if (routine.unseen.ended > 0) unread = true
+  }
+  if (waiting > 0) return { kind: 'waiting', count: waiting }
+  if (failed) return { kind: 'failed' }
+  if (running) return { kind: 'running' }
+  if (unread) return { kind: 'unread' }
+  return null
+}
+
+/** What the sidebar row says it shows, in words. */
+export function signalText(signal: RoutineSignal): string {
+  switch (signal.kind) {
+    case 'waiting':
+      return i18n.t('routines:signal.waiting', { count: signal.count })
+    case 'failed':
+      return i18n.t('routines:signal.failed')
+    case 'running':
+      return i18n.t('routines:signal.running')
+    case 'unread':
+      return i18n.t('routines:signal.unread')
+  }
+}
+
+/** The values a routine's options stand for, as the agent menu reads them. */
+export function optionValues(options: RoutineOption[]): OptionValues {
+  return Object.fromEntries(options.map((option) => [option.id, option.value]))
+}
+
+/** The model, model config and thought level values a routine saves for its agent. */
+export function routineOptions(entry: AgentOptions, values: OptionValues): RoutineOption[] {
+  const wanted = startValues(entry, values)
+  const kept = new Set(['model', 'model_config', 'thought_level'])
+  return startConfig(entry, values)
+    .filter((option) => kept.has(option.category) && wanted[option.id] !== undefined)
+    .map((option) => ({ id: option.id, value: wanted[option.id]! }))
+}
+
+/** The project a routine's runs work in, or null for its own scratch folder. */
+export function routineProject(
+  routine: Pick<Routine, 'projectPath'>,
+  projects: readonly Project[],
+): Project | null {
+  return routine.projectPath === null
+    ? null
+    : (projects.find((project) => project.path === routine.projectPath) ?? null)
+}

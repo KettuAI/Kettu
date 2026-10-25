@@ -4,6 +4,7 @@
 import type { Worker } from 'node:worker_threads'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
+import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
 import type { LogFn } from '../storage'
 import type { StoredBlob, StoredThread, ThreadPage, ThreadWrite } from './model'
 import type {
@@ -182,6 +183,14 @@ export class ThreadStore {
   ): Promise<ArtifactCalls[K]['result']> {
     // TypeScript cannot pair a generic name with its params inside the union.
     return this.request({ op: 'artifact', call: { name, params } as ArtifactCall })
+  }
+
+  /** A call on the routine runs, which share the database. */
+  routine<K extends RoutineCallName>(
+    name: K,
+    params: RoutineCalls[K]['params'],
+  ): Promise<RoutineCalls[K]['result']> {
+    return this.request({ op: 'routine', call: { name, params } as RoutineCall })
   }
 
   /** Settles once every request made so far is answered, whatever the answer. */

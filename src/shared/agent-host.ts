@@ -16,6 +16,15 @@ import type {
   RepositoryVisibility,
 } from './git'
 import type { PortConnectionState } from './port-rpc'
+import type {
+  RoutineChanges,
+  RoutineDraft,
+  RoutineRef,
+  RoutineRun,
+  RoutineView,
+  RunPage,
+  RoutinesProblem,
+} from './routines'
 import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
@@ -251,7 +260,8 @@ export interface SessionSummary {
   createdAt: number
   updatedAt: number
   parentId: string | null
-  origin: 'user' | 'subagent'
+  origin: 'user' | 'subagent' | 'routine'
+  routine: RoutineRef | null // a routine's run, listed under its routine rather than its project
   description: string | null // a subagent's purpose, as its parent described it
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
@@ -307,6 +317,15 @@ export interface AgentDiagnostics {
   events: { at: number; event: string; detail?: string }[]
   /** The installed adapter's `installed.json` and `package-lock.json`, for a package agent. */
   adapter: { installed: unknown; lock: unknown } | null
+}
+
+/**
+ * The routines and, when `routines.json` could not be read, what became of it: the page says so
+ * above the empty list and New routine still works.
+ */
+export interface RoutineList {
+  routines: RoutineView[]
+  problem: RoutinesProblem | null
 }
 
 export interface DiagnosticsBundle {
@@ -372,6 +391,21 @@ export interface HostContract {
     }
     result: SessionSummary
   }
+  // Routines: the saved prompts and their runs. See routines.
+  'routines.list': { params: void; result: RoutineList }
+  'routines.create': { params: RoutineDraft; result: RoutineView }
+  'routines.update': { params: { routineId: string; changes: RoutineChanges }; result: RoutineView }
+  'routines.delete': { params: { routineId: string }; result: void }
+  // `busy` while the routine already has an active run.
+  'routines.runNow': { params: { routineId: string }; result: RoutineRun }
+  // Drops a queued run, or stops a working one as Stop does.
+  'routines.cancelRun': { params: { runId: string }; result: void }
+  'routines.runs': {
+    params: { routineId: string; before?: number }
+    result: RunPage
+  }
+  // The routine's page is shown: its ended runs count as seen.
+  'routines.markSeen': { params: { routineId: string }; result: void }
   // The window's prepared session for New session; `replace` opens a new one even when it holds one.
   'sessions.prepare': {
     params: {
@@ -596,6 +630,14 @@ export const HOST_METHODS = [
   'sessions.removeEmpty',
   'sessions.takeReturned',
   'sessions.removeAll',
+  'routines.list',
+  'routines.create',
+  'routines.update',
+  'routines.delete',
+  'routines.runNow',
+  'routines.cancelRun',
+  'routines.runs',
+  'routines.markSeen',
   'permissions.respond',
   'diagnostics.collect',
   'git.status',
@@ -656,6 +698,9 @@ export type HostEvent =
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
   | { type: 'artifacts.activity'; id: string; viewers: number; editing: string[] }
+  | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
+  | { type: 'routine.removed'; routineId: string }
+  | { type: 'routine.run'; run: RoutineRun } // a run's status changed
 
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>

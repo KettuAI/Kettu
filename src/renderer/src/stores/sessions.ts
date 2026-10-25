@@ -17,7 +17,17 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
   byId: {},
   loaded: false,
   setAll(summaries) {
-    set({ byId: Object.fromEntries(summaries.map((s) => [s.id, s])), loaded: true })
+    // The list leaves out a routine's run sessions; one that is open stays for its view, which
+    // the host still knows, and its removal comes as a session.removed event.
+    set((state) => ({
+      byId: {
+        ...Object.fromEntries(
+          Object.entries(state.byId).filter(([, summary]) => summary.origin === 'routine'),
+        ),
+        ...Object.fromEntries(summaries.map((summary) => [summary.id, summary])),
+      },
+      loaded: true,
+    }))
   },
   upsert(summary) {
     set((state) => ({ byId: { ...state.byId, [summary.id]: summary } }))
@@ -53,7 +63,7 @@ export interface SessionNode {
 /**
  * The project's sessions as a tree, newest first, with attention summed up from descendants;
  * null for the sessions started with No project, across their scratch folders. Pinned and archived
- * sessions are listed elsewhere, with their sub-sessions.
+ * sessions are listed elsewhere, with their sub-sessions. Routine runs keep their own lists.
  */
 export function sessionTree(
   byId: Record<string, SessionSummary>,
@@ -61,7 +71,8 @@ export function sessionTree(
 ): SessionNode[] {
   return buildTree(
     byId,
-    (s) => (projectPath === null ? s.scratch : s.projectPath === projectPath),
+    (s) =>
+      s.origin !== 'routine' && (projectPath === null ? s.scratch : s.projectPath === projectPath),
     (s) => !s.pinnedAt && !s.archivedAt,
   ).sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
 }
@@ -70,7 +81,7 @@ export function sessionTree(
 export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] {
   return buildTree(
     byId,
-    () => true,
+    (s) => s.origin !== 'routine',
     (s) => !!s.pinnedAt && !s.archivedAt,
   ).sort((a, b) => (a.summary.pinnedAt ?? 0) - (b.summary.pinnedAt ?? 0))
 }
@@ -85,7 +96,7 @@ export function inPinnedTree(byId: Record<string, SessionSummary>, s: SessionSum
 /** The archived top-level sessions, the most recently archived first. */
 export function archivedSessions(byId: Record<string, SessionSummary>): SessionSummary[] {
   return Object.values(byId)
-    .filter((s) => s.parentId === null && !!s.archivedAt)
+    .filter((s) => s.origin !== 'routine' && s.parentId === null && !!s.archivedAt)
     .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
 }
 

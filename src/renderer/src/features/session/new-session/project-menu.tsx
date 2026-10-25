@@ -34,18 +34,22 @@ interface ProjectGroup {
 /**
  * The route line's project: No project, then the projects by name, most recently opened first,
  * with a search field over them and Open project… last. The items are paths. A failure to add a
- * project shows in the error line the screen passes in.
+ * project shows in the error line the screen passes in. `onChoose` takes the choice instead of
+ * New session, for a routine's own project row.
  */
 export function ProjectMenu({
   project,
   noProject,
   onError,
+  onChoose,
 }: {
   project: Project | null
   noProject: boolean
   onError: (message: string | null) => void
+  onChoose?: (projectPath: string | null) => void
 }) {
   const { t } = useTranslation('session')
+  const choose = onChoose ?? chooseNewSessionProject
   const projects = useProjectsStore((s) => s.projects)
   const { contains } = useComboboxFilter()
   const byPath = useMemo(() => new Map(projects.map((p) => [p.path, p])), [projects])
@@ -64,7 +68,7 @@ export function ProjectMenu({
     onError(null)
     try {
       const path = await addProjectFromDialog()
-      if (path) chooseNewSessionProject(path)
+      if (path) choose(path)
     } catch (e) {
       onError(errorMessage(e))
     }
@@ -76,8 +80,8 @@ export function ProjectMenu({
       value={noProject ? NO_PROJECT : (project?.path ?? null)}
       onValueChange={(value: string | null) => {
         if (value === OPEN_PROJECT) void add()
-        else if (value === NO_PROJECT) chooseNewSessionProject(null)
-        else if (value) chooseNewSessionProject(value)
+        else if (value === NO_PROJECT) choose(null)
+        else if (value) choose(value)
       }}
       itemToStringLabel={label}
       filter={(value: string, query: string) =>

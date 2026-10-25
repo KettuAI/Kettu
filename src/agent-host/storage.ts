@@ -11,6 +11,19 @@ import {
   type QueuedPrompt,
   type UserContent,
 } from '@shared/thread'
+import {
+  isPermissionScope,
+  isRunTrigger,
+  isSchedule,
+  isTimeLimit,
+  ROUTINE_ID,
+  ROUTINE_NAME_CHARS,
+  ROUTINE_OPTION_CHARS,
+  ROUTINE_OPTION_LIMIT,
+  PROMPT_CHARS,
+  type Routine,
+  type RoutineRef,
+} from '@shared/routines'
 import type { AgentInit } from './acp/connection'
 import { isVersion } from './versions'
 
@@ -233,7 +246,8 @@ export interface SessionRecord {
   updatedAt: number
   lastViewedAt: number | null
   parentId: string | null
-  origin: 'user' | 'subagent'
+  origin: 'user' | 'subagent' | 'routine'
+  routine?: RoutineRef // a routine's run, when origin is 'routine'
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
@@ -294,6 +308,88 @@ export interface AgentUpdatesFile {
   >
 }
 
+export interface RoutinesFile {
+  version: 1
+  routines: Routine[]
+}
+
+/** Reads a routine, or null when a field is missing or out of range. */
+function routineOf(value: unknown): Routine | null {
+  if (!isRecord(value)) return null
+  const id = value.id
+  const name = value.name
+  const prompt = value.prompt
+  const agentId = value.agentId
+  if (
+    typeof id !== 'string' ||
+    !ROUTINE_ID.test(id) ||
+    typeof name !== 'string' ||
+    name.length > ROUTINE_NAME_CHARS ||
+    typeof prompt !== 'string' ||
+    prompt.length === 0 ||
+    prompt.length > PROMPT_CHARS ||
+    typeof agentId !== 'string' ||
+    !(AGENT_IDS as readonly string[]).includes(agentId) ||
+    !(value.projectPath === null || typeof value.projectPath === 'string') ||
+    !Array.isArray(value.options) ||
+    value.options.length > ROUTINE_OPTION_LIMIT ||
+    !isRecord(value.trigger) ||
+    value.trigger.kind !== 'schedule' ||
+    !isSchedule(value.trigger.schedule) ||
+    !isPermissionScope(value.scope) ||
+    !isTimeLimit(value.timeLimitMinutes) ||
+    typeof value.enabled !== 'boolean' ||
+    !isTime(value.createdAt) ||
+    !isTime(value.updatedAt) ||
+    !isTime(value.checkedThrough)
+  ) {
+    return null
+  }
+  const options: Routine['options'] = []
+  for (const option of value.options) {
+    if (
+      !isRecord(option) ||
+      typeof option.id !== 'string' ||
+      option.id.length === 0 ||
+      option.id.length > ROUTINE_OPTION_CHARS ||
+      !(
+        typeof option.value === 'boolean' ||
+        (typeof option.value === 'string' && option.value.length <= ROUTINE_OPTION_CHARS)
+      )
+    ) {
+      return null
+    }
+    options.push({ id: option.id, value: option.value })
+  }
+  return {
+    id,
+    name,
+    prompt,
+    agentId: agentId as Routine['agentId'],
+    projectPath: value.projectPath as string | null,
+    options,
+    trigger: { kind: 'schedule', schedule: value.trigger.schedule },
+    scope: value.scope,
+    timeLimitMinutes: value.timeLimitMinutes,
+    enabled: value.enabled,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    checkedThrough: value.checkedThrough,
+  }
+}
+
+/** A routine that does not parse fails the file, which is then moved aside. */
+export function parseRoutinesFile(data: Record<string, unknown>): RoutinesFile | string {
+  if (!Array.isArray(data.routines)) return 'routines is not a list'
+  const routines: Routine[] = []
+  for (const [index, item] of data.routines.entries()) {
+    const routine = routineOf(item)
+    if (!routine) return `routine ${index} is malformed`
+    routines.push(routine)
+  }
+  return { version: 1, routines }
+}
+
 /** Messages no session took, kept for a window to take back; `sessionId` is null for New session. */
 export interface ReturnedFile {
   version: 1
@@ -313,7 +409,9 @@ export const AGENTS_VERSION = 1
 export const RETURNED_VERSION = 1
 export const AGENT_PROCESSES_VERSION = 1
 export const AGENT_UPDATES_VERSION = 1
+export const ROUTINES_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
+export const ROUTINES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
@@ -387,6 +485,26 @@ function cacheOf(value: unknown): { cache?: PromptCache } {
   return { cache: { lastRequestAt: value.lastRequestAt, ttl: value.ttl } }
 }
 
+function routineRefOf(value: unknown): { routine?: RoutineRef } {
+  if (
+    !isRecord(value) ||
+    !isString(value.routineId) ||
+    !isString(value.runId) ||
+    !isRunTrigger(value.trigger) ||
+    !isNullable(isTime)(value.scheduledFor)
+  ) {
+    return {}
+  }
+  return {
+    routine: {
+      routineId: value.routineId,
+      runId: value.runId,
+      trigger: value.trigger,
+      scheduledFor: value.scheduledFor,
+    },
+  }
+}
+
 export function parseSessionsFile(data: Record<string, unknown>): SessionsFile | string {
   if (!Array.isArray(data.sessions)) return 'sessions is not a list'
   const sessions: SessionRecord[] = []
@@ -404,7 +522,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       !isTime(item.updatedAt) ||
       !isNullable(isTime)(item.lastViewedAt) ||
       !nullableString(item.parentId) ||
-      (item.origin !== 'user' && item.origin !== 'subagent') ||
+      (item.origin !== 'user' && item.origin !== 'subagent' && item.origin !== 'routine') ||
       !nullableString(item.description) ||
       !nullableString(item.branch)
     ) {
@@ -421,6 +539,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       lastViewedAt: item.lastViewedAt,
       parentId: item.parentId,
       origin: item.origin,
+      ...routineRefOf(item.routine),
       description: item.description,
       branch: item.branch,
       ...queueOf(item.queue),
@@ -652,6 +771,17 @@ export function agentProcessesFile(userDataPath: string, log: LogFn): JsonFile<A
     log,
     // Written at once: a launch the file misses is a process no later host can stop.
     debounceMs: 0,
+  })
+}
+
+export function routinesFile(userDataPath: string, log: LogFn): JsonFile<RoutinesFile> {
+  return new JsonFile<RoutinesFile>({
+    file: path.join(userDataPath, 'state', 'routines.json'),
+    version: ROUTINES_VERSION,
+    migrations: ROUTINES_MIGRATIONS,
+    parse: parseRoutinesFile,
+    empty: () => ({ version: 1, routines: [] }),
+    log,
   })
 }
 

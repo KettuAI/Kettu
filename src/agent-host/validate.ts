@@ -6,6 +6,19 @@ import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
+import {
+  isPermissionScope,
+  isSchedule,
+  isTimeLimit,
+  ROUTINE_ID,
+  ROUTINE_NAME_CHARS,
+  ROUTINE_OPTION_CHARS,
+  ROUTINE_OPTION_LIMIT,
+  PROMPT_CHARS,
+  type RoutineChanges,
+  type RoutineDraft,
+  type RoutineOption,
+} from '@shared/routines'
 import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@shared/attachments'
 import { AGENT_IDS, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
 import { invalidParams } from './errors'
@@ -29,6 +42,10 @@ const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>(
 ])
 
 type Fields = Record<string, unknown>
+
+function isRecord(value: unknown): value is Fields {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 function fields(params: unknown): Fields {
   if (typeof params !== 'object' || params === null || Array.isArray(params)) {
@@ -167,6 +184,117 @@ function range(o: Fields): { from: number; to: number } {
   const to = time(o, 'to')
   if (to < from) throw invalidParams('to must not be before from')
   return { from, to }
+}
+
+function routineId(o: Fields, key = 'routineId'): string {
+  const value = string(o, key, ID_CHARS)
+  if (!ROUTINE_ID.test(value)) throw invalidParams(`${key} is not a routine id`)
+  return value
+}
+
+/** A routine's option values, by id. */
+function routineOptions(value: unknown): RoutineOption[] {
+  if (!Array.isArray(value) || value.length > ROUTINE_OPTION_LIMIT) {
+    throw invalidParams(`options must be a list of at most ${ROUTINE_OPTION_LIMIT}`)
+  }
+  return value.map((item: unknown, index) => {
+    if (!isRecord(item)) throw invalidParams(`options[${index}] must be an object`)
+    const option = fields(item)
+    const id = string(option, 'id', ROUTINE_OPTION_CHARS)
+    const v = option.value
+    if (!(typeof v === 'boolean' || (typeof v === 'string' && v.length <= ROUTINE_OPTION_CHARS))) {
+      throw invalidParams(
+        `options[${index}].value must be a boolean or at most ${ROUTINE_OPTION_CHARS} characters`,
+      )
+    }
+    return { id, value: v }
+  })
+}
+
+function routineTrigger(value: unknown): {
+  kind: 'schedule'
+  schedule: import('@shared/routines').Schedule
+} {
+  if (!isRecord(value) || value.kind !== 'schedule' || !isSchedule(value.schedule)) {
+    throw invalidParams('trigger must be a schedule')
+  }
+  return { kind: 'schedule', schedule: value.schedule }
+}
+
+function routineScope(value: unknown): import('@shared/routines').PermissionScope {
+  if (!isPermissionScope(value)) throw invalidParams('scope must be a permission scope')
+  return value
+}
+
+function routineTimeLimit(value: unknown): import('@shared/routines').TimeLimitMinutes {
+  if (!isTimeLimit(value)) throw invalidParams('timeLimitMinutes is not a time limit')
+  return value
+}
+
+function routineProjectPath(o: Fields, platform: Platform): string | null {
+  return o.projectPath === null ? null : absolutePath(o, 'projectPath', platform)
+}
+
+function routineDraft(value: unknown, platform: Platform): RoutineDraft {
+  const o = fields(value)
+  const name = o.name === undefined ? '' : o.name
+  if (typeof name !== 'string' || name.length > ROUTINE_NAME_CHARS) {
+    throw invalidParams(`name must be at most ${ROUTINE_NAME_CHARS} characters`)
+  }
+  if (typeof o.prompt !== 'string' || o.prompt.trim() === '' || o.prompt.length > PROMPT_CHARS) {
+    throw invalidParams(`prompt must be 1 to ${PROMPT_CHARS} characters`)
+  }
+  return {
+    name,
+    prompt: o.prompt,
+    agentId: agentId(o),
+    projectPath: routineProjectPath(o, platform),
+    options: routineOptions(o.options),
+    trigger: routineTrigger(o.trigger),
+    scope: routineScope(o.scope),
+    timeLimitMinutes: routineTimeLimit(o.timeLimitMinutes),
+  }
+}
+
+/** The fields of a draft an update may change, each only when named. */
+function routineChanges(value: unknown, platform: Platform): RoutineChanges {
+  const o = fields(value)
+  const known = new Set([
+    'name',
+    'prompt',
+    'agentId',
+    'projectPath',
+    'options',
+    'trigger',
+    'scope',
+    'timeLimitMinutes',
+    'enabled',
+  ])
+  for (const key of Object.keys(o)) {
+    if (!known.has(key)) throw invalidParams(`Unknown change "${key}"`)
+  }
+  const changes: RoutineChanges = {}
+  if (o.name !== undefined) {
+    if (typeof o.name !== 'string' || o.name.length > ROUTINE_NAME_CHARS) {
+      throw invalidParams(`name must be at most ${ROUTINE_NAME_CHARS} characters`)
+    }
+    changes.name = o.name
+  }
+  if (o.prompt !== undefined) {
+    if (typeof o.prompt !== 'string' || o.prompt.trim() === '' || o.prompt.length > PROMPT_CHARS) {
+      throw invalidParams(`prompt must be 1 to ${PROMPT_CHARS} characters`)
+    }
+    changes.prompt = o.prompt
+  }
+  if (o.agentId !== undefined) changes.agentId = agentId(o)
+  if (o.projectPath !== undefined) changes.projectPath = routineProjectPath(o, platform)
+  if (o.options !== undefined) changes.options = routineOptions(o.options)
+  if (o.trigger !== undefined) changes.trigger = routineTrigger(o.trigger)
+  if (o.scope !== undefined) changes.scope = routineScope(o.scope)
+  if (o.timeLimitMinutes !== undefined)
+    changes.timeLimitMinutes = routineTimeLimit(o.timeLimitMinutes)
+  if (o.enabled !== undefined) changes.enabled = flag(o, 'enabled')
+  return changes
 }
 
 function sessionId(o: Fields): string {
@@ -508,6 +636,23 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'sessions.removeAll': none,
+    'routines.list': none,
+    'routines.create': (params) => routineDraft(params, platform),
+    'routines.update': (params) => {
+      const o = fields(params)
+      return { routineId: routineId(o), changes: routineChanges(o.changes, platform) }
+    },
+    'routines.delete': (params) => ({ routineId: routineId(fields(params)) }),
+    'routines.runNow': (params) => ({ routineId: routineId(fields(params)) }),
+    'routines.cancelRun': (params) => ({ runId: string(fields(params), 'runId', ID_CHARS) }),
+    'routines.runs': (params) => {
+      const o = fields(params)
+      return {
+        routineId: routineId(o),
+        ...(o.before === undefined ? {} : { before: position(o, 'before') }),
+      }
+    },
+    'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
     'permissions.respond': (params) => {
       const o = fields(params)
       return {

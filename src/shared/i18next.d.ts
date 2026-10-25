@@ -10,6 +10,7 @@ import type files from './locales/en/files.json'
 import type git from './locales/en/git.json'
 import type host from './locales/en/host.json'
 import type main from './locales/en/main.json'
+import type routines from './locales/en/routines.json'
 import type session from './locales/en/session.json'
 import type settings from './locales/en/settings.json'
 import type shell from './locales/en/shell.json'
@@ -32,6 +33,7 @@ declare module 'i18next' {
       git: typeof git
       host: typeof host
       main: typeof main
+      routines: typeof routines
       session: typeof session
       settings: typeof settings
       shell: typeof shell

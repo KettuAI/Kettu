@@ -69,11 +69,13 @@ export type HostToMain =
   | {
       type: 'host:attention'
       sessionId: string
-      kind: 'permission' | 'turn-ended' | 'error'
+      kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended' | 'routine-paused'
       title: string
       body: string
     }
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
+  // Whether any routine run is starting or running, for keeping the computer from idle sleep.
+  | { type: 'host:routines-working'; working: boolean }
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
   | { type: 'host:granted'; requestId: number }
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }

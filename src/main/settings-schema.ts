@@ -52,6 +52,7 @@ const SECTION_FIELDS = {
     permission: isBoolean,
     turnEnded: isBoolean,
     error: isBoolean,
+    routines: isBoolean,
     sound: isBoolean,
     badge: isBoolean,
   },

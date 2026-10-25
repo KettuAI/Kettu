@@ -146,6 +146,11 @@
       "name": "Turn finished",
       "description": "When an agent finishes what you asked."
     },
+    "routines": {
+      "name": "Routine runs",
+      "description": "A routine's run ended, or its routines paused at a plan limit.",
+      "keywords": "routine schedule background"
+    },
     "error": {
       "name": "Errors",
       "description": "When a session fails or an agent stops unexpectedly."

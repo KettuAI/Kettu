@@ -462,6 +462,93 @@ describe('attachments', () => {
     )
   })
 
+  it('checks a routine draft, its changes, and the requests on it', () => {
+    const draft = {
+      name: 'Morning briefing',
+      prompt: 'Summarize the open pull requests',
+      agentId: 'claude-code',
+      projectPath: '/work/app',
+      options: [
+        { id: 'model', value: 'fable' },
+        { id: 'fast', value: true },
+      ],
+      trigger: {
+        kind: 'schedule',
+        schedule: { kind: 'weekly', days: [1, 2, 3, 4, 5], time: '09:00' },
+      },
+      scope: { level: 'read', web: false },
+      timeLimitMinutes: 60,
+    }
+    expect(posix['routines.create'](draft)).toEqual(draft)
+    expect(posix['routines.create']({ ...draft, name: undefined })).toEqual({ ...draft, name: '' })
+    expect(posix['routines.create']({ ...draft, projectPath: null })).toMatchObject({
+      projectPath: null,
+    })
+    expect(windows['routines.create']({ ...draft, projectPath: 'C:\\work\\app' })).toMatchObject({
+      projectPath: 'C:\\work\\app',
+    })
+    for (const broken of [
+      { ...draft, name: 'x'.repeat(121) },
+      { ...draft, name: 7 },
+      { ...draft, prompt: '   ' },
+      { ...draft, prompt: 'x'.repeat(100_001) },
+      { ...draft, agentId: 'gemini' },
+      { ...draft, projectPath: 'app' },
+      { ...draft, projectPath: undefined },
+      { ...draft, options: Array.from({ length: 21 }, () => ({ id: 'x', value: true })) },
+      { ...draft, options: [{ id: '', value: true }] },
+      { ...draft, options: [{ id: 'x', value: 'y'.repeat(201) }] },
+      { ...draft, options: [{ id: 'x', value: 1 }] },
+      { ...draft, trigger: { kind: 'later' } },
+      {
+        ...draft,
+        trigger: { kind: 'schedule', schedule: { kind: 'weekly', days: [], time: '09:00' } },
+      },
+      {
+        ...draft,
+        trigger: { kind: 'schedule', schedule: { kind: 'weekly', days: [1], time: '24:00' } },
+      },
+      { ...draft, scope: { level: 'all', web: false } },
+      { ...draft, timeLimitMinutes: 45 },
+    ]) {
+      rejects(() => posix['routines.create'](broken))
+    }
+
+    expect(
+      posix['routines.update']({
+        routineId: 'r-0123456789ab',
+        changes: { enabled: false, prompt: 'Another prompt' },
+      }),
+    ).toEqual({
+      routineId: 'r-0123456789ab',
+      changes: { enabled: false, prompt: 'Another prompt' },
+    })
+    rejects(() => posix['routines.update']({ routineId: 'r-1', changes: {} }))
+    rejects(() =>
+      posix['routines.update']({ routineId: 'r-0123456789ab', changes: { later: true } }),
+    )
+    rejects(() =>
+      posix['routines.update']({ routineId: 'r-0123456789ab', changes: { enabled: 'yes' } }),
+    )
+    rejects(() =>
+      posix['routines.update']({ routineId: 'r-0123456789ab', changes: { projectPath: 'app' } }),
+    )
+
+    expect(posix['routines.runs']({ routineId: 'r-0123456789ab' })).toEqual({
+      routineId: 'r-0123456789ab',
+    })
+    expect(posix['routines.runs']({ routineId: 'r-0123456789ab', before: 5 })).toEqual({
+      routineId: 'r-0123456789ab',
+      before: 5,
+    })
+    rejects(() => posix['routines.runs']({ routineId: 'r-0123456789ab', before: -1 }))
+    rejects(() => posix['routines.runNow']({ routineId: 'run-1' }))
+    rejects(() => posix['routines.delete']({}))
+    rejects(() => posix['routines.cancelRun']({}))
+    expect(posix['routines.cancelRun']({ runId: 'run-1' })).toEqual({ runId: 'run-1' })
+    expect(posix['routines.list'](undefined)).toBeUndefined()
+  })
+
   it('takes a grant by its id alone, never a path', () => {
     const thumb = 'data:image/webp;base64,AAAA'
     expect(

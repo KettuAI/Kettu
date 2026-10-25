@@ -15,6 +15,7 @@ import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
 import { notifyAttention } from './notifications'
+import { RoutinesAwake } from './power-save'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
@@ -102,6 +103,7 @@ async function start(): Promise<void> {
   setBadgeEnabled(settings.get().notifications.badge)
 
   const mediaGrants = new MediaGrants()
+  const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
@@ -111,6 +113,7 @@ async function start(): Promise<void> {
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
     onMediaGrant: (grant) => mediaGrants.add(grant),
     onMediaRevoke: (sessionId) => mediaGrants.revoke(sessionId),
+    onRoutinesWorking: (working) => routinesAwake.set(working),
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),

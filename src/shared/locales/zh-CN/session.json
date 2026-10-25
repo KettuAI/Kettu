@@ -294,6 +294,12 @@
       "copy": "复制原始信息"
     }
   },
+  "routine": {
+    "link": "打开例程 {{name}}",
+    "sent": "由 {{name}} 发送 · 立即运行",
+    "due": "由 {{name}} 发送 · {{when}} 到期",
+    "catchUp": "由 {{name}} 发送 · 补运行 {{when}}"
+  },
   "link": {
     "title": "打开此链接？",
     "open": "在浏览器中打开"

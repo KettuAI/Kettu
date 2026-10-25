@@ -22,8 +22,9 @@ import {
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
+import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import { openSession } from '@renderer/stores/view'
+import { openRoutine, openSession } from '@renderer/stores/view'
 
 /** A sub-session's parent at the start of the top bar, which opens it. */
 export function ParentLink({ parent }: { parent: SessionSummary }) {
@@ -54,7 +55,11 @@ export function SessionHeader({
   session: SessionView | undefined
 }) {
   const { t } = useTranslation('sidebar')
+  const { t: ts } = useTranslation('session')
   const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
+  const routine = useRoutinesStore((s) =>
+    summary.routine ? s.byId[summary.routine.routineId] : undefined,
+  )
   const [deleting, setDeleting] = useState(false)
   const titleButton = useRef<HTMLButtonElement>(null)
   const rename = useRenaming(() => titleButton.current)
@@ -67,6 +72,20 @@ export function SessionHeader({
     <TopBar>
       {/* The title gives way last: the git status shrinks first (see HeaderTools). */}
       <NoDrag className="min-w-0 gap-0.5">
+        {routine && summary.routine && (
+          <>
+            <Button
+              variant="quiet"
+              size="compact"
+              className="min-w-16 shrink-100 px-1.5"
+              aria-label={ts('routine.link', { name: routine.name })}
+              onClick={() => openRoutine(summary.routine!.routineId)}
+            >
+              <span className="truncate">{routine.name}</span>
+            </Button>
+            <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-icon" />
+          </>
+        )}
         {parent && <ParentLink parent={parent} />}
         {summary.origin === 'subagent' ? (
           <BotIcon className="ml-1.5 size-3.5 shrink-0 text-muted-foreground" />

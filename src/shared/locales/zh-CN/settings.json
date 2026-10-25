@@ -145,6 +145,11 @@
       "name": "本轮对话已完成",
       "description": "Agent 完成你交给它的任务时。"
     },
+    "routines": {
+      "name": "例程运行",
+      "description": "例程的运行结束，或例程因套餐限制暂停。",
+      "keywords": "例程 计划 后台"
+    },
     "error": {
       "name": "错误",
       "description": "会话出错，或 Agent 意外停止时。"

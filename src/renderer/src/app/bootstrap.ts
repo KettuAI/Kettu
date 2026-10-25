@@ -29,6 +29,7 @@ import {
   useGitStore,
 } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { initTerminals } from '@renderer/stores/terminals'
@@ -89,6 +90,15 @@ function onHostEvent(event: HostEvent): void {
     case 'artifacts.changed':
       artifactsChanged()
       break
+    case 'routine.changed':
+      useRoutinesStore.getState().receive(event.routine)
+      break
+    case 'routine.removed':
+      useRoutinesStore.getState().removed(event.routineId)
+      break
+    case 'routine.run':
+      useRoutinesStore.getState().receiveRun(event.run)
+      break
   }
 }
 
@@ -97,6 +107,7 @@ function loadSessionState(): Promise<unknown> {
   return Promise.allSettled([
     useProjectsStore.getState().refresh(),
     useSessionsStore.getState().refresh(),
+    useRoutinesStore.getState().load(),
     useAgentsStore.getState().refresh(),
     loadAgentOptions(),
   ])

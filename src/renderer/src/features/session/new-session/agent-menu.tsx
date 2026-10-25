@@ -43,7 +43,7 @@ import { limitLabel } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
@@ -77,9 +77,18 @@ function menuOrder(statuses: AgentStatus[]): AgentStatus[] {
 export function AgentMenu({
   agentId,
   onChoose,
+  values,
+  onValues,
 }: {
   agentId: AgentId | null
   onChoose: (agentId: AgentId, model: string | null) => void
+  /**
+   * The option values of the menu's own agent, when the caller keeps them itself, as a routine
+   * does; without them the menu shows and sets New session's picks.
+   */
+  values?: OptionValues
+  /** With `values`, each change to them; the caller saves it. */
+  onValues?: (optionId: string, value: string | boolean) => void
 }) {
   const { t } = useTranslation('session')
   const statuses = useAgentsStore(useShallow((s) => menuOrder(usableAgents(s.order, s.byId))))
@@ -100,12 +109,12 @@ export function AgentMenu({
     for (const status of statuses) {
       const entry = entries[status.id]
       const live = prepared?.agentId === status.id ? prepared.summary?.prepared : undefined
-      if (live)
-        map.set(status.id, preparedConfig(live.config, entry?.levels ?? {}, picks[status.id]))
-      else if (entry) map.set(status.id, startConfig(entry, picks[status.id]))
+      const own = values && status.id === agentId ? values : picks[status.id]
+      if (live) map.set(status.id, preparedConfig(live.config, entry?.levels ?? {}, own))
+      else if (entry) map.set(status.id, startConfig(entry, own))
     }
     return map
-  }, [statuses, entries, picks, prepared])
+  }, [statuses, entries, picks, prepared, values, agentId])
   const agents: MenuAgent[] = statuses.map((status) => {
     const model = configs.get(status.id)?.find((o) => o.category === 'model')
     return {
@@ -171,6 +180,13 @@ export function AgentMenu({
 
   const close = () => onOpenChange(false)
 
+  // A caller that keeps the values itself hears of the changes to its own agent; another agent's
+  // changes are only a look at it until one of its models is chosen.
+  const pickOption = (id: AgentId, optionId: string, value: string | boolean) => {
+    if (onValues && id === agentId) onValues(optionId, value)
+    else setOption(id, optionId, value)
+  }
+
   return (
     <Combobox
       items={allGroups}
@@ -199,7 +215,7 @@ export function AgentMenu({
           />
         }
       >
-        <AgentButtonLabel agentId={agentId} />
+        <AgentButtonLabel agentId={agentId} values={values} />
       </ComboboxTrigger>
       <ComboboxContent sideOffset={6} className="flex flex-col">
         <ComboboxInput
@@ -249,6 +265,7 @@ export function AgentMenu({
                 groups={groups}
                 agents={agents}
                 onLeave={close}
+                onOption={pickOption}
               />
             </TabsContent>
           </div>
@@ -259,9 +276,9 @@ export function AgentMenu({
 }
 
 /** What the composer's button shows: the agent, the model it starts with and the level. */
-function AgentButtonLabel({ agentId }: { agentId: AgentId | null }) {
+function AgentButtonLabel({ agentId, values }: { agentId: AgentId | null; values?: OptionValues }) {
   const { t } = useTranslation('session')
-  const config = useStartConfig(agentId)
+  const config = useStartConfig(agentId, values)
   if (!agentId) {
     return <span className="truncate text-foreground">{t('newSession.chooseAgentShort')}</span>
   }
@@ -373,6 +390,7 @@ function Pane({
   groups,
   agents,
   onLeave,
+  onOption,
 }: {
   status: AgentStatus | null
   config: ConfigOption[] | null
@@ -385,6 +403,8 @@ function Pane({
   groups: MenuGroup[]
   agents: MenuAgent[]
   onLeave: () => void
+  /** Where an option's change goes: New session's picks, or the caller's own values. */
+  onOption: (agentId: AgentId, optionId: string, value: string | boolean) => void
 }) {
   const { t } = useTranslation('session')
   if (!status) return null
@@ -548,7 +568,7 @@ function Pane({
               <EffortSegments
                 effort={effort}
                 value={String(effort.value)}
-                onPick={(v) => setOption(status.id, effort.id, v)}
+                onPick={(v) => onOption(status.id, effort.id, v)}
                 plain
               />
             </>
@@ -557,7 +577,12 @@ function Pane({
             <>
               <ComboboxSeparator />
               {switches.map((o) => (
-                <SwitchRow key={o.id} agentId={status.id} option={o} />
+                <SwitchRow
+                  key={o.id}
+                  agentId={status.id}
+                  option={o}
+                  onChange={(value) => onOption(status.id, o.id, value)}
+                />
               ))}
             </>
           )}
@@ -634,7 +659,15 @@ function Notice({
 }
 
 /** A boolean option as a menu row; it sets what the agent starts with and keeps the menu open. */
-function SwitchRow({ agentId, option }: { agentId: AgentId; option: ConfigOption }) {
+function SwitchRow({
+  agentId,
+  option,
+  onChange,
+}: {
+  agentId: AgentId
+  option: ConfigOption
+  onChange: (value: boolean) => void
+}) {
   const id = `${agentId}-${option.id}`
   return (
     <label
@@ -647,12 +680,7 @@ function SwitchRow({ agentId, option }: { agentId: AgentId; option: ConfigOption
           <span className="text-xs text-muted-foreground">{option.description}</span>
         )}
       </span>
-      <Switch
-        id={id}
-        size="sm"
-        checked={option.value === true}
-        onCheckedChange={(checked) => setOption(agentId, option.id, checked)}
-      />
+      <Switch id={id} size="sm" checked={option.value === true} onCheckedChange={onChange} />
     </label>
   )
 }

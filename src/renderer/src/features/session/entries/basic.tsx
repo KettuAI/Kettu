@@ -1,6 +1,7 @@
 import { memo, useState } from 'react'
 import {
   ArrowUpIcon,
+  CalendarClockIcon,
   ChevronRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
@@ -13,6 +14,7 @@ import {
   TriangleAlertIcon,
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
+import type { RoutineRef } from '@shared/routines'
 import type { PlanItem } from '@shared/thread'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
@@ -25,9 +27,12 @@ import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marke
 import { Message } from '@renderer/components/ui/message'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PrChip } from '@renderer/features/git/pr-chip'
+import { dayTime } from '@renderer/features/routines/model'
 import { PANEL, stopReasonText } from './helpers'
 import { cn } from '@renderer/lib/utils'
+import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { useThreadsStore } from '@renderer/stores/threads'
 import { Clamp } from '../clamp'
 import { Markdown } from '../markdown'
 import { SessionIdContext } from '../media/grants'
@@ -46,6 +51,12 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'user')
   const animation = useEntryAnimation(sessionId, entryId)
+  const routine = useSessionsStore((s) => s.byId[sessionId]?.routine ?? null)
+  // The prompt of a routine's run is the thread's very first entry, once its first page is here.
+  const first = useThreadsStore((s) => {
+    const replica = s.replicas[sessionId]
+    return !!replica && replica.older === null && replica.state?.order[0] === entryId
+  })
   if (!entry) return null
   const attachments = entry.content.flatMap((c) =>
     c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
@@ -74,10 +85,31 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
           {t('userEntry.from', { title: entry.from.title })}
         </span>
       )}
+      {first && routine && <RoutineSent routine={routine} />}
       <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
     </div>
   )
 })
+
+/** Under a routine's prompt: which routine sent it, and when it was due or that it ran by hand. */
+function RoutineSent({ routine }: { routine: RoutineRef }) {
+  const { t } = useTranslation('session')
+  const name = useRoutinesStore((s) => s.byId[routine.routineId]?.name)
+  if (!name) return null
+  const when = routine.scheduledFor === null ? null : dayTime(routine.scheduledFor)
+  const text =
+    routine.trigger === 'manual' || when === null
+      ? t('routine.sent', { name })
+      : routine.trigger === 'catch-up'
+        ? t('routine.catchUp', { name, when })
+        : t('routine.due', { name, when })
+  return (
+    <span className="flex max-w-[85%] items-center gap-1 text-xs text-tertiary">
+      <CalendarClockIcon aria-hidden className="size-3 shrink-0" />
+      <span className="truncate">{text}</span>
+    </span>
+  )
+}
 
 /** An agent message; `note` sets a progress note between runs, muted like a thought. */
 export const AgentEntry = memo(function AgentEntry({
