@@ -24,7 +24,9 @@ export interface SettingsFile {
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
   }
-  agents: Partial<Record<AgentId, { binaryPath?: string; cli?: AgentCliSource }>>
+  agents: Partial<
+    Record<AgentId, { binaryPath?: string; cli?: AgentCliSource; configDir?: string }>
+  > // configDir: a configuration folder of the agent's own, picked in a native dialog
   proxy: ProxySettings
   terminal: {
     shellPath?: string // picked in a native dialog; the platform default when absent
@@ -37,6 +39,12 @@ export interface SettingsFile {
     fromComputer: boolean // read the agents' own logs
     sidebar: 'today' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
   }
+}
+
+/** The variable that moves each agent's configuration folder, for those whose folder can be chosen. */
+export const CONFIG_VARIABLES: Partial<Record<AgentId, string>> = {
+  'claude-code': 'CLAUDE_CONFIG_DIR',
+  codex: 'CODEX_HOME',
 }
 
 /** Chrome's page zoom steps from 80% to 150%. */
@@ -76,14 +84,14 @@ export function stepZoom(zoom: ZoomLevel, step: ZoomStep): ZoomLevel {
 
 /**
  * A change from the renderer. Sections merge key by key; `proxy` is replaced whole.
- * Executable paths can only be cleared here (`null`); setting one goes through a native
- * dialog in main, so the renderer never sends a path to a program.
+ * Executable paths and configuration folders can only be cleared here (`null`); setting one goes
+ * through a native dialog in main, so the renderer never sends a path to a program or folder.
  */
 export interface SettingsPatch {
   general?: Partial<SettingsFile['general']>
   appearance?: Partial<SettingsFile['appearance']>
   notifications?: Partial<SettingsFile['notifications']>
-  agents?: Partial<Record<AgentId, { binaryPath?: null; cli?: AgentCliSource }>>
+  agents?: Partial<Record<AgentId, { binaryPath?: null; cli?: AgentCliSource; configDir?: null }>>
   proxy?: ProxySettings
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>

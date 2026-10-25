@@ -34,8 +34,8 @@ export interface UsageManagerDeps {
   fromComputer: boolean
   platform: Platform
   home: string
-  /** The resolved agent environment, once it is ready. */
-  env(): Promise<Record<string, string | undefined>>
+  /** The agent's own resolved environment, once it is ready. */
+  env(agentId: AgentId): Promise<Record<string, string | undefined>>
   /** Whether a folder is one of OverBench's No project folders. */
   isScratch(path: string): boolean
   log: LogFn
@@ -66,8 +66,8 @@ export class UsageManager {
   /** Turning the setting off cancelled `scanning`, so a full scan follows it instead of joining. */
   private scanCancelled = false
   private stopped = false
-  /** The environment the locations are shown with; the readers see the same one. */
-  private env: Record<string, string | undefined> = {}
+  /** The environments the locations are shown with, by agent; the readers see the same ones. */
+  private envs: Partial<Record<AgentId, Record<string, string | undefined>>> = {}
 
   constructor(private readonly deps: UsageManagerDeps) {
     this.fromComputer = deps.fromComputer
@@ -89,10 +89,7 @@ export class UsageManager {
       this.unavailable = unusable(status)
       void this.refreshStats()
     })
-    void this.deps.env().then((env) => {
-      this.env = env
-      this.publish()
-    })
+    void this.readEnvs(this.deps.readers.map((r) => r.agentId)).then(() => this.publish())
     this.firstTimer = setTimeout(() => {
       this.firstTimer = null
       void this.scan()
@@ -163,11 +160,11 @@ export class UsageManager {
       .then(async () => {
         // The setting may have been turned off while this scan waited for the one before.
         if (!this.fromComputer || this.stopped) return null
-        const env = await this.deps.env()
-        this.env = env
+        const scanned = agents ?? this.deps.readers.map((r) => r.agentId)
+        const envs = await this.readEnvs(scanned)
         const outcome = await store.scan({
-          agents: agents ?? this.deps.readers.map((r) => r.agentId),
-          env,
+          agents: scanned,
+          envs,
           home: this.deps.home,
           platform: this.deps.platform,
         })
@@ -186,6 +183,17 @@ export class UsageManager {
     })
     this.scanning = tracked
     return tracked
+  }
+
+  private async readEnvs(
+    agents: AgentId[],
+  ): Promise<Partial<Record<AgentId, Record<string, string | undefined>>>> {
+    const read = await Promise.all(agents.map(async (id) => [id, await this.deps.env(id)] as const))
+    const envs = Object.fromEntries(read) as Partial<
+      Record<AgentId, Record<string, string | undefined>>
+    >
+    Object.assign(this.envs, envs)
+    return envs
   }
 
   private applyResults(results: ScanResult[]): void {
@@ -317,7 +325,7 @@ export class UsageManager {
       const stats = this.stats.find((s) => s.agentId === reader.agentId && s.source === 'log')
       return {
         agentId: reader.agentId,
-        locations: reader.locations(this.env, this.deps.home),
+        locations: reader.locations(this.envs[reader.agentId] ?? {}, this.deps.home),
         found: state?.found ?? null,
         rows: stats?.rows ?? 0,
         first: stats?.first ?? null,

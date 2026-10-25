@@ -7,6 +7,7 @@ import path from 'node:path'
 import type { EnvironmentInfo } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import type { ProxySettings } from '@shared/settings'
+import type { AgentId } from '@shared/thread'
 import { deleteEnv, findCommand, getEnv, isExecutableFile, type Env } from './find-command'
 import { translate, type HostMessage } from './i18n'
 import { quotePosix } from './quote'
@@ -94,6 +95,25 @@ export function applyProxy(env: Env, proxy: ProxySettings, platform: Platform): 
     if (platform !== 'win32') out[name.toLowerCase()] = value
   }
   return out
+}
+
+/** An agent's own configuration folder, which wins over the same variable from the shell. */
+export function applyConfigFolder(
+  env: Env,
+  folder: ConfigFolder | undefined,
+  platform: Platform,
+): Env {
+  if (!folder) return env
+  const out = { ...env }
+  deleteEnv(out, folder.variable, platform)
+  out[folder.variable] = folder.path
+  return out
+}
+
+/** The variable that moves an agent's configuration folder, and the folder picked for it. */
+export interface ConfigFolder {
+  variable: string
+  path: string
 }
 
 export interface ShellEnvironment {
@@ -254,6 +274,7 @@ export class EnvironmentService {
   private node: NodeProbe = { nodeVersion: null, npmPath: null, nodePath: null }
   private current: Promise<void> | null = null
   private proxy: ProxySettings = { mode: 'environment' }
+  private configFolders: Partial<Record<AgentId, ConfigFolder>> = {}
   private resolvedAt: number | null = null
   private listeners = new Set<(info: EnvironmentInfo) => void>()
 
@@ -287,10 +308,19 @@ export class EnvironmentService {
     this.proxy = proxy
   }
 
-  /** The environment for agents and git: resolved, without Electron's variables, with the proxy. */
-  agentEnv(): Env {
-    const base = this.resolved?.env ?? withoutElectronVars(this.deps.baseEnv, this.deps.platform)
-    return applyProxy(base, this.proxy, this.deps.platform)
+  setConfigFolders(folders: Partial<Record<AgentId, ConfigFolder>>): void {
+    this.configFolders = folders
+  }
+
+  /**
+   * The environment for agents and git: resolved, without Electron's variables, with the proxy.
+   * An agent's own adds its configuration folder; git, commands and the terminal go without one.
+   */
+  agentEnv(agentId?: AgentId): Env {
+    const { platform } = this.deps
+    const base = this.resolved?.env ?? withoutElectronVars(this.deps.baseEnv, platform)
+    const env = applyProxy(base, this.proxy, platform)
+    return agentId ? applyConfigFolder(env, this.configFolders[agentId], platform) : env
   }
 
   nodeProbe(): NodeProbe {
@@ -310,8 +340,8 @@ export class EnvironmentService {
     }
   }
 
-  get(name: string): string | undefined {
-    return getEnv(this.agentEnv(), name, this.deps.platform)
+  get(name: string, agentId?: AgentId): string | undefined {
+    return getEnv(this.agentEnv(agentId), name, this.deps.platform)
   }
 
   onChange(listener: (info: EnvironmentInfo) => void): () => void {

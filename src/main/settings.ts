@@ -11,6 +11,7 @@ import {
   type SettingsSection,
   validateSettingsPatch,
   withAgentBinary,
+  withAgentConfigDir,
   withShellPath,
 } from './settings-schema'
 
@@ -70,6 +71,10 @@ export class SettingsStore {
 
   setAgentBinary(agentId: AgentId, binaryPath: string): SettingsFile {
     return this.replace(withAgentBinary(this.current, agentId, binaryPath))
+  }
+
+  setAgentConfigDir(agentId: AgentId, configDir: string): SettingsFile {
+    return this.replace(withAgentConfigDir(this.current, agentId, configDir))
   }
 
   setShellPath(shellPath: string): SettingsFile {

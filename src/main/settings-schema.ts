@@ -1,6 +1,7 @@
 // Pure validation and merging of settings.json and of the renderer's patches.
 
 import {
+  CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
   type HostSettings,
   type ProxySettings,
@@ -96,6 +97,8 @@ function checkProxy(value: unknown, path: string): string | null {
   return null
 }
 
+const AGENT_KEYS: readonly string[] = ['binaryPath', 'cli', 'configDir']
+
 function checkStoredPath(value: unknown, path: string): string | null {
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_PATH_LENGTH) {
     return `"${path}" must be a non-empty path`
@@ -139,14 +142,22 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
           problems.push(`Unknown agent "agents.${agentId}"`)
         } else if (
           !isRecord(entry) ||
-          Object.keys(entry).some((key) => key !== 'binaryPath' && key !== 'cli')
+          Object.keys(entry).some((key) => !AGENT_KEYS.includes(key))
         ) {
-          problems.push(`"agents.${agentId}" accepts only "binaryPath" and "cli"`)
+          problems.push(`"agents.${agentId}" accepts only "binaryPath", "cli" and "configDir"`)
         } else {
           if ('binaryPath' in entry && entry.binaryPath !== null) {
             problems.push(
               `"agents.${agentId}.binaryPath" can only be cleared with null; choose a program in the dialog`,
             )
+          }
+          if ('configDir' in entry) {
+            const problem = !CONFIG_VARIABLES[agentId as AgentId]
+              ? `"agents.${agentId}" has no configuration folder of its own`
+              : entry.configDir !== null
+                ? `"agents.${agentId}.configDir" can only be cleared with null; choose a folder in the dialog`
+                : null
+            if (problem) problems.push(problem)
           }
           const problem = 'cli' in entry ? AGENT_CLI(entry.cli, `agents.${agentId}.cli`) : null
           if (problem) problems.push(problem)
@@ -195,6 +206,7 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
       const change = patch.agents[agentId]
       const entry = { ...next.agents[agentId] }
       if (change?.binaryPath === null) delete entry.binaryPath
+      if (change?.configDir === null) delete entry.configDir
       if (change?.cli) entry.cli = change.cli
       if (Object.keys(entry).length > 0) next.agents[agentId] = entry
       else delete next.agents[agentId]
@@ -214,6 +226,19 @@ export function withAgentBinary(
 ): SettingsFile {
   const next = structuredClone(current)
   next.agents[agentId] = { ...next.agents[agentId], binaryPath }
+  return next
+}
+
+export function withAgentConfigDir(
+  current: SettingsFile,
+  agentId: AgentId,
+  configDir: string,
+): SettingsFile {
+  if (!CONFIG_VARIABLES[agentId]) {
+    throw new SettingsError(`"agents.${agentId}" has no configuration folder of its own`)
+  }
+  const next = structuredClone(current)
+  next.agents[agentId] = { ...next.agents[agentId], configDir }
   return next
 }
 
@@ -280,6 +305,13 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
           const problem = AGENT_CLI(entry.cli, `agents.${agentId}.cli`)
           if (problem) problems.push(problem)
           else stored.cli = entry.cli as 'installed' | 'bundled'
+        }
+        if (entry.configDir !== undefined) {
+          const problem = !CONFIG_VARIABLES[agentId]
+            ? `"agents.${agentId}" has no configuration folder of its own`
+            : checkStoredPath(entry.configDir, `agents.${agentId}.configDir`)
+          if (problem) problems.push(problem)
+          else stored.configDir = entry.configDir as string
         }
         if (Object.keys(stored).length > 0) settings.agents[agentId] = stored
       }

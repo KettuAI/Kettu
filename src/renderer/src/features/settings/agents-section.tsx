@@ -191,7 +191,7 @@ function useAgentReads(status: AgentStatus): boolean {
       .getState()
       .loadDetails(status.id)
       .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
-  }, [status.id, status.state, task])
+  }, [status.id, status.state, task, status.configDir?.runs])
   return reading
 }
 
@@ -1279,9 +1279,13 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
           </Button>
         </RowFrame>
       )}
-      {details?.config.map((item) => (
-        <ConfigRow key={item.id} item={item} />
-      ))}
+      {details?.config.map((item) =>
+        item.id === 'folder' && status.configDir ? (
+          <FolderRow key={item.id} item={item} status={status} configDir={status.configDir} />
+        ) : (
+          <ConfigRow key={item.id} item={item} />
+        ),
+      )}
       {details && details.config.length === 0 && status.id !== 'opencode' && (
         <RowShell>
           <p className="py-3 text-xs text-secondary">{t('agents.noConfig')}</p>
@@ -1397,7 +1401,15 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   )
 }
 
-function ConfigRow({ item }: { item: AgentConfigItem }) {
+function ConfigRow({
+  item,
+  note,
+  children,
+}: {
+  item: AgentConfigItem
+  note?: ReactNode
+  children?: ReactNode
+}) {
   const { t } = useTranslation('settings')
   return (
     <RowFrame
@@ -1405,9 +1417,14 @@ function ConfigRow({ item }: { item: AgentConfigItem }) {
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-ui font-medium">{t(`agents.config.${item.id}`)}</span>
           <PathText path={item.path} missing={!item.exists} />
-          {item.env && (
-            <span className="text-xs text-tertiary">{t('agents.setBy', { env: item.env })}</span>
+          {item.chosen ? (
+            <span className="text-xs text-tertiary">{t('agents.configFolder.chosen')}</span>
+          ) : (
+            item.env && (
+              <span className="text-xs text-tertiary">{t('agents.setBy', { env: item.env })}</span>
+            )
           )}
+          {note}
         </div>
       }
     >
@@ -1419,7 +1436,60 @@ function ConfigRow({ item }: { item: AgentConfigItem }) {
       ) : (
         <span className="text-xs text-tertiary">{t('agents.notCreated')}</span>
       )}
+      {children}
     </RowFrame>
+  )
+}
+
+/**
+ * Claude Code's and Codex's folder: the environment's, or one of the agent's own picked in a
+ * native dialog, which keeps its sign-in and settings apart from the CLI in a terminal.
+ */
+function FolderRow({
+  item,
+  status,
+  configDir,
+}: {
+  item: AgentConfigItem
+  status: AgentStatus
+  configDir: NonNullable<AgentStatus['configDir']>
+}) {
+  const { t } = useTranslation('settings')
+  const chosen = useSettingsStore((s) => s.settings.agents[status.id]?.configDir ?? null)
+  const [apply, applyError] = useApply()
+  const [act, choosing, chooseError] = useAction()
+  const choose = () => act(() => window.overbench.dialogs.chooseAgentConfigFolder(status.id))
+  // The running agent keeps its folder until it stops, so another one waits for the next start.
+  const pending = configDir.active !== null && configDir.active !== configDir.runs
+  return (
+    <ConfigRow
+      item={item}
+      note={
+        pending && (
+          <span className="text-xs text-tertiary">{t('agents.configFolder.nextStart')}</span>
+        )
+      }
+    >
+      <ControlError error={applyError ?? chooseError} />
+      {chosen && (
+        <Button variant="outline" size="compact" disabled={choosing} onClick={choose}>
+          {t('agents.configFolder.choose')}
+        </Button>
+      )}
+      <Segmented
+        label={t('agents.configFolder.label', { name: status.name })}
+        value={chosen ? 'custom' : 'environment'}
+        options={[
+          { value: 'environment', label: t('agents.configFolder.useEnvironment') },
+          { value: 'custom', label: t('agents.configFolder.custom') },
+        ]}
+        onChange={(mode) => {
+          if (mode === 'environment') {
+            if (chosen) apply({ agents: { [status.id]: { configDir: null } } })
+          } else if (!chosen) choose()
+        }}
+      />
+    </ConfigRow>
   )
 }
 

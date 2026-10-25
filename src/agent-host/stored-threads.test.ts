@@ -1,7 +1,10 @@
 // Integration tests: threads stored by the session layer, read back a page at a time, and
 // sessions that attach to their agent only when used.
 
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { ThreadEntry } from '@shared/thread'
 import {
   startTestHost,
@@ -368,6 +371,64 @@ describe('attaching on use', () => {
     await port.untilStatus(sessionId, 'failed')
     const users = port.entries(sessionId).filter((entry) => entry.kind === 'user')
     expect(users).toHaveLength(2)
+  })
+
+  describe('started under another configuration folder', () => {
+    const shellFolder = path.join(os.tmpdir(), 'overbench-shell-claude')
+    const settings = (configDir?: string): HostSettings => ({
+      locale: 'en',
+      agents: configDir ? { 'claude-code': { configDir } } : {},
+      proxy: DEFAULT_SETTINGS.proxy,
+      git: DEFAULT_SETTINGS.git,
+      usage: { fromComputer: false },
+    })
+    const message = (folder: string) =>
+      `This session was started with the configuration folder ${folder}. Switch back to it in Settings › Agents to continue it.`
+
+    async function claudeSession(first: TestHost, port: TestPort) {
+      const summary = await port.request('sessions.create', {
+        agentId: 'claude-code',
+        projectPath: first.project,
+      })
+      await port.open(summary.id)
+      await finishTurn(port, summary.id, 'hello')
+      return summary.id
+    }
+
+    async function failedAttach(from: string | undefined, to: string | undefined) {
+      const agentEnv = { CLAUDE_CONFIG_DIR: shellFolder }
+      const { t: first, port: before } = await setup({
+        fakeAs: ['claude-code'],
+        agentEnv,
+        settings: settings(from),
+      })
+      const sessionId = await claudeSession(first, before)
+      const { port } = await restart(first, {
+        fakeAs: ['claude-code'],
+        agentEnv: { ...agentEnv, FAKE_AGENT_RESUME_UNKNOWN: 'fail' },
+        settings: settings(to),
+      })
+      await port.open(sessionId)
+      await port.request('sessions.queue', { sessionId, content: text('still there?') })
+      await port.untilStatus(sessionId, 'failed')
+      return port.thread(sessionId).session.error?.message
+    }
+
+    it('names the picked folder once the agent runs with the environment again', async () => {
+      const picked = path.join(os.tmpdir(), 'overbench-picked-claude')
+      expect(await failedAttach(picked, undefined)).toBe(message(picked))
+    })
+
+    it("names the environment's folder once the agent runs with a picked one", async () => {
+      const picked = path.join(os.tmpdir(), 'overbench-picked-claude')
+      expect(await failedAttach(undefined, picked)).toBe(message(shellFolder))
+    })
+
+    it("keeps the agent's own error while the folder is the same", async () => {
+      const failure = await failedAttach(undefined, undefined)
+      expect(failure).toBeTruthy()
+      expect(failure).not.toContain('configuration folder')
+    })
   })
 
   it('changes a setting of a closed session by attaching it', async () => {

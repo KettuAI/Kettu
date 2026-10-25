@@ -19,6 +19,7 @@ import {
   applyPatches,
   threadEntries,
   threadFromSnapshot,
+  type AgentId,
   type SessionSnapshot,
   type ThreadEntry,
   type ThreadState,
@@ -26,7 +27,7 @@ import {
 import { inProcessTransport } from '../acp/connection'
 import type { ExitInfo } from '../agent-process'
 import type { AgentLauncher, AgentTimings } from '../agents'
-import { detectAgent } from '../catalog'
+import { detectAgent, fakeAgent } from '../catalog'
 import type { Env } from '../find-command'
 import type { GitServiceApi } from '../git/api'
 import { AgentHost, type HostOptions } from '../host'
@@ -259,6 +260,8 @@ export interface TestHostOptions {
   /** Log readers for Usage on this computer, read by both the manager and the worker. */
   usageReaders?: readonly LogReader[]
   cacheTtl?: CacheTtlReader
+  /** Agents that run the fake agent under their own id, such as Claude Code for its folder. */
+  fakeAs?: AgentId[]
 }
 
 export interface TestHost {
@@ -308,10 +311,9 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     // No Node.js is found, so only the fake agent is available.
     probeNode: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
     detect: async (def, ctx) => {
-      if (def.id !== 'fake-agent') {
-        return { state: 'not-installed', detail: `${def.name} is not part of the tests` }
-      }
-      return detectAgent(def, ctx)
+      if (def.id === 'fake-agent') return detectAgent(def, ctx)
+      if (options.fakeAs?.includes(def.id)) return detectAgent(fakeAgent(FAKE_AGENT_MAIN), ctx)
+      return { state: 'not-installed', detail: `${def.name} is not part of the tests` }
     },
     agentTimings: options.agentTimings ?? {},
     sessionTimings: options.sessionTimings ?? {},

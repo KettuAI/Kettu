@@ -236,6 +236,7 @@ export interface SessionRecord {
   model?: string // the model option as its last turn left it, which an estimate of the cache needs
   pinnedAt?: number // when the user pinned it, which orders the Pinned group
   archivedAt?: number // when the user archived it; off the sidebar while set
+  configDir?: string // the configuration folder picked for its agent when it was created
 }
 
 export interface SessionsFile {
@@ -395,6 +396,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isString(item.model) ? { model: item.model } : {}),
       ...(isTime(item.pinnedAt) ? { pinnedAt: item.pinnedAt } : {}),
       ...(isTime(item.archivedAt) ? { archivedAt: item.archivedAt } : {}),
+      ...(isString(item.configDir) && item.configDir !== '' ? { configDir: item.configDir } : {}),
     })
   }
   return {

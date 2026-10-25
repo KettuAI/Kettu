@@ -22,7 +22,7 @@ import {
   type AgentManagerDeps,
   type AgentTimings,
 } from './agents'
-import { buildCatalog } from './catalog'
+import { buildCatalog, configFolders, type AgentDefinition } from './catalog'
 import { Diagnostics } from './diagnostics'
 import { HostError } from './errors'
 import { setLocale, t } from './i18n'
@@ -137,6 +137,7 @@ export class AgentHost {
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
+  private readonly catalog: readonly AgentDefinition[]
 
   private constructor(private readonly options: HostOptions) {
     const { platform } = options
@@ -154,7 +155,10 @@ export class AgentHost {
       ...(options.resolveEnv ? { resolve: options.resolveEnv } : {}),
       ...(options.probeNode ? { probe: options.probeNode } : {}),
     })
+    const catalog = buildCatalog(options.fakeAgentPath)
+    this.catalog = catalog
     this.env.setProxy(options.settings.proxy)
+    this.env.setConfigFolders(configFolders(catalog, options.settings.agents))
     this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
     this.files = new FilesService({ exec: this.execRunner.exec, platform })
     this.media = new MediaService({
@@ -224,9 +228,9 @@ export class AgentHost {
       fromComputer: options.settings.usage.fromComputer,
       platform,
       home: options.homeDir ?? os.homedir(),
-      env: async () => {
+      env: async (agentId) => {
         await this.env.ready()
-        return this.env.agentEnv()
+        return this.env.agentEnv(agentId)
       },
       isScratch: (folder) => this.scratch.contains(folder),
       log,
@@ -235,7 +239,7 @@ export class AgentHost {
       ...(options.usageTimings ? { timings: options.usageTimings } : {}),
     })
     this.agents = new AgentManager({
-      catalog: buildCatalog(options.fakeAgentPath),
+      catalog,
       platform,
       electronPath: options.electronPath,
       appVersion: options.appVersion,
@@ -281,7 +285,7 @@ export class AgentHost {
           home: options.homeDir ?? os.homedir(),
           env: async () => {
             await this.env.ready()
-            return this.env.agentEnv()
+            return this.env.agentEnv('claude-code')
           },
           log,
         }),
@@ -294,7 +298,7 @@ export class AgentHost {
         settingsTargets(
           agentId,
           folder,
-          (name) => this.env.get(name),
+          (name) => this.env.get(name, agentId),
           options.homeDir ?? os.homedir(),
           platform,
         ),
@@ -438,6 +442,7 @@ export class AgentHost {
       this.git?.setBackgroundFetch(next.git.backgroundFetch)
     }
     this.usage.setFromComputer(next.usage.fromComputer)
+    this.env.setConfigFolders(configFolders(this.catalog, next.agents))
     await this.agents.settingsChanged(previous, next)
   }
 

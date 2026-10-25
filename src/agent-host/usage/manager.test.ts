@@ -10,6 +10,7 @@ import type { UsageStore } from './store'
 
 interface FakeScan {
   agents: AgentId[]
+  envs: ScanRequest['envs']
   finish(cancelled?: boolean): void
   fail(error: Error): void
   done: boolean
@@ -24,6 +25,7 @@ function fakeStore() {
       new Promise<ScanOutcome>((resolve, reject) => {
         const scan: FakeScan = {
           agents: request.agents,
+          envs: request.envs,
           done: false,
           finish: (cancelled = false) => {
             scan.done = true
@@ -71,6 +73,30 @@ function manager(store: UsageStore, overrides: Partial<UsageManagerDeps> = {}) {
 const settle = async () => {
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
 }
+
+describe("each agent's environment", () => {
+  it('reads and shows each log where its own environment points', async () => {
+    const { store, scans } = fakeStore()
+    const where = (agentId: AgentId): LogReader => ({
+      agentId,
+      locations: (env) => [env.CONFIG ?? 'none'],
+      scan: async () => true,
+    })
+    const usage = manager(store, {
+      readers: [where('claude-code'), where('codex')],
+      env: async (agentId) => ({ CONFIG: `/${agentId}` }),
+    })
+    void usage.sync()
+    await vi.waitFor(() => expect(scans).toHaveLength(1))
+    expect(scans[0]?.envs).toEqual({
+      'claude-code': { CONFIG: '/claude-code' },
+      codex: { CONFIG: '/codex' },
+    })
+    scans[0]?.finish()
+    await settle()
+    expect(usage.status().logs.map((log) => log.locations)).toEqual([['/claude-code'], ['/codex']])
+  })
+})
 
 describe('turning Usage on this computer off and on', () => {
   it('starts a new import when it is turned on again while the cancelled scan ends', async () => {

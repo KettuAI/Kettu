@@ -4,6 +4,7 @@ import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentCliSource } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
+import { CONFIG_VARIABLES, type HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
 import type { BinaryInstalls } from './binary-install'
@@ -21,7 +22,7 @@ import {
   type CliFiles,
   type CliProbe,
 } from './installed-cli'
-import { satisfiesNode, type NodeProbe } from './shell-env'
+import { satisfiesNode, type ConfigFolder, type NodeProbe } from './shell-env'
 import { compareVersions } from './versions'
 
 export type LaunchKind =
@@ -57,6 +58,8 @@ export interface AgentDefinition {
   installs?: BinaryInstalls
   /** The CLI a package agent's adapter runs, which the user may have installed themselves. */
   cli?: AdapterCli
+  /** The variable that moves its configuration folder, set to the folder picked in Settings. */
+  configVariable?: string
 }
 
 const NODE_INSTALL: AgentDefinition['install'] = {
@@ -73,6 +76,7 @@ export const CLAUDE_CODE: AgentDefinition = {
   install: NODE_INSTALL,
   reportsAccount: true,
   cli: CLAUDE_CLI,
+  configVariable: CONFIG_VARIABLES['claude-code'],
 }
 
 export const CODEX: AgentDefinition = {
@@ -86,6 +90,7 @@ export const CODEX: AgentDefinition = {
   progressNotes: true,
   launchEnv: codexLaunchEnv,
   cli: CODEX_CLI,
+  configVariable: CONFIG_VARIABLES.codex,
 }
 
 export const OPENCODE: AgentDefinition = {
@@ -128,6 +133,20 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
   const catalog = [CLAUDE_CODE, CODEX, OPENCODE]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
+}
+
+/** The configuration folder picked for each agent whose folder can be moved. */
+export function configFolders(
+  catalog: readonly AgentDefinition[],
+  agents: HostSettings['agents'],
+): Partial<Record<AgentId, ConfigFolder>> {
+  const folders: Partial<Record<AgentId, ConfigFolder>> = {}
+  for (const def of catalog) {
+    const folder = agents[def.id]?.configDir
+    if (def.configVariable && folder)
+      folders[def.id] = { variable: def.configVariable, path: folder }
+  }
+  return folders
 }
 
 /** A command line as words, for display and for building terminal sign-in commands. */

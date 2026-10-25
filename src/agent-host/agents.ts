@@ -42,7 +42,12 @@ import {
   type ProgramOptions,
   type ProgramRun,
 } from './adapter-install'
-import { CLI_VERSION_SOURCES, readAgentDetails, readCliVersion } from './agent-details'
+import {
+  CLI_VERSION_SOURCES,
+  configLocations,
+  readAgentDetails,
+  readCliVersion,
+} from './agent-details'
 import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
 import type { AgentTrees } from './agent-trees'
 import { decideUpdate, fetchLatest, type LatestOptions } from './agent-updates'
@@ -58,7 +63,7 @@ import {
 } from './catalog'
 import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
-import { isExecutableFile, type Env } from './find-command'
+import { getEnv, isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
 import { CliVersions, type CliProbe } from './installed-cli'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
@@ -167,6 +172,14 @@ export interface AgentSessionHooks {
   optionsKnown(agentId: AgentId): boolean
   /** The config options of a hidden session in `folder`, at the agent's own values. */
   optionsSeen(agentId: AgentId, config: ConfigOption[], folder: string): void
+  /** The agent's configuration folder was changed in Settings; it applies from its next start. */
+  configChanged(agentId: AgentId): void
+}
+
+/** The configuration folder an agent runs with, and the one picked in Settings, if any. */
+export interface RunningConfig {
+  folder: string
+  chosen: string | null
 }
 
 export interface AgentManagerDeps {
@@ -229,6 +242,8 @@ class Slot {
   adapterNote: string | null = null
   /** What the running launch ran, which is the command shown while it runs. */
   launchSpec: LaunchSpec | null = null
+  /** The configuration folder the running launch got, for an agent whose folder can be chosen. */
+  launchConfig: RunningConfig | null = null
   /** The install whose older siblings were last deleted, once it first initialized. */
   cleanedDir: string | null = null
   /** What the last update check found, and when it finished. */
@@ -337,6 +352,7 @@ export class AgentManager {
     signedIn: () => {},
     optionsKnown: () => true,
     optionsSeen: () => {},
+    configChanged: () => {},
   }
 
   constructor(private readonly deps: AgentManagerDeps) {
@@ -377,7 +393,7 @@ export class AgentManager {
   private async detect(slot: Slot): Promise<void> {
     const platform = this.deps.platform
     const agentSettings = this.deps.settings().agents[slot.def.id]
-    const env = this.deps.env.agentEnv()
+    const env = this.deps.env.agentEnv(slot.def.id)
     const node = this.deps.env.nodeProbe()
     const isExecutable = (file: string): Promise<boolean> => isExecutableFile(file, platform)
     const detection = await (this.deps.detect ?? detectAgent)(slot.def, {
@@ -435,20 +451,33 @@ export class AgentManager {
     return this.statuses()
   }
 
-  /** Binary overrides or the choice of CLI changed: detect the affected agents again. */
+  /**
+   * Binary overrides, the choice of CLI or the configuration folder changed: detect the affected
+   * agents again. The environment already carries the new folder.
+   */
   async settingsChanged(previous: HostSettings, next: HostSettings): Promise<void> {
     const before = (slot: Slot) => previous.agents[slot.def.id]
     const after = (slot: Slot) => next.agents[slot.def.id]
+    const folderChanged = (slot: Slot) =>
+      !!slot.def.configVariable && before(slot)?.configDir !== after(slot)?.configDir
     // Choosing again tries the installed CLI again, after a start with it failed.
     for (const slot of this.slots.values()) {
       if (before(slot)?.cli !== after(slot)?.cli) slot.cliFailure = null
+    }
+    // The account, limits and prepared session belong to the folder the agent ran with.
+    for (const slot of this.slots.values()) {
+      if (!folderChanged(slot)) continue
+      slot.account = null
+      slot.limits.clear()
+      this.hooks.configChanged(slot.def.id)
     }
     // Detecting again rewrites each idle agent's guidance in the new language.
     const changed = [...this.slots.values()].filter(
       (slot) =>
         previous.locale !== next.locale ||
         before(slot)?.binaryPath !== after(slot)?.binaryPath ||
-        before(slot)?.cli !== after(slot)?.cli,
+        before(slot)?.cli !== after(slot)?.cli ||
+        folderChanged(slot),
     )
     await Promise.all(changed.map((slot) => this.detect(slot)))
   }
@@ -550,9 +579,11 @@ export class AgentManager {
     slot.progress.clear()
     slot.intentionalStop = false
     slot.launchSpec = spec
+    const env = this.deps.env.agentEnv(agentId)
+    slot.launchConfig = this.configIn(slot, env)
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
-    const launched = this.deps.launcher.launch(slot.def, spec, this.deps.env.agentEnv(), {
+    const launched = this.deps.launcher.launch(slot.def, spec, env, {
       stderr: (text) => this.onStderr(slot, text),
       event: (event, detail) => diagnostics.event(agentId, event, detail),
     })
@@ -707,7 +738,7 @@ export class AgentManager {
         npm: adapter.npm,
         nodeVersion: adapter.nodeVersion,
         platform,
-        env: this.deps.env.agentEnv(),
+        env: this.deps.env.agentEnv(agentId),
         timeoutMs: this.timings.installMs,
         signal: abort.signal,
         onOutput: (text) => this.onProgress(slot, text),
@@ -975,7 +1006,7 @@ export class AgentManager {
         npm: adapter.npm,
         package: launch.package,
         cli: CLI_VERSION_SOURCES[slot.def.id] ?? null,
-        env: this.deps.env.agentEnv(),
+        env: this.deps.env.agentEnv(slot.def.id),
         platform: this.deps.platform,
         cwd: os.homedir(),
         timeoutMs: this.timings.updateViewMs,
@@ -1053,7 +1084,7 @@ export class AgentManager {
           npm,
           nodeVersion: adapter.nodeVersion,
           platform,
-          env: this.deps.env.agentEnv(),
+          env: this.deps.env.agentEnv(agentId),
           timeoutMs: this.timings.installMs,
           signal,
           onOutput,
@@ -1181,7 +1212,7 @@ export class AgentManager {
           program: run.program,
           args: run.args,
           cwd: home,
-          env: this.deps.env.agentEnv(),
+          env: this.deps.env.agentEnv(slot.def.id),
           platform,
           timeoutMs,
           signal,
@@ -1666,7 +1697,8 @@ export class AgentManager {
     // The install in use, as for diagnostics: the one a start picks, or the fallback until then.
     const inUse = adapter?.current?.dir ?? adapter?.fallback?.dir
     return readAgentDetails(agentId, {
-      getEnv: (name) => this.deps.env.get(name),
+      getEnv: (name) => this.deps.env.get(name, agentId),
+      chosen: this.chosenFolder(slot),
       home: os.homedir(),
       platform: this.deps.platform,
       adapterDir:
@@ -1770,6 +1802,53 @@ export class AgentManager {
     return displayCommand(slot.def, this.deps.electronPath, override, this.deps.adaptersDir)
   }
 
+  /** The folder picked in Settings for an agent whose folder can be moved. */
+  private chosenFolder(slot: Slot): string | null {
+    const folder = this.deps.settings().agents[slot.def.id]?.configDir
+    return slot.def.configVariable && folder ? folder : null
+  }
+
+  /** The configuration folder `env` gives the agent; null for an agent whose folder is fixed. */
+  private configIn(slot: Slot, env: Env): RunningConfig | null {
+    if (!slot.def.configVariable) return null
+    const { platform } = this.deps
+    const chosen = this.chosenFolder(slot)
+    const locations = configLocations(
+      slot.def.id,
+      (name) => getEnv(env, name, platform),
+      os.homedir(),
+      platform,
+      chosen,
+    )
+    const folder = locations.find((location) => location.id === 'folder')?.candidates[0]
+    return folder === undefined ? null : { folder, chosen }
+  }
+
+  private running(slot: Slot): boolean {
+    return slot.state === 'ready' || slot.state === 'starting'
+  }
+
+  /** The configuration folder of the agent's running process; null while none runs. */
+  runningConfig(agentId: AgentId): RunningConfig | null {
+    const slot = this.slots.get(agentId)
+    return slot && this.running(slot) ? slot.launchConfig : null
+  }
+
+  /** The configuration folder the environment gives the agent, without one picked in Settings. */
+  environmentConfig(agentId: AgentId): string | null {
+    const slot = this.slots.get(agentId)
+    if (!slot?.def.configVariable) return null
+    const { platform } = this.deps
+    const env = this.deps.env.agentEnv()
+    const locations = configLocations(
+      agentId,
+      (name) => getEnv(env, name, platform),
+      os.homedir(),
+      platform,
+    )
+    return locations.find((location) => location.id === 'folder')?.candidates[0] ?? null
+  }
+
   /** The CLI the running adapter process uses, which a change of setting leaves until it stops. */
   private activeCli(slot: Slot, installed: InstalledCli | null): AgentCliSource | null {
     const spec = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
@@ -1783,6 +1862,12 @@ export class AgentManager {
     const platform = this.deps.platform
     const display = this.display(slot)
     const init = slot.init
+    const config = this.configIn(slot, this.deps.env.agentEnv(agentId))
+    const active = this.running(slot) ? slot.launchConfig : null
+    // The sign-in runs in a terminal without the folder, so its command carries the one in use.
+    const signInFolder = (active ?? config)?.chosen
+    const folderEnv: Record<string, string> =
+      signInFolder && slot.def.configVariable ? { [slot.def.configVariable]: signInFolder } : {}
     const authMethods: AgentAuthMethod[] = (init?.authMethods ?? []).map((method) => ({
       id: method.id,
       name: method.name,
@@ -1794,7 +1879,7 @@ export class AgentManager {
               {
                 command: display.command,
                 args: [...display.args, ...method.args],
-                env: { ...display.env, ...method.env },
+                env: { ...display.env, ...method.env, ...folderEnv },
               },
               platform,
             ),
@@ -1854,6 +1939,7 @@ export class AgentManager {
               copyMegabytes: slot.def.cli.copyMegabytes,
             }
           : null,
+      configDir: config ? { runs: config.folder, active: active?.folder ?? null } : null,
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
         listSessions: capabilities?.listSessions ?? false,

@@ -13,14 +13,20 @@ export interface ConfigLocation {
   id: AgentConfigItem['id']
   candidates: string[]
   env: string | null
+  /** The folder picked in Settings, which wins over the variable. */
+  chosen?: boolean
 }
 
-/** Where each agent reads its configuration, by the same rules the agent itself follows. */
+/**
+ * Where each agent reads its configuration, by the same rules the agent itself follows. `chosen`
+ * is the folder picked in Settings for Claude Code or Codex, which the agent gets in its variable.
+ */
 export function configLocations(
   agentId: AgentId,
   getEnv: (name: string) => string | undefined,
   home: string,
   platform: Platform,
+  chosen: string | null = null,
 ): ConfigLocation[] {
   const p = platform === 'win32' ? path.win32 : path.posix
   // A relative value is taken from the home directory, where agents are spawned.
@@ -34,14 +40,16 @@ export function configLocations(
     settings: ConfigLocation,
     instructions: string,
   ): ConfigLocation[] => [
-    { id: 'folder', candidates: [folder], env },
+    chosen !== null && folder === chosen
+      ? { id: 'folder', candidates: [folder], env: null, chosen: true }
+      : { id: 'folder', candidates: [folder], env },
     settings,
     { id: 'instructions', candidates: [p.join(folder, instructions)], env: null },
   ]
 
   switch (agentId) {
     case 'claude-code': {
-      const moved = variable('CLAUDE_CONFIG_DIR')
+      const moved = chosen ?? variable('CLAUDE_CONFIG_DIR')
       const folder = moved ?? p.join(home, '.claude')
       return layout(
         folder,
@@ -51,7 +59,7 @@ export function configLocations(
       )
     }
     case 'codex': {
-      const moved = variable('CODEX_HOME')
+      const moved = chosen ?? variable('CODEX_HOME')
       const folder = moved ?? p.join(home, '.codex')
       return layout(
         folder,
@@ -95,12 +103,14 @@ async function exists(target: string, kind: 'directory' | 'file', log: LogFn): P
 
 async function resolveItem(location: ConfigLocation, log: LogFn): Promise<AgentConfigItem> {
   const kind = location.id === 'folder' ? 'directory' : 'file'
+  const chosen = location.chosen ?? false
   for (const candidate of location.candidates) {
     if (await exists(candidate, kind, log)) {
-      return { id: location.id, path: candidate, exists: true, env: location.env }
+      return { id: location.id, path: candidate, exists: true, env: location.env, chosen }
     }
   }
-  return { id: location.id, path: location.candidates[0] ?? '', exists: false, env: location.env }
+  const path = location.candidates[0] ?? ''
+  return { id: location.id, path, exists: false, env: location.env, chosen }
 }
 
 /** The package whose `package.json` names the CLI an adapter runs, and the field that holds it. */
@@ -155,6 +165,8 @@ export interface AgentDetailsContext {
   getEnv(name: string): string | undefined
   home: string
   platform: Platform
+  /** The folder picked in Settings for an agent whose folder can be moved; null otherwise. */
+  chosen?: string | null
   /** The directory of the adapter install a package agent runs; null for the others. */
   adapterDir: string | null
   log: LogFn
@@ -165,7 +177,7 @@ export async function readAgentDetails(
   agentId: AgentId,
   ctx: AgentDetailsContext,
 ): Promise<AgentDetails> {
-  const locations = configLocations(agentId, ctx.getEnv, ctx.home, ctx.platform)
+  const locations = configLocations(agentId, ctx.getEnv, ctx.home, ctx.platform, ctx.chosen)
   const installRoot = ctx.adapterDir
   const [items, version] = await Promise.all([
     Promise.all(locations.map((location) => withLogs((log) => resolveItem(location, log)))),

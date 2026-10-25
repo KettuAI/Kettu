@@ -100,6 +100,7 @@ const api: OverbenchApi = {
   dialogs: {
     openProject: () => invoke('dialog:open-project'),
     chooseAgentBinary: (agentId) => invoke('dialog:choose-agent-binary', agentId),
+    chooseAgentConfigFolder: (agentId) => invoke('dialog:choose-agent-config-folder', agentId),
     chooseShell: () => invoke('dialog:choose-shell'),
   },
   diagnostics: {

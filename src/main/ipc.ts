@@ -16,6 +16,7 @@ import type {
   IpcSendContract,
   UnsavedFile,
 } from '@shared/ipc'
+import { CONFIG_VARIABLES } from '@shared/settings'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
 import { grantPaths } from './attachments'
@@ -218,6 +219,21 @@ export function registerIpcHandlers({
     const agent = agentId(id)
     const path = await chooseProgram(window, t('dialogs.chooseAgentProgram'))
     if (path) settings.setAgentBinary(agent, path)
+    return path
+  })
+
+  handle('dialog:choose-agent-config-folder', 1, async ({ window }, id) => {
+    const agent = agentId(id)
+    if (!CONFIG_VARIABLES[agent]) throw new Error(`${agent} has no configuration folder of its own`)
+    const options: Electron.OpenDialogOptions = {
+      title: t('dialogs.chooseAgentConfigFolder'),
+      properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
+    }
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options)
+    const path = result.canceled ? null : (result.filePaths[0] ?? null)
+    if (path) settings.setAgentConfigDir(agent, path)
     return path
   })
 

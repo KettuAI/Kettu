@@ -26,6 +26,7 @@
     "attachmentMissing": "有一个附件已不可用，请移除后重新添加。",
     "attachmentUnreadable": "OverBench 无法读取 {{name}}。",
     "attachmentDenied": "OverBench 没有读取 {{name}} 的权限。",
+    "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的。请在「设置 › Agent」中切换回该目录以继续这个会话。",
     "topLevelOnly": "只有顶层会话可以置顶或归档",
     "subagent": {
       "noPrompt": "子 Agent 会话从父会话接收指令",

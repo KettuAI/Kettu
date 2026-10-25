@@ -797,6 +797,26 @@ describe('prepared sessions', () => {
     expect(other.events.some((e) => e.type === 'session.summary')).toBe(false)
   })
 
+  it("removes the agent's prepared session when its configuration folder changes", async () => {
+    const { t, port } = await setup({ fakeAs: ['claude-code'] })
+    const summary = await port.request('sessions.prepare', {
+      agentId: 'claude-code',
+      projectPath: t.project,
+    })
+    const other = await prepare(t, t.connect())
+    const settings = {
+      locale: 'en' as const,
+      agents: { 'claude-code': { configDir: path.join(t.dir, 'claude-config') } },
+      proxy: DEFAULT_SETTINGS.proxy,
+      git: DEFAULT_SETTINGS.git,
+      usage: { fromComputer: false },
+    }
+    await t.host.updateSettings(settings)
+    await port.until(() => removed(port, summary.id))
+    // Another agent's prepared session stays.
+    expect(t.host.sessions.has(other.id)).toBe(true)
+  })
+
   it("reuses the window's session for the same agent and folder", async () => {
     const { t, port } = await setup()
     const first = await prepare(t, port)

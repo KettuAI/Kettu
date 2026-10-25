@@ -87,6 +87,29 @@ describe('configLocations', () => {
     expect(summary(list)[0]).toMatchObject({ candidates: ['/home/me/.config/opencode'], env: null })
   })
 
+  it('puts Claude Code and Codex in the folder picked in Settings, over their variables', () => {
+    const claude = configLocations(
+      'claude-code',
+      (name) => ({ CLAUDE_CONFIG_DIR: '/picked' })[name],
+      '/home/me',
+      'linux',
+      '/picked',
+    )
+    expect(claude[0]).toEqual({
+      id: 'folder',
+      candidates: ['/picked'],
+      env: null,
+      chosen: true,
+    })
+    expect(claude[1]).toMatchObject({ candidates: ['/picked/settings.json'], env: null })
+    const codex = configLocations('codex', () => '/srv/codex', '/home/me', 'linux', '/picked')
+    expect(summary(codex)).toEqual([
+      { id: 'folder', candidates: ['/picked'], env: null },
+      { id: 'settings', candidates: ['/picked/config.toml'], env: null },
+      { id: 'instructions', candidates: ['/picked/AGENTS.md'], env: null },
+    ])
+  })
+
   it('has nothing to show for the fake agent', () => {
     expect(locations('fake-agent', { CLAUDE_CONFIG_DIR: '/x' }, '/home/me', 'linux')).toEqual([])
   })
@@ -159,13 +182,14 @@ describe('readAgentDetails', () => {
   function read(
     agentId: AgentId,
     home: string,
-    options: { vars?: Vars; adapterVersion?: string | null } = {},
+    options: { vars?: Vars; adapterVersion?: string | null; chosen?: string } = {},
   ) {
     const logs: { level: string; message: string }[] = []
     const details = readAgentDetails(agentId, {
       getEnv: (name) => options.vars?.[name],
       home,
       platform,
+      chosen: options.chosen ?? null,
       adapterDir: options.adapterVersion
         ? path.join(adaptersDir, agentId, options.adapterVersion)
         : null,
@@ -181,18 +205,20 @@ describe('readAgentDetails', () => {
     expect(await details).toEqual({
       cliVersion: null,
       config: [
-        { id: 'folder', path: path.join(home, '.claude'), exists: true, env: null },
+        { id: 'folder', path: path.join(home, '.claude'), exists: true, env: null, chosen: false },
         {
           id: 'settings',
           path: path.join(home, '.claude', 'settings.json'),
           exists: true,
           env: null,
+          chosen: false,
         },
         {
           id: 'instructions',
           path: path.join(home, '.claude', 'CLAUDE.md'),
           exists: false,
           env: null,
+          chosen: false,
         },
       ],
     })
@@ -225,10 +251,39 @@ describe('readAgentDetails', () => {
     const { config } = await read('claude-code', home, { vars: { CLAUDE_CONFIG_DIR: moved } })
       .details
     expect(config).toEqual([
-      { id: 'folder', path: moved, exists: true, env: 'CLAUDE_CONFIG_DIR' },
-      { id: 'settings', path: path.join(moved, 'settings.json'), exists: false, env: null },
-      { id: 'instructions', path: path.join(moved, 'CLAUDE.md'), exists: true, env: null },
+      { id: 'folder', path: moved, exists: true, env: 'CLAUDE_CONFIG_DIR', chosen: false },
+      {
+        id: 'settings',
+        path: path.join(moved, 'settings.json'),
+        exists: false,
+        env: null,
+        chosen: false,
+      },
+      {
+        id: 'instructions',
+        path: path.join(moved, 'CLAUDE.md'),
+        exists: true,
+        env: null,
+        chosen: false,
+      },
     ])
+  })
+
+  it('marks the folder picked in Settings as chosen', async () => {
+    const home = await newHome()
+    const picked = path.join(home, 'gateway')
+    await mkdir(picked)
+    const { details } = read('claude-code', home, {
+      vars: { CLAUDE_CONFIG_DIR: picked },
+      chosen: picked,
+    })
+    expect((await details).config[0]).toEqual({
+      id: 'folder',
+      path: picked,
+      exists: true,
+      env: null,
+      chosen: true,
+    })
   })
 
   describe('OpenCode settings', () => {
@@ -240,6 +295,7 @@ describe('readAgentDetails', () => {
         path: path.join(home, '.config', 'opencode', 'opencode.json'),
         exists: false,
         env: null,
+        chosen: false,
       })
     })
 
@@ -248,7 +304,13 @@ describe('readAgentDetails', () => {
       const jsonc = path.join(home, '.config', 'opencode', 'opencode.jsonc')
       await put(jsonc, '{}')
       const { config } = await read('opencode', home).details
-      expect(config[1]).toEqual({ id: 'settings', path: jsonc, exists: true, env: null })
+      expect(config[1]).toEqual({
+        id: 'settings',
+        path: jsonc,
+        exists: true,
+        env: null,
+        chosen: false,
+      })
     })
 
     it('prefers opencode.json when both exist', async () => {
@@ -271,8 +333,9 @@ describe('readAgentDetails', () => {
         path: custom,
         exists: false,
         env: 'OPENCODE_CONFIG',
+        chosen: false,
       })
-      expect(config[0]).toMatchObject({ path: folder, exists: true, env: null })
+      expect(config[0]).toMatchObject({ path: folder, exists: true, env: null, chosen: false })
     })
   })
 

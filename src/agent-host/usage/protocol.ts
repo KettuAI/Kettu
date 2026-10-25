@@ -9,7 +9,8 @@ import type { UsageRow } from './model'
 
 export interface ScanRequest {
   agents: AgentId[]
-  env: Record<string, string | undefined>
+  // Each agent's own environment, which carries the configuration folder picked for it.
+  envs: Partial<Record<AgentId, Record<string, string | undefined>>>
   home: string
   platform: Platform
 }

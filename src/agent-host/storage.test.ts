@@ -232,6 +232,17 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [session] })
   })
 
+  it('keeps the configuration folder a session started with, and drops one that does not parse', () => {
+    const picked = { ...session, configDir: '/srv/claude' }
+    expect(parseSessionsFile({ sessions: [picked] })).toEqual({ version: 1, sessions: [picked] })
+    for (const configDir of ['', 7]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, configDir }] })).toEqual({
+        version: 1,
+        sessions: [session],
+      })
+    }
+  })
+
   it('keeps when sessions with no message were removed, and drops a time that does not parse', () => {
     expect(parseSessionsFile({ sessions: [session], emptySessionsRemovedAt: 7 })).toEqual({
       version: 1,
