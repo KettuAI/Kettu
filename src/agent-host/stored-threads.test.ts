@@ -796,6 +796,22 @@ describe('keeping the config across an attach', () => {
     await port.until(() => port.thread(sessionId).session.status === 'closed')
   }
 
+  /** Stores another mode value, as an agent that no longer offers it would leave it. */
+  async function storeMode(t: TestHost, sessionId: string, value: string) {
+    const thread = await t.host.threads!.load(sessionId)
+    if (!thread) throw new Error(`No stored thread for ${sessionId}`)
+    await t.host.threads!.write(sessionId, {
+      head: thread.head,
+      session: {
+        ...thread.session,
+        config: thread.session.config.map((option) =>
+          option.category === 'mode' ? { ...option, value } : option,
+        ),
+      },
+      entries: [],
+    })
+  }
+
   const restored = ['model', 'fast', 'thought_level', 'mode'].map(
     (id) => `session/set_config_option ${id}`,
   )
@@ -864,6 +880,50 @@ describe('keeping the config across an attach', () => {
       'session/set_mode',
       'session/prompt',
     ])
+  })
+
+  it('sets a mode the agent now reports as a legacy mode', async () => {
+    const { t: first, port: before } = await setup()
+    const sessionId = await chosenSession(first, before, { mode: 'code' })
+    const { t, port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
+    await port.open(sessionId)
+    await finishTurn(port, sessionId, 'and again')
+    expect(values(port, sessionId)).toMatchObject({ __mode: 'code' })
+    expect(requests(t, port, sessionId)).toEqual([
+      'session/resume',
+      'session/set_mode',
+      'session/prompt',
+    ])
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'notice')).toEqual([])
+  })
+
+  it('sets a legacy mode the agent now reports as a config option', async () => {
+    const { t: first, port: before } = await setup({
+      agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' },
+    })
+    const sessionId = await chosenSession(first, before, { __mode: 'code' })
+    const { t, port } = await restart(first)
+    await port.open(sessionId)
+    await finishTurn(port, sessionId, 'and again')
+    expect(values(port, sessionId)).toMatchObject({ mode: 'code' })
+    expect(requests(t, port, sessionId)).toEqual([
+      'session/resume',
+      'session/set_config_option mode',
+      'session/prompt',
+    ])
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'notice')).toEqual([])
+  })
+
+  it('adds no notice when a setting attaches a session whose mode moved to legacy modes', async () => {
+    const { t: first, port: before } = await setup()
+    const sessionId = await chosenSession(first, before, { mode: 'code' })
+    const { port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
+    await port.open(sessionId)
+    await port.request('sessions.setConfigOption', { sessionId, optionId: 'model', value: 'deep' })
+    await port.until(() => values(port, sessionId).model === 'deep')
+    expect(values(port, sessionId)).toMatchObject({ __mode: 'code', model: 'deep' })
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'notice')).toEqual([])
+    expect(port.thread(sessionId).session).toMatchObject({ status: 'ready', error: null })
   })
 
   it('keeps what the agent sends between its answer and the attach', async () => {
@@ -1050,10 +1110,11 @@ describe('keeping the config across an attach', () => {
       expect(port.thread(sessionId).session).toMatchObject({ queuePaused: true })
     })
 
-    it('holds back the prompt when the mode option the session had is gone', async () => {
+    it('holds back the prompt when the mode the session had is not offered now', async () => {
       const { t: first, port: before } = await setup()
       const sessionId = await chosenSession(first, before, { mode: 'code' })
       const { t, port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
+      await storeMode(t, sessionId, 'retired')
       await port.open(sessionId)
       await port.request('sessions.queue', { sessionId, content: text('and again') })
       await port.until(() => port.thread(sessionId).session.queue.length === 1)
@@ -1062,7 +1123,7 @@ describe('keeping the config across an attach', () => {
       expect(port.entries(sessionId).at(-1)).toMatchObject({
         kind: 'notice',
         description: [
-          'This session has no Mode option, so Code is not available.',
+          'This session has no Mode option, so retired is not available.',
           'You can change them in the composer.',
           notSent,
         ].join('\n'),
@@ -1072,7 +1133,8 @@ describe('keeping the config across an attach', () => {
     it('says so when a setting attaches the session, with nothing to hold back', async () => {
       const { t: first, port: before } = await setup()
       const sessionId = await chosenSession(first, before, { mode: 'code' })
-      const { port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
+      const { t, port } = await restart(first, { agentEnv: { FAKE_AGENT_LEGACY_MODES: '1' } })
+      await storeMode(t, sessionId, 'retired')
       await port.open(sessionId)
       await port.request('sessions.setConfigOption', {
         sessionId,
@@ -1084,7 +1146,7 @@ describe('keeping the config across an attach', () => {
         kind: 'notice',
         title: 'This session could not keep all of its settings',
         description: [
-          'This session has no Mode option, so Code is not available.',
+          'This session has no Mode option, so retired is not available.',
           'You can change them in the composer.',
         ].join('\n'),
       })

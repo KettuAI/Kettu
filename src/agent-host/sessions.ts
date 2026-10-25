@@ -77,7 +77,7 @@ import {
   type Attachments,
 } from './attachments'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
-import { lostValues, lostValuesNotice, type LostValue } from './config-notice'
+import { carryMode, lostValues, lostValuesNotice, type LostValue } from './config-notice'
 import type { Diagnostics } from './diagnostics'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import { HostError, invalidParams, notFound } from './errors'
@@ -2616,7 +2616,8 @@ export class SessionManager {
       )
     }
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
-    config = await this.applyStartOptions(live, connection, agentValues(own), {
+    const wanted = carryMode(own, config)
+    config = await this.applyStartOptions(live, connection, agentValues(wanted), {
       restore: true,
       from: config,
       stop: () => gone() || connection.isClosed,
@@ -2644,8 +2645,8 @@ export class SessionManager {
     this.deps.agents.signedIn(record.agentId)
     // The mode decides what the agent may do unasked, so the session must not run in another
     // one unseen.
-    const modes = own.filter((option) => option.category === 'mode')
-    if (lostValues(modes, config).length > 0) this.modeLost(live, lostValues(own, config))
+    const modes = wanted.filter((option) => option.category === 'mode')
+    if (lostValues(modes, config).length > 0) this.modeLost(live, lostValues(wanted, config))
     return connection
   }
 

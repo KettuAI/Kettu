@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConfigOption } from '@shared/thread'
-import { lostValues, lostValuesNotice, valueName, type LostValue } from './config-notice'
+import { carryMode, lostValues, lostValuesNotice, valueName, type LostValue } from './config-notice'
 import { setLocale } from './i18n'
 
 afterEach(() => {
@@ -43,6 +43,39 @@ const level = (value: string): ConfigOption => ({
   type: 'select',
   value,
   choices: [{ value: 'low', name: 'Low' }],
+})
+const legacyMode = (value: string): ConfigOption => ({ ...mode(value), id: '__mode' })
+
+describe('carryMode', () => {
+  it('sets the stored mode on the one mode option now offered', () => {
+    const offered = legacyMode('read-only')
+    expect(carryMode([mode('agent'), model('a')], [offered, model('a')])).toEqual([
+      { ...offered, value: 'agent' },
+      model('a'),
+    ])
+  })
+
+  it('maps a legacy mode back to the mode option', () => {
+    const offered = mode('read-only')
+    expect(carryMode([legacyMode('agent')], [offered])).toEqual([{ ...offered, value: 'agent' }])
+  })
+
+  it('keeps the stored option when the agent still offers its id', () => {
+    const own = [mode('agent')]
+    expect(carryMode(own, [mode('read-only')])).toBe(own)
+  })
+
+  it('keeps the stored option when the new mode does not take the value', () => {
+    const own = [mode('gone')]
+    expect(carryMode(own, [legacyMode('read-only')])).toBe(own)
+  })
+
+  it('keeps the stored option when more than one mode option is offered', () => {
+    const own = [mode('agent')]
+    expect(carryMode(own, [legacyMode('read-only'), { ...mode('read-only'), id: 'mode2' }])).toBe(
+      own,
+    )
+  })
 })
 
 describe('lostValues', () => {
