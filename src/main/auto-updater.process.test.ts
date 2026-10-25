@@ -28,10 +28,16 @@ app
   .whenReady()
   .then(() => import(${JSON.stringify(moduleUrl)}))
   .then(({ loadAutoUpdater }) => loadAutoUpdater())
-  .then((autoUpdater) => {
+  .then(({ autoUpdater, CancellationToken }) => {
     // The first thing Updater.load() does with it.
     autoUpdater.logger = null
-    report({ checkForUpdates: typeof autoUpdater.checkForUpdates, on: typeof autoUpdater.on })
+    const token = new CancellationToken()
+    token.cancel()
+    report({
+      checkForUpdates: typeof autoUpdater.checkForUpdates,
+      on: typeof autoUpdater.on,
+      cancelled: token.cancelled,
+    })
   })
   .catch((error) => report({ error: String((error && error.stack) || error) }))
 `
@@ -49,7 +55,7 @@ function run(args: string[]): Promise<{ code: number | null; stderr: string }> {
   })
 }
 
-it('gets a usable autoUpdater in the packaged app', { timeout: 60_000 }, async () => {
+it('gets usable electron-updater exports in the packaged app', { timeout: 60_000 }, async () => {
   dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-updater-'))
   const result = path.join(dir, 'result.json')
   const main = path.join(dir, 'main.cjs')
@@ -63,5 +69,5 @@ it('gets a usable autoUpdater in the packaged app', { timeout: 60_000 }, async (
   const text = await readFile(result, 'utf8').catch((): never => {
     throw new Error(`Electron exited with ${code} and no result:\n${stderr}`)
   })
-  expect(JSON.parse(text)).toEqual({ checkForUpdates: 'function', on: 'function' })
+  expect(JSON.parse(text)).toEqual({ checkForUpdates: 'function', on: 'function', cancelled: true })
 })

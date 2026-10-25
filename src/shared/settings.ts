@@ -35,7 +35,7 @@ export interface SettingsFile {
     fontSize: 12 | 13 | 14
   }
   git: { backgroundFetch: boolean }
-  updates: { automatic: 'download' | 'notify' | 'off' }
+  updates: { automatic: 'download' | 'restart' | 'notify' | 'off' }
   privacy: { hideAccount: boolean } // masks emails and account names on screen
   usage: {
     fromComputer: boolean // read the agents' own logs

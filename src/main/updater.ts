@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import type { AppUpdater } from 'electron-updater'
+import type { AppUpdater, CancellationToken } from 'electron-updater'
 import type { SettingsFile } from '@shared/settings'
 import type { UpdateStatus } from '@shared/updates'
 import type { AppStateStore } from './app-state'
@@ -9,9 +9,12 @@ import { createLogger } from './log'
 import type { SettingsSection } from './settings-schema'
 import {
   dismissTarget,
+  dmgDownloadUrl,
   errorMessage,
+  installOnQuit,
   nextState,
   offReason,
+  type StartedBy,
   type UpdateMode,
   type UpdaterEvent,
   updatedFrom,
@@ -38,9 +41,16 @@ export class Updater {
   private manual = false
   private lastCheckedAt: number | null = null
   private lastAvailable: string | null = null
+  private lastDownloadUrl: string | null = null
   private checking: Promise<void> | null = null
   private started = false
   private errorEvents = 0
+  private startedBy: StartedBy = 'auto'
+  /** Set once electron-updater has loaded. */
+  private newToken: (() => CancellationToken) | null = null
+  /** Stops the download the user started with Update. */
+  private cancellation: CancellationToken | null = null
+  private shuttingDown = false
 
   constructor(private readonly deps: UpdaterDeps) {
     const current = app.getVersion()
@@ -51,6 +61,7 @@ export class Updater {
         kind: 'idle',
         checkedAt: null,
       },
+      mode: this.mode,
       current,
       updatedFrom: updatedFrom(lastRunVersion, current),
       dismissed: dismissedUpdate,
@@ -81,6 +92,7 @@ export class Updater {
     return this.status
   }
 
+  /** Update: downloads the update found, then restarts once it is ready. */
   async download(): Promise<void> {
     const off = this.status.state
     if (off.kind === 'off') {
@@ -96,7 +108,12 @@ export class Updater {
     const { state } = this.status
     if (state.kind !== 'available') throw new Error('There is no update to download')
     this.manual = true
-    await this.startDownload(state.version)
+    await this.startDownload(state.version, 'user')
+  }
+
+  /** Stops a download started with Update, which leaves the update available again. */
+  cancel(): void {
+    if (this.status.state.kind === 'downloading') this.cancellation?.cancel()
   }
 
   restart(): void {
@@ -120,6 +137,7 @@ export class Updater {
 
   /** The system is shutting down, which could kill an installer halfway. */
   systemShutdown(): void {
+    this.shuttingDown = true
     if (!this.updater) return
     void this.updater.then((updater) => {
       updater.autoInstallOnAppQuit = false
@@ -133,20 +151,35 @@ export class Updater {
       if (changed.has('proxy')) void this.applyProxy(updater, settings)
       if (!changed.has('updates')) return
       updater.autoDownload = this.autoDownload(settings)
+      this.applyInstallOnQuit(updater, settings)
       const { state } = this.status
       if (updater.autoDownload && state.kind === 'available') {
         this.manual = false
-        void this.startDownload(state.version)
+        void this.startDownload(state.version, 'auto')
       }
     })
   }
 
   private autoDownload(settings: SettingsFile): boolean {
-    return this.mode === 'install' && settings.updates.automatic === 'download'
+    const { automatic } = settings.updates
+    return this.mode === 'install' && (automatic === 'download' || automatic === 'restart')
+  }
+
+  /**
+   * electron-updater adds its quit handler when a download finishes, and only while
+   * autoInstallOnAppQuit is on, so it stays on until then; a ready update follows the choice.
+   */
+  private applyInstallOnQuit(updater: AppUpdater, settings: SettingsFile): void {
+    const ready = this.status.state.kind === 'ready'
+    updater.autoInstallOnAppQuit =
+      this.mode === 'install' &&
+      !this.shuttingDown &&
+      (!ready || installOnQuit({ choice: settings.updates.automatic, startedBy: this.startedBy }))
   }
 
   private load(): Promise<AppUpdater> {
-    this.updater ??= loadAutoUpdater().then((autoUpdater) => {
+    this.updater ??= loadAutoUpdater().then(({ autoUpdater, CancellationToken }) => {
+      this.newToken = () => new CancellationToken()
       const settings = this.deps.settings()
       autoUpdater.logger = {
         info: (message?: unknown) => log.info(String(message)),
@@ -156,7 +189,7 @@ export class Updater {
       autoUpdater.allowPrerelease = false
       autoUpdater.allowDowngrade = false
       autoUpdater.autoDownload = this.autoDownload(settings)
-      autoUpdater.autoInstallOnAppQuit = this.mode === 'install'
+      this.applyInstallOnQuit(autoUpdater, settings)
       // Releases carry no NSIS blockmap, so the Windows installer always downloads whole.
       autoUpdater.disableDifferentialDownload = process.platform === 'win32'
       autoUpdater.on('checking-for-update', () =>
@@ -164,19 +197,29 @@ export class Updater {
       )
       autoUpdater.on('update-available', (info) => {
         this.lastAvailable = info.version
+        this.lastDownloadUrl =
+          this.mode === 'link' ? dmgDownloadUrl(info.version, info.files, process.arch) : null
+        // With automatic downloads electron-updater starts one right after this event.
+        this.startedBy = 'auto'
         this.dispatch({ type: 'available', version: info.version })
+        this.applyInstallOnQuit(autoUpdater, this.deps.settings())
       })
       autoUpdater.on('update-not-available', () => {
         this.lastAvailable = null
+        this.lastDownloadUrl = null
         this.lastCheckedAt = Date.now()
         this.dispatch({ type: 'not-available', at: this.lastCheckedAt })
       })
       autoUpdater.on('download-progress', (progress) =>
         this.dispatch({ type: 'progress', percent: progress.percent }),
       )
-      autoUpdater.on('update-downloaded', (info) =>
-        this.dispatch({ type: 'downloaded', version: info.version }),
-      )
+      autoUpdater.on('update-downloaded', (info) => {
+        this.dispatch({ type: 'downloaded', version: info.version })
+        // electron-updater adds its quit handler right after this event, so the choice applies
+        // once it has.
+        queueMicrotask(() => this.applyInstallOnQuit(autoUpdater, this.deps.settings()))
+        if (this.startedBy === 'user') this.deps.requestRestart()
+      })
       autoUpdater.on('error', (error) => {
         this.errorEvents++
         const message = errorMessage(error)
@@ -251,18 +294,31 @@ export class Updater {
     return this.checking
   }
 
-  private async startDownload(version: string): Promise<void> {
+  private async startDownload(version: string, startedBy: StartedBy): Promise<void> {
     const errorsBefore = this.errorEvents
+    // Before anything waits: a second Update then finds the download started, and the cancel
+    // button that shows with it has a token to cancel.
+    const token = startedBy === 'user' ? (this.newToken?.() ?? null) : null
+    this.startedBy = startedBy
+    this.cancellation = token
+    this.dispatch({ type: 'download-started', version, manual: startedBy === 'user' })
     try {
       const updater = await this.load()
-      this.dispatch({ type: 'download-started', version })
-      await updater.downloadUpdate()
+      this.applyInstallOnQuit(updater, this.deps.settings())
+      await updater.downloadUpdate(token ?? undefined)
     } catch (error) {
+      // A cancelled download rejects without an 'error' event.
+      if (token?.cancelled) {
+        this.dispatch({ type: 'download-cancelled' })
+        return
+      }
       const message = errorMessage(error)
       if (this.errorEvents === errorsBefore) {
         this.dispatch({ type: 'error', message, manual: this.manual })
       }
       if (this.manual) throw new Error(message, { cause: error })
+    } finally {
+      if (this.cancellation === token) this.cancellation = null
     }
   }
 
@@ -272,6 +328,7 @@ export class Updater {
       autoDownload: this.autoDownload(this.deps.settings()),
       lastCheckedAt: this.lastCheckedAt,
       lastAvailable: this.lastAvailable,
+      downloadUrl: this.lastDownloadUrl,
     })
     if (state !== this.status.state) this.publish({ ...this.status, state })
   }

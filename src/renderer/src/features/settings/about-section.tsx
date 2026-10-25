@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckIcon, CircleCheckIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
+import type { SettingsFile } from '@shared/settings'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
 import { BrandLockup } from '@renderer/components/brand'
 import { useRefresh } from '@renderer/components/refresh'
@@ -138,7 +139,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
             {whatsNew(state.version)}
             {state.mode === 'link' ? (
               <a
-                href={releaseUrl(state.version)}
+                href={state.downloadUrl ?? releaseUrl(state.version)}
                 target="_blank"
                 rel="noreferrer"
                 className={buttonVariants({ size: 'compact' })}
@@ -148,7 +149,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
               </a>
             ) : (
               <Button size="compact" onClick={() => run(window.overbench.updates.download)}>
-                {t('about.updates.download')}
+                {t('about.updates.update')}
               </Button>
             )}
           </>
@@ -190,21 +191,35 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
   )
 }
 
+type AutomaticChoice = SettingsFile['updates']['automatic']
+
 export function AutomaticUpdates() {
   const { t } = useTranslation('settings')
-  const value = useSettingsStore((s) => s.settings.updates.automatic)
+  const mode = useUpdatesStore((s) => s.status?.mode ?? 'install')
+  const stored = useSettingsStore((s) => s.settings.updates.automatic)
+  // Link mode cannot install, so a stored choice to download counts as notify there.
+  const value: AutomaticChoice =
+    mode === 'link' && (stored === 'download' || stored === 'restart') ? 'notify' : stored
   const [apply, error] = useApply()
+  const options: { value: AutomaticChoice; label: string }[] =
+    mode === 'link'
+      ? [
+          { value: 'notify', label: t('about.automatic.linkNotify') },
+          { value: 'off', label: t('about.automatic.off') },
+        ]
+      : [
+          { value: 'download', label: t('about.automatic.download') },
+          { value: 'restart', label: t('about.automatic.restart') },
+          { value: 'notify', label: t('about.automatic.notify') },
+          { value: 'off', label: t('about.automatic.off') },
+        ]
   return (
     <>
       <ControlError error={error} />
       <SettingSelect
         label={t('about.automatic.name')}
         value={value}
-        options={[
-          { value: 'download', label: t('about.automatic.download') },
-          { value: 'notify', label: t('about.automatic.notify') },
-          { value: 'off', label: t('about.automatic.off') },
-        ]}
+        options={options}
         onChange={(v) => apply({ updates: { automatic: v } })}
       />
     </>

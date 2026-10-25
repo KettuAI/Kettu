@@ -133,6 +133,7 @@ const api: OverbenchApi = {
     getStatus: () => invoke('update:get-status'),
     check: () => invoke('update:check'),
     download: () => invoke('update:download'),
+    cancel: () => invoke('update:cancel'),
     restart: () => invoke('update:restart'),
     dismiss: () => invoke('update:dismiss'),
     onChanged: onUpdateChanged,

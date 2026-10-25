@@ -113,6 +113,7 @@ export interface IpcInvokeContract {
   'update:get-status': { args: []; result: UpdateStatus }
   'update:check': { args: []; result: UpdateStatus }
   'update:download': { args: []; result: void }
+  'update:cancel': { args: []; result: void }
   'update:restart': { args: []; result: void }
   'update:dismiss': { args: []; result: void }
   'agent-host:restart': { args: []; result: void }
@@ -244,7 +245,10 @@ export interface OverbenchApi {
   updates: {
     getStatus(): Promise<UpdateStatus>
     check(): Promise<UpdateStatus>
+    /** Update: downloads, then restarts once the download is ready. */
     download(): Promise<void>
+    /** Stops a download that `download()` started. */
+    cancel(): Promise<void>
     restart(): Promise<void>
     dismiss(): Promise<void>
     onChanged(listener: (status: UpdateStatus) => void): () => void

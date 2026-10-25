@@ -49,6 +49,12 @@ describe('validateSettingsPatch', () => {
     })
   })
 
+  it('accepts installing updates only on a restart', () => {
+    expect(validateSettingsPatch({ updates: { automatic: 'restart' } })).toEqual({
+      updates: { automatic: 'restart' },
+    })
+  })
+
   it.each([
     [null, 'must be an object'],
     [[], 'must be an object'],

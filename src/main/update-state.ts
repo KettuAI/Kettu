@@ -1,10 +1,41 @@
-// Pure parts of the updater: which mode a build uses, whether it can update, and how events
-// from electron-updater move the state every surface reads.
+// Pure parts of the updater: which mode a build uses, whether it can update, when a download
+// installs on quit, and how events from electron-updater move the state every surface reads.
 
 import type { Platform } from '@shared/platform'
-import type { UpdateState, UpdateStatus } from '@shared/updates'
+import type { SettingsFile } from '@shared/settings'
+import { RELEASES_URL, type UpdateState, type UpdateStatus } from '@shared/updates'
 
 export type UpdateMode = 'install' | 'link'
+
+/** Who started a download: the updater, as the choice says, or the user with Update. */
+export type StartedBy = 'auto' | 'user'
+
+/** Whether a downloaded update installs when the app quits without a restart for it. */
+export function installOnQuit({
+  choice,
+  startedBy,
+}: {
+  choice: SettingsFile['updates']['automatic']
+  startedBy: StartedBy
+}): boolean {
+  return !(choice === 'restart' && startedBy === 'auto')
+}
+
+/**
+ * Link mode's download: the release's .dmg for this Mac, picked by the architecture in its name,
+ * or null when the update lists none.
+ */
+export function dmgDownloadUrl(
+  version: string,
+  files: readonly { url: string }[],
+  arch: string,
+): string | null {
+  if (arch !== 'arm64' && arch !== 'x64') return null
+  const name = files
+    .map((file) => file.url.slice(file.url.lastIndexOf('/') + 1))
+    .find((file) => file.endsWith(`-${arch}.dmg`))
+  return name ? `${RELEASES_URL}/download/v${version}/${encodeURIComponent(name)}` : null
+}
 
 /**
  * Install replaces the app; Link only opens the release page. The release workflow sets
@@ -70,9 +101,10 @@ export type UpdaterEvent =
   | { type: 'checking'; manual: boolean }
   | { type: 'available'; version: string }
   | { type: 'not-available'; at: number }
-  | { type: 'download-started'; version: string }
+  | { type: 'download-started'; version: string; manual: boolean }
   | { type: 'progress'; percent: number }
   | { type: 'downloaded'; version: string }
+  | { type: 'download-cancelled' }
   | { type: 'error'; message: string; manual: boolean }
   | { type: 'load-failed'; message: string; manual: boolean }
 
@@ -82,6 +114,13 @@ export interface TransitionContext {
   lastCheckedAt: number | null
   /** The version found last, to fall back to after a failed automatic download. */
   lastAvailable: string | null
+  /** In Link mode, the .dmg to open for `lastAvailable`. */
+  downloadUrl: string | null
+}
+
+function available(version: string, context: TransitionContext): UpdateState {
+  const downloadUrl = context.mode === 'link' ? context.downloadUrl : null
+  return { kind: 'available', version, mode: context.mode, downloadUrl }
 }
 
 export function nextState(
@@ -97,28 +136,28 @@ export function nextState(
       return { kind: 'checking', manual: event.manual }
     case 'available':
       if (context.mode === 'install' && context.autoDownload) {
-        return { kind: 'downloading', version: event.version, percent: 0 }
+        return { kind: 'downloading', version: event.version, percent: 0, manual: false }
       }
-      return { kind: 'available', version: event.version, mode: context.mode }
+      return available(event.version, context)
     case 'not-available':
       return { kind: 'idle', checkedAt: event.at }
     case 'download-started':
-      return { kind: 'downloading', version: event.version, percent: 0 }
+      return { kind: 'downloading', version: event.version, percent: 0, manual: event.manual }
     case 'progress':
       if (state.kind !== 'downloading' || !Number.isFinite(event.percent)) return state
       return { ...state, percent: Math.max(0, Math.min(100, Math.floor(event.percent))) }
     case 'downloaded':
       return { kind: 'ready', version: event.version }
+    case 'download-cancelled':
+      return state.kind === 'downloading' ? available(state.version, context) : state
     case 'error':
       if (event.manual) return { kind: 'error', message: event.message, manual: true }
       // Automatic failures are only logged and retried at the next check, so the state falls
       // back to what was known before.
-      if (state.kind === 'downloading') {
-        return { kind: 'available', version: state.version, mode: context.mode }
-      }
+      if (state.kind === 'downloading') return available(state.version, context)
       if (state.kind !== 'checking') return state
       return context.lastAvailable
-        ? { kind: 'available', version: context.lastAvailable, mode: context.mode }
+        ? available(context.lastAvailable, context)
         : { kind: 'idle', checkedAt: context.lastCheckedAt }
     case 'load-failed':
       // Without electron-updater no check can run, so even an automatic one shows it.

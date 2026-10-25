@@ -61,4 +61,5 @@ linux:
   files:
     - '!node_modules/node-pty/prebuilds{,/**/*}'
 appImage:
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  # No version in the name: an update replaces the file a launcher already points at.
+  artifactName: ${productName}-${arch}.${ext}
