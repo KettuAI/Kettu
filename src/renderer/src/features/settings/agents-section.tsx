@@ -12,7 +12,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   LogOutIcon,
-  RefreshCwIcon,
   RotateCwIcon,
   XIcon,
 } from 'lucide-react'
@@ -30,6 +29,8 @@ import type {
 import type { AgentId } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
+import { useRefresh } from '@renderer/components/refresh'
+import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
@@ -104,6 +105,16 @@ function useAction(): [(run: () => Promise<unknown>) => void, boolean, string | 
       .finally(() => setBusy(false))
   }
   return [act, busy, error]
+}
+
+/**
+ * Checks every package agent for updates. The store records a failure as `updateCheck.error`, so
+ * reject as well, which keeps a failed check from showing the icon's check.
+ */
+async function checkForAgentUpdates(): Promise<void> {
+  await useAgentsStore.getState().checkUpdates()
+  const error = useAgentsStore.getState().updateCheck.error
+  if (error) throw new Error(error)
 }
 
 /** The way OverBench would install it now, or null when it cannot. */
@@ -467,23 +478,25 @@ export function AgentsGroupActions() {
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const [apply, error] = useApply()
+  const refresh = useRefresh({ busy: check.running })
   const now = useNow()
   const checkable = agents.some((a) => a.package)
   const lastAt = Math.max(0, ...agents.map((a) => a.updateCheckedAt ?? 0)) || null
   const pending = agents.filter((a) => a.update).length
-  const meta: ReactNode = check.running ? null : check.error ? (
-    <span className="text-danger" title={check.error}>
-      {t('agents.update.checkFailed')}
-    </span>
-  ) : check.finishedAt && now - check.finishedAt < JUST_CHECKED_MS ? (
-    pending > 0 ? (
-      t('agents.update.justChecked', { count: pending })
-    ) : (
-      t('agents.update.allCurrent')
-    )
-  ) : lastAt ? (
-    t('agents.update.checkedAgo', { ago: longAgo(lastAt, now) })
-  ) : null
+  const meta: ReactNode =
+    refresh.phase === 'turning' ? null : check.error ? (
+      <span className="text-danger" title={check.error}>
+        {t('agents.update.checkFailed')}
+      </span>
+    ) : check.finishedAt && now - check.finishedAt < JUST_CHECKED_MS ? (
+      pending > 0 ? (
+        t('agents.update.justChecked', { count: pending })
+      ) : (
+        t('agents.update.allCurrent')
+      )
+    ) : lastAt ? (
+      t('agents.update.checkedAgo', { ago: longAgo(lastAt, now) })
+    ) : null
   return (
     <>
       {meta && <span className="mr-1 text-tertiary">{meta}</span>}
@@ -491,14 +504,11 @@ export function AgentsGroupActions() {
         <Button
           variant="quiet"
           size="xs"
-          disabled={check.running}
-          onClick={() => void useAgentsStore.getState().checkUpdates()}
+          aria-busy={refresh.phase === 'turning'}
+          disabled={refresh.phase === 'turning'}
+          onClick={() => void refresh.run(checkForAgentUpdates).catch(() => {})}
         >
-          {check.running ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <RefreshCwIcon data-icon="inline-start" />
-          )}
+          <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
           {t('agents.update.check')}
         </Button>
       )}
@@ -772,10 +782,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
 function VersionGroup({ status, version }: { status: AgentStatus; version: string | null }) {
   const { t } = useTranslation('settings')
   const check = useAgentsStore((s) => s.updateCheck)
+  const refresh = useRefresh({ busy: check.running })
   const now = useNow()
   const checkedAt = status.updateCheckedAt
   const updating = status.task?.kind === 'update' && status.task.state === 'running'
-  const line: ReactNode = !status.package ? null : check.running ? (
+  const line: ReactNode = !status.package ? null : refresh.phase === 'turning' ? (
     t('agents.update.checking')
   ) : updating ? (
     t('agents.update.updating')
@@ -824,14 +835,11 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
           <Button
             variant="outline"
             size="compact"
-            disabled={check.running || updating}
-            onClick={() => void useAgentsStore.getState().checkUpdates()}
+            aria-busy={refresh.phase === 'turning'}
+            disabled={refresh.phase === 'turning' || updating}
+            onClick={() => void refresh.run(checkForAgentUpdates).catch(() => {})}
           >
-            {check.running ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <RefreshCwIcon data-icon="inline-start" />
-            )}
+            <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
             {t('agents.update.check')}
           </Button>
         )}
@@ -1133,6 +1141,8 @@ function UsageGroup({
   const { t } = useTranslation(['settings', 'composer'])
   const now = useNow()
   const [act, busy, error] = useAction()
+  const refresh = useRefresh()
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   const observed = Math.max(0, ...status.limits.map((l) => l.observedAt)) || null
   const actions =
     status.limits.length > 0 && limitsReadable(status) ? (
@@ -1144,10 +1154,16 @@ function UsageGroup({
         )}
         <IconAction
           label={t('agents.refreshUsage')}
-          disabled={busy}
-          onClick={() => act(() => refreshLimits(status.id))}
+          disabled={refresh.phase === 'turning'}
+          busy={refresh.phase === 'turning'}
+          onClick={() => {
+            setRefreshError(null)
+            void refresh
+              .run(() => refreshLimits(status.id))
+              .catch((e: unknown) => setRefreshError(errorMessage(e)))
+          }}
         >
-          {busy ? <Spinner /> : <RefreshCwIcon />}
+          <RefreshIcon phase={refresh.phase} />
         </IconAction>
       </>
     ) : null
@@ -1215,8 +1231,8 @@ function UsageGroup({
           </p>
         </RowShell>
       )}
-      {error && status.limits.length > 0 && (
-        <p className="px-1 pt-1 text-xs text-danger">{error}</p>
+      {(error ?? refreshError) && status.limits.length > 0 && (
+        <p className="px-1 pt-1 text-xs text-danger">{error ?? refreshError}</p>
       )}
     </section>
   )
@@ -1299,7 +1315,8 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
 function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   const { t } = useTranslation(['settings', 'common'])
   const [apply, error] = useApply()
-  const [retry, retrying, retryError] = useAction()
+  const refresh = useRefresh()
+  const [retryError, setRetryError] = useState<string | null>(null)
   const version = useAgentVersion(status)
   const installed = cli.installed
   const { command } = cli
@@ -1375,14 +1392,16 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
         <Button
           variant="quiet"
           size="compact"
-          disabled={retrying}
-          onClick={() => retry(() => useAgentsStore.getState().reloadEnvironment())}
+          aria-busy={refresh.phase === 'turning'}
+          disabled={refresh.phase === 'turning'}
+          onClick={() => {
+            setRetryError(null)
+            void refresh
+              .run(() => useAgentsStore.getState().reloadEnvironment())
+              .catch((e: unknown) => setRetryError(errorMessage(e)))
+          }}
         >
-          {retrying ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <RefreshCwIcon data-icon="inline-start" />
-          )}
+          <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
           {t('common:actions.retry')}
         </Button>
       )}
@@ -1554,7 +1573,8 @@ export function EnvironmentFooter() {
   const { t } = useTranslation('settings')
   const environment = useAgentsStore((s) => s.environment)
   const now = useNow()
-  const [act, busy, error] = useAction()
+  const refresh = useRefresh()
+  const [error, setError] = useState<string | null>(null)
   const source = environment?.source
   const text =
     !environment || source === 'pending'
@@ -1584,10 +1604,16 @@ export function EnvironmentFooter() {
         <Button
           variant="quiet"
           size="xs"
-          disabled={busy}
-          onClick={() => act(() => useAgentsStore.getState().reloadEnvironment())}
+          aria-busy={refresh.phase === 'turning'}
+          disabled={refresh.phase === 'turning'}
+          onClick={() => {
+            setError(null)
+            void refresh
+              .run(() => useAgentsStore.getState().reloadEnvironment())
+              .catch((e: unknown) => setError(errorMessage(e)))
+          }}
         >
-          {busy ? <Spinner data-icon="inline-start" /> : <RefreshCwIcon data-icon="inline-start" />}
+          <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
           {t('agents.environment.reload')}
         </Button>
       </div>

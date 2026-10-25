@@ -118,11 +118,13 @@ export function IconAction({
   label,
   onClick,
   disabled,
+  busy,
   children,
 }: {
   label: string
   onClick: () => void
   disabled?: boolean
+  busy?: boolean
   children: ReactNode
 }) {
   return (
@@ -133,6 +135,7 @@ export function IconAction({
             variant="quiet"
             size="icon-xs"
             aria-label={label}
+            aria-busy={busy}
             disabled={disabled}
             onClick={onClick}
           />

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChartNoAxesColumnIcon, CircleAlertIcon, RefreshCwIcon } from 'lucide-react'
+import { ChartNoAxesColumnIcon, CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { useRefresh } from '@renderer/components/refresh'
+import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
@@ -19,7 +21,6 @@ import {
 } from '@renderer/components/ui/empty'
 import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { LimitsPart } from '@renderer/features/session/composer/usage'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
@@ -202,13 +203,13 @@ function SyncState() {
   )
   const reading = useUsageStore((s) => s.status?.scanning != null)
   const now = useNow()
-  const [busy, setBusy] = useState(false)
+  const refresh = useRefresh({ busy: reading })
   const [failed, setFailed] = useState<string | null>(null)
   if (fromComputer === null) return null
   if (!fromComputer) {
     return <span className="text-xs text-tertiary">{t('page.record')}</span>
   }
-  const scanning = busy || reading
+  const scanning = refresh.phase === 'turning'
   return (
     <NoDrag className="gap-2">
       {failed && !scanning ? (
@@ -230,20 +231,14 @@ function SyncState() {
       <Button
         variant="quiet"
         size="compact"
+        aria-busy={scanning}
         disabled={scanning}
         onClick={() => {
-          setBusy(true)
           setFailed(null)
-          void syncUsage()
-            .catch((e: unknown) => setFailed(errorMessage(e)))
-            .finally(() => setBusy(false))
+          void refresh.run(syncUsage).catch((e: unknown) => setFailed(errorMessage(e)))
         }}
       >
-        {scanning ? (
-          <Spinner data-icon="inline-start" />
-        ) : (
-          <RefreshCwIcon data-icon="inline-start" />
-        )}
+        <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
         {t('page.sync')}
       </Button>
     </NoDrag>

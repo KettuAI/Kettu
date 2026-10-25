@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { RefreshCwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SettingsFile } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { useRefresh } from '@renderer/components/refresh'
+import { RefreshIcon } from '@renderer/components/refresh-icon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +17,6 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { bytes, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -49,16 +49,9 @@ export function FromComputer() {
 export function SyncLogs() {
   const { t } = useTranslation('usage')
   const scanning = useUsageStore((s) => s.status?.scanning ?? null)
-  const [busy, setBusy] = useState(false)
+  const refresh = useRefresh({ busy: scanning !== null })
   const [error, setError] = useState<string | null>(null)
-  const running = busy || scanning !== null
-  const sync = () => {
-    setBusy(true)
-    setError(null)
-    syncUsage()
-      .catch((e: unknown) => setError(errorMessage(e)))
-      .finally(() => setBusy(false))
-  }
+  const running = refresh.phase === 'turning'
   return (
     <>
       {scanning && scanning.bytes > 0 && (
@@ -67,12 +60,18 @@ export function SyncLogs() {
         </span>
       )}
       <ControlError error={error} />
-      <Button variant="quiet" size="xs" disabled={running} onClick={sync} className="-mr-2">
-        {running ? (
-          <Spinner data-icon="inline-start" className="size-3" />
-        ) : (
-          <RefreshCwIcon data-icon="inline-start" />
-        )}
+      <Button
+        variant="quiet"
+        size="xs"
+        aria-busy={running}
+        disabled={running}
+        onClick={() => {
+          setError(null)
+          void refresh.run(syncUsage).catch((e: unknown) => setError(errorMessage(e)))
+        }}
+        className="-mr-2"
+      >
+        <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
         {t('page.sync')}
       </Button>
     </>
