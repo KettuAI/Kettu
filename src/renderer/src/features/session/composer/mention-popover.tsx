@@ -1,5 +1,3 @@
-import type { MouseEvent } from 'react'
-import { Autocomplete } from '@base-ui/react/autocomplete'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
@@ -10,23 +8,31 @@ import type { MentionList } from './use-mention-list'
 
 /** A mention's row: the type icon, the name with its matched characters marked, then the folder. */
 export function MentionItem({
+  id,
   row,
+  highlighted,
+  onHighlight,
   onChoose,
 }: {
+  id: string
   row: MentionRow
+  highlighted: boolean
+  onHighlight: () => void
   onChoose: (row: MentionRow) => void
 }) {
   const nameStart = row.path.lastIndexOf('/') + 1
   const runs = markedRuns(row.path.slice(nameStart), nameStart, row.positions)
   const folder = folderOf(row.path)
   return (
-    <Autocomplete.Item
-      value={row}
-      // The composer writes the name and adds the file; Base UI would put the row in the text.
-      onClick={(event: MouseEvent & { preventBaseUIHandler?: () => void }) => {
-        event.preventBaseUIHandler?.()
-        onChoose(row)
-      }}
+    <div
+      role="option"
+      id={id}
+      aria-selected={highlighted}
+      data-highlighted={highlighted ? '' : undefined}
+      // Pressing a row keeps the focus, and with it the caret, in the box.
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseMove={onHighlight}
+      onClick={() => onChoose(row)}
       title={row.folder ? `${row.path}/` : row.path}
       className="flex min-h-row cursor-default items-center gap-1.5 rounded-md px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
     >
@@ -46,7 +52,7 @@ export function MentionItem({
         </span>
         {folder && <span className="truncate text-xs text-tertiary">{folder}</span>}
       </span>
-    </Autocomplete.Item>
+    </div>
   )
 }
 

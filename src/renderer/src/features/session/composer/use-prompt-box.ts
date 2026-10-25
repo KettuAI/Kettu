@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useEffectEvent,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ClipboardEvent,
-} from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
@@ -18,6 +11,7 @@ import {
 } from '@renderer/stores/attachments'
 import { attachFiles, attachImages, pastedImages, pickAttachments } from './attachments'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
+import type { ComposerEditorHandle } from './editor'
 
 // The state of the box both composers share, the session's and New session's; see PromptBox.
 
@@ -54,8 +48,7 @@ export function usePromptBox({
   const [slashDismissed, setSlashDismissed] = useState(false)
   // The caret, or null while a range is selected, for telling which `@` word it is in.
   const [caret, setCaret] = useState<number | null>(null)
-  const pendingCaret = useRef<number | null>(null)
-  const textarea = useRef<HTMLTextAreaElement>(null)
+  const editor = useRef<ComposerEditorHandle>(null)
   const attachments = useAttachmentsStore(selectDraft(draft))
 
   useEffect(() => () => flushDraft(draft), [draft])
@@ -91,56 +84,35 @@ export function usePromptBox({
     () =>
       onAppEvent((event) => {
         onEvent(event)
-        if (event.kind === 'focus-composer') textarea.current?.focus()
+        if (event.kind === 'focus-composer') editor.current?.focus()
         if (
           event.kind === 'insert-into-composer' &&
           (!event.sessionId || event.sessionId === sessionId)
         ) {
-          setText((current) => {
-            const next = current ? `${current.replace(/\s+$/, '')}\n\n${event.text}` : event.text
-            writeDraft(draft, next)
-            return next
-          })
-          requestAnimationFrame(() => {
-            const el = textarea.current
-            if (!el) return
-            el.focus()
-            el.setSelectionRange(el.value.length, el.value.length)
-          })
+          const current = editor.current?.text() ?? ''
+          const next = current ? `${current.replace(/\s+$/, '')}\n\n${event.text}` : event.text
+          setText(next)
+          writeDraft(draft, next)
+          setCaret(null)
+          editor.current?.setText(next)
+          requestAnimationFrame(() => editor.current?.focus())
         }
       }),
     [draft, sessionId],
   )
 
-  // A chosen mention or `@` from the menu puts the caret after what it wrote.
-  useLayoutEffect(() => {
-    const at = pendingCaret.current
-    const el = textarea.current
-    if (at === null || !el) return
-    pendingCaret.current = null
-    el.setSelectionRange(at, at)
-  }, [text])
-
-  // A textarea scrolls only the caret into view, not its padding, so typing at the end of a long
-  // draft would leave the last line on the box's edge.
-  useLayoutEffect(() => {
-    const el = textarea.current
-    if (!el || document.activeElement !== el || el.selectionEnd !== el.value.length) return
-    if (el.scrollHeight > el.clientHeight) el.scrollTop = el.scrollHeight
-  }, [text])
-
-  const update = (next: string, at?: number) => {
+  /** Typing changed the text: its state, its draft, and a slash list Esc closed. */
+  const changed = (next: string) => {
     setText(next)
     writeDraft(draft, next)
     onActivity?.()
     if (!next.startsWith('/')) setSlashDismissed(false)
-    if (at !== undefined) {
-      pendingCaret.current = at
-      setCaret(at)
-      return
-    }
-    const el = textarea.current
-    setCaret(el && el.selectionStart === el.selectionEnd ? el.selectionStart : null)
+  }
+  /** Puts `next` in the box with the caret at `at`, the end by default. */
+  const update = (next: string, at = next.length) => {
+    changed(next)
+    editor.current?.setText(next, at)
+    setCaret(at)
   }
 
   /** Empties the box for a send. */
@@ -148,6 +120,7 @@ export function usePromptBox({
     const prompt = text
     const held = attachments
     setText('')
+    editor.current?.setText('')
     // A draft put back after a failed send opens no mention until the caret moves.
     setCaret(null)
     clearDraft(draft)
@@ -160,16 +133,20 @@ export function usePromptBox({
     ({ prompt, held }: Taken) =>
     (e: unknown) => {
       setError(errorMessage(e))
-      setText((current) => (current ? current : prompt))
+      if (!editor.current?.text()) {
+        setText(prompt)
+        editor.current?.setText(prompt)
+      }
       if (held.length > 0) setDraftAttachments(draft, held)
     }
 
-  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const images = pastedImages(event.clipboardData)
-    if (images.length === 0) return
+  const onPaste = (event: ClipboardEvent): boolean => {
+    const images = event.clipboardData ? pastedImages(event.clipboardData) : []
+    if (images.length === 0) return false
     event.preventDefault()
     onActivity?.()
     limitError(attachImages(draft, images))
+    return true
   }
 
   return {
@@ -184,7 +161,9 @@ export function usePromptBox({
     update,
     take,
     restore,
-    textarea,
+    editor,
+    focus: () => editor.current?.focus(),
+    changed,
     // For the view.
     slashDismissed,
     setSlashDismissed,

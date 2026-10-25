@@ -34,6 +34,7 @@ import { FileLink } from '@renderer/features/files/file-link'
 import { useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
 import { LocalImage } from '@renderer/features/session/media/local-image'
+import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
 import { localImageTarget, spacedImages } from './local-images'
@@ -95,9 +96,6 @@ function InlineCode({ className, children }: ComponentProps<'code'> & ExtraProps
     </code>
   )
 }
-
-// Chinese has no italics, so emphasis in Chinese text is marked for a step of weight instead.
-const HAN = /\p{Script=Han}/u
 
 function textOf(node: ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node)

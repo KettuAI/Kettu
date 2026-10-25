@@ -251,15 +251,17 @@ async function stopObserving() {
   })()`)
 }
 
+const composerText = "document.querySelector('[data-slot=input-group] .cm-content')"
+
 async function typeWhileStreaming() {
-  await evaluate(`document.querySelector('textarea').focus()`)
+  await evaluate(`${composerText}.focus()`)
   await key('a', { code: 'KeyA', text: 'a', keyCode: 65 })
   await sleep(150)
   return 1
 }
 
 async function clearComposer() {
-  await evaluate(`document.querySelector('textarea').focus()`)
+  await evaluate(`${composerText}.focus()`)
   await key('a', { code: 'KeyA', modifiers: commandKey, keyCode: 65 })
   await key('Backspace', { keyCode: 8 })
 }

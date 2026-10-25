@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowUpIcon, ListPlusIcon, SquareIcon } from 'lucide-react'
 import { AnimatePresence } from 'motion/react'
 import { Trans, useTranslation } from 'react-i18next'
@@ -53,9 +53,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   // Starting a session focuses the composer, as the reference does.
   useEffect(() => {
-    if (status === 'ready' && document.activeElement === document.body)
-      box.textarea.current?.focus()
-  }, [status, box.textarea])
+    if (status === 'ready' && document.activeElement === document.body) box.editor.current?.focus()
+  }, [status, box.editor])
 
   // Both go through the host's queue, which sends at once when the session is free.
   const send = () => {
@@ -84,7 +83,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     host('sessions.cancel', { sessionId }).catch((e: unknown) => setError(errorMessage(e)))
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && running) {
       event.preventDefault()
       cancel()
@@ -141,7 +140,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         commands={session.commands}
         placeholder={placeholder}
         label={t('prompt.label', { agent: agentName })}
-        className="min-h-(--composer-min) py-4"
+        size={{ minHeight: 'var(--composer-min)', padding: '16px 4px 16px 6px' }}
         onKeyDown={onKeyDown}
         wrap={!!outOfCredit}
         top={

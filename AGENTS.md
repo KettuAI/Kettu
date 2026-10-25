@@ -40,20 +40,20 @@ Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the
 
 ### UI stack: one library per concern
 
-| Concern                     | Library                                                            |
-| --------------------------- | ------------------------------------------------------------------ |
-| Components and visual style | shadcn/ui, `base-nova` style on Base UI                            |
-| Icons                       | Lucide (`lucide-react`)                                            |
-| Animation                   | Motion (`motion/react`)                                            |
-| Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`      |
-| Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                         |
-| State management            | Zustand, stores in `src/renderer/src/stores`, one store per domain |
-| Markdown                    | Streamdown, with `@streamdown/code` and `@streamdown/cjk`          |
-| Syntax highlighting         | Shiki                                                              |
-| Diffs                       | `@pierre/diffs`                                                    |
-| Code editing                | CodeMirror 6 (`codemirror`), the Files pane's editor               |
-| Terminal                    | xterm.js in the renderer, `node-pty` in the terminal host          |
-| Localization                | i18next with react-i18next, catalogs in `src/shared/locales`       |
+| Concern                     | Library                                                               |
+| --------------------------- | --------------------------------------------------------------------- |
+| Components and visual style | shadcn/ui, `base-nova` style on Base UI                               |
+| Icons                       | Lucide (`lucide-react`)                                               |
+| Animation                   | Motion (`motion/react`)                                               |
+| Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`         |
+| Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                            |
+| State management            | Zustand, stores in `src/renderer/src/stores`, one store per domain    |
+| Markdown                    | Streamdown, with `@streamdown/code` and `@streamdown/cjk`             |
+| Syntax highlighting         | Shiki                                                                 |
+| Diffs                       | `@pierre/diffs`                                                       |
+| Code editing                | CodeMirror 6 (`codemirror`): the Files pane's editor and the composer |
+| Terminal                    | xterm.js in the renderer, `node-pty` in the terminal host             |
+| Localization                | i18next with react-i18next, catalogs in `src/shared/locales`          |
 
 Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
 

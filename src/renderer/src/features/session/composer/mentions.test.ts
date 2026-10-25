@@ -9,6 +9,7 @@ import {
   mentionAt,
   mentionName,
   mentionShown,
+  moveHighlight,
   popoverKey,
   replaceMention,
   usedFiles,
@@ -193,6 +194,21 @@ describe('keys', () => {
     expect(popoverKey('Enter', slash)).toBe('popover')
     expect(popoverKey('Tab', slash)).toBe('popover')
     expect(popoverKey('a', slash)).toBe('composer')
+  })
+})
+
+describe('moveHighlight', () => {
+  it('moves down and up, wrapping at both ends', () => {
+    expect(moveHighlight(0, 3, 'ArrowDown')).toBe(1)
+    expect(moveHighlight(2, 3, 'ArrowDown')).toBe(0)
+    expect(moveHighlight(0, 3, 'ArrowUp')).toBe(2)
+    expect(moveHighlight(0, 1, 'ArrowDown')).toBe(0)
+  })
+
+  it('starts at an end with nothing highlighted, and gives -1 for no rows', () => {
+    expect(moveHighlight(-1, 3, 'ArrowDown')).toBe(0)
+    expect(moveHighlight(-1, 3, 'ArrowUp')).toBe(2)
+    expect(moveHighlight(0, 0, 'ArrowDown')).toBe(-1)
   })
 })
 
