@@ -181,6 +181,11 @@ export class AgentHost {
     this.host.post({ type: 'host:settings', settings })
   }
 
+  /** The computer slept or woke, for the routines' schedule timer. */
+  power(state: 'suspend' | 'resume'): void {
+    this.host.post({ type: 'host:power', state })
+  }
+
   /** The sessions that are working, or none if the host does not answer within `timeoutMs`. */
   busy(timeoutMs: number): Promise<BusySession[]> {
     if (this.host.state !== 'ready') return Promise.resolve([])

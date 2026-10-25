@@ -211,6 +211,8 @@ async function start(): Promise<void> {
     quitFlow.systemShutdown()
     updater.systemShutdown()
   })
+  powerMonitor.on('suspend', () => agentHost.power('suspend'))
+  powerMonitor.on('resume', () => agentHost.power('resume'))
 
   agentHost.start()
   const window = createMainWindow(start)

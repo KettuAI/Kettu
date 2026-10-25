@@ -5,6 +5,7 @@
     "lib": ["ES2025"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "types": ["node", "electron-vite/node"],
     "strict": true,
     "verbatimModuleSyntax": true,

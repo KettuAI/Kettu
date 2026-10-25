@@ -46,6 +46,7 @@ export type MainToHost =
       path: string
       project: string | null
     }
+  | { type: 'host:power'; state: 'suspend' | 'resume' }
   | { type: 'host:shutdown' }
 
 /** The host's answer to `host:artifact-content-request`. */

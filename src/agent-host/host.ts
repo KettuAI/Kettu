@@ -40,6 +40,7 @@ import { PortHub, type Handlers, type PortChannel } from './rpc'
 import { Attachments } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
+import type { RoutineClock } from './routines/scheduler'
 import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
@@ -84,6 +85,8 @@ export interface HostOptions {
   sessionTimings?: Partial<SessionTimings>
   /** How long a minute of a run's time limit lasts, shortened by tests. */
   routineTimings?: Partial<RoutineTimings>
+  /** The scheduler's clock and timer; the system's by default, or a test's. */
+  routineClock?: RoutineClock
   /** How long after an agent's traffic its process tree is listed again. */
   treeNoteMs?: number
   /** Lists and stops the agents' process trees; the system's tools by default. */
@@ -367,6 +370,7 @@ export class AgentHost {
       log,
       resolveProject: (value) => this.projects.resolveDirectory(value),
       timings: options.routineTimings,
+      ...(options.routineClock ? { clock: options.routineClock } : {}),
       events: {
         changed: (routine) => this.broadcast({ type: 'routine.changed', routine }),
         removed: (routineId) => this.broadcast({ type: 'routine.removed', routineId }),
@@ -419,6 +423,7 @@ export class AgentHost {
     ])
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
+    host.routines.start()
     host.sendFolders()
     host.usage.start()
     host.artifacts.start()
@@ -497,6 +502,11 @@ export class AgentHost {
     this.usage.setFromComputer(next.usage.fromComputer)
     this.env.setConfigFolders(configFolders(this.catalog, next.agents))
     await this.agents.settingsChanged(previous, next)
+  }
+
+  /** The computer slept or woke, so the routines' timer starts over from the wall clock. */
+  power(state: 'suspend' | 'resume'): void {
+    this.routines.power(state)
   }
 
   busy(requestId: number): void {
