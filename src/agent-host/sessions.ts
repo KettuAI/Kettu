@@ -398,6 +398,17 @@ function agentValues(config: readonly ConfigOption[]): Record<string, string | b
   )
 }
 
+/** `config` with each option in `values` at that value when the option takes it. */
+function chosenConfig(
+  config: readonly ConfigOption[],
+  values: Record<string, string | boolean>,
+): ConfigOption[] {
+  return config.map((option) => {
+    const value = values[option.id]
+    return value !== undefined && isValueOf(option, value) ? { ...option, value } : option
+  })
+}
+
 const CONNECTED: ReadonlySet<SessionStatus> = new Set([
   'starting',
   'auth_required',
@@ -1857,6 +1868,20 @@ export class SessionManager {
       // Closing or deleting it already closed or deleted the agent's session; closing it kept the
       // first message in its paused queue.
       if (live.removing || !this.has(live.id)) throw removedWhileStarting()
+      return
+    }
+    if (runtime.connection.isClosed) {
+      // The agent went while the values were set, which leaves the session stored and closed. Its
+      // values were not refused, only not set, so there is nothing to say.
+      this.update(live, {
+        config: withUltracode(live.record, chosenConfig(config, live.startValues)),
+        status: 'closed',
+      })
+      this.persist(live)
+      this.touch(live.id)
+      const first = live.first
+      live.first = null
+      if (first) this.startTurn(live, first.content, this.now(), first.entryId)
       return
     }
     this.update(live, { status: 'ready' })

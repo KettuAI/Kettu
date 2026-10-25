@@ -604,13 +604,14 @@ describe('starting with chosen options', () => {
       ).sessions.filter((s) => s.acpSessionId.startsWith('fake-'))
 
     /** A new session reported `starting`, whose agent takes `env`'s time to open or set it. */
-    async function createInFlight(env: Record<string, string>) {
+    async function createInFlight(env: Record<string, string>, prompt?: string) {
       const { t, port } = await setup({ agentEnv: env })
       const outcome = port
         .request('sessions.create', {
           agentId: 'fake-agent',
           projectPath: t.project,
           options: { model: 'deep', thought_level: 'high' },
+          ...(prompt ? { prompt: [{ type: 'text' as const, text: prompt }] } : {}),
         })
         .then(
           (value) => ({ value }),
@@ -697,6 +698,77 @@ describe('starting with chosen options', () => {
       const listed = await port.request('sessions.list', {})
       expect(listed.find((s) => s.id === sessionId)?.status).toBe('closed')
       expect(sent(t, 'session/set_config_option')).toBe(1)
+    })
+
+    const sets = (t: TestHost) =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/set_config_option')
+        .map((r) => {
+          const { configId, value } = (
+            r.message as { params: { configId: string; value: string | boolean } }
+          ).params
+          return [configId, value]
+        })
+
+    /** A new session whose agent exits while its first start value is set. */
+    async function exitedWhileStarting() {
+      const inFlight = await createInFlight(settingValues)
+      await vi.waitFor(() => expect(sent(inFlight.t, 'session/set_config_option')).toBe(1))
+      ;(inFlight.t.launcher as InProcessLauncher).crash()
+      expect(await inFlight.outcome).toMatchObject({
+        value: { id: inFlight.sessionId, status: 'closed' },
+      })
+      const listed = await inFlight.port.request('sessions.list', {})
+      expect(listed.find((s) => s.id === inFlight.sessionId)?.status).toBe('closed')
+      return inFlight
+    }
+
+    it('stays in the list, closed with its values, when its agent exits while they are set', async () => {
+      const { t, port, sessionId } = await exitedWhileStarting()
+      await port.open(sessionId)
+      // The values not set yet are kept for its next attach, which sets them again.
+      expect(value(port, sessionId, 'model')).toBe('deep')
+      expect(value(port, sessionId, 'thought_level')).toBe('high')
+      const before = sets(t).length
+      await port.request('sessions.setConfigOption', {
+        sessionId,
+        optionId: 'model',
+        value: 'swift',
+      })
+      expect(sets(t).slice(before)).toEqual([
+        ['model', 'deep'],
+        ['thought_level', 'high'],
+        ['model', 'swift'],
+      ])
+      await port.until(() => value(port, sessionId, 'model') === 'swift')
+    })
+
+    it('forks it once its values are set again, when its agent exits while they are set', async () => {
+      const { port, sessionId } = await exitedWhileStarting()
+      const fork = await port.request('sessions.fork', { sessionId })
+      expect(fork).toMatchObject({ status: 'ready' })
+      await port.open(fork.id)
+      expect(value(port, fork.id, 'model')).toBe('deep')
+      expect(value(port, fork.id, 'thought_level')).toBe('high')
+    })
+
+    it('sends its first message once its values are set again, when its agent exits meanwhile', async () => {
+      const { t, port, sessionId } = await createInFlight(settingValues, 'Fix the flaky login test')
+      await vi.waitFor(() => expect(sent(t, 'session/set_config_option')).toBe(1))
+      ;(t.launcher as InProcessLauncher).crash()
+      // The first message is its first turn, which attaches the session it left closed.
+      await port.untilStatus(sessionId, 'running')
+      await port.open(sessionId)
+      await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+      expect(port.entries(sessionId)[0]).toMatchObject({ kind: 'user' })
+      const methods = t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out')
+        .map((r) => r.method)
+      expect(methods.lastIndexOf('session/set_config_option')).toBeLessThan(
+        methods.indexOf('session/prompt'),
+      )
     })
   })
 
