@@ -260,6 +260,11 @@ async function run() {
   await sleep(800)
   await shoot('session-report')
 
+  // A page for the artifact screens below; the fake agent makes it through the service.
+  await prompt('/artifacts')
+  await waitFor(`document.body.textContent.includes('Fake canvas')`, 'the artifact calls', 120_000)
+  await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the artifact turn to end', 120_000)
+
   await click(`return document.querySelector('button[aria-label=Model]')`, 'the model button')
   await waitFor(`document.querySelector('[role=menu]')`, 'the model menu')
   await sleep(400)
@@ -450,6 +455,28 @@ async function run() {
   await press('Escape', 27)
   await sleep(300)
 
+  // The artifact's page from the Artifacts list, with its Share popover open.
+  await click(
+    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.trim() === 'Artifacts')`,
+    'the Artifacts row',
+  )
+  await waitFor(`document.querySelector('[data-artifact-card]')`, 'the artifact cards')
+  await click(
+    `return [...document.querySelectorAll('[data-artifact-card]')].find((c) => c.textContent.includes('Fake canvas'))`,
+    'the Fake canvas card',
+  )
+  await waitFor(
+    `document.querySelector('button[aria-label="Share"]') && [...document.querySelectorAll('h1')].some((h) => h.textContent.includes('Fake canvas'))`,
+    'the artifact viewer',
+  )
+  await sleep(1200)
+  await click(`return document.querySelector('button[aria-label="Share"]')`, 'Share')
+  await waitFor(`document.querySelector('[data-slot=popover-content]')`, 'the Share popover')
+  await sleep(400)
+  await shoot('artifact-share')
+  await press('Escape', 27)
+  await sleep(300)
+
   await click(
     `return [...document.querySelectorAll('button, a')].find((b) => b.textContent.trim().startsWith('Settings'))`,
     'Settings',
@@ -467,6 +494,7 @@ async function run() {
     'Usage',
     'Terminal',
     'Git',
+    'Sharing',
     'Advanced',
     'About',
   ]

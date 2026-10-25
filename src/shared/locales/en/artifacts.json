@@ -67,7 +67,8 @@
     "when": "v{{version}} · {{time}}",
     "daysLeft_one": "{{project}} · {{count}} day left",
     "daysLeft_other": "{{project}} · {{count}} days left",
-    "editing": "Editing"
+    "editing": "Editing",
+    "shared": "Shared online"
   },
   "menu": {
     "open": "Open",
@@ -88,7 +89,11 @@
     "eraseTitle": "Delete “{{title}}” permanently?",
     "eraseDescription_one": "Its one version will be removed from this computer. This cannot be undone.",
     "eraseDescription_other": "Its {{count}} versions will be removed from this computer. This cannot be undone.",
-    "erase": "Delete"
+    "erase": "Delete",
+    "deleteTitle": "Delete “{{title}}”?",
+    "deleteDescription": "It goes to Recently deleted and stays there for 30 days.",
+    "unpublishToo": "Unpublish it too, so its link stops working",
+    "delete": "Delete"
   },
   "viewer": {
     "back": "Back",
@@ -138,5 +143,39 @@
     "version": "Version {{version}}",
     "latest": "Latest",
     "you": "You"
+  },
+  "share": {
+    "open": "Share",
+    "loading": "Checking sharing…",
+    "unpublished": "Publish this artifact to a link anyone can open.",
+    "target": "Cloudflare",
+    "disclosure": "Anyone with the link can see this page, which loads its scripts and fonts from public CDNs.",
+    "publish": "Publish",
+    "needAccount": "Connect a Cloudflare account in Settings › Sharing to publish this artifact.",
+    "openSettings": "Open Settings › Sharing",
+    "url": "Published URL",
+    "copy": "Copy the link",
+    "copied": "Copied",
+    "published": "Version {{version}}, published {{ago}}",
+    "update": "Update to version {{version}}",
+    "openLink": "Open",
+    "unpublish": "Unpublish",
+    "unpublishConfirm": "The link stops working for everyone. The artifact stays in OverBench.",
+    "cancel": "Cancel",
+    "tryAgain": "Try again",
+    "noAccountPublished": "Connect the Cloudflare account that published it to change it.",
+    "otherAccount": "This page was published with another Cloudflare account. Connect that account to change it.",
+    "failures": {
+      "invalid_token": "Cloudflare refused the API token. Check it in Settings › Sharing.",
+      "no_subdomain": "The account has no workers.dev subdomain. Choose one in Cloudflare's dashboard.",
+      "worker_limit": "The account already has {{count}} Workers, the most its plan allows. Unpublish one first.",
+      "network": "Cloudflare could not be reached. Check your connection and try again.",
+      "no_account": "Connect a Cloudflare account in Settings › Sharing.",
+      "other_account": "This page was published with another Cloudflare account.",
+      "encryption": "The system cannot encrypt the API token, so it was not saved.",
+      "not_found": "The page is no longer on Cloudflare. Publish it again.",
+      "unavailable": "The agent host did not answer. Try again in a moment.",
+      "failed": "Something went wrong. Try again."
+    }
   }
 }

@@ -9,7 +9,8 @@
     "shortcuts": "Keyboard shortcuts",
     "advanced": "Advanced",
     "about": "About",
-    "archived": "Archived sessions"
+    "archived": "Archived sessions",
+    "sharing": "Sharing"
   },
   "page": {
     "title": "Settings",
@@ -472,7 +473,8 @@
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data OverBench keeps on this computer.",
     "about": "OverBench and the versions it runs on.",
-    "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project."
+    "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
+    "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account."
   },
   "footer": {
     "about": "About OverBench",
@@ -487,5 +489,32 @@
     "delete": "Delete…",
     "empty": "No archived sessions. Archive one from its menu in the sidebar.",
     "keywords": "archive restore"
+  },
+  "sharing": {
+    "groups": {
+      "account": "Cloudflare",
+      "published": "Published artifacts"
+    },
+    "account": {
+      "name": "Cloudflare account",
+      "description": "Publish artifacts through your own Cloudflare account. The API token needs Workers Scripts Write.",
+      "keywords": "share publish link cloudflare workers token account",
+      "id": "Account ID",
+      "idPlaceholder": "32 hexadecimal characters",
+      "token": "API token",
+      "createToken": "Create a token with Workers Scripts Write",
+      "connect": "Connect",
+      "connected": "Connected",
+      "remove": "Remove",
+      "plainText": "This system has no keyring, so the token is stored without the system's encryption.",
+      "dashboard": "Choose a subdomain in Cloudflare"
+    },
+    "published": {
+      "version": "Version {{version}}, published {{ago}}",
+      "keywords": "share published link url",
+      "unpublish": "Unpublish",
+      "otherAccount": "Published with another Cloudflare account. Connect that account to change it.",
+      "empty": "Nothing is published yet."
+    }
   }
 }

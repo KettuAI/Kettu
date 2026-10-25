@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
+import { CLOUDFLARE_FREE_WORKERS } from '@shared/sharing'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
+import { Checkbox } from '@renderer/components/ui/checkbox'
 import {
   Dialog,
   DialogClose,
@@ -25,11 +27,13 @@ import { Input } from '@renderer/components/ui/input'
 import { errorMessage } from '@renderer/lib/host'
 import {
   askArtifactDialog,
+  deleteArtifact,
   eraseArtifact,
   renameArtifact,
   useArtifactsStore,
   type ArtifactDialog,
 } from '@renderer/stores/artifacts'
+import { unpublishArtifact } from '@renderer/stores/sharing'
 
 /** Renaming and deleting permanently, asked from any artifact's menu. */
 export function ArtifactDialogs() {
@@ -42,6 +46,7 @@ export function ArtifactDialogs() {
           {dialog?.kind === 'rename' && <RenameForm key={dialog.id} dialog={dialog} />}
         </DialogContent>
       </Dialog>
+      <DeleteDialog dialog={dialog?.kind === 'delete' ? dialog : null} onClose={close} />
       <EraseDialog dialog={dialog?.kind === 'erase' ? dialog : null} onClose={close} />
     </>
   )
@@ -107,6 +112,89 @@ function RenameForm({ dialog }: { dialog: Extract<ArtifactDialog, { kind: 'renam
   )
 }
 
+/** The checkbox that takes a published page down with its artifact; checked by default. */
+function UnpublishToo({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  const { t } = useTranslation('artifacts')
+  return (
+    <label className="flex items-start gap-2.5 px-1 text-left text-ui">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(value) => onChange(value === true)}
+        className="mt-0.5"
+      />
+      <span className="text-secondary">{t('dialog.unpublishToo')}</span>
+    </label>
+  )
+}
+
+function DeleteDialog({
+  dialog,
+  onClose,
+}: {
+  dialog: Extract<ArtifactDialog, { kind: 'delete' }> | null
+  onClose: () => void
+}) {
+  const { t } = useTranslation(['artifacts', 'common'])
+  // Kept while the dialog closes, so its text does not empty during the exit.
+  const [shown, setShown] = useState(dialog)
+  const [unpublish, setUnpublish] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (dialog && dialog !== shown) {
+    setShown(dialog)
+    setUnpublish(true)
+    setBusy(false)
+    setError(null)
+  }
+  const remove = async (): Promise<void> => {
+    if (!shown || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (unpublish) {
+        const result = await unpublishArtifact(shown.id)
+        if ('failed' in result) {
+          setError(t(`share.failures.${result.failed}`, { count: CLOUDFLARE_FREE_WORKERS }))
+          return
+        }
+      }
+      await deleteArtifact(shown.id)
+      shown.onDeleted?.()
+      onClose()
+    } catch (failure) {
+      setError(errorMessage(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <AlertDialog open={dialog !== null} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {t('dialog.deleteTitle', { title: shown?.title ?? '' })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>{t('dialog.deleteDescription')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        {shown && <UnpublishToo checked={unpublish} onChange={setUnpublish} />}
+        {error && <p className="text-xs text-danger">{error}</p>}
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={busy} onClick={() => void remove()}>
+            {t('dialog.delete')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 function EraseDialog({
   dialog,
   onClose,
@@ -117,7 +205,35 @@ function EraseDialog({
   const { t } = useTranslation(['artifacts', 'common'])
   // Kept while the dialog closes, so its text does not empty during the exit.
   const [shown, setShown] = useState(dialog)
-  if (dialog && dialog !== shown) setShown(dialog)
+  const [unpublish, setUnpublish] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (dialog && dialog !== shown) {
+    setShown(dialog)
+    setUnpublish(true)
+    setBusy(false)
+    setError(null)
+  }
+  const remove = async (): Promise<void> => {
+    if (!shown || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (unpublish && shown.published) {
+        const result = await unpublishArtifact(shown.id)
+        if ('failed' in result) {
+          setError(t(`share.failures.${result.failed}`, { count: CLOUDFLARE_FREE_WORKERS }))
+          return
+        }
+      }
+      await eraseArtifact(shown.id)
+      onClose()
+    } catch (failure) {
+      setError(errorMessage(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <AlertDialog open={dialog !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent>
@@ -129,17 +245,11 @@ function EraseDialog({
             {t('dialog.eraseDescription', { count: shown?.versions ?? 1 })}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {shown?.published && <UnpublishToo checked={unpublish} onChange={setUnpublish} />}
+        {error && <p className="text-xs text-danger">{error}</p>}
         <AlertDialogFooter>
           <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            onClick={() => {
-              if (!shown) return
-              eraseArtifact(shown.id).catch((error: unknown) =>
-                console.error(`Could not delete ${shown.id}`, error),
-              )
-            }}
-          >
+          <AlertDialogAction variant="destructive" disabled={busy} onClick={() => void remove()}>
             {t('dialog.erase')}
           </AlertDialogAction>
         </AlertDialogFooter>

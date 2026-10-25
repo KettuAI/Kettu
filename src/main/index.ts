@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, powerMonitor, protocol, session } from 'electron'
+import { app, powerMonitor, protocol, safeStorage, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
@@ -17,6 +17,8 @@ import { installMenu } from './menu'
 import { isOpenedAtLogin, startMode, syncLoginItem } from './login-item'
 import { notifyAttention } from './notifications'
 import { RoutinesAwake } from './power-save'
+import { sessionProxy } from './proxy'
+import { Sharing } from './sharing'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
@@ -113,6 +115,8 @@ async function start(): Promise<void> {
   const mediaGrants = new MediaGrants()
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
+  // Set once the sharing service exists; the host reports ready only after that, at each start.
+  let reconcileSharing: (() => void) | null = null
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     onAttention: (message) => notifyAttention(message, settings.get()),
@@ -122,6 +126,7 @@ async function start(): Promise<void> {
     onMediaGrant: (grant) => mediaGrants.add(grant),
     onMediaRevoke: (sessionId) => mediaGrants.revoke(sessionId),
     onRoutinesWorking: (working) => routinesAwake.set(working),
+    onReady: () => reconcileSharing?.(),
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
@@ -131,6 +136,29 @@ async function start(): Promise<void> {
   })
   await artifacts.install(session.defaultSession)
   serveMedia(session.defaultSession, mediaGrants, isRendererUrl)
+  // A session of its own, so publishing follows the proxy setting rather than the artifacts'
+  // window proxy, and keeps no cookies or storage of its own.
+  const sharingSession = session.fromPartition('overbench-sharing')
+  await sharingSession.setProxy(sessionProxy(settings.get().proxy))
+  const sharing = await Sharing.load({
+    userDataPath,
+    contentDir: join(userDataPath, 'artifacts', 'content'),
+    host: {
+      content: (id, version) => agentHost.artifactContent(id, version),
+      ids: () => agentHost.artifactIds(),
+    },
+    cipher: {
+      encrypt: async (text) => (await safeStorage.encryptStringAsync(text)).toString('base64'),
+      decrypt: async (encoded) =>
+        (await safeStorage.decryptStringAsync(Buffer.from(encoded, 'base64'))).result,
+    },
+    encryptionAvailable: () => safeStorage.isAsyncEncryptionAvailable(),
+    plainText: () =>
+      process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
+    fetch: (url, init) => sharingSession.fetch(url, init) as unknown as Promise<Response>,
+    changed: (status) => broadcast('sharing:changed', status),
+  })
+  reconcileSharing = () => void sharing.reconcile()
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,
@@ -143,7 +171,7 @@ async function start(): Promise<void> {
     busyTerminals: (timeoutMs) => terminalHost.busy(timeoutMs),
     shutDown: async () => {
       await Promise.all([agentHost.stop(), terminalHost.stop()])
-      await Promise.all([settings.flush(), windowState.flush(), appState.flush()])
+      await Promise.all([settings.flush(), windowState.flush(), appState.flush(), sharing.flush()])
     },
     installUpdate: () => updater.installNow(),
   })
@@ -172,6 +200,7 @@ async function start(): Promise<void> {
     }
     if (changed.has('notifications')) setBadgeEnabled(next.notifications.badge)
     if (changed.has('general')) syncLoginItem(next.general.openAtLogin)
+    if (changed.has('proxy')) void sharingSession.setProxy(sessionProxy(next.proxy))
     updater.settingsChanged(next, changed)
   })
 
@@ -181,6 +210,7 @@ async function start(): Promise<void> {
     terminalHost,
     artifacts,
     mediaGrants,
+    sharing,
     updater,
     quit: quitFlow,
     perf,

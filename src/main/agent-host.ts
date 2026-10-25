@@ -34,6 +34,8 @@ export interface AgentHostDeps {
   onMediaRevoke(sessionId: string | null): void
   /** Whether any routine run is starting or running, for keeping the computer awake. */
   onRoutinesWorking(working: boolean): void
+  /** The host started and answers requests, at launch and after each restart. */
+  onReady?(): void
 }
 
 const MAX_LIST = 10_000
@@ -46,6 +48,9 @@ const GRANT_TIMEOUT_MS = 5_000
 const CONTENT_TIMEOUT_MS = 10_000
 /** How long an import waits for the host to make the artifact. */
 const IMPORT_TIMEOUT_MS = 10_000
+/** How long main waits for the host to list its artifacts. */
+const LIST_TIMEOUT_MS = 10_000
+const MAX_ARTIFACTS = 1_000_000
 
 type ImportAnswer = NonNullable<ArtifactImportResult>
 const UNAVAILABLE: ImportAnswer = { failed: 'unavailable' }
@@ -70,6 +75,15 @@ function isContentResult(value: unknown): value is ArtifactContentResult {
     (version as number) >= 1 &&
     typeof title === 'string'
   )
+}
+
+/** The listed ids, or null for a failed or malformed answer. */
+function listedIds(value: unknown): Set<string> | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { kind, ids } = value as Record<string, unknown>
+  if (kind !== 'listed' || !Array.isArray(ids) || ids.length > MAX_ARTIFACTS) return null
+  if (!ids.every((id) => typeof id === 'string' && ARTIFACT_ID.test(id))) return null
+  return new Set(ids as string[])
 }
 
 function isImportAnswer(value: unknown): value is ImportAnswer {
@@ -122,6 +136,8 @@ export class AgentHost {
   private nextContentId = 1
   private readonly importRequests = new Map<number, (result: ImportAnswer) => void>()
   private nextImportId = 1
+  private readonly listRequests = new Map<number, (ids: Set<string> | null) => void>()
+  private nextListId = 1
 
   constructor(private readonly deps: AgentHostDeps) {
     this.host = new UtilityHost<MainToHost, HostToMain>({
@@ -148,6 +164,7 @@ export class AgentHost {
       readyType: 'host:ready',
       stoppedType: 'host:stopped',
       onMessage: (message) => this.receive(message),
+      onReady: () => this.deps.onReady?.(),
       onExit: (clean) => this.exited(clean),
     })
   }
@@ -239,6 +256,27 @@ export class AgentHost {
     })
   }
 
+  /** Every artifact the host has, Recently deleted included; null when it cannot say. */
+  artifactIds(): Promise<Set<string> | null> {
+    if (this.host.state !== 'ready') return Promise.resolve(null)
+    const requestId = this.nextListId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.listRequests.delete(requestId)
+        log.warn(`No artifact list within ${LIST_TIMEOUT_MS} ms`)
+        resolve(null)
+      }, LIST_TIMEOUT_MS)
+      this.listRequests.set(requestId, (ids) => {
+        clearTimeout(timer)
+        resolve(ids)
+      })
+      if (!this.host.post({ type: 'host:artifact-list-request', requestId })) {
+        this.listRequests.get(requestId)?.(null)
+        this.listRequests.delete(requestId)
+      }
+    })
+  }
+
   /** Has the host make an artifact of a file the user chose; `unavailable` without a host. */
   artifactImport(path: string, project: string | null): Promise<ImportAnswer> {
     if (this.host.state !== 'ready') return Promise.resolve(UNAVAILABLE)
@@ -307,6 +345,13 @@ export class AgentHost {
         resolve(isContentResult(message.result) ? message.result : { kind: 'failed' })
         break
       }
+      case 'host:artifact-list': {
+        const resolve = this.listRequests.get(message.requestId)
+        if (!resolve) break
+        this.listRequests.delete(message.requestId)
+        resolve(listedIds(message.result))
+        break
+      }
       case 'host:artifact-import': {
         const resolve = this.importRequests.get(message.requestId)
         if (!resolve) break
@@ -342,6 +387,8 @@ export class AgentHost {
     this.contentRequests.clear()
     for (const resolve of this.importRequests.values()) resolve(UNAVAILABLE)
     this.importRequests.clear()
+    for (const resolve of this.listRequests.values()) resolve(null)
+    this.listRequests.clear()
     this.deps.onMediaRevoke(null)
     this.deps.onRoutinesWorking(false)
     this.deps.onBadge(0)

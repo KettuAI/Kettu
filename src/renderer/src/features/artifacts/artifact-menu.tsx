@@ -17,6 +17,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { askArtifactDialog, deleteArtifact, restoreArtifact } from '@renderer/stores/artifacts'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { isPublished } from '@renderer/stores/sharing'
 import { openSessionWithArtifact } from '@renderer/stores/view'
 
 /** What an artifact's menu acts on. */
@@ -74,6 +75,7 @@ export function ArtifactMenuItems({
                 id: target.id,
                 title: target.title,
                 versions: target.versions,
+                published: isPublished(target.id),
               })
             }
           >
@@ -143,6 +145,11 @@ export function ArtifactMenuItems({
         <DropdownMenuItem
           variant="destructive"
           onClick={() => {
+            // A published artifact asks first, so the link can be taken down with it.
+            if (isPublished(target.id)) {
+              askArtifactDialog({ kind: 'delete', id: target.id, title: target.title, onDeleted })
+              return
+            }
             deleteArtifact(target.id).then(onDeleted, failed('delete'))
           }}
         >

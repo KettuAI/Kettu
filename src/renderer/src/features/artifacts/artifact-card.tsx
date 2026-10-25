@@ -1,5 +1,5 @@
 import { memo, useRef, useState } from 'react'
-import { EllipsisIcon, ImageOffIcon } from 'lucide-react'
+import { EllipsisIcon, GlobeIcon, ImageOffIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactSummary } from '@shared/artifacts'
 import { Button } from '@renderer/components/ui/button'
@@ -20,6 +20,7 @@ import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
+import { useSharingStore } from '@renderer/stores/sharing'
 import { openArtifact } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
 import { useThumbnail, type Thumbnail } from './thumbnails'
@@ -56,6 +57,9 @@ export const ArtifactCard = memo(function ArtifactCard({
   const card = useRef<HTMLDivElement>(null)
   const thumbnail = useThumbnail(artifact, useInView(card))
   const [moreOpen, setMoreOpen] = useState(false)
+  const shared = useSharingStore(
+    (s) => s.status?.published.some((page) => page.id === artifact.id) ?? false,
+  )
   const recent = variant === 'recent'
   // Only the page takes the focus back to the card it opened.
   const open = (history = false) =>
@@ -109,9 +113,14 @@ export const ArtifactCard = memo(function ArtifactCard({
       </span>
       <span className="block py-3 pr-11 pl-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
         <span className="block truncate text-ui font-medium text-primary">{artifact.title}</span>
-        <span className="mt-0.5 block truncate text-xs text-tertiary">
-          {caption}
-          {recent && <Ago at={artifact.updatedAt} />}
+        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-tertiary">
+          {shared && (
+            <GlobeIcon role="img" aria-label={t('card.shared')} className="size-3 shrink-0" />
+          )}
+          <span className="truncate">
+            {caption}
+            {recent && <Ago at={artifact.updatedAt} />}
+          </span>
         </span>
       </span>
       <span

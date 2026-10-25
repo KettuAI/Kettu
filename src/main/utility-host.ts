@@ -36,6 +36,8 @@ export interface UtilityHostConfig<ToChild, FromChild extends { type: string }> 
   readyType: FromChild['type']
   stoppedType: FromChild['type']
   onMessage(message: FromChild): void
+  /** Called each time a process reports ready, after the pages waiting for it got their ports. */
+  onReady?(): void
   /** Called once the process is gone; `clean` is false for a crash or a kill. */
   onExit?(clean: boolean): void
 }
@@ -216,6 +218,11 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
       const pending = [...this.pendingConnects.values()]
       this.pendingConnects.clear()
       for (const webContents of pending) this.handOff(webContents)
+      try {
+        this.config.onReady?.()
+      } catch (error) {
+        this.log.error('Ready handler failed', error)
+      }
       return
     }
     if (typed.type === this.config.stoppedType) {

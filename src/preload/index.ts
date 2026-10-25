@@ -55,6 +55,7 @@ const onUpdateChanged = subscribe('update:changed')
 const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
+const onSharingChanged = subscribe('sharing:changed')
 
 const pathOf = (file: File) => webUtils.getPathForFile(file)
 
@@ -105,6 +106,15 @@ const api: OverbenchApi = {
     import: (project) => invoke('artifact:import', project),
     onBlocked: onArtifactBlocked,
     onStopped: onArtifactStopped,
+  },
+  sharing: {
+    status: () => invoke('sharing:status'),
+    connect: (accountId, token) => invoke('sharing:connect', accountId, token),
+    remove: () => invoke('sharing:remove'),
+    publish: (id, version) => invoke('sharing:publish', id, version),
+    update: (id, version) => invoke('sharing:update', id, version),
+    unpublish: (id) => invoke('sharing:unpublish', id),
+    onChanged: onSharingChanged,
   },
   settings: {
     get: () => invoke('settings:get'),

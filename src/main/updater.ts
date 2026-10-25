@@ -6,6 +6,7 @@ import type { AppStateStore } from './app-state'
 import { loadAutoUpdater } from './auto-updater'
 import { broadcast } from './events'
 import { createLogger } from './log'
+import { sessionProxy } from './proxy'
 import type { SettingsSection } from './settings-schema'
 import {
   dismissTarget,
@@ -237,18 +238,8 @@ export class Updater {
   }
 
   private async applyProxy(updater: AppUpdater, settings: SettingsFile): Promise<void> {
-    const { proxy } = settings
     try {
-      if (proxy.mode === 'custom') {
-        // Chromium wants scheme://host:port, without a path or credentials.
-        const url = new URL(proxy.url)
-        await updater.netSession.setProxy({
-          proxyRules: `${url.protocol}//${url.host}`,
-          proxyBypassRules: proxy.noProxy,
-        })
-      } else {
-        await updater.netSession.setProxy({ mode: 'system' })
-      }
+      await updater.netSession.setProxy(sessionProxy(settings.proxy))
     } catch (error) {
       log.error('Could not apply the proxy to updates', error)
     }

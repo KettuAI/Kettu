@@ -5,6 +5,7 @@ import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
 import type { Platform } from './platform'
 import type { SettingsFile, SettingsPatch } from './settings'
+import type { SharingResult, SharingStatus } from './sharing'
 import type { TerminalsApi } from './terminal-host'
 import type { AgentId } from './thread'
 import type { UpdateStatus } from './updates'
@@ -139,6 +140,13 @@ export interface IpcInvokeContract {
   'artifact:export': { args: [id: string, version: number]; result: boolean }
   // `project`: a registered project's folder, or null for No project.
   'artifact:import': { args: [project: string | null]; result: ArtifactImportResult }
+  'sharing:status': { args: []; result: SharingStatus }
+  'sharing:connect': { args: [accountId: string, token: string]; result: SharingResult }
+  'sharing:remove': { args: []; result: SharingStatus }
+  // Main reads the version's HTML from the host, so the page never comes from the renderer.
+  'sharing:publish': { args: [id: string, version: number]; result: SharingResult }
+  'sharing:update': { args: [id: string, version: number]; result: SharingResult }
+  'sharing:unpublish': { args: [id: string]; result: SharingResult }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -154,6 +162,7 @@ export interface IpcEventContract {
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
+  'sharing:changed': SharingStatus
 }
 
 export type IpcEventChannel = keyof IpcEventContract
@@ -223,6 +232,19 @@ export interface OverbenchApi {
     import(project: string | null): Promise<ArtifactImportResult>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
+  }
+  /** Publishing artifacts online; main holds the account's token and makes every request. */
+  sharing: {
+    status(): Promise<SharingStatus>
+    /** Checks the account and token with Cloudflare, then keeps them. */
+    connect(accountId: string, token: string): Promise<SharingResult>
+    /** Forgets the account and its token; published pages stay as they are. */
+    remove(): Promise<SharingStatus>
+    publish(id: string, version: number): Promise<SharingResult>
+    /** Puts the version on the artifact's page, at the same URL. */
+    update(id: string, version: number): Promise<SharingResult>
+    unpublish(id: string): Promise<SharingResult>
+    onChanged(listener: (status: SharingStatus) => void): () => void
   }
   settings: {
     get(): Promise<SettingsFile>
