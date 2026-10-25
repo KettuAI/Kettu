@@ -1,6 +1,7 @@
 import { useContext, useState } from 'react'
 import { FileIcon, LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { readTextThumb } from '@shared/attachments'
 import type { Attachment, ContentRef, UserContent } from '@shared/thread'
 import { basename, bytes } from '@renderer/lib/format'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
@@ -98,6 +99,7 @@ export function SentAttachments({
     const hash = attachment.blob
     setViewing({
       name: attachment.name,
+      text: attachment.type === 'text',
       read: () =>
         hash && sessionId
           ? host('sessions.blob', { sessionId, hash })
@@ -139,25 +141,29 @@ function sentView(attachment: Attachment, t: T): TileView {
       : attachment.size !== null
         ? bytes(attachment.size)
         : null
-  const facts = [attachment.name, size].filter(Boolean).join(' · ')
+  const preview = attachment.type === 'text' ? readTextThumb(attachment.thumb) : null
+  const lines = preview ? t('attachments.lines', { count: preview.count }) : null
+  const facts = [attachment.name, lines, size].filter(Boolean).join(' · ')
   const note =
     attachment.sent === 'image'
       ? t('attachments.sentAsImage')
       : attachment.sent === 'embedded'
         ? t('attachments.sentWithContents')
-        : attachment.sent === 'linked'
-          ? t(
-              attachment.type === 'folder'
-                ? 'attachments.sentLinkedFolder'
-                : 'attachments.sentLinked',
-            )
-          : null
+        : attachment.sent === 'inline'
+          ? t('attachments.sentInline')
+          : attachment.sent === 'linked'
+            ? t(
+                attachment.type === 'folder'
+                  ? 'attachments.sentLinkedFolder'
+                  : 'attachments.sentLinked',
+              )
+            : null
   return {
     name: attachment.name,
     kind: attachment.type,
     thumb: attachment.thumb,
     status: 'ready',
-    detail: size,
+    detail: lines ?? size,
     tooltip: note ? `${facts}\n${note}` : facts,
     warn: attachment.type === 'image' && attachment.sent === 'linked',
   }

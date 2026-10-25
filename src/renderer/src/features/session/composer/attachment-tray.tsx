@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { embedsText } from '@shared/attachments'
+import { embedsText, readTextThumb } from '@shared/attachments'
 import type { AgentId } from '@shared/thread'
 import { bytes } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -28,6 +28,7 @@ export function AttachmentTray({
   agentName,
   projectPath,
   onOpen,
+  onPasteAsText,
   onError,
   onLeave,
 }: {
@@ -37,6 +38,8 @@ export function AttachmentTray({
   /** The session's folder, whose files open in the Files pane. */
   projectPath: string | null
   onOpen: (target: ImageDialogTarget) => void
+  /** Puts a pasted text back in the box, in place of its tile. */
+  onPasteAsText: (key: string, text: string) => void
   onError: (message: string) => void
   /** Focus leaves the row, as when its last tile is removed. */
   onLeave: () => void
@@ -94,8 +97,19 @@ export function AttachmentTray({
   const open = (item: DraftAttachment) => {
     const attachment = item.attachment
     if (!attachment || item.status !== 'ready') return
+    const read = () => host('attachments.read', { id: attachment.id })
     if (attachment.type === 'image') {
-      onOpen({ name: item.name, read: () => host('attachments.read', { id: attachment.id }) })
+      onOpen({ name: item.name, read })
+    } else if (attachment.type === 'text') {
+      onOpen({
+        name: item.name,
+        read,
+        text: true,
+        pasteAsText: (text) => {
+          onPasteAsText(item.key, text)
+          setAnnouncement(t('attachments.announceRemoved', { name: item.name }))
+        },
+      })
     } else {
       openAttachmentPath(attachment, projectPath).catch((e: unknown) => onError(errorMessage(e)))
     }
@@ -204,8 +218,11 @@ function draftView(
 ): TileView {
   const size =
     item.kind === 'folder' ? t('attachments.folder') : item.size !== null ? bytes(item.size) : null
+  const preview = item.kind === 'text' ? readTextThumb(item.thumb) : null
+  const lines = preview ? t('attachments.lines', { count: preview.count }) : null
   const facts = [
     item.name,
+    lines,
     size,
     item.pixels ? `${item.pixels.width} × ${item.pixels.height}` : null,
   ]
@@ -217,17 +234,21 @@ function draftView(
       ? (item.error ?? t('attachments.cannotRead'))
       : item.status === 'adding'
         ? t('attachments.adding')
-        : item.kind !== 'image'
-          ? item.attachment && embedsText(item.attachment) && takes.text
+        : item.kind === 'text'
+          ? takes.text
             ? t('attachments.sentWithContents')
-            : t('attachments.sentAsFileLink', { agent: agentName })
-          : noImages
-            ? t('attachments.sentAsLink', { agent: agentName })
-            : item.scaled
-              ? t('attachments.sentScaled', {
-                  size: `${item.scaled.width} × ${item.scaled.height}`,
-                })
-              : t('attachments.sentAsImage')
+            : t('attachments.sentInline')
+          : item.kind !== 'image'
+            ? item.attachment && embedsText(item.attachment) && takes.text
+              ? t('attachments.sentWithContents')
+              : t('attachments.sentAsFileLink', { agent: agentName })
+            : noImages
+              ? t('attachments.sentAsLink', { agent: agentName })
+              : item.scaled
+                ? t('attachments.sentScaled', {
+                    size: `${item.scaled.width} × ${item.scaled.height}`,
+                  })
+                : t('attachments.sentAsImage')
   return {
     name: item.name,
     kind: item.kind,
@@ -236,7 +257,7 @@ function draftView(
     detail:
       item.status === 'failed'
         ? t(item.gone ? 'attachments.unavailable' : 'attachments.cannotRead')
-        : size,
+        : (lines ?? size),
     tooltip: `${facts}\n${note}`,
     warn: item.status === 'ready' && noImages,
   }
