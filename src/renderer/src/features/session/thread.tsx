@@ -30,36 +30,25 @@ import { TurnStatus } from './turn-status'
 // growing by a fixed step: N items take log2(N / 40) passes instead of N / 60.
 const FIRST_ITEMS = 40
 
-// A jump in the outline renders every loaded item at once, and waits until they are committed.
-function useShownFrom(total: number): [number, () => Promise<void>] {
+function useShownFrom(total: number, held: boolean): number {
   const [limit, setLimit] = useState(FIRST_ITEMS)
-  const [all, setAll] = useState(false)
   useEffect(() => {
-    if (all || limit >= total) return
+    if (held || limit >= total) return
     const frame = requestAnimationFrame(() => startTransition(() => setLimit((l) => l * 2)))
     return () => cancelAnimationFrame(frame)
-  }, [all, limit, total])
-  const shownFrom = all ? 0 : Math.max(0, total - limit)
-  const shown = useRef(shownFrom)
-  const waiting = useRef<(() => void)[]>([])
-  useEffect(() => {
-    shown.current = shownFrom
-    if (shownFrom !== 0) return
-    const resolved = waiting.current
-    waiting.current = []
-    for (const resolve of resolved) resolve()
-  })
-  const revealAll = useCallback(
-    (): Promise<void> =>
-      shown.current === 0
-        ? Promise.resolve()
-        : new Promise((resolve) => {
-            waiting.current.push(resolve)
-            setAll(true)
-          }),
-    [],
-  )
-  return [shownFrom, revealAll]
+  }, [held, limit, total])
+  return Math.max(0, total - limit)
+}
+
+/** What a jump in the outline needs of the thread. */
+export interface ThreadJumps {
+  /** Resolves once the item `key`, or the first item for null, is rendered. */
+  reveal(key: string | null): Promise<void>
+  /**
+   * Holds the rendering of older items and the loading of older pages while a jump's scroll
+   * settles: either would prepend items and cut the scroll short.
+   */
+  hold(on: boolean): void
 }
 
 /** The tool calls of a thread, whose rows sit close together. */
@@ -149,14 +138,38 @@ export const Thread = memo(function Thread({
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
   useEffect(() => () => hoverReply(null), [sessionId])
   const sent = lastSent(order ?? [], signature)
-  const [shownFrom, revealAll] = useShownFrom(items.length)
+  const [held, setHeld] = useState(false)
+  const shownFrom = useShownFrom(items.length, held)
+  const revealing = useRef<{ key: string | null; resolve: () => void } | null>(null)
+  const [, setRevealTick] = useState(0)
+  useEffect(() => {
+    const waiting = revealing.current
+    if (!waiting) return
+    const index = waiting.key === null ? 0 : items.findIndex((item) => item.key === waiting.key)
+    if (index < 0 || shownFrom > index) return
+    revealing.current = null
+    waiting.resolve()
+  })
+  const jumps = useMemo<ThreadJumps>(
+    () => ({
+      reveal: (key) =>
+        new Promise((resolve) => {
+          revealing.current = { key, resolve }
+          setRevealTick((tick) => tick + 1)
+        }),
+      hold: setHeld,
+    }),
+    [],
+  )
   const hasOlder = useThreadsStore((s) => (s.replicas[sessionId]?.older ?? null) !== null)
   const viewport = useRef<HTMLDivElement | null>(null)
   const content = useRef<HTMLDivElement | null>(null)
   const nearStart = useCallback(() => {
     const el = viewport.current
-    if (el && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) loadOlder(sessionId)
-  }, [sessionId, hasOlder, shownFrom])
+    if (el && !held && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) {
+      loadOlder(sessionId)
+    }
+  }, [sessionId, held, hasOlder, shownFrom])
   // Also after each prepend, and for a page too short to scroll.
   useEffect(nearStart, [nearStart, items.length])
   // Where scrollbars take room (Windows, and macOS set to show them), the column centres in what
@@ -260,12 +273,7 @@ export const Thread = memo(function Thread({
           className="rounded-full shadow-md"
         />
         <OlderLoading sessionId={sessionId} />
-        <MessageOutline
-          sessionId={sessionId}
-          viewport={viewport}
-          content={content}
-          revealAll={revealAll}
-        />
+        <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
       </MessageScroller>
     </MessageScrollerProvider>
   )
