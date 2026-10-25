@@ -180,6 +180,7 @@ async function start(): Promise<void> {
     agentHost,
     terminalHost,
     artifacts,
+    mediaGrants,
     updater,
     quit: quitFlow,
     perf,

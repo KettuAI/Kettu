@@ -569,9 +569,16 @@
   & > :first-child > :first-child > :first-child {
     margin-top: 0;
   }
-  & > :last-child > :last-child,
-  & > :last-child > :last-child > :last-child {
+  & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)),
+  & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)) > :last-child {
     margin-bottom: 0;
+  }
+  /* Media a block's file references name, under it (markdown-impl.tsx). */
+  & :where([data-media-block]) {
+    margin: 0 0 0.75em;
+  }
+  & [data-media-block]:empty {
+    display: none;
   }
 
   /* More space above than below, so a heading sits on its content. */
@@ -626,6 +633,9 @@
   /* Loose lists keep the spacing of tight ones. */
   & [data-streamdown='list-item'] > p {
     margin: 0;
+  }
+  & [data-streamdown='list-item'] > [data-media-block] {
+    margin-block: 0.3em;
   }
 
   & [data-streamdown='strong'] {

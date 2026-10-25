@@ -26,6 +26,7 @@ import { isExecutableFile } from './executable'
 import { t } from './i18n'
 import { loginItemStatus } from './login-item'
 import { createLogger } from './log'
+import { grantedPath, type MediaGrants } from './media'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
@@ -41,6 +42,7 @@ export interface IpcDeps {
   agentHost: AgentHost
   terminalHost: TerminalHost
   artifacts: Artifacts
+  mediaGrants: MediaGrants
   updater: Updater
   quit: QuitFlow
   /** Started with --overbench-perf. */
@@ -177,6 +179,7 @@ export function registerIpcHandlers({
   agentHost,
   terminalHost,
   artifacts,
+  mediaGrants,
   updater,
   quit,
   perf,
@@ -284,6 +287,15 @@ export function registerIpcHandlers({
   // Revealing selects the item in the file manager and never runs it, unlike shell.openPath.
   handle('shell:show-item', 1, (_, target) => {
     shell.showItemInFolder(absolutePath(target))
+  })
+
+  handle('media:reveal', 1, async (_, url) => {
+    shell.showItemInFolder(await grantedPath(url, mediaGrants))
+  })
+
+  handle('media:open-external', 1, async (_, url) => {
+    const error = await shell.openPath(await grantedPath(url, mediaGrants))
+    if (error) throw new Error(error)
   })
 
   handle('notifications:test', 0, () => notifyTest(settings.get()))

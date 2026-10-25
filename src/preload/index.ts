@@ -113,6 +113,10 @@ const api: OverbenchApi = {
     showDataFolder: () => invoke('shell:show-data-folder'),
     showItem: (path) => invoke('shell:show-item', path),
   },
+  media: {
+    reveal: (url) => invoke('media:reveal', url),
+    openExternal: (url) => invoke('media:open-external', url),
+  },
   notifications: {
     test: () => invoke('notifications:test'),
   },

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  clock,
   countdown,
   duration,
   exactCount,
@@ -50,6 +51,14 @@ describe('format in the interface language', () => {
     expect(limitLabel({ window: 'seven_day_fable', label: 'Weekly · Fable' })).toBe('每周 · Fable')
     expect(limitLabel({ window: 'monthly', label: 'Monthly' })).toBe('每月')
     expect(limitLabel({ window: '2_day', label: '2-day' })).toBe('2-day')
+  })
+
+  it('gives a length as a clock', () => {
+    expect(clock(7.4)).toBe('0:07')
+    expect(clock(252)).toBe('4:12')
+    expect(clock(3_599.6)).toBe('1:00:00')
+    expect(clock(3_723)).toBe('1:02:03')
+    expect(clock(-1)).toBe('0:00')
   })
 
   it('counts down in minutes and seconds, rounding up', () => {

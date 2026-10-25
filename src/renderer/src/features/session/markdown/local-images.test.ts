@@ -56,6 +56,11 @@ describe('localImages', () => {
     expect(images(html)).toEqual(paths)
   })
 
+  it('takes a clip or a sound whose path has spaces', () => {
+    const html = render('![demo](~/My Renders/demo 1.mp4) and ![beep](/tmp/a b/beep.mp3)')
+    expect(images(html)).toEqual(['~/My Renders/demo 1.mp4', '/tmp/a b/beep.mp3'])
+  })
+
   it('keeps alt text', () => {
     expect(render(`![桌面截图](${SCREENSHOT})`)).toMatch(/alt="桌面截图"/)
   })

@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { Platform } from '@shared/platform'
-import { isSvg, MediaService, mediaToken, pixelSize } from './media'
+import { avType, isSvg, MediaService, mediaToken, pixelSize } from './media'
 
 const platform: Platform = process.platform
 const posixOnly = platform === 'win32' ? it.skip : it
@@ -70,6 +70,24 @@ function jpeg(width: number, height: number, orientation: number): Buffer {
   return Buffer.concat([Buffer.from([0xff, 0xd8]), app1, exif, sof])
 }
 
+function ftyp(brand: string): Buffer {
+  const box = Buffer.alloc(32)
+  box.writeUInt32BE(32, 0)
+  box.write(`ftyp${brand}`, 4, 'latin1')
+  return box
+}
+
+/** An EBML header with only its DocType, as WebM and Matroska files start. */
+function ebml(docType: string): Buffer {
+  const element = Buffer.concat([
+    Buffer.from([0x42, 0x82, 0x80 | docType.length]),
+    Buffer.from(docType),
+  ])
+  return Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x80 | element.length]), element])
+}
+
+const latin1 = (text: string) => Buffer.from(text, 'latin1')
+
 describe('mediaToken', () => {
   it('is 128 bits in lowercase base32', () => {
     expect(mediaToken(Buffer.alloc(16, 0xff))).toMatch(MEDIA_TOKEN)
@@ -97,6 +115,40 @@ describe('pixelSize', () => {
     expect(pixelSize('image/png', png(10, 10).subarray(0, 20))).toBeNull()
     expect(pixelSize('image/jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xda, 0, 2]))).toBeNull()
     expect(pixelSize('image/svg+xml', Buffer.from('<svg/>'))).toBeNull()
+  })
+})
+
+describe('avType', () => {
+  it('tells audio and video by their first bytes', () => {
+    const cases: [Buffer, string, string, string][] = [
+      [ftyp('isom'), 'demo.mp4', 'video', 'video/mp4'],
+      [ftyp('mp42'), 'clip.m4v', 'video', 'video/mp4'],
+      [ftyp('qt  '), 'take.mov', 'video', 'video/quicktime'],
+      [ftyp('M4A '), 'song.m4a', 'audio', 'audio/mp4'],
+      [ftyp('isom'), 'voice.m4a', 'audio', 'audio/mp4'],
+      [ebml('webm'), 'demo.webm', 'video', 'video/webm'],
+      [ebml('webm'), 'beep.weba', 'audio', 'audio/webm'],
+      [ebml('matroska'), 'demo.mkv', 'video', 'video/x-matroska'],
+      [latin1('ID3\x04\0\0\0\0\0\0'), 'beep.mp3', 'audio', 'audio/mpeg'],
+      [Buffer.from([0xff, 0xfb, 0x90, 0x64]), 'beep.mp3', 'audio', 'audio/mpeg'],
+      [Buffer.from([0xff, 0xf1, 0x50, 0x80]), 'beep.aac', 'audio', 'audio/aac'],
+      [latin1('RIFF\0\0\0\0WAVEfmt '), 'beep.wav', 'audio', 'audio/wav'],
+      [latin1('OggS\0\x02'), 'beep.opus', 'audio', 'audio/ogg'],
+      [latin1('fLaC\0\0\0\x22'), 'beep.flac', 'audio', 'audio/flac'],
+    ]
+    for (const [bytes, name, kind, mimeType] of cases) {
+      expect(avType(bytes, name), name).toEqual({ kind, mimeType })
+    }
+  })
+
+  it('takes nothing else, whatever the name says', () => {
+    expect(avType(ftyp('avif'), 'still.mp4')).toBeNull()
+    expect(avType(ftyp('heic'), 'photo.mov')).toBeNull()
+    expect(avType(ebml('other'), 'demo.mkv')).toBeNull()
+    expect(avType(latin1('RIFF\0\0\0\0WEBPVP8 '), 'beep.wav')).toBeNull()
+    expect(avType(Buffer.from([0xff, 0xfb, 0xf0, 0x64]), 'beep.mp3')).toBeNull()
+    expect(avType(latin1('not a sound'), 'beep.mp3')).toBeNull()
+    expect(avType(Buffer.alloc(0), 'demo.mp4')).toBeNull()
   })
 })
 
@@ -128,6 +180,9 @@ describe('MediaService', () => {
     await writeFile(join(root, 'mark.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>')
     await writeFile(join(root, 'notes.png'), 'not a picture')
     await writeFile(join(root, 'notes.txt'), 'text')
+    await writeFile(join(root, 'out', 'demo.mp4'), ftyp('isom'))
+    await writeFile(join(root, 'out', 'beep.mp3'), latin1('ID3\x04\0\0\0\0\0\0'))
+    await writeFile(join(root, 'out', 'fake.mp4'), 'not a video')
     await writeFile(join(outside, 'chart.png'), png(10, 20))
     await writeFile(join(home, 'Desktop', 'a.gif'), gif(3, 4))
   })
@@ -173,6 +228,21 @@ describe('MediaService', () => {
       },
     ])
     expect(asked).toEqual([])
+  })
+
+  it('grants video and audio with their kind and type, and no size', async () => {
+    const { media } = service()
+    const video = await media.open(root, 'out/demo.mp4', sessionId)
+    expect(video).toMatchObject({
+      kind: 'granted',
+      grant: { kind: 'video', mimeType: 'video/mp4', size: 32 },
+    })
+    if (video.kind === 'granted') expect(video.grant.width).toBeUndefined()
+    expect(await media.open(root, 'out/beep.mp3', sessionId)).toMatchObject({
+      kind: 'granted',
+      grant: { kind: 'audio', mimeType: 'audio/mpeg' },
+    })
+    expect(await media.open(root, 'out/fake.mp4', sessionId)).toEqual({ kind: 'not_media' })
   })
 
   it('takes absolute paths, file URIs and percent-encoded spaces', async () => {
