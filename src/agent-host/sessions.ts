@@ -1805,7 +1805,14 @@ export class SessionManager {
    */
   private async startNew(live: Live): Promise<void> {
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
-    const runtime = await this.deps.agents.ensureReady(live.record.agentId)
+    let runtime: AgentRuntime
+    try {
+      runtime = await this.deps.agents.ensureReady(live.record.agentId)
+    } catch (error) {
+      // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
+      if (gone()) throw removedWhileStarting()
+      throw this.failStart(live, error, { action: 'create' })
+    }
     if (gone()) throw removedWhileStarting()
     let setup
     try {
@@ -2314,6 +2321,9 @@ export class SessionManager {
     if (status !== 'failed' && status !== 'auth_required') return
     if (this.deps.agents.status(live.record.agentId).state === 'failed') {
       await this.deps.agents.retry(live.record.agentId).catch(() => {})
+      // A retry that came in meanwhile took the session: it sends what is left, once.
+      const taken = live.thread.session.status
+      if ((taken !== 'failed' && taken !== 'auth_required') || live.failure !== failure) return
     }
     switch (failure?.action) {
       case 'create':
