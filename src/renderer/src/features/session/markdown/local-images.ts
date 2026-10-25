@@ -13,11 +13,11 @@ const PREFIX = '/#local-image:'
 
 /**
  * `![alt](path)` as agents write paths such as `~/Library/Application Support/...`: an absolute or
- * `./` path, with no parenthesis, angle bracket or line break, that ends in an image's extension
- * and is closed by `)`.
+ * `./` path, with no parenthesis, angle bracket or line break, that ends in a media file's
+ * extension and is closed by `)`.
  */
 const LOCAL_IMAGE =
-  /!\[([^\]\n]*)\]\(((?:\/(?!\/)|~[\\/]|\.{1,2}[\\/]|[a-z]:[\\/])[^()<>\n]*\.(?:png|jpe?g|gif|webp|avif|bmp|ico|svg))\)/gi
+  /!\[([^\]\n]*)\]\(((?:\/(?!\/)|~[\\/]|\.{1,2}[\\/]|[a-z]:[\\/])[^()<>\n]*\.(?:png|jpe?g|gif|webp|avif|bmp|ico|svg|mp3|wav|m4a|aac|ogg|oga|opus|flac|weba|mp4|m4v|webm|mov|mkv))\)/gi
 const FENCE = /^ {0,3}(`{3,}|~{3,})/
 const INDENTED = /^(?: {4}|\t)/
 // Inside `<...>` a backslash before punctuation escapes it, which would eat a Windows separator.

@@ -109,6 +109,9 @@ export interface IpcInvokeContract {
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
+  // A media URL main still grants, never a path.
+  'media:reveal': { args: [url: string]; result: void }
+  'media:open-external': { args: [url: string]; result: void }
   'notifications:test': { args: []; result: boolean }
   'update:get-status': { args: []; result: UpdateStatus }
   'update:check': { args: []; result: UpdateStatus }
@@ -236,6 +239,13 @@ export interface OverbenchApi {
     showDataFolder(): Promise<void>
     /** Shows a file or folder in the system file manager; the path must be absolute. */
     showItem(path: string): Promise<void>
+  }
+  /** Actions on a file served on the media scheme, by its URL. */
+  media: {
+    /** Shows the file in the system file manager. */
+    reveal(url: string): Promise<void>
+    /** Opens the file in the system's default app for it. */
+    openExternal(url: string): Promise<void>
   }
   notifications: {
     /** Shows a sample notification at once; false when the system does not support them. */

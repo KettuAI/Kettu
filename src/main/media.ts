@@ -3,10 +3,10 @@
 import { open, realpath } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import type { CustomScheme, Session, WebFrameMain } from 'electron'
-import { MEDIA_SCHEME, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
+import { MEDIA_SCHEME, MEDIA_TOKEN, mediaUrlToken, type MediaGrantRecord } from '@shared/media'
 import { refuseRequests } from './request-filter'
 
-/** `stream` too, which audio and video will need, since they expect a streamed response. */
+/** `stream` too, since audio and video expect a streamed response. */
 export const mediaScheme: CustomScheme = {
   scheme: MEDIA_SCHEME,
   privileges: { standard: true, secure: true, stream: true },
@@ -68,14 +68,43 @@ export class MediaGrants {
 }
 
 const HEADERS = {
+  'Accept-Ranges': 'bytes',
   'X-Content-Type-Options': 'nosniff',
   'Cache-Control': 'no-store',
   // Should a response ever open as a document, it runs nothing.
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
 }
 
-function answer(status: number): Response {
-  return new Response(null, { status, headers: HEADERS })
+function answer(status: number, headers: Record<string, string> = {}): Response {
+  return new Response(null, { status, headers: { ...HEADERS, ...headers } })
+}
+
+export interface ByteRange {
+  start: number
+  end: number // inclusive
+}
+
+/**
+ * The one range a `Range` header asks of a file of `size` bytes: `bytes=a-b`, `bytes=a-` or the
+ * suffix `bytes=-n`. Null for the whole file, as for no header, a malformed one or several
+ * ranges, which a server may ignore; `unsatisfiable` when the range starts past the end.
+ */
+export function parseRange(
+  header: string | null,
+  size: number,
+): ByteRange | 'unsatisfiable' | null {
+  const match = header === null ? null : /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!match || (match[1] === '' && match[2] === '')) return null
+  if (match[1] === '') {
+    const suffix = Number(match[2])
+    if (suffix === 0 || size === 0) return 'unsatisfiable'
+    return { start: Math.max(0, size - suffix), end: size - 1 }
+  }
+  const start = Number(match[1])
+  const end = match[2] === '' ? Infinity : Number(match[2])
+  if (end < start) return null
+  if (start >= size) return 'unsatisfiable'
+  return { start, end: Math.min(end, size - 1) }
 }
 
 /** Answers one request on the media scheme. */
@@ -94,22 +123,46 @@ export async function respondMedia(request: Request, grants: MediaGrants): Promi
     try {
       const info = await file.stat()
       if (!info.isFile()) return answer(404)
-      const headers = {
+      const range = parseRange(request.headers.get('range'), info.size)
+      if (range === 'unsatisfiable') {
+        return answer(416, { 'Content-Range': `bytes */${info.size}` })
+      }
+      // Within the size just read, so a file still being written cannot outrun its length.
+      const { start, end } = range ?? { start: 0, end: info.size - 1 }
+      const status = range ? 206 : 200
+      const headers: Record<string, string> = {
         ...HEADERS,
         'Content-Type': grant.mimeType,
-        'Content-Length': String(info.size),
+        'Content-Length': String(end - start + 1),
+        ...(range ? { 'Content-Range': `bytes ${start}-${end}/${info.size}` } : {}),
       }
-      if (request.method === 'HEAD' || info.size === 0) return new Response(null, { headers })
-      // Exactly the size just read, so a file still being written cannot outrun its length.
-      const stream = file.createReadStream({ start: 0, end: info.size - 1 })
+      if (request.method === 'HEAD' || info.size === 0) {
+        return new Response(null, { status, headers })
+      }
+      const stream = file.createReadStream({ start, end })
       streamed = true
-      return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { headers })
+      return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
+        status,
+        headers,
+      })
     } finally {
       if (!streamed) await file.close()
     }
   } catch {
     return answer(404)
   }
+}
+
+/**
+ * The real path behind a media URL main still grants, for the actions on a file: never a path
+ * from the renderer. Throws when the grant is gone or the file was swapped for a link.
+ */
+export async function grantedPath(url: unknown, grants: MediaGrants): Promise<string> {
+  const token = typeof url === 'string' ? mediaUrlToken(url) : null
+  const grant = token ? await grants.find(token) : null
+  if (!grant) throw new Error('The file is no longer available here')
+  if ((await realpath(grant.path)) !== grant.path) throw new Error('The file has moved')
+  return grant.path
 }
 
 /** Whether a request on the media scheme may go: only the app's own page, its main frame. */

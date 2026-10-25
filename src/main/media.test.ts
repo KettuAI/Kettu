@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { WebFrameMain } from 'electron'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { MediaGrantRecord } from '@shared/media'
-import { MediaGrants, mayRequestMedia, respondMedia } from './media'
+import { grantedPath, MediaGrants, mayRequestMedia, parseRange, respondMedia } from './media'
 
 const open = vi.hoisted(() => vi.fn())
 vi.mock('node:fs/promises', async (original) => {
@@ -58,6 +58,30 @@ describe('MediaGrants', () => {
   })
 })
 
+describe('parseRange', () => {
+  it('reads a range, an open end and a suffix', () => {
+    expect(parseRange('bytes=0-99', 1000)).toEqual({ start: 0, end: 99 })
+    expect(parseRange('bytes=900-', 1000)).toEqual({ start: 900, end: 999 })
+    expect(parseRange('bytes=-100', 1000)).toEqual({ start: 900, end: 999 })
+    expect(parseRange('bytes=-5000', 1000)).toEqual({ start: 0, end: 999 })
+    expect(parseRange('bytes=990-2000', 1000)).toEqual({ start: 990, end: 999 })
+  })
+
+  it('cannot satisfy a range past the end or an empty suffix', () => {
+    expect(parseRange('bytes=1000-', 1000)).toBe('unsatisfiable')
+    expect(parseRange('bytes=1000-1001', 1000)).toBe('unsatisfiable')
+    expect(parseRange('bytes=-0', 1000)).toBe('unsatisfiable')
+    expect(parseRange('bytes=-1', 0)).toBe('unsatisfiable')
+  })
+
+  it('serves the whole file for no range, a malformed one or several', () => {
+    expect(parseRange(null, 1000)).toBeNull()
+    for (const header of ['bytes=-', 'bytes=5-1', 'items=0-1', 'bytes=a-b', 'bytes=0-1,5-9']) {
+      expect(parseRange(header, 1000), header).toBeNull()
+    }
+  })
+})
+
 describe('respondMedia', () => {
   let dir: string
   let file: string
@@ -104,6 +128,42 @@ describe('respondMedia', () => {
     expect((await respondMedia(new Request(bad), grants())).status).toBe(404)
   })
 
+  it('answers a range with 206 and its Content-Range', async () => {
+    const response = await respondMedia(
+      new Request(url(0), { headers: { range: 'bytes=4-7' } }),
+      grants(),
+    )
+    expect(response.status).toBe(206)
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes.subarray(4, 8))
+    expect(Object.fromEntries(response.headers)).toMatchObject({
+      'content-range': `bytes 4-7/${bytes.length}`,
+      'content-length': '4',
+      'accept-ranges': 'bytes',
+    })
+    const suffix = await respondMedia(
+      new Request(url(0), { headers: { range: 'bytes=-4' } }),
+      grants(),
+    )
+    expect(suffix.status).toBe(206)
+    expect(Buffer.from(await suffix.arrayBuffer())).toEqual(bytes.subarray(-4))
+  })
+
+  it('answers 416 past the end, and Accept-Ranges on every answer', async () => {
+    const past = await respondMedia(
+      new Request(url(0), { headers: { range: `bytes=${bytes.length}-` } }),
+      grants(),
+    )
+    expect(past.status).toBe(416)
+    expect(past.headers.get('content-range')).toBe(`bytes */${bytes.length}`)
+    expect(past.headers.get('accept-ranges')).toBe('bytes')
+    const whole = await respondMedia(new Request(url(0)), grants())
+    expect(whole.headers.get('accept-ranges')).toBe('bytes')
+    expect(whole.headers.get('content-range')).toBeNull()
+    expect((await respondMedia(new Request(url(1)), grants())).headers.get('accept-ranges')).toBe(
+      'bytes',
+    )
+  })
+
   it('closes the file when reading its size fails', async () => {
     const close = vi.fn(async () => {})
     open.mockResolvedValueOnce({
@@ -125,6 +185,24 @@ describe('respondMedia', () => {
     } finally {
       await rm(file)
       await rename(join(dir, 'moved.png'), file)
+    }
+  })
+})
+
+describe('grantedPath', () => {
+  it('resolves a granted URL to its file, and nothing else', async () => {
+    const dir = await realpath(await mkdtemp(join(os.tmpdir(), 'overbench-media-path-')))
+    try {
+      const file = join(dir, 'demo.mp4')
+      await writeFile(file, 'x')
+      const grants = new MediaGrants(0)
+      grants.add(grant(0, file))
+      expect(await grantedPath(`overbench-media://${token(0)}/demo.mp4?v=1`, grants)).toBe(file)
+      await expect(grantedPath(`overbench-media://${token(1)}/demo.mp4`, grants)).rejects.toThrow()
+      await expect(grantedPath(file, grants)).rejects.toThrow()
+      await expect(grantedPath(42, grants)).rejects.toThrow()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
     }
   })
 })

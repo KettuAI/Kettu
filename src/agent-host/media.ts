@@ -5,11 +5,13 @@ import { open, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  MEDIA_IMAGE_NAME,
+  mediaKindOfName,
   mediaUrl,
+  type MediaAudioType,
   type MediaGrantRecord,
   type MediaImageType,
   type MediaOpenResult,
+  type MediaVideoType,
 } from '@shared/media'
 import type { Platform } from '@shared/platform'
 import { imageType, readBytes } from './files'
@@ -146,6 +148,80 @@ export function pixelSize(mimeType: MediaImageType, b: Buffer): PixelSize | null
   }
 }
 
+export type AvType =
+  { kind: 'audio'; mimeType: MediaAudioType } | { kind: 'video'; mimeType: MediaVideoType }
+
+const audio = (mimeType: MediaAudioType): AvType => ({ kind: 'audio', mimeType })
+const video = (mimeType: MediaVideoType): AvType => ({ kind: 'video', mimeType })
+
+// ISO base media brands that hold pictures, not sound or video.
+const IMAGE_BRANDS = new Set(['avif', 'avis', 'heic', 'heix', 'hevc', 'mif1', 'msf1'])
+
+/** An EBML element's size or ID, a variable-length integer; null when cut or too long. */
+function vint(b: Buffer, at: number): { value: number; length: number } | null {
+  const first = b[at]
+  if (first === undefined || first === 0) return null
+  const length = Math.clz32(first) - 23
+  if (length > 8 || at + length > b.length) return null
+  let value = first & (0xff >> length)
+  for (let i = 1; i < length; i++) value = value * 256 + b[at + i]!
+  return { value, length }
+}
+
+/** The DocType of an EBML header, `webm` or `matroska`, read from its first element. */
+function ebmlDocType(b: Buffer): string | null {
+  const header = vint(b, 4)
+  if (!header) return null
+  const end = Math.min(b.length, 4 + header.length + header.value)
+  let at = 4 + header.length
+  while (at + 2 < end) {
+    const id = b.readUInt16BE(at)
+    const size = vint(b, at + 2)
+    if (!size) return null
+    const start = at + 2 + size.length
+    if (id === 0x4282) return b.toString('latin1', start, Math.min(end, start + size.value))
+    at = start + size.value
+  }
+  return null
+}
+
+/**
+ * Audio or video by the container's first bytes, never the name. The name settles only what the
+ * bytes leave open: an MP4 or WebM container holds either, and an ID3 tag fronts MP3 or AAC.
+ */
+export function avType(b: Buffer, name: string): AvType | null {
+  const ascii = (start: number, end: number) => b.toString('latin1', start, end)
+  const named = mediaKindOfName(name)
+  if (ascii(4, 8) === 'ftyp') {
+    const brand = ascii(8, 12)
+    if (IMAGE_BRANDS.has(brand)) return null
+    if (brand === 'qt  ') return video('video/quicktime')
+    if (/^M4[ABP] $/.test(brand) || named === 'audio') return audio('audio/mp4')
+    return video('video/mp4')
+  }
+  if (b.length >= 4 && b.readUInt32BE(0) === 0x1a45dfa3) {
+    const docType = ebmlDocType(b)
+    if (docType === 'webm') return named === 'audio' ? audio('audio/webm') : video('video/webm')
+    return docType === 'matroska' ? video('video/x-matroska') : null
+  }
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return audio('audio/wav')
+  if (ascii(0, 4) === 'OggS') return audio('audio/ogg')
+  if (ascii(0, 4) === 'fLaC') return audio('audio/flac')
+  if (ascii(0, 3) === 'ID3') return audio(/\.aac$/i.test(name) ? 'audio/aac' : 'audio/mpeg')
+  if (b.length >= 3 && b[0] === 0xff) {
+    // ADTS: sync, MPEG version, layer 0.
+    if ((b[1]! & 0xf6) === 0xf0) return audio('audio/aac')
+    // An MPEG audio frame: sync, a version and a layer that are not reserved, a valid bitrate.
+    const frame =
+      (b[1]! & 0xe0) === 0xe0 &&
+      ((b[1]! >> 3) & 3) !== 1 &&
+      ((b[1]! >> 1) & 3) !== 0 &&
+      b[2]! >> 4 !== 15
+    if (frame) return audio('audio/mpeg')
+  }
+  return null
+}
+
 function isMissing(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | undefined)?.code
   return code === 'ENOENT' || code === 'ENOTDIR'
@@ -159,7 +235,7 @@ export class MediaService {
   }
 
   /**
-   * A grant for the image `written` names, as a thread writes it. `root` is the session's
+   * A grant for the media file `written` names, as a thread writes it. `root` is the session's
    * canonical folder; a file outside it needs `sessionId`'s thread to name it, and is not
    * looked at until it does.
    */
@@ -188,21 +264,20 @@ export class MediaService {
     const info = await stat(real)
     if (!info.isFile()) return { kind: 'not_found' }
     const name = this.paths.basename(real)
-    if (!MEDIA_IMAGE_NAME.test(name)) return { kind: 'not_media' }
+    const nominated = mediaKindOfName(name)
+    if (!nominated) return { kind: 'not_media' }
     const head = await readHead(real, Math.min(info.size, HEAD_BYTES))
-    const mimeType: MediaImageType | null =
-      imageType(head) ?? (isSvg(head) ? 'image/svg+xml' : null)
-    if (!mimeType) return { kind: 'not_media' }
+    const type = nominated === 'image' ? imageOf(head) : avType(head, name)
+    if (!type) return { kind: 'not_media' }
     const token = mediaToken((this.deps.random ?? randomBytes)(16))
-    this.deps.grant({ token, path: real, mimeType, sessionId })
+    this.deps.grant({ token, path: real, mimeType: type.mimeType, sessionId })
     return {
       kind: 'granted',
       grant: {
         url: mediaUrl(token, name, info.mtimeMs),
-        kind: 'image',
-        mimeType,
+        ...type,
         size: info.size,
-        ...(pixelSize(mimeType, head) ?? {}),
+        ...(type.kind === 'image' ? (pixelSize(type.mimeType, head) ?? {}) : {}),
       },
     }
   }
@@ -248,6 +323,11 @@ export class MediaService {
     const prefix = rootKey.endsWith(this.paths.sep) ? rootKey : rootKey + this.paths.sep
     return pathKey(real, this.deps.platform).startsWith(prefix)
   }
+}
+
+function imageOf(head: Buffer): { kind: 'image'; mimeType: MediaImageType } | null {
+  const mimeType = imageType(head) ?? (isSvg(head) ? 'image/svg+xml' : null)
+  return mimeType ? { kind: 'image', mimeType } : null
 }
 
 async function readHead(file: string, length: number): Promise<Buffer> {

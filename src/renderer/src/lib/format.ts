@@ -81,6 +81,14 @@ export function duration(ms: number): string {
   return i18n.t('time.hoursMinutes', { h: Math.floor(m / 60), m: m % 60 })
 }
 
+/** A clip's length as "0:07", "4:12" or "1:02:03", in whole seconds. */
+export function clock(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds))
+  const mmss = `${Math.floor(s / 60) % 60}:${String(s % 60).padStart(2, '0')}`
+  if (s < 3600) return mmss
+  return `${Math.floor(s / 3600)}:${mmss.padStart(5, '0')}`
+}
+
 /** Time left as "4:12", in whole seconds rounded up, so it reads 0:00 only once the time is up. */
 export function countdown(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000))

@@ -2,9 +2,13 @@ import 'streamdown/styles.css'
 import {
   isValidElement,
   memo,
+  useContext,
   useDeferredValue,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
   type ReactNode,
 } from 'react'
@@ -31,9 +35,16 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { FileLink } from '@renderer/features/files/file-link'
-import { useFileRef } from '@renderer/features/files/file-refs'
+import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
-import { LocalImage } from '@renderer/features/session/media/local-image'
+import { SessionIdContext } from '@renderer/features/session/media/grants'
+import { LocalMedia } from '@renderer/features/session/media/local-media'
+import {
+  NamedMedia,
+  NamedMediaContext,
+  namedMedia,
+  type MediaClaim,
+} from '@renderer/features/session/media/named'
 import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
@@ -50,6 +61,9 @@ const plugins = {
 
 const DefaultLink = defaultComponents.a
 const DefaultImage = defaultComponents.img
+const DefaultParagraph = defaultComponents.p
+const DefaultListItem = defaultComponents.li
+const DefaultTable = defaultComponents.table
 
 /** A link: a pull request chip, a project file, or the default link with its safety check. */
 function Link(props: ComponentProps<'a'> & ExtraProps) {
@@ -72,7 +86,7 @@ function Link(props: ComponentProps<'a'> & ExtraProps) {
 function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
   const src = typeof props.src === 'string' ? props.src : ''
   const local = localImageTarget(src)
-  if (local !== null) return <LocalImage key={local} path={local} alt={props.alt ?? ''} />
+  if (local !== null) return <LocalMedia key={local} path={local} alt={props.alt ?? ''} image />
   const remote = /^https?:/i.test(src) ? URL.parse(src) : null
   if (remote) {
     return (
@@ -97,6 +111,69 @@ function InlineCode({ className, children }: ComponentProps<'code'> & ExtraProps
   )
 }
 
+/**
+ * The media files a block's file references name, shown under it, each once per message and only
+ * under the first block that names it.
+ */
+function MediaUnder({ node }: ExtraProps) {
+  const named = useContext(NamedMediaContext)
+  const projectPath = useContext(ProjectPathContext)
+  const sessionId = useContext(SessionIdContext)
+  const enabled = !!projectPath && !!sessionId && !!named
+  const paths = namedMedia(node)
+  const key = paths.join('\0')
+  const ref = useRef<HTMLDivElement>(null)
+  const [claim, setClaim] = useState<MediaClaim<Element> | null>(null)
+  useSyncExternalStore(named?.subscribe ?? noSubscribe, named?.getVersion ?? noVersion)
+  useLayoutEffect(() => {
+    const at = ref.current
+    if (!at || !named || key === '') return
+    const next = { at, paths: key.split('\0') }
+    setClaim(next)
+    return named.claim(next)
+  }, [named, key])
+  if (!enabled || paths.length === 0) return null
+  const shown = claim && named ? named.shown(claim) : []
+  return (
+    // Empty until it shows a file, which hides it (globals.css).
+    <div ref={ref} data-media-block="" className="flex flex-col items-start gap-3">
+      {shown.map((path) => (
+        <LocalMedia key={path} path={path} />
+      ))}
+    </div>
+  )
+}
+
+const noSubscribe = () => () => {}
+const noVersion = () => 0
+
+function Paragraph(props: ComponentProps<'p'> & ExtraProps) {
+  return (
+    <>
+      <DefaultParagraph {...props} />
+      <MediaUnder node={props.node} />
+    </>
+  )
+}
+
+function ListItem({ children, ...props }: ComponentProps<'li'> & ExtraProps) {
+  return (
+    <DefaultListItem {...props}>
+      {children}
+      <MediaUnder node={props.node} />
+    </DefaultListItem>
+  )
+}
+
+function Table(props: ComponentProps<'table'> & ExtraProps) {
+  return (
+    <>
+      <DefaultTable {...props} />
+      <MediaUnder node={props.node} />
+    </>
+  )
+}
+
 function textOf(node: ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(textOf).join('')
@@ -115,6 +192,9 @@ function Emphasis({ children, className }: ComponentProps<'em'> & ExtraProps) {
 const components: Components = {
   a: Link,
   img: MarkdownImage,
+  p: Paragraph,
+  li: ListItem,
+  table: Table,
   inlineCode: InlineCode,
   em: Emphasis,
 }
@@ -181,12 +261,15 @@ function MarkdownImpl({
   // React split that work across frames instead of blocking one.
   const live = useDeferredValue(streaming)
   const chunks = useChunks(markdown)
+  const [named] = useState(() => new NamedMedia())
   return (
     <div className={cn('markdown', className)}>
-      {chunks.map((chunk, i) => (
-        // By position: when the tail settles, the chunk in its place keeps its rendered blocks.
-        <Chunk key={i} markdown={chunk} live={live} />
-      ))}
+      <NamedMediaContext value={named}>
+        {chunks.map((chunk, i) => (
+          // By position: when the tail settles, the chunk in its place keeps its rendered blocks.
+          <Chunk key={i} markdown={chunk} live={live} />
+        ))}
+      </NamedMediaContext>
     </div>
   )
 }

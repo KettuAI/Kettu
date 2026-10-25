@@ -19,13 +19,48 @@ export const MEDIA_IMAGE_TYPES = [
 
 export type MediaImageType = (typeof MEDIA_IMAGE_TYPES)[number]
 
+export const MEDIA_AUDIO_TYPES = [
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4',
+  'audio/aac',
+  'audio/ogg',
+  'audio/flac',
+  'audio/webm',
+] as const
+
+export type MediaAudioType = (typeof MEDIA_AUDIO_TYPES)[number]
+
+export const MEDIA_VIDEO_TYPES = [
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+  'video/x-matroska',
+] as const
+
+export type MediaVideoType = (typeof MEDIA_VIDEO_TYPES)[number]
+
+export type MediaType = MediaImageType | MediaAudioType | MediaVideoType
+
+export type MediaKind = 'image' | 'audio' | 'video'
+
 /** A file's name that nominates it as an image; its first bytes decide. */
 export const MEDIA_IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i
+export const MEDIA_AUDIO_NAME = /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|weba)$/i
+export const MEDIA_VIDEO_NAME = /\.(mp4|m4v|webm|mov|mkv)$/i
+
+/** The kind a file's name nominates it as, or null when it names no media. */
+export function mediaKindOfName(name: string): MediaKind | null {
+  if (MEDIA_IMAGE_NAME.test(name)) return 'image'
+  if (MEDIA_VIDEO_NAME.test(name)) return 'video'
+  if (MEDIA_AUDIO_NAME.test(name)) return 'audio'
+  return null
+}
 
 export interface MediaGrant {
   url: string // overbench-media://<token>/<file name>?v=<mtime>
-  kind: 'image'
-  mimeType: MediaImageType // from the first bytes, never the name
+  kind: MediaKind
+  mimeType: MediaType // from the first bytes, never the name
   size: number // bytes
   width?: number // pixels, when the header holds them
   height?: number
@@ -36,14 +71,21 @@ export type MediaOpenResult =
   | { kind: 'granted'; grant: MediaGrant }
   | { kind: 'not_found' } // no such regular file
   | { kind: 'forbidden' } // outside the session's folder, and the thread does not name it
-  | { kind: 'not_media' } // not named as an image, or its bytes are no image
+  | { kind: 'not_media' } // not named as media, or its bytes are no media
 
 /** What main keeps for a grant and serves on its token. */
 export interface MediaGrantRecord {
   token: string
   path: string // the real path when granted; a request finds the same one or nothing
-  mimeType: MediaImageType
+  mimeType: MediaType
   sessionId: string | null
+}
+
+/** The token of a media URL, or null when it is none. */
+export function mediaUrlToken(url: string): string | null {
+  const parsed = URL.parse(url)
+  if (parsed?.protocol !== `${MEDIA_SCHEME}:`) return null
+  return MEDIA_TOKEN.test(parsed.hostname) ? parsed.hostname : null
 }
 
 export function mediaUrl(token: string, name: string, mtimeMs: number): string {

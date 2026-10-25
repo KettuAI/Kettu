@@ -313,6 +313,12 @@
     "openImage": "打开图片 {{name}}",
     "notFound": "在 {{path}} 找不到。",
     "cannotRead": "无法读取 {{name}}",
-    "unsupported": "这种图片格式无法在这里显示。"
+    "unsupported": "这种图片格式无法在这里显示。",
+    "unsupportedVideo": "这种视频格式无法在这里播放。",
+    "unsupportedAudio": "这种音频格式无法在这里播放。",
+    "openLarger": "放大查看",
+    "showInFiles": "在文件面板中显示",
+    "showIn": "在{{name}}中显示",
+    "openWithDefault": "用默认应用打开"
   }
 }
