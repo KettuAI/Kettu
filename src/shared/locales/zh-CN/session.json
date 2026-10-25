@@ -14,8 +14,6 @@
   "summary": {
     "separator": " · ",
     "nameSeparator": "、",
-    "thought": "思考",
-    "thoughtFor": "思考了 {{duration}}",
     "plan": "更新了计划",
     "compaction": "压缩了上下文",
     "execute_other": "运行了 {{count}} 条命令",
@@ -90,11 +88,6 @@
     "runsForParent": "{{agent}} 正在为<parent>父会话</parent>运行这个子 Agent",
     "stop": "停止",
     "back": "返回 {{title}}"
-  },
-  "thought": {
-    "live": "思考中",
-    "done": "已思考",
-    "doneFor": "已思考 {{duration}}"
   },
   "sessionMessage": {
     "from": "来自 {{title}}",

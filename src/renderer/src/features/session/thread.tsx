@@ -13,6 +13,7 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { loadOlder, useThreadsStore } from '@renderer/stores/threads'
+import { AgentEntry } from './entries/basic'
 import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
@@ -38,11 +39,11 @@ function useShownFrom(total: number): number {
   return Math.max(0, total - limit)
 }
 
-/** The thoughts and tool calls of a thread, whose rows sit close together. */
+/** The tool calls of a thread, whose rows sit close together. */
 function stepIds(order: string[], signature: string): Set<string> {
   const ids = new Set<string>()
   order.forEach((id, i) => {
-    if ('hgtw'.includes(signature[i] ?? '-')) ids.add(id)
+    if ('gtw'.includes(signature[i] ?? '-')) ids.add(id)
   })
   return ids
 }
@@ -108,7 +109,7 @@ export const Thread = memo(function Thread({
   agentName: string
   /** A turn is running. */
   working: boolean
-  /** The agent's messages that more work follows are progress notes, folded with the work. */
+  /** The agent's messages that more work follows show as muted notes between runs. */
   progressNotes: boolean
   /** Told the width the viewport's scrollbar takes, so the composer can leave the same. */
   onGutter: (width: number) => void
@@ -208,6 +209,8 @@ export const Thread = memo(function Thread({
                       projectPath={projectPath}
                       agentName={agentName}
                     />
+                  ) : item.note ? (
+                    <AgentEntry sessionId={sessionId} entryId={item.id} note />
                   ) : (
                     <Entry
                       sessionId={sessionId}

@@ -90,16 +90,19 @@ describe('signatureOf', () => {
 })
 
 describe('buildItems', () => {
-  it('folds a run of thoughts and tool calls between messages', () => {
+  it('shows a thought between the runs around it', () => {
     const result = items([
       user('u1'),
-      thought('h1'),
       tool('x1', 'execute'),
-      tool('e1', 'edit'),
+      thought('h1'),
+      tool('x2', 'execute'),
+      tool('x3', 'execute'),
       agent('a1'),
     ])
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a1', 'reply:u1'])
-    expect(result[1]).toMatchObject({ type: 'run', ids: ['h1', 'x1', 'e1'], signature: 'htt' })
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'h1', 'run:x2', 'a1', 'reply:u1'])
+    expect(result[1]).toMatchObject({ type: 'run', ids: ['x1'], signature: 't' })
+    expect(result[2]).toMatchObject({ type: 'entry', id: 'h1', note: false })
+    expect(result[3]).toMatchObject({ type: 'run', ids: ['x2', 'x3'], signature: 'tt' })
   })
 
   it('folds a lone tool call into a line of its own', () => {
@@ -135,7 +138,15 @@ describe('buildItems', () => {
       tool('x3', 'execute'),
       agent('a2'),
     ])
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a1', 'run:x2', 'a2', 'reply:u1'])
+    expect(result.map((i) => i.key)).toEqual([
+      'u1',
+      'h1',
+      'run:x1',
+      'a1',
+      'run:x2',
+      'a2',
+      'reply:u1',
+    ])
   })
 
   it('keeps plans and compactions inside a run', () => {
@@ -196,6 +207,16 @@ describe('buildItems', () => {
     ])
   })
 
+  it('keeps a streaming thought after the tool calls of a live run', () => {
+    const streaming: ThreadEntry = { kind: 'thought', id: 'h1', markdown: '', streaming: true }
+    const s = state([user('u1'), tool('x1', 'execute'), streaming])
+    expect(buildItems(s.order, signatureOf(s), true).map((i) => i.key)).toEqual([
+      'u1',
+      'run:x1',
+      'h1',
+    ])
+  })
+
   it('folds every run of a live turn, a message between them or not', () => {
     const s = state([
       user('u1'),
@@ -235,7 +256,7 @@ describe('progress notes', () => {
     return buildItems(s.order, signatureOf(s), live, true)
   }
 
-  it('fold with the work, and the answer stays', () => {
+  it('show between the runs, and the answer stays', () => {
     const result = notes([
       user('u1'),
       thought('h1'),
@@ -246,9 +267,27 @@ describe('progress notes', () => {
       tool('x2', 'execute'),
       agent('a3'),
     ])
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:h1', 'a3', 'reply:u1'])
-    expect(result[1]).toMatchObject({ signature: 'hcthct' })
-    expect(result[3]).toMatchObject({ agentIds: ['a3'] })
+    expect(result.map((i) => i.key)).toEqual([
+      'u1',
+      'h1',
+      'a1',
+      'run:x1',
+      'h2',
+      'a2',
+      'run:x2',
+      'a3',
+      'reply:u1',
+    ])
+    expect(result[2]).toMatchObject({ type: 'entry', id: 'a1', note: true })
+    expect(result[5]).toMatchObject({ type: 'entry', id: 'a2', note: true })
+    expect(result[7]).toMatchObject({ type: 'entry', id: 'a3', note: false })
+    expect(result[8]).toMatchObject({ agentIds: ['a3'] })
+  })
+
+  it('treats a thought as work after a message', () => {
+    const result = notes([user('u1'), agent('a1'), thought('h1'), agent('a2')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'h1', 'a2', 'reply:u1'])
+    expect(result[1]).toMatchObject({ type: 'entry', id: 'a1', note: true })
   })
 
   it('leave every message as it is for other agents', () => {
@@ -271,7 +310,8 @@ describe('progress notes', () => {
     ])
     expect(result.map((i) => i.key)).toEqual([
       'u1',
-      'run:a1',
+      'a1',
+      'run:x1',
       'a2',
       'reply:u1',
       'u2',
@@ -280,7 +320,7 @@ describe('progress notes', () => {
     ])
   })
 
-  it('fold into the running turn as soon as more work follows them', () => {
+  it('turn the latest message into a note once more work follows it', () => {
     const result = notes(
       [
         user('u1'),
@@ -292,8 +332,8 @@ describe('progress notes', () => {
       ],
       true,
     )
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a2'])
-    expect(result[1]).toMatchObject({ signature: 'ttct' })
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a1', 'run:x3', 'a2'])
+    expect(result[2]).toMatchObject({ type: 'entry', id: 'a1', note: true })
   })
 })
 

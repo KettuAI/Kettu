@@ -25,10 +25,10 @@ import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marke
 import { Message } from '@renderer/components/ui/message'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PrChip } from '@renderer/features/git/pr-chip'
-import { duration } from '@renderer/lib/format'
 import { PANEL, stopReasonText } from './helpers'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { Clamp } from '../clamp'
 import { Markdown } from '../markdown'
 import { SessionIdContext } from '../media/grants'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -72,7 +72,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   )
 })
 
-/** An agent message; `note` sets a progress note in a folded run, muted like a thought. */
+/** An agent message; `note` sets a progress note between runs, muted like a thought. */
 export const AgentEntry = memo(function AgentEntry({
   sessionId,
   entryId,
@@ -111,32 +111,21 @@ export const AgentEntry = memo(function AgentEntry({
 })
 
 export const ThoughtEntry = memo(function ThoughtEntry({ sessionId, entryId }: EntryProps) {
-  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'thought')
   const animation = useEntryAnimation(sessionId, entryId)
-  const [open, setOpen] = useState(false)
   if (!entry) return null
-  const label = entry.streaming
-    ? t('thought.live')
-    : entry.durationMs !== undefined && entry.durationMs >= 1000
-      ? t('thought.doneFor', { duration: duration(entry.durationMs) })
-      : t('thought.done')
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={animation}>
-      <CollapsibleTrigger className="group/thought -mx-1 flex h-6 items-center gap-1 rounded-md px-1 text-ui text-muted-foreground outline-none hover:text-primary focus-ring">
-        <span className={cn(entry.streaming && 'shimmer')}>{label}</span>
-        <ChevronRightIcon className="size-3.5 transition-transform duration-(--duration-fast) group-data-panel-open/thought:rotate-90" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className={PANEL}>
-        <div className="mt-1 border-l border-subtle pl-3 text-muted-foreground" data-selectable="">
+    <div className={cn('text-muted-foreground', animation)} data-selectable="">
+      <SessionIdContext value={sessionId}>
+        <Clamp maxHeight={76} buttonClassName="-mx-1.5">
           <Markdown
             markdown={entry.markdown}
             streaming={entry.streaming}
             className="markdown-muted"
           />
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+        </Clamp>
+      </SessionIdContext>
+    </div>
   )
 })
 

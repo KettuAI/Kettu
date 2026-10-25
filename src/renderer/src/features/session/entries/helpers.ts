@@ -60,7 +60,6 @@ type Diff = Extract<ToolContent, { type: 'diff' }>
 
 /** A step of a folded run, as its summary counts it. */
 export type RunStep =
-  | { kind: 'thought'; durationMs?: number; streaming?: boolean }
   | {
       kind: 'tool'
       toolKind: ToolKind
@@ -98,8 +97,7 @@ export interface SummaryPart {
 
 type FilePart = 'read' | 'create' | 'edit' | 'delete' | 'move'
 
-type RunPart =
-  FilePart | 'thought' | 'plan' | 'compaction' | 'execute' | 'search' | 'fetch' | 'other'
+type RunPart = FilePart | 'plan' | 'compaction' | 'execute' | 'search' | 'fetch' | 'other'
 
 /** What a step adds to a part: an edit adds one unit per file it touched. */
 interface Unit {
@@ -178,20 +176,6 @@ export function runSummary(steps: RunStep[]): {
   const parts = [...byPart].flatMap(([part, units]): SummaryPart[] => {
     const n = units.length
     switch (part) {
-      case 'thought': {
-        const ms = units.reduce(
-          (sum, u) => sum + (u.step.kind === 'thought' ? (u.step.durationMs ?? 0) : 0),
-          0,
-        )
-        return [
-          {
-            text:
-              ms >= 1000
-                ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
-                : i18n.t('session:summary.thought'),
-          },
-        ]
-      }
       case 'plan':
         return [{ text: i18n.t('session:summary.plan') }]
       case 'compaction':
@@ -223,7 +207,6 @@ export function runSummary(steps: RunStep[]): {
     parts,
     failed: steps.filter((s) => s.kind === 'tool' && s.status === 'failed').length,
     running: steps.some((s) => {
-      if (s.kind === 'thought') return !!s.streaming
       if (s.kind === 'compaction') return s.running
       if (s.kind === 'plan') return false
       return s.status === 'pending' || s.status === 'in_progress'

@@ -144,7 +144,6 @@ describe('runSummary', () => {
     const edited = diff('/repo/docs/ui.md', 'a\n')
     expect(
       runSummary([
-        { kind: 'thought', durationMs: 8_000 },
         run('edit', '/repo/offload.py', { diffs: [created] }),
         run('edit', '/repo/docs/ui.md', { diffs: [edited] }),
         run('edit', '/repo/offload.py', { diffs: [later] }),
@@ -152,7 +151,6 @@ describe('runSummary', () => {
       ]),
     ).toEqual({
       parts: [
-        { text: 'Thought for 8 s' },
         { text: 'Created offload.py', names: 'offload.py', diffs: [created, later] },
         { text: 'Edited ui.md', names: 'ui.md', diffs: [edited] },
         { text: 'Searched once' },
@@ -210,15 +208,9 @@ describe('runSummary', () => {
       { ...run('execute'), status: 'failed' },
       { ...run('fetch'), status: 'in_progress' },
       run('other'),
-      { kind: 'thought', streaming: true },
     ])
     expect(summary).toEqual({
-      parts: [
-        { text: 'Ran a command' },
-        { text: 'Fetched a page' },
-        { text: 'Used a tool' },
-        { text: 'Thought' },
-      ],
+      parts: [{ text: 'Ran a command' }, { text: 'Fetched a page' }, { text: 'Used a tool' }],
       failed: 1,
       running: true,
     })

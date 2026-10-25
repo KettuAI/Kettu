@@ -13,7 +13,6 @@ import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { stepItems } from '../thread-items'
 import { useEntryAnimation } from '../use-thread'
-import { AgentEntry } from './basic'
 import { Entry } from './entry'
 import { CutLabel } from './cut-label'
 import { PANEL, runSummary, toolStep, type RunStep, type SummaryPart } from './helpers'
@@ -30,9 +29,9 @@ interface RunGroupProps {
 }
 
 /**
- * The work between messages, two or more steps or a lone tool call, folded into one line that
- * says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to the
- * steps. A step waiting for permission holds it open.
+ * The work between messages and thoughts, two or more steps or a lone tool call, folded into one
+ * line that says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands
+ * to the steps. A step waiting for permission holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,
@@ -53,9 +52,7 @@ export const RunGroup = memo(function RunGroup({
   const steps: RunStep[] = []
   let waiting = false
   for (const entry of entries) {
-    if (entry?.kind === 'thought') {
-      steps.push({ kind: 'thought', durationMs: entry.durationMs, streaming: entry.streaming })
-    } else if (entry?.kind === 'tool') {
+    if (entry?.kind === 'tool') {
       steps.push(toolStep(entry))
       if (entry.permission) waiting = true
     } else if (entry?.kind === 'plan') {
@@ -67,11 +64,7 @@ export const RunGroup = memo(function RunGroup({
   const { parts, failed, running } = runSummary(steps)
   const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
   const spaced = useMemo(
-    () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'c')),
-    [entryIds, signature],
-  )
-  const notes = useMemo(
-    () => new Set(entryIds.filter((_, i) => signature[i] === 'c')),
+    () => new Set(entryIds.filter((_, i) => signature[i] === 'p')),
     [entryIds, signature],
   )
   const open = waiting || (userOpen ?? false)
@@ -109,18 +102,14 @@ export const RunGroup = memo(function RunGroup({
                 agentName={agentName}
               />
             ) : (
-              // A plan, a compaction or a progress note is not a row, so it keeps room from them.
+              // A plan or compaction is not a row, so it keeps room from them.
               <div key={item.key} className={cn(spaced.has(item.id) && 'py-1.5')}>
-                {notes.has(item.id) ? (
-                  <AgentEntry sessionId={sessionId} entryId={item.id} note />
-                ) : (
-                  <Entry
-                    sessionId={sessionId}
-                    entryId={item.id}
-                    projectPath={projectPath}
-                    agentName={agentName}
-                  />
-                )}
+                <Entry
+                  sessionId={sessionId}
+                  entryId={item.id}
+                  projectPath={projectPath}
+                  agentName={agentName}
+                />
               </div>
             ),
           )}
