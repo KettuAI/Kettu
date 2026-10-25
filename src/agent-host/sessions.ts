@@ -3210,6 +3210,10 @@ export class SessionManager {
       lastViewedAt: now,
       branch: null,
     }
+    // A queued prompt, the attachments it holds, and the source's pin or archive stay with it.
+    delete record.queue
+    delete record.pinnedAt
+    delete record.archivedAt
     this.stampConfig(record)
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
