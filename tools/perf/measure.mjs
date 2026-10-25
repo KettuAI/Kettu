@@ -130,18 +130,33 @@ const fakeAgentTab = `[...document.querySelectorAll('[role=tab]')].find((t) => t
 // Before its first session the fake agent's pane offers the agent; after it, its models.
 const fakeAgentChoice = `[...document.querySelectorAll('[role=option]')].find((o) => /Use Fake agent|Fake Balanced/.test(o.textContent))`
 
-// From the first project's +, which opens New session there, with the fake agent chosen in the
-// agent menu. The session is created with its first message, so a short /status turn makes it
-// ready before anything is measured.
+const projectButton = `document.querySelector('button[aria-label="Project"]')`
+
+// From the sidebar's New session row, which is there before any session, with the first project
+// chosen in the route line and the fake agent in the agent menu. The session is created with its
+// first message, so a short /status turn makes it ready before anything is measured.
 async function newFakeSession() {
   await click(
-    `return document.querySelector('[data-sidebar=menu-action][aria-label^="New session in "]')`,
-    "a project's + (open a project)",
+    `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.includes('New session'))`,
+    "the sidebar's New session row",
   )
   await waitFor(
     `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
     { what: 'the New session screen' },
   )
+  // A project with no sessions has no sidebar row, so the first one is chosen here.
+  const projectName = await evaluate(`(async () => {
+    const [project] = await window.overbench.agents.request('projects.list', undefined)
+    return project.name
+  })()`)
+  const showsProject = `(${projectButton}?.textContent ?? '').includes(${JSON.stringify(projectName)})`
+  if (!(await evaluate(showsProject))) {
+    await click(`return ${projectButton}`, 'the project menu')
+    const option = `[...document.querySelectorAll('[role=option]')].find((o) => o.textContent.includes(${JSON.stringify(projectName)}))`
+    await waitFor(`Boolean(${option})`, { what: 'the scratch project in the project menu' })
+    await click(`return ${option}`, 'the scratch project')
+    await waitFor(showsProject, { what: 'the scratch project on the New session screen' })
+  }
   if (!(await evaluate(`Boolean(${agentButton}?.textContent.includes('Fake agent'))`))) {
     await click(`return ${agentButton}`, 'the agent menu')
     // Right after launch the menu can open before the agents are listed.
@@ -290,23 +305,28 @@ const after = await evaluate('window.overbench.app.perfMetrics()')
 const agentHost = after.processes.find((p) => p.name === 'OverBench Agent Host')
 results.agentHostMB = agentHost ? agentHost.workingSetKB / 1024 : null
 
-/** Closes the shown session through its menu, which leaves it for New session. */
-async function closeShownSession() {
-  await click(
-    `return document.querySelector('header [data-slot=dropdown-menu-trigger]')`,
-    'the session menu',
+/**
+ * Archives the shown session through its menu, which closes it and leaves it for New session, then
+ * brings it back from Settings' side: it returns to the sidebar closed, so it reopens from the store.
+ */
+async function archiveAndRestore(sessionId) {
+  // The trigger's own attributes: its tooltip wrapper has no menu trigger slot.
+  const trigger = `document.querySelector('header button[aria-haspopup=menu][aria-label="More actions"]')`
+  await click(`return ${trigger}`, 'the session menu')
+  await waitFor(`Boolean(document.querySelector('[role=menuitem][data-accelerator="A"]'))`, {
+    what: 'the session menu',
+  })
+  await click(`return document.querySelector('[role=menuitem][data-accelerator="A"]')`, 'Archive')
+  await waitFor(`!${trigger}`, {
+    what: 'New session after Archive',
+  })
+  await evaluate(
+    `window.overbench.agents.request('sessions.unarchive', { sessionId: ${JSON.stringify(sessionId)} })`,
   )
   await waitFor(
-    `[...document.querySelectorAll('[role=menuitem]')].some((m) => m.textContent.trim() === 'Close')`,
-    { what: 'the session menu' },
+    `Boolean(document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]'))`,
+    { what: 'the restored session in the sidebar' },
   )
-  await click(
-    `return [...document.querySelectorAll('[role=menuitem]')].find((m) => m.textContent.trim() === 'Close')`,
-    'Close',
-  )
-  await waitFor(`!document.querySelector('header [data-slot=dropdown-menu-trigger]')`, {
-    what: 'New session after Close',
-  })
 }
 
 /**
@@ -344,8 +364,8 @@ async function switchTo(sessionId, what) {
 
 /**
  * A session of `entries` entries, imported from the fake agent as from its CLI. Its first open
- * replays the history with `session/load` and stores it; closed again, it reopens from the store,
- * a page at a time, as any session with a long history does.
+ * replays the history with `session/load` and stores it; archived and brought back, it reopens
+ * from the store, a page at a time, as any session with a long history does.
  */
 async function storedHistory(entries) {
   const sessionId = await evaluate(`(async () => {
@@ -365,7 +385,7 @@ async function storedHistory(entries) {
     },
   )
   await switchTo(sessionId, `the imported ${entries}-entry session`)
-  await closeShownSession()
+  await archiveAndRestore(sessionId)
   return sessionId
 }
 
