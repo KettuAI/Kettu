@@ -14,8 +14,6 @@
   "summary": {
     "separator": " · ",
     "nameSeparator": ", ",
-    "thought": "Thought",
-    "thoughtFor": "Thought for {{duration}}",
     "plan": "Updated the plan",
     "compaction": "Compacted the context",
     "execute_one": "Ran a command",
@@ -99,11 +97,6 @@
     "runsForParent": "{{agent}} runs this subagent for <parent>its parent session</parent>",
     "stop": "Stop",
     "back": "Back to {{title}}"
-  },
-  "thought": {
-    "live": "Thinking",
-    "done": "Thought",
-    "doneFor": "Thought for {{duration}}"
   },
   "sessionMessage": {
     "from": "From {{title}}",

@@ -2,8 +2,8 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
-// groupable lookup, t other tool, w tool waiting for permission, p plan or compaction, e turn
-// end, o anything else.
+// groupable lookup, t other tool, w tool waiting for permission, p plan or compaction, c progress
+// note, e turn end, o anything else.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -29,12 +29,13 @@ function charOf(entry: ThreadEntry | undefined): string {
   return 't'
 }
 
-/**
- * The agent's work between messages, which a run folds: thoughts, tool calls, plan updates,
- * compactions and progress notes (c, below). Messages never fold.
- */
-const isStep = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'p' || char === 'c'
+/** Work after a message makes that message a progress note. Thoughts count as work here. */
+const isWork = (char: string | undefined): boolean =>
+  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'p'
+
+/** Tool calls, plans and compactions fold into a run. Thoughts and notes end it. */
+const foldsIntoRun = (char: string | undefined): boolean =>
+  char === 'g' || char === 't' || char === 'w' || char === 'p'
 
 /**
  * Marks progress notes as c: an agent message that more work in its turn follows, as Codex's
@@ -48,7 +49,7 @@ function markNotes(signature: string): string {
   starts.forEach((start, n) => {
     const end = starts[n + 1] ?? chars.length
     let workEnd = end
-    while (workEnd > start && !isStep(chars[workEnd - 1])) workEnd--
+    while (workEnd > start && !isWork(chars[workEnd - 1])) workEnd--
     for (let i = start; i < workEnd; i++) if (chars[i] === 'a') chars[i] = 'c'
   })
   return chars.join('')
@@ -64,6 +65,7 @@ export type Item =
       type: 'entry'
       id: string
       turnStart: boolean
+      note: boolean
     }
   | { key: string; type: 'group'; ids: string[] }
   // The work between messages, two or more steps or a lone tool call, folded into one line.
@@ -74,7 +76,7 @@ export type Item =
 /**
  * The thread's items. Work folds as it happens, so a running turn already reads as it will once it
  * ends. With `live`, a turn is running and gets its reply footer only when it ends. With `notes`,
- * the agent's messages that more work follows are progress notes and fold with it.
+ * the agent's messages that more work follows are progress notes and show between the runs.
  */
 export function buildItems(order: string[], shape: string, live = false, notes = false): Item[] {
   const signature = notes ? markNotes(shape) : shape
@@ -86,12 +88,12 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       items.push(footer)
       continue
     }
-    if (isStep(signature[i])) {
+    if (foldsIntoRun(signature[i])) {
       let end = i
-      while (isStep(signature[end + 1])) end++
+      while (foldsIntoRun(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
       // A lone tool call folds too, so every piece of work reads as one quiet line; a request
-      // for permission, a thought and a plan show as they are.
+      // for permission and a plan or compaction show as they are.
       const lone = end === i && (signature[i] === 'g' || signature[i] === 't')
       if (end > i || lone) {
         items.push({
@@ -102,7 +104,7 @@ export function buildItems(order: string[], shape: string, live = false, notes =
         })
       } else {
         for (const step of stepItems(ids, signature.slice(i, end + 1))) {
-          items.push(step.type === 'group' ? step : { ...step, turnStart: false })
+          items.push(step.type === 'group' ? step : { ...step, turnStart: false, note: false })
         }
       }
       i = end
@@ -116,6 +118,7 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       type: 'entry',
       id,
       turnStart: signature[i] === 'u',
+      note: signature[i] === 'c',
     })
     const closing = after.get(i)
     if (closing) items.push(closing)
