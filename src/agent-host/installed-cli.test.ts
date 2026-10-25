@@ -262,6 +262,7 @@ describe('parseCliVersion', () => {
   it('takes the first version in what --version prints', () => {
     expect(parseCliVersion('2.1.304 (Claude Code)\n')).toBe('2.1.304')
     expect(parseCliVersion('codex-cli 0.163.0\n')).toBe('0.163.0')
+    expect(parseCliVersion('opencode v2.0.32\n')).toBe('2.0.32')
     expect(parseCliVersion('usage: claude [options]')).toBeNull()
   })
 })
