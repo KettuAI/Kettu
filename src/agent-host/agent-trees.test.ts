@@ -182,6 +182,27 @@ describe('AgentTrees', () => {
     expect(await stored()).toEqual([root])
   })
 
+  it('logs a listing failure when it is new since the last success', async () => {
+    const { trees, control, logs } = await setup('linux', [[row(100, 1, 100)]])
+    const enoent = Object.assign(new Error('ps not found'), { code: 'ENOENT' })
+    const timeout = Object.assign(new Error('ps timed out'), { code: 'ETIMEDOUT' })
+    const outcomes = [enoent, enoent, [row(100, 1, 100)], timeout, enoent]
+    control.list = async () => {
+      const next = outcomes.shift()
+      if (next instanceof Error) throw next
+      return next ?? []
+    }
+    await trees.load()
+    trees.launched(root)
+    for (let i = 0; i < 5; i++) await trees.note(root)
+
+    const warnings = logs.filter((line) => line.startsWith('Could not list'))
+    expect(warnings).toHaveLength(3)
+    expect(warnings[0]).toContain('ps not found')
+    expect(warnings[1]).toContain('ps timed out')
+    expect(warnings[2]).toContain('ps not found')
+  })
+
   it('stops what the last run left, and forgets it', async () => {
     const { trees, calls, stored, file, endGrace } = await setup('linux', [
       [row(100, 1, 100), row(101, 100, 100)],
