@@ -45,6 +45,20 @@ mac:
     - '!node_modules/node-pty/prebuilds/win32-*{,/**/*}'
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
+  # The volume and its window carry the name alone; the file name has the version and architecture.
+  title: ${productName}
+  # electron-builder sizes the window from the background and ignores dmg.window, so the background
+  # is drawn at the window's size, for the icons below (tools/brand/dmg-layout.mjs).
+  background: build/dmg-background.png
+  iconSize: 128
+  iconTextSize: 13
+  contents:
+    - x: 192
+      y: 140
+    - x: 448
+      y: 140
+      type: link
+      path: /Applications
 
 win:
   target: nsis

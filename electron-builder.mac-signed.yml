@@ -24,3 +24,6 @@ mac:
     NSMicrophoneUsageDescription: A command that an agent or the terminal runs wants to use the microphone.
   # Notarizes and staples the app with the credentials in the environment.
   notarize: true
+dmg:
+  # A Developer ID build opens without asking, so its background has no first-launch lines.
+  background: build/dmg-background-signed.png
