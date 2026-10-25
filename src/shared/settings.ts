@@ -38,7 +38,7 @@ export interface SettingsFile {
   privacy: { hideAccount: boolean } // masks emails and account names on screen
   usage: {
     fromComputer: boolean // read the agents' own logs
-    sidebar: 'today' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
+    sidebar: 'today' | 'cost' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
   }
 }
 

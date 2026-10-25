@@ -74,6 +74,7 @@ import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
 import { visibleProjects } from './project-group'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
+import { costText } from './usage-row'
 
 export function AppSidebar() {
   const { t } = useTranslation('sidebar')
@@ -268,18 +269,26 @@ function RoutineSignalMark({
   )
 }
 
-/** The Usage row; its end shows today's tokens or the tightest plan limit, as Settings chooses. */
+/** The Usage row; its end shows today's tokens, cost or plan limit, as Settings chooses. */
 function UsageNavRow() {
   const { t } = useTranslation('usage')
   const current = useViewStore((s) => s.main.kind === 'usage' && !s.settings.open)
   const end = useSettingsStore((s) => s.settings.usage.sidebar)
+  const extra =
+    end === 'today' ? (
+      <TodayTokens />
+    ) : end === 'cost' ? (
+      <TodayCost />
+    ) : end === 'limit' ? (
+      <TightestLimit />
+    ) : undefined
   return (
     <NavRow
       icon={<ChartNoAxesColumnIcon />}
       label={t('nav.usage')}
       current={current}
       onClick={openUsage}
-      extra={end === 'today' ? <TodayTokens /> : end === 'limit' ? <TightestLimit /> : undefined}
+      extra={extra}
     />
   )
 }
@@ -297,6 +306,31 @@ function TodayTokens() {
       <span aria-hidden>{tokens(today)}</span>
       <span className="sr-only">{t('nav.today', { tokens: tokens(today) })}</span>
     </span>
+  )
+}
+
+function TodayCost() {
+  const { t } = useTranslation('usage')
+  const cost = useUsageStore((s) => s.todayCost)
+  const day = dayOf(useNow())
+  // A new day starts from nothing, whether or not a turn ends to say so.
+  useEffect(() => void loadToday(), [day])
+  const text = costText(cost)
+  // Quiet until there is something to show.
+  if (!text) return null
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="text-xs font-normal text-tertiary tabular-nums group-data-active/menu-button:text-secondary" />
+        }
+        delay={700}
+      >
+        <span aria-hidden>{text}</span>
+        <span className="sr-only">{t('nav.todayCost', { cost: text })}</span>
+      </TooltipTrigger>
+      <TooltipContent>{t('nav.costEstimate')}</TooltipContent>
+    </Tooltip>
   )
 }
 

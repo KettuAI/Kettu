@@ -38,6 +38,12 @@ describe('validateSettingsPatch', () => {
     expect(() => validateSettingsPatch({ general: { defaultAgent: null } })).not.toThrow()
   })
 
+  it("accepts today's cost as what the sidebar shows", () => {
+    expect(validateSettingsPatch({ usage: { sidebar: 'cost' } })).toEqual({
+      usage: { sidebar: 'cost' },
+    })
+  })
+
   it.each([
     [null, 'must be an object'],
     [[], 'must be an object'],
