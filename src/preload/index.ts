@@ -97,6 +97,9 @@ const api: OverbenchApi = {
     update: (patch) => invoke('settings:update', patch),
     onChanged: onSettingsChanged,
   },
+  loginItem: {
+    getStatus: () => invoke('login-item:status'),
+  },
   dialogs: {
     openProject: () => invoke('dialog:open-project'),
     chooseAgentBinary: (agentId) => invoke('dialog:choose-agent-binary', agentId),

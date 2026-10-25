@@ -15,7 +15,9 @@
     "open": "打开 {{name}}",
     "switchOn": "开启 {{name}}",
     "switchOff": "关闭 {{name}}",
-    "lastFailed": "它上次运行失败"
+    "lastFailed": "它上次运行失败",
+    "openAtLogin": "例程只在 OverBench 打开时运行。",
+    "openAtLoginAction": "登录时打开"
   },
   "signal": {
     "name": "例程，{{signal}}",

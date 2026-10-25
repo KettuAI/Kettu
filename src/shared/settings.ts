@@ -10,6 +10,7 @@ export interface SettingsFile {
     sendKey: 'enter' | 'mod-enter' // the other key inserts a newline
     restoreLastSession: boolean
     confirmQuitWhileRunning: boolean
+    openAtLogin: boolean // start at login, so routines keep their schedule
   }
   appearance: {
     theme: 'system' | 'light' | 'dark'
@@ -64,6 +65,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     sendKey: 'enter',
     restoreLastSession: true,
     confirmQuitWhileRunning: true,
+    openAtLogin: false,
   },
   appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system', zoom: 1 },
   notifications: {

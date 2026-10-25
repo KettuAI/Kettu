@@ -41,6 +41,7 @@ const SECTION_FIELDS = {
     sendKey: oneOf('enter', 'mod-enter'),
     restoreLastSession: isBoolean,
     confirmQuitWhileRunning: isBoolean,
+    openAtLogin: isBoolean,
   },
   appearance: {
     theme: oneOf('system', 'light', 'dark'),

@@ -147,6 +147,22 @@ export function GeneralSwitch({
   )
 }
 
+export function OpenAtLogin({ label, disabled }: { label: string; disabled: boolean }) {
+  const checked = useSettings().general.openAtLogin
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        disabled={disabled}
+        onChange={(v) => apply({ general: { openAtLogin: v } })}
+      />
+    </>
+  )
+}
+
 export function SendKey() {
   const { t } = useTranslation('settings')
   const value = useSettings().general.sendKey

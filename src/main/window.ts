@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/set
 import { mayOpenWindow } from './artifacts/guards'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
+import type { StartMode } from './login-item'
 import { isRendererUrl, loadRenderer } from './renderer'
 import { parseWindowState, placeWindow, type SavedWindowState } from './window-bounds'
 
@@ -141,7 +142,7 @@ export function configureWindows(windowOptions: WindowOptions): void {
   options = windowOptions
 }
 
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
   if (!options) throw new Error('configureWindows must run before a window is created')
   const isMac = process.platform === 'darwin'
   const placement = options.state.placement()
@@ -181,8 +182,10 @@ export function createMainWindow(): BrowserWindow {
   // chose 100%. Set here, it applies before the page's first script runs.
   window.webContents.on('did-navigate', () => window.webContents.setZoomFactor(zoom))
   window.once('ready-to-show', () => {
+    if (start === 'hidden') return
     if (placement.maximized) window.maximize()
     window.show()
+    if (start === 'minimized') window.minimize()
   })
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -213,7 +216,8 @@ export function currentWindow(): BrowserWindow | null {
 export function showMainWindow(): BrowserWindow {
   const window = currentWindow() ?? createMainWindow()
   if (window.isMinimized()) window.restore()
-  if (window.isVisible()) window.focus()
+  window.show()
+  window.focus()
   return window
 }
 

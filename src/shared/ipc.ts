@@ -19,6 +19,13 @@ export interface AppInfo {
   isPackaged: boolean
 }
 
+/** Whether the app can register a login item, and whether macOS waits for the user's approval. */
+export interface LoginItemStatus {
+  /** A development build cannot register one. */
+  available: boolean
+  requiresApproval: boolean
+}
+
 /** A file the Files pane holds unsaved edits for, by its project and its path in it. */
 export interface UnsavedFile {
   projectPath: string
@@ -86,6 +93,7 @@ export interface IpcInvokeContract {
   'app:respond-quit': { args: [id: number, confirmed: boolean]; result: void }
   'settings:get': { args: []; result: SettingsFile }
   'settings:update': { args: [patch: SettingsPatch]; result: SettingsFile }
+  'login-item:status': { args: []; result: LoginItemStatus }
   'dialog:open-project': { args: []; result: string | null }
   'dialog:choose-agent-binary': { args: [agentId: AgentId]; result: string | null }
   'dialog:choose-agent-config-folder': { args: [agentId: AgentId]; result: string | null }
@@ -209,6 +217,9 @@ export interface OverbenchApi {
     get(): Promise<SettingsFile>
     update(patch: SettingsPatch): Promise<SettingsFile>
     onChanged(listener: (settings: SettingsFile) => void): () => void
+  }
+  loginItem: {
+    getStatus(): Promise<LoginItemStatus>
   }
   dialogs: {
     openProject(): Promise<string | null>

@@ -48,9 +48,17 @@
       "name": "Ask before quitting while agents or terminal commands are running",
       "keywords": "quit confirm"
     },
+    "openAtLogin": {
+      "name": "Open at login",
+      "description": "Routines run only while OverBench is open.",
+      "approval": "Allow OverBench in System Settings › General › Login Items.",
+      "unavailable": "Available in the installed app.",
+      "keywords": "login startup launch start routine"
+    },
     "groups": {
       "input": "Language and input",
-      "sessions": "Sessions"
+      "sessions": "Sessions",
+      "startup": "Startup"
     }
   },
   "appearance": {

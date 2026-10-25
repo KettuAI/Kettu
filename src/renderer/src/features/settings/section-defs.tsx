@@ -36,6 +36,7 @@ import {
 import { AgentListItem, AgentsGroupActions, EnvironmentFooter } from './agents-section'
 import { ArchivedRow } from './archived-section'
 import { useAppInfo } from './use-app-info'
+import { useLoginItemStatus } from './use-login-item'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
   BackgroundFetch,
@@ -49,6 +50,7 @@ import {
   Language,
   NotificationPreview,
   NotificationSwitch,
+  OpenAtLogin,
   Proxy,
   ReduceMotion,
   RemoveAll,
@@ -95,6 +97,15 @@ export function useGeneralSection(): SectionDef {
   const en = english()
   const input = group('input', t('general.groups.input'))
   const sessions = group('sessions', t('general.groups.sessions'))
+  const startup = group('startup', t('general.groups.startup'))
+  const loginItem = useLoginItemStatus()
+  const openAtLoginDescription = loginItem
+    ? !loginItem.available
+      ? t('general.openAtLogin.unavailable')
+      : loginItem.requiresApproval
+        ? t('general.openAtLogin.approval')
+        : t('general.openAtLogin.description')
+    : t('general.openAtLogin.description')
   return {
     id: 'general',
     title: t('sections.general'),
@@ -144,6 +155,17 @@ export function useGeneralSection(): SectionDef {
         group: sessions,
         render: () => (
           <GeneralSwitch field="confirmQuitWhileRunning" label={t('general.confirmQuit.name')} />
+        ),
+      },
+      {
+        id: 'open-at-login',
+        name: t('general.openAtLogin.name'),
+        english: en('general.openAtLogin.name'),
+        description: openAtLoginDescription,
+        keywords: t('general.openAtLogin.keywords'),
+        group: startup,
+        render: () => (
+          <OpenAtLogin label={t('general.openAtLogin.name')} disabled={!loginItem?.available} />
         ),
       },
     ],
