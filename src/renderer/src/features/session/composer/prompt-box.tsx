@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AtSignIcon, FileIcon, FolderIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -30,6 +30,7 @@ import {
   replaceMention,
   type MentionRow,
 } from './mentions'
+import { orderSlashMatches } from './slash'
 import { useMentionList, type MentionList } from './use-mention-list'
 import type { PromptBoxState } from './use-prompt-box'
 
@@ -37,6 +38,9 @@ import type { PromptBoxState } from './use-prompt-box'
 // popovers, the attachments and **+**, kept in a draft. What sends, and how, is each one's own.
 
 type PopoverItem = SlashCommand | MentionRow
+
+// 8 px from the list: the rows sit 6 px inside its edge.
+const TIP_OFFSET = 14
 
 const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 
@@ -100,8 +104,7 @@ export function PromptBox({
   const listId = useId()
 
   const slashQuery = text.startsWith('/') && !/\s/.test(text) ? text.slice(1).toLowerCase() : null
-  const slashMatches =
-    slashQuery === null ? [] : commands.filter((c) => c.name.toLowerCase().includes(slashQuery))
+  const slashMatches = slashQuery === null ? [] : orderSlashMatches(commands, slashQuery)
   const slashOpen = slashQuery !== null && slashMatches.length > 0 && !slashDismissed
 
   const mention = mentionAt(text, caret)
@@ -161,9 +164,18 @@ export function PromptBox({
     update(next.text, next.caret)
   }
   const hint = (() => {
+    if (text === '/' && slashOpen) return t('slash.typeToFilter')
     const match = /^\/(\S+)\s$/.exec(text)
     return match ? commands.find((c) => c.name === match[1])?.inputHint : undefined
   })()
+
+  // The highlighted command's description, in a tooltip 8 px beside the list, whichever row it is.
+  const tipText = slashOpen ? (rows[active] as SlashCommand | undefined)?.description : undefined
+  const tipOpen = !!tipText
+  const tipAnchor = useCallback(
+    () => document.getElementById(`${listId}-${active}`),
+    [listId, active],
+  )
 
   const addMenu = (
     <AddMenu
@@ -298,7 +310,12 @@ export function PromptBox({
               ref={popup}
               initialFocus={false}
               finalFocus={false}
-              className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] flex origin-(--transform-origin) flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+              className={cn(
+                'flex max-h-[min(var(--available-height),320px)] origin-(--transform-origin) flex-col overflow-hidden bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+                showing === 'slash'
+                  ? 'w-max max-w-80 min-w-40 rounded-2xl'
+                  : 'w-[min(var(--anchor-width),420px)] rounded-xl',
+              )}
             >
               {listing?.used && listing.rows.length > 0 && <MentionHeader id={`${draft}-used`} />}
               <div
@@ -307,7 +324,8 @@ export function PromptBox({
                 aria-labelledby={listing?.used ? `${draft}-used` : undefined}
                 aria-label={listing && !listing.used ? t('mentions.label') : undefined}
                 className={cn(
-                  'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain p-1',
+                  'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain',
+                  showing === 'slash' ? 'p-1.5' : 'p-1',
                   rows.length === 0 && 'hidden',
                 )}
               >
@@ -338,12 +356,23 @@ export function PromptBox({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
+      {/* Keyed by the row: a tooltip does not follow its anchor to another row on its own. */}
+      <Tooltip key={`${listKey}:${active}`} open={tipOpen}>
+        <TooltipContent
+          anchor={tipAnchor}
+          side="right"
+          sideOffset={TIP_OFFSET}
+          className="pointer-events-none motion-reduce:data-closed:animate-none motion-reduce:data-open:animate-none"
+        >
+          {tipText}
+        </TooltipContent>
+      </Tooltip>
       <ImageDialog target={viewing} onClose={() => setViewing(null)} />
     </>
   )
 }
 
-/** A slash command's row: its name, then its description. */
+/** A slash command's row: its name alone; the description shows in a tooltip. */
 function SlashItem({
   id,
   command,
@@ -362,15 +391,15 @@ function SlashItem({
       role="option"
       id={id}
       aria-selected={highlighted}
+      aria-description={command.description || undefined}
       data-highlighted={highlighted ? '' : undefined}
       // Pressing a row keeps the focus, and with it the caret, in the box.
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHighlight}
       onClick={onChoose}
-      className="flex min-h-row cursor-default items-baseline gap-2 rounded-md px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
+      className="flex min-h-row cursor-default items-center rounded-lg px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
     >
-      <span className="shrink-0 font-mono text-xs">/{command.name}</span>
-      <span className="min-w-0 truncate text-muted-foreground">{command.description}</span>
+      <span className="truncate">{command.name}</span>
     </div>
   )
 }
