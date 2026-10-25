@@ -34,7 +34,7 @@
     "running": "运行中",
     "starting": "启动中",
     "queued": "排队中",
-    "next": "下次运行 {{when}}"
+    "next": "下次运行 {{when}} · {{away}}"
   },
   "when": {
     "today": "今天 {{time}}",
@@ -50,7 +50,48 @@
     "everyMinutes": "每 {{count}} 分钟",
     "everyHours_one": "每小时",
     "everyHours_other": "每 {{count}} 小时",
-    "cron": "Cron {{expression}}"
+    "cron": "Cron {{expression}}",
+    "kind": {
+      "once": "一次",
+      "every": "每隔",
+      "daily": "每天",
+      "weekly": "每周",
+      "cron": "Cron"
+    },
+    "nextRuns": "接下来几次",
+    "runAt": "{{when}} · {{away}}",
+    "clockGap": "钟表跳过这个时间，将在 {{time}} 运行。",
+    "clockOverlap": "钟表重复这个时间，只在第一次运行。",
+    "everyValue": "每隔",
+    "unit": "单位",
+    "minutesUnit": "分钟",
+    "hoursUnit": "小时",
+    "date": "日期",
+    "time": "时间",
+    "days": "星期",
+    "expression": "Cron 表达式",
+    "expressionHint": "0 9 * * 1-5",
+    "field": {
+      "date": "日期",
+      "time": "时间",
+      "every": "间隔",
+      "days": "星期",
+      "expression": "Cron 表达式",
+      "minute": "分钟",
+      "hour": "小时",
+      "dayOfMonth": "日期中的日",
+      "month": "月份",
+      "dayOfWeek": "星期几"
+    },
+    "problem": {
+      "format": "{{field}}：{{detail}}",
+      "range": "{{field}}：{{detail}} 超出 {{min}} 到 {{max}}。",
+      "past": "{{field}}：选择一个将来的时间。",
+      "never": "{{field}}：未来五年内不会运行。",
+      "frequent": "{{field}}：两次运行至少间隔 5 分钟。",
+      "empty": "{{field}}：至少选择一天。"
+    },
+    "unvalid": "未保存。例程仍按上一个有效计划运行：{{schedule}}"
   },
   "routine": {
     "back": "例程",
@@ -75,6 +116,10 @@
     "agentDescription": "它的运行使用的 Agent、模型和选项。",
     "timeLimit": "时间限制",
     "timeLimitDescription": "运行到达这个时间就停止，等待你的时间不计入。",
+    "schedule": "计划",
+    "scheduleDescription": "它的运行在本地时间何时开始。",
+    "scheduleNotSaved": "这个计划尚未保存；修正后即可保存。",
+    "createMissingSchedule": "先修正计划。",
     "waitingTitle": "有一个运行正在等待你的批准",
     "waitingDescription": "它请求做超出其权限的事。其间到期的运行会被跳过。",
     "openRun": "打开该运行",

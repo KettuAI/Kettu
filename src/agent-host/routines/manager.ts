@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { RoutineList, SessionSummary } from '@shared/agent-host'
+import { nextRuns } from '@shared/schedule'
 import {
   KEPT_RUN_SESSIONS,
   RUN_OUTPUT_BYTES,
@@ -29,6 +30,8 @@ import type { JsonFile, LogFn, RoutinesFile } from '../storage'
 import type { ThreadStore } from '../threads/store'
 import type { RoutineCallName, RoutineCalls, RoutineRunStats } from './calls'
 import type { RoutineSessionHooks, RoutineSessions, RunTurnResult } from './hooks'
+import { RoutineScheduler, SYSTEM_CLOCK, type RoutineClock } from './scheduler'
+import type { SchedulerRoutine } from './scheduler'
 
 export interface RoutineTimings {
   /** How long a minute of a run's time limit lasts; a minute, shortened by tests. */
@@ -63,6 +66,8 @@ export interface RoutinesDeps {
   /** A project folder, canonical; rejects when it is missing. */
   resolveProject(path: string): Promise<string>
   now?: () => number
+  /** The scheduler's clock and timer; the system's by default, or a test's. */
+  clock?: RoutineClock
   timings?: Partial<RoutineTimings>
 }
 
@@ -89,8 +94,12 @@ export class RoutinesManager {
   private readonly bySession = new Map<string, string>()
   private readonly queued: string[] = []
   private readonly lastViews = new Map<string, string>()
+  /** The latest skipped run of each routine, while skips stay consecutive. */
+  private readonly lastSkips = new Map<string, RoutineRun>()
   private readonly writes = new Set<Promise<unknown>>()
   private readonly deleting = new Set<string>()
+  private readonly clock: RoutineClock
+  private readonly scheduler: RoutineScheduler
   private readonly now: () => number
   private readonly timings: RoutineTimings
   private problem: RoutinesProblem | null = null
@@ -99,8 +108,15 @@ export class RoutinesManager {
   private working = false
 
   constructor(private readonly deps: RoutinesDeps) {
-    this.now = deps.now ?? Date.now
+    this.clock = deps.clock ?? { ...SYSTEM_CLOCK, now: deps.now ?? SYSTEM_CLOCK.now }
+    this.now = () => this.clock.now()
     this.timings = { ...ROUTINE_TIMINGS, ...deps.timings }
+    this.scheduler = new RoutineScheduler({
+      clock: this.clock,
+      routines: () => [...this.routines.values()].map(schedulerRoutine),
+      due: (routineId, at, trigger, count) => this.scheduled(routineId, at, trigger, count),
+      accounted: (routineId, at) => this.account(routineId, at),
+    })
   }
 
   /** The hooks the sessions manager calls for a run's session. */
@@ -127,6 +143,31 @@ export class RoutinesManager {
       this.persist({ ...run, status: 'interrupted', endedAt: now, seen: false })
     }
     this.loaded = true
+    this.settleOnce()
+  }
+
+  /** A one-time routine whose time is accounted for is off, even if the host stopped mid-run. */
+  private settleOnce(): void {
+    let changed = false
+    for (const [routineId, routine] of this.routines) {
+      if (!routine.enabled || routine.trigger.schedule.kind !== 'once') continue
+      if (nextRuns(routine.trigger.schedule, routine.checkedThrough, { count: 1 }).length > 0) {
+        continue
+      }
+      this.routines.set(routineId, { ...routine, enabled: false })
+      changed = true
+    }
+    if (changed) this.save()
+  }
+
+  /** Starts the schedule timer, once the host and its sessions are loaded. */
+  start(): void {
+    this.scheduler.start()
+  }
+
+  /** The computer slept or woke; the timer starts over from the wall clock. */
+  power(state: 'suspend' | 'resume'): void {
+    this.scheduler.power(state)
   }
 
   async list(): Promise<RoutineList> {
@@ -155,6 +196,7 @@ export class RoutinesManager {
     const view = await this.viewOf(routine)
     this.lastViews.set(routine.id, JSON.stringify(view))
     this.deps.events.changed(view)
+    this.scheduler.refresh()
     return view
   }
 
@@ -185,6 +227,7 @@ export class RoutinesManager {
     const view = await this.viewOf(next)
     this.lastViews.set(routineId, JSON.stringify(view))
     this.deps.events.changed(view)
+    this.scheduler.refresh()
     return view
   }
 
@@ -224,9 +267,11 @@ export class RoutinesManager {
       await this.call('remove', { routineId })
       this.routines.delete(routineId)
       this.lastViews.delete(routineId)
+      this.lastSkips.delete(routineId)
       this.save()
       this.setWorking()
       this.deps.events.removed(routineId)
+      this.scheduler.refresh()
       this.startNext()
     } finally {
       this.deleting.delete(routineId)
@@ -236,37 +281,9 @@ export class RoutinesManager {
   async runNow(routineId: string): Promise<RoutineRun> {
     if (!this.loaded) await this.load()
     const routine = this.routineOf(routineId)
-    for (const live of this.runs.values()) {
-      if (live.run.routineId === routineId) throw new HostError('busy', t('routines.busy'))
-    }
+    if (this.activeOf(routineId)) throw new HostError('busy', t('routines.busy'))
     if (this.stopped) throw new HostError('busy', t('routines.stopping'))
-    const working = this.workingCount()
-    const run: RoutineRun = {
-      id: `run-${randomBytes(6).toString('hex')}`,
-      routineId,
-      trigger: 'manual',
-      scheduledFor: null,
-      count: 1,
-      status: working >= WORKING_RUNS ? 'queued' : 'starting',
-      reason: null,
-      sessionId: null,
-      startedAt: null,
-      endedAt: null,
-      workingMs: 0,
-      stopReason: null,
-      error: null,
-      output: null,
-      usage: null,
-      changedFiles: [],
-      seen: false,
-    }
-    const live: LiveRun = { run, workingSince: null, timer: null, intent: null }
-    this.runs.set(run.id, live)
-    this.persist(run)
-    this.emit(run)
-    void this.publish(routineId)
-    if (run.status === 'queued') this.queued.push(run.id)
-    else void this.start(live)
+    const run = this.launch(routine, 'manual', null, 1)
     this.deps.log('info', `Run ${run.id} of ${routine.name}: ${run.status}`)
     return { ...run }
   }
@@ -303,6 +320,129 @@ export class RoutinesManager {
     this.routineOf(routineId)
     await this.call('markSeen', { routineId })
     void this.publish(routineId)
+  }
+
+  /** A scheduled time came due: run it, or record it skipped while the routine still works. */
+  private scheduled(
+    routineId: string,
+    at: number,
+    trigger: 'schedule' | 'catch-up',
+    count: number,
+  ): void {
+    const routine = this.routines.get(routineId)
+    if (!routine || !routine.enabled || this.stopped) return
+    if (this.activeOf(routineId)) {
+      this.skip(routine, at, count)
+      if (routine.trigger.schedule.kind === 'once') this.finishOnce(routineId)
+      return
+    }
+    const run = this.launch(routine, trigger, at, count)
+    this.deps.log('info', `Run ${run.id} of ${routine.name}: ${run.status} (${trigger})`)
+  }
+
+  /** The scheduler moved how far every scheduled time is accounted for. */
+  private account(routineId: string, at: number): void {
+    const routine = this.routines.get(routineId)
+    if (!routine || at <= routine.checkedThrough) return
+    this.routines.set(routineId, { ...routine, checkedThrough: at })
+    this.save()
+  }
+
+  /** A one-time routine ran, so it turns off; its page shows it as done. */
+  private finishOnce(routineId: string): void {
+    const routine = this.routines.get(routineId)
+    if (!routine || !routine.enabled) return
+    const next: Routine = { ...routine, enabled: false, updatedAt: this.now() }
+    this.routines.set(routineId, next)
+    this.save()
+    void this.publish(routineId)
+    this.scheduler.refresh()
+  }
+
+  /** Consecutive due times skipped while the routine works share one record, counted. */
+  private skip(routine: Routine, at: number, count: number): void {
+    const existing = this.lastSkips.get(routine.id)
+    if (existing) {
+      const run: RoutineRun = {
+        ...existing,
+        count: existing.count + count,
+        endedAt: this.now(),
+      }
+      this.lastSkips.set(routine.id, run)
+      this.persist(run)
+      this.emit(run)
+      void this.publish(routine.id)
+      return
+    }
+    const run: RoutineRun = {
+      id: `run-${randomBytes(6).toString('hex')}`,
+      routineId: routine.id,
+      trigger: 'schedule',
+      scheduledFor: at,
+      count,
+      status: 'skipped',
+      reason: 'overlap',
+      sessionId: null,
+      startedAt: null,
+      endedAt: this.now(),
+      workingMs: 0,
+      stopReason: null,
+      error: null,
+      output: null,
+      usage: null,
+      changedFiles: [],
+      seen: false,
+    }
+    this.lastSkips.set(routine.id, run)
+    this.persist(run)
+    this.emit(run)
+    void this.publish(routine.id)
+  }
+
+  /** Starts a run for a routine, queued beyond the runs that may work at once. */
+  private launch(
+    routine: Routine,
+    trigger: RoutineRun['trigger'],
+    scheduledFor: number | null,
+    count: number,
+  ): RoutineRun {
+    const working = this.workingCount()
+    const run: RoutineRun = {
+      id: `run-${randomBytes(6).toString('hex')}`,
+      routineId: routine.id,
+      trigger,
+      scheduledFor,
+      count,
+      status: working >= WORKING_RUNS ? 'queued' : 'starting',
+      reason: null,
+      sessionId: null,
+      startedAt: null,
+      endedAt: null,
+      workingMs: 0,
+      stopReason: null,
+      error: null,
+      output: null,
+      usage: null,
+      changedFiles: [],
+      seen: false,
+    }
+    const live: LiveRun = { run, workingSince: null, timer: null, intent: null }
+    this.runs.set(run.id, live)
+    // A real run breaks the run of skipped times.
+    this.lastSkips.delete(routine.id)
+    this.persist(run)
+    this.emit(run)
+    void this.publish(routine.id)
+    if (run.status === 'queued') this.queued.push(run.id)
+    else void this.begin(live)
+    return run
+  }
+
+  private activeOf(routineId: string): boolean {
+    for (const live of this.runs.values()) {
+      if (live.run.routineId === routineId) return true
+    }
+    return false
   }
 
   /** A run's session was created: the run names it from now on. */
@@ -410,6 +550,7 @@ export class RoutinesManager {
   /** Marks every working run interrupted and flushes the records; the host is stopping. */
   async shutdown(): Promise<void> {
     this.stopped = true
+    this.scheduler.stop()
     for (const live of this.runs.values()) {
       this.pauseClock(live)
       if (live.timer) clearTimeout(live.timer)
@@ -431,7 +572,7 @@ export class RoutinesManager {
     await Promise.allSettled([...this.writes, this.deps.file.flush()])
   }
 
-  private async start(live: LiveRun): Promise<void> {
+  private async begin(live: LiveRun): Promise<void> {
     const routine = this.routines.get(live.run.routineId)
     if (!routine || this.stopped) return
     live.run.status = 'starting'
@@ -539,6 +680,10 @@ export class RoutinesManager {
     void this.publish(run.routineId)
     this.setWorking()
     this.notify(run)
+    if (run.trigger !== 'manual') {
+      const routine = this.routines.get(run.routineId)
+      if (routine?.trigger.schedule.kind === 'once') this.finishOnce(run.routineId)
+    }
     this.startNext()
   }
 
@@ -569,7 +714,7 @@ export class RoutinesManager {
       const runId = this.queued.shift()!
       const live = this.runs.get(runId)
       if (!live || live.run.status !== 'queued') continue
-      void this.start(live)
+      void this.begin(live)
     }
   }
 
@@ -657,7 +802,7 @@ export class RoutinesManager {
     return {
       ...routine,
       state,
-      nextRunAt: null,
+      nextRunAt: this.scheduler.nextRunAt(schedulerRoutine(routine)),
       pause: null,
       activeRun: stats.active,
       lastRun: stats.last,
@@ -731,6 +876,16 @@ export class RoutinesManager {
   ): Promise<RoutineCalls[K]['result']> {
     if (!this.deps.threads) return Promise.reject(new Error('The thread database is not open'))
     return this.deps.threads.routine(name, params)
+  }
+}
+
+/** What the scheduler needs to know of a routine. */
+function schedulerRoutine(routine: Routine): SchedulerRoutine {
+  return {
+    id: routine.id,
+    schedule: routine.trigger.schedule,
+    enabled: routine.enabled,
+    checkedThrough: routine.checkedThrough,
   }
 }
 

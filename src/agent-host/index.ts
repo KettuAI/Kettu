@@ -111,6 +111,9 @@ parentPort.on('message', ({ data, ports }) => {
     case 'host:artifact-import-request':
       withHost((h) => h.artifactImport(message.requestId, message.path, message.project))
       break
+    case 'host:power':
+      withHost((h) => h.power(message.state))
+      break
     case 'host:shutdown':
       if (!host) {
         send({ type: 'host:stopped' })

@@ -11,13 +11,13 @@ import {
 } from '@shared/routines'
 import { startConfig, startValues } from '@renderer/features/session/new-session/start-options'
 import { duration } from '@renderer/lib/format'
-import { i18n } from '@renderer/lib/i18n'
+import { currentLocale, i18n } from '@renderer/lib/i18n'
 import type { OptionValues } from '@renderer/stores/agent-options'
+import { scheduleWords as sharedScheduleWords } from '@shared/schedule'
 
 const MINUTE = 60_000
-const DAY = 24 * 60 * MINUTE
-// A known Sunday, for the weekday names a weekly schedule reads with.
-const SUNDAY = new Date(2024, 0, 7).getTime()
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
 
 const formatters = new Map<string, ReturnType<typeof makeFormatters>>()
 
@@ -25,8 +25,12 @@ function makeFormatters(locale: string) {
   return {
     weekday: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
     monthDay: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
+    monthDayYear: new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
     clock: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }),
-    list: new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }),
   }
 }
 
@@ -37,52 +41,21 @@ function format(): ReturnType<typeof makeFormatters> {
   return made
 }
 
-const weekdayName = (day: number): string => format().weekday.format(SUNDAY + day * DAY)
-
 /** A schedule in words: "Weekdays at 9:00 AM", "Every 2 hours", "Cron 0 9 * * 1". */
 export function scheduleWords(schedule: Schedule): string {
-  switch (schedule.kind) {
-    case 'once': {
-      const at = localDate(schedule.at)
-      return i18n.t('routines:schedule.once', {
-        date: at ? format().monthDay.format(at) : schedule.at,
-        time: clip(schedule.at),
-      })
-    }
-    case 'every':
-      return schedule.minutes % 60 === 0
-        ? i18n.t('routines:schedule.everyHours', {
-            count: schedule.minutes / 60,
-          })
-        : i18n.t('routines:schedule.everyMinutes', { count: schedule.minutes })
-    case 'weekly': {
-      const days = [...schedule.days].sort((a, b) => a - b)
-      const time = clockOf(schedule.time)
-      if (days.length === 7) return i18n.t('routines:schedule.daily', { time })
-      if (days.join() === '1,2,3,4,5') return i18n.t('routines:schedule.weekdays', { time })
-      return i18n.t('routines:schedule.weekly', {
-        days: format().list.format(days.map(weekdayName)),
-        time,
-      })
-    }
-    case 'cron':
-      return i18n.t('routines:schedule.cron', { expression: schedule.expression })
-  }
+  const translate = i18n.t.bind(i18n) as (
+    key: string,
+    params?: Record<string, string | number>,
+  ) => string
+  return sharedScheduleWords(
+    schedule,
+    (key, params) => translate(`routines:${key}`, params),
+    currentLocale(),
+  )
 }
 
-function clip(at: string): string {
-  const time = /T(\d{2}):(\d{2})/.exec(at)
-  return time ? clockOf(`${time[1]}:${time[2]}`) : at
-}
-
-function clockOf(time: string): string {
-  const [hour = 0, minute = 0] = time.split(':').map(Number)
-  return format().clock.format(new Date(2000, 0, 1, hour, minute))
-}
-
-function localDate(at: string): Date | null {
-  const date = new Date(at)
-  return Number.isNaN(date.getTime()) ? null : date
+export function clockTime(at: number): string {
+  return format().clock.format(at)
 }
 
 /** A time as a sentence names it: "Today, 9:00 AM", "Tomorrow, 9:00 AM", "Mon, 9:00 AM". */
@@ -95,7 +68,21 @@ export function dayTime(at: number, now = Date.now()): string {
   if (days > 1 && days <= 6) {
     return i18n.t('routines:when.weekday', { weekday: format().weekday.format(at), time })
   }
-  return i18n.t('routines:when.date', { date: format().monthDay.format(at), time })
+  const date =
+    new Date(at).getFullYear() === new Date(now).getFullYear()
+      ? format().monthDay.format(at)
+      : format().monthDayYear.format(at)
+  return i18n.t('routines:when.date', { date, time })
+}
+
+/** How far ahead a time is: "in 14 h", "in 25 min", "in 3 days". */
+export function untilTime(at: number, now = Date.now()): string {
+  const delta = Math.max(0, at - now)
+  if (delta < HOUR) {
+    return i18n.t('time.inMinutes', { count: Math.max(1, Math.floor(delta / MINUTE)) })
+  }
+  if (delta < DAY) return i18n.t('time.inHours', { count: Math.round(delta / HOUR) })
+  return i18n.t('time.inDays', { count: Math.round(delta / DAY) })
 }
 
 /** A run's time: when it was due, or when it started for Run now. */
@@ -203,7 +190,7 @@ export function routineState(routine: RoutineView): RoutineState {
 }
 
 /** A routine's state as a sentence, for its page under the name. */
-export function stateText(routine: RoutineView): string {
+export function stateText(routine: RoutineView, now = Date.now()): string {
   const state = routineState(routine)
   switch (state.kind) {
     case 'waiting':
@@ -221,7 +208,10 @@ export function stateText(routine: RoutineView): string {
     case 'paused':
       return i18n.t('routines:state.paused')
     case 'next':
-      return i18n.t('routines:state.next', { when: dayTime(state.at) })
+      return i18n.t('routines:state.next', {
+        when: dayTime(state.at, now),
+        away: untilTime(state.at, now),
+      })
     case 'on':
       return i18n.t('routines:state.on')
   }

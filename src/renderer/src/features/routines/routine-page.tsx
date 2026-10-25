@@ -19,8 +19,10 @@ import {
   type RoutineChanges,
   type RoutineOption,
   type RoutineView,
+  type Schedule,
   type TimeLimitMinutes,
 } from '@shared/routines'
+import type { ScheduleProblem } from '@shared/schedule'
 import type { AgentId } from '@shared/thread'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
@@ -43,6 +45,7 @@ import { RowLine, RowShell, RowText } from '@renderer/features/settings/rows'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { basename } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { useNow } from '@renderer/lib/use-now'
 import { i18n } from '@renderer/lib/i18n'
 import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -55,6 +58,7 @@ import { DeleteRoutineDialog } from './delete-routine-dialog'
 import { optionValues, routineOptions, routineState, stateText } from './model'
 import { RoutineMenuItems } from './routine-menu'
 import { RunAnnouncements, RunHistory } from './run-history'
+import { ScheduleField } from './schedule-field'
 
 export default function RoutinePage({ routineId }: { routineId: string | null }) {
   return routineId === null ? <NewRoutine /> : <ExistingRoutine routineId={routineId} />
@@ -187,6 +191,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
   }
 
   const state = routineState(routine)
+  const now = useNow()
 
   return (
     <RoutineShell>
@@ -225,7 +230,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
               {routine.name}
             </button>
           )}
-          <p className="text-small leading-normal text-secondary">{stateText(routine)}</p>
+          <p className="text-small leading-normal text-secondary">{stateText(routine, now)}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" disabled={!!routine.activeRun} onClick={runNow}>
@@ -319,6 +324,9 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
           }}
           timeLimit={routine.timeLimitMinutes}
           onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
+          schedule={routine.trigger.schedule}
+          savedSchedule={routine.trigger.schedule}
+          onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
         />
         <RunHistory routine={routine} />
       </div>
@@ -364,6 +372,8 @@ function NewRoutine() {
   })
   const [values, setValues] = useState<OptionValues>(() => initialValues(agentId))
   const [timeLimit, setTimeLimit] = useState<TimeLimitMinutes>(DEFAULT_TIME_LIMIT)
+  const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE)
+  const [scheduleProblem, setScheduleProblem] = useState<ScheduleProblem | null>(null)
 
   useBackOnEscape()
   useEffect(() => {
@@ -376,7 +386,9 @@ function NewRoutine() {
       ? t('routine.createMissingProject')
       : !agentId
         ? t('routine.createMissingAgent')
-        : null
+        : scheduleProblem
+          ? t('routine.createMissingSchedule')
+          : null
 
   const create = async () => {
     if (missing || !agentId || creating) return
@@ -390,7 +402,7 @@ function NewRoutine() {
         agentId,
         projectPath,
         options: entry ? routineOptions(entry, values) : optionsFrom(values),
-        trigger: { kind: 'schedule', schedule: DEFAULT_SCHEDULE },
+        trigger: { kind: 'schedule', schedule },
         scope: DEFAULT_SCOPE,
         timeLimitMinutes: timeLimit,
       })
@@ -466,6 +478,10 @@ function NewRoutine() {
         onValues={(optionId, value) => setValues((current) => ({ ...current, [optionId]: value }))}
         timeLimit={timeLimit}
         onTimeLimit={setTimeLimit}
+        schedule={schedule}
+        savedSchedule={null}
+        onSchedule={setSchedule}
+        onScheduleProblem={setScheduleProblem}
       />
     </RoutineShell>
   )
@@ -506,6 +522,10 @@ function RoutineFields({
   onValues,
   timeLimit,
   onTimeLimit,
+  schedule,
+  savedSchedule,
+  onSchedule,
+  onScheduleProblem,
 }: {
   prompt: string
   onPrompt: (prompt: string) => void
@@ -522,6 +542,10 @@ function RoutineFields({
   onValues: (optionId: string, value: string | boolean) => void
   timeLimit: TimeLimitMinutes
   onTimeLimit: (timeLimit: TimeLimitMinutes) => void
+  schedule: Schedule
+  savedSchedule: Schedule | null
+  onSchedule: (schedule: Schedule) => void
+  onScheduleProblem?: (problem: ScheduleProblem | null) => void
 }) {
   const { t } = useTranslation('routines')
   const projects = useProjectsStore((s) => s.projects)
@@ -587,6 +611,17 @@ function RoutineFields({
         <h2 className="flex h-7.5 items-center px-1 text-xs font-medium text-tertiary">
           {t('routine.howItRuns')}
         </h2>
+        <RowShell>
+          <div className="py-3">
+            <RowText name={t('routine.schedule')} description={t('routine.scheduleDescription')} />
+            <ScheduleField
+              schedule={schedule}
+              saved={savedSchedule}
+              onSchedule={onSchedule}
+              {...(onScheduleProblem ? { onProblem: onScheduleProblem } : {})}
+            />
+          </div>
+        </RowShell>
         <RowShell>
           <RowLine
             text={

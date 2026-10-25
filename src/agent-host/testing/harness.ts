@@ -36,6 +36,7 @@ import type { CacheTtlReader } from '../prompt-cache'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
 import type { RoutineTimings } from '../routines/manager'
+import type { RoutineClock } from '../routines/scheduler'
 import type { LogReader } from '../usage/model'
 import { inThreadWorker } from './thread-worker'
 import { inUsageWorker } from './usage-worker'
@@ -254,6 +255,7 @@ export interface TestHostOptions {
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
   routineTimings?: Partial<RoutineTimings>
+  routineClock?: RoutineClock
   treeNoteMs?: number
   processControl?: ProcessControl
   launcher?: AgentLauncher
@@ -320,6 +322,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     agentTimings: options.agentTimings ?? {},
     sessionTimings: options.sessionTimings ?? {},
     ...(options.routineTimings ? { routineTimings: options.routineTimings } : {}),
+    ...(options.routineClock ? { routineClock: options.routineClock } : {}),
     ...(options.treeNoteMs !== undefined ? { treeNoteMs: options.treeNoteMs } : {}),
     ...(options.processControl ? { processControl: options.processControl } : {}),
     threadWorker: inThreadWorker,

@@ -23,7 +23,11 @@
     "seconds": "{{s}} s",
     "minutesSeconds": "{{m}} m {{s}} s",
     "minutesLeft": "{{m}} min",
-    "hoursMinutes": "{{h}} h {{m}} m"
+    "hoursMinutes": "{{h}} h {{m}} m",
+    "inMinutes": "in {{count}} min",
+    "inHours": "in {{count}} h",
+    "inDays_one": "in {{count}} day",
+    "inDays_other": "in {{count}} days"
   },
   "errors": {
     "hostRestarted": "A background process of OverBench restarted. Try again."

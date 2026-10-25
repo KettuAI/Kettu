@@ -34,7 +34,7 @@
     "running": "Running",
     "starting": "Starting",
     "queued": "Queued",
-    "next": "Next run {{when}}"
+    "next": "Next run {{when}} · {{away}}"
   },
   "when": {
     "today": "Today, {{time}}",
@@ -50,7 +50,48 @@
     "everyMinutes": "Every {{count}} minutes",
     "everyHours_one": "Every hour",
     "everyHours_other": "Every {{count}} hours",
-    "cron": "Cron {{expression}}"
+    "cron": "Cron {{expression}}",
+    "kind": {
+      "once": "Once",
+      "every": "Every",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "cron": "Cron"
+    },
+    "nextRuns": "Next runs",
+    "runAt": "{{when}} · {{away}}",
+    "clockGap": "The clocks skip this time; it runs at {{time}}.",
+    "clockOverlap": "The clocks repeat this time; it runs once, at the first.",
+    "everyValue": "Every",
+    "unit": "Unit",
+    "minutesUnit": "minutes",
+    "hoursUnit": "hours",
+    "date": "Date",
+    "time": "Time",
+    "days": "Days",
+    "expression": "Cron expression",
+    "expressionHint": "0 9 * * 1-5",
+    "field": {
+      "date": "Date",
+      "time": "Time",
+      "every": "Every",
+      "days": "Days",
+      "expression": "Cron expression",
+      "minute": "Minute",
+      "hour": "Hour",
+      "dayOfMonth": "Day of month",
+      "month": "Month",
+      "dayOfWeek": "Day of week"
+    },
+    "problem": {
+      "format": "{{field}}: {{detail}}",
+      "range": "{{field}}: {{detail}} is outside {{min}} to {{max}}.",
+      "past": "{{field}}: choose a time in the future.",
+      "never": "{{field}}: nothing matches in the next five years.",
+      "frequent": "{{field}}: runs must be at least 5 minutes apart.",
+      "empty": "{{field}}: choose at least one day."
+    },
+    "unvalid": "Not saved. The routine still runs on its last valid schedule: {{schedule}}"
   },
   "routine": {
     "back": "Routines",
@@ -75,6 +116,10 @@
     "agentDescription": "The agent its runs start, with the model and options they use.",
     "timeLimit": "Time limit",
     "timeLimitDescription": "A run stops when it reaches this time, not counting the time it waits for you.",
+    "schedule": "Schedule",
+    "scheduleDescription": "When its runs start, in your local time.",
+    "scheduleNotSaved": "This schedule is not saved yet; fix it to save it.",
+    "createMissingSchedule": "Fix the schedule first.",
     "waitingTitle": "A run is waiting for your approval",
     "waitingDescription": "It asked to do something outside its permissions. Runs due meanwhile are skipped.",
     "openRun": "Open the run",

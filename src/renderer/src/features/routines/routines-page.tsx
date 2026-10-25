@@ -31,6 +31,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Switch } from '@renderer/components/ui/switch'
 import { TopBar } from '@renderer/features/shell/top-bar'
 import { errorMessage } from '@renderer/lib/host'
+import { useNow } from '@renderer/lib/use-now'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { openRoutine } from '@renderer/stores/view'
@@ -261,6 +262,7 @@ function RoutineRow({
 }) {
   const { t } = useTranslation('routines')
   const projects = useProjectsStore((s) => s.projects)
+  const now = useNow()
   const [moreOpen, setMoreOpen] = useState(false)
   const project = routineProject(routine, projects)
   const failed = failedRun(routine.lastRun)
@@ -324,7 +326,7 @@ function RoutineRow({
             </span>
           </span>
           <span className="pointer-events-none relative shrink-0">
-            <RowState routine={routine} />
+            <RowState routine={routine} now={now} />
           </span>
           <Switch
             checked={routine.enabled}
@@ -368,7 +370,7 @@ function RoutineRow({
 }
 
 /** What the routine is doing at the row's end, by a session row's priorities. */
-function RowState({ routine }: { routine: RoutineView }) {
+function RowState({ routine, now }: { routine: RoutineView; now: number }) {
   const { t } = useTranslation('routines')
   const state = routineState(routine)
   if (state.kind === 'waiting') {
@@ -382,7 +384,7 @@ function RowState({ routine }: { routine: RoutineView }) {
       </span>
     )
   }
-  return <span className="text-xs text-tertiary">{stateText(routine)}</span>
+  return <span className="text-xs text-tertiary">{stateText(routine, now)}</span>
 }
 
 /** The list is one Tab stop; the arrow keys move between its rows. */
