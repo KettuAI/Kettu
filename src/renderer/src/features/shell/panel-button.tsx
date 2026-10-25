@@ -7,12 +7,14 @@ export function PanelButton({
   label,
   shortcut,
   pressed,
+  size = 'icon-xs',
   onClick,
   children,
 }: {
   label: string
   shortcut?: string
   pressed?: boolean
+  size?: 'icon-xs' | 'icon-sm'
   onClick: () => void
   children: ReactNode
 }) {
@@ -22,7 +24,7 @@ export function PanelButton({
         render={
           <Button
             variant="quiet"
-            size="icon-xs"
+            size={size}
             aria-label={label}
             aria-pressed={pressed}
             onClick={onClick}
