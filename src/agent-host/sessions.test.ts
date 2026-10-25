@@ -2442,7 +2442,9 @@ describe('a first message whose window went before the start failed', () => {
       type: 'session.returned',
       sessionId: null,
     })
-    expect(await next.request('sessions.takeReturned', { sessionId: null })).toEqual([prompt])
+    expect(await next.request('sessions.takeReturned', { sessionId: null })).toEqual([
+      { sessionId: null, content: prompt },
+    ])
     expect(await next.request('sessions.takeReturned', { sessionId: null })).toEqual([])
   })
 
@@ -2453,7 +2455,9 @@ describe('a first message whose window went before the start failed', () => {
 
     current = await startTestHost({ userDataPath: first.dir })
     const port = current.connect()
-    expect(await port.request('sessions.takeReturned', { sessionId: null })).toEqual([prompt])
+    expect(await port.request('sessions.takeReturned', {})).toEqual([
+      { sessionId: null, content: prompt },
+    ])
   })
 
   it('is kept nowhere when the window that sent it is still there', async () => {
@@ -2468,6 +2472,133 @@ describe('a first message whose window went before the start failed', () => {
     await expect(creating).rejects.toBeDefined()
     expect(port.events.some((event) => event.type === 'session.returned')).toBe(false)
     expect(await port.request('sessions.takeReturned', { sessionId: null })).toEqual([])
+  })
+})
+
+describe("a failed turn's message", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
+  const text = (value: string) => [{ type: 'text' as const, text: value }]
+  const returned = (port: TestPort) =>
+    port.events.filter((event) => event.type === 'session.returned')
+
+  /** Sends `prompt` and waits for its turn to fail or end. */
+  async function failing(port: TestPort, sessionId: string, prompt: string) {
+    await turn(port, sessionId, prompt)
+    await port.untilEntry(
+      sessionId,
+      (entry) => entry.kind === 'notice' || entry.kind === 'turn_end',
+    )
+    await port.untilStatus(sessionId, 'ready')
+  }
+
+  it('goes back when the agent fails the turn before adding anything', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await failing(port, sessionId, '/error --silent')
+    await port.until(() => returned(port).length > 0)
+    expect(returned(port)).toEqual([{ type: 'session.returned', sessionId }])
+    expect(await port.request('sessions.takeReturned', { sessionId })).toEqual([
+      { sessionId, content: text('/error --silent') },
+    ])
+    expect(await port.request('sessions.takeReturned', { sessionId })).toEqual([])
+    // The thread keeps the message and its error.
+    expect(port.entries(sessionId).map((entry) => entry.kind)).toEqual(['user', 'notice'])
+  })
+
+  it('keeps its attachments held until a composer takes it', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const added = await port.request('attachments.add', {
+      source: { bytes: PNG.slice().buffer, mimeType: 'image/png', name: 'Image 1' },
+      thumb: null,
+    })
+    const ref = { type: 'ref' as const, ref: { kind: 'attachment' as const, attachment: added } }
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: [...text('/error --silent'), ref],
+    })
+    await port.until(() => returned(port).length > 0)
+    expect(await port.request('sessions.takeReturned', {})).toEqual([
+      { sessionId, content: [...text('/error --silent'), ref] },
+    ])
+    const read = await port.request('attachments.read', { id: added.id })
+    expect(new Uint8Array(read.bytes)).toEqual(PNG)
+  })
+
+  it('keeps it across a quit until a window takes it', async () => {
+    const first = await startTestHost()
+    const port = first.connect()
+    const sessionId = await newSession(first, port)
+    await failing(port, sessionId, '/error --silent')
+    await port.until(() => returned(port).length > 0)
+    await first.host.shutdown()
+
+    current = await startTestHost({ userDataPath: first.dir })
+    expect(await current.connect().request('sessions.takeReturned', {})).toEqual([
+      { sessionId, content: text('/error --silent') },
+    ])
+  })
+
+  it('goes back when the agent exits before adding anything', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/crash --silent')
+    await port.untilStatus(sessionId, 'closed')
+    await port.until(() => returned(port).length > 0)
+    expect(await port.request('sessions.takeReturned', { sessionId })).toEqual([
+      { sessionId, content: text('/crash --silent') },
+    ])
+  })
+
+  it('stays in the thread alone once the agent added something', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await failing(port, sessionId, '/error')
+    await turn(port, sessionId, '/crash')
+    await port.untilStatus(sessionId, 'closed')
+    expect(returned(port)).toEqual([])
+    expect(await port.request('sessions.takeReturned', {})).toEqual([])
+  })
+
+  it('stays in the thread alone when Retry sends it again', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await failing(port, sessionId, '/out-of-credit')
+    await turn(port, sessionId, '/auth-required')
+    await port.untilStatus(sessionId, 'auth_required')
+    expect(returned(port)).toEqual([])
+    expect(await port.request('sessions.takeReturned', {})).toEqual([])
+  })
+
+  it('stays in the thread alone when the user stopped the turn', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/error --silent --hold 10000')
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'notice')
+    await port.untilStatus(sessionId, 'ready')
+    expect(returned(port)).toEqual([])
+    expect(await port.request('sessions.takeReturned', {})).toEqual([])
+  })
+
+  it("lets a turn's attachments go once it ends", async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const added = await port.request('attachments.add', {
+      source: { bytes: PNG.slice().buffer, mimeType: 'image/png', name: 'Image 1' },
+      thumb: null,
+    })
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: [
+        ...text('/attachments'),
+        { type: 'ref', ref: { kind: 'attachment', attachment: added } },
+      ],
+    })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    await expect(port.request('attachments.read', { id: added.id })).rejects.toMatchObject({
+      code: 'not_found',
+    })
   })
 })
 

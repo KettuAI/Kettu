@@ -59,6 +59,8 @@ describe('chooseScenario', () => {
   it('reads whether error writes anything before it fails', () => {
     expect(chooseScenario('/error', {}).options.silent).toBe(false)
     expect(chooseScenario('/error --silent', {}).options.silent).toBe(true)
+    expect(chooseScenario('/crash --silent', {}).options.silent).toBe(true)
+    expect(chooseScenario('/error --silent --hold 500', {}).options.holdMs).toBe(500)
   })
 
   it('sizes a large history from --entries, else the environment, else 1,000', () => {

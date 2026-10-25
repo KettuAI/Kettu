@@ -619,6 +619,7 @@ export function createValidators(platform: Platform): Validators {
     'sessions.delete': session,
     'sessions.takeReturned': (params) => {
       const o = fields(params)
+      if (o.sessionId === undefined) return {}
       return { sessionId: o.sessionId === null ? null : sessionId(o) }
     },
     'sessions.removeEmpty': (params) => {

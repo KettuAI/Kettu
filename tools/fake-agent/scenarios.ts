@@ -463,14 +463,16 @@ const longTurn: Scenario = async (turn) => {
 
 // Never resolves: the process is gone before the turn could end.
 const crash: Scenario = async (turn) => {
-  await stream(turn, 'Starting the build. ', { messageId: turn.messageId() })
-  await turn.send({
-    sessionUpdate: 'tool_call',
-    toolCallId: `build-${turn.session.turns}`,
-    title: 'Run pnpm build',
-    kind: 'execute',
-    status: 'in_progress',
-  })
+  if (!turn.options.silent) {
+    await stream(turn, 'Starting the build. ', { messageId: turn.messageId() })
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId: `build-${turn.session.turns}`,
+      title: 'Run pnpm build',
+      kind: 'execute',
+      status: 'in_progress',
+    })
+  }
   await turn.sleep(300)
   turn.log(`fake-agent: crashing with exit code ${turn.options.exitCode}`)
   turn.exit(turn.options.exitCode)
@@ -480,6 +482,7 @@ const crash: Scenario = async (turn) => {
 const error: Scenario = async (turn) => {
   if (!turn.options.silent)
     await stream(turn, 'Checking the build. ', { messageId: turn.messageId() })
+  if (turn.options.holdMs > 0) await waitUnscaled(turn.options.holdMs, turn.signal)
   throw RequestError.internalError(undefined, 'The fake agent failed this turn on purpose')
 }
 

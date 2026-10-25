@@ -142,12 +142,12 @@ describe('createValidators', () => {
     )
   })
 
-  it('takes returned messages for a session or for New session', () => {
+  it('takes returned messages for a session, for New session, or for all', () => {
     expect(posix['sessions.takeReturned']({ sessionId: null })).toEqual({ sessionId: null })
     expect(posix['sessions.takeReturned']({ sessionId: 's1', other: 1 })).toEqual({
       sessionId: 's1',
     })
-    rejects(() => posix['sessions.takeReturned']({}))
+    expect(posix['sessions.takeReturned']({})).toEqual({})
     rejects(() => posix['sessions.takeReturned']({ sessionId: 1 }))
     rejects(() => posix['sessions.takeReturned']({ sessionId: '' }))
   })

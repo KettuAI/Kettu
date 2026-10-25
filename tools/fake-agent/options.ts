@@ -51,8 +51,11 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'long-turn': {
     description: 'Thinks, reads, runs commands and edits until you cancel, as the context grows',
   },
-  crash: { description: 'Exits mid-turn with a non-zero code', hint: '--code <n>' },
-  error: { description: 'Fails the turn with an internal error', hint: '--silent' },
+  crash: { description: 'Exits mid-turn with a non-zero code', hint: '--code <n> --silent' },
+  error: {
+    description: 'Fails the turn with an internal error',
+    hint: '--silent --hold <ms before it fails, or until cancelled>',
+  },
   'auth-required': {
     description: 'Signs the agent out; requests fail until you sign in, then the retry answers',
   },
@@ -105,7 +108,7 @@ export interface ScenarioOptions {
   entries: number // large-history: the entries its replay synthesizes
   plain: boolean // usage: Claude Code's own text, as the adapter forwards it when its report fails
   stepMs: number // plan: how long each step's tool call runs
-  holdMs: number // requests: how long the turn stays open after its request, not scaled
+  holdMs: number // requests: open after its request; error: before it fails; not scaled
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
   read: string | null // artifacts: the artifact to read instead
@@ -113,7 +116,7 @@ export interface ScenarioOptions {
   child: string | null // artifacts: the calls come from this subagent session, as OpenCode's do
   meta: string | null // artifacts: the session id the calls name instead; none names none
   execute: boolean // artifacts: the calls run inside one tool call, as OpenCode's Code Mode runs them
-  silent: boolean // error: fails before writing anything
+  silent: boolean // error, crash: fails before writing anything
 }
 
 export interface ScenarioChoice {

@@ -58,7 +58,7 @@ function onHostEvent(event: HostEvent): void {
       if (!preparedRemoved(event.sessionId)) sessionRemoved(event.sessionId)
       break
     case 'session.returned':
-      if (event.sessionId === null) void takeReturnedMessages()
+      void takeReturnedMessages(event.sessionId)
       break
     case 'agent.status':
       useAgentsStore.getState().setOne(event.status)
