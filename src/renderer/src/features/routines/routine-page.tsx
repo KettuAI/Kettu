@@ -17,6 +17,7 @@ import {
   DEFAULT_TIME_LIMIT,
   ROUTINE_NAME_CHARS,
   TIME_LIMITS,
+  type PermissionScope,
   type RoutineChanges,
   type RoutineOption,
   type RoutineView,
@@ -57,6 +58,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { openRoutine, openRoutines, openSession, useViewStore } from '@renderer/stores/view'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
 import { optionValues, pauseNotice, routineOptions, routineState, stateText } from './model'
+import { PermissionField } from './permission-field'
 import { RoutineMenuItems } from './routine-menu'
 import { RunAnnouncements, RunHistory } from './run-history'
 import { ScheduleField } from './schedule-field'
@@ -332,6 +334,8 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
           }}
           timeLimit={routine.timeLimitMinutes}
           onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
+          scope={routine.scope}
+          onScope={(scope) => save({ scope })}
           schedule={routine.trigger.schedule}
           savedSchedule={routine.trigger.schedule}
           onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
@@ -380,6 +384,7 @@ function NewRoutine() {
   })
   const [values, setValues] = useState<OptionValues>(() => initialValues(agentId))
   const [timeLimit, setTimeLimit] = useState<TimeLimitMinutes>(DEFAULT_TIME_LIMIT)
+  const [scope, setScope] = useState<PermissionScope>(DEFAULT_SCOPE)
   const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE)
   const [scheduleProblem, setScheduleProblem] = useState<ScheduleProblem | null>(null)
 
@@ -411,7 +416,7 @@ function NewRoutine() {
         projectPath,
         options: entry ? routineOptions(entry, values) : optionsFrom(values),
         trigger: { kind: 'schedule', schedule },
-        scope: DEFAULT_SCOPE,
+        scope,
         timeLimitMinutes: timeLimit,
       })
       openRoutine(routine.id)
@@ -486,6 +491,8 @@ function NewRoutine() {
         onValues={(optionId, value) => setValues((current) => ({ ...current, [optionId]: value }))}
         timeLimit={timeLimit}
         onTimeLimit={setTimeLimit}
+        scope={scope}
+        onScope={setScope}
         schedule={schedule}
         savedSchedule={null}
         onSchedule={setSchedule}
@@ -530,6 +537,8 @@ function RoutineFields({
   onValues,
   timeLimit,
   onTimeLimit,
+  scope,
+  onScope,
   schedule,
   savedSchedule,
   onSchedule,
@@ -550,6 +559,8 @@ function RoutineFields({
   onValues: (optionId: string, value: string | boolean) => void
   timeLimit: TimeLimitMinutes
   onTimeLimit: (timeLimit: TimeLimitMinutes) => void
+  scope: PermissionScope
+  onScope: (scope: PermissionScope) => void
   schedule: Schedule
   savedSchedule: Schedule | null
   onSchedule: (schedule: Schedule) => void
@@ -628,6 +639,17 @@ function RoutineFields({
               onSchedule={onSchedule}
               {...(onScheduleProblem ? { onProblem: onScheduleProblem } : {})}
             />
+          </div>
+        </RowShell>
+        <RowShell>
+          <div className="py-3">
+            <RowText
+              name={t('routine.permissions')}
+              description={t('routine.permissionsDescription')}
+            />
+            <div className="mt-2">
+              <PermissionField scope={scope} agentId={agentId} onChange={onScope} />
+            </div>
           </div>
         </RowShell>
         <RowShell>

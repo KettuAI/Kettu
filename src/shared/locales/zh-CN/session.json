@@ -71,11 +71,13 @@
       "other": "{{agent}} 想使用这个工具。"
     },
     "answerGroup": "回应",
+    "outsideScope": "超出此例程的权限：{{level}}。",
     "answer": {
       "allowOnce": "已允许一次",
       "allowAlways": "已始终允许",
       "rejectOnce": "已拒绝",
       "rejectAlways": "已始终拒绝",
+      "allowedByRoutine": "由例程允许",
       "cancelled": "已取消",
       "withdrawn": "已不再需要"
     }

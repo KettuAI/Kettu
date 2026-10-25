@@ -39,6 +39,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { basename, dirname, relativePath } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
+import { useRoutinesStore } from '@renderer/stores/routines'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { Clamp } from '../clamp'
 import { Diff, Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -427,7 +429,11 @@ function PermissionPrompt({
   entry: ToolEntry
   agentName: string
 }) {
-  const { t } = useTranslation('session')
+  const { t } = useTranslation(['session', 'routines'])
+  const routine = useSessionsStore((s) => s.byId[sessionId]?.routine ?? null)
+  const level = useRoutinesStore((s) =>
+    routine ? (s.byId[routine.routineId]?.scope.level ?? null) : null,
+  )
   const [answering, setAnswering] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const permission = entry.permission!
@@ -457,6 +463,13 @@ function PermissionPrompt({
       <p className="text-ui text-muted-foreground">
         {t(`permission.ask.${ASK_KEY[entry.toolKind]}`, { agent: agentName })}
       </p>
+      {level && (
+        <p className="text-xs text-tertiary">
+          {t('permission.outsideScope', {
+            level: t(`routines:permission.level.${level}.name`),
+          })}
+        </p>
+      )}
       <div
         role="group"
         aria-label={t('permission.answerGroup')}
@@ -497,7 +510,9 @@ function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissio
       ? t('permission.answer.cancelled')
       : result === 'withdrawn'
         ? t('permission.answer.withdrawn')
-        : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
+        : result.by === 'routine'
+          ? t('permission.answer.allowedByRoutine')
+          : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
   const rejected =
     result !== 'cancelled' && result !== 'withdrawn' && result.kind.startsWith('reject')
   return (

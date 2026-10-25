@@ -167,6 +167,55 @@ describe('routines', () => {
       expect.objectContaining({ type: 'host:attention', kind: 'permission' }),
     )
     expect(waiting.sessionId).not.toBeNull()
+    const snapshot = await port.open(waiting.sessionId!)
+    const tool = snapshot.entries.find((entry) => entry.kind === 'tool' && entry.permission)
+    expect(tool).toMatchObject({ permissionResult: null })
+  })
+
+  it('answers a permission request inside the scope as the routine', async () => {
+    const { t, port } = await setup()
+    const routine = await create(port, {
+      prompt: '/permission',
+      scope: { level: 'commands', web: false },
+    })
+    const run = await port.request('routines.runNow', { routineId: routine.id })
+
+    const ended = await waitEnded(port, run.id)
+    expect(ended.status).toBe('succeeded')
+    expect(ended.output).toContain('All 12 login tests pass')
+    expect(runEvents(port, run.id).map((event) => event.status)).not.toContain('waiting')
+    expect(t.sent).not.toContainEqual(
+      expect.objectContaining({ type: 'host:attention', kind: 'permission' }),
+    )
+
+    const snapshot = await port.open(ended.sessionId!)
+    expect(snapshot.entries.find((entry) => entry.kind === 'tool')).toMatchObject({
+      toolKind: 'execute',
+      permission: null,
+      permissionResult: { optionId: 'allow-once', kind: 'allow_once', by: 'routine' },
+    })
+  })
+
+  it('pauses a permission request in a run session after the run ended', async () => {
+    const { port } = await setup()
+    const routine = await create(port, {
+      prompt: '/basic-turn',
+      scope: { level: 'commands', web: false },
+    })
+    const run = await port.request('routines.runNow', { routineId: routine.id })
+    const ended = await waitEnded(port, run.id)
+    expect(ended.status).toBe('succeeded')
+
+    const sessionId = ended.sessionId!
+    await port.open(sessionId)
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: [{ type: 'text', text: '/permission' }],
+    })
+    await port.untilStatus(sessionId, 'awaiting_permission')
+    expect(
+      port.entries(sessionId).find((entry) => entry.kind === 'tool' && entry.permission),
+    ).toMatchObject({ permissionResult: null })
   })
 
   it('stops a run at its time limit and ends it timed out', async () => {

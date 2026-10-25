@@ -1,6 +1,6 @@
 // What a routine's run needs of the session that carries it, and what it hears back.
 
-import type { RoutineRef } from '@shared/routines'
+import type { PermissionScope, RoutineRef } from '@shared/routines'
 import type { AgentId, StopReason, TokenTotals } from '@shared/thread'
 import type { SessionSummary } from '@shared/agent-host'
 
@@ -39,7 +39,9 @@ export interface RoutineSessionStart {
   options: Record<string, string | boolean>
   prompt: string
   routine: RoutineRef
-  /** The agent's strictest mode that still asks; null when the agent offers no modes. */
+  /** What the run may do without asking. */
+  scope: PermissionScope
+  /** The mode its level names for the agent; null when the agent offers no modes. */
   mode: string | null
 }
 

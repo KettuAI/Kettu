@@ -80,11 +80,13 @@
       "other": "{{agent}} wants to use this tool."
     },
     "answerGroup": "Answer",
+    "outsideScope": "Outside this routine's permissions: {{level}}.",
     "answer": {
       "allowOnce": "Allowed once",
       "allowAlways": "Always allowed",
       "rejectOnce": "Rejected",
       "rejectAlways": "Always rejected",
+      "allowedByRoutine": "Allowed by the routine",
       "cancelled": "Cancelled",
       "withdrawn": "No longer needed"
     }

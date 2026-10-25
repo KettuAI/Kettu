@@ -131,6 +131,8 @@
     "noProject": "无项目",
     "agent": "Agent 和模型",
     "agentDescription": "它的运行使用的 Agent、模型和选项。",
+    "permissions": "权限",
+    "permissionsDescription": "它的运行可以不询问就做什么；其余的会让运行暂停。",
     "timeLimit": "时间限制",
     "timeLimitDescription": "运行到达这个时间就停止，等待你的时间不计入。",
     "schedule": "计划",
@@ -159,6 +161,32 @@
     "deleteNoSessions": "它没有运行会话。",
     "deleteConfirm": "删除",
     "deleteFailed": "无法删除例程：{{error}}"
+  },
+  "permission": {
+    "levels": "权限",
+    "level": {
+      "read": {
+        "name": "只读",
+        "description": "读取和搜索项目。"
+      },
+      "edit": {
+        "name": "编辑项目",
+        "description": "还可以在项目文件夹内创建、更改、移动和删除文件。"
+      },
+      "commands": {
+        "name": "编辑并运行命令",
+        "description": "还可以运行命令，这些命令能做你能做的任何事。"
+      }
+    },
+    "web": {
+      "name": "使用网络",
+      "description": "在任意级别下获取网页和搜索网络。"
+    },
+    "caption": {
+      "claude-code": "Claude Code 在编辑和大多数命令前会询问，因此 OverBench 会逐条回应。",
+      "codex": "Codex 有自己的沙箱：选择“编辑项目”时，它也会在项目内不经询问地运行命令；离开项目或访问网络时会询问。",
+      "opencode": "OpenCode 只对它自己的权限设置标为“ask”的操作询问；默认什么都不问，所以 OverBench 无法把它限制在这个权限范围内。"
+    }
   },
   "limit": {
     "minutes": "{{count}} 分钟",

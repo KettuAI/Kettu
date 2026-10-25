@@ -12,6 +12,7 @@ import {
   ROUTINE_NAME_CHARS,
   ROUTINE_NAME_FROM_PROMPT,
   WORKING_RUNS,
+  type PermissionScope,
   type Routine,
   type RoutineChanges,
   type RoutineDraft,
@@ -745,7 +746,8 @@ export class RoutinesManager {
           trigger: live.run.trigger,
           scheduledFor: live.run.scheduledFor,
         },
-        mode: askingMode(routine.agentId),
+        scope: routine.scope,
+        mode: askingMode(routine.agentId, routine.scope.level),
       })
     } catch (error) {
       this.deps.log('warn', `The run of ${routine.name} could not start: ${messageOf(error)}`)
@@ -1107,15 +1109,15 @@ function resetTime(at: number, now: number): string {
   return new Intl.DateTimeFormat(currentLocale(), options).format(at)
 }
 
-/** The strictest mode of each agent that still asks before acting, from the observed table. */
-function askingMode(agentId: AgentId): string | null {
+/** The mode each level names for the agent, from the observed table. */
+function askingMode(agentId: AgentId, level: PermissionScope['level']): string | null {
   switch (agentId) {
     case 'claude-code':
       return 'default'
     case 'codex':
-      return 'read-only'
+      return level === 'read' ? 'read-only' : 'workspace-write'
     case 'opencode':
-      return 'plan'
+      return level === 'read' ? 'plan' : 'build'
     case 'fake-agent':
       return 'ask'
   }
