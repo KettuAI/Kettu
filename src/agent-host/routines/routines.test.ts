@@ -128,8 +128,10 @@ describe('routines', () => {
     expect(ended.status).toBe('succeeded')
     expect(ended.output).toContain('## Plan')
     expect(ended.stopReason).toBe('end_turn')
+    // The host reports a run's files with the platform's own separators.
+    const own = (file: string) => file.split('/').join(path.sep)
     expect(ended.changedFiles).toEqual(
-      expect.arrayContaining(['src/clock.ts', 'test/clock.test.ts']),
+      expect.arrayContaining([own('src/clock.ts'), own('test/clock.test.ts')]),
     )
 
     const stored = await runOf(port, routine.id, run.id)
