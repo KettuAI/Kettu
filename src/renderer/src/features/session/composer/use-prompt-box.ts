@@ -12,6 +12,7 @@ import {
 import {
   attachFiles,
   attachImages,
+  attachPastedFiles,
   attachPastedText,
   pastedImages,
   pastedText,
@@ -157,6 +158,13 @@ export function usePromptBox({
   const onPaste = (event: ClipboardEvent): boolean => {
     const data = event.clipboardData
     if (!data) return false
+    const files = attachPastedFiles(draft, data)
+    if (files) {
+      event.preventDefault()
+      onActivity?.()
+      files.then(limitError, (e: unknown) => setError(errorMessage(e)))
+      return true
+    }
     const images = pastedImages(data)
     const long = images.length === 0 ? pastedText(data) : null
     if (images.length === 0 && long === null) return false

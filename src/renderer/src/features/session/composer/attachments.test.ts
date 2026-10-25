@@ -11,6 +11,7 @@ import {
   attachFiles,
   attachImages,
   attachMention,
+  attachPastedFiles,
   attachPastedText,
   attachmentContent,
   attachmentsBlock,
@@ -302,6 +303,7 @@ describe('attachmentsBlock', () => {
 describe('picked and dropped files', () => {
   const pick = vi.fn<(kind: string, folder: string | null) => Promise<GrantedAttachment[]>>()
   const fromFiles = vi.fn<(files: File[]) => Promise<(GrantedAttachment | null)[]>>()
+  const fromClipboard = vi.fn<(files: File[]) => Promise<GrantedAttachment[]> | null>()
   const grant = (name: string, kind: 'file' | 'folder' = 'file', size: number | null = 8) => ({
     grantId: `g-${name}`,
     name,
@@ -319,7 +321,7 @@ describe('picked and dropped files', () => {
     }) satisfies Attachment
 
   beforeEach(() => {
-    vi.stubGlobal('window', { overbench: { attachments: { pick, fromFiles } } })
+    vi.stubGlobal('window', { overbench: { attachments: { pick, fromFiles, fromClipboard } } })
     request.mockImplementation((async (method: string, params: Record<string, unknown>) => {
       const source = params.source as
         { grantId?: string; name?: string; projectPath?: string; path?: string } | undefined
@@ -442,6 +444,41 @@ describe('picked and dropped files', () => {
     expect(draftAttachments(DRAFT)).toHaveLength(20)
     pick.mockResolvedValue([grant('x.md'), grant('y.md')])
     await expect(pickAttachments(DRAFT, 'files', null)).resolves.toBe(2)
+  })
+
+  it('adds every file and folder copied in the file manager, and none of its icon or names', async () => {
+    fromClipboard.mockReturnValue(
+      Promise.resolve([grant('b.md'), grant('src', 'folder', null), grant('a.txt')]),
+    )
+    const icon = png('b.md')
+    const pasting = attachPastedFiles(DRAFT, clipboard([icon], 'b.md\rsrc\ra.txt'))
+    expect(pasting).not.toBeNull()
+    expect(fromClipboard).toHaveBeenCalledWith([icon])
+    await expect(pasting).resolves.toBe(0)
+    await settled()
+    expect(draftAttachments(DRAFT).map((i) => [i.name, i.kind, i.status])).toEqual([
+      ['b.md', 'file', 'ready'],
+      ['src', 'folder', 'ready'],
+      ['a.txt', 'file', 'ready'],
+    ])
+    expect(prepare).not.toHaveBeenCalled()
+  })
+
+  it('leaves a paste with no file on disk to the image paste', () => {
+    fromClipboard.mockReturnValue(null)
+    expect(attachPastedFiles(DRAFT, clipboard([png()]))).toBeNull()
+    expect(draftAttachments(DRAFT)).toEqual([])
+  })
+
+  it('adds no more than 20 pasted files, and says how many did not fit', async () => {
+    attachImages(DRAFT, [png()])
+    fromClipboard.mockReturnValue(
+      Promise.resolve(Array.from({ length: 25 }, (_, i) => grant(`f${i}.md`))),
+    )
+    const files = Array.from({ length: 25 }, (_, i) => new File(['x'], `f${i}.md`))
+    await expect(attachPastedFiles(DRAFT, clipboard(files))).resolves.toBe(6)
+    expect(fromClipboard.mock.calls[0]![0]).toHaveLength(20)
+    expect(draftAttachments(DRAFT)).toHaveLength(20)
   })
 
   it('fails the tiles when main cannot grant them', async () => {
