@@ -1,0 +1,54 @@
+name: Update end to end
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Full commit SHA, branch or tag to check, if not the one dispatched from
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Check updating
+        if: runner.os != 'Linux'
+        shell: bash
+        timeout-minutes: 20
+        run: node tools/update-e2e/run.mjs 2>&1 | tee update-e2e-${{ runner.os }}.log; exit ${PIPESTATUS[0]}
+      # xvfb-run's default screen is 640x480 at 8-bit colour.
+      - name: Check updating
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 20
+        run: xvfb-run -a --server-args="-screen 0 1280x800x24" node tools/update-e2e/run.mjs 2>&1 | tee update-e2e-${{ runner.os }}.log; exit ${PIPESTATUS[0]}
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: update-e2e-${{ runner.os }}
+          path: update-e2e-${{ runner.os }}.log
+          if-no-files-found: warn
