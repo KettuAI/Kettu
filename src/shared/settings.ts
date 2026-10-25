@@ -12,6 +12,7 @@ export interface SettingsFile {
     confirmQuitWhileRunning: boolean
     openAtLogin: boolean // start at login, so routines keep their schedule
   }
+  thread: { outlineSummaries: boolean } // a small model titles the outline's messages
   appearance: {
     theme: 'system' | 'light' | 'dark'
     textSize: 'small' | 'default' | 'large' // thread prose and the composer: 13, 14 or 15 px
@@ -67,6 +68,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     confirmQuitWhileRunning: true,
     openAtLogin: false,
   },
+  thread: { outlineSummaries: true },
   appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system', zoom: 1 },
   notifications: {
     permission: true,
@@ -99,6 +101,7 @@ export function stepZoom(zoom: ZoomLevel, step: ZoomStep): ZoomLevel {
  */
 export interface SettingsPatch {
   general?: Partial<SettingsFile['general']>
+  thread?: Partial<SettingsFile['thread']>
   appearance?: Partial<SettingsFile['appearance']>
   notifications?: Partial<SettingsFile['notifications']>
   agents?: Partial<Record<AgentId, { binaryPath?: null; cli?: AgentCliSource; configDir?: null }>>

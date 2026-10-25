@@ -18,6 +18,7 @@ import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
+import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
 import { buildItems, lastSent, replyKeys, signatureOf, type Item } from './thread-items'
 import { TurnStatus } from './turn-status'
@@ -29,14 +30,25 @@ import { TurnStatus } from './turn-status'
 // growing by a fixed step: N items take log2(N / 40) passes instead of N / 60.
 const FIRST_ITEMS = 40
 
-function useShownFrom(total: number): number {
+function useShownFrom(total: number, held: boolean): number {
   const [limit, setLimit] = useState(FIRST_ITEMS)
   useEffect(() => {
-    if (limit >= total) return
+    if (held || limit >= total) return
     const frame = requestAnimationFrame(() => startTransition(() => setLimit((l) => l * 2)))
     return () => cancelAnimationFrame(frame)
-  }, [limit, total])
+  }, [held, limit, total])
   return Math.max(0, total - limit)
+}
+
+/** What a jump in the outline needs of the thread. */
+export interface ThreadJumps {
+  /** Resolves once the item `key`, or the first item for null, is rendered. */
+  reveal(key: string | null): Promise<void>
+  /**
+   * Holds the rendering of older items and the loading of older pages while a jump's scroll
+   * settles: either would prepend items and cut the scroll short.
+   */
+  hold(on: boolean): void
 }
 
 /** The tool calls of a thread, whose rows sit close together. */
@@ -126,13 +138,38 @@ export const Thread = memo(function Thread({
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
   useEffect(() => () => hoverReply(null), [sessionId])
   const sent = lastSent(order ?? [], signature)
-  const shownFrom = useShownFrom(items.length)
+  const [held, setHeld] = useState(false)
+  const shownFrom = useShownFrom(items.length, held)
+  const revealing = useRef<{ key: string | null; resolve: () => void } | null>(null)
+  const [, setRevealTick] = useState(0)
+  useEffect(() => {
+    const waiting = revealing.current
+    if (!waiting) return
+    const index = waiting.key === null ? 0 : items.findIndex((item) => item.key === waiting.key)
+    if (index < 0 || shownFrom > index) return
+    revealing.current = null
+    waiting.resolve()
+  })
+  const jumps = useMemo<ThreadJumps>(
+    () => ({
+      reveal: (key) =>
+        new Promise((resolve) => {
+          revealing.current = { key, resolve }
+          setRevealTick((tick) => tick + 1)
+        }),
+      hold: setHeld,
+    }),
+    [],
+  )
   const hasOlder = useThreadsStore((s) => (s.replicas[sessionId]?.older ?? null) !== null)
   const viewport = useRef<HTMLDivElement | null>(null)
+  const content = useRef<HTMLDivElement | null>(null)
   const nearStart = useCallback(() => {
     const el = viewport.current
-    if (el && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) loadOlder(sessionId)
-  }, [sessionId, hasOlder, shownFrom])
+    if (el && !held && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) {
+      loadOlder(sessionId)
+    }
+  }, [sessionId, held, hasOlder, shownFrom])
   // Also after each prepend, and for a page too short to scroll.
   useEffect(nearStart, [nearStart, items.length])
   // Where scrollbars take room (Windows, and macOS set to show them), the column centres in what
@@ -166,6 +203,7 @@ export const Thread = memo(function Thread({
           className="outline-none [scroll-timeline:--scroll-fade-top_y]"
         >
           <MessageScrollerContent
+            ref={content}
             className="mx-auto w-full max-w-thread gap-0 px-6 pt-5 pb-8"
             onPointerLeave={() => hoverReply(null)}
           >
@@ -235,6 +273,7 @@ export const Thread = memo(function Thread({
           className="rounded-full shadow-md"
         />
         <OlderLoading sessionId={sessionId} />
+        <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
       </MessageScroller>
     </MessageScrollerProvider>
   )

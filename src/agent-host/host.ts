@@ -296,6 +296,7 @@ export class AgentHost {
       returned: returnedFile(options.userDataPath, log),
       portOpen: (portId) => this.hub.has(portId),
       threads: this.threads,
+      reportsDir: path.join(options.userDataPath, 'agent-reports'),
       attachments: this.attachments,
       mcp: {
         servers: (sessionId, record, connection) =>
@@ -743,7 +744,9 @@ export class AgentHost {
       'sessions.import': (params) => sessions.importSession(params),
       'sessions.open': ({ sessionId }) => sessions.open(sessionId),
       'sessions.snapshot': ({ sessionId, from }) => sessions.snapshot(sessionId, from),
-      'sessions.page': ({ sessionId, before }) => sessions.page(sessionId, before),
+      'sessions.page': ({ sessionId, before, from }) => sessions.page(sessionId, before, from),
+      'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
+      'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
       'sessions.show': ({ sessionId }, { portId }) => sessions.show(sessionId, portId),

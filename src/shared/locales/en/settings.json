@@ -55,9 +55,15 @@
       "unavailable": "Available in the installed app.",
       "keywords": "login startup launch start routine"
     },
+    "outlineSummaries": {
+      "name": "Summarize messages in the outline",
+      "description": "Uses a small model of each session's agent, and its plan or credits, when the outline opens with messages it has not summarized.",
+      "keywords": "outline titles summary model credits"
+    },
     "groups": {
       "input": "Language and input",
       "sessions": "Sessions",
+      "thread": "Thread",
       "startup": "Startup"
     }
   },
