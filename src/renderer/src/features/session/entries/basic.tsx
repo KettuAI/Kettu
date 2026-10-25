@@ -217,11 +217,7 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
   return (
     <Alert
       variant={
-        entry.severity === 'error'
-          ? 'destructive'
-          : entry.severity === 'warning'
-            ? 'warning'
-            : 'default'
+        entry.severity === 'error' ? 'error' : entry.severity === 'warning' ? 'warning' : 'default'
       }
       className={animation}
     >
