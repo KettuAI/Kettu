@@ -161,6 +161,8 @@ async function serveFeed(folder) {
     url: `http://127.0.0.1:${port}/`,
     close: () =>
       new Promise((done) => {
+        // A download still running must not keep the process alive.
+        server.closeAllConnections()
         server.close(() => done(undefined))
       }),
   }
@@ -193,10 +195,12 @@ function packageApp(version, output, feedUrl) {
     {
       cwd: root,
       stdio: 'inherit',
+      timeout: 15 * 60 * 1000,
       // Ad-hoc signing on macOS; never pick an identity from the keychain.
       env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' },
     },
   )
+  if (result.error) throw new Error(`Packaging ${version} failed: ${result.error.message}`)
   if (result.status !== 0) throw new Error(`Packaging ${version} failed`)
 }
 
@@ -256,13 +260,17 @@ function launchApp({ executable, port, userData, outputLog, chromiumLog, env = {
 
 /** @param {any} cdp @param {string} findBody @param {string} what */
 async function click(cdp, findBody, what) {
-  const point = await cdp.evaluate(`(() => {
-    const el = (() => { ${findBody} })()
-    if (!el) return null
-    el.scrollIntoView({ block: 'nearest' })
-    const r = el.getBoundingClientRect()
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-  })()`)
+  const point = await withTimeout(
+    cdp.evaluate(`(() => {
+      const el = (() => { ${findBody} })()
+      if (!el) return null
+      el.scrollIntoView({ block: 'nearest' })
+      const r = el.getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    })()`),
+    15_000,
+    'the page',
+  )
   if (!point) throw new Error(`Could not find ${what}`)
   for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
     await cdp.send('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1 })
@@ -273,7 +281,12 @@ async function click(cdp, findBody, what) {
 async function waitFor(cdp, expression, what, timeout = 60_000) {
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
-    if (await cdp.evaluate(`Boolean(${expression})`).catch(() => false)) return
+    const answered = await withTimeout(
+      cdp.evaluate(`Boolean(${expression})`),
+      15_000,
+      'the page',
+    ).catch(() => false)
+    if (answered) return
     await sleep(200)
   }
   throw new Error(`Timed out waiting for ${what}`)
@@ -437,10 +450,13 @@ async function main() {
   try {
     const newOutput = join(scratch, 'build-0.0.901')
     feed = await serveFeed(newOutput)
+    log(`Feed at ${feed.url}`)
     log(`Packaging ${OLD_VERSION}`)
     packageApp(OLD_VERSION, join(scratch, 'build-0.0.900'), feed.url)
+    log(`Packaged ${OLD_VERSION}`)
     log(`Packaging ${NEW_VERSION}`)
     packageApp(NEW_VERSION, newOutput, feed.url)
+    log(`Packaged ${NEW_VERSION}`)
 
     const newFiles = readdirSync(newOutput)
     const updateFile =
@@ -494,6 +510,7 @@ async function main() {
       ...(platform === 'linux' ? { env: { APPIMAGE: executable } } : {}),
     })
     cdp = await connect(port)
+    log(`Window answered on port ${port}`)
     await waitFor(cdp, 'window.overbench', 'the preload', 60_000)
     await waitFor(
       cdp,
@@ -530,6 +547,7 @@ async function main() {
       await waitFor(cdp, `(() => { ${updateButton} })()`, 'the notice Update button', 30_000)
       log('Clicking Update')
       await click(cdp, updateButton, 'the notice Update button')
+      log(`Waiting for ${NEW_VERSION} to start`)
 
       const deadline = Date.now() + UPDATE_TIMEOUT_MS
       /** @type {{ lastRunVersion: string | null } | null} */
@@ -552,6 +570,9 @@ async function main() {
   } finally {
     if (cdp) cdp.close()
     if (running) await stopApp(running)
+    // A surviving helper that inherited the pipes would keep this process alive.
+    running?.stdout?.destroy()
+    running?.stderr?.destroy()
     if (appImage) await killAppImageProcesses(appImage)
     if (installDir) {
       killWindowsApp(installDir)
@@ -567,8 +588,9 @@ async function main() {
     }
     await removeFolder(scratch)
   }
-  if (failure) process.exitCode = 1
-  else log('Updating end to end passed')
+  if (failure) process.exit(1)
+  log('Updating end to end passed')
+  process.exit(0)
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -577,6 +599,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } catch (error) {
     // The refusal happens before there is anything to clean up.
     log(`Failed: ${error instanceof Error ? error.message : String(error)}`)
-    process.exitCode = 1
+    process.exit(1)
   }
 }

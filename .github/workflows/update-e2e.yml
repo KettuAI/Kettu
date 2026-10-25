@@ -41,11 +41,13 @@ jobs:
       - name: Check updating
         if: runner.os != 'Linux'
         shell: bash
+        timeout-minutes: 20
         run: node tools/update-e2e/run.mjs 2>&1 | tee update-e2e-${{ runner.os }}.log; exit ${PIPESTATUS[0]}
       # xvfb-run's default screen is 640x480 at 8-bit colour.
       - name: Check updating
         if: runner.os == 'Linux'
         shell: bash
+        timeout-minutes: 20
         run: xvfb-run -a --server-args="-screen 0 1280x800x24" node tools/update-e2e/run.mjs 2>&1 | tee update-e2e-${{ runner.os }}.log; exit ${PIPESTATUS[0]}
       - uses: actions/upload-artifact@v7
         if: failure()
