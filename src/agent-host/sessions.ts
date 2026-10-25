@@ -804,13 +804,14 @@ export class SessionManager {
    * Writes what changed since the last checkpoint. The store answers in order, so a later read
    * sees it. A failed write is logged, and the next checkpoint writes the whole thread again.
    */
-  private checkpoint(live: Live): void {
+  private checkpoint(live: Live, { afterShutdown = false } = {}): void {
     if (live.checkpointTimer) {
       clearTimeout(live.checkpointTimer)
       live.checkpointTimer = null
     }
     const store = this.deps.threads
-    if (!store || this.stopped || live.replaying || live.partial || !live.saved) return
+    if (!store || (this.stopped && !afterShutdown) || live.replaying || live.partial || !live.saved)
+      return
     if (!live.record.acpSessionId || !this.hasChanges(live)) return
     const replace = live.rewrite
     const entries: PositionedEntry[] = []
@@ -1837,6 +1838,20 @@ export class SessionManager {
       // It never reached the index, so the agent's new session goes the way a hidden one does.
       await this.removeUnlisted(live.id, runtime, setup.acpSessionId)
       throw removedWhileStarting()
+    }
+    if (this.stopped) {
+      // The quit ran while `session/new` was pending: the message waits in its queue and the
+      // session goes into the index and the thread store as the quit closes them.
+      live.record.acpSessionId = setup.acpSessionId
+      this.update(live, {
+        acpSessionId: setup.acpSessionId,
+        config: withUltracode(live.record, chosenConfig(setup.config, live.startValues)),
+        status: 'closed',
+      })
+      this.save(live)
+      this.holdFirst(live)
+      this.checkpoint(live, { afterShutdown: true })
+      return
     }
     live.record.acpSessionId = setup.acpSessionId
     this.stampConfig(live.record)
