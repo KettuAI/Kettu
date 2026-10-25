@@ -488,22 +488,30 @@ export class RoutinesManager {
 
   /** Keeps the sessions of the routine's latest 100 runs, as deleted sessions are removed. */
   private async trim(routine: Routine): Promise<void> {
-    const beyond = await this.call('beyond', { routineId: routine.id, keep: KEPT_RUN_SESSIONS })
-    for (const { sessionId } of beyond) {
-      if (!this.deps.sessions.has(sessionId)) {
-        await this.call('clearSession', { sessionId }).catch(() => {})
-        continue
+    try {
+      const beyond = await this.call('beyond', {
+        routineId: routine.id,
+        keep: KEPT_RUN_SESSIONS,
+      })
+      for (const { sessionId } of beyond) {
+        if (!this.deps.sessions.has(sessionId)) {
+          await this.call('clearSession', { sessionId }).catch(() => {})
+          continue
+        }
+        try {
+          await this.deps.sessions.delete(sessionId)
+        } catch (error) {
+          this.deps.log(
+            'warn',
+            `Could not remove an old session of ${routine.name}: ${messageOf(error)}`,
+          )
+        }
       }
-      try {
-        await this.deps.sessions.delete(sessionId)
-      } catch (error) {
-        this.deps.log(
-          'warn',
-          `Could not remove an old session of ${routine.name}: ${messageOf(error)}`,
-        )
-      }
+      void this.publish(routine.id)
+    } catch (error) {
+      // The thread store may be closing, as at quit; the next run trims again.
+      this.deps.log('warn', `Could not trim the runs of ${routine.name}: ${messageOf(error)}`)
     }
-    void this.publish(routine.id)
   }
 
   private finish(live: LiveRun, status: RunStatus, result: RunEnd): void {
@@ -668,13 +676,20 @@ export class RoutinesManager {
   private async publish(routineId: string): Promise<void> {
     const routine = this.routines.get(routineId)
     if (!routine) return
-    // The view counts what the database holds, so its writes come first.
-    if (this.writes.size > 0) await Promise.allSettled([...this.writes])
-    const view = await this.viewOf(routine)
-    const json = JSON.stringify(view)
-    if (this.lastViews.get(routineId) === json) return
-    this.lastViews.set(routineId, json)
-    this.deps.events.changed(view)
+    try {
+      // The view counts what the database holds, so its writes come first.
+      if (this.writes.size > 0) await Promise.allSettled([...this.writes])
+      const view = await this.viewOf(routine)
+      const json = JSON.stringify(view)
+      if (this.lastViews.get(routineId) === json) return
+      this.lastViews.set(routineId, json)
+      this.deps.events.changed(view)
+    } catch (error) {
+      // The thread store may be closing, as at quit; a view that cannot be counted is not sent.
+      if (!this.stopped) {
+        this.deps.log('warn', `Could not update the view of ${routine.name}: ${messageOf(error)}`)
+      }
+    }
   }
 
   private routineOf(routineId: string): Routine {
