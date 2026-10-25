@@ -107,6 +107,12 @@ export interface IpcInvokeContract {
   // Paths the preload read off dropped or pasted files, granted as the dialog's are; in their
   // order, null for one that is neither a file nor a folder.
   'attachments:grant': { args: [paths: string[]]; result: (GrantedAttachment | null)[] }
+  // Every file copied in the file manager, granted in the order copied, when the clipboard lists
+  // `pastedPath`, the first file a paste carried; null when it lists no files or not that one.
+  'attachments:clipboard-files': {
+    args: [pastedPath: string]
+    result: GrantedAttachment[] | null
+  }
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
@@ -270,6 +276,12 @@ export interface OverbenchApi {
     pick(kind: 'files' | 'folder', defaultPath: string | null): Promise<GrantedAttachment[]>
     /** Dropped or pasted files, in their order; null for one with no file on disk behind it. */
     fromFiles(files: File[]): Promise<(GrantedAttachment | null)[]>
+    /**
+     * The files and folders a paste carries, copied in the file manager: all of them, from the
+     * clipboard, or the paste's own files without a list there. Null when the first has no file
+     * on disk behind it, so the paste is an image or text.
+     */
+    fromClipboard(files: File[]): Promise<GrantedAttachment[]> | null
   }
   agents: AgentsApi
   terminals: TerminalsApi

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { HOST_METHODS, type AgentsApi, type HostEvent } from '@shared/agent-host'
+import type { GrantedAttachment } from '@shared/attachments'
 import type { AppCommand, OverbenchApi, QuitRequest } from '@shared/ipc'
 import { isLocale, type Locale } from '@shared/locale'
 import { TERMINAL_METHODS, type TerminalEvent, type TerminalsApi } from '@shared/terminal-host'
@@ -54,6 +55,19 @@ const onUpdateChanged = subscribe('update:changed')
 const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
+
+const pathOf = (file: File) => webUtils.getPathForFile(file)
+
+// Only a drop, a paste or a file input yields a File with a path, so a page names none itself.
+async function fromFiles(files: File[]): Promise<(GrantedAttachment | null)[]> {
+  const paths = filePaths(files, pathOf)
+  const granted = await invoke(
+    'attachments:grant',
+    paths.filter((path) => path !== ''),
+  )
+  let next = 0
+  return paths.map((path) => (path === '' ? null : (granted[next++] ?? null)))
+}
 
 const api: OverbenchApi = {
   platform: process.platform,
@@ -122,15 +136,16 @@ const api: OverbenchApi = {
   },
   attachments: {
     pick: (kind, defaultPath) => invoke('dialog:add-attachments', kind, defaultPath),
-    // Only a drop, a paste or a file input yields a File with a path, so a page names none itself.
-    fromFiles: async (files) => {
-      const paths = filePaths(files, (file) => webUtils.getPathForFile(file))
-      const granted = await invoke(
-        'attachments:grant',
-        paths.filter((path) => path !== ''),
+    fromFiles,
+    // Chromium's paste event can carry fewer files than were copied, so main reads them from the
+    // clipboard, and only while it lists the file this paste carried.
+    fromClipboard: (files) => {
+      const [pasted] = filePaths(files, pathOf)
+      if (!pasted) return null
+      return invoke('attachments:clipboard-files', pasted).then(
+        async (granted) =>
+          granted ?? (await fromFiles(files)).flatMap((item) => (item ? [item] : [])),
       )
-      let next = 0
-      return paths.map((path) => (path === '' ? null : (granted[next++] ?? null)))
     },
   },
   updates: {

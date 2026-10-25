@@ -1,6 +1,7 @@
-// A composer's attachments: adding pasted images and long pasted texts, picked or dropped files
-// and folders, and the project's files and folders an `@` mention names, through the host, removing them, keeping them
-// with the draft across a restart, and the content refs a message carries.
+// A composer's attachments: adding pasted images and long pasted texts, picked, pasted or dropped
+// files and folders, and the project's files and folders an `@` mention names, through the host,
+// removing them, keeping them with the draft across a restart, and the content refs a message
+// carries.
 
 import {
   ATTACHMENT_LIMIT,
@@ -202,9 +203,32 @@ export async function pickAttachments(
   kind: 'files' | 'folder',
   folder: string | null,
 ): Promise<number> {
-  const granted = await window.overbench.attachments.pick(kind, folder)
-  const room = attachmentRoom(draft)
-  const taken = granted.slice(0, room)
+  return addAllGranted(draft, await window.overbench.attachments.pick(kind, folder))
+}
+
+/**
+ * Adds the files and folders a paste carries when they were copied in the file manager: every one
+ * copied, granted by main, not only those the paste event holds, and none of the image or text the
+ * file manager puts beside them. Null when the paste has no file on disk, so it is an image or
+ * text. Resolves to how many did not fit under the limit.
+ */
+export function attachPastedFiles(draft: string, data: DataTransfer): Promise<number> | null {
+  const files = [...data.files]
+  if (files.length === 0) return null
+  const pending = window.overbench.attachments.fromClipboard(files.slice(0, ATTACHMENT_LIMIT))
+  if (!pending) return null
+  return pending.then((granted) =>
+    // More than fit in a message were copied, whichever of them main could grant.
+    Math.max(
+      addAllGranted(draft, granted),
+      files.length > ATTACHMENT_LIMIT ? files.length - ATTACHMENT_LIMIT : 0,
+    ),
+  )
+}
+
+/** Adds granted files and folders, as many as fit. Returns how many did not. */
+function addAllGranted(draft: string, granted: readonly GrantedAttachment[]): number {
+  const taken = granted.slice(0, attachmentRoom(draft))
   const added = taken.map((grant) => addingTile(grant.name, grant.size, grant.kind === 'folder'))
   setDraftAttachments(draft, [...draftAttachments(draft), ...added])
   added.forEach((item, i) => void addGranted(draft, item, taken[i]!, null))

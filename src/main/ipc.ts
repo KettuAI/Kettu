@@ -2,6 +2,7 @@ import { isAbsolute } from 'node:path'
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   type IpcMainEvent,
@@ -19,7 +20,7 @@ import type {
 import { CONFIG_VARIABLES } from '@shared/settings'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
-import { grantPaths } from './attachments'
+import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
@@ -126,6 +127,13 @@ function absolutePath(value: unknown): string {
   if (value.includes('\0')) throw new Error('A path must not contain a NUL character')
   if (!isAbsolute(value)) throw new Error('A path must be absolute')
   return value
+}
+
+/** The `text/uri-list` the clipboard holds, as the file manager writes copied files. */
+async function clipboardUriList(): Promise<string | null> {
+  const [item] = await clipboard.read()
+  if (!item?.types.includes('text/uri-list')) return null
+  return (await item.getType('text/uri-list')).text()
 }
 
 /** Dropped or pasted paths: the renderer passes no more than fit in one message. */
@@ -269,6 +277,12 @@ export function registerIpcHandlers({
 
   handle('attachments:grant', 1, (_, paths) =>
     grantPaths(attachmentPaths(paths), (grants) => agentHost.grant(grants)),
+  )
+
+  handle('attachments:clipboard-files', 1, async (_, pastedPath) =>
+    grantClipboardFiles(absolutePath(pastedPath), await clipboardUriList(), (grants) =>
+      agentHost.grant(grants),
+    ),
   )
 
   handle('diagnostics:save', 1, ({ window }, bundle) =>
