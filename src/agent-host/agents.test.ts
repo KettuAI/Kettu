@@ -32,7 +32,7 @@ import {
 } from './catalog'
 import { Diagnostics } from './diagnostics'
 import type { Env } from './find-command'
-import { CliVersions, type AdapterCli } from './installed-cli'
+import { CliVersions, type AdapterCli, type CliProbe } from './installed-cli'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
@@ -1297,6 +1297,78 @@ describe('the CLI the user installed', () => {
     ])
     expect(m.status()).toMatchObject({ state: 'ready', cli: { runs: 'bundled' } })
     await m.agents.stopAll()
+  })
+})
+
+describe("a binary agent's version", () => {
+  const windows = process.platform === 'win32'
+
+  /** OpenCode as `fake-opencode`, on a PATH of its own, its version answered by `probe`. */
+  async function opencodeManager(probe: CliProbe) {
+    const bin = await mkdtemp(path.join(os.tmpdir(), 'overbench-bin-'))
+    const program = path.join(bin, windows ? 'fake-opencode.cmd' : 'fake-opencode')
+    await writeFile(program, windows ? '@exit /b 0\r\n' : '#!/bin/sh\n')
+    if (!windows) await chmod(program, 0o755)
+    const env = new EnvironmentService({
+      platform: process.platform,
+      electronPath: process.execPath,
+      baseEnv: {},
+      resolve: async () => ({
+        env: { PATH: bin, PATHEXT: '.EXE;.CMD' },
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: null,
+      }),
+      probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
+    })
+    const def: AgentDefinition = {
+      ...OPENCODE,
+      launch: { kind: 'binary', command: 'fake-opencode', args: ['acp'] },
+    }
+    const m = manager({}, { progressMs: 1 }, { catalog: [def], env, probeCli: probe })
+    return { ...m, program, status: () => m.agents.status('opencode') }
+  }
+
+  it('shows the version --version prints before it has ever started', async () => {
+    const asked: string[] = []
+    const m = await opencodeManager(async (program) => {
+      asked.push(program)
+      return { version: '2.0.32' }
+    })
+    expect(await m.agents.list()).toMatchObject([{ id: 'opencode', state: 'available' }])
+    await until(() => m.status().version === '2.0.32')
+    expect(asked).toEqual([m.program])
+    expect(m.launcher.launches).toBe(0)
+  })
+
+  it('shows what initialize reports once it starts', async () => {
+    const m = await opencodeManager(async () => ({ version: '2.0.32' }))
+    await m.agents.list()
+    await until(() => m.status().version === '2.0.32')
+    await m.agents.ensureReady('opencode')
+    expect(m.status()).toMatchObject({ state: 'ready', version: '0.1.0' })
+    await m.agents.stopAll()
+  })
+
+  it('shows no version when --version fails, and logs the failure once', async () => {
+    let asked = 0
+    const m = await opencodeManager(async () => {
+      asked++
+      return { error: 'opencode --version printed no version.' }
+    })
+    await m.agents.list()
+    const logged = () =>
+      m.diagnostics
+        .logEntries()
+        .filter((entry) => entry.message.includes('could not read its version'))
+    await until(() => logged().length === 1)
+    expect(m.status().version).toBeNull()
+    await m.agents.check('opencode')
+    await until(() => asked === 2)
+    // The answer's continuation runs after the poll saw the ask; a second log would follow it.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(logged()).toHaveLength(1)
   })
 })
 

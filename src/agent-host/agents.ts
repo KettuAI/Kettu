@@ -65,7 +65,7 @@ import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { getEnv, isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
-import { CliVersions, type CliProbe } from './installed-cli'
+import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import {
@@ -254,6 +254,12 @@ class Slot {
   rememberedUpdate = 'null'
   /** The CLI version of the install a start runs, read at detection. */
   installedCli: string | null = null
+  /** A binary agent's version, from its own `--version`, until it starts and reports its own. */
+  binaryVersion: string | null = null
+  /** The program `binaryVersion` was read from, so an answer for another one is dropped. */
+  binaryProgram: string | null = null
+  /** The `--version` failure already logged, so a repeated detection logs it once. */
+  binaryVersionFailure: string | null = null
   /** A binary agent's install routes, found at detection. */
   installPlans: InstallPlan[] = []
   /** The user's CLI a start failed with; the copy runs until the setting or environment changes. */
@@ -404,8 +410,7 @@ export class AgentManager {
       node,
       adaptersDir: this.deps.adaptersDir,
       isExecutable,
-      probeCli:
-        this.deps.probeCli ?? ((program, cliEnv) => this.cliVersions.probe(program, cliEnv)),
+      probeCli: (program, cliEnv) => this.askVersion(program, cliEnv),
       cliPreference: agentSettings?.cli ?? 'installed',
       cliFailure: slot.cliFailure,
     })
@@ -422,11 +427,59 @@ export class AgentManager {
     slot.detection = detection
     slot.installedCli = installedCli
     slot.installPlans = plans
+    // A binary agent's own version is asked in the background, so detection never waits for it.
+    const program =
+      slot.def.launch.kind === 'binary' && detection.state === 'available'
+        ? (detection.spec?.command ?? null)
+        : null
+    if (program !== slot.binaryProgram) {
+      slot.binaryProgram = program
+      slot.binaryVersion = null
+      slot.binaryVersionFailure = null
+    }
     // A running, installing, failed or recovering agent keeps its lifecycle state.
     const idle = !slot.launched && !slot.starting && !slot.installing && slot.state !== 'failed'
     if (idle) {
       slot.state = detection.state
       slot.detail = detection.state === 'available' ? null : detection.detail
+    }
+    this.emit(slot)
+    if (program) void this.askBinaryVersion(slot, program, env)
+  }
+
+  /** A program's `--version` answer: the test's probe, or the cache the CLIs are asked through. */
+  private askVersion(program: string, env: Env): Promise<CliVersion> {
+    return this.deps.probeCli
+      ? this.deps.probeCli(program, env)
+      : this.cliVersions.probe(program, env)
+  }
+
+  /**
+   * A binary agent's version from `--version`, asked in the background as detection finds the
+   * program: Settings shows it before the agent starts, and `initialize` reports its own after.
+   */
+  private async askBinaryVersion(slot: Slot, program: string, env: Env): Promise<void> {
+    let answer: CliVersion
+    try {
+      answer = await this.askVersion(program, env)
+    } catch (error) {
+      answer = { error: (error as Error).message }
+    }
+    // A detection that moved on to another program has asked its own version.
+    if (slot.binaryProgram !== program) return
+    if ('error' in answer) {
+      slot.binaryVersion = null
+      // The same failure is logged once, however often detection asks again.
+      if (slot.binaryVersionFailure !== answer.error) {
+        slot.binaryVersionFailure = answer.error
+        this.deps.diagnostics.log(
+          'warn',
+          `${slot.def.name}: could not read its version: ${answer.error}`,
+        )
+      }
+    } else {
+      slot.binaryVersion = answer.version
+      slot.binaryVersionFailure = null
     }
     this.emit(slot)
   }
@@ -1893,7 +1946,7 @@ export class AgentManager {
       id: slot.def.id,
       name: slot.def.name,
       state: slot.state,
-      version: init?.version ?? null,
+      version: init?.version ?? slot.binaryVersion ?? null,
       package:
         launch.kind === 'package'
           ? {
