@@ -49,13 +49,13 @@
     "context": {
       "title": "Context",
       "used": "Context used",
-      "tokens": "{{used}} of {{size}} tokens · {{left}} left",
+      "summary": "{{percent}}% used · {{used}} / {{size}}",
       "session": "This session",
       "input": "Input",
       "output": "Output",
       "reasoning": "Reasoning",
       "cacheRead": "Cache read",
-      "cacheWrite": "write",
+      "cacheWrite": "Cache write",
       "compact": "Compact"
     },
     "breakdown": {
@@ -64,6 +64,7 @@
     },
     "limits": {
       "plan": "Plan",
+      "tier": "{{plan}} ({{tier}})",
       "title": "Plan limits",
       "used": "{{limit}} used",
       "resets": "Resets {{time}}",

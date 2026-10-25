@@ -23,6 +23,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { CacheDetails } from '@renderer/features/prompt-cache/cache-details'
 import { CacheHourglass } from '@renderer/features/prompt-cache/cache-hourglass'
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
+import {
+  contextRows,
+  contextSegments,
+  type ContextRow,
+  type ContextSegment,
+} from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { USAGE_TONE_TEXT, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import {
@@ -220,7 +226,12 @@ export function UsageButton({
         )}
         {usage && <Ring share={share} tone={tone} cache={ringCache} />}
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" sideOffset={6} className="w-[320px] gap-0 p-0">
+      <PopoverContent
+        side="top"
+        align="end"
+        sideOffset={6}
+        className="max-h-(--available-height) w-[320px] gap-0 overflow-y-auto p-0"
+      >
         {usage && (
           <ContextPart
             sessionId={sessionId}
@@ -232,7 +243,7 @@ export function UsageButton({
           />
         )}
         {usage && (limits.length > 0 || account) && <Separator className="bg-border-soft" />}
-        {(limits.length > 0 || account) && <LimitsPart limits={limits} account={account} />}
+        {(limits.length > 0 || account) && <PlanPart limits={limits} account={account} />}
       </PopoverContent>
     </Popover>
   )
@@ -257,66 +268,54 @@ function ContextPart({
   const report = useUsageStore((s) => s.context[sessionId])
   const totals = usage.tokens
   const tone = contextTone(share)
+  const breakdown = report?.breakdown ?? null
+  const rows = breakdown ? contextRows(breakdown.categories) : null
+  const busy = report?.loading === true
+  const more = Boolean(totals || cache || usage.cost || onCompact)
   return (
-    <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
-      <div className="flex items-baseline justify-between text-ui">
-        <span className="font-medium">{t('usage.context.title')}</span>
-        <span className={cn('tabular', full && USAGE_TONE_TEXT[tone])}>
-          {Math.round(share * 100)}%
-        </span>
-      </div>
-      <Progress
-        value={Math.min(100, share * 100)}
-        tone={tone === 'success' ? 'default' : tone}
-        aria-label={t('usage.context.used')}
-      />
-      <p className="text-xs text-muted-foreground tabular">
-        {t('usage.context.tokens', {
-          used: tokens(usage.used),
-          size: tokens(usage.size),
-          left: tokens(Math.max(0, usage.size - usage.used)),
-        })}
-      </p>
-      {report && <Breakdown report={report} />}
-      {totals && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs tabular">
-          <dt className="text-muted-foreground">{t('usage.context.session')}</dt>
-          <dd className="flex flex-wrap gap-x-3">
-            <span>
-              <span className="text-muted-foreground">{t('usage.context.input')}</span>{' '}
-              {tokens(totals.input)}
-            </span>
-            <span>
-              <span className="text-muted-foreground">{t('usage.context.output')}</span>{' '}
-              {tokens(totals.output)}
-            </span>
-            {totals.thought !== null && (
-              <span>
-                <span className="text-muted-foreground">{t('usage.context.reasoning')}</span>{' '}
-                {tokens(totals.thought)}
-              </span>
-            )}
-          </dd>
-          {(totals.cacheRead !== null || totals.cacheWrite !== null) && (
-            <>
-              <dt />
-              <dd className="flex flex-wrap gap-x-3">
-                {totals.cacheRead !== null && (
-                  <span>
-                    <span className="text-muted-foreground">{t('usage.context.cacheRead')}</span>{' '}
-                    {tokens(totals.cacheRead)}
-                  </span>
-                )}
-                {totals.cacheWrite !== null && (
-                  <span>
-                    <span className="text-muted-foreground">{t('usage.context.cacheWrite')}</span>{' '}
-                    {tokens(totals.cacheWrite)}
-                  </span>
-                )}
-              </dd>
-            </>
+    <div className="flex flex-col gap-3 p-3.5">
+      <div className="flex flex-col gap-2.5">
+        <div className="flex items-baseline justify-between gap-3 text-ui">
+          <span className="font-semibold">{t('usage.context.title')}</span>
+          <span className={cn('tabular text-secondary', full && USAGE_TONE_TEXT[tone])}>
+            {t('usage.context.summary', {
+              percent: Math.round(share * 100),
+              used: tokens(usage.used),
+              size: tokens(usage.size),
+            })}
+          </span>
+        </div>
+        <div
+          aria-busy={busy}
+          className={cn(
+            'flex flex-col gap-2.5 transition-opacity duration-(--duration-fast)',
+            busy && breakdown && 'opacity-60',
           )}
-        </dl>
+        >
+          <ContextBar rows={rows} used={usage.used} size={usage.size} />
+          {rows && <Sources rows={rows} />}
+        </div>
+        {!breakdown && report && <BreakdownState report={report} />}
+        {breakdown && breakdown.lists.length > 0 && (
+          <div className="flex flex-col">
+            {breakdown.lists.map((list) => (
+              <ListPart key={list.name} list={list} />
+            ))}
+          </div>
+        )}
+      </div>
+      {more && <Separator className="bg-border-soft" />}
+      {totals && (
+        <div className="flex flex-col gap-2">
+          <span className="text-ui font-semibold">{t('usage.context.session')}</span>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs tabular">
+            <Total label={t('usage.context.input')} value={totals.input} />
+            <Total label={t('usage.context.output')} value={totals.output} />
+            <Total label={t('usage.context.reasoning')} value={totals.thought} />
+            <Total label={t('usage.context.cacheRead')} value={totals.cacheRead} />
+            <Total label={t('usage.context.cacheWrite')} value={totals.cacheWrite} />
+          </dl>
+        </div>
       )}
       {cache && <CacheDetails cache={cache} used={usage.used} />}
       {(usage.cost || onCompact) && (
@@ -332,6 +331,99 @@ function ContextPart({
         </div>
       )}
     </div>
+  )
+}
+
+function Total({ label, value }: { label: string; value: number | null }) {
+  if (value === null) return null
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd>{tokens(value)}</dd>
+    </div>
+  )
+}
+
+const SOURCE_COLOR = [
+  'bg-context-1',
+  'bg-context-2',
+  'bg-context-3',
+  'bg-context-4',
+  'bg-context-5',
+  'bg-context-6',
+  'bg-context-7',
+] as const
+
+/** A part's fill in the bar, and in its row's swatch (where the buffer and free space are outlined). */
+const partFill = (part: ContextSegment['part']): string => {
+  switch (part.kind) {
+    case 'source':
+      return SOURCE_COLOR[part.color - 1]!
+    case 'buffer':
+      return 'bg-(image:--context-hatch)'
+    case 'used':
+      return 'bg-text-tertiary'
+    case 'free':
+      return ''
+  }
+}
+
+/** The context stacked by source, its autocompact buffer hatched and free space the track. */
+function ContextBar({
+  rows,
+  used,
+  size,
+}: {
+  rows: readonly ContextRow[] | null
+  used: number
+  size: number
+}) {
+  const { t } = useTranslation('composer')
+  const segments = contextSegments(rows, used, size)
+  return (
+    <div
+      role="img"
+      aria-label={t('usage.context.used')}
+      className="flex h-2 gap-px overflow-hidden rounded-full bg-track"
+    >
+      {segments.map((segment) => (
+        <div
+          key={segment.key}
+          style={{ flexGrow: segment.tokens }}
+          className={cn('min-w-px basis-0', partFill(segment.part))}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** One row per source, then free space and the autocompact buffer. */
+function Sources({ rows }: { rows: readonly ContextRow[] }) {
+  return (
+    <ul className="flex flex-col text-xs tabular">
+      {rows.map((row) => {
+        const source = row.part.kind === 'source'
+        return (
+          <li key={row.name} className="flex h-6 items-center gap-2">
+            <span
+              aria-hidden
+              className={cn(
+                'size-2 shrink-0 rounded-sm',
+                source ? partFill(row.part) : 'border border-border-strong',
+                row.part.kind === 'buffer' && partFill(row.part),
+              )}
+            />
+            <span className={cn('min-w-0 flex-1 truncate', !source && 'text-secondary')}>
+              {row.name}
+            </span>
+            <span>{tokens(row.tokens)}</span>
+            <span className="w-11 text-right text-tertiary">
+              {row.share !== null && `${Math.round(row.share * 1000) / 10}%`}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -361,60 +453,39 @@ function CacheTime({ cache, phase }: { cache: KnownExpiry; phase: RingCache }) {
   )
 }
 
-/** What fills the context, by source, as the agent's own report gives it. */
-function Breakdown({ report }: { report: ContextReport }) {
+/** The skeleton rows while the first breakdown is read, and the failure when it could not be. */
+function BreakdownState({ report }: { report: ContextReport }) {
   const { t } = useTranslation('composer')
-  const { breakdown, loading, error } = report
-  if (!breakdown) {
-    if (loading) {
-      return (
-        <div aria-label={t('usage.breakdown.loading')} className="flex flex-col gap-1.5 py-0.5">
-          <Skeleton className="h-3 w-4/5" />
-          <Skeleton className="h-3 w-3/5" />
-          <Skeleton className="h-3 w-2/3" />
-        </div>
-      )
-    }
-    return error ? (
-      <p className="text-xs text-muted-foreground">{t('usage.breakdown.error', { error })}</p>
-    ) : null
-  }
-  return (
-    <div
-      aria-busy={loading}
-      className={cn(
-        'flex flex-col gap-1.5 transition-opacity duration-(--duration-fast)',
-        loading && 'opacity-60',
-      )}
-    >
-      <ul className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5 text-xs tabular">
-        {breakdown.categories.map((category) => (
-          <li key={category.name} className="contents">
-            <span className="truncate text-muted-foreground">{category.name}</span>
-            <span className="text-right">{tokens(category.tokens)}</span>
-            <span className="w-10 text-right text-muted-foreground">
-              {category.share !== null && `${Math.round(category.share * 1000) / 10}%`}
-            </span>
-          </li>
+  if (report.loading) {
+    return (
+      <div aria-label={t('usage.breakdown.loading')} className="flex flex-col">
+        {[4 / 5, 3 / 5, 2 / 3].map((width) => (
+          <div key={width} className="flex h-6 items-center">
+            <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
+          </div>
         ))}
-      </ul>
-      {breakdown.lists.map((list) => (
-        <ListPart key={list.name} list={list} />
-      ))}
-    </div>
-  )
+      </div>
+    )
+  }
+  return report.error ? (
+    <p className="text-xs text-muted-foreground">
+      {t('usage.breakdown.error', { error: report.error })}
+    </p>
+  ) : null
 }
 
 function ListPart({ list }: { list: ContextList }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group/list flex items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-ring">
-        <ChevronRightIcon className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90" />
-        {list.name}
-        <span className="tabular">{list.items.length}</span>
+      <CollapsibleTrigger className="group/list flex h-6 w-full items-center gap-2 rounded-sm text-xs outline-none focus-ring">
+        <span className="flex size-2 shrink-0 justify-center">
+          <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-left">{list.name}</span>
+        <span className="tabular text-tertiary">{list.items.length}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
-        <ul className="mt-1 grid max-h-40 grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 overflow-y-auto pl-4 text-xs tabular">
+        <ul className="mb-1 grid max-h-40 grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 overflow-y-auto pl-4 text-xs tabular">
           {list.items.map((item, index) => (
             <li key={index} className="contents">
               <span className="truncate" title={item.detail ?? item.name}>
@@ -427,6 +498,65 @@ function ListPart({ list }: { list: ContextList }) {
         </ul>
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+/** The plan and its windows in the popover: the label with its tier, then a bar for each window. */
+function PlanPart({ limits, account }: { limits: PlanLimit[]; account: AgentAccount | null }) {
+  const { t } = useTranslation('composer')
+  const now = useNow()
+  const observed = limits.reduce((at, l) => Math.max(at, l.observedAt), 0)
+  const plan = account?.label ?? t('usage.limits.plan')
+  return (
+    <div className="flex flex-col gap-3 p-3.5">
+      <div className="flex items-baseline justify-between gap-3 text-ui">
+        <span className="min-w-0 truncate font-semibold text-secondary">
+          {account?.tier ? t('usage.limits.tier', { plan, tier: account.tier }) : plan}
+        </span>
+        {observed > 0 && (
+          <span className="shrink-0 text-xs text-tertiary">
+            {t('usage.limits.updated', { ago: longAgo(observed, now) })}
+          </span>
+        )}
+      </div>
+      {limits.length > 0 && (
+        <ul className="flex flex-col gap-3">
+          {limits.map((limit) => {
+            const tone = usageTone(limit)
+            return (
+              <li key={limit.window} className="flex flex-col gap-1.5">
+                <div className="flex items-baseline gap-2 text-xs tabular">
+                  <span>{limitLabel(limit)}</span>
+                  {limit.resetsAt ? (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<span className="min-w-0 flex-1 truncate text-tertiary" />}
+                      >
+                        {resetTime(limit.resetsAt, now)}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span className="flex-1" />
+                  )}
+                  <span className={tone === 'success' ? 'text-secondary' : USAGE_TONE_TEXT[tone]}>
+                    {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
+                  </span>
+                </div>
+                <Progress
+                  value={limit.usedPercent ?? 0}
+                  tone={tone}
+                  aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
+                  className="[&_[data-slot=progress-track]]:h-1.5"
+                />
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }
 

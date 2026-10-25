@@ -49,13 +49,13 @@
     "context": {
       "title": "上下文",
       "used": "已用上下文",
-      "tokens": "{{used}} / {{size}} token · 剩余 {{left}}",
+      "summary": "已使用 {{percent}}% · {{used}} / {{size}}",
       "session": "本会话",
       "input": "输入",
       "output": "输出",
       "reasoning": "推理",
       "cacheRead": "缓存读取",
-      "cacheWrite": "写入",
+      "cacheWrite": "缓存写入",
       "compact": "压缩上下文"
     },
     "breakdown": {
@@ -64,6 +64,7 @@
     },
     "limits": {
       "plan": "套餐",
+      "tier": "{{plan}} ({{tier}})",
       "title": "套餐限额",
       "used": "已使用：{{limit}}",
       "resets": "重置时间：{{time}}",

@@ -590,6 +590,7 @@ function accountOf(value: unknown): AgentAccount | null {
     kind: value.kind as AgentAccount['kind'],
     label: value.label,
     email: isString(value.email) ? value.email : null,
+    ...(isString(value.tier) ? { tier: value.tier } : {}),
   }
 }
 

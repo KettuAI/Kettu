@@ -130,6 +130,13 @@
   --color-agent-codex: var(--agent-codex);
   --color-agent-opencode: var(--agent-opencode);
   --color-agent-other: var(--agent-other);
+  --color-context-1: var(--context-1);
+  --color-context-2: var(--context-2);
+  --color-context-3: var(--context-3);
+  --color-context-4: var(--context-4);
+  --color-context-5: var(--context-5);
+  --color-context-6: var(--context-6);
+  --color-context-7: var(--context-7);
   --color-heat-0: var(--heat-0);
   --color-heat-1: var(--heat-1);
   --color-heat-2: var(--heat-2);

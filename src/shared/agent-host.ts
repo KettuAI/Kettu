@@ -47,6 +47,8 @@ export interface AgentAccount {
   kind: 'account' | 'api_key' | 'external' | 'gateway' | 'none'
   label: string // "Claude Max", "ChatGPT Plus", "Anthropic API key"
   email: string | null
+  /** The subscription's multiple of the base plan, such as "5x" of Claude Max; absent when unknown. */
+  tier?: string
 }
 
 export interface PlanLimit {
