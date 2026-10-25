@@ -2,6 +2,7 @@
 // whose agent refused its source's mode, or a session whose agent would not take its own back.
 
 import type { ConfigOption } from '@shared/thread'
+import { isValueOf } from './agent-options'
 import { t } from './i18n'
 
 /** A value a session could not keep: `actual` is null when it has no such option. */
@@ -59,6 +60,20 @@ export function lostValues(
     lost.push({ rank: RANK[option.category], value: lostValue(option, same) })
   }
   return lost.sort((a, b) => a.rank - b.rank).map(({ value }) => value)
+}
+
+/**
+ * `own` with its stored mode set on the one mode option the agent offers now, when the stored
+ * option's id is gone, exactly one mode option is offered, and it takes the stored value; `own`
+ * itself otherwise. An agent that moves between `configOptions` and the legacy `modes` does this.
+ */
+export function carryMode(own: ConfigOption[], offered: ConfigOption[]): ConfigOption[] {
+  const stored = own.find((option) => option.category === 'mode')
+  if (!stored || offered.some((option) => option.id === stored.id)) return own
+  const modes = offered.filter((option) => option.category === 'mode')
+  const [mode] = modes
+  if (modes.length !== 1 || !mode || !isValueOf(mode, stored.value)) return own
+  return own.map((option) => (option === stored ? { ...mode, value: stored.value } : option))
 }
 
 /**
