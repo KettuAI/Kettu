@@ -24,6 +24,29 @@ describe('buttonVariants', () => {
   })
 })
 
+describe('buttonVariants depth', () => {
+  it('draws the primary button as a gradient that lightens on hover', () => {
+    const classes = buttonVariants({ variant: 'default' })
+
+    expect(classes).toContain('bg-(image:--primary-gradient)')
+    expect(classes).toContain('hover:bg-(image:--primary-gradient-hover)')
+    expect(classes).toContain('shadow-primary')
+    expect(classes).not.toContain('hover:bg-primary/80')
+  })
+
+  it('raises the outline button and darkens its line on hover instead of its fill', () => {
+    const classes = buttonVariants({ variant: 'outline' })
+
+    expect(classes).toContain('shadow-outline')
+    expect(classes).toContain('hover:shadow-outline-hover')
+    expect(classes).not.toContain('hover:bg-accent')
+  })
+
+  it('sinks a pressed quiet button', () => {
+    expect(buttonVariants({ variant: 'quiet' })).toContain('aria-pressed:shadow-sunk')
+  })
+})
+
 describe('Button', () => {
   it.each([
     ['default', 'default'],

@@ -96,7 +96,7 @@ export const ArtifactCard = memo(function ArtifactCard({
           setMoreOpen(true)
         }
       }}
-      className="relative flex w-full flex-col overflow-hidden rounded-xl bg-surface text-left outline-none focus-ring"
+      className="relative flex w-full flex-col overflow-hidden rounded-xl bg-surface text-left shadow-(--elevation-card) outline-none transition-[translate,box-shadow] duration-(--duration-fast) focus-ring group-hover/card:shadow-float group-hover/card:-translate-y-px motion-reduce:transition-none motion-reduce:group-hover/card:translate-y-0"
     >
       <span
         className={cn(
@@ -116,7 +116,7 @@ export const ArtifactCard = memo(function ArtifactCard({
       </span>
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-card transition-shadow duration-(--duration-fast) group-hover/card:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)] group-has-focus-visible/card:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]"
+        className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] transition-shadow duration-(--duration-fast) group-hover/card:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)] group-has-focus-visible/card:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]"
       />
     </button>
   )

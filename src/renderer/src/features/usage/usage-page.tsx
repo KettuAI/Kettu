@@ -562,7 +562,7 @@ function Card({ className, children }: { className?: string; children: ReactNode
 
 function CardHead({ title, aside }: { title: string; aside?: ReactNode }) {
   return (
-    <div className="flex min-h-5 items-baseline gap-2">
+    <div className="flex min-h-5 items-baseline gap-2 pb-3 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
       <h2 className="text-ui font-medium">{title}</h2>
       <span className="flex-1" />
       {aside}

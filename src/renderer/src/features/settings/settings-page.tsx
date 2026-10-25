@@ -236,7 +236,7 @@ function NavRow({
       className={cn(
         'group flex h-8 shrink-0 items-center gap-2.5 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-ring',
         selected
-          ? 'bg-selected font-medium text-primary'
+          ? 'bg-surface font-medium text-primary shadow-outline'
           : 'text-secondary hover:bg-hover hover:text-primary',
         dim && 'pointer-events-none opacity-40',
       )}

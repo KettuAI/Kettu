@@ -149,6 +149,10 @@
   --shadow-lg: var(--elevation-lg);
   --shadow-card: var(--card-ring);
   --shadow-outline: var(--outline-ring);
+  --shadow-outline-hover: var(--outline-hover);
+  --shadow-sunk: var(--sunk-ring);
+  --shadow-primary: var(--primary-shadow);
+  --shadow-float: var(--float-shadow);
   --shadow-menu: var(--menu-ring);
   --shadow-dialog: var(--dialog-ring);
   --shadow-composer: var(--composer-ring);
@@ -225,19 +229,6 @@
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
-}
-
-/* Lines are as fine as the display allows. */
-@media (resolution >= 2x) {
-  :root {
-    --hairline: 0.5px;
-  }
-}
-
-@media (resolution >= 3x) {
-  :root {
-    --hairline: 0.34px;
-  }
 }
 
 /* Light text on a dark surface looks heavier than it is. */

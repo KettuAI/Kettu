@@ -12,7 +12,7 @@ void bootstrap().then(() =>
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       {/* One 1 px line at every icon size (design system: density and sizing). */}
-      <LucideProvider strokeWidth={1} nonScalingStroke>
+      <LucideProvider strokeWidth={1.25} nonScalingStroke>
         <Root />
       </LucideProvider>
     </StrictMode>,
