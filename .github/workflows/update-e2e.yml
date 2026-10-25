@@ -1,6 +1,9 @@
 name: Update end to end
 
 on:
+  push:
+    # Temporary: lets this branch run the workflow before it exists on main.
+    branches: [test/284-update-e2e]
   workflow_dispatch:
     inputs:
       ref:
