@@ -63,6 +63,9 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.removeEmpty']({ keep: [''] }))
     rejects(() => posix['sessions.removeEmpty']({ keep: [3] }))
     rejects(() => posix['sessions.removeEmpty']({ keep: ['x'.repeat(257)] }))
+    const ids = (count: number) => Array.from({ length: count }, (_, i) => `s${i}`)
+    expect(posix['sessions.removeEmpty']({ keep: ids(10_000) }).keep).toHaveLength(10_000)
+    rejects(() => posix['sessions.removeEmpty']({ keep: ids(10_001) }))
   })
 
   it('takes a pin and an unread mark as booleans', () => {

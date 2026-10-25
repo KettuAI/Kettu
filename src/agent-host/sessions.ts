@@ -4048,15 +4048,21 @@ export class SessionManager {
       return yes
     }
     const removed = [...empty].filter(removable)
+    const records = removed.map((id) => this.records.get(id)!)
     for (const id of removed) this.forget(id)
     this.emptySessionsRemovedAt = this.now()
     this.saveIndex()
     // While the index on disk still lists a session, its empty thread is what lets a later run
     // remove it, so the threads go only once the index is written.
     if (!(await this.deps.file.flushWritten())) {
+      // Undone, so a later write in this run does not drop them with their threads still stored.
+      for (const record of records) this.records.set(record.id, record)
+      this.emptySessionsRemovedAt = null
+      this.saveIndex()
+      for (const record of records) this.touch(record.id)
       this.deps.diagnostics.log(
         'warn',
-        `Could not write the index without ${removed.length} sessions that held no message; their threads stay and the next launch tries again`,
+        `Could not write the index without ${removed.length} sessions that held no message; they stay listed and the next launch tries again`,
       )
       return
     }

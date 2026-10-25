@@ -19,7 +19,7 @@ const TEXT_CHARS = 4_096
 const URL_CHARS = 2_048
 const PROMPT_ITEMS = 1_000
 // Sessions with a draft, which the one-time removal keeps.
-const KEPT_SESSIONS = 100_000
+const KEPT_SESSIONS = 10_000
 // Attachments the drafts name, checked once at launch.
 const HELD_ATTACHMENTS = 100_000
 const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
