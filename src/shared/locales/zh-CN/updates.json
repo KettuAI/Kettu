@@ -11,6 +11,12 @@
     "availableTooltip": "OverBench {{version}} 已发布，请从发布页面下载。",
     "updatedTooltip": "OverBench 已更新到 {{version}}。"
   },
+  "agentNotice": {
+    "one": "{{name}} 有更新",
+    "many": "Agent 有更新",
+    "oneTooltip": "{{name}} {{version}} 已发布。打开「设置 › Agent」进行更新。",
+    "manyTooltip_other": "{{count}} 个 Agent 有可用更新。打开「设置 › Agent」进行更新。"
+  },
   "quit": {
     "titleUpdate": "重启以完成更新？",
     "titleQuit": "退出 OverBench？",

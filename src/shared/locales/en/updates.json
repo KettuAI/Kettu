@@ -11,6 +11,13 @@
     "availableTooltip": "OverBench {{version}} is out. Download it from the release page.",
     "updatedTooltip": "OverBench was updated to {{version}}."
   },
+  "agentNotice": {
+    "one": "{{name}} update",
+    "many": "Agent updates",
+    "oneTooltip": "{{name}} {{version}} is available. Open Settings › Agents to update.",
+    "manyTooltip_one": "{{count}} agent update is available. Open Settings › Agents to update.",
+    "manyTooltip_other": "{{count}} agent updates are available. Open Settings › Agents to update."
+  },
   "quit": {
     "titleUpdate": "Restart to update?",
     "titleQuit": "Quit OverBench?",

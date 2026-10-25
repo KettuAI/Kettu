@@ -152,6 +152,7 @@ export interface AgentStatus {
   binaryOverride: string | null // the program picked in Settings, if any
   update: AgentUpdate | null // from the last update check; null when up to date or unchecked
   updateCheckedAt: number | null // when that check finished; always null for binary agents
+  updateSkipped: boolean // the user dismissed this update in the sidebar's notice
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
   cli: AgentCli | null // which CLI a Claude Code or Codex adapter runs; null for the others
@@ -331,6 +332,8 @@ export interface HostContract {
   'agents.reinstall': { params: { agentId: AgentId }; result: void }
   // Asks npm for each package agent's latest adapter and the CLI it carries.
   'agents.checkUpdates': { params: void; result: AgentStatus[] }
+  // Skips the agent's current update in the sidebar's notice, until a newer one.
+  'agents.skipUpdate': { params: { agentId: AgentId }; result: void }
   // Both resolve once the task is done or cancelled, and reject with its error.
   'agents.update': { params: { agentId: AgentId }; result: void }
   'agents.install': {
@@ -545,6 +548,7 @@ export const HOST_METHODS = [
   'agents.retry',
   'agents.reinstall',
   'agents.checkUpdates',
+  'agents.skipUpdate',
   'agents.update',
   'agents.install',
   'agents.cancelTask',

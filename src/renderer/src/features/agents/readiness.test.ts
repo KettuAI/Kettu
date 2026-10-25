@@ -20,6 +20,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   binaryOverride: null,
   update: null,
   updateCheckedAt: null,
+  updateSkipped: false,
   task: null,
   installMethods: [],
   cli: null,
