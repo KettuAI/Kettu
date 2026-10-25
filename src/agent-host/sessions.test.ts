@@ -1939,6 +1939,25 @@ describe('cancellation', () => {
       stopReason: 'cancelled',
     })
   })
+
+  it('takes no usage a prompt the host gave up on reports as a request', async () => {
+    const { t, port } = await setup({ sessionTimings: { cancelFallbackMs: 200 } })
+    const sessionId = await newSession(t, port)
+    // A first turn, so the cache has a time to keep. OpenCode reports usage only as a turn ends.
+    await turn(port, sessionId, '/requests --at-end')
+    await port.untilStatus(sessionId, 'ready')
+    const before = port.thread(sessionId).session.usage!
+    expect(before.cache).not.toBeUndefined()
+    const chunks = () => port.entries(sessionId).filter((entry) => entry.kind === 'agent').length
+    const streamed = chunks()
+    await turn(port, sessionId, '/requests --at-end --hold 600 --ignore-cancel')
+    await port.until(() => chunks() > streamed)
+    await port.request('sessions.cancel', { sessionId })
+    // The fallback ends the turn, and the prompt's own usage arrives well after it.
+    await port.untilStatus(sessionId, 'ready')
+    await port.until(() => port.thread(sessionId).session.usage!.used > before.used)
+    expect(port.thread(sessionId).session.usage!.cache).toEqual(before.cache)
+  })
 })
 
 describe('opening and recovering', () => {

@@ -310,6 +310,8 @@ interface Live {
   first: { content: UserContent[]; entryId: string } | null
   /** The values New session chose, set once `session/new` answers, also after a sign-in. */
   startValues: Record<string, string | boolean>
+  /** A turn the host ended after a Stop the agent did not confirm, until its prompt is answered. */
+  unansweredCancel: Turn | null
   /** It started work that runs on after its tool call, which Claude Code reports no end of. */
   background: boolean
   /** Set while it is a prepared session, not yet in the index. */
@@ -1010,7 +1012,7 @@ export class SessionManager {
       context: () => ({
         thread: live.thread,
         replaying: live.replaying,
-        cancelling: live.turn?.cancelRequested ?? false,
+        cancelling: live.turn ? live.turn.cancelRequested : live.unansweredCancel !== null,
         scope: live.scope,
         now: this.now(),
         nextId: () => this.nextId(live),
@@ -1057,6 +1059,7 @@ export class SessionManager {
       used: false,
       first: null,
       startValues: {},
+      unansweredCancel: null,
       background: false,
       prepared: null,
       idleSince: null,
@@ -3285,7 +3288,9 @@ export class SessionManager {
           ])
         }
       }
-      const sending = connection.prompt(live.record.acpSessionId, resolved.wire)
+      const sending = connection.prompt(live.record.acpSessionId, resolved.wire).finally(() => {
+        if (live.unansweredCancel === turn) live.unansweredCancel = null
+      })
       // Sent: the records go, and a retry after a failed sign-in sends what the thread shows.
       this.commitAttachments(live, resolved)
       turn.content = resolved.shown
@@ -3552,6 +3557,8 @@ export class SessionManager {
           },
         },
       ])
+      // The agent may still report the stopped prompt's usage long after the turn is over.
+      live.unansweredCancel = turn
       this.endTurn(live, turn, 'cancelled', null)
     }, this.timings.cancelFallbackMs)
   }

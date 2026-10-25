@@ -40,7 +40,7 @@ export interface MapperContext {
   readonly thread: ThreadState
   /** True while `session/load` replays history into the thread. */
   readonly replaying: boolean
-  /** The user stopped the running turn and the agent has not ended it yet. */
+  /** The user stopped the turn and the agent has not answered its prompt yet. */
   readonly cancelling: boolean
   readonly scope: TurnScope
   readonly now: number
