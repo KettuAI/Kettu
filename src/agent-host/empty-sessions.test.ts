@@ -39,13 +39,14 @@ const readIndex = async (dir: string) => JSON.parse(await readFile(indexFile(dir
 async function launchAfterUpdate(
   first: TestHost,
   edit: (records: SessionRecord[]) => void = () => {},
+  options: Parameters<typeof startTestHost>[0] = {},
 ) {
   await first.host.shutdown()
   const index = await readIndex(first.dir)
   delete index.emptySessionsRemovedAt
   edit(index.sessions)
   await writeFile(indexFile(first.dir), JSON.stringify(index))
-  return setup({ userDataPath: first.dir })
+  return setup({ ...options, userDataPath: first.dir })
 }
 
 async function relaunch(first: TestHost) {
@@ -89,6 +90,29 @@ async function stored(t: TestHost, sessionId: string) {
 
 const logged = (t: TestHost, text: string) =>
   t.host.diagnostics.logEntries().some((entry) => entry.message.includes(text))
+
+function gate(): { open: () => void; opened: Promise<void> } {
+  let open = () => {}
+  const opened = new Promise<void>((resolve) => (open = resolve))
+  return { open, opened }
+}
+
+/** Holds the stored-thread reads of `method` for `sessionId` until the returned gate opens. */
+function holdReads(method: 'load' | 'page', sessionId: string) {
+  const held = gate()
+  const calls: string[] = []
+  const original = ThreadStore.prototype[method] as (...args: unknown[]) => Promise<unknown>
+  vi.spyOn(ThreadStore.prototype, method).mockImplementation(async function (
+    this: ThreadStore,
+    id: string,
+    ...rest: unknown[]
+  ) {
+    calls.push(id)
+    if (id === sessionId) await held.opened
+    return original.call(this, id, ...rest)
+  } as never)
+  return { ...held, calls }
+}
 
 describe('removing sessions with no message, once', () => {
   it('removes those with no message and no title of any kind, with their threads', async () => {
@@ -195,6 +219,78 @@ describe('removing sessions with no message, once', () => {
     expect(await listed(port)).toEqual([live, shown, watched, fresh].sort())
   })
 
+  it('keeps a session renamed while its thread is read', async () => {
+    const { t: first, port: before } = await setup()
+    const renamed = await create(first, before)
+    const reads = holdReads('page', renamed)
+    const { port } = await launchAfterUpdate(first)
+    const removal = removeEmpty(port)
+    await vi.waitFor(() => expect(reads.calls).toContain(renamed))
+    await port.request('sessions.rename', { sessionId: renamed, title: 'Keep me' })
+    reads.open()
+    await removal
+    expect(await listed(port)).toEqual([renamed])
+  })
+
+  it('keeps a session being brought back from its stored thread', async () => {
+    const { t: first, port: before } = await setup()
+    const reviving = await create(first, before)
+    const reads = holdReads('load', reviving)
+    const { port } = await launchAfterUpdate(first)
+    const used = port.request('sessions.setConfigOption', {
+      sessionId: reviving,
+      optionId: 'mode',
+      value: 'plan',
+    })
+    await vi.waitFor(() => expect(reads.calls).toContain(reviving))
+    await removeEmpty(port)
+    reads.open()
+    await used
+    expect(await listed(port)).toEqual([reviving])
+  })
+
+  it('keeps a session being let go', async () => {
+    const { t: first, port: before } = await setup()
+    const released = await create(first, before)
+    const quick = { releaseHiddenMs: 60, releaseShownMs: 800, releaseUnusedMs: 60 }
+    const { t, port } = await launchAfterUpdate(first, undefined, { sessionTimings: quick })
+    // The release goes on after the session dropped, as it does for the ticks before it ends.
+    const releasing = gate()
+    const sessions = t.host.sessions as unknown as {
+      closeAll: (...args: unknown[]) => Promise<void>
+    }
+    const closeAll = sessions.closeAll.bind(sessions)
+    vi.spyOn(sessions, 'closeAll').mockImplementation(async (...args) => {
+      await closeAll(...args)
+      await releasing.opened
+    })
+    await port.request('sessions.setConfigOption', {
+      sessionId: released,
+      optionId: 'mode',
+      value: 'plan',
+    })
+    await port.untilStatus(released, 'closed')
+    await removeEmpty(port)
+    releasing.open()
+    expect(await listed(port)).toEqual([released])
+  })
+
+  it('runs once when it is asked again while it runs', async () => {
+    const { t: first, port: before } = await setup()
+    const empty = await create(first, before)
+    const reads = holdReads('page', empty)
+    const { t, port } = await launchAfterUpdate(first)
+    const removals = [removeEmpty(port), removeEmpty(port)]
+    await vi.waitFor(() => expect(reads.calls).toContain(empty))
+    reads.open()
+    await Promise.all(removals)
+    expect(reads.calls.filter((id) => id === empty)).toHaveLength(1)
+    const runs = t.host.diagnostics
+      .logEntries()
+      .filter((entry) => entry.message.startsWith('Removed'))
+    expect(runs).toHaveLength(1)
+  })
+
   it('keeps a session whose thread cannot be read, and still runs only once', async () => {
     const { t: first, port: before } = await setup()
     const unreadable = await create(first, before)
@@ -263,6 +359,31 @@ describe('removing sessions with no message, once', () => {
     const { t, port } = await setup({ userDataPath: second.dir })
     await removeEmpty(port)
     expect(await listed(port)).toEqual([])
+    expect(await stored(t, empty)).toBeNull()
+  })
+
+  it('writes no removal once the index can be written again in the same run', async () => {
+    const { t: first, port: before } = await setup()
+    const empty = await create(first, before)
+    const other = await create(first, before)
+    await talk(before, other)
+    const tmp = `${indexFile(first.dir)}.tmp`
+    const { t: second, port: during } = await launchAfterUpdate(first)
+    await mkdir(tmp)
+    await removeEmpty(during)
+    // Listed again, as the index on disk still has it.
+    expect(await listed(during)).toEqual([empty, other].sort())
+
+    await rm(tmp, { recursive: true })
+    await during.request('sessions.rename', { sessionId: other, title: 'Renamed' })
+    await second.host.sessions.flush()
+    const index = await readIndex(second.dir)
+    expect(index.sessions.map((s) => s.id).sort()).toEqual([empty, other].sort())
+    expect(index.emptySessionsRemovedAt).toBeUndefined()
+
+    const { t, port } = await relaunch(second)
+    await removeEmpty(port)
+    expect(await listed(port)).toEqual([other])
     expect(await stored(t, empty)).toBeNull()
   })
 })
