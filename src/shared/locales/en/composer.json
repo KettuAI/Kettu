@@ -143,5 +143,8 @@
     "toSearch_other": "Type to search {{count, number}} files and their folders",
     "loading": "Listing the project's files…",
     "chooseProject": "Choose a project to mention its files"
+  },
+  "slash": {
+    "typeToFilter": "Type to filter"
   }
 }

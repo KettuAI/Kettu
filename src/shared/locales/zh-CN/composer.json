@@ -138,5 +138,8 @@
     "toSearch_other": "输入以搜索 {{count, number}} 个文件及其文件夹",
     "loading": "正在列出项目文件…",
     "chooseProject": "选择一个项目后才能提及其中的文件"
+  },
+  "slash": {
+    "typeToFilter": "输入以筛选"
   }
 }
