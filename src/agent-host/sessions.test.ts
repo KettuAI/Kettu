@@ -1081,6 +1081,69 @@ describe('forking', () => {
     })
   })
 
+  const IMAGE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
+  async function imagePrompt(port: TestPort): Promise<UserContent[]> {
+    const added = await port.request('attachments.add', {
+      source: { bytes: IMAGE.slice().buffer, mimeType: 'image/png', name: 'Image 1' },
+      thumb: 'data:image/webp;base64,AAAA',
+    })
+    return [
+      { type: 'text', text: '/attachments' },
+      {
+        type: 'ref',
+        ref: { kind: 'attachment', attachment: { id: added.id } as Attachment },
+      },
+    ]
+  }
+
+  it('starts a fork with an empty queue and leaves the source its own', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    const content = await imagePrompt(port)
+    await port.request('sessions.queue', { sessionId, content })
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    await port.until(() => port.thread(sessionId).session.queuePaused)
+    const queued = port.thread(sessionId).session.queue
+    expect(queued).toHaveLength(1)
+
+    const fork = await port.request('sessions.fork', { sessionId })
+    await port.open(fork.id)
+    expect(port.thread(fork.id).session).toMatchObject({ queue: [], queuePaused: false })
+    expect(port.thread(sessionId).session).toMatchObject({ queue: queued, queuePaused: true })
+
+    await port.request('sessions.delete', { sessionId: fork.id })
+    const attachment = queued[0]!.content.at(-1)
+    const id =
+      attachment?.type === 'ref' && attachment.ref.kind === 'attachment'
+        ? attachment.ref.attachment.id
+        : ''
+    expect((await port.request('attachments.read', { id })).bytes.byteLength).toBe(IMAGE.length)
+    await port.request('sessions.resumeQueue', { sessionId })
+    await port.untilEntry(
+      sessionId,
+      (entry) => entry.kind === 'agent' && entry.markdown.includes('- image image/png, 12 bytes'),
+    )
+    const lastUser = port.entries(sessionId).findLast((entry) => entry.kind === 'user')
+    const ref = lastUser?.kind === 'user' ? lastUser.content.find((c) => c.type === 'ref') : null
+    expect(ref?.type === 'ref' ? ref.ref : null).toMatchObject({
+      kind: 'attachment',
+      attachment: { sent: 'image' },
+    })
+  })
+
+  it('starts a fork unpinned', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await port.request('sessions.pin', { sessionId, pinned: true })
+    expect(port.summary(sessionId)?.pinnedAt).toEqual(expect.any(Number))
+    const fork = await port.request('sessions.fork', { sessionId })
+    expect(fork).toMatchObject({ pinnedAt: null })
+    expect(port.summary(fork.id)?.pinnedAt).toBeNull()
+    expect(port.summary(sessionId)?.pinnedAt).toEqual(expect.any(Number))
+  })
+
   async function finishTurn(port: TestPort, sessionId: string, text: string) {
     const ends = () => port.entries(sessionId).filter((entry) => entry.kind === 'turn_end').length
     const before = ends()
