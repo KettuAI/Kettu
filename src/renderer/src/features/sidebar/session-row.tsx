@@ -234,18 +234,25 @@ export const SessionRow = memo(function SessionRow({
               onOpenChange={setMoreOpen}
               onOpenChangeComplete={rename.menu.onOpenChangeComplete}
             >
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    aria-label={t('row.more')}
-                    className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-primary data-popup-open:opacity-100 [&_svg]:size-3.5"
-                  />
-                }
-              >
-                <EllipsisIcon />
-              </DropdownMenuTrigger>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuTrigger
+                      render={
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          aria-label={t('row.more')}
+                          className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-primary data-popup-open:opacity-100 [&_svg]:size-3.5"
+                        />
+                      }
+                    />
+                  }
+                >
+                  <EllipsisIcon />
+                </TooltipTrigger>
+                <TooltipContent>{t('row.more')}</TooltipContent>
+              </Tooltip>
               <DropdownMenuContent
                 align="start"
                 finalFocus={rename.menu.finalFocus}
