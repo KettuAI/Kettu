@@ -57,6 +57,7 @@ import {
 } from '@renderer/stores/view'
 import { ImportSessionsDialog } from './import-sessions'
 import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
+import { visibleProjects } from './project-group'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
 
@@ -67,6 +68,8 @@ export function AppSidebar() {
   const sessionsLoaded = useSessionsStore((s) => s.loaded)
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
+  const sessionsById = useSessionsStore((s) => s.byId)
+  const shownProjects = visibleProjects(projects, sessionsById)
   const drafting = useViewStore((s) => s.main.kind === 'new' && !s.settings.open)
   // The viewer opened from the page belongs to it.
   const artifactsShown = useViewStore(
@@ -120,10 +123,10 @@ export function AppSidebar() {
           ) : (
             <>
               <PinnedGroup />
-              {projects.length === 0 ? (
+              {shownProjects.length === 0 ? (
                 <p className="px-2 py-1 text-xs leading-normal text-secondary">{t('nav.empty')}</p>
               ) : (
-                projects.map((project) => (
+                shownProjects.map((project) => (
                   <ProjectGroup key={project.path} project={project} onImport={importSessions} />
                 ))
               )}
