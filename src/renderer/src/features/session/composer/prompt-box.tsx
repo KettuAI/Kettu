@@ -436,7 +436,6 @@ function AddMenu({
       <DropdownMenuContent
         side="top"
         sideOffset={6}
-        className="w-60"
         finalFocus={() => {
           onFocusBox()
           return false
