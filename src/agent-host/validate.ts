@@ -489,6 +489,10 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), unread: flag(o, 'unread') }
     },
     'sessions.delete': session,
+    'sessions.takeReturned': (params) => {
+      const o = fields(params)
+      return { sessionId: o.sessionId === null ? null : sessionId(o) }
+    },
     'sessions.removeEmpty': (params) => {
       const keep = fields(params).keep
       if (!Array.isArray(keep) || keep.length > KEPT_SESSIONS) {

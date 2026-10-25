@@ -190,6 +190,27 @@ export async function createSession(
 }
 
 /**
+ * Takes the messages the host kept when no window could, into New session's draft: an empty one
+ * gets the text and attachments, one written since gets the text after a blank line.
+ */
+export async function takeReturnedMessages(): Promise<void> {
+  let messages: UserContent[][]
+  try {
+    messages = await host('sessions.takeReturned', { sessionId: null })
+  } catch (error) {
+    console.warn(`Could not take the returned messages: ${errorMessage(error)}`)
+    return
+  }
+  for (const content of messages) {
+    const text = promptText(content)
+    const draft = readDraft(NEW_SESSION_DRAFT)
+    writeDraft(NEW_SESSION_DRAFT, draftIsEmpty() ? text : draft ? `${draft}\n\n${text}` : text)
+    restoreAttachments(NEW_SESSION_DRAFT, content)
+    flushDraft(NEW_SESSION_DRAFT)
+  }
+}
+
+/**
  * New session's send: creates the session with its first message, as a sub-session when the
  * screen was opened for one and its parent is still listed.
  */

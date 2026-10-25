@@ -97,7 +97,7 @@ import {
   runReport,
 } from './reports'
 import type { ScratchFolders } from './scratch'
-import type { JsonFile, SessionRecord, SessionsFile } from './storage'
+import type { JsonFile, ReturnedFile, SessionRecord, SessionsFile } from './storage'
 import {
   attachmentBlobs,
   changesStored,
@@ -150,6 +150,8 @@ export interface SessionEvents {
   /** To every port, or to `portIds` alone for a prepared session. */
   summary(summary: SessionSummary, portIds?: readonly string[]): void
   removed(sessionId: string, portIds?: readonly string[]): void
+  /** A message waits in the host for a window to take back; null for New session. */
+  returned(sessionId: string | null): void
   attention(
     sessionId: string,
     kind: 'permission' | 'turn-ended' | 'error',
@@ -174,6 +176,10 @@ export interface SessionManagerDeps {
   projects: Projects
   scratch: ScratchFolders
   file: JsonFile<SessionsFile>
+  /** Messages no session took, kept until a window takes them back. */
+  returned: JsonFile<ReturnedFile>
+  /** Whether a port is still open, so a failed start knows whether its window can take its message. */
+  portOpen(portId: string): boolean
   /** Where threads are stored; without it every session opens through its agent. */
   threads: ThreadStore | null
   diagnostics: Diagnostics
@@ -338,6 +344,13 @@ export function fallbackTitle(content: readonly UserContent[]): string | null {
   return null
 }
 
+/** The ids of the attachments a prompt's content names. */
+function attachmentIds(content: readonly UserContent[]): string[] {
+  return content.flatMap((item) =>
+    item.type === 'ref' && item.ref.kind === 'attachment' ? [item.ref.attachment.id] : [],
+  )
+}
+
 /** The attachments that sessions' queued prompts hold, which go with the sessions. */
 function queuedAttachments(records: readonly SessionRecord[]): string[] {
   return records.flatMap((record) =>
@@ -446,6 +459,8 @@ export class SessionManager {
   private readonly atLaunch = new Set<string>()
   /** When `removeEmpty` ran, kept in the index; null before that. */
   private emptySessionsRemovedAt: number | null = null
+  /** Messages no session took, oldest first, until a window takes them back. */
+  private returned: ReturnedFile['messages'] = []
   /** Each window's prepared sessions, by port. */
   private readonly preparedSlots = new Map<string, PreparedSlot>()
   private emptyRemoval: Promise<void> | null = null
@@ -476,10 +491,11 @@ export class SessionManager {
       this.atLaunch.add(record.id)
     }
     this.emptySessionsRemovedAt = file.emptySessionsRemovedAt ?? null
+    this.returned = (await this.deps.returned.load()).messages
   }
 
-  flush(): Promise<void> {
-    return this.deps.file.flush()
+  async flush(): Promise<void> {
+    await Promise.all([this.deps.file.flush(), this.deps.returned.flush()])
   }
 
   // Lookups.
@@ -1442,14 +1458,17 @@ export class SessionManager {
   // Creating, opening and recovering.
 
   /** Without a `projectPath`, the session gets a scratch folder of its own. */
-  async create(params: {
-    agentId: AgentId
-    projectPath: string | null
-    parentId?: string
-    options?: Record<string, string | boolean>
-    prompt?: UserContent[]
-    preparedId?: string
-  }): Promise<SessionSummary> {
+  async create(
+    params: {
+      agentId: AgentId
+      projectPath: string | null
+      parentId?: string
+      options?: Record<string, string | boolean>
+      prompt?: UserContent[]
+      preparedId?: string
+    },
+    portId: string,
+  ): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
     // Before a prepared session is taken over, so a refused prompt leaves it prepared.
@@ -1505,6 +1524,19 @@ export class SessionManager {
       await this.startNew(live)
     } catch (error) {
       if (!(error instanceof HostError && error.code === 'auth_required')) {
+        // Gone is dropped already; nothing left to show, so its message stays in its draft.
+        const removed =
+          error instanceof HostError &&
+          error.code === 'not_found' &&
+          (error.data as { reason?: unknown } | undefined)?.reason === REMOVED_WHILE_STARTING
+        // The window that sent the message has gone, so the host keeps it for the next one.
+        if (prompt && !removed && !this.deps.portOpen(portId)) {
+          this.returned.push({ sessionId: null, content: prompt, at: this.now() })
+          this.saveReturned()
+          const ids = attachmentIds(prompt)
+          if (ids.length > 0) this.deps.attachments?.held(ids)
+          this.deps.events.returned(null)
+        }
         // A session closed or deleted while it started is already dropped.
         if (this.live.get(live.id) === live) this.dropLive(live)
         this.forget(live.id)
@@ -1512,6 +1544,19 @@ export class SessionManager {
       }
     }
     return this.summary(live.id)
+  }
+
+  /** Removes and returns the messages kept for a session, oldest first; a taken one is gone. */
+  takeReturned(sessionId: string | null): UserContent[][] {
+    const taken = this.returned.filter((message) => message.sessionId === sessionId)
+    if (taken.length === 0) return []
+    this.returned = this.returned.filter((message) => message.sessionId !== sessionId)
+    this.saveReturned()
+    return taken.map((message) => message.content)
+  }
+
+  private saveReturned(): void {
+    this.deps.returned.save({ version: 1, messages: this.returned })
   }
 
   // Prepared sessions: the session New session's first message will use, opened ahead of it so
