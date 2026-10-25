@@ -6,7 +6,12 @@ import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
-import type { AgentProcess, ArtifactContentResult, HostToMain } from '@shared/host-control'
+import type {
+  AgentProcess,
+  ArtifactContentResult,
+  ArtifactListResult,
+  HostToMain,
+} from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
@@ -544,6 +549,22 @@ export class AgentHost {
       }
     }
     this.options.send({ type: 'host:artifact-content', requestId, result })
+  }
+
+  /** `host:artifact-list-request`: every artifact's id, for main to unpublish the ones gone. */
+  async artifactList(requestId: number): Promise<void> {
+    let result: ArtifactListResult
+    try {
+      const [kept, deleted] = await Promise.all([
+        this.artifacts.list({ deleted: false }),
+        this.artifacts.list({ deleted: true }),
+      ])
+      result = { kind: 'listed', ids: [...kept, ...deleted].map((artifact) => artifact.id) }
+    } catch (error) {
+      this.diagnostics.log('warn', `Could not list the artifacts: ${(error as Error).message}`)
+      result = { kind: 'failed' }
+    }
+    this.options.send({ type: 'host:artifact-list', requestId, result })
   }
 
   /**

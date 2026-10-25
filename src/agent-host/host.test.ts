@@ -775,6 +775,35 @@ describe('artifacts', () => {
     ])
   })
 
+  it('lists every artifact it has for main, Recently deleted included', async () => {
+    const { t } = await setup()
+    const make = (title: string) =>
+      t.host.artifacts.create({
+        project: t.project,
+        sessionId: 's1',
+        title,
+        html: `<p>${title}</p>`,
+        pages: 1,
+        note: null,
+      })
+    const kept = await make('Kept')
+    const deleted = await make('Deleted')
+    const erased = await make('Erased')
+    await t.host.artifacts.delete(deleted.id)
+    await t.host.artifacts.delete(erased.id)
+    await t.host.artifacts.erase(erased.id)
+
+    await t.host.artifactList(7)
+    const answers = t.sent.flatMap((message) =>
+      message.type === 'host:artifact-list' ? [message] : [],
+    )
+    expect(answers).toHaveLength(1)
+    const [answer] = answers
+    expect(answer?.requestId).toBe(7)
+    const ids = answer?.result.kind === 'listed' ? [...answer.result.ids].sort() : null
+    expect(ids).toEqual([kept.id, deleted.id].sort())
+  })
+
   it('imports a file the user chose as version 1 by the user, in a project or No project', async () => {
     const { t, port } = await setup()
     await port.request('projects.add', { path: t.project })

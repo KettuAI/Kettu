@@ -7,6 +7,7 @@ import {
   InfoIcon,
   KeyboardIcon,
   SettingsIcon,
+  ShareIcon,
   SquareTerminalIcon,
   SunMoonIcon,
   WrenchIcon,
@@ -15,13 +16,14 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { listedInstalled } from '@renderer/features/agents/readiness'
-import { basename } from '@renderer/lib/format'
+import { basename, longAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useSharingStore } from '@renderer/stores/sharing'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useUsageStore } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
@@ -35,6 +37,7 @@ import {
 } from './about-section'
 import { AgentListItem, AgentsGroupActions, EnvironmentFooter } from './agents-section'
 import { ArchivedRow } from './archived-section'
+import { PublishedRow, SharingAccount } from './sharing-section'
 import { useAppInfo } from './use-app-info'
 import { useLoginItemStatus } from './use-login-item'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
@@ -683,6 +686,53 @@ export function useArchivedSection(): SectionDef {
     })),
     footer: archived.length === 0 && (
       <p className="px-1 text-small text-secondary">{t('archived.empty')}</p>
+    ),
+  }
+}
+
+export function useSharingSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const account = useSharingStore((s) => s.status?.cloudflare ?? null)
+  const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
+  const rows: RowDef[] = [
+    {
+      id: 'cloudflare',
+      name: t('sharing.account.name'),
+      english: en('sharing.account.name'),
+      description: account ? `${account.subdomain}.workers.dev` : t('sharing.account.description'),
+      keywords: t('sharing.account.keywords'),
+      group: group('cloudflare', t('sharing.groups.account')),
+      layout: 'custom',
+      render: () => <SharingAccount />,
+    },
+  ]
+  if (pages.length > 0) {
+    const published = group('published', t('sharing.groups.published'), { count: pages.length })
+    rows.push(
+      ...pages.map((page): RowDef => ({
+        id: `published-${page.id}`,
+        name: page.url,
+        english: page.url,
+        description: t('sharing.published.version', {
+          version: page.version,
+          ago: longAgo(page.publishedAt),
+        }),
+        keywords: t('sharing.published.keywords'),
+        group: published,
+        layout: 'custom',
+        render: () => <PublishedRow page={page} />,
+      })),
+    )
+  }
+  return {
+    id: 'sharing',
+    title: t('sections.sharing'),
+    description: t('pages.sharing'),
+    icon: ShareIcon,
+    rows,
+    footer: pages.length === 0 && (
+      <p className="px-1 text-small text-secondary">{t('sharing.published.empty')}</p>
     ),
   }
 }

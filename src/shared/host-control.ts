@@ -38,6 +38,8 @@ export type MainToHost =
   | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
   // `artifact.content`: the file of a version, the latest when `version` is null.
   | { type: 'host:artifact-content-request'; requestId: number; id: string; version: number | null }
+  // `artifact.list`: the id of every artifact the host has, Recently deleted included.
+  | { type: 'host:artifact-list-request'; requestId: number }
   // `artifact.import`: a file the user chose in main's dialog, made an artifact in `project`, or
   // in a new scratch folder when `project` is null.
   | {
@@ -54,6 +56,9 @@ export type ArtifactContentResult =
   | { kind: 'found'; path: string; version: number; title: string } // `path` lies in artifacts/content/
   | { kind: 'not_found' }
   | { kind: 'failed' }
+
+/** The host's answer to `host:artifact-list-request`. */
+export type ArtifactListResult = { kind: 'listed'; ids: string[] } | { kind: 'failed' }
 
 /** An agent process the host runs; its start time tells it apart from a later one with its pid. */
 export interface AgentProcess {
@@ -88,6 +93,7 @@ export type HostToMain =
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
   | { type: 'host:granted'; requestId: number }
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }
+  | { type: 'host:artifact-list'; requestId: number; result: ArtifactListResult }
   | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all

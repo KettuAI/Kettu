@@ -64,7 +64,8 @@
     "where": "{{project}} · {{session}}",
     "when": "v{{version}} · {{time}}",
     "daysLeft_other": "{{project}} · 剩 {{count}} 天",
-    "editing": "编辑中"
+    "editing": "编辑中",
+    "shared": "已在线分享"
   },
   "menu": {
     "open": "打开",
@@ -84,7 +85,11 @@
     "rename": "重命名",
     "eraseTitle": "永久删除“{{title}}”？",
     "eraseDescription_other": "它的 {{count}} 个版本将从这台电脑上移除，此操作无法撤销。",
-    "erase": "删除"
+    "erase": "删除",
+    "deleteTitle": "删除“{{title}}”？",
+    "deleteDescription": "它会进入最近删除，并保留 30 天。",
+    "unpublishToo": "同时取消发布，让链接失效",
+    "delete": "删除"
   },
   "viewer": {
     "back": "返回",
@@ -133,5 +138,39 @@
     "version": "版本 {{version}}",
     "latest": "最新",
     "you": "你"
+  },
+  "share": {
+    "open": "分享",
+    "loading": "正在检查分享状态…",
+    "unpublished": "将此 artifact 发布为任何人都能打开的链接。",
+    "target": "Cloudflare",
+    "disclosure": "任何拿到链接的人都能看到此页面，页面会从公共 CDN 加载脚本和字体。",
+    "publish": "发布",
+    "needAccount": "在“设置 › 分享”中连接 Cloudflare 账号后即可发布此 artifact。",
+    "openSettings": "打开“设置 › 分享”",
+    "url": "已发布链接",
+    "copy": "复制链接",
+    "copied": "已复制",
+    "published": "版本 {{version}}，发布于{{ago}}",
+    "update": "更新到版本 {{version}}",
+    "openLink": "打开",
+    "unpublish": "取消发布",
+    "unpublishConfirm": "链接将对所有人失效。artifact 仍会保留在 OverBench 中。",
+    "cancel": "取消",
+    "tryAgain": "重试",
+    "noAccountPublished": "连接发布此页面的 Cloudflare 账号后才能修改。",
+    "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
+    "failures": {
+      "invalid_token": "Cloudflare 拒绝了 API token。请在“设置 › 分享”中检查。",
+      "no_subdomain": "该账号没有 workers.dev 子域名。请在 Cloudflare 控制台中选择一个。",
+      "worker_limit": "该账号已有 {{count}} 个 Worker，已达到套餐上限。请先取消发布一个。",
+      "network": "无法连接 Cloudflare。请检查网络后重试。",
+      "no_account": "请在“设置 › 分享”中连接 Cloudflare 账号。",
+      "other_account": "此页面是用另一个 Cloudflare 账号发布的。",
+      "encryption": "系统无法加密 API token，因此没有保存。",
+      "not_found": "该页面已不在 Cloudflare 上。请重新发布。",
+      "unavailable": "Agent host 未响应。请稍后再试。",
+      "failed": "出了点问题，请重试。"
+    }
   }
 }

@@ -32,6 +32,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
+import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
 import { receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { initUpdates } from '@renderer/stores/updates'
@@ -183,6 +184,7 @@ export function bootstrap(): Promise<unknown> {
 
   const settingsReady = initSettings()
   void initUpdates()
+  void initSharing()
   initTerminals()
   // Before any composer shows, so each finds its draft's attachments.
   void restoreDraftAttachments()

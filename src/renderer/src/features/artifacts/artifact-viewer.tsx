@@ -26,6 +26,7 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
 import { closeArtifact } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
+import { ShareButton } from './share-popover'
 import { CanvasControls } from './canvas-controls'
 import { isEditable } from './keys'
 import { Waiting } from './page-frame'
@@ -203,6 +204,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
               />
             )}
             <span className="w-1.5" />
+            {shown && <ShareButton id={id} shown={shown.version} head={head ?? shown.version} />}
             <BarButton label={t('viewer.reload')} onClick={artifact.reload}>
               <RefreshCwIcon />
             </BarButton>

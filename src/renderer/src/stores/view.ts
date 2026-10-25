@@ -47,6 +47,7 @@ export type SettingsSection =
   | 'usage'
   | 'shortcuts'
   | 'archived'
+  | 'sharing'
   | 'advanced'
   | 'about'
 

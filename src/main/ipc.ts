@@ -32,6 +32,7 @@ import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
+import type { Sharing } from './sharing'
 import { framesSettled, isRevoked } from './subframes'
 import type { TerminalHost } from './terminal-host'
 import type { Updater } from './updater'
@@ -44,6 +45,7 @@ export interface IpcDeps {
   terminalHost: TerminalHost
   artifacts: Artifacts
   mediaGrants: MediaGrants
+  sharing: Sharing
   updater: Updater
   quit: QuitFlow
   /** Started with --overbench-perf. */
@@ -188,6 +190,7 @@ export function registerIpcHandlers({
   terminalHost,
   artifacts,
   mediaGrants,
+  sharing,
   updater,
   quit,
   perf,
@@ -349,6 +352,13 @@ export function registerIpcHandlers({
   handle('artifact:open-external', 2, (_, id, version) => artifacts.openExternal(id, version))
   handle('artifact:export', 2, ({ window }, id, version) => artifacts.export(window, id, version))
   handle('artifact:import', 1, ({ window }, project) => artifacts.import(window, project))
+
+  handle('sharing:status', 0, () => sharing.status())
+  handle('sharing:connect', 2, (_, accountId, token) => sharing.connect(accountId, token))
+  handle('sharing:remove', 0, () => sharing.remove())
+  handle('sharing:publish', 2, (_, id, version) => sharing.publish(id, version))
+  handle('sharing:update', 2, (_, id, version) => sharing.update(id, version))
+  handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))
