@@ -420,16 +420,20 @@
       "offPackageManager": "Updates are installed by your package manager",
       "check": "Check for updates",
       "tryAgain": "Try again",
-      "restart": "Restart",
+      "restart": "Restart to update",
+      "update": "Update",
       "download": "Download",
       "whatsNew": "What's new"
     },
     "automatic": {
       "name": "Automatic updates",
-      "description": "Download and install in the background, only tell you, or neither.",
-      "download": "Download and install",
-      "notify": "Notify only",
-      "off": "Off"
+      "description": "When new versions download, and when they install.",
+      "download": "Download and install on quit",
+      "restart": "Download, install when I restart",
+      "notify": "Ask before downloading",
+      "off": "Off: check only when I ask",
+      "linkNotify": "Tell me about new versions",
+      "linkOff": "Off"
     },
     "source": {
       "name": "Source code"

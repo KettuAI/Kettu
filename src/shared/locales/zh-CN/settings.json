@@ -417,16 +417,20 @@
       "offPackageManager": "更新由你的包管理器安装",
       "check": "检查更新",
       "tryAgain": "重试",
-      "restart": "重启",
+      "restart": "重启以更新",
+      "update": "更新",
       "download": "下载",
       "whatsNew": "更新内容"
     },
     "automatic": {
       "name": "自动更新",
-      "description": "在后台下载并安装，只通知你，或什么都不做。",
-      "download": "下载并安装",
-      "notify": "仅通知",
-      "off": "关闭"
+      "description": "新版本何时下载、何时安装。",
+      "download": "自动下载，退出时安装",
+      "restart": "自动下载，重启时安装",
+      "notify": "下载前询问",
+      "off": "关闭：仅在我要求时检查",
+      "linkNotify": "有新版本时通知我",
+      "linkOff": "关闭"
     },
     "source": {
       "name": "源代码"

@@ -58,7 +58,7 @@ const SECTION_FIELDS = {
     badge: isBoolean,
   },
   git: { backgroundFetch: isBoolean },
-  updates: { automatic: oneOf('download', 'notify', 'off') },
+  updates: { automatic: oneOf('download', 'restart', 'notify', 'off') },
   privacy: { hideAccount: isBoolean },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
 } as const satisfies Record<string, Record<string, Check>>

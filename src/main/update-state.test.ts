@@ -3,7 +3,9 @@ import type { UpdateState } from '@shared/updates'
 import {
   compareVersions,
   dismissTarget,
+  dmgDownloadUrl,
   errorMessage,
+  installOnQuit,
   nextState,
   offReason,
   type TransitionContext,
@@ -16,6 +18,7 @@ const install: TransitionContext = {
   autoDownload: true,
   lastCheckedAt: 1000,
   lastAvailable: null,
+  downloadUrl: null,
 }
 
 describe('updateMode', () => {
@@ -79,13 +82,47 @@ describe('updatedFrom', () => {
   })
 })
 
+describe('installOnQuit', () => {
+  it('waits for a restart only when the choice says so and the updater started the download', () => {
+    expect(installOnQuit({ choice: 'restart', startedBy: 'auto' })).toBe(false)
+    expect(installOnQuit({ choice: 'restart', startedBy: 'user' })).toBe(true)
+  })
+
+  it.each(['download', 'notify', 'off'] as const)('installs on quit under %s', (choice) => {
+    expect(installOnQuit({ choice, startedBy: 'auto' })).toBe(true)
+    expect(installOnQuit({ choice, startedBy: 'user' })).toBe(true)
+  })
+})
+
+describe('dmgDownloadUrl', () => {
+  const files = [{ url: 'OverBench-0.4.0-x64.dmg' }, { url: 'OverBench-0.4.0-arm64.dmg' }]
+
+  it("picks the .dmg for the Mac's architecture", () => {
+    expect(dmgDownloadUrl('0.4.0', files, 'arm64')).toBe(
+      'https://github.com/overbench/overbench/releases/download/v0.4.0/OverBench-0.4.0-arm64.dmg',
+    )
+    expect(dmgDownloadUrl('0.4.0', files, 'x64')).toBe(
+      'https://github.com/overbench/overbench/releases/download/v0.4.0/OverBench-0.4.0-x64.dmg',
+    )
+  })
+
+  it('finds none for another architecture or a release without one', () => {
+    expect(dmgDownloadUrl('0.4.0', files, 'ia32')).toBeNull()
+    expect(dmgDownloadUrl('0.4.0', [{ url: 'OverBench-0.4.0-arm64-mac.zip' }], 'arm64')).toBeNull()
+    expect(dmgDownloadUrl('0.4.0', [], 'arm64')).toBeNull()
+  })
+})
+
 describe('dismissTarget', () => {
-  const base = { current: '0.3.0', updatedFrom: null, dismissed: null }
+  const base = { mode: 'install' as const, current: '0.3.0', updatedFrom: null, dismissed: null }
 
   it('dismisses the version on the notice', () => {
     expect(dismissTarget({ ...base, state: { kind: 'ready', version: '0.4.0' } })).toBe('0.4.0')
     expect(
-      dismissTarget({ ...base, state: { kind: 'available', version: '0.4.0', mode: 'link' } }),
+      dismissTarget({
+        ...base,
+        state: { kind: 'available', version: '0.4.0', mode: 'link', downloadUrl: null },
+      }),
     ).toBe('0.4.0')
   })
 
@@ -101,7 +138,12 @@ describe('nextState', () => {
   const idle: UpdateState = { kind: 'idle', checkedAt: 1000 }
 
   it('keeps an available update through an automatic check', () => {
-    const available: UpdateState = { kind: 'available', version: '0.4.0', mode: 'link' }
+    const available: UpdateState = {
+      kind: 'available',
+      version: '0.4.0',
+      mode: 'link',
+      downloadUrl: null,
+    }
     expect(nextState(available, { type: 'checking', manual: false }, install)).toBe(available)
     const notify = { ...install, autoDownload: false }
     expect(nextState(available, { type: 'checking', manual: false }, notify)).toBe(available)
@@ -110,14 +152,14 @@ describe('nextState', () => {
     ).toEqual({ kind: 'idle', checkedAt: 5000 })
     expect(
       nextState(available, { type: 'available', version: '0.5.0' }, { ...install, mode: 'link' }),
-    ).toEqual({ kind: 'available', version: '0.5.0', mode: 'link' })
+    ).toEqual({ kind: 'available', version: '0.5.0', mode: 'link', downloadUrl: null })
     expect(
       nextState(
-        { kind: 'available', version: '0.4.0', mode: 'install' },
+        { kind: 'available', version: '0.4.0', mode: 'install', downloadUrl: null },
         { type: 'available', version: '0.5.0' },
         notify,
       ),
-    ).toEqual({ kind: 'available', version: '0.5.0', mode: 'install' })
+    ).toEqual({ kind: 'available', version: '0.5.0', mode: 'install', downloadUrl: null })
     expect(
       nextState(available, { type: 'error', message: 'offline', manual: false }, install),
     ).toBe(available)
@@ -131,9 +173,19 @@ describe('nextState', () => {
     const checking = nextState(idle, { type: 'checking', manual: false }, install)
     expect(checking).toEqual({ kind: 'checking', manual: false })
     const downloading = nextState(checking, { type: 'available', version: '0.4.0' }, install)
-    expect(downloading).toEqual({ kind: 'downloading', version: '0.4.0', percent: 0 })
+    expect(downloading).toEqual({
+      kind: 'downloading',
+      version: '0.4.0',
+      percent: 0,
+      manual: false,
+    })
     const progressed = nextState(downloading, { type: 'progress', percent: 42.7 }, install)
-    expect(progressed).toEqual({ kind: 'downloading', version: '0.4.0', percent: 42 })
+    expect(progressed).toEqual({
+      kind: 'downloading',
+      version: '0.4.0',
+      percent: 42,
+      manual: false,
+    })
     expect(nextState(progressed, { type: 'downloaded', version: '0.4.0' }, install)).toEqual({
       kind: 'ready',
       version: '0.4.0',
@@ -147,22 +199,47 @@ describe('nextState', () => {
       { type: 'available', version: '0.4.0' },
       notify,
     )
-    expect(available).toEqual({ kind: 'available', version: '0.4.0', mode: 'install' })
-    expect(nextState(available, { type: 'download-started', version: '0.4.0' }, notify)).toEqual({
-      kind: 'downloading',
+    expect(available).toEqual({
+      kind: 'available',
       version: '0.4.0',
-      percent: 0,
+      mode: 'install',
+      downloadUrl: null,
     })
+    expect(
+      nextState(available, { type: 'download-started', version: '0.4.0', manual: true }, notify),
+    ).toEqual({ kind: 'downloading', version: '0.4.0', percent: 0, manual: true })
   })
 
-  it('always stops at available in Link mode', () => {
+  it('goes back to available when a download is cancelled', () => {
+    const downloading: UpdateState = {
+      kind: 'downloading',
+      version: '0.4.0',
+      percent: 30,
+      manual: true,
+    }
+    expect(nextState(downloading, { type: 'download-cancelled' }, install)).toEqual({
+      kind: 'available',
+      version: '0.4.0',
+      mode: 'install',
+      downloadUrl: null,
+    })
+    const ready: UpdateState = { kind: 'ready', version: '0.4.0' }
+    expect(nextState(ready, { type: 'download-cancelled' }, install)).toBe(ready)
+  })
+
+  it('always stops at available in Link mode, with the .dmg found for this Mac', () => {
+    const url = 'https://github.com/overbench/overbench/releases/download/v0.4.0/x-arm64.dmg'
+    const link = { ...install, mode: 'link' as const, lastAvailable: '0.4.0', downloadUrl: url }
+    expect(
+      nextState({ kind: 'checking', manual: false }, { type: 'available', version: '0.4.0' }, link),
+    ).toEqual({ kind: 'available', version: '0.4.0', mode: 'link', downloadUrl: url })
     expect(
       nextState(
         { kind: 'checking', manual: false },
-        { type: 'available', version: '0.4.0' },
-        { ...install, mode: 'link' },
+        { type: 'error', message: 'offline', manual: false },
+        link,
       ),
-    ).toEqual({ kind: 'available', version: '0.4.0', mode: 'link' })
+    ).toEqual({ kind: 'available', version: '0.4.0', mode: 'link', downloadUrl: url })
   })
 
   it('records when a check found nothing', () => {
@@ -198,18 +275,18 @@ describe('nextState', () => {
   it('falls back to the found version after a failed automatic download', () => {
     expect(
       nextState(
-        { kind: 'downloading', version: '0.4.0', percent: 30 },
+        { kind: 'downloading', version: '0.4.0', percent: 30, manual: false },
         { type: 'error', message: 'reset', manual: false },
         install,
       ),
-    ).toEqual({ kind: 'available', version: '0.4.0', mode: 'install' })
+    ).toEqual({ kind: 'available', version: '0.4.0', mode: 'install', downloadUrl: null })
     expect(
       nextState(
         { kind: 'checking', manual: false },
         { type: 'error', message: 'offline', manual: false },
         { ...install, lastAvailable: '0.4.0' },
       ),
-    ).toEqual({ kind: 'available', version: '0.4.0', mode: 'install' })
+    ).toEqual({ kind: 'available', version: '0.4.0', mode: 'install', downloadUrl: null })
   })
 
   it('keeps a ready update through a failed automatic event', () => {
