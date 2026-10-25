@@ -38,15 +38,19 @@ const MAX_DEPTH = 2
 export const SessionRow = memo(function SessionRow({
   node,
   depth = 0,
+  tabStopId,
 }: {
   node: SessionNode
   depth?: number
+  /** The id of the list's one Tab stop, which the row it names takes. */
+  tabStopId: string | null
 }) {
   const { t } = useTranslation('sidebar')
   const { summary, children } = node
   const current = useViewStore(
     (s) => s.main.kind === 'session' && s.main.sessionId === summary.id && !s.settings.open,
   )
+  const tabStop = tabStopId === summary.id
   const userExpanded = useViewStore((s) => s.expandedParents[summary.id])
   const hasChildren = children.length > 0
   const childActive = children.some((c) => c.running || c.permissionCount > 0)
@@ -116,7 +120,7 @@ export const SessionRow = memo(function SessionRow({
       isActive={current}
       data-sidebar-row=""
       data-session-id={summary.id}
-      tabIndex={current ? 0 : -1}
+      tabIndex={tabStop ? 0 : -1}
       aria-current={current ? 'page' : undefined}
       aria-expanded={hasChildren ? expanded : undefined}
       onClick={() => openSession(summary.id, summary.projectPath)}
@@ -272,7 +276,12 @@ export const SessionRow = memo(function SessionRow({
             style={{ left: pad + 7 }}
           />
           {children.map((child) => (
-            <SessionRow key={child.summary.id} node={child} depth={depth + 1} />
+            <SessionRow
+              key={child.summary.id}
+              node={child}
+              depth={depth + 1}
+              tabStopId={tabStopId}
+            />
           ))}
         </ul>
       )}

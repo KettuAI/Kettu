@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionSummary } from '@shared/agent-host'
+import type { Project, SessionSummary } from '@shared/agent-host'
+import { NO_PROJECT_GROUP, PINNED_GROUP, type MainView } from '@renderer/stores/view'
 import {
   archivedSessions,
   inPinnedTree,
   isScratchFolder,
   pinnedTree,
   sessionTree,
+  sidebarTabStop,
+  type SidebarView,
 } from './sessions'
 
 const session = (id: string, projectPath: string, extra: Partial<SessionSummary> = {}) =>
@@ -73,5 +76,107 @@ describe('isScratchFolder', () => {
   it("knows a scratch session's folder from a project's", () => {
     expect(isScratchFolder(byId, '/data/scratch/a')).toBe(true)
     expect(isScratchFolder(byId, '/repo')).toBe(false)
+  })
+})
+
+describe('sidebarTabStop', () => {
+  const project = (path: string): Project => ({
+    path,
+    name: path.slice(1),
+    missing: false,
+    lastOpenedAt: 0,
+  })
+  const projects = [project('/repo'), project('/other')]
+  const listed = (extra: Partial<SessionSummary> = {}, id = 'repo-1') =>
+    session(id, '/repo', { updatedAt: 3, ...extra })
+  const projectById = Object.fromEntries(
+    [
+      listed(),
+      session('repo-2', '/repo', { updatedAt: 2 }),
+      session('repo-1-child', '/repo', { parentId: 'repo-1' }),
+      session('other-1', '/other', { updatedAt: 1 }),
+      session('scratch-1', '/data/scratch/a', { scratch: true, updatedAt: 1 }),
+    ].map((s) => [s.id, s]),
+  )
+  const view = (main: MainView, extra: Partial<Omit<SidebarView, 'main'>> = {}): SidebarView => ({
+    main,
+    collapsedProjects: {},
+    expandedParents: {},
+    ...extra,
+  })
+  const newSession: MainView = { kind: 'new', agentId: null, noProject: false }
+  const shown = (id: string): MainView => ({ kind: 'session', sessionId: id })
+
+  it("stops on the shown session's row while the list shows it", () => {
+    expect(sidebarTabStop(view(shown('repo-1')), projectById, projects)).toEqual({
+      kind: 'session',
+      id: 'repo-1',
+    })
+    expect(sidebarTabStop(view(shown('scratch-1')), projectById, projects)).toEqual({
+      kind: 'session',
+      id: 'scratch-1',
+    })
+  })
+
+  it('stops on the Pinned header with a pinned session and nothing shown', () => {
+    const byId = { ...projectById, pinned: listed({ pinnedAt: 1 }, 'pinned') }
+    expect(sidebarTabStop(view(newSession), byId, projects)).toEqual({
+      kind: 'group',
+      key: PINNED_GROUP,
+    })
+  })
+
+  it('stops on the first project with a session when nothing is shown', () => {
+    expect(sidebarTabStop(view(newSession), projectById, projects)).toEqual({
+      kind: 'group',
+      key: '/repo',
+    })
+  })
+
+  it('stops on the No project header when it is the only group left', () => {
+    const byId = { scratch: projectById['scratch-1']! }
+    expect(sidebarTabStop(view(newSession), byId, projects)).toEqual({
+      kind: 'group',
+      key: NO_PROJECT_GROUP,
+    })
+  })
+
+  it("stops on the first header while the shown session's group is collapsed", () => {
+    const collapsed = { collapsedProjects: { '/repo': true as const } }
+    expect(sidebarTabStop(view(shown('repo-1'), collapsed), projectById, projects)).toEqual({
+      kind: 'group',
+      key: '/repo',
+    })
+    const byId = { ...projectById, pinned: listed({ pinnedAt: 1 }, 'pinned') }
+    const pinnedCollapsed = {
+      collapsedProjects: { [PINNED_GROUP]: true as const },
+    }
+    expect(sidebarTabStop(view(shown('pinned'), pinnedCollapsed), byId, projects)).toEqual({
+      kind: 'group',
+      key: PINNED_GROUP,
+    })
+  })
+
+  it("stops on the first header while the shown session's parent is collapsed", () => {
+    expect(sidebarTabStop(view(shown('repo-1-child')), projectById, projects)).toEqual({
+      kind: 'group',
+      key: '/repo',
+    })
+    const expanded = { expandedParents: { 'repo-1': true } }
+    expect(sidebarTabStop(view(shown('repo-1-child'), expanded), projectById, projects)).toEqual({
+      kind: 'session',
+      id: 'repo-1-child',
+    })
+  })
+
+  it('has no stop while the list has no rows', () => {
+    expect(sidebarTabStop(view(newSession), {}, [])).toBeNull()
+    expect(
+      sidebarTabStop(
+        view(newSession),
+        { archived: session('a', '/repo', { archivedAt: 1 }) },
+        projects,
+      ),
+    ).toBeNull()
   })
 })
