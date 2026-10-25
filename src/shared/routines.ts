@@ -135,11 +135,12 @@ export const RUN_OUTPUT_BYTES = 64 * 1024
 export interface RoutineView extends Routine {
   state: 'on' | 'off' | 'done' | 'paused'
   nextRunAt: number | null // null while off, done or paused
+  /** While its agent's plan-limit window is near: that window, which the routine waits out. */
   pause: {
     agentId: AgentId
-    window: string
-    usedPercent: number | null
-    resetsAt: number | null
+    window: string // the plan limit's window, such as 'five_hour'
+    usedPercent: number | null // null when the window is reached
+    resetsAt: number | null // null when the window gives no reset; the pause then lasts an hour
   } | null
   activeRun: RoutineRun | null
   lastRun: RoutineRun | null

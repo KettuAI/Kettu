@@ -25,6 +25,16 @@ export function translate(message: HostMessage): string {
   )
 }
 
+/** The language the host writes in, for dates and times formatted to match. */
+export function currentLocale(): string {
+  return i18next.language
+}
+
+/** Whether the host's catalog has a message, for keys made from what an agent reports. */
+export function hasMessage(key: string): boolean {
+  return i18next.exists(key, { ns: 'host' })
+}
+
 export function setLocale(locale: Locale): boolean {
   if (i18next.language === locale) return false
   void i18next.changeLanguage(locale)

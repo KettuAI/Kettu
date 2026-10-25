@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import type { RoutineList, SessionSummary } from '@shared/agent-host'
+import type { PlanLimit, RoutineList, SessionSummary } from '@shared/agent-host'
 import { nextRuns } from '@shared/schedule'
 import {
   KEPT_RUN_SESSIONS,
@@ -25,13 +25,20 @@ import {
 } from '@shared/routines'
 import type { AgentId } from '@shared/thread'
 import { HostError } from '../errors'
-import { t } from '../i18n'
+import { currentLocale, hasMessage, t } from '../i18n'
 import type { JsonFile, LogFn, RoutinesFile } from '../storage'
 import type { ThreadStore } from '../threads/store'
 import type { RoutineCallName, RoutineCalls, RoutineRunStats } from './calls'
 import type { RoutineSessionHooks, RoutineSessions, RunTurnResult } from './hooks'
-import { RoutineScheduler, SYSTEM_CLOCK, type RoutineClock } from './scheduler'
-import type { SchedulerRoutine } from './scheduler'
+import {
+  LIMITS_FRESH_MS,
+  RoutineScheduler,
+  SYSTEM_CLOCK,
+  type LimitPause,
+  type PauseChange,
+  type RoutineClock,
+  type SchedulerRoutine,
+} from './scheduler'
 
 export interface RoutineTimings {
   /** How long a minute of a run's time limit lasts; a minute, shortened by tests. */
@@ -54,6 +61,17 @@ export interface RoutineEvents {
     title: string,
     body: string,
   ): void
+  /** An agent's routines paused at a plan limit, announced once per pause. */
+  paused(agentId: AgentId, title: string, body: string): void
+}
+
+/** What the routines need of the agents: their plan limits and their names. */
+export interface RoutineAgents {
+  /** The plan limits the agent reported last. */
+  limits(agentId: AgentId): readonly PlanLimit[]
+  /** Reads the agent's plan limits again from its own report; nothing for an agent without one. */
+  readLimits(agentId: AgentId): Promise<void>
+  name(agentId: AgentId): string
 }
 
 export interface RoutinesDeps {
@@ -61,6 +79,7 @@ export interface RoutinesDeps {
   file: JsonFile<RoutinesFile>
   threads: ThreadStore | null
   sessions: RoutineSessions
+  agents: RoutineAgents
   log: LogFn
   events: RoutineEvents
   /** A project folder, canonical; rejects when it is missing. */
@@ -96,6 +115,9 @@ export class RoutinesManager {
   private readonly lastViews = new Map<string, string>()
   /** The latest skipped run of each routine, while skips stay consecutive. */
   private readonly lastSkips = new Map<string, RoutineRun>()
+  /** When the routines last read each agent's plan limits, whatever the reading found. */
+  private readonly limitsRead = new Map<AgentId, number>()
+  private readonly reading = new Map<AgentId, Promise<void>>()
   private readonly writes = new Set<Promise<unknown>>()
   private readonly deleting = new Set<string>()
   private readonly clock: RoutineClock
@@ -116,6 +138,8 @@ export class RoutinesManager {
       routines: () => [...this.routines.values()].map(schedulerRoutine),
       due: (routineId, at, trigger, count) => this.scheduled(routineId, at, trigger, count),
       accounted: (routineId, at) => this.account(routineId, at),
+      limits: (agentId) => this.deps.agents.limits(agentId),
+      paused: (agentId, pause, change) => this.pauseChanged(agentId, pause, change),
     })
   }
 
@@ -168,6 +192,20 @@ export class RoutinesManager {
   /** The computer slept or woke; the timer starts over from the wall clock. */
   power(state: 'suspend' | 'resume'): void {
     this.scheduler.power(state)
+  }
+
+  /** The agent reported its status, its plan limits among it: a pause may begin, end or move. */
+  limitsChanged(agentId: AgentId): void {
+    if (this.scheduler.pauseOf(agentId)) {
+      this.scheduler.limitsChanged(agentId)
+      return
+    }
+    // A reading restored from the last run is refreshed before it may pause anything.
+    if (this.limitsStale(agentId)) return
+    const enabled = [...this.routines.values()].some(
+      (routine) => routine.enabled && routine.agentId === agentId,
+    )
+    if (enabled) this.scheduler.check(agentId)
   }
 
   async list(): Promise<RoutineList> {
@@ -322,7 +360,10 @@ export class RoutinesManager {
     void this.publish(routineId)
   }
 
-  /** A scheduled time came due: run it, or record it skipped while the routine still works. */
+  /**
+   * A scheduled time came due: run it, or record it skipped while the routine still works or
+   * its agent is near a plan limit.
+   */
   private scheduled(
     routineId: string,
     at: number,
@@ -331,13 +372,98 @@ export class RoutinesManager {
   ): void {
     const routine = this.routines.get(routineId)
     if (!routine || !routine.enabled || this.stopped) return
-    if (this.activeOf(routineId)) {
-      this.skip(routine, at, count)
+    const reason = this.activeOf(routineId)
+      ? 'overlap'
+      : this.held(routine.agentId)
+        ? 'plan_limit'
+        : null
+    if (reason) {
+      this.skip(routine, at, count, reason)
       if (routine.trigger.schedule.kind === 'once') this.finishOnce(routineId)
       return
     }
     const run = this.launch(routine, trigger, at, count)
     this.deps.log('info', `Run ${run.id} of ${routine.name}: ${run.status} (${trigger})`)
+  }
+
+  /**
+   * Whether the agent's scheduled runs wait for a plan limit: while it is paused, or when its
+   * latest limits, read recently enough, find a window near and so pause it.
+   */
+  private held(agentId: AgentId): boolean {
+    if (this.scheduler.pauseOf(agentId)) return true
+    return !this.limitsStale(agentId) && this.scheduler.check(agentId) !== null
+  }
+
+  /** Whether the agent's limits were last read longer ago than a scheduled run trusts. */
+  private limitsStale(agentId: AgentId): boolean {
+    let read = this.limitsRead.get(agentId) ?? 0
+    for (const limit of this.deps.agents.limits(agentId)) read = Math.max(read, limit.observedAt)
+    return this.now() - read > LIMITS_FRESH_MS
+  }
+
+  /** Reads the agent's plan limits again, one reading at a time; a failure keeps the last ones. */
+  private readLimits(agentId: AgentId): Promise<void> {
+    const current = this.reading.get(agentId)
+    if (current) return current
+    const reading = this.deps.agents
+      .readLimits(agentId)
+      .catch((error: unknown) => {
+        const agent = this.deps.agents.name(agentId)
+        this.deps.log('warn', `Could not read the plan limits of ${agent}: ${messageOf(error)}`)
+      })
+      .finally(() => {
+        this.reading.delete(agentId)
+        this.limitsRead.set(agentId, this.now())
+      })
+    this.reading.set(agentId, reading)
+    return reading
+  }
+
+  private pauseChanged(agentId: AgentId, pause: LimitPause | null, change: PauseChange): void {
+    if (change === 'began' && pause) {
+      // Queued scheduled runs of the agent would start near the limit too.
+      for (const runId of [...this.queued]) {
+        const live = this.runs.get(runId)
+        if (!live || live.run.trigger === 'manual') continue
+        if (this.routines.get(live.run.routineId)?.agentId === agentId) this.skipHeld(live)
+      }
+      this.announce(pause)
+    }
+    // Its time is up: a fresh reading lifts it, or moves it to the window that still holds.
+    if (change === 'time-up') void this.readLimits(agentId)
+    if (change !== 'changed') {
+      const agent = this.deps.agents.name(agentId)
+      this.deps.log(
+        'info',
+        pause
+          ? `The routines of ${agent} are paused at its ${pause.limit.label} limit`
+          : `The routines of ${agent} resumed`,
+      )
+    }
+    for (const routine of this.routines.values()) {
+      if (routine.agentId === agentId) void this.publish(routine.id)
+    }
+  }
+
+  /** One notification per pause: the agent, the window, its use and when it resets. */
+  private announce({ agentId, limit }: LimitPause): void {
+    const params = {
+      limit: windowName(limit),
+      percent: Math.round(limit.usedPercent ?? 0),
+      time: limit.resetsAt === null ? '' : resetTime(limit.resetsAt, this.now()),
+    }
+    const reached = limit.state === 'reached'
+    const body =
+      limit.resetsAt === null
+        ? reached
+          ? t('routines.pausedReachedNoReset', params)
+          : t('routines.pausedUsedNoReset', params)
+        : reached
+          ? t('routines.pausedReached', params)
+          : t('routines.pausedUsed', params)
+    const title = t('routines.pausedTitle', { agent: this.deps.agents.name(agentId) })
+    this.deps.events.paused(agentId, title, body)
   }
 
   /** The scheduler moved how far every scheduled time is accounted for. */
@@ -359,10 +485,15 @@ export class RoutinesManager {
     this.scheduler.refresh()
   }
 
-  /** Consecutive due times skipped while the routine works share one record, counted. */
-  private skip(routine: Routine, at: number, count: number): void {
+  /** Consecutive due times skipped for one reason share one record, counted. */
+  private skip(
+    routine: Routine,
+    at: number,
+    count: number,
+    reason: NonNullable<RoutineRun['reason']>,
+  ): void {
     const existing = this.lastSkips.get(routine.id)
-    if (existing) {
+    if (existing?.reason === reason) {
       const run: RoutineRun = {
         ...existing,
         count: existing.count + count,
@@ -381,7 +512,7 @@ export class RoutinesManager {
       scheduledFor: at,
       count,
       status: 'skipped',
-      reason: 'overlap',
+      reason,
       sessionId: null,
       startedAt: null,
       endedAt: this.now(),
@@ -575,6 +706,12 @@ export class RoutinesManager {
   private async begin(live: LiveRun): Promise<void> {
     const routine = this.routines.get(live.run.routineId)
     if (!routine || this.stopped) return
+    // Run now starts outside a plan-limit pause, since the user asked for it.
+    const scheduled = live.run.trigger !== 'manual'
+    if (scheduled && this.held(routine.agentId)) {
+      this.skipHeld(live)
+      return
+    }
     live.run.status = 'starting'
     live.run.startedAt = this.now()
     live.run.workingMs = 0
@@ -582,6 +719,18 @@ export class RoutinesManager {
     this.emit(live.run)
     void this.publish(routine.id)
     this.setWorking()
+    if (scheduled && this.limitsStale(routine.agentId)) {
+      await this.readLimits(routine.agentId)
+      if (this.runs.get(live.run.id) !== live || this.stopped) return
+      if (live.intent) {
+        this.finish(live, 'cancelled', {})
+        return
+      }
+      if (this.scheduler.check(routine.agentId)) {
+        this.skipHeld(live)
+        return
+      }
+    }
     let summary: SessionSummary
     try {
       const folder = routine.projectPath ?? (await this.routineFolder(routine.id))
@@ -683,6 +832,35 @@ export class RoutinesManager {
     if (run.trigger !== 'manual') {
       const routine = this.routines.get(run.routineId)
       if (routine?.trigger.schedule.kind === 'once') this.finishOnce(run.routineId)
+    }
+    this.startNext()
+  }
+
+  /** A scheduled run that has not started waits for a plan limit: its record becomes the skip. */
+  private skipHeld(live: LiveRun): void {
+    if (this.runs.get(live.run.id) !== live) return
+    this.pauseClock(live)
+    this.dequeue(live.run.id)
+    this.runs.delete(live.run.id)
+    const run: RoutineRun = {
+      ...live.run,
+      status: 'skipped',
+      reason: 'plan_limit',
+      sessionId: null,
+      startedAt: null,
+      endedAt: this.now(),
+      workingMs: 0,
+      seen: false,
+    }
+    // A skip recorded after this run started waiting is the latest; later skips follow that one.
+    if (!this.lastSkips.has(run.routineId)) this.lastSkips.set(run.routineId, run)
+    this.persist(run)
+    this.emit(run)
+    void this.publish(run.routineId)
+    this.setWorking()
+    this.deps.log('info', `Run ${run.id} of ${this.nameOf(run.routineId)}: skipped (plan_limit)`)
+    if (this.routines.get(run.routineId)?.trigger.schedule.kind === 'once') {
+      this.finishOnce(run.routineId)
     }
     this.startNext()
   }
@@ -794,16 +972,19 @@ export class RoutinesManager {
 
   private async viewOf(routine: Routine): Promise<RoutineView> {
     const stats = await this.stats(routine.id)
+    const pause = routine.enabled ? this.scheduler.pauseOf(routine.agentId) : null
     const state: RoutineView['state'] = !routine.enabled
       ? isDone(routine, stats.last)
         ? 'done'
         : 'off'
-      : 'on'
+      : pause
+        ? 'paused'
+        : 'on'
     return {
       ...routine,
       state,
       nextRunAt: this.scheduler.nextRunAt(schedulerRoutine(routine)),
-      pause: null,
+      pause: pause ? pauseView(pause) : null,
       activeRun: stats.active,
       lastRun: stats.last,
       unseen: { failed: stats.unseenFailed, ended: stats.unseenEnded },
@@ -883,10 +1064,47 @@ export class RoutinesManager {
 function schedulerRoutine(routine: Routine): SchedulerRoutine {
   return {
     id: routine.id,
+    agentId: routine.agentId,
     schedule: routine.trigger.schedule,
     enabled: routine.enabled,
     checkedThrough: routine.checkedThrough,
   }
+}
+
+function pauseView({ agentId, limit }: LimitPause): NonNullable<RoutineView['pause']> {
+  return {
+    agentId,
+    window: limit.window,
+    // A reached window says so, whatever use it reported last.
+    usedPercent: limit.state === 'reached' ? null : limit.usedPercent,
+    resetsAt: limit.resetsAt,
+  }
+}
+
+/** A plan-limit window's name: OverBench's for the windows it knows, else the agent's own. */
+function windowName(limit: PlanLimit): string {
+  const key = `planWindow.${limit.window}`
+  if (hasMessage(key)) return (t as (key: string) => string)(key)
+  // Claude Code names a weekly limit per model, "Weekly · Fable", in English.
+  const weekly = /^Weekly · (.+)$/.exec(limit.label)
+  return weekly ? t('planWindow.weeklyOf', { model: weekly[1]! }) : limit.label
+}
+
+const DAY = 24 * 60 * 60_000
+
+/** When a window resets: the clock time today, with the weekday within six days, else the date. */
+function resetTime(at: number, now: number): string {
+  const day = (time: number): number => new Date(time).setHours(0, 0, 0, 0)
+  // Rounded, since a day across a clock change is not 24 hours.
+  const days = Math.round((day(at) - day(now)) / DAY)
+  const clock: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' }
+  const options: Intl.DateTimeFormatOptions =
+    days === 0
+      ? clock
+      : days > 0 && days <= 6
+        ? { ...clock, weekday: 'short' }
+        : { ...clock, month: 'short', day: 'numeric' }
+  return new Intl.DateTimeFormat(currentLocale(), options).format(at)
 }
 
 /** The strictest mode of each agent that still asks before acting, from the observed table. */

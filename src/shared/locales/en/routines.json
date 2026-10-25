@@ -36,7 +36,22 @@
     "running": "Running",
     "starting": "Starting",
     "queued": "Queued",
-    "next": "Next run {{when}} · {{away}}"
+    "next": "Next run {{when}} · {{away}}",
+    "resumes": "Resumes at {{time}}",
+    "resumesDay": "Resumes {{day}} at {{time}}",
+    "pausedUntil": "Paused until {{time}}: {{reason}}",
+    "pausedUntilDay": "Paused until {{day}} at {{time}}: {{reason}}",
+    "pausedFor": "Paused: {{reason}}"
+  },
+  "pause": {
+    "title": "{{agent}}'s routines are paused",
+    "used": "{{agent}}'s {{limit}} limit is {{percent}}% used",
+    "reached": "{{agent}}'s {{limit}} limit is reached",
+    "limitUsed": "The {{limit}} limit is {{percent}}% used.",
+    "limitReached": "The {{limit}} limit is reached.",
+    "resumes": "They resume at {{time}}.",
+    "resumesDay": "They resume {{day}} at {{time}}.",
+    "notice": "{{use}} {{resume}}"
   },
   "when": {
     "today": "Today, {{time}}",
@@ -167,7 +182,7 @@
     "cancelled": "Cancelled",
     "interrupted": "Interrupted",
     "skippedOverlap": "Skipped: the last run was still working.",
-    "skippedLimit": "Skipped: the plan limit was reached.",
+    "skippedLimit": "Skipped: near the plan limit.",
     "duration": "Worked for {{duration}}",
     "working": "Working for {{duration}}",
     "waited": "Waited {{duration}}",

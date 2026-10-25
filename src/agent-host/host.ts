@@ -276,7 +276,10 @@ export class AgentHost {
       adaptersDir: path.join(options.userDataPath, 'agents'),
       ...(options.detect ? { detect: options.detect } : {}),
       ...(options.agentTimings ? { timings: options.agentTimings } : {}),
-      status: (status) => this.hub.broadcast({ type: 'agent.status', status }),
+      status: (status) => {
+        this.hub.broadcast({ type: 'agent.status', status })
+        this.routines.limitsChanged(status.id)
+      },
       processes: (processes) => this.reportProcesses(processes),
       trees: this.trees,
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
@@ -367,6 +370,11 @@ export class AgentHost {
         summary: (sessionId) =>
           this.sessions.has(sessionId) ? this.sessions.summary(sessionId) : null,
       },
+      agents: {
+        limits: (agentId) => this.agents.limitsOf(agentId),
+        readLimits: (agentId) => this.agents.refreshLimits(agentId),
+        name: (agentId) => this.agents.name(agentId),
+      },
       log,
       resolveProject: (value) => this.projects.resolveDirectory(value),
       timings: options.routineTimings,
@@ -378,6 +386,8 @@ export class AgentHost {
         working: (working) => options.send({ type: 'host:routines-working', working }),
         attention: (kind, sessionId, title, body) =>
           options.send({ type: 'host:attention', sessionId, kind, title, body }),
+        paused: (agentId, title, body) =>
+          options.send({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
       },
     })
     routineHooks.current = this.routines.hooks

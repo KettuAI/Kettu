@@ -1,12 +1,15 @@
 // The scheduler, with a clock and timer the tests move by hand.
 
 import { afterEach, describe, expect, it } from 'vitest'
+import type { PlanLimit } from '@shared/agent-host'
+import type { HostToMain } from '@shared/host-control'
 import type { RoutineDraft, RoutineRun, RoutineView, RunPage } from '@shared/routines'
 import type { Schedule } from '@shared/routines'
 import { startTestHost, type TestHost, type TestPort } from '../testing/harness'
 import type { RoutineClock } from './scheduler'
 
 const START = Date.parse('2024-06-03T12:00:00Z')
+const MINUTE = 60_000
 
 class FakeClock implements RoutineClock {
   at: number
@@ -139,6 +142,33 @@ async function allRuns(port: TestPort, routineId: string): Promise<RoutineRun[]>
   }
 }
 
+/** Reports a window of the fake agent's plan limits, as `/usage` or a rate-limit event would. */
+function report(
+  t: TestHost,
+  clock: FakeClock,
+  usedPercent: number | null,
+  extra: Partial<PlanLimit> = {},
+): void {
+  t.host.agents.setLimit('fake-agent', {
+    window: 'five_hour',
+    label: '5-hour',
+    usedPercent,
+    resetsAt: START + 30 * MINUTE,
+    state: 'ok',
+    observedAt: clock.now(),
+    ...extra,
+  })
+}
+
+type PauseNotice = Extract<HostToMain, { type: 'host:attention'; kind: 'routine-paused' }>
+
+function pausesSent(t: TestHost): PauseNotice[] {
+  return t.sent.filter(
+    (message): message is PauseNotice =>
+      message.type === 'host:attention' && message.kind === 'routine-paused',
+  )
+}
+
 describe('the routine scheduler', () => {
   it('runs an every schedule when it comes due, and shows its next run', async () => {
     const clock = new FakeClock(START)
@@ -258,5 +288,156 @@ describe('the routine scheduler', () => {
     clock.set(START + 45 * 60_000)
     await port.until(() => runsOf(port, routine.id, 'schedule').length === 1)
     expect(runsOf(port, routine.id, 'schedule')[0]?.scheduledFor).toBe(START + 45 * 60_000)
+  })
+
+  it('runs while a window is below 90% used', async () => {
+    const clock = new FakeClock(START)
+    const { t, port } = await setup(clock)
+    const routine = await creates(port, every(5, START))
+    report(t, clock, 89)
+
+    clock.advance(5 * MINUTE)
+    await port.until(() => runsOf(port, routine.id, 'schedule').some((run) => !!run.sessionId))
+
+    const view = await viewOf(port, routine.id)
+    expect(view.state).toBe('on')
+    expect(view.pause).toBeNull()
+    expect(pausesSent(t)).toHaveLength(0)
+  })
+
+  it('pauses at 90% used, skips the due runs as one record, and notifies once', async () => {
+    const clock = new FakeClock(START)
+    const { t, port } = await setup(clock)
+    const routine = await creates(port, every(5, START))
+    report(t, clock, 90)
+
+    await port.until(() => pausesSent(t).length === 1)
+    const paused = await poll(async () => {
+      const view = await viewOf(port, routine.id)
+      return view.state === 'paused' ? view : null
+    })
+    expect(paused.pause).toEqual({
+      agentId: 'fake-agent',
+      window: 'five_hour',
+      usedPercent: 90,
+      resetsAt: START + 30 * MINUTE,
+    })
+    expect(paused.nextRunAt).toBeNull()
+
+    clock.advance(5 * MINUTE)
+    await port.until(() => runsFor(port, routine.id).some((run) => run.status === 'skipped'))
+    clock.advance(5 * MINUTE)
+
+    const skipped = runsFor(port, routine.id).filter((run) => run.status === 'skipped')
+    expect(skipped).toHaveLength(1)
+    expect(skipped[0]).toMatchObject({ reason: 'plan_limit', count: 2 })
+    expect(pausesSent(t)).toHaveLength(1)
+    expect(pausesSent(t)[0]?.agentId).toBe('fake-agent')
+  })
+
+  it('pauses when a window is reached, without a percent', async () => {
+    const clock = new FakeClock(START)
+    const { t, port } = await setup(clock)
+    const routine = await creates(port, every(5, START))
+    report(t, clock, 100, { state: 'reached' })
+
+    const paused = await poll(async () => {
+      const view = await viewOf(port, routine.id)
+      return view.state === 'paused' ? view : null
+    })
+    expect(paused.pause?.usedPercent).toBeNull()
+
+    clock.advance(5 * MINUTE)
+    await port.until(() => runsFor(port, routine.id).some((run) => run.status === 'skipped'))
+    expect(runsFor(port, routine.id).find((run) => run.status === 'skipped')).toMatchObject({
+      reason: 'plan_limit',
+    })
+    expect(pausesSent(t)[0]?.body).toContain('reached')
+  })
+
+  it('ends the pause at the window reset and runs from the next time', async () => {
+    const clock = new FakeClock(START)
+    const { t, port } = await setup(clock)
+    const routine = await creates(port, every(5, START))
+    report(t, clock, 94, { resetsAt: START + 15 * MINUTE })
+
+    await port.until(() => pausesSent(t).length === 1)
+    clock.advance(5 * MINUTE)
+    await port.until(() => runsFor(port, routine.id).some((run) => run.status === 'skipped'))
+    clock.advance(10 * MINUTE)
+
+    await port.until(() =>
+      runsFor(port, routine.id).some(
+        (run) => run.scheduledFor === START + 15 * MINUTE && !!run.sessionId,
+      ),
+    )
+    const resumed = await poll(async () => {
+      const view = await viewOf(port, routine.id)
+      return view.state === 'on' ? view : null
+    })
+    expect(resumed.pause).toBeNull()
+    expect(resumed.nextRunAt).toBe(START + 20 * MINUTE)
+
+    await port.until(() =>
+      runsFor(port, routine.id).some(
+        (run) => run.scheduledFor === START + 15 * MINUTE && run.status === 'succeeded',
+      ),
+    )
+    clock.advance(5 * MINUTE)
+    await port.until(() =>
+      runsFor(port, routine.id).some(
+        (run) => run.scheduledFor === START + 20 * MINUTE && !!run.sessionId,
+      ),
+    )
+    expect(pausesSent(t)).toHaveLength(1)
+  })
+
+  it('ends the pause when the agent next reports the window below 90%', async () => {
+    const clock = new FakeClock(START)
+    const { t, port } = await setup(clock)
+    const routine = await creates(port, every(5, START))
+    report(t, clock, 95)
+
+    await port.until(() => pausesSent(t).length === 1)
+    clock.advance(5 * MINUTE)
+    await port.until(() => runsFor(port, routine.id).some((run) => run.status === 'skipped'))
+
+    report(t, clock, 88)
+    const lifted = await poll(async () => {
+      const view = await viewOf(port, routine.id)
+      return view.state === 'on' ? view : null
+    })
+    expect(lifted.pause).toBeNull()
+    expect(lifted.nextRunAt).toBe(START + 10 * MINUTE)
+
+    clock.advance(5 * MINUTE)
+    await port.until(() =>
+      runsFor(port, routine.id).some(
+        (run) => run.scheduledFor === START + 10 * MINUTE && !!run.sessionId,
+      ),
+    )
+    expect(pausesSent(t)).toHaveLength(1)
+  })
+
+  it('leaves a run already working alone when a window turns near', async () => {
+    const clock = new FakeClock(START)
+    const { t, port } = await setup(clock)
+    const routine = await creates(port, every(5, START), '/cancel')
+    clock.advance(5 * MINUTE)
+    const working = await poll(async () => {
+      const run = runsFor(port, routine.id).find((candidate) => candidate.sessionId !== null)
+      return run?.status === 'running' ? run : null
+    })
+
+    report(t, clock, 95)
+    await port.until(() => pausesSent(t).length === 1)
+    clock.advance(5 * MINUTE)
+    await port.until(() => runsFor(port, routine.id).some((run) => run.status === 'skipped'))
+
+    const view = await viewOf(port, routine.id)
+    expect(view.activeRun).toMatchObject({ id: working.id, status: 'running' })
+    expect(runsFor(port, routine.id).find((run) => run.status === 'skipped')).toMatchObject({
+      reason: 'overlap',
+    })
   })
 })

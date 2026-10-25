@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { checkForUpdates } from '@renderer/stores/updates'
 import {
+  openRoutines,
   openSession,
   openSettings,
   toggleSidebar,
@@ -33,6 +34,9 @@ export function useAppCommands(): void {
             if (summary) openSession(summary.id, summary.projectPath)
             break
           }
+          case 'open-routines':
+            openRoutines()
+            break
         }
       }),
     [],

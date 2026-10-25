@@ -9,10 +9,12 @@ import {
   type RoutineView,
   type Schedule,
 } from '@shared/routines'
+import type { AgentId } from '@shared/thread'
 import { startConfig, startValues } from '@renderer/features/session/new-session/start-options'
-import { duration } from '@renderer/lib/format'
+import { duration, limitLabel } from '@renderer/lib/format'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
 import type { OptionValues } from '@renderer/stores/agent-options'
+import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { scheduleWords as sharedScheduleWords } from '@shared/schedule'
 
 const MINUTE = 60_000
@@ -164,13 +166,15 @@ export function failedRun(run: RoutineRun | null): boolean {
   return !!run && FAILED_RUN_STATUSES.includes(run.status)
 }
 
+export type RoutinePause = NonNullable<RoutineView['pause']>
+
 export type RoutineState =
   | { kind: 'waiting' }
   | { kind: 'running'; status: 'starting' | 'running' }
   | { kind: 'queued' }
   | { kind: 'off' }
   | { kind: 'done' }
-  | { kind: 'paused' }
+  | { kind: 'paused'; pause: RoutinePause | null }
   | { kind: 'next'; at: number }
   | { kind: 'on' }
 
@@ -184,7 +188,7 @@ export function routineState(routine: RoutineView): RoutineState {
   if (active?.status === 'queued') return { kind: 'queued' }
   if (routine.state === 'off') return { kind: 'off' }
   if (routine.state === 'done') return { kind: 'done' }
-  if (routine.state === 'paused') return { kind: 'paused' }
+  if (routine.state === 'paused') return { kind: 'paused', pause: routine.pause }
   if (routine.nextRunAt !== null) return { kind: 'next', at: routine.nextRunAt }
   return { kind: 'on' }
 }
@@ -206,7 +210,7 @@ export function stateText(routine: RoutineView, now = Date.now()): string {
     case 'done':
       return i18n.t('routines:state.done')
     case 'paused':
-      return i18n.t('routines:state.paused')
+      return pausedText(state.pause, now)
     case 'next':
       return i18n.t('routines:state.next', {
         when: dayTime(state.at, now),
@@ -215,6 +219,80 @@ export function stateText(routine: RoutineView, now = Date.now()): string {
     case 'on':
       return i18n.t('routines:state.on')
   }
+}
+
+/** A routine's state at its row's end: when a pause ends, else as its page says it. */
+export function rowStateText(routine: RoutineView, now = Date.now()): string {
+  const state = routineState(routine)
+  if (state.kind !== 'paused') return stateText(routine, now)
+  if (state.pause?.resetsAt == null) return i18n.t('routines:state.paused')
+  const { day, time } = pauseEnd(state.pause.resetsAt, now)
+  return day === null
+    ? i18n.t('routines:state.resumes', { time })
+    : i18n.t('routines:state.resumesDay', { day, time })
+}
+
+/** "Paused until 2:30 PM: Claude Code's 5-hour limit is 92% used", under a routine's name. */
+function pausedText(pause: RoutinePause | null, now: number): string {
+  if (!pause) return i18n.t('routines:state.paused')
+  const reason = pauseReason(pause)
+  if (pause.resetsAt === null) return i18n.t('routines:state.pausedFor', { reason })
+  const { day, time } = pauseEnd(pause.resetsAt, now)
+  return day === null
+    ? i18n.t('routines:state.pausedUntil', { time, reason })
+    : i18n.t('routines:state.pausedUntilDay', { day, time, reason })
+}
+
+function pauseReason(pause: RoutinePause): string {
+  const agent = agentName(pause.agentId)
+  const limit = pauseWindow(pause)
+  return pause.usedPercent === null
+    ? i18n.t('routines:pause.reached', { agent, limit })
+    : i18n.t('routines:pause.used', { agent, limit, percent: Math.round(pause.usedPercent) })
+}
+
+/** The paused agents among the routines, each with its pause, for the Routines page's notices. */
+export function agentPauses(routines: RoutineView[]): RoutinePause[] {
+  const pauses = new Map<AgentId, RoutinePause>()
+  for (const routine of routines) {
+    const pause = routine.state === 'paused' ? routine.pause : null
+    if (pause && !pauses.has(pause.agentId)) pauses.set(pause.agentId, pause)
+  }
+  return [...pauses.values()]
+}
+
+/** A pause's notice: the window, its use, and when the routines resume. */
+export function pauseNotice(pause: RoutinePause, now = Date.now()): string {
+  const limit = pauseWindow(pause)
+  const use =
+    pause.usedPercent === null
+      ? i18n.t('routines:pause.limitReached', { limit })
+      : i18n.t('routines:pause.limitUsed', { limit, percent: Math.round(pause.usedPercent) })
+  if (pause.resetsAt === null) return use
+  const { day, time } = pauseEnd(pause.resetsAt, now)
+  const resume =
+    day === null
+      ? i18n.t('routines:pause.resumes', { time })
+      : i18n.t('routines:pause.resumesDay', { day, time })
+  return i18n.t('routines:pause.notice', { use, resume })
+}
+
+/** The window a pause names, by the label the agent's limits give it. */
+function pauseWindow(pause: RoutinePause): string {
+  const limit = useAgentsStore
+    .getState()
+    .byId[pause.agentId]?.limits.find((known) => known.window === pause.window)
+  return limitLabel(limit ?? { window: pause.window, label: pause.window })
+}
+
+/** When a pause ends: the time, with the weekday or the date when it is not today. */
+function pauseEnd(at: number, now: number): { day: string | null; time: string } {
+  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
+  const days = Math.round((day(at) - day(now)) / DAY)
+  const time = format().clock.format(at)
+  if (days === 0) return { day: null, time }
+  const date = days > 0 && days <= 6 ? format().weekday.format(at) : format().monthDay.format(at)
+  return { day: date, time }
 }
 
 /** The routines under On, by their next run; those without one, by name. */

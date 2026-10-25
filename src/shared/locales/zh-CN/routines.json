@@ -36,7 +36,22 @@
     "running": "运行中",
     "starting": "启动中",
     "queued": "排队中",
-    "next": "下次运行 {{when}} · {{away}}"
+    "next": "下次运行 {{when}} · {{away}}",
+    "resumes": "{{time}} 恢复",
+    "resumesDay": "{{day}} {{time}} 恢复",
+    "pausedUntil": "暂停至 {{time}}：{{reason}}",
+    "pausedUntilDay": "暂停至 {{day}} {{time}}：{{reason}}",
+    "pausedFor": "已暂停：{{reason}}"
+  },
+  "pause": {
+    "title": "{{agent}} 的例程已暂停",
+    "used": "{{agent}} 的限额已用 {{percent}}%（{{limit}}）",
+    "reached": "{{agent}} 的限额已用完（{{limit}}）",
+    "limitUsed": "限额已用 {{percent}}%（{{limit}}）。",
+    "limitReached": "限额已用完（{{limit}}）。",
+    "resumes": "例程将于 {{time}} 恢复。",
+    "resumesDay": "例程将于 {{day}} {{time}} 恢复。",
+    "notice": "{{use}}{{resume}}"
   },
   "when": {
     "today": "今天 {{time}}",
@@ -167,7 +182,7 @@
     "cancelled": "已取消",
     "interrupted": "已中断",
     "skippedOverlap": "已跳过：上次运行还在工作。",
-    "skippedLimit": "已跳过：已达到套餐限制。",
+    "skippedLimit": "已跳过：接近套餐限额。",
     "duration": "工作了 {{duration}}",
     "working": "已工作 {{duration}}",
     "waited": "等待了 {{duration}}",
