@@ -106,7 +106,22 @@
     "timedOut": "The run reached its time limit",
     "needsApproval": "{{name}} needs approval",
     "noAskingMode": "{{agent}} offers no mode that asks before it acts",
-    "modeFailed": "{{agent}} would not set the mode that asks before it acts"
+    "modeFailed": "{{agent}} would not set the mode that asks before it acts",
+    "pausedTitle": "Routines paused for {{agent}}",
+    "pausedUsed": "{{limit}} limit {{percent}}% used · resets {{time}}",
+    "pausedReached": "{{limit}} limit reached · resets {{time}}",
+    "pausedUsedNoReset": "{{limit}} limit {{percent}}% used",
+    "pausedReachedNoReset": "{{limit}} limit reached"
+  },
+  "planWindow": {
+    "five_hour": "5-hour",
+    "seven_day": "Weekly",
+    "seven_day_opus": "Weekly · Opus",
+    "seven_day_sonnet": "Weekly · Sonnet",
+    "monthly": "Monthly",
+    "annual": "Annual",
+    "overage": "Extra usage",
+    "weeklyOf": "Weekly · {{model}}"
   },
   "agent": {
     "stoppedBeforeAnswer": "The agent stopped before it answered",

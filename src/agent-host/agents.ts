@@ -1648,6 +1648,11 @@ export class AgentManager {
     if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.def.id)
   }
 
+  /** The plan limits the agent reported last, one per window. */
+  limitsOf(agentId: AgentId): PlanLimit[] {
+    return [...(this.slots.get(agentId)?.limits.values() ?? [])]
+  }
+
   setLimit(agentId: AgentId, limit: PlanLimit): void {
     const slot = this.slots.get(agentId)
     if (!slot) return

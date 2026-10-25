@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftIcon,
   CalendarClockIcon,
+  ChartNoAxesColumnIcon,
   CircleAlertIcon,
   EllipsisIcon,
   PlayIcon,
@@ -48,14 +49,14 @@ import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { i18n } from '@renderer/lib/i18n'
 import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { useAgentsStore, agentName } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { loadRoutinePage, useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openRoutine, openRoutines, openSession, useViewStore } from '@renderer/stores/view'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
-import { optionValues, routineOptions, routineState, stateText } from './model'
+import { optionValues, pauseNotice, routineOptions, routineState, stateText } from './model'
 import { RoutineMenuItems } from './routine-menu'
 import { RunAnnouncements, RunHistory } from './run-history'
 import { ScheduleField } from './schedule-field'
@@ -275,6 +276,13 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
               </Button>
             </AlertAction>
           )}
+        </Alert>
+      )}
+      {state.kind === 'paused' && state.pause && (
+        <Alert variant="info">
+          <ChartNoAxesColumnIcon />
+          <AlertTitle>{t('pause.title', { agent: agentName(state.pause.agentId) })}</AlertTitle>
+          <AlertDescription>{pauseNotice(state.pause, now)}</AlertDescription>
         </Alert>
       )}
       {error && (

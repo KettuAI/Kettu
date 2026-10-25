@@ -106,7 +106,22 @@
     "timedOut": "运行达到了时间上限",
     "needsApproval": "{{name}} 需要批准",
     "noAskingMode": "{{agent}} 没有提供会在行动前询问的模式",
-    "modeFailed": "{{agent}} 无法设置会在行动前询问的模式"
+    "modeFailed": "{{agent}} 无法设置会在行动前询问的模式",
+    "pausedTitle": "{{agent}} 的例程已暂停",
+    "pausedUsed": "限额已用 {{percent}}%（{{limit}}）· {{time}} 重置",
+    "pausedReached": "限额已用完（{{limit}}）· {{time}} 重置",
+    "pausedUsedNoReset": "限额已用 {{percent}}%（{{limit}}）",
+    "pausedReachedNoReset": "限额已用完（{{limit}}）"
+  },
+  "planWindow": {
+    "five_hour": "5 小时",
+    "seven_day": "每周",
+    "seven_day_opus": "每周 · Opus",
+    "seven_day_sonnet": "每周 · Sonnet",
+    "monthly": "每月",
+    "annual": "每年",
+    "overage": "额外用量",
+    "weeklyOf": "每周 · {{model}}"
   },
   "agent": {
     "stoppedBeforeAnswer": "Agent 在回复前停止了",

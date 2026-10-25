@@ -70,7 +70,15 @@ export type HostToMain =
   | {
       type: 'host:attention'
       sessionId: string
-      kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended' | 'routine-paused'
+      kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended'
+      title: string
+      body: string
+    }
+  // An agent's routines paused at a plan limit; it has no session and opens the Routines page.
+  | {
+      type: 'host:attention'
+      kind: 'routine-paused'
+      agentId: AgentId
       title: string
       body: string
     }

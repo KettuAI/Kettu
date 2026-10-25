@@ -1,7 +1,7 @@
 // The Routines page: every routine, on and off, with the state of its runs.
 
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
-import { CalendarClockIcon, CircleAlertIcon, PlusIcon } from 'lucide-react'
+import { CalendarClockIcon, ChartNoAxesColumnIcon, CircleAlertIcon, PlusIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { RoutineView } from '@shared/routines'
@@ -32,19 +32,23 @@ import { Switch } from '@renderer/components/ui/switch'
 import { TopBar } from '@renderer/features/shell/top-bar'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
+import { agentName } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openRoutine } from '@renderer/stores/view'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
 import {
+  agentPauses,
   failedRun,
   offRoutines,
   onRoutines,
+  pauseNotice,
   routineProject,
   routineState,
+  rowStateText,
   scheduleWords,
-  stateText,
+  type RoutinePause,
 } from './model'
 import { RoutineMenuItems } from './routine-menu'
 import { RunningDot } from './run-mark'
@@ -72,6 +76,7 @@ export default function RoutinesPage() {
   const on = useMemo(() => onRoutines(routines), [routines])
   const off = useMemo(() => offRoutines(routines), [routines])
   const all = useMemo(() => [...on, ...off], [on, off])
+  const pauses = useMemo(() => agentPauses(routines), [routines])
   const tabStop = active && all.some((routine) => routine.id === active) ? active : all[0]?.id
 
   const target = useRoutinesStore((s) => (deleting ? s.byId[deleting] : undefined))
@@ -166,6 +171,9 @@ export default function RoutinesPage() {
               {t('page.new')}
             </Button>
           </div>
+          {pauses.map((pause) => (
+            <PauseNotice key={pause.agentId} pause={pause} />
+          ))}
           {problem && (
             <Alert variant="error">
               <CircleAlertIcon />
@@ -220,6 +228,19 @@ export default function RoutinesPage() {
         />
       )}
     </div>
+  )
+}
+
+/** An agent's routines paused at a plan limit: the window, its use and when they resume. */
+function PauseNotice({ pause }: { pause: RoutinePause }) {
+  const { t } = useTranslation('routines')
+  const now = useNow()
+  return (
+    <Alert variant="info">
+      <ChartNoAxesColumnIcon />
+      <AlertTitle>{t('pause.title', { agent: agentName(pause.agentId) })}</AlertTitle>
+      <AlertDescription>{pauseNotice(pause, now)}</AlertDescription>
+    </Alert>
   )
 }
 
@@ -402,7 +423,7 @@ function RowState({ routine, now }: { routine: RoutineView; now: number }) {
       </span>
     )
   }
-  return <span className="text-xs text-tertiary">{stateText(routine, now)}</span>
+  return <span className="text-xs text-tertiary">{rowStateText(routine, now)}</span>
 }
 
 /** The list is one Tab stop; the arrow keys move between its rows. */
