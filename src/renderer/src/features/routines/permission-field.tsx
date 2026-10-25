@@ -42,7 +42,7 @@ export function PermissionField({
             />
             <span
               aria-hidden
-              className="mt-[3px] grid size-3.5 shrink-0 place-items-center rounded-full ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-has-[:checked]/level:bg-primary group-has-[:checked]/level:ring-0"
+              className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-has-[:checked]/level:bg-primary group-has-[:checked]/level:ring-0"
             >
               <span className="size-1.5 scale-0 rounded-full bg-background transition-transform duration-(--duration-fast) group-has-[:checked]/level:scale-100" />
             </span>
@@ -55,18 +55,20 @@ export function PermissionField({
           </label>
         ))}
       </div>
-      <div className="mt-1 flex items-center gap-6 border-t border-subtle px-2 pt-2.5">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-ui font-medium">{t('permission.web.name')}</span>
-          <span className="text-xs leading-normal text-pretty text-secondary">
-            {t('permission.web.description')}
-          </span>
+      <div className="mt-1 px-2">
+        <div className="flex items-center gap-6 border-t border-subtle pt-2.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-ui font-medium">{t('permission.web.name')}</span>
+            <span className="text-xs leading-normal text-pretty text-secondary">
+              {t('permission.web.description')}
+            </span>
+          </div>
+          <Switch
+            checked={scope.web}
+            onCheckedChange={(web) => onChange({ ...scope, web })}
+            aria-label={t('permission.web.name')}
+          />
         </div>
-        <Switch
-          checked={scope.web}
-          onCheckedChange={(web) => onChange({ ...scope, web })}
-          aria-label={t('permission.web.name')}
-        />
       </div>
       {caption && (
         <p className="mt-1.5 px-2 text-xs leading-normal text-pretty text-tertiary">{caption}</p>
