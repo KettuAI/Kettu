@@ -138,7 +138,7 @@ export interface AgentStatus {
   id: AgentId
   name: string
   state: AgentState
-  version: string | null // from agentInfo, once initialized
+  version: string | null // from `initialize`, or a binary agent's `--version` before it starts
   package: { name: string; version: string; installed: boolean } | null // the adapter a start runs; the pin until one is installed
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: AgentAuthMethod[]
