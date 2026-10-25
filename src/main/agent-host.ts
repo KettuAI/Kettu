@@ -8,7 +8,7 @@ import type {
   HostToMain,
   MainToHost,
 } from '@shared/host-control'
-import { MEDIA_IMAGE_TYPES, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
+import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
@@ -93,8 +93,7 @@ function isMediaGrant(value: unknown): value is MediaGrantRecord {
     typeof path === 'string' &&
     path.length > 0 &&
     path.length <= MAX_STRING &&
-    typeof mimeType === 'string' &&
-    (MEDIA_IMAGE_TYPES as readonly string[]).includes(mimeType) &&
+    isMediaType(mimeType) &&
     (sessionId === null || (typeof sessionId === 'string' && sessionId.length <= MAX_STRING))
   )
 }

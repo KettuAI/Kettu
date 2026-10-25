@@ -42,6 +42,17 @@ export type MediaVideoType = (typeof MEDIA_VIDEO_TYPES)[number]
 
 export type MediaType = MediaImageType | MediaAudioType | MediaVideoType
 
+const MEDIA_TYPES: ReadonlySet<string> = new Set([
+  ...MEDIA_IMAGE_TYPES,
+  ...MEDIA_AUDIO_TYPES,
+  ...MEDIA_VIDEO_TYPES,
+])
+
+/** Whether a value is a type the scheme serves, as a grant from the host must carry. */
+export function isMediaType(value: unknown): value is MediaType {
+  return typeof value === 'string' && MEDIA_TYPES.has(value)
+}
+
 export type MediaKind = 'image' | 'audio' | 'video'
 
 /** A file's name that nominates it as an image; its first bytes decide. */
