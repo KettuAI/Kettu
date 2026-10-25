@@ -131,6 +131,8 @@
     "noProject": "No project",
     "agent": "Agent and model",
     "agentDescription": "The agent its runs start, with the model and options they use.",
+    "permissions": "Permissions",
+    "permissionsDescription": "What its runs may do without asking. Anything else pauses the run.",
     "timeLimit": "Time limit",
     "timeLimitDescription": "A run stops when it reaches this time, not counting the time it waits for you.",
     "schedule": "Schedule",
@@ -159,6 +161,32 @@
     "deleteNoSessions": "It has no run sessions.",
     "deleteConfirm": "Delete",
     "deleteFailed": "The routine could not be deleted: {{error}}"
+  },
+  "permission": {
+    "levels": "Permissions",
+    "level": {
+      "read": {
+        "name": "Read only",
+        "description": "Read and search the project."
+      },
+      "edit": {
+        "name": "Edit the project",
+        "description": "Also create, change, move and delete files inside the project folder."
+      },
+      "commands": {
+        "name": "Edit and run commands",
+        "description": "Also run commands, which can do anything you can."
+      }
+    },
+    "web": {
+      "name": "Use the web",
+      "description": "Fetch pages and search the web, at any level."
+    },
+    "caption": {
+      "claude-code": "Claude Code asks before edits and most commands, so OverBench answers each.",
+      "codex": "Codex keeps its own sandbox: Edit the project also runs commands inside the project without asking; leaving the project or reaching the network asks.",
+      "opencode": "OpenCode asks only for what its own permission settings mark “ask”; by default it asks nothing, so OverBench cannot hold it to this scope."
+    }
   },
   "limit": {
     "minutes": "{{count}} minutes",

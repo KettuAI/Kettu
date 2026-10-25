@@ -22,6 +22,7 @@ import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { firstLine, outlineText } from '@shared/outline'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
+import type { PermissionScope } from '@shared/routines'
 import {
   applyPatchInPlace,
   coalescePatches,
@@ -98,6 +99,7 @@ import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
 import { cutReply, type ToolSession } from './session-tools'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
+import { scopeAnswer } from './routines/scope'
 import {
   CONTEXT_REPORT,
   hasContextReport,
@@ -344,8 +346,9 @@ interface Live {
   background: boolean
   /** Set while it is a prepared session, not yet in the index. */
   prepared: Prepared | null
-  /** A run's session: the mode it must start in, and whether its first turn began and ended. */
+  /** A run's session: the mode it must start in, its scope, and its first turn's course. */
   routineMode: string | null
+  routineScope: PermissionScope | null
   routineTurnStarted: boolean
   routineTurnEnded: boolean
   /** Since when nothing has needed its agent, and since when no port has shown it in front. */
@@ -1250,6 +1253,7 @@ export class SessionManager {
       background: false,
       prepared: null,
       routineMode: null,
+      routineScope: null,
       routineTurnStarted: false,
       routineTurnEnded: false,
       idleSince: null,
@@ -1729,8 +1733,8 @@ export class SessionManager {
 
   /**
    * A routine's run's session: created as `sessions.create` creates one, but top-level with
-   * `origin: 'routine'`, in the routine's folder, in the strictest mode that still asks, with
-   * the routine's prompt as its first message.
+   * `origin: 'routine'`, in the routine's folder, in the mode its scope names, with the
+   * routine's prompt as its first message.
    */
   async createRun(params: RoutineSessionStart): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
@@ -1757,6 +1761,7 @@ export class SessionManager {
     live.unread = false
     live.used = true
     live.routineMode = params.mode
+    live.routineScope = params.scope
     const content: UserContent[] = [{ type: 'text', text: params.prompt }]
     live.first = { content, entryId: this.addPrompt(live, content, now) }
     this.touch(live.id)
@@ -2350,8 +2355,8 @@ export class SessionManager {
   }
 
   /**
-   * A run's session starts in the strictest mode that still asks; one that cannot be set fails
-   * the run before anything is sent, so it never starts in a broader mode than its scope.
+   * A run's session starts in the mode its level names; one that cannot be set fails the run
+   * before anything is sent, so it never starts in a broader mode than its scope.
    */
   private async applyRoutineMode(live: Live, connection: AgentConnection): Promise<void> {
     const wanted = live.routineMode
@@ -2365,7 +2370,7 @@ export class SessionManager {
     if (!choice) {
       throw new HostError(
         'restricted',
-        t('routines.noAskingMode', { agent: this.deps.agents.name(live.record.agentId) }),
+        t('routines.noScopeMode', { agent: this.deps.agents.name(live.record.agentId) }),
       )
     }
     if (option.value === wanted) return
@@ -4118,6 +4123,26 @@ export class SessionManager {
 
   // Permissions.
 
+  /** The `allow_once` option the run's scope allows, or null when the request waits. */
+  private routineAnswer(
+    live: Live,
+    scope: PermissionScope,
+    request: PermissionRequest,
+  ): string | null {
+    const entry = live.thread.byId[request.toolEntryId]
+    if (entry?.kind !== 'tool') return null
+    return scopeAnswer(
+      scope,
+      live.record.projectPath,
+      {
+        toolKind: entry.toolKind,
+        locations: entry.locations.map((location) => location.path),
+        options: request.options,
+      },
+      this.deps.platform,
+    )
+  }
+
   private requestPermission(
     live: Live,
     request: PermissionRequest,
@@ -4126,6 +4151,24 @@ export class SessionManager {
     this.applyOutput(live, request.output)
     // The user already stopped this turn or closed the session: the request is moot.
     if (live.closing || live.turn?.cancelRequested) return Promise.resolve('cancelled')
+    // A run answers inside its scope while its first turn works; anything else waits for the user.
+    if (live.routineScope && live.record.origin === 'routine' && !live.routineTurnEnded) {
+      const optionId = this.routineAnswer(live, live.routineScope, request)
+      if (optionId !== null) {
+        this.emit(live, [
+          {
+            op: 'entry.update',
+            id: request.toolEntryId,
+            changes: {
+              permission: null,
+              permissionResult: { optionId, kind: 'allow_once', by: 'routine' },
+            },
+          },
+        ])
+        this.touch(live.id)
+        return Promise.resolve({ optionId })
+      }
+    }
     const requestId = `p${++this.requestCounter}`
     return new Promise<PermissionAnswer>((resolve, reject) => {
       const onAbort = (): void => {
