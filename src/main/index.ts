@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, powerMonitor, protocol, session } from 'electron'
+import { app, powerMonitor, protocol, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
@@ -14,6 +14,7 @@ import { registerIpcHandlers } from './ipc'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
+import { isOpenedAtLogin, startMode, syncLoginItem } from './login-item'
 import { notifyAttention } from './notifications'
 import { RoutinesAwake } from './power-save'
 import { restrictPermissions } from './permissions'
@@ -82,6 +83,12 @@ async function start(): Promise<void> {
 
   await app.whenReady()
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
+  const wasOpenedAtLogin =
+    process.platform === 'darwin' ? app.getLoginItemSettings().wasOpenedAtLogin : false
+  const start = startMode(
+    process.platform,
+    isOpenedAtLogin(process.platform, process.argv, wasOpenedAtLogin),
+  )
   const icon = devIcon()
   if (icon) app.dock?.setIcon(icon)
   restrictPermissions(
@@ -90,6 +97,7 @@ async function start(): Promise<void> {
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
   )
   const [settings, windowState, appState] = await loading
+  syncLoginItem(settings.get().general.openAtLogin)
 
   // The system's languages are read once; macOS and Windows ask for a restart to change them.
   const systemLocale = matchLocale(app.getPreferredSystemLanguages())
@@ -163,6 +171,7 @@ async function start(): Promise<void> {
       applyZoom(next.appearance.zoom)
     }
     if (changed.has('notifications')) setBadgeEnabled(next.notifications.badge)
+    if (changed.has('general')) syncLoginItem(next.general.openAtLogin)
     updater.settingsChanged(next, changed)
   })
 
@@ -204,12 +213,12 @@ async function start(): Promise<void> {
   })
 
   agentHost.start()
-  const window = createMainWindow()
+  const window = createMainWindow(start)
   window.once('show', () => updater.start())
   ready = true
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && !quitFlow.quitting) createMainWindow()
+    if (!quitFlow.quitting) showMainWindow()
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()

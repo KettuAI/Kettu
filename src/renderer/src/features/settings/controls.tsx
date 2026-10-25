@@ -31,13 +31,20 @@ export function SettingSwitch({
   label,
   checked,
   onChange,
+  disabled,
 }: {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
+  disabled?: boolean
 }) {
   return (
-    <Switch aria-label={label} checked={checked} onCheckedChange={(value) => onChange(value)} />
+    <Switch
+      aria-label={label}
+      checked={checked}
+      disabled={disabled}
+      onCheckedChange={(value) => onChange(value)}
+    />
   )
 }
 

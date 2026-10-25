@@ -15,7 +15,9 @@
     "open": "Open {{name}}",
     "switchOn": "Turn on {{name}}",
     "switchOff": "Turn off {{name}}",
-    "lastFailed": "Its last run failed"
+    "lastFailed": "Its last run failed",
+    "openAtLogin": "Routines run only while OverBench is open.",
+    "openAtLoginAction": "Open at login"
   },
   "signal": {
     "name": "Routines, {{signal}}",

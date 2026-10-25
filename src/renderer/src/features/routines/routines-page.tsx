@@ -33,6 +33,7 @@ import { TopBar } from '@renderer/features/shell/top-bar'
 import { errorMessage } from '@renderer/lib/host'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { openRoutine } from '@renderer/stores/view'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
 import {
@@ -58,6 +59,7 @@ export default function RoutinesPage() {
   const loaded = useRoutinesStore((s) => s.loaded)
   const problem = useRoutinesStore((s) => s.problem)
   const loadError = useRoutinesStore((s) => s.error)
+  const openAtLogin = useSettingsStore((s) => s.settings.general.openAtLogin)
   const [error, setError] = useState<string | null>(null)
   const [active, setActive] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -78,6 +80,14 @@ export default function RoutinesPage() {
     useRoutinesStore
       .getState()
       .runNow(routine.id)
+      .catch((failure: unknown) => setError(errorMessage(failure)))
+  }
+
+  const enableOpenAtLogin = () => {
+    setError(null)
+    useSettingsStore
+      .getState()
+      .update({ general: { openAtLogin: true } })
       .catch((failure: unknown) => setError(errorMessage(failure)))
   }
 
@@ -189,6 +199,14 @@ export default function RoutinesPage() {
             </Alert>
           )}
           {body}
+          {!openAtLogin && (
+            <div className="flex items-center justify-between gap-4 border-t border-subtle pt-4">
+              <p className="text-small text-secondary">{t('page.openAtLogin')}</p>
+              <Button variant="outline" size="sm" onClick={enableOpenAtLogin}>
+                {t('page.openAtLoginAction')}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
       {target && (

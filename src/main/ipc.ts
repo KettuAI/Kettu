@@ -24,6 +24,7 @@ import type { Artifacts } from './artifacts'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
+import { loginItemStatus } from './login-item'
 import { createLogger } from './log'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
@@ -203,6 +204,7 @@ export function registerIpcHandlers({
 
   handle('settings:get', 0, () => settings.get())
   handle('settings:update', 1, (_, patch) => settings.update(patch))
+  handle('login-item:status', 0, () => loginItemStatus())
 
   handle('dialog:open-project', 0, async ({ window }) => {
     const options: Electron.OpenDialogOptions = {

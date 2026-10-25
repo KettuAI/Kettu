@@ -21,7 +21,12 @@ function defaults(): SettingsFile {
 describe('validateSettingsPatch', () => {
   it('accepts a partial change in every section', () => {
     const patch = {
-      general: { language: 'zh-CN', sendKey: 'mod-enter', defaultAgent: 'codex' },
+      general: {
+        language: 'zh-CN',
+        sendKey: 'mod-enter',
+        defaultAgent: 'codex',
+        openAtLogin: true,
+      },
       appearance: { theme: 'dark', zoom: 1.25 },
       notifications: { sound: true },
       agents: { opencode: { binaryPath: null }, codex: { cli: 'bundled' } },
@@ -52,6 +57,7 @@ describe('validateSettingsPatch', () => {
     [{ general: { sendKey: 'shift-enter' } }, '"general.sendKey" must be one of'],
     [{ general: { language: 'zh-TW' } }, '"general.language" must be one of'],
     [{ general: { fontFamily: 'x' } }, 'Unknown setting "general.fontFamily"'],
+    [{ general: { openAtLogin: 'yes' } }, '"general.openAtLogin" must be a boolean'],
     [{ general: 'enter' }, '"general" must be an object'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
     [{ appearance: { zoom: 2 } }, '"appearance.zoom" must be one of'],
