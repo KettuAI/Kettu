@@ -3,7 +3,14 @@
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
-import { AGENT_IDS, type AgentId, type PromptCache, type QueuedPrompt } from '@shared/thread'
+import {
+  AGENT_IDS,
+  isUserContent,
+  type AgentId,
+  type PromptCache,
+  type QueuedPrompt,
+  type UserContent,
+} from '@shared/thread'
 import type { AgentInit } from './acp/connection'
 import { isVersion } from './versions'
 
@@ -286,6 +293,12 @@ export interface AgentUpdatesFile {
   >
 }
 
+/** Messages no session took, kept for a window to take back; `sessionId` is null for New session. */
+export interface ReturnedFile {
+  version: 1
+  messages: { sessionId: string | null; content: UserContent[]; at: number }[]
+}
+
 /** Agent processes, and what they left behind, not yet seen gone; the next host stops them. */
 export interface AgentProcessesFile {
   version: 1
@@ -296,12 +309,14 @@ export interface AgentProcessesFile {
 export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
 export const AGENTS_VERSION = 1
+export const RETURNED_VERSION = 1
 export const AGENT_PROCESSES_VERSION = 1
 export const AGENT_UPDATES_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
 export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const RETURNED_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_PROCESSES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_UPDATES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 
@@ -416,6 +431,21 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ? { emptySessionsRemovedAt: data.emptySessionsRemovedAt }
       : {}),
   }
+}
+
+// A message whose content does not parse is dropped rather than failing the whole file.
+export function parseReturnedFile(data: Record<string, unknown>): ReturnedFile | string {
+  if (!Array.isArray(data.messages)) return 'messages is not a list'
+  const nullableString = isNullable(isString)
+  const messages = data.messages.filter(
+    (item): item is ReturnedFile['messages'][number] =>
+      isRecord(item) &&
+      nullableString(item.sessionId) &&
+      isTime(item.at) &&
+      Array.isArray(item.content) &&
+      item.content.every(isUserContent),
+  )
+  return { version: 1, messages }
 }
 
 // Not 'none': whether a signed-out agent is still signed out is known only once it runs.
@@ -575,6 +605,19 @@ export function sessionsFile(userDataPath: string, log: LogFn): JsonFile<Session
     parse: parseSessionsFile,
     empty: () => ({ version: 1, sessions: [] }),
     log,
+  })
+}
+
+export function returnedFile(userDataPath: string, log: LogFn): JsonFile<ReturnedFile> {
+  return new JsonFile<ReturnedFile>({
+    file: path.join(userDataPath, 'state', 'returned.json'),
+    version: RETURNED_VERSION,
+    migrations: RETURNED_MIGRATIONS,
+    parse: parseReturnedFile,
+    empty: () => ({ version: 1, messages: [] }),
+    log,
+    // Written at once: a quit right after the message was kept must not lose it.
+    debounceMs: 0,
   })
 }
 

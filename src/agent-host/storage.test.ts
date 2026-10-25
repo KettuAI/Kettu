@@ -11,8 +11,10 @@ import {
   parseAgentsFile,
   parseAgentUpdatesFile,
   parseProjectsFile,
+  parseReturnedFile,
   parseSessionsFile,
   projectsFile,
+  returnedFile,
   sessionsFile,
   writeFileAtomic,
   type Migration,
@@ -253,6 +255,29 @@ describe('the host files', () => {
       version: 1,
       sessions: [session],
     })
+  })
+
+  it('keeps the returned messages that validate and drops the rest', async () => {
+    const kept = {
+      sessionId: null,
+      content: [{ type: 'text' as const, text: 'Fix the build' }],
+      at: 3,
+    }
+    expect(
+      parseReturnedFile({
+        messages: [
+          kept,
+          { sessionId: 's1', content: [{ type: 'text', text: 7 }], at: 4 },
+          { sessionId: 's1', content: 'Fix the build', at: 5 },
+        ],
+      }),
+    ).toEqual({ version: 1, messages: [kept] })
+    expect(parseReturnedFile({ messages: {} })).toBe('messages is not a list')
+    const store = returnedFile(dir, log)
+    expect(store.file).toBe(path.join(dir, 'state', 'returned.json'))
+    store.save({ version: 1, messages: [kept] })
+    await store.flush()
+    expect(await returnedFile(dir, log).load()).toEqual({ version: 1, messages: [kept] })
   })
 
   it('validates projects', async () => {

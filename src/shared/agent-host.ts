@@ -426,6 +426,8 @@ export interface HostContract {
   'sessions.delete': { params: { sessionId: string }; result: void }
   // Once per index: the sessions left with no message go, except `keep`, those with a draft.
   'sessions.removeEmpty': { params: { keep: string[] }; result: void }
+  // Messages the host kept to give back, oldest first, for a session or for New session (null).
+  'sessions.takeReturned': { params: { sessionId: string | null }; result: UserContent[][] }
   'sessions.removeAll': { params: void; result: void }
   'permissions.respond': {
     params: { sessionId: string; requestId: string; optionId: string }
@@ -592,6 +594,7 @@ export const HOST_METHODS = [
   'sessions.markUnread',
   'sessions.delete',
   'sessions.removeEmpty',
+  'sessions.takeReturned',
   'sessions.removeAll',
   'permissions.respond',
   'diagnostics.collect',
@@ -640,6 +643,7 @@ export type HostEvent =
   | { type: 'session.patches'; batch: PatchBatch }
   | { type: 'session.summary'; summary: SessionSummary }
   | { type: 'session.removed'; sessionId: string }
+  | { type: 'session.returned'; sessionId: string | null }
   | { type: 'agent.status'; status: AgentStatus }
   | { type: 'agent.options'; options: AgentOptions }
   | { type: 'projects.changed'; projects: Project[] }

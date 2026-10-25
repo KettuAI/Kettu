@@ -22,6 +22,7 @@ const {
   retryPendingSession,
   sessionRemoved,
   startNewSession,
+  takeReturnedMessages,
   usePendingSession,
 } = await import('./actions')
 const { clearDraft, draftedSessions, NEW_SESSION_DRAFT, readDraft, writeDraft } =
@@ -530,6 +531,50 @@ describe('createSession with a first message', () => {
       expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 'n1' }),
     )
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else')
+  })
+})
+
+describe('takeReturnedMessages', () => {
+  const shot = {
+    id: 'a1',
+    type: 'image',
+    name: 'Image 1',
+    uri: null,
+    mimeType: 'image/png',
+    size: 3,
+    sent: null,
+    thumb: null,
+    blob: null,
+  } as const
+  const message: UserContent[] = [
+    { type: 'text', text: 'Fix the build' },
+    { type: 'ref', ref: { kind: 'attachment', attachment: shot } },
+  ]
+
+  beforeEach(() => {
+    request.mockReset()
+    clearDraft(NEW_SESSION_DRAFT)
+    setDraftAttachments(NEW_SESSION_DRAFT, [])
+  })
+
+  it('puts the message into an empty draft', async () => {
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.takeReturned' ? [message] : undefined,
+    )
+    await takeReturnedMessages()
+    expect(request).toHaveBeenCalledWith('sessions.takeReturned', { sessionId: null })
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
+    expect(draftAttachments(NEW_SESSION_DRAFT).map((item) => item.attachment?.id)).toEqual(['a1'])
+  })
+
+  it('puts it after a draft written since, its attachments after the draft ones', async () => {
+    writeDraft(NEW_SESSION_DRAFT, 'Something else')
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.takeReturned' ? [message] : undefined,
+    )
+    await takeReturnedMessages()
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else\n\nFix the build')
+    expect(draftAttachments(NEW_SESSION_DRAFT).map((item) => item.attachment?.id)).toEqual(['a1'])
   })
 })
 

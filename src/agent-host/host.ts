@@ -46,6 +46,7 @@ import {
   agentsFile,
   agentUpdatesFile,
   projectsFile,
+  returnedFile,
   sessionsFile,
   type AgentsFile,
   type AgentUpdatesFile,
@@ -264,6 +265,8 @@ export class AgentHost {
       projects: this.projects,
       scratch: this.scratch,
       file: sessionsFile(options.userDataPath, log),
+      returned: returnedFile(options.userDataPath, log),
+      portOpen: (portId) => this.hub.has(portId),
       threads: this.threads,
       attachments: this.attachments,
       mcp: {
@@ -320,6 +323,7 @@ export class AgentHost {
           this.hub.broadcast({ type: 'session.removed', sessionId })
           this.sendFolders()
         },
+        returned: (sessionId) => this.hub.broadcast({ type: 'session.returned', sessionId }),
         attention: (sessionId, kind, title, body) =>
           options.send({ type: 'host:attention', sessionId, kind, title, body }),
         badge: (count) => options.send({ type: 'host:badge', count }),
@@ -663,7 +667,7 @@ export class AgentHost {
       },
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
       'sessions.list': ({ projectPath }) => sessions.list(projectPath),
-      'sessions.create': (params) => sessions.create(params),
+      'sessions.create': (params, { portId }) => sessions.create(params, portId),
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
       'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
@@ -696,6 +700,7 @@ export class AgentHost {
         this.options.send({ type: 'host:media-revoke', sessionId })
       },
       'sessions.removeEmpty': ({ keep }) => sessions.removeEmptyOnce(keep),
+      'sessions.takeReturned': ({ sessionId }) => sessions.takeReturned(sessionId),
       'sessions.removeAll': async () => {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })

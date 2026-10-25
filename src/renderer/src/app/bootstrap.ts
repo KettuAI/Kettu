@@ -4,6 +4,7 @@ import {
   newSessionInPlace,
   removeEmptySessions,
   sessionRemoved,
+  takeReturnedMessages,
   usePendingSession,
 } from '@renderer/app/actions'
 import { launchTarget } from '@renderer/app/restore'
@@ -54,6 +55,9 @@ function onHostEvent(event: HostEvent): void {
       break
     case 'session.removed':
       if (!preparedRemoved(event.sessionId)) sessionRemoved(event.sessionId)
+      break
+    case 'session.returned':
+      if (event.sessionId === null) void takeReturnedMessages()
       break
     case 'agent.status':
       useAgentsStore.getState().setOne(event.status)
@@ -171,6 +175,7 @@ export function bootstrap(): Promise<unknown> {
   initTerminals()
   // Before any composer shows, so each finds its draft's attachments.
   void restoreDraftAttachments()
+  void takeReturnedMessages()
   // Asked first, so the host reads the threads before the ones the launch opens.
   void removeEmptySessions()
   const sessionState = loadSessionState()

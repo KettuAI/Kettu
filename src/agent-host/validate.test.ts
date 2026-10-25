@@ -142,6 +142,16 @@ describe('createValidators', () => {
     )
   })
 
+  it('takes returned messages for a session or for New session', () => {
+    expect(posix['sessions.takeReturned']({ sessionId: null })).toEqual({ sessionId: null })
+    expect(posix['sessions.takeReturned']({ sessionId: 's1', other: 1 })).toEqual({
+      sessionId: 's1',
+    })
+    rejects(() => posix['sessions.takeReturned']({}))
+    rejects(() => posix['sessions.takeReturned']({ sessionId: 1 }))
+    rejects(() => posix['sessions.takeReturned']({ sessionId: '' }))
+  })
+
   it('takes a string or a boolean for a config value', () => {
     const v = posix['sessions.setConfigOption']
     expect(v({ sessionId: 's', optionId: 'fast', value: false })).toMatchObject({ value: false })

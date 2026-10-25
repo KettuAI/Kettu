@@ -2407,6 +2407,65 @@ describe('the first message', () => {
   })
 })
 
+describe('a first message whose window went before the start failed', () => {
+  const prompt = [{ type: 'text' as const, text: 'Fix the flaky login test' }]
+
+  const news = (t: TestHost) =>
+    t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter((r) => r.direction === 'out' && r.method === 'session/new').length
+
+  /** Starts a create whose agent fails `session/new` once the sending port has gone. */
+  async function createWithoutItsWindow(t: TestHost, sending: TestPort) {
+    const creating = sending.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      prompt,
+    })
+    await vi.waitFor(() => expect(news(t)).toBe(1))
+    sending.disconnect()
+    const next = t.connect()
+    ;(t.launcher as InProcessLauncher).crash()
+    return { creating, next }
+  }
+
+  it('is given to the next window, once', async () => {
+    const { t } = await setup({ agentEnv: { FAKE_AGENT_NEW_SESSION_MS: '100' } })
+    const { next } = await createWithoutItsWindow(t, t.connect())
+    await next.until(() => next.events.some((event) => event.type === 'session.returned'))
+    expect(next.events.find((event) => event.type === 'session.returned')).toEqual({
+      type: 'session.returned',
+      sessionId: null,
+    })
+    expect(await next.request('sessions.takeReturned', { sessionId: null })).toEqual([prompt])
+    expect(await next.request('sessions.takeReturned', { sessionId: null })).toEqual([])
+  })
+
+  it('is still there after a quit before a window opens again', async () => {
+    const first = await startTestHost({ agentEnv: { FAKE_AGENT_NEW_SESSION_MS: '100' } })
+    await createWithoutItsWindow(first, first.connect())
+    await first.host.shutdown()
+
+    current = await startTestHost({ userDataPath: first.dir })
+    const port = current.connect()
+    expect(await port.request('sessions.takeReturned', { sessionId: null })).toEqual([prompt])
+  })
+
+  it('is kept nowhere when the window that sent it is still there', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_NEW_SESSION_MS: '100' } })
+    const creating = port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      prompt,
+    })
+    await vi.waitFor(() => expect(news(t)).toBe(1))
+    ;(t.launcher as InProcessLauncher).crash()
+    await expect(creating).rejects.toBeDefined()
+    expect(port.events.some((event) => event.type === 'session.returned')).toBe(false)
+    expect(await port.request('sessions.takeReturned', { sessionId: null })).toEqual([])
+  })
+})
+
 describe('sign-in', () => {
   it('retries after a sign-in in a terminal', async () => {
     const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)

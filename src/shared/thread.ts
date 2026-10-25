@@ -483,7 +483,7 @@ export function isAttachment(value: unknown): value is Attachment {
   )
 }
 
-function isUserContent(value: unknown): value is UserContent {
+export function isUserContent(value: unknown): value is UserContent {
   if (!isRecord(value)) return false
   if (value.type === 'text') return typeof value.text === 'string'
   return value.type === 'ref' && isContentRef(value.ref)
