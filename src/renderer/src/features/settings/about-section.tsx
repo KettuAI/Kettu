@@ -102,7 +102,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
       case 'idle':
         text = state.checkedAt
           ? t('about.updates.upToDateChecked', { ago: longAgo(state.checkedAt, now) })
-          : t('about.updates.upToDate')
+          : t('about.updates.notChecked')
         action = check
         break
       case 'checking':
