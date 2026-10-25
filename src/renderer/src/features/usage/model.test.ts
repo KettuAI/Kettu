@@ -28,9 +28,12 @@ import {
   seriesOf,
   shownSeries,
   shownTotals,
+  todayFigure,
+  tokensPerRequest,
   trend,
   typedDay,
   typedRange,
+  unpricedTokens,
   weekStartOf,
   wholeMonth,
   widest,
@@ -41,7 +44,14 @@ const day = (y: number, m: number, d: number) => new Date(y, m - 1, d).getTime()
 const TODAY = day(2026, 10, 22) // a Thursday
 const HOUR = 3_600_000
 
-function usage(dayIndex: number, agentId: DayUsage['agentId'], output: number): DayUsage {
+function usage(
+  dayIndex: number,
+  agentId: DayUsage['agentId'],
+  output: number,
+  extra: Partial<
+    Pick<DayUsage, 'input' | 'requests' | 'turns' | 'cost' | 'unpricedTokens' | 'cacheSaved'>
+  > = {},
+): DayUsage {
   return {
     day: dayIndex,
     agentId,
@@ -55,6 +65,7 @@ function usage(dayIndex: number, agentId: DayUsage['agentId'], output: number): 
     cost: null,
     unpricedTokens: 0,
     cacheSaved: 0,
+    ...extra,
   }
 }
 
@@ -127,6 +138,84 @@ describe('figures', () => {
       peak: null,
       cacheShare: null,
     })
+  })
+
+  it('counts each metric, requests standing in for turns under OverBench only', () => {
+    const metricStarts = dayStarts({ from: day(2026, 10, 19), to: day(2026, 10, 23) })
+    const rows = {
+      days: [
+        usage(0, 'claude-code', 100, { requests: 3, turns: 1, cost: 1.5 }),
+        usage(1, 'codex', 50, { requests: 2, turns: 1, cost: 0.25, cacheSaved: 0.75 }),
+        usage(2, 'opencode', 400, { requests: 4, turns: 2, unpricedTokens: 400 }),
+      ],
+    }
+    const metricRange = { from: metricStarts[0]!, to: metricStarts[4]! }
+    const days = dayTotals(rows, metricStarts, 'all')
+    expect(figures(days, metricRange)).toMatchObject({
+      total: 550,
+      tokens: 550,
+      activeDays: 3,
+      average: 550 / 3,
+      priced: true,
+    })
+    const requests = figures(days, metricRange, 'requests', 'computer')
+    expect(requests).toMatchObject({ total: 9, tokens: 550, average: 3, priced: true })
+    expect(requests.peak).toEqual({ day: day(2026, 10, 21), total: 4 })
+    expect(figures(days, metricRange, 'requests', 'overbench')).toMatchObject({
+      total: 4,
+      average: 4 / 3,
+    })
+    const cost = figures(days, metricRange, 'cost', 'computer')
+    expect(cost).toMatchObject({ total: 1.75, tokens: 550, average: 1.75 / 3, priced: true })
+    expect(cost.peak).toEqual({ day: day(2026, 10, 19), total: 1.5 })
+    expect(cost.parts.unpricedTokens).toBe(400)
+    expect(cost.parts.cacheSaved).toBe(0.75)
+  })
+
+  it('reads tokens per request and names what no price counts', () => {
+    const metricStarts = dayStarts({ from: day(2026, 10, 19), to: day(2026, 10, 23) })
+    const rows = {
+      days: [
+        usage(0, 'claude-code', 100, { requests: 3, cost: 1.5 }),
+        usage(1, 'codex', 50, { requests: 2, unpricedTokens: 50 }),
+      ],
+    }
+    const metricRange = { from: metricStarts[0]!, to: metricStarts[4]! }
+    const days = dayTotals(rows, metricStarts, 'all')
+    const requests = figures(days, metricRange, 'requests', 'computer')
+    expect(tokensPerRequest(requests)).toBe(30)
+    expect(
+      tokensPerRequest(
+        figures(dayTotals({ days: [] }, metricStarts, 'all'), metricRange, 'requests'),
+      ),
+    ).toBeNull()
+    const cost = figures(days, metricRange, 'cost', 'computer')
+    expect(unpricedTokens(cost)).toBe(50)
+    expect(
+      unpricedTokens(
+        figures(dayTotals({ days: [] }, metricStarts, 'all'), metricRange, 'cost', 'computer'),
+      ),
+    ).toBeNull()
+  })
+
+  it('gives today’s figure in the metric, and only when it has usage', () => {
+    const today = day(2026, 10, 22)
+    const metricStarts = dayStarts({ from: day(2026, 10, 19), to: day(2026, 10, 23) })
+    const rows = {
+      days: [usage(3, 'codex', 70, { requests: 2, turns: 1, cost: 0.5 })],
+    }
+    const days = dayTotals(rows, metricStarts, 'all')
+    expect(todayFigure(days, today, 'tokens', 'computer')).toBe(70)
+    expect(todayFigure(days, today, 'requests', 'computer')).toBe(2)
+    expect(todayFigure(days, today, 'requests', 'overbench')).toBe(1)
+    expect(todayFigure(days, today, 'cost', 'computer')).toBe(0.5)
+    expect(todayFigure(days, day(2026, 10, 21), 'tokens', 'computer')).toBeNull()
+    const unpriced = dayTotals(
+      { days: [usage(3, 'codex', 10, { unpricedTokens: 10 })] },
+      metricStarts,
+      'all',
+    )
+    expect(todayFigure(unpriced, today, 'cost', 'computer')).toBeNull()
   })
 
   it('draws a bar per day, or per week beyond 92 days, stacked by agent', () => {
@@ -506,6 +595,39 @@ describe('breakdowns', () => {
     expect(projects.map((p) => [p.name, p.total])).toEqual([
       [null, 5],
       ['kite', 4],
+    ])
+  })
+
+  it('ranks and values the breakdowns in the metric, an unpriced model last', () => {
+    const rows = {
+      models: [
+        {
+          agentId: 'claude-code' as const,
+          model: 'a',
+          output: 5,
+          ...parts,
+          requests: 2,
+          cost: 1.25,
+        },
+        {
+          agentId: 'codex' as const,
+          model: 'b',
+          output: 3,
+          ...parts,
+          requests: 1,
+          unpricedTokens: 3,
+        },
+      ],
+    }
+    const byCost = modelRows(rows, 'all', 'cost', 'computer')
+    expect(byCost.map((row) => [row.name, row.value, row.total])).toEqual([
+      ['a', 1.25, 5],
+      ['b', null, 3],
+    ])
+    const byRequests = modelRows(rows, 'all', 'requests', 'computer')
+    expect(byRequests.map((row) => [row.name, row.value])).toEqual([
+      ['a', 2],
+      ['b', 1],
     ])
   })
 })
