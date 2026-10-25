@@ -27,6 +27,8 @@ export interface ComposerEditorHandle {
   focus(): void
   text(): string
   selection(): { from: number; to: number }
+  /** Types `text` over the selection, as a paste would, so it can be undone. */
+  insert(text: string): void
   /** Replaces the whole text and puts the caret at `caret`, the end by default. */
   setText(text: string, caret?: number): void
 }
@@ -285,6 +287,14 @@ export function ComposerEditor({
       selection: () => {
         const main = view.current?.state.selection.main
         return { from: main?.from ?? 0, to: main?.to ?? 0 }
+      },
+      insert: (text) => {
+        const editor = view.current
+        if (!editor) return
+        editor.dispatch(editor.state.replaceSelection(text), {
+          scrollIntoView: true,
+          userEvent: 'input.paste',
+        })
       },
       setText: (text, caret = text.length) => {
         const editor = view.current

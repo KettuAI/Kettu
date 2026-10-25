@@ -9,7 +9,15 @@ import {
   useAttachmentsStore,
   type DraftAttachment,
 } from '@renderer/stores/attachments'
-import { attachFiles, attachImages, pastedImages, pickAttachments } from './attachments'
+import {
+  attachFiles,
+  attachImages,
+  attachPastedText,
+  pastedImages,
+  pastedText,
+  pasteAsText,
+  pickAttachments,
+} from './attachments'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
 import type { ComposerEditorHandle } from './editor'
 
@@ -141,12 +149,21 @@ export function usePromptBox({
     }
 
   const onPaste = (event: ClipboardEvent): boolean => {
-    const images = event.clipboardData ? pastedImages(event.clipboardData) : []
-    if (images.length === 0) return false
+    const data = event.clipboardData
+    if (!data) return false
+    const images = pastedImages(data)
+    const long = images.length === 0 ? pastedText(data) : null
+    if (images.length === 0 && long === null) return false
     event.preventDefault()
     onActivity?.()
-    limitError(attachImages(draft, images))
+    limitError(long === null ? attachImages(draft, images) : attachPastedText(draft, long))
     return true
+  }
+
+  /** Puts a pasted text back in the box at the caret, in place of its tile. */
+  const pasteBack = (key: string, pasted: string) => {
+    pasteAsText(draft, key, pasted, (text) => editor.current?.insert(text))
+    requestAnimationFrame(() => editor.current?.focus())
   }
 
   return {
@@ -172,6 +189,7 @@ export function usePromptBox({
     full,
     pick,
     onPaste,
+    pasteAsText: pasteBack,
     onActivity,
     limitError,
   }

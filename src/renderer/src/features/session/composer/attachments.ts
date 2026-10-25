@@ -1,11 +1,13 @@
-// A composer's attachments: adding pasted images, picked or dropped files and folders, and the
-// project's files and folders an `@` mention names, through the host, removing them, keeping them
+// A composer's attachments: adding pasted images and long pasted texts, picked or dropped files
+// and folders, and the project's files and folders an `@` mention names, through the host, removing them, keeping them
 // with the draft across a restart, and the content refs a message carries.
 
 import {
   ATTACHMENT_LIMIT,
+  PASTED_TEXT_CHARS,
   PROMPT_BYTES,
   promptShare,
+  textThumb,
   type GrantedAttachment,
 } from '@shared/attachments'
 import type { Attachment, UserContent } from '@shared/thread'
@@ -45,7 +47,7 @@ export function attachImages(draft: string, files: readonly File[]): number {
   const items = draftAttachments(draft)
   const room = Math.max(0, ATTACHMENT_LIMIT - items.length)
   const taken = files.slice(0, room)
-  let number = nextImageNumber(items)
+  let number = nextNumber(items, 'composer:attachments.imageName')
   const added: DraftAttachment[] = taken.map((file) => ({
     key: `a${nextKey++}`,
     name: i18n.t('composer:attachments.imageName', { number: number++ }),
@@ -63,11 +65,13 @@ export function attachImages(draft: string, files: readonly File[]): number {
   return files.length - taken.length
 }
 
-function nextImageNumber(items: readonly DraftAttachment[]): number {
+/** The next number of a numbered name in a draft: one past the highest it holds. */
+function nextNumber(
+  items: readonly DraftAttachment[],
+  key: 'composer:attachments.imageName' | 'composer:attachments.pastedTextName',
+): number {
   const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const [before = '', after = ''] = i18n
-    .t('composer:attachments.imageName', { number: '\u0000' })
-    .split('\u0000')
+  const [before = '', after = ''] = i18n.t(key, { number: '\u0000' }).split('\u0000')
   const pattern = new RegExp(`^${escape(before)}(\\d+)${escape(after)}$`)
   let highest = 0
   for (const item of items) {
@@ -90,6 +94,68 @@ async function addImage(draft: string, item: DraftAttachment, file: File): Promi
     const attachment = await host('attachments.add', {
       source: { bytes: image.bytes, mimeType: image.mimeType, name: item.name },
       thumb: image.thumb,
+    })
+    // Removed while it was being added: the host's record goes too.
+    if (!isHeld(draft, item.key)) {
+      void host('attachments.remove', { id: attachment.id }).catch(() => {})
+      return
+    }
+    patchDraftAttachment(draft, item.key, { status: 'ready', attachment })
+  } catch (error) {
+    console.warn(`Could not attach ${item.name}`, error)
+    patchDraftAttachment(draft, item.key, { status: 'failed', error: errorMessage(error) })
+  }
+}
+
+/** The text of a paste that becomes a pasted text attachment, or null when it stays text. */
+export function pastedText(data: DataTransfer): string | null {
+  const text = data.getData('text/plain')
+  return text.length > PASTED_TEXT_CHARS ? text : null
+}
+
+/**
+ * Adds a long paste as "Pasted text 1", "Pasted text 2", in the order pasted. Returns 1 when the
+ * composer is full, and nothing is added.
+ */
+export function attachPastedText(draft: string, text: string): number {
+  const items = draftAttachments(draft)
+  if (items.length >= ATTACHMENT_LIMIT) return 1
+  const bytes = new TextEncoder().encode(text)
+  const item: DraftAttachment = {
+    key: `a${nextKey++}`,
+    name: i18n.t('composer:attachments.pastedTextName', {
+      number: nextNumber(items, 'composer:attachments.pastedTextName'),
+    }),
+    kind: 'text',
+    status: 'adding',
+    attachment: null,
+    thumb: textThumb(text),
+    size: bytes.byteLength,
+    pixels: null,
+    scaled: null,
+    error: null,
+  }
+  setDraftAttachments(draft, [...items, item])
+  void addText(draft, item, bytes)
+  return 0
+}
+
+/** Puts a pasted text back as text through `insert`, and removes its tile and its record. */
+export function pasteAsText(
+  draft: string,
+  key: string,
+  text: string,
+  insert: (text: string) => void,
+): void {
+  insert(text)
+  removeAttachment(draft, key)
+}
+
+async function addText(draft: string, item: DraftAttachment, bytes: Uint8Array): Promise<void> {
+  try {
+    const attachment = await host('attachments.add', {
+      source: { bytes: bytes.buffer as ArrayBuffer, mimeType: 'text/plain', name: item.name },
+      thumb: null,
     })
     // Removed while it was being added: the host's record goes too.
     if (!isHeld(draft, item.key)) {

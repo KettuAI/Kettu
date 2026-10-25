@@ -1,6 +1,7 @@
 import type { ComponentProps, MouseEvent } from 'react'
 import { CircleAlertIcon, TriangleAlertIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { readTextThumb } from '@shared/attachments'
 import type { Attachment } from '@shared/thread'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -24,8 +25,8 @@ export interface TileView {
 }
 
 /**
- * A 112 px attachment tile: an image's thumbnail, or a file's name and size. See attachments in
- * the design system.
+ * A 112 px attachment tile: an image's thumbnail, a file's name and size, or a pasted text's first
+ * lines over its name and line count. See attachments in the design system.
  */
 export function AttachmentTile({
   view,
@@ -39,7 +40,9 @@ export function AttachmentTile({
   removeLabel?: string
 } & ComponentProps<'div'>) {
   const { t } = useTranslation('composer')
-  const picture = view.status !== 'failed' && view.thumb
+  const picture = view.status !== 'failed' && view.kind !== 'text' && view.thumb
+  const preview =
+    view.status !== 'failed' && view.kind === 'text' ? readTextThumb(view.thumb) : null
   const adding = view.status === 'adding'
   const remove = (event: MouseEvent) => {
     event.stopPropagation()
@@ -74,6 +77,14 @@ export function AttachmentTile({
           <div className="flex size-full flex-col justify-between p-2.5">
             {view.status === 'failed' ? (
               <CircleAlertIcon className="size-4 text-danger" />
+            ) : preview ? (
+              <div className="overflow-hidden font-mono text-meta whitespace-pre text-secondary">
+                {preview.lines.map((line, i) => (
+                  <div key={i} className="truncate">
+                    {line || ' '}
+                  </div>
+                ))}
+              </div>
             ) : adding ? (
               <Spinner className="size-4 animate-in text-icon fade-in fill-mode-both delay-200 duration-(--duration-fast)" />
             ) : view.kind === 'file' || view.kind === 'folder' ? (

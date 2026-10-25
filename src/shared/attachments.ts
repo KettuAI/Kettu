@@ -73,7 +73,47 @@ export function embedsText(attachment: Sendable): boolean {
 /** An attachment's share of `PROMPT_BYTES`: an image in base64 and a text, but not a link. */
 export function promptShare(attachment: Sendable): number {
   if (attachment.type === 'image') return sentBytes(attachment.size ?? 0)
+  if (attachment.type === 'text') return attachment.size ?? 0
   return embedsText(attachment) ? (attachment.size ?? 0) : 0
+}
+
+/** A paste longer than this, in characters, becomes a pasted text attachment. */
+export const PASTED_TEXT_CHARS = 10_000
+
+const PREVIEW_LINES = 3
+
+// Far wider than a tile shows, so the thumb stays small whatever the text's lines are.
+const PREVIEW_LINE_CHARS = 120
+
+const TEXT_THUMB = /^data:text\/plain;charset=utf-8;lines=(\d+),(.*)$/s
+
+/** A text's lines, not counting the empty one after a final line break. */
+export function lineCount(text: string): number {
+  if (text === '') return 0
+  const breaks = text.match(/\r\n|\r|\n/g)?.length ?? 0
+  return /[\r\n]$/.test(text) ? breaks : breaks + 1
+}
+
+/**
+ * A pasted text's thumb: its first three lines and its line count as a text/plain data URL, so a
+ * restored draft and the thread show its tile without reading its bytes.
+ */
+export function textThumb(text: string): string {
+  const lines = text
+    .split(/\r\n|\r|\n/, PREVIEW_LINES)
+    .map((line) => line.slice(0, PREVIEW_LINE_CHARS))
+  return `data:text/plain;charset=utf-8;lines=${lineCount(text)},${encodeURIComponent(lines.join('\n'))}`
+}
+
+/** What a pasted text's thumb holds, or null when it is not one. */
+export function readTextThumb(thumb: string | null): { lines: string[]; count: number } | null {
+  const match = thumb ? TEXT_THUMB.exec(thumb) : null
+  if (!match) return null
+  try {
+    return { lines: decodeURIComponent(match[2]!).split('\n'), count: Number(match[1]) }
+  } catch {
+    return null
+  }
 }
 
 /** A file or folder main granted the host for one attachment, as the renderer knows it. */

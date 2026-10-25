@@ -73,6 +73,7 @@ import {
   blockBytes,
   embedFile,
   linkBlock,
+  pastedTextBlock,
   resolvePath,
   sendAttachment,
   toArrayBuffer,
@@ -3123,6 +3124,15 @@ export class SessionManager {
     const shown: UserContent[] = []
     const blobs: StoredBlob[] = []
     const ids: string[] = []
+    // A pasted text sent as text follows the message's text after a blank line.
+    const attach = (block: PromptBlock) => {
+      const last = wire.at(-1)
+      if (block.type === 'text' && last?.type === 'text') {
+        wire[wire.length - 1] = { ...last, text: `${last.text}\n\n${block.text}` }
+      } else {
+        wire.push(block)
+      }
+    }
     for (const item of content) {
       if (item.type !== 'ref' || item.ref.kind !== 'attachment') {
         wire.push(...promptBlocks([item]))
@@ -3131,7 +3141,7 @@ export class SessionManager {
       }
       if (item.ref.attachment.sent) {
         // Sent before, as when the agent asked to sign in: again from what the thread keeps.
-        wire.push(await this.resend(live, item.ref.attachment))
+        attach(await this.resend(live, item.ref.attachment))
         shown.push(item)
         continue
       }
@@ -3140,7 +3150,7 @@ export class SessionManager {
       const sent = await sendAttachment(store, record, prompt)
       ids.push(record.id)
       if (sent.blob) blobs.push(sent.blob)
-      wire.push(sent.block)
+      attach(sent.block)
       shown.push({
         type: 'ref',
         ref: { kind: 'attachment', attachment: { ...store.view(record.id), ...sent.changes } },
@@ -3155,6 +3165,14 @@ export class SessionManager {
 
   private async resend(live: Live, attachment: Attachment): Promise<PromptBlock> {
     const { uri, name, mimeType, size } = attachment
+    if (attachment.type === 'text') {
+      const stored = attachment.blob
+        ? await this.storedBlob(live.id, attachment.blob).catch(() => null)
+        : null
+      if (!stored) throw notFound(t('session.attachmentGone', { name }))
+      const text = Buffer.from(stored.data).toString('utf8')
+      return pastedTextBlock(text, attachment.sent === 'embedded' ? uri : null, stored.mime)
+    }
     if (attachment.sent === 'linked' && uri) return linkBlock(uri, name, mimeType, size)
     if (attachment.sent === 'embedded' && uri) {
       const prompt = this.deps.agents.status(live.record.agentId).capabilities.prompt

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { readTextThumb, textThumb } from '@shared/attachments'
 import {
   ATTACHMENT_MAX_AGE_MS,
   Attachments,
@@ -81,7 +82,47 @@ describe('Attachments', () => {
     await expect(
       attachments.add({ ...image(), mimeType: 'image/tiff' }, null),
     ).rejects.toMatchObject({ code: 'invalid_params' })
-    await expect(attachments.add({ ...image(), mimeType: 'text/plain' }, null)).rejects.toThrow()
+    await expect(
+      attachments.add({ ...image(), mimeType: 'application/pdf' }, null),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+
+  it('keeps a pasted text as a text record, its bytes by hash, and its first lines', async () => {
+    const attachments = store()
+    await attachments.load()
+    const text = 'first\nsecond\r\nthird\nfourth\n'
+    const data = new TextEncoder().encode(text)
+    const source = { bytes: toArrayBuffer(data), mimeType: 'text/plain', name: 'Pasted text 1' }
+    const added = await attachments.add(source, THUMB)
+    expect(added).toEqual({
+      id: expect.any(String),
+      type: 'text',
+      name: 'Pasted text 1',
+      uri: null,
+      mimeType: 'text/plain',
+      size: data.byteLength,
+      sent: null,
+      // Made from the text, whatever thumb the renderer named.
+      thumb: textThumb(text),
+      blob: null,
+    })
+    expect(readTextThumb(added.thumb)).toEqual({ lines: ['first', 'second', 'third'], count: 4 })
+    const saved = path.join(dir, 'attachments', `${sha(data)}.txt`)
+    expect(await readFile(saved, 'utf8')).toBe(text)
+    expect(new TextDecoder().decode((await attachments.read(added.id)).bytes)).toBe(text)
+
+    await attachments.flush()
+    const reopened = store()
+    await reopened.load()
+    expect(reopened.view(added.id)).toEqual(added)
+    await reopened.remove(added.id)
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([])
+  })
+
+  it('refuses a pasted text that is not UTF-8', async () => {
+    const attachments = store()
+    const source = { bytes: toArrayBuffer(PNG), mimeType: 'text/plain', name: 'Pasted text 1' }
+    await expect(attachments.add(source, null)).rejects.toMatchObject({ code: 'invalid_params' })
   })
 
   it('answers not_found for an id it does not hold', async () => {
@@ -411,8 +452,19 @@ describe('parseAttachmentsFile', () => {
           { ...file, id: 'f3', hash: 'c'.repeat(64) },
           { ...folder, id: 'd2', size: 4 },
           { ...record, id: 'a2', hash: null },
+          { ...record, id: 't1', type: 'text', mimeType: 'text/plain' },
+          { ...record, id: 't2', type: 'text', mimeType: 'text/plain', hash: null },
+          { ...record, id: 't3', type: 'text', mimeType: 'text/plain', path: '/p/a.txt' },
         ],
       }),
-    ).toEqual({ version: 1, attachments: [record, file, folder] })
+    ).toEqual({
+      version: 1,
+      attachments: [
+        record,
+        file,
+        folder,
+        { ...record, id: 't1', type: 'text', mimeType: 'text/plain' },
+      ],
+    })
   })
 })

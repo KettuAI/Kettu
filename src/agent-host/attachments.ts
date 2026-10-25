@@ -1,6 +1,7 @@
 // The attachments of drafts and queued prompts: their records in state/attachments.json, the
-// paths main granted for picked and dropped files or an `@` mention named, and the image bytes
-// they were read as or the renderer handed over in attachments/, named by SHA-256 and extension,
+// paths main granted for picked and dropped files or an `@` mention named, and the image and
+// pasted text bytes they were read as or the renderer handed over in attachments/, named by
+// SHA-256 and extension,
 // until a prompt sends them or the user removes them; and in attachments/sent/, the copies that
 // links sent to an agent point to.
 
@@ -14,6 +15,7 @@ import {
   EMBED_BYTES,
   isTextType,
   MODEL_IMAGE_TYPES,
+  textThumb,
   type AttachmentGrant,
 } from '@shared/attachments'
 import type { Attachment } from '@shared/thread'
@@ -34,12 +36,12 @@ const GRANT_MAX_AGE_MS = 10 * 60 * 1000
 
 export interface AttachmentRecord {
   id: string
-  type: 'image' | 'file' | 'folder'
+  type: 'image' | 'file' | 'folder' | 'text'
   name: string
   mimeType: string | null
-  /** Bytes: an image's saved copy, or a file's when it was added; null for a folder. */
+  /** Bytes: an image's or a pasted text's saved copy, or a file's when added; null for a folder. */
   size: number | null
-  /** SHA-256 of an image's saved bytes, as pasted, read when added, or scaled. */
+  /** SHA-256 of the saved bytes: an image's, as pasted, read when added or scaled, or a text's. */
   hash: string | null
   /** What main granted, or a mention named, for a file or folder; the only path a record reads. */
   path: string | null
@@ -159,7 +161,8 @@ function modelImageType(data: Uint8Array): string | null {
 }
 
 function fileName(record: Pick<AttachmentRecord, 'hash' | 'mimeType'>): string {
-  return `${record.hash}${EXTENSIONS[record.mimeType ?? ''] ?? ''}`
+  const mimeType = record.mimeType ?? ''
+  return `${record.hash}${EXTENSIONS[mimeType] ?? (isTextType(mimeType) ? '.txt' : '')}`
 }
 
 /** The name of the saved bytes of each record that has them. */
@@ -194,12 +197,15 @@ function attachmentRecord(value: unknown): AttachmentRecord | null {
   if (!isStringOrNull(hash) || (hash !== null && !HASH.test(hash)) || !isStringOrNull(granted)) {
     return null
   }
+  const saved = hash !== null && value.mimeType !== null && typeof value.size === 'number'
   const valid =
     value.type === 'image'
-      ? hash !== null && value.mimeType !== null && typeof value.size === 'number'
-      : value.type === 'file'
-        ? granted !== null && hash === null && typeof value.size === 'number'
-        : value.type === 'folder' && granted !== null && hash === null && value.size === null
+      ? saved
+      : value.type === 'text'
+        ? saved && granted === null
+        : value.type === 'file'
+          ? granted !== null && hash === null && typeof value.size === 'number'
+          : value.type === 'folder' && granted !== null && hash === null && value.size === null
   if (!valid) return null
   return {
     id: value.id,
@@ -284,6 +290,7 @@ export class Attachments {
 
   async add(source: AttachmentSource, thumb: string | null): Promise<Attachment> {
     if ('grantId' in source) return this.addGranted(source.grantId, thumb)
+    if (isTextType(source.mimeType)) return this.addText(source)
     if (!MODEL_IMAGE_TYPES.includes(source.mimeType)) {
       throw invalidParams(`${source.mimeType} is not an image type a model takes`)
     }
@@ -297,6 +304,31 @@ export class Attachments {
       hash: await this.saveBytes(data, source.mimeType),
       path: null,
       thumb,
+      addedAt: this.now(),
+    }
+    this.records.set(record.id, record)
+    this.save()
+    return attachmentOf(record)
+  }
+
+  /** A pasted text, whose tile is made here from its first lines. */
+  private async addText(source: {
+    bytes: ArrayBuffer
+    mimeType: string
+    name: string
+  }): Promise<Attachment> {
+    const data = new Uint8Array(source.bytes)
+    const text = textOf(data)
+    if (text === null) throw invalidParams(`${source.name} is not UTF-8 text`)
+    const record: AttachmentRecord = {
+      id: randomUUID(),
+      type: 'text',
+      name: source.name,
+      mimeType: source.mimeType,
+      size: data.byteLength,
+      hash: await this.saveBytes(data, source.mimeType),
+      path: null,
+      thumb: textThumb(text),
       addedAt: this.now(),
     }
     this.records.set(record.id, record)
@@ -419,9 +451,9 @@ export class Attachments {
     return attachmentOf(this.get(id))
   }
 
-  /** An image's saved bytes. */
+  /** An image's or a pasted text's saved bytes. */
   async bytes(record: AttachmentRecord): Promise<Buffer> {
-    if (!record.hash) throw invalidParams(`${record.name} is not an image`)
+    if (!record.hash) throw invalidParams(`${record.name} has no saved bytes`)
     try {
       return await readFile(this.bytesPath(record))
     } catch {
@@ -437,7 +469,7 @@ export class Attachments {
 
   /** A granted file or folder as it is now; `not_found` when it is gone or no longer that kind. */
   resolve(record: AttachmentRecord): Promise<ResolvedPath> {
-    if (!record.path || record.type === 'image') {
+    if (!record.path || record.type === 'image' || record.type === 'text') {
       return Promise.reject(invalidParams(`${record.name} has no granted path`))
     }
     return resolvePath(record.path, record.type, record.name)
@@ -568,13 +600,32 @@ export interface SentAttachment {
 
 /**
  * Builds what goes to the agent for one attachment, from what its prompt capabilities allow: an
- * image as an image or a link, a text file with its contents or as a link, a folder as a link.
+ * image as an image or a link, a text file with its contents or as a link, a folder as a link, a
+ * pasted text embedded or as text after the message's.
  */
 export async function sendAttachment(
   store: Attachments,
   record: AttachmentRecord,
   prompt: PromptCapabilities | null,
 ): Promise<SentAttachment> {
+  if (record.type === 'text') {
+    const data = await store.bytes(record)
+    const blob = { hash: record.hash!, mime: record.mimeType!, data: new Uint8Array(data) }
+    if (prompt?.embeddedContext) {
+      // Under a copy of its own, which stays after the draft's goes, so the URI still opens.
+      const uri = await store.sentLink(record, data)
+      return {
+        block: pastedTextBlock(data.toString('utf8'), uri, record.mimeType!),
+        changes: { uri, sent: 'embedded', size: record.size, blob: blob.hash },
+        blob,
+      }
+    }
+    return {
+      block: pastedTextBlock(data.toString('utf8'), null, record.mimeType!),
+      changes: { uri: null, sent: 'inline', size: record.size, blob: blob.hash },
+      blob,
+    }
+  }
   if (record.type === 'image') {
     const data = await store.bytes(record)
     const blob = { hash: record.hash!, mime: record.mimeType!, data: new Uint8Array(data) }
@@ -646,6 +697,11 @@ export async function embedFile(
     }
   }
   return { block: linkBlock(uri, name, mimeType, size), sent: 'linked', size }
+}
+
+/** A pasted text as a `resource` under `uri`, or, with no URI, as text after the message's. */
+export function pastedTextBlock(text: string, uri: string | null, mimeType: string): PromptBlock {
+  return uri ? { type: 'resource', resource: { uri, mimeType, text } } : { type: 'text', text }
 }
 
 /** A block's share of `PROMPT_BYTES`, as the host counts a prompt: text, base64 and embedded text. */

@@ -307,6 +307,90 @@ describe('attachments', () => {
     expect(existsSync(saved)).toBe(true)
   })
 
+  const pasteText = (port: TestPort, text: string, name = 'Pasted text 1') =>
+    port.request('attachments.add', {
+      source: {
+        bytes: new TextEncoder().encode(text).buffer as ArrayBuffer,
+        mimeType: 'text/plain',
+        name,
+      },
+      thumb: null,
+    })
+
+  it('sends a pasted text as a resource under its saved copy and keeps it with the thread', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const text = 'error: one\nerror: two\n'
+    const data = new TextEncoder().encode(text)
+    const added = await pasteText(port, text)
+    await sendWith(port, sessionId, added.id)
+    const saved = path.join(t.dir, 'attachments', 'sent', `${sha(data)}.txt`)
+    const uri = pathToFileURL(saved).href
+    expect(reply(port, sessionId)).toContain(`- resource ${uri} text/plain, 22 characters`)
+    expect(sentAttachment(port, sessionId)).toEqual({
+      ...added,
+      uri,
+      sent: 'embedded',
+      blob: sha(data),
+    })
+    expect(await readFile(saved, 'utf8')).toBe(text)
+    const blob = await port.request('sessions.blob', { sessionId, hash: sha(data) })
+    expect(blob.mimeType).toBe('text/plain')
+    expect(new TextDecoder().decode(blob.bytes)).toBe(text)
+    await expect(port.request('attachments.read', { id: added.id })).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it("sends a pasted text after the message's text to an agent without embedded context", async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'embeddedContext' } })
+    const sessionId = await newSession(t, port)
+    const data = new TextEncoder().encode('error: one')
+    const added = await pasteText(port, 'error: one')
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: withAttachment('Why does it fail?', added.id),
+    })
+    await port.untilStatus(sessionId, 'ready')
+    expect(sentAttachment(port, sessionId)).toEqual({
+      ...added,
+      sent: 'inline',
+      blob: sha(data),
+    })
+    // The thread shows the text and the tile apart, as they were written.
+    const user = port.entries(sessionId).findLast((entry) => entry.kind === 'user')
+    expect(user?.kind === 'user' && user.content[0]).toEqual({
+      type: 'text',
+      text: 'Why does it fail?',
+    })
+    await port.request('sessions.prompt', {
+      sessionId,
+      content: [{ type: 'text', text: '/recall' }],
+    })
+    await port.until(() => reply(port, sessionId).includes('Your last message was:'))
+    expect(reply(port, sessionId)).toContain(
+      'Your last message was: Why does it fail?\n\nerror: one',
+    )
+    expect(existsSync(path.join(t.dir, 'attachments', 'sent'))).toBe(false)
+  })
+
+  it('counts pasted texts toward the 10 MB a prompt may carry', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const first = await pasteText(port, 'x'.repeat(6 * 1024 * 1024))
+    const second = await pasteText(port, 'y'.repeat(6 * 1024 * 1024), 'Pasted text 2')
+    await expect(
+      port.request('sessions.prompt', {
+        sessionId,
+        content: [
+          ...withAttachment('Both', first.id),
+          { type: 'ref', ref: { kind: 'attachment', attachment: { id: second.id } as Attachment } },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+    expect(port.entries(sessionId).some((entry) => entry.kind === 'user')).toBe(false)
+  })
+
   it('refuses an attachment it does not hold', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)

@@ -11,10 +11,13 @@ import {
   attachFiles,
   attachImages,
   attachMention,
+  attachPastedText,
   attachmentContent,
   attachmentsBlock,
   dropAttachments,
   pastedImages,
+  pastedText,
+  pasteAsText,
   pickAttachments,
   removeAttachment,
   restoreAttachments,
@@ -97,6 +100,83 @@ describe('pastedImages', () => {
   it('leaves a spreadsheet copy as text, though it carries a picture of the cells', () => {
     expect(pastedImages(clipboard([png()], 'a\tb\n1\t2'))).toEqual([])
     expect(pastedImages(clipboard([png()], 'first line\nsecond line'))).toEqual([])
+  })
+})
+
+describe('pastedText', () => {
+  it('takes a paste over 10,000 characters, line breaks included', () => {
+    expect(pastedText(clipboard([], 'x'.repeat(10_000)))).toBeNull()
+    expect(pastedText(clipboard([], 'x'.repeat(10_001)))).toHaveLength(10_001)
+    expect(pastedText(clipboard([], '\n'.repeat(10_001)))).toHaveLength(10_001)
+    expect(pastedText(clipboard([]))).toBeNull()
+  })
+})
+
+describe('attachPastedText', () => {
+  const text = (lines: number) => Array.from({ length: lines }, (_, i) => `line ${i}`).join('\n')
+
+  it('adds a long paste through the host as a text, its first lines shown at once', async () => {
+    request.mockImplementation((async (method: string, params: { source?: { name: string } }) => {
+      if (method !== 'attachments.add') return undefined
+      return { ...record(`a${++added}`, params.source!.name, 41), type: 'text' }
+    }) as typeof host)
+    expect(attachPastedText(DRAFT, text(5))).toBe(0)
+    const [adding] = draftAttachments(DRAFT)
+    expect(adding).toMatchObject({
+      name: 'Pasted text 1',
+      kind: 'text',
+      status: 'adding',
+      size: 34,
+    })
+    expect(adding!.thumb).toBe(
+      `data:text/plain;charset=utf-8;lines=5,${encodeURIComponent('line 0\nline 1\nline 2')}`,
+    )
+    await settled()
+    expect(draftAttachments(DRAFT)[0]).toMatchObject({ status: 'ready', attachment: { id: 'a1' } })
+    const [, params] = request.mock.calls[0]! as unknown as [
+      string,
+      { source: { bytes: ArrayBuffer; mimeType: string; name: string }; thumb: null },
+    ]
+    expect(params.source).toMatchObject({ mimeType: 'text/plain', name: 'Pasted text 1' })
+    expect(new TextDecoder().decode(params.source.bytes)).toBe(text(5))
+    expect(params.thumb).toBeNull()
+  })
+
+  it('numbers pastes in the order pasted, past the highest left after removals', async () => {
+    attachPastedText(DRAFT, text(2))
+    attachImages(DRAFT, [png()])
+    attachPastedText(DRAFT, text(2))
+    attachPastedText(DRAFT, text(2))
+    await settled()
+    const names = () => draftAttachments(DRAFT).map((i) => i.name)
+    expect(names()).toEqual(['Pasted text 1', 'Image 1', 'Pasted text 2', 'Pasted text 3'])
+    const key = (name: string) => draftAttachments(DRAFT).find((i) => i.name === name)!.key
+    removeAttachment(DRAFT, key('Pasted text 3'))
+    removeAttachment(DRAFT, key('Pasted text 1'))
+    attachPastedText(DRAFT, text(2))
+    expect(names()).toEqual(['Image 1', 'Pasted text 2', 'Pasted text 3'])
+  })
+
+  it('adds nothing to a full composer', () => {
+    setDraftAttachments(
+      DRAFT,
+      Array.from({ length: 20 }, (_, i) => item({ key: `k${i}` })),
+    )
+    expect(attachPastedText(DRAFT, text(2))).toBe(1)
+    expect(draftAttachments(DRAFT)).toHaveLength(20)
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('pastes the text back through the editor and removes its tile and record', async () => {
+    attachPastedText(DRAFT, text(3))
+    attachPastedText(DRAFT, text(4))
+    await settled()
+    const [first, second] = draftAttachments(DRAFT)
+    const inserted: string[] = []
+    pasteAsText(DRAFT, first!.key, text(3), (pasted) => inserted.push(pasted))
+    expect(inserted).toEqual([text(3)])
+    expect(draftAttachments(DRAFT)).toEqual([second])
+    expect(request).toHaveBeenCalledWith('attachments.remove', { id: first!.attachment!.id })
   })
 })
 

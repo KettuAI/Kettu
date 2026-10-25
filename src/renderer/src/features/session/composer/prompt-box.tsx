@@ -255,6 +255,7 @@ export function PromptBox({
           agentName={agentName}
           projectPath={projectPath}
           onOpen={setViewing}
+          onPasteAsText={box.pasteAsText}
           onError={box.setError}
           onLeave={box.focus}
         />
