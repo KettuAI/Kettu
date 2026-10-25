@@ -41,6 +41,19 @@ const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\
 const mentions = (text: string, name: string): boolean =>
   new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`).test(text)
 
+/** The level the Default choice stands for, by its name or description, if the agent names one. */
+function defaultStandsFor(
+  fallback: { name: string; description?: string } | undefined,
+  levels: { value: string; name: string }[],
+) {
+  if (!fallback) return undefined
+  const said = `${fallback.name} ${fallback.description ?? ''}`.toLowerCase()
+  // The longest name first, so "Default (Extra High)" stands for Extra High, not High.
+  return [...levels]
+    .sort((a, b) => b.name.length - a.name.length)
+    .find((l) => mentions(said, l.name))
+}
+
 /**
  * The option's levels without the choice that leaves the level to the agent. That choice is one
  * of the levels in effect, so it gets no segment of its own; when the agent names the level it
@@ -50,10 +63,7 @@ export function levelsOf(effort: SelectOption, value: string | undefined) {
   const levels = effort.choices.filter((c) => !isDefaultChoice(c))
   const fallback = effort.choices.find(isDefaultChoice)
   const usesDefault = !!fallback && fallback.value === value
-  const said = usesDefault ? `${fallback.name} ${fallback.description ?? ''}`.toLowerCase() : ''
-  // The longest name first, so "Default (Extra High)" stands for Extra High, not High.
-  const byLength = [...levels].sort((a, b) => b.name.length - a.name.length)
-  const standsFor = usesDefault ? byLength.find((l) => mentions(said, l.name)) : undefined
+  const standsFor = defaultStandsFor(fallback, levels)
   return {
     levels,
     fallback,
@@ -61,4 +71,25 @@ export function levelsOf(effort: SelectOption, value: string | undefined) {
     /** The level shown as chosen; none while the default stands for a level the agent does not name. */
     shown: usesDefault ? standsFor?.value : value,
   }
+}
+
+export interface LevelRow {
+  value: string
+  label: string
+  description?: string
+}
+
+/** Every choice as one row, in the agent's order, the Default one named with the level it stands for. */
+export function levelRows(effort: SelectOption): LevelRow[] {
+  const levels = effort.choices.filter((c) => !isDefaultChoice(c))
+  const fallback = effort.choices.find(isDefaultChoice)
+  const standsFor = defaultStandsFor(fallback, levels)
+  return effort.choices.map((choice) => ({
+    value: choice.value,
+    label:
+      choice === fallback && standsFor && !mentions(choice.name.toLowerCase(), standsFor.name)
+        ? `${choice.name} (${standsFor.name})`
+        : choice.name,
+    ...(choice.description ? { description: choice.description } : {}),
+  }))
 }

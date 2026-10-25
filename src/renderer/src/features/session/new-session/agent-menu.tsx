@@ -618,20 +618,20 @@ function ModelGroup({
         {(key: string) => {
           const { model } = parseItemKey(key)
           const choice = choices.find((c) => c.value === model)
-          return (
-            <ComboboxItem key={key} value={key} className="items-start">
-              {choice ? (
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <ChoiceName name={choice.name} />
-                  {choice.description && (
-                    <span className="text-xs text-muted-foreground">{choice.description}</span>
-                  )}
-                </span>
-              ) : (
-                <span className="font-medium">
-                  {t('newSession.agentMenu.useAgent', { agent: agent.name })}
-                </span>
+          return choice ? (
+            <Tooltip key={key}>
+              <TooltipTrigger render={<ComboboxItem value={key} className="items-center" />}>
+                <ChoiceName name={choice.name} className="flex-1" />
+              </TooltipTrigger>
+              {choice.description && (
+                <TooltipContent side="right">{choice.description}</TooltipContent>
               )}
+            </Tooltip>
+          ) : (
+            <ComboboxItem key={key} value={key} className="items-center">
+              <span className="min-w-0 flex-1 truncate font-medium">
+                {t('newSession.agentMenu.useAgent', { agent: agent.name })}
+              </span>
             </ComboboxItem>
           )
         }}

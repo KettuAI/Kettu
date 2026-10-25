@@ -1,10 +1,25 @@
-import { useCallback, useId, useState, type ComponentProps, type KeyboardEvent } from 'react'
+import {
+  useCallback,
+  useId,
+  useState,
+  type ComponentProps,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { ChevronDownIcon, RotateCcwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cacheExpiry } from '@shared/prompt-cache'
 import { ULTRACODE_OPTION_ID, type ConfigOption, type SessionView } from '@shared/thread'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
+import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  useComboboxFilter,
+} from '@renderer/components/ui/combobox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +31,9 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Switch } from '@renderer/components/ui/switch'
@@ -23,7 +41,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
-import { levelsOf, splitName, tierOf, type SelectOption } from './levels'
+import { levelRows, levelsOf, splitName, tierOf, type SelectOption } from './levels'
+import { mainModels, numberedModel, MAIN_MODELS } from './model-list'
 import { UsageButton } from './usage'
 
 /** Asks the agent to change an option; resolves to whether it did. */
@@ -206,17 +225,15 @@ function Choices({
   value,
   onPick,
   closeOnClick = false,
-  numbered = false,
 }: {
   option: SelectOption
   value: string | undefined
   onPick: (value: string) => void
   closeOnClick?: boolean
-  numbered?: boolean
 }) {
   return (
     <DropdownMenuRadioGroup value={value} onValueChange={(v) => onPick(String(v))}>
-      {option.choices.map((choice, i) => (
+      {option.choices.map((choice) => (
         <DropdownMenuRadioItem
           key={choice.value}
           value={choice.value}
@@ -224,11 +241,7 @@ function Choices({
           className="items-start"
         >
           <span className="flex min-w-0 flex-1 flex-col">
-            {/* The number shares the name's baseline, not the top of a two-line row. */}
-            <span className="flex items-baseline gap-2">
-              <ChoiceName name={choice.name} />
-              {numbered && i < 4 && <DropdownMenuShortcut>{i + 1}</DropdownMenuShortcut>}
-            </span>
+            <ChoiceName name={choice.name} />
             {choice.description && (
               <span className="text-xs text-muted-foreground">{choice.description}</span>
             )}
@@ -239,23 +252,303 @@ function Choices({
   )
 }
 
-export function ChoiceName({ name }: { name: string }) {
+export function ChoiceName({ name, className }: { name: string; className?: string }) {
   const [prefix, rest] = splitName(name)
   return (
-    <span className="font-medium break-words">
+    <span className={cn('block min-w-0 truncate font-medium', className)}>
       {prefix && <span className="text-muted-foreground">{prefix}</span>}
       {rest}
     </span>
   )
 }
 
-// More levels than this do not fit as segments, so they are listed like models.
-const MAX_SEGMENTS = 6
+// Past this many models in More models, a search field filters them.
+const SEARCH_MODELS_AFTER = 12
+
+/** One model or level: its name on one line, its description in a tooltip beside the row. */
+function ChoiceRow({
+  value,
+  description,
+  shortcut,
+  className,
+  children,
+}: {
+  value: string
+  description?: string
+  shortcut?: string
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <DropdownMenuRadioItem
+            value={value}
+            closeOnClick
+            className={cn(
+              'items-center',
+              shortcut && 'pr-14 [&>[data-slot=dropdown-menu-radio-item-indicator]]:right-8',
+              className,
+            )}
+          />
+        }
+      >
+        {children}
+        {shortcut && (
+          <DropdownMenuShortcut className="absolute right-2 pl-0">{shortcut}</DropdownMenuShortcut>
+        )}
+      </TooltipTrigger>
+      {description && <TooltipContent side="right">{description}</TooltipContent>}
+    </Tooltip>
+  )
+}
+
+/** A boolean option as a row that keeps the menu open. */
+function SwitchRow({
+  option,
+  running,
+  onSelect,
+}: {
+  option: ConfigOption
+  running: boolean
+  onSelect: Select
+}) {
+  const { t } = useTranslation('composer')
+  return (
+    <DropdownMenuItem
+      closeOnClick={false}
+      role="menuitemcheckbox"
+      aria-checked={option.value === true}
+      disabled={option.idleOnly && running}
+      onClick={() => void onSelect(option.id, option.value !== true)}
+    >
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="font-medium">{option.name}</span>
+        {option.idleOnly && running ? (
+          <span className="text-xs text-muted-foreground">{t('controls.changesBetweenTurns')}</span>
+        ) : (
+          option.description && (
+            <span className="text-xs text-muted-foreground">{option.description}</span>
+          )
+        )}
+      </span>
+      <Switch
+        size="sm"
+        checked={option.value === true}
+        tabIndex={-1}
+        aria-hidden
+        className="pointer-events-none"
+      />
+    </DropdownMenuItem>
+  )
+}
+
+/** The Effort submenu: one row per level, in the agent's order, and ultracode last. */
+function EffortMenu({
+  effort,
+  value,
+  onPick,
+  ultracode,
+  running,
+  onSelect,
+}: {
+  effort: SelectOption
+  value: string | undefined
+  onPick: (value: string) => void
+  ultracode: ConfigOption | undefined
+  running: boolean
+  onSelect: Select
+}) {
+  const { t } = useTranslation('composer')
+  const rows = levelRows(effort)
+  const current = rows.find((row) => row.value === value)?.label ?? choiceName(effort, value)
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <span className="flex-1">{effort.name}</span>
+        <span className="shrink-0 text-muted-foreground">{current}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <p className="w-56 px-2 pt-1.5 pb-2 text-xs text-muted-foreground">
+          {t('controls.levelsHint')}
+        </p>
+        <ScrollToChosen>
+          <DropdownMenuRadioGroup value={value} onValueChange={(v) => onPick(String(v))}>
+            {rows.map((row) => (
+              <ChoiceRow
+                key={row.value}
+                value={row.value}
+                description={row.description}
+                className="items-center"
+              >
+                <span className="min-w-0 flex-1 truncate">{row.label}</span>
+              </ChoiceRow>
+            ))}
+          </DropdownMenuRadioGroup>
+        </ScrollToChosen>
+        {ultracode && (
+          <>
+            <DropdownMenuSeparator />
+            <SwitchRow option={ultracode} running={running} onSelect={onSelect} />
+          </>
+        )}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+/** More models as a submenu: rows with tooltips, or a search menu once the list is long. */
+function MoreModelsMenu({
+  choices,
+  value,
+  onPick,
+  onClose,
+}: {
+  choices: NonNullable<ConfigOption['choices']>
+  value: string | undefined
+  onPick: (value: string) => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation('composer')
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <span className="flex-1">{t('controls.moreModels')}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {choices.length > SEARCH_MODELS_AFTER ? (
+          <SearchModels choices={choices} value={value} onPick={onPick} onClose={onClose} />
+        ) : (
+          <DropdownMenuRadioGroup value={value} onValueChange={(v) => onPick(String(v))}>
+            <ScrollToChosen>
+              {choices.map((choice) => (
+                <ChoiceRow key={choice.value} value={choice.value} description={choice.description}>
+                  <ChoiceName name={choice.name} className="flex-1" />
+                </ChoiceRow>
+              ))}
+            </ScrollToChosen>
+          </DropdownMenuRadioGroup>
+        )}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+/** The list of models, scrolled within 288 px and opened at the chosen one. */
+function ScrollToChosen({ children }: { children: ReactNode }) {
+  // Only on opening, so the list never jumps under the pointer.
+  const showChosen = useCallback((list: HTMLDivElement | null) => {
+    const chosen = list?.querySelector<HTMLElement>('[aria-checked=true], [data-selected]')
+    if (list && chosen) {
+      list.scrollTop = chosen.offsetTop - (list.clientHeight - chosen.offsetHeight) / 2
+    }
+  }, [])
+  return (
+    <div
+      ref={showChosen}
+      className="relative -mx-1 max-h-72 scroll-fade-y overflow-y-auto overscroll-contain px-1"
+    >
+      {children}
+    </div>
+  )
+}
+
+/** More models as a search menu, for an agent with dozens of them. */
+function SearchModels({
+  choices,
+  value,
+  onPick,
+  onClose,
+}: {
+  choices: NonNullable<ConfigOption['choices']>
+  value: string | undefined
+  onPick: (value: string) => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation('composer')
+  const { contains } = useComboboxFilter()
+  const [query, setQuery] = useState('')
+  const byValue = new Map(choices.map((choice) => [choice.value, choice]))
+  const label = (key: string) => byValue.get(key)?.name ?? key
+  const showChosen = useCallback((list: HTMLDivElement | null) => {
+    const chosen = list?.querySelector<HTMLElement>('[data-selected]')
+    if (list && chosen) {
+      list.scrollTop = chosen.offsetTop - (list.clientHeight - chosen.offsetHeight) / 2
+    }
+  }, [])
+  return (
+    <Combobox
+      items={choices.map((choice) => choice.value)}
+      value={value ?? null}
+      onValueChange={(next: string | null) => {
+        if (!next) return
+        onPick(next)
+        onClose()
+      }}
+      filter={(key: string, search: string) => contains(label(key), search)}
+      inputValue={query}
+      onInputValueChange={setQuery}
+      itemToStringLabel={label}
+      autoHighlight
+    >
+      <div className="*:data-[slot=input-group]:h-9 *:data-[slot=input-group]:rounded-none *:data-[slot=input-group]:border-0 *:data-[slot=input-group]:bg-transparent *:data-[slot=input-group]:px-1.5 *:data-[slot=input-group]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)] *:data-[slot=input-group]:has-[[data-slot=input-group-control]:focus-visible]:outline-none *:data-[slot=input-group]:**:data-[slot=input-group-control]:px-2 *:data-[slot=input-group]:**:data-[slot=input-group-control]:text-ui">
+        <ComboboxInput
+          showTrigger={false}
+          placeholder={t('controls.searchModels')}
+          aria-label={t('controls.searchModels')}
+          spellCheck={false}
+          autoFocus
+          // The search field owns its keys, and Esc closes the menu around it.
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onClose()
+            }
+          }}
+        />
+      </div>
+      <ComboboxList ref={showChosen} className="scroll-fade-y max-h-72">
+        <ComboboxCollection>
+          {(key: string) => {
+            const choice = byValue.get(key)
+            return (
+              choice && (
+                <Tooltip key={key}>
+                  <TooltipTrigger
+                    render={<ComboboxItem value={key} onClick={onClose} className="items-center" />}
+                  >
+                    <ChoiceName name={choice.name} className="flex-1" />
+                  </TooltipTrigger>
+                  {choice.description && (
+                    <TooltipContent side="right">{choice.description}</TooltipContent>
+                  )}
+                </Tooltip>
+              )
+            )
+          }}
+        </ComboboxCollection>
+      </ComboboxList>
+      {/* Sized by every model, so the menu keeps its width while the list filters. */}
+      <div aria-hidden className="invisible h-0 overflow-hidden px-1.5">
+        {choices.map((choice) => (
+          <div
+            key={choice.value}
+            className="flex items-center gap-2 pr-8 pl-2 text-ui whitespace-nowrap"
+          >
+            <ChoiceName name={choice.name} className="flex-1" />
+          </div>
+        ))}
+      </div>
+    </Combobox>
+  )
+}
 
 /**
- * One button for the model, with the reasoning level after it, and one menu for both. Choosing a
- * model, by click or with 1 to 4, closes the menu; the level, which the left and right arrows
- * step, and the switches keep it open, so several can be set in one visit.
+ * One button for the model, with the reasoning level after it, and one menu for both. The first
+ * four models are one-line rows, with the rest under More models and the levels under Effort.
+ * Choosing a model, by click or with 1 to 4, or a level closes the menu; the switches keep it open.
  */
 function ModelMenu({
   model,
@@ -279,36 +572,21 @@ function ModelMenu({
   const { t } = useTranslation('composer')
   const [modelValue, pickModel] = usePick(model, onSelect)
   const [effortValue, pickEffort] = usePick(effort, onSelect)
-  const level = effort ? levelsOf(effort, effortValue) : null
-  const segmented = !!level && level.levels.length > 0 && level.levels.length <= MAX_SEGMENTS
-  // The list opens scrolled to the chosen model; only on opening, so it never jumps under the pointer.
-  const showChosen = useCallback((list: HTMLDivElement | null) => {
-    const chosen = list?.querySelector<HTMLElement>('[aria-checked=true]')
-    if (list && chosen) {
-      list.scrollTop = chosen.offsetTop - (list.clientHeight - chosen.offsetHeight) / 2
-    }
-  }, [])
+  const choices = model?.choices ?? []
+  const main = mainModels(choices, modelValue)
+  const rest = choices.slice(MAIN_MODELS)
+  const ultracode = switches.find((o) => o.id === ULTRACODE_OPTION_ID)
+  const otherSwitches = switches.filter((o) => o.id !== ULTRACODE_OPTION_ID)
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return
-    const n = Number(event.key)
-    const choice = Number.isInteger(n) && n >= 1 && n <= 4 ? model?.choices[n - 1] : undefined
-    if (choice) {
-      event.preventDefault()
-      pickModel(choice.value)
-      setOpen(false)
-      return
-    }
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
-    // Inside the segments the arrows move focus between them instead.
-    const inSegments = (event.target as Element).closest('[data-slot=toggle-group]')
-    if (!level || step === 0 || inSegments) return
+    // Inside a submenu the keys belong to its rows or its search field.
+    if ((event.target as Element).closest('[data-slot=dropdown-menu-sub-content]')) return
+    const choice = numberedModel(choices, event.key)
+    if (!choice) return
     event.preventDefault()
-    const { levels, shown } = level
-    const index = levels.findIndex((c) => c.value === shown)
-    const next =
-      index < 0 ? levels[0] : levels[Math.min(levels.length - 1, Math.max(0, index + step))]
-    if (next) pickEffort(next.value)
+    pickModel(choice.value)
+    setOpen(false)
   }
 
   return (
@@ -336,86 +614,53 @@ function ModelMenu({
             {splitName(choiceName(model, modelValue))[1]}
           </span>
         )}
-        {effort && !(model && level?.usesDefault) && (
-          <span className="shrink-0 text-secondary">{choiceName(effort, effortValue)}</span>
+        {effort && !(model && levelsOf(effort, effortValue).usesDefault) && (
+          <span className="shrink-0 text-tertiary">{choiceName(effort, effortValue)}</span>
         )}
         {!model && !effort && <span>{t('controls.options')}</span>}
         <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        side="top"
-        align="end"
-        sideOffset={6}
-        className="w-80"
-        onKeyDown={onKeyDown}
-      >
+      <DropdownMenuContent side="top" align="end" sideOffset={6} onKeyDown={onKeyDown}>
         <DropdownMenuList>
           {model && (
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>{model.name}</DropdownMenuLabel>
-              {/* A long list scrolls by itself, so the levels below stay in view. */}
-              <div
-                ref={showChosen}
-                className="relative -mx-1 max-h-72 scroll-fade-y overflow-y-auto overscroll-contain px-1"
-              >
-                <Choices
-                  option={model}
-                  value={modelValue}
-                  onPick={pickModel}
-                  numbered
-                  closeOnClick
-                />
-              </div>
-            </DropdownMenuGroup>
+            <DropdownMenuRadioGroup value={modelValue} onValueChange={(v) => pickModel(String(v))}>
+              {main.map((choice, index) => (
+                <ChoiceRow
+                  key={choice.value}
+                  value={choice.value}
+                  description={choice.description}
+                  shortcut={index < MAIN_MODELS ? String(index + 1) : undefined}
+                >
+                  <ChoiceName name={choice.name} className="flex-1" />
+                </ChoiceRow>
+              ))}
+            </DropdownMenuRadioGroup>
           )}
+          {(effort || rest.length > 0) && model && <DropdownMenuSeparator />}
           {effort && (
-            <>
-              {model && <DropdownMenuSeparator />}
-              {segmented ? (
-                <EffortSegments effort={effort} value={effortValue} onPick={pickEffort} />
-              ) : (
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>{effort.name}</DropdownMenuLabel>
-                  <Choices option={effort} value={effortValue} onPick={pickEffort} />
-                </DropdownMenuGroup>
-              )}
-            </>
+            <EffortMenu
+              effort={effort}
+              value={effortValue}
+              onPick={pickEffort}
+              ultracode={ultracode}
+              running={running}
+              onSelect={onSelect}
+            />
           )}
-          {switches.length > 0 && (
+          {rest.length > 0 && (
+            <MoreModelsMenu
+              choices={rest}
+              value={modelValue}
+              onPick={pickModel}
+              onClose={() => setOpen(false)}
+            />
+          )}
+          {otherSwitches.length > 0 && (
             <>
               {(model || effort) && <DropdownMenuSeparator />}
-              <DropdownMenuGroup>
-                {switches.map((o) => (
-                  <DropdownMenuItem
-                    key={o.id}
-                    closeOnClick={false}
-                    role="menuitemcheckbox"
-                    aria-checked={o.value === true}
-                    disabled={o.idleOnly && running}
-                    onClick={() => void onSelect(o.id, o.value !== true)}
-                  >
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="font-medium">{o.name}</span>
-                      {o.idleOnly && running ? (
-                        <span className="text-xs text-muted-foreground">
-                          {t('controls.changesBetweenTurns')}
-                        </span>
-                      ) : (
-                        o.description && (
-                          <span className="text-xs text-muted-foreground">{o.description}</span>
-                        )
-                      )}
-                    </span>
-                    <Switch
-                      size="sm"
-                      checked={o.value === true}
-                      tabIndex={-1}
-                      aria-hidden
-                      className="pointer-events-none"
-                    />
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
+              {otherSwitches.map((o) => (
+                <SwitchRow key={o.id} option={o} running={running} onSelect={onSelect} />
+              ))}
             </>
           )}
         </DropdownMenuList>
