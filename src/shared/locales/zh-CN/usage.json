@@ -2,6 +2,8 @@
   "nav": {
     "usage": "用量",
     "today": "今日 {{tokens}} token",
+    "todayCost": "今日 {{cost}}，按 API 价格估算",
+    "costEstimate": "按 API 价格估算",
     "limit": "{{agent}}，{{limit}}：已用 {{percent}}",
     "limitShort": "{{limit}}已用 {{percent}}"
   },
@@ -197,6 +199,7 @@
       "name": "侧边栏显示",
       "description": "侧边栏「用量」那一行末尾显示的内容。",
       "today": "今日 token",
+      "cost": "今日估算费用",
       "limit": "最紧的套餐限额",
       "off": "不显示"
     },

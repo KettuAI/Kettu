@@ -2,6 +2,8 @@
   "nav": {
     "usage": "Usage",
     "today": "Today: {{tokens}} tokens",
+    "todayCost": "Today: {{cost}}, estimated at API prices",
+    "costEstimate": "Estimated at API prices",
     "limit": "{{agent}}, {{limit}}: {{percent}} used",
     "limitShort": "{{limit}} {{percent}} used"
   },
@@ -202,6 +204,7 @@
       "name": "Show in the sidebar",
       "description": "What the end of the sidebar's Usage row shows.",
       "today": "Today's tokens",
+      "cost": "Today's estimated cost",
       "limit": "Tightest plan limit",
       "off": "Nothing"
     },

@@ -189,6 +189,7 @@ export function SidebarEnd() {
   const [apply, error] = useApply()
   const options: { value: SettingsFile['usage']['sidebar']; label: string }[] = [
     { value: 'today', label: t('settings.sidebar.today') },
+    { value: 'cost', label: t('settings.sidebar.cost') },
     { value: 'limit', label: t('settings.sidebar.limit') },
     { value: 'off', label: t('settings.sidebar.off') },
   ]

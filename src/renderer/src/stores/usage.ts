@@ -59,6 +59,8 @@ interface UsageStore {
   status: UsageStatus | null
   /** Today's tokens, for the sidebar; null until read. */
   today: number | null
+  /** Today's estimated cost in dollars; null until read, or while no model had a price. */
+  todayCost: number | null
   filters: UsageFilters
   /** How many times the filters have changed; the page carries `figures` once its figures arrive. */
   generations: Generations
@@ -78,6 +80,7 @@ export const useUsageStore = create<UsageStore>()(() => ({
   context: {},
   status: null,
   today: null,
+  todayCost: null,
   filters: DEFAULT_FILTERS,
   generations: { agent: 0, figures: 0 },
   page: null,
@@ -222,12 +225,12 @@ export async function loadUsageStatus(): Promise<void> {
   }
 }
 
-/** Today's tokens across the agents, as the sidebar shows them. */
+/** Today's tokens and estimated cost across the agents, as the sidebar shows them. */
 export async function loadToday(): Promise<void> {
   const today = dayOf(Date.now())
   try {
     const total = await host('usage.total', { from: today, to: addDays(today, 1) })
-    useUsageStore.setState({ today: total.total })
+    useUsageStore.setState({ today: total.total, todayCost: total.cost })
   } catch {
     // Shown as nothing until the host answers.
   }
