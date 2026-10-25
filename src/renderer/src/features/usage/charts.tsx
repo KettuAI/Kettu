@@ -2,7 +2,6 @@ import { memo, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } 
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
-import { tokens } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import {
@@ -132,8 +131,8 @@ export function TrendChart({
 }
 
 /** An agent's part of a bar; "—" for none, as the page writes a figure with nothing in it. */
-function partTokens(value: number | undefined): string {
-  return value ? tokens(value) : '—'
+function partValue(value: number | undefined, format: (value: number) => string): string {
+  return value ? format(value) : '—'
 }
 
 /** Room between two dates under the trend, the 12 px spacing step. */
@@ -215,6 +214,7 @@ export const TrendLegend = memo(function TrendLegend({
   series,
   shown,
   label,
+  formatValue,
   onChange,
 }: {
   bars: TrendBar[]
@@ -222,17 +222,18 @@ export const TrendLegend = memo(function TrendLegend({
   series: readonly AgentId[]
   shown: readonly AgentId[]
   label: string
+  formatValue: (value: number) => string
   onChange: (shown: AgentId[]) => void
 }) {
   const { i18n } = useTranslation()
   const room = useMemo(
     () => {
       const font = `12px ${getComputedStyle(document.body).fontFamily}`
-      const values = (id: AgentId) => bars.map((bar) => partTokens(bar.byAgent[id]))
+      const values = (id: AgentId) => bars.map((bar) => partValue(bar.byAgent[id], formatValue))
       return new Map(series.map((id) => [id, widest(values(id), (t) => textWidth(t, font))]))
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- tokens() follows the language
-    [bars, series, i18n.language],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the formatters follow the language
+    [bars, series, i18n.language, formatValue],
   )
   const bar = index === null ? null : bars[index]
   return (
@@ -259,7 +260,9 @@ export const TrendLegend = memo(function TrendLegend({
           {/* The header reads the values out; the button's name stays the agent's. */}
           <span aria-hidden className="grid text-left text-tertiary tabular-nums">
             <span className="invisible col-start-1 row-start-1">{room.get(id)}</span>
-            <span className="col-start-1 row-start-1">{bar && partTokens(bar.byAgent[id])}</span>
+            <span className="col-start-1 row-start-1">
+              {bar && partValue(bar.byAgent[id], formatValue)}
+            </span>
           </span>
         </ToggleGroupItem>
       ))}

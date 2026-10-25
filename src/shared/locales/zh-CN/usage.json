@@ -14,6 +14,7 @@
     "syncFailed": "同步失败",
     "agent": "Agent",
     "allShort": "全部",
+    "metric": "统计指标",
     "range": "时间范围",
     "ranges": {
       "1": "1 天",
@@ -30,8 +31,29 @@
     },
     "importing": "正在读取 Agent 的日志：{{done}} / {{total}}"
   },
+  "metrics": {
+    "tokens": "Token",
+    "requests": "请求数",
+    "turns": "轮数",
+    "cost": "费用"
+  },
+  "units": {
+    "tokens": "{{value}} token",
+    "request": "{{value}} 次请求",
+    "requests": "{{value}} 次请求",
+    "turn": "{{value}} 轮",
+    "turns": "{{value}} 轮"
+  },
   "figures": {
+    "today": "今天",
     "total": "总 token",
+    "cost": "估算费用",
+    "tokensPerRequest": "每次请求 token",
+    "savedByCache": "缓存节省",
+    "perRequestNote": "token 数除以请求数",
+    "cacheSavedNote": "按输入价格计算的缓存读取",
+    "estimated": "按 API 价格估算 · 价格截至 {{date}}",
+    "unpriced": "{{tokens}} token 来自没有价格的模型，未计入费用",
     "days_other": "{{range}} · {{count}} 天",
     "average": "日均",
     "active_other": "{{count}} 天中有 {{active}} 天有用量",
@@ -48,9 +70,25 @@
     "weekly": "每周用量",
     "monthly": "每月用量",
     "hourly": "每小时用量",
+    "requestsDaily": "每日请求数",
+    "requestsWeekly": "每周请求数",
+    "requestsMonthly": "每月请求数",
+    "requestsHourly": "每小时请求数",
+    "turnsDaily": "每日轮数",
+    "turnsWeekly": "每周轮数",
+    "turnsMonthly": "每月轮数",
+    "turnsHourly": "每小时轮数",
+    "costDaily": "每日费用",
+    "costWeekly": "每周费用",
+    "costMonthly": "每月费用",
+    "costHourly": "每小时费用",
     "hour": "{{from}}–{{to}}",
     "label": "{{date}}：{{tokens}} token",
+    "labelCount": "{{date}}：{{value}}",
+    "labelCost": "{{date}}：{{cost}}",
     "agent": "{{agent}} {{tokens}}",
+    "agentCount": "{{agent}} {{value}}",
+    "agentCost": "{{agent}} {{cost}}",
     "legend": "图表中显示的 Agent"
   },
   "limits": {
@@ -88,6 +126,8 @@
     "none": "无项目"
   },
   "noUsage": "这段时间没有用量。",
+  "noCost": "这段时间没有费用。",
+  "noPrice": "无价格",
   "empty": {
     "title": "还没有用量",
     "description": "从现在起，OverBench 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从本机的 Agent 日志统计。",

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
+import type { UsageScope } from '@shared/usage'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
@@ -24,7 +25,16 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { LimitsPart } from '@renderer/features/session/composer/usage'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { basename, bytes, exactCount, longAgo, percent, tokens } from '@renderer/lib/format'
+import {
+  basename,
+  bytes,
+  count,
+  exactCount,
+  longAgo,
+  percent,
+  tokens,
+  usd,
+} from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useClock, useNow } from '@renderer/lib/use-now'
@@ -55,19 +65,26 @@ import {
   hoursSoFar,
   legendHidden,
   legendHides,
+  metricKind,
   modelRows,
   namesYear,
   NO_SERIES,
+  oneDay,
   projectRows,
   RANGE_KINDS,
   seriesOf,
   shownSeries,
   shownTotals,
+  todayFigure,
+  tokensPerRequest,
   trend,
+  unpricedTokens,
   wholeMonth,
   type BreakdownRow,
   type DayTotal,
   type LegendChoice,
+  type Metric,
+  type MetricKind,
   type RangeKind,
   type TrendBar,
 } from './model'
@@ -266,8 +283,8 @@ function LoadingState() {
   return (
     <div aria-busy className="flex flex-col gap-4">
       <Skeleton className="h-control w-2/3" />
-      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
+      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4 @min-[60rem]:grid-cols-5">
+        {[0, 1, 2, 3, 4].map((i) => (
           <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
       </div>
@@ -314,6 +331,9 @@ function Dashboard({ page }: { page: PageData }) {
   const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? false)
   const { summary, starts, range, today, firstDay } = page
   const agent = filters.agent
+  const metric = filters.metric
+  const scope = filters.scope
+  const kind = metricKind(metric, scope)
 
   const allDays = useMemo(() => dayTotals(summary, starts, 'all'), [summary, starts])
   const days = useMemo(
@@ -336,7 +356,13 @@ function Dashboard({ page }: { page: PageData }) {
   // A chosen agent stays a choice once its usage is gone, as after clearing the record.
   const choices =
     agent === 'all' || summary.agents.includes(agent) ? summary.agents : [...summary.agents, agent]
-  const facts = useMemo(() => figures(days, range), [days, range])
+  const facts = useMemo(() => figures(days, range, metric, scope), [days, range, metric, scope])
+  // The table by type and the cache share count tokens, whatever the metric.
+  const tokenFacts = useMemo(() => figures(days, range), [days, range])
+  const todayValue = useMemo(
+    () => todayFigure(days, today, metric, scope),
+    [days, today, metric, scope],
+  )
   const heat = heatmapRange(today, firstDay)
   const heatDays = useMemo(
     () => days.filter((d) => d.day >= heat.from && d.day < heat.to),
@@ -358,6 +384,16 @@ function Dashboard({ page }: { page: PageData }) {
         className="flex flex-wrap items-center justify-between gap-2"
       >
         <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            aria-label={t('page.metric')}
+            value={metric}
+            onChange={(value) => setUsageFilters({ metric: value as Metric })}
+            segments={[
+              { value: 'tokens', label: t('metrics.tokens') },
+              { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
+              { value: 'cost', label: t('metrics.cost') },
+            ]}
+          />
           {/* With usage from one agent only, All is the only choice. */}
           {choices.length > 1 && (
             <SegmentedControl
@@ -373,8 +409,8 @@ function Dashboard({ page }: { page: PageData }) {
           {fromComputer && (
             <SegmentedControl
               aria-label={t('page.scope')}
-              value={filters.scope}
-              onChange={(scope) => setUsageFilters({ scope })}
+              value={scope}
+              onChange={(next) => setUsageFilters({ scope: next })}
               segments={[
                 { value: 'computer', label: t('page.scopes.computer') },
                 { value: 'overbench', label: t('page.scopes.overbench') },
@@ -387,9 +423,9 @@ function Dashboard({ page }: { page: PageData }) {
             aria-label={t('page.range')}
             value={filters.range.kind}
             onChange={(value) => setUsageFilters({ range: { kind: value as RangeKind } })}
-            segments={RANGE_KINDS.map((kind) => ({
-              value: kind,
-              label: t(`page.ranges.${kind}`),
+            segments={RANGE_KINDS.map((rangeKind) => ({
+              value: rangeKind,
+              label: t(`page.ranges.${rangeKind}`),
             }))}
           />
           <RangePicker
@@ -404,23 +440,39 @@ function Dashboard({ page }: { page: PageData }) {
         </div>
       </div>
 
-      <Figures facts={facts} hours={hours} rangeLabel={rangeText(range.from, range.to)} />
+      <Figures
+        facts={facts}
+        hours={hours}
+        kind={kind}
+        metric={metric}
+        scope={scope}
+        today={today}
+        todayValue={todayValue}
+        single={oneDay(range)}
+        rangeLabel={rangeText(range.from, range.to)}
+      />
+
+      {kind === 'cost' && (
+        <EstimateNote asOf={summary.pricesAsOf} unpriced={unpricedTokens(facts)} />
+      )}
 
       <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TrendCard days={days} hours={hours} page={page} />
+        <TrendCard days={days} hours={hours} page={page} metric={metric} scope={scope} />
         <LimitsCard />
       </div>
 
       <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <ActivityCard days={heatDays} page={page} />
-        <PartsCard facts={facts} />
+        <PartsCard facts={tokenFacts} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
         <BreakdownCard
           title={t('models.title')}
           column={t('models.name')}
-          rows={modelRows(summary, agent)}
+          valueLabel={t(`metrics.${kind}`)}
+          kind={kind}
+          rows={modelRows(summary, agent, metric, scope)}
           total={facts.total}
           nameOf={(row) => row.name ?? t('models.unknown')}
           mono
@@ -428,7 +480,9 @@ function Dashboard({ page }: { page: PageData }) {
         <BreakdownCard
           title={t('projects.title')}
           column={t('projects.name')}
-          rows={projectRows(summary, agent, basename)}
+          valueLabel={t(`metrics.${kind}`)}
+          kind={kind}
+          rows={projectRows(summary, agent, basename, metric, scope)}
           total={facts.total}
           nameOf={(row) => row.name ?? t('projects.none')}
         />
@@ -516,25 +570,63 @@ function CardHead({ title, aside }: { title: string; aside?: ReactNode }) {
   )
 }
 
-/** A token count, compact, with the exact value in its tooltip. */
+/** A count, compact, with the exact value in its tooltip. */
 function Count({ value, className }: { value: number; className?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<span className={cn('tabular-nums', className)} />}>
-        {tokens(value)}
+        {count(value)}
       </TooltipTrigger>
       <TooltipContent>{exactCount(value)}</TooltipContent>
     </Tooltip>
   )
 }
 
+/** A figure in the metric: a compact count, or US dollars. */
+function FigureValue({ value, kind }: { value: number; kind: MetricKind }) {
+  return kind === 'cost' ? (
+    <span className="tabular-nums">{usd(value)}</span>
+  ) : (
+    <Count value={value} />
+  )
+}
+
+/** The estimate's wording and the tokens no cost counts, under the Cost figures. */
+function EstimateNote({ asOf, unpriced }: { asOf: string; unpriced: number | null }) {
+  const { t, i18n } = useTranslation('usage')
+  const [year, month, day] = asOf.split('-').map(Number)
+  const date = new Intl.DateTimeFormat(i18n.language, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(year!, month! - 1, day!))
+  return (
+    <div className="-mt-2 flex flex-col gap-0.5 text-small text-secondary">
+      <span>{t('figures.estimated', { date })}</span>
+      {unpriced !== null && <span>{t('figures.unpriced', { tokens: tokens(unpriced) })}</span>}
+    </div>
+  )
+}
+
 function Figures({
   facts,
   hours,
+  kind,
+  metric,
+  scope,
+  today,
+  todayValue,
+  single,
   rangeLabel,
 }: {
   facts: ReturnType<typeof figures>
   hours: HourTotals | null
+  kind: MetricKind
+  metric: Metric
+  scope: UsageScope
+  today: number
+  todayValue: number | null
+  single: boolean
   rangeLabel: string
 }) {
   const { t } = useTranslation('usage')
@@ -542,8 +634,8 @@ function Figures({
   // Re-renders as an hour begins, not on every tick of the clock.
   const begun = useClock((now) => (hours ? hoursSoFar(hours.starts, now).to : 0))
   const hourly = useMemo(
-    () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }),
-    [hours, begun],
+    () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }, metric, scope),
+    [hours, begun, metric, scope],
   )
   const hourEnd = (start: number) => hours?.starts[hours.starts.indexOf(start) + 1] ?? start
   const figure = (label: string, value: ReactNode, note: string) => (
@@ -554,54 +646,113 @@ function Figures({
     </Card>
   )
   const none = <span className="text-tertiary">—</span>
+  const shown = (value: number | null, priced = true): ReactNode =>
+    value === null || (kind === 'cost' && !priced) ? (
+      none
+    ) : (
+      <FigureValue value={value} kind={kind} />
+    )
+  const current = hourly ?? facts
+  const average =
+    current.average === null || kind === 'cost' ? current.average : Math.round(current.average)
+  const peak = current.peak
+  const totalLabel =
+    kind === 'tokens'
+      ? t('figures.total')
+      : kind === 'cost'
+        ? t('figures.cost')
+        : t(`metrics.${kind}`)
+  const perRequest = tokensPerRequest(current)
   return (
-    <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+    <div
+      className={cn(
+        'grid grid-cols-2 gap-3 @3xl:grid-cols-4',
+        !single && '@min-[60rem]:grid-cols-5',
+      )}
+    >
+      {!single && figure(t('figures.today'), shown(todayValue), dayText(today))}
       {figure(
-        t('figures.total'),
-        facts.total > 0 ? <Count value={facts.total} /> : none,
+        totalLabel,
+        shown(facts.activeDays > 0 ? facts.total : null, facts.priced),
         t('figures.days', { range: rangeLabel, count: facts.days }),
       )}
       {hourly
         ? figure(
             t('figures.hourlyAverage'),
-            hourly.average !== null ? <Count value={Math.round(hourly.average)} /> : none,
+            shown(average, hourly.priced),
             t('figures.activeHours', { active: hourly.activeDays, count: hourly.days }),
           )
         : figure(
             t('figures.average'),
-            facts.average !== null ? <Count value={Math.round(facts.average)} /> : none,
+            shown(average, facts.priced),
             t('figures.active', { active: facts.activeDays, count: facts.days }),
           )}
       {hourly
         ? figure(
             t('figures.peakHour'),
-            hourly.peak ? <Count value={hourly.peak.total} /> : none,
-            hourly.peak ? hourText(hourly.peak.day, hourEnd(hourly.peak.day)) : t('figures.none'),
+            peak ? shown(peak.total) : none,
+            peak ? hourText(peak.day, hourEnd(peak.day)) : t('figures.none'),
           )
         : figure(
             t('figures.peak'),
-            facts.peak ? <Count value={facts.peak.total} /> : none,
-            facts.peak ? dayText(facts.peak.day) : t('figures.none'),
+            peak ? shown(peak.total) : none,
+            peak ? dayText(peak.day) : t('figures.none'),
           )}
-      {figure(
-        t('figures.cacheShare'),
-        facts.cacheShare !== null ? (
-          <span className="tabular-nums">{percent(facts.cacheShare)}</span>
-        ) : (
-          none
-        ),
-        t('figures.cacheShareNote'),
-      )}
+      {kind === 'tokens'
+        ? figure(
+            t('figures.cacheShare'),
+            facts.cacheShare !== null ? (
+              <span className="tabular-nums">{percent(facts.cacheShare)}</span>
+            ) : (
+              none
+            ),
+            t('figures.cacheShareNote'),
+          )
+        : kind === 'cost'
+          ? figure(
+              t('figures.savedByCache'),
+              current.activeDays > 0 ? shown(current.parts.cacheSaved, current.priced) : none,
+              t('figures.cacheSavedNote'),
+            )
+          : figure(
+              t('figures.tokensPerRequest'),
+              perRequest !== null ? (
+                <FigureValue value={Math.round(perRequest)} kind="tokens" />
+              ) : (
+                none
+              ),
+              t('figures.perRequestNote'),
+            )}
     </div>
   )
 }
 
 const TREND_TITLE = {
-  hour: 'trend.hourly',
-  day: 'trend.daily',
-  week: 'trend.weekly',
-  month: 'trend.monthly',
-} as const
+  tokens: {
+    hour: 'trend.hourly',
+    day: 'trend.daily',
+    week: 'trend.weekly',
+    month: 'trend.monthly',
+  },
+  requests: {
+    hour: 'trend.requestsHourly',
+    day: 'trend.requestsDaily',
+    week: 'trend.requestsWeekly',
+    month: 'trend.requestsMonthly',
+  },
+  turns: {
+    hour: 'trend.turnsHourly',
+    day: 'trend.turnsDaily',
+    week: 'trend.turnsWeekly',
+    month: 'trend.turnsMonthly',
+  },
+  cost: {
+    hour: 'trend.costHourly',
+    day: 'trend.costDaily',
+    week: 'trend.costWeekly',
+    month: 'trend.costMonthly',
+  },
+} as const satisfies Record<MetricKind, Record<'hour' | 'day' | 'week' | 'month', string>>
 /** Hours are labelled every 1, 2, 3, 4, 6 or 12, so the labels fall on the same times each day. */
 const HOUR_STEPS = [1, 2, 3, 4, 6, 12]
 /** A placeholder waits this long, so a quick answer shows no flash. */
@@ -625,14 +776,19 @@ function TrendCard({
   days,
   hours,
   page,
+  metric,
+  scope,
 }: {
   days: DayTotal[]
   hours: HourTotals | null
   page: PageData
+  metric: Metric
+  scope: UsageScope
 }) {
   const { t, i18n } = useTranslation('usage')
   const rangeText = useRangeText()
   const hourText = useHourText(hours?.zoned ?? false)
+  const kind = metricKind(metric, scope)
   // Figures for another range or source are on their way.
   const late = useLate(
     useUsageStore(
@@ -645,9 +801,9 @@ function TrendCard({
   const { unit, bars } = useMemo(
     () =>
       hours
-        ? { unit: 'hour' as const, bars: hourBars(hours.totals, hours.starts) }
-        : trend(days, page.range, page.firstDay),
-    [hours, days, page.range, page.firstDay],
+        ? { unit: 'hour' as const, bars: hourBars(hours.totals, hours.starts, metric, scope) }
+        : trend(days, page.range, page.firstDay, metric, scope),
+    [hours, days, page.range, page.firstDay, metric, scope],
   )
   const series = useMemo(() => seriesOf(bars, AGENT_IDS), [bars])
   // What the legend hides holds until any filter changes, even back to an earlier value: the agent
@@ -673,7 +829,19 @@ function TrendCard({
   const at = chosen !== null && chosen < bars.length - future ? chosen : null
   const index = at ?? busiest(totals)
   const bar = index === null ? null : bars[index]!
-  const title = t(TREND_TITLE[unit])
+  const title = t(TREND_TITLE[kind][unit])
+  const formatValue = useCallback(
+    (value: number) => (kind === 'cost' ? usd(value) : count(value)),
+    [kind],
+  )
+  const unitText = (value: number): string => {
+    const text = count(value)
+    if (kind === 'tokens') return t('units.tokens', { value: text })
+    if (kind === 'cost') return usd(value)
+    return kind === 'requests'
+      ? t(value === 1 ? 'units.request' : 'units.requests', { value: text })
+      : t(value === 1 ? 'units.turn' : 'units.turns', { value: text })
+  }
   const describe = (bar: TrendBar) =>
     unit === 'hour'
       ? hourText(bar.from, bar.to)
@@ -709,7 +877,14 @@ function TrendCard({
           <span aria-live="polite" className="truncate text-xs text-tertiary tabular-nums">
             {bar &&
               !late &&
-              t('trend.label', { date: describe(bar), tokens: tokens(totals[index!]!) })}
+              (kind === 'tokens'
+                ? t('trend.label', { date: describe(bar), tokens: count(totals[index!]!) })
+                : kind === 'cost'
+                  ? t('trend.labelCost', { date: describe(bar), cost: usd(totals[index!]!) })
+                  : t('trend.labelCount', {
+                      date: describe(bar),
+                      value: unitText(totals[index!]!),
+                    }))}
             {bar &&
               !late &&
               series.length > 1 &&
@@ -717,7 +892,19 @@ function TrendCard({
                 .filter((id) => bar.byAgent[id])
                 .map((id) => (
                   <span key={id} className="sr-only">
-                    {` ${t('trend.agent', { agent: agentName(id), tokens: tokens(bar.byAgent[id]!) })}`}
+                    {` ${t(
+                      kind === 'tokens'
+                        ? 'trend.agent'
+                        : kind === 'cost'
+                          ? 'trend.agentCost'
+                          : 'trend.agentCount',
+                      {
+                        agent: agentName(id),
+                        tokens: count(bar.byAgent[id]!),
+                        cost: usd(bar.byAgent[id]!),
+                        value: unitText(bar.byAgent[id]!),
+                      },
+                    )}`}
                   </span>
                 ))}
           </span>
@@ -727,7 +914,7 @@ function TrendCard({
         {/* The scale's top, and the legend with each agent's part of the bar the header names. */}
         <div className="flex min-h-(--control-height-sm) items-center justify-between gap-3">
           <span aria-hidden className="text-xs text-tertiary tabular-nums">
-            {!late && max > 0 && tokens(max)}
+            {!late && max > 0 && formatValue(max)}
           </span>
           {!late && series.length > 1 && (
             <TrendLegend
@@ -736,6 +923,7 @@ function TrendCard({
               series={series}
               shown={shown}
               label={t('trend.legend')}
+              formatValue={formatValue}
               onChange={toggle}
             />
           )}
@@ -744,7 +932,7 @@ function TrendCard({
           <Skeleton className="h-40" />
         ) : max === 0 ? (
           <p className="flex h-40 items-center justify-center text-xs text-secondary">
-            {t('noUsage')}
+            {kind === 'cost' && days.some((day) => day.total > 0) ? t('noCost') : t('noUsage')}
           </p>
         ) : (
           <TrendChart
@@ -909,6 +1097,8 @@ function PartsCard({ facts }: { facts: ReturnType<typeof figures> }) {
 function BreakdownCard({
   title,
   column,
+  valueLabel,
+  kind,
   rows,
   total,
   nameOf,
@@ -916,6 +1106,8 @@ function BreakdownCard({
 }: {
   title: string
   column: string
+  valueLabel: string
+  kind: MetricKind
   rows: BreakdownRow[]
   total: number
   nameOf: (row: BreakdownRow) => string
@@ -932,7 +1124,7 @@ function BreakdownCard({
           <thead className="text-tertiary">
             <tr>
               <th className="pb-1.5 text-left font-normal">{column}</th>
-              <th className="w-36 pb-1.5 text-right font-normal">{t('parts.tokens')}</th>
+              <th className="w-36 pb-1.5 text-right font-normal">{valueLabel}</th>
               <th className="w-14 pb-1.5 text-right font-normal">{t('parts.share')}</th>
             </tr>
           </thead>
@@ -951,9 +1143,20 @@ function BreakdownCard({
                     <TooltipContent>{row.path ?? nameOf(row)}</TooltipContent>
                   </Tooltip>
                 </td>
-                <td className="py-1.5 text-right font-mono">{exactCount(row.total)}</td>
+                <td
+                  className={cn(
+                    'py-1.5 text-right',
+                    row.value === null ? 'text-secondary' : 'font-mono',
+                  )}
+                >
+                  {row.value === null
+                    ? t('noPrice')
+                    : kind === 'cost'
+                      ? usd(row.value)
+                      : exactCount(row.value)}
+                </td>
                 <td className="py-1.5 text-right text-tertiary">
-                  {total > 0 ? percent(row.total / total) : '—'}
+                  {row.value !== null && total > 0 ? percent(row.value / total) : '—'}
                 </td>
               </tr>
             ))}

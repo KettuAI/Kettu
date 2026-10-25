@@ -14,6 +14,7 @@ import {
   type AgentFilter,
   type DayRange,
   type Generations,
+  type Metric,
   type RangeChoice,
 } from '@renderer/features/usage/model'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -29,6 +30,8 @@ export interface ContextReport {
 
 /** What the usage page shows; kept while the app runs, back to the defaults on launch. */
 export interface UsageFilters {
+  /** What the figures count: tokens, requests (turns under OverBench only), or cost. */
+  metric: Metric
   agent: AgentFilter
   range: RangeChoice
   scope: UsageScope
@@ -65,6 +68,7 @@ interface UsageStore {
 }
 
 export const DEFAULT_FILTERS: UsageFilters = {
+  metric: 'tokens',
   agent: 'all',
   range: { kind: 'all' },
   scope: 'computer',

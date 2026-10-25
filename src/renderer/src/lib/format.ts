@@ -18,6 +18,17 @@ function makeFormatters(locale: string) {
     compact: new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }),
     integer: new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }),
     percent: new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }),
+    usdCents: new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+    usdWhole: new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }),
   }
 }
 
@@ -95,9 +106,19 @@ export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   return weekly ? i18n.t('planWindow.weeklyOf', { model: weekly[1] }) : limit.label
 }
 
+/** A count compactly, for figures, readouts and legends: "980", "1.2K", "41.7B". */
+export function count(n: number): string {
+  return format().compact.format(n)
+}
+
 /** Token counts everywhere: "980", "41K", "1.2M", "41.7B"; in Chinese, in its own wan and yi. */
 export function tokens(n: number): string {
-  return format().compact.format(n)
+  return count(n)
+}
+
+/** US dollars, with cents under $100: "$4.20", "$1,234". */
+export function usd(amount: number): string {
+  return (amount < 100 ? format().usdCents : format().usdWhole).format(amount)
 }
 
 /** A count in full, for tables and tooltips: "35,317,988,871". */

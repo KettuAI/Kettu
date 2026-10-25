@@ -2,12 +2,35 @@
 // breakdowns summed from the host's per-day rows. Pure, so it is tested without a window.
 
 import type { AgentId } from '@shared/thread'
-import { partsTotal, type TokenParts, type UsageSummary } from '@shared/usage'
+import { partsTotal, type TokenParts, type UsageScope, type UsageSummary } from '@shared/usage'
 
 export type RangeKind = '1' | '7' | '30' | '90' | '365' | 'all'
 /** A custom range holds local day starts, both ends included. */
 export type RangeChoice = { kind: RangeKind } | { kind: 'custom'; from: number; to: number }
 export type AgentFilter = AgentId | 'all'
+
+/** What the figures, the trend and the breakdowns count. */
+export type Metric = 'tokens' | 'requests' | 'cost'
+/** What the metric counts under the chosen scope: OverBench's turns stand in for requests there. */
+export type MetricKind = 'tokens' | 'requests' | 'turns' | 'cost'
+
+export function metricKind(metric: Metric, scope: UsageScope): MetricKind {
+  return metric === 'requests' && scope === 'overbench' ? 'turns' : metric
+}
+
+/** A sum in the metric; cost is null when nothing in it had a price. */
+export function metricValue(parts: TokenParts, metric: Metric, scope: UsageScope): number | null {
+  switch (metricKind(metric, scope)) {
+    case 'cost':
+      return parts.cost
+    case 'requests':
+      return parts.requests
+    case 'turns':
+      return parts.turns
+    case 'tokens':
+      return partsTotal(parts)
+  }
+}
 
 /** Local days as [from, to): day starts, `to` the day after the last. */
 export interface DayRange {
@@ -150,9 +173,13 @@ export function hoursSoFar(starts: readonly number[], now: number): DayRange {
 export interface DayTotal {
   /** The day's start, or the hour's when summed over `hourStarts`. */
   day: number
+  /** The day's tokens. */
   total: number
   parts: TokenParts
+  /** Each agent's tokens. */
   byAgent: Partial<Record<AgentId, number>>
+  /** Each agent's own parts, for a metric other than tokens. */
+  agentParts: Partial<Record<AgentId, TokenParts>>
 }
 
 /** Each requested day's totals for the agents the filter keeps; days with nothing are zero. */
@@ -163,7 +190,7 @@ export function dayTotals(
 ): DayTotal[] {
   const days: DayTotal[] = starts
     .slice(0, -1)
-    .map((day) => ({ day, total: 0, parts: { ...ZERO }, byAgent: {} }))
+    .map((day) => ({ day, total: 0, parts: { ...ZERO }, byAgent: {}, agentParts: {} }))
   for (const row of summary.days) {
     if (agent !== 'all' && row.agentId !== agent) continue
     const day = days[row.day]
@@ -171,6 +198,9 @@ export function dayTotals(
     const total = partsTotal(row)
     day.total += total
     day.byAgent[row.agentId] = (day.byAgent[row.agentId] ?? 0) + total
+    let agentParts = day.agentParts[row.agentId]
+    if (!agentParts) day.agentParts[row.agentId] = agentParts = { ...ZERO }
+    addInto(agentParts, row)
     addInto(day.parts, row)
   }
   return days
@@ -190,42 +220,82 @@ function addInto(sum: TokenParts, add: TokenParts): void {
 }
 
 export interface Figures {
+  /** The range's total in the metric. */
   total: number
+  /** The range's tokens, whatever the metric. */
+  tokens: number
   parts: TokenParts
   days: number
   activeDays: number
   /** Over the active days; null with none. */
   average: number | null
+  /** The day with the most of the metric, the first of equals; null when none has any. */
   peak: { day: number; total: number } | null
   /** Cache reads over the whole input side; null with no input. */
   cacheShare: number | null
+  /** Some row in the range had a price, so a cost is known. */
+  priced: boolean
 }
 
-export function figures(days: readonly DayTotal[], range: DayRange): Figures {
+export function figures(
+  days: readonly DayTotal[],
+  range: DayRange,
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
+): Figures {
   const parts = { ...ZERO }
   let total = 0
+  let tokens = 0
   let activeDays = 0
   let peak: Figures['peak'] = null
   let count = 0
+  let priced = false
   for (const day of days) {
     if (day.day < range.from || day.day >= range.to) continue
     count++
     if (day.total <= 0) continue
     activeDays++
-    total += day.total
+    tokens += day.total
     addInto(parts, day.parts)
-    if (!peak || day.total > peak.total) peak = { day: day.day, total: day.total }
+    if (day.parts.cost !== null) priced = true
+    const value = metricValue(day.parts, metric, scope) ?? 0
+    total += value
+    if (value > 0 && (!peak || value > peak.total)) peak = { day: day.day, total: value }
   }
   const inputSide = parts.input + parts.cacheRead + parts.cacheWrite
   return {
     total,
+    tokens,
     parts,
     days: count,
     activeDays,
     average: activeDays > 0 ? total / activeDays : null,
     peak,
     cacheShare: inputSide > 0 ? parts.cacheRead / inputSide : null,
+    priced,
   }
+}
+
+/** The chosen day's figure in the metric; null without usage, or for a cost with no price. */
+export function todayFigure(
+  days: readonly DayTotal[],
+  today: number,
+  metric: Metric,
+  scope: UsageScope,
+): number | null {
+  const day = days.find((d) => d.day === today)
+  if (!day || day.total <= 0) return null
+  return metricValue(day.parts, metric, scope)
+}
+
+/** The range's tokens per request; null without requests. */
+export function tokensPerRequest(facts: Pick<Figures, 'tokens' | 'total'>): number | null {
+  return facts.total > 0 ? facts.tokens / facts.total : null
+}
+
+/** The tokens no cost counts, when there are any: the note under the Cost figures. */
+export function unpricedTokens(facts: Pick<Figures, 'parts'>): number | null {
+  return facts.parts.unpricedTokens > 0 ? facts.parts.unpricedTokens : null
 }
 
 export interface TrendBar {
@@ -240,12 +310,14 @@ export type TrendUnit = 'hour' | 'day' | 'week' | 'month'
 
 /**
  * A bar per day for a range up to `DAILY_BARS` days, per week up to `WEEKLY_DAYS`, else per
- * month, clipped to the range.
+ * month, clipped to the range, in the chosen metric.
  */
 export function trend(
   days: readonly DayTotal[],
   range: DayRange,
   firstDay: number,
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
 ): { unit: Exclude<TrendUnit, 'hour'>; bars: TrendBar[] } {
   const inRange = days.filter((d) => d.day >= range.from && d.day < range.to)
   const unit = inRange.length > WEEKLY_DAYS ? 'month' : inRange.length > DAILY_BARS ? 'week' : 'day'
@@ -264,22 +336,33 @@ export function trend(
       bars.push(bar)
     }
     bar.to = addDays(day.day, 1)
-    bar.total += day.total
-    for (const [agentId, total] of Object.entries(day.byAgent) as [AgentId, number][]) {
-      bar.byAgent[agentId] = (bar.byAgent[agentId] ?? 0) + total
+    bar.total += metricValue(day.parts, metric, scope) ?? 0
+    for (const [agentId, parts] of Object.entries(day.agentParts) as [AgentId, TokenParts][]) {
+      bar.byAgent[agentId] = (bar.byAgent[agentId] ?? 0) + (metricValue(parts, metric, scope) ?? 0)
     }
   }
   return { unit, bars }
 }
 
 /** A bar per hour, from the totals `dayTotals` sums over `hourStarts`. */
-export function hourBars(hours: readonly DayTotal[], starts: readonly number[]): TrendBar[] {
-  return hours.map((hour, i) => ({
-    from: hour.day,
-    to: starts[i + 1]!,
-    total: hour.total,
-    byAgent: hour.byAgent,
-  }))
+export function hourBars(
+  hours: readonly DayTotal[],
+  starts: readonly number[],
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
+): TrendBar[] {
+  return hours.map((hour, i) => {
+    const byAgent: Partial<Record<AgentId, number>> = {}
+    for (const [agentId, parts] of Object.entries(hour.agentParts) as [AgentId, TokenParts][]) {
+      byAgent[agentId] = metricValue(parts, metric, scope) ?? 0
+    }
+    return {
+      from: hour.day,
+      to: starts[i + 1]!,
+      total: metricValue(hour.parts, metric, scope) ?? 0,
+      byAgent,
+    }
+  })
 }
 
 /** The agents with usage in the bars, in the given order: the trend's series, bottom first. */
@@ -484,31 +567,54 @@ export interface BreakdownRow {
   name: string | null
   /** The folder, for a project's tooltip. */
   path: string | null
+  /** The row's tokens, which rank rows a metric cannot price. */
   total: number
+  /** The row's value in the metric; null for a row no price covers. */
+  value: number | null
 }
 
 function top(rows: Map<string, BreakdownRow>): BreakdownRow[] {
   return [...rows.values()]
     .filter((row) => row.total > 0)
-    .sort((a, b) => b.total - a.total)
+    .sort((a, b) => (b.value ?? -1) - (a.value ?? -1) || b.total - a.total)
     .slice(0, BREAKDOWN_ROWS)
+}
+
+function addRow(
+  rows: Map<string, BreakdownRow>,
+  key: string,
+  name: string | null,
+  path: string | null,
+  row: TokenParts,
+  metric: Metric,
+  scope: UsageScope,
+): void {
+  const sum = rows.get(key) ?? {
+    key,
+    name,
+    path,
+    total: 0,
+    value: metricKind(metric, scope) === 'cost' ? null : 0,
+  }
+  sum.total += partsTotal(row)
+  if (metricKind(metric, scope) === 'cost') {
+    if (row.cost !== null) sum.value = (sum.value ?? 0) + row.cost
+  } else {
+    sum.value = (sum.value ?? 0) + (metricValue(row, metric, scope) ?? 0)
+  }
+  rows.set(key, sum)
 }
 
 export function modelRows(
   summary: Pick<UsageSummary, 'models'>,
   agent: AgentFilter,
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
 ): BreakdownRow[] {
   const rows = new Map<string, BreakdownRow>()
   for (const row of summary.models) {
     if (agent !== 'all' && row.agentId !== agent) continue
-    const sum = rows.get(row.model) ?? {
-      key: row.model,
-      name: row.model || null,
-      path: null,
-      total: 0,
-    }
-    sum.total += partsTotal(row)
-    rows.set(row.model, sum)
+    addRow(rows, row.model, row.model || null, null, row, metric, scope)
   }
   return top(rows)
 }
@@ -518,20 +624,23 @@ export function projectRows(
   summary: Pick<UsageSummary, 'projects'>,
   agent: AgentFilter,
   basename: (path: string) => string,
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
 ): BreakdownRow[] {
   const rows = new Map<string, BreakdownRow>()
   for (const row of summary.projects) {
     if (agent !== 'all' && row.agentId !== agent) continue
     const named = row.project !== null && !row.scratch
     const key = named ? row.project! : ''
-    const sum = rows.get(key) ?? {
+    addRow(
+      rows,
       key,
-      name: named ? basename(row.project!) : null,
-      path: named ? row.project : null,
-      total: 0,
-    }
-    sum.total += partsTotal(row)
-    rows.set(key, sum)
+      named ? basename(row.project!) : null,
+      named ? row.project : null,
+      row,
+      metric,
+      scope,
+    )
   }
   return top(rows)
 }

@@ -14,6 +14,7 @@
     "syncFailed": "Could not sync",
     "agent": "Agent",
     "allShort": "All",
+    "metric": "Metric",
     "range": "Time range",
     "ranges": {
       "1": "1 day",
@@ -30,8 +31,29 @@
     },
     "importing": "Reading the agents' logs: {{done}} of {{total}}"
   },
+  "metrics": {
+    "tokens": "Tokens",
+    "requests": "Requests",
+    "turns": "Turns",
+    "cost": "Cost"
+  },
+  "units": {
+    "tokens": "{{value}} tokens",
+    "request": "{{value}} request",
+    "requests": "{{value}} requests",
+    "turn": "{{value}} turn",
+    "turns": "{{value}} turns"
+  },
   "figures": {
+    "today": "Today",
     "total": "Tokens",
+    "cost": "Estimated cost",
+    "tokensPerRequest": "Tokens per request",
+    "savedByCache": "Saved by cache",
+    "perRequestNote": "Tokens divided by requests",
+    "cacheSavedNote": "Cache reads at the input price",
+    "estimated": "Estimated at API prices · prices as of {{date}}",
+    "unpriced": "{{tokens}} tokens of models without a price are not counted",
     "days_one": "{{range}} · {{count}} day",
     "days_other": "{{range}} · {{count}} days",
     "average": "Daily average",
@@ -51,9 +73,25 @@
     "weekly": "Tokens per week",
     "monthly": "Tokens per month",
     "hourly": "Tokens per hour",
+    "requestsDaily": "Requests per day",
+    "requestsWeekly": "Requests per week",
+    "requestsMonthly": "Requests per month",
+    "requestsHourly": "Requests per hour",
+    "turnsDaily": "Turns per day",
+    "turnsWeekly": "Turns per week",
+    "turnsMonthly": "Turns per month",
+    "turnsHourly": "Turns per hour",
+    "costDaily": "Cost per day",
+    "costWeekly": "Cost per week",
+    "costMonthly": "Cost per month",
+    "costHourly": "Cost per hour",
     "hour": "{{from}} – {{to}}",
     "label": "{{date}}: {{tokens}} tokens",
+    "labelCount": "{{date}}: {{value}}",
+    "labelCost": "{{date}}: {{cost}}",
     "agent": "{{agent}} {{tokens}}",
+    "agentCount": "{{agent}} {{value}}",
+    "agentCost": "{{agent}} {{cost}}",
     "legend": "Agents shown in the chart"
   },
   "limits": {
@@ -91,6 +129,8 @@
     "none": "No project"
   },
   "noUsage": "No usage in this range.",
+  "noCost": "No cost in this range.",
+  "noPrice": "No price",
   "empty": {
     "title": "No usage yet",
     "description": "OverBench counts the tokens of every turn it runs from now on. To include what the agents used before, and in a terminal, count from their logs on this computer.",
