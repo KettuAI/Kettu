@@ -165,6 +165,7 @@ function DeleteDialog({
         }
       }
       await deleteArtifact(shown.id)
+      shown.onDeleted?.()
       onClose()
     } catch (failure) {
       setError(errorMessage(failure))

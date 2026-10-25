@@ -21,7 +21,7 @@ interface ArtifactsStore {
 
 export type ArtifactDialog =
   | { kind: 'rename'; id: string; title: string }
-  | { kind: 'delete'; id: string; title: string }
+  | { kind: 'delete'; id: string; title: string; onDeleted?: () => void }
   | { kind: 'erase'; id: string; title: string; versions: number; published: boolean }
 
 export type ImportFailure = Extract<ArtifactImportResult, { failed: string }>['failed'] | 'failed'

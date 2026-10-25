@@ -147,7 +147,7 @@ export function ArtifactMenuItems({
           onClick={() => {
             // A published artifact asks first, so the link can be taken down with it.
             if (isPublished(target.id)) {
-              askArtifactDialog({ kind: 'delete', id: target.id, title: target.title })
+              askArtifactDialog({ kind: 'delete', id: target.id, title: target.title, onDeleted })
               return
             }
             deleteArtifact(target.id).then(onDeleted, failed('delete'))
