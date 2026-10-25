@@ -1,7 +1,7 @@
 // Registers the app to start at login and decides how such a start opens its window.
 
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, posix } from 'node:path'
 import { app } from 'electron'
 import type { LoginItemStatus } from '@shared/ipc'
 import { createLogger } from './log'
@@ -27,8 +27,9 @@ export function isOpenedAtLogin(
   return platform === 'darwin' ? wasOpenedAtLogin : argv.includes(OPENED_AT_LOGIN_FLAG)
 }
 
+/** The autostart file's path, always in Linux's own form, whichever platform writes it. */
 export function autostartPath(home: string): string {
-  return join(home, '.config', 'autostart', 'overbench.desktop')
+  return posix.join(home.replaceAll('\\', '/'), '.config', 'autostart', 'overbench.desktop')
 }
 
 /** The AppImage's own path when running from one: the desktop entry must start that file. */
