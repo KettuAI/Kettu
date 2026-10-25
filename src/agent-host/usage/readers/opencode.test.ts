@@ -219,6 +219,8 @@ describe('opencodeReader.scan', () => {
         reasoning: 45,
         cacheRead: 9000,
         cacheWrite: 500,
+        cacheWrite1h: 0,
+        turn: 0,
       },
     ])
     const size = statSync(fixture.file).size

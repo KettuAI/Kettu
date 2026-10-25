@@ -14,7 +14,7 @@ import {
 } from '@shared/usage'
 import type { LogFn } from '../storage'
 import type { SourceMap, SourceStats, UsageDbStatus } from './db'
-import type { LogReader, UsageRow } from './model'
+import { PRICES, type LogReader, type UsageRow } from './model'
 import type { ScanResult } from './protocol'
 import type { UsageStore } from './store'
 
@@ -285,7 +285,15 @@ export class UsageManager {
       .reduce<number | null>((min, s) => (min === null || s.first < min ? s.first : min), null)
     const agents = this.agentsWithUsage()
     if (!store || this.unavailable) {
-      return { days: [], models: [], projects: [], sources, first, agents }
+      return {
+        days: [],
+        models: [],
+        projects: [],
+        sources,
+        first,
+        agents,
+        pricesAsOf: PRICES.asOf,
+      }
     }
     const summary = await store.summary(dayStarts, from, to, sources)
     const projects = summary.projects.map((p) => ({
@@ -306,16 +314,40 @@ export class UsageManager {
 
   async total(from: number, to: number): Promise<UsageTotal> {
     const { store } = this.deps
-    if (!store || this.unavailable) return { total: 0, byAgent: {} }
+    if (!store || this.unavailable) {
+      return {
+        total: 0,
+        byAgent: {},
+        requests: 0,
+        turns: 0,
+        cost: null,
+        unpricedTokens: 0,
+        cacheSaved: 0,
+      }
+    }
     const rows = await store.totals(from, to, this.sources('computer'))
     const byAgent: UsageTotal['byAgent'] = {}
-    let total = 0
-    for (const row of rows) {
-      const sum = partsTotal(row)
-      byAgent[row.agentId] = (byAgent[row.agentId] ?? 0) + sum
-      total += sum
+    const sum: UsageTotal = {
+      total: 0,
+      byAgent,
+      requests: 0,
+      turns: 0,
+      cost: null,
+      unpricedTokens: 0,
+      cacheSaved: 0,
     }
-    return { total, byAgent }
+    for (const row of rows) {
+      const tokens = partsTotal(row)
+      byAgent[row.agentId] = (byAgent[row.agentId] ?? 0) + tokens
+      sum.total += tokens
+      sum.requests += row.requests
+      sum.turns += row.turns
+      sum.unpricedTokens += row.unpricedTokens
+      sum.cacheSaved += row.cacheSaved
+      // A priced agent adds up; the cost stays null while every agent it holds is unpriced.
+      if (row.cost !== null) sum.cost = (sum.cost ?? 0) + row.cost
+    }
+    return sum
   }
 
   status(): UsageStatus {

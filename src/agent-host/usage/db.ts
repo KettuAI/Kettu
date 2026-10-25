@@ -6,10 +6,10 @@ import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import type { AgentId } from '@shared/thread'
 import type { DayUsage, TokenParts, UsageSource, UsageSummary } from '@shared/usage'
-import type { FileCursor, UsageRow } from './model'
+import { PRICES, type FileCursor, type UsageRow } from './model'
 import { keepsNewer } from './rows'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /** Every time zone's offset is a multiple of 15 minutes, so a local day is a range of these. */
 export const QUARTER_MS = 900_000
@@ -27,7 +27,9 @@ const SCHEMA = `
     output      INTEGER NOT NULL,
     reasoning   INTEGER,
     cache_read  INTEGER NOT NULL,
-    cache_write INTEGER NOT NULL
+    cache_write INTEGER NOT NULL,
+    cache_write_1h INTEGER NOT NULL,
+    turn        INTEGER NOT NULL
   ) STRICT, WITHOUT ROWID;
   CREATE INDEX usage_by_agent ON usage (source, agent_id);
   CREATE TABLE buckets (
@@ -42,6 +44,8 @@ const SCHEMA = `
     reasoning   INTEGER NOT NULL,
     cache_read  INTEGER NOT NULL,
     cache_write INTEGER NOT NULL,
+    cache_write_1h INTEGER NOT NULL,
+    turns       INTEGER NOT NULL,
     PRIMARY KEY (quarter, source, agent_id, model, project)
   ) STRICT, WITHOUT ROWID;
   CREATE TABLE cursors (
@@ -56,6 +60,56 @@ const SCHEMA = `
   ) STRICT;
   CREATE INDEX cursors_by_agent ON cursors (agent_id);
 `
+
+// Version 1 kept no split of the cache writes and no turns. Claude Code's rows are dropped, since
+// its reader is the one that fills the hour's cache writes, and OverBench's buckets are rebuilt
+// from its rows so their turns match.
+const UPGRADE_1 = `
+  ALTER TABLE usage ADD COLUMN cache_write_1h INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE usage ADD COLUMN turn INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE buckets ADD COLUMN cache_write_1h INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE buckets ADD COLUMN turns INTEGER NOT NULL DEFAULT 0;
+  DELETE FROM usage WHERE source = 'log' AND agent_id = 'claude-code';
+  DELETE FROM buckets WHERE source = 'log' AND agent_id = 'claude-code';
+  DELETE FROM cursors WHERE agent_id = 'claude-code';
+  UPDATE usage SET turn = 1 WHERE key IN (
+    SELECT MIN(key) FROM usage WHERE source = 'overbench'
+    GROUP BY substr(key, 1, length(key) - length(model))
+  );
+  DELETE FROM buckets WHERE source = 'overbench';
+  INSERT INTO buckets (quarter, source, agent_id, model, project, rows, input, output, reasoning,
+    cache_read, cache_write, cache_write_1h, turns)
+  SELECT CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, ''),
+    COUNT(*), SUM(input), SUM(output), COALESCE(SUM(reasoning), 0), SUM(cache_read),
+    SUM(cache_write), SUM(cache_write_1h), SUM(turn)
+  FROM usage WHERE source = 'overbench'
+  GROUP BY CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, '');
+`
+
+/** The price list the queries join, in a temporary table of this connection. */
+function fillPrices(db: DatabaseSync): void {
+  db.exec(`CREATE TEMP TABLE IF NOT EXISTS prices (
+    model TEXT PRIMARY KEY,
+    input REAL NOT NULL,
+    output REAL NOT NULL,
+    cache_read REAL NOT NULL,
+    cache_write REAL NOT NULL,
+    cache_write_1h REAL
+  )`)
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO prices (model, input, output, cache_read, cache_write, cache_write_1h)
+    VALUES (?, ?, ?, ?, ?, ?)`)
+  for (const [model, price] of Object.entries(PRICES.models)) {
+    insert.run(
+      model,
+      price.input,
+      price.output,
+      price.cacheRead,
+      price.cacheWrite,
+      price.cacheWrite1h ?? null,
+    )
+  }
+}
 
 // SQLite's primary result codes, the low byte of node:sqlite's `errcode`.
 const SQLITE_CORRUPT = 11
@@ -102,11 +156,49 @@ function parts(row: Row): TokenParts {
     reasoning: num(row.reasoning),
     cacheRead: num(row.cache_read),
     cacheWrite: num(row.cache_write),
+    requests: num(row.requests),
+    turns: num(row.turns),
+    // A sum over unpriced rows only is NULL: no model in it had a price.
+    cost: row.cost === null || row.cost === undefined ? null : num(row.cost),
+    unpricedTokens: num(row.unpriced_tokens),
+    cacheSaved: num(row.cache_saved),
   }
 }
 
-const SUMS =
-  'SUM(input) AS input, SUM(output) AS output, SUM(reasoning) AS reasoning, SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write'
+/** A price matches a row's model by its name, or by the name without a stored trailing date. */
+const PRICE_JOIN = `
+  LEFT JOIN temp.prices AS p ON p.model = b.model
+  LEFT JOIN temp.prices AS pd ON p.model IS NULL
+    AND pd.model = CASE
+      WHEN b.model GLOB '*-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+      THEN substr(b.model, 1, length(b.model) - 9)
+    END`
+const INPUT_PRICE = 'COALESCE(p.input, pd.input)'
+const OUTPUT_PRICE = 'COALESCE(p.output, pd.output)'
+const READ_PRICE = 'COALESCE(p.cache_read, pd.cache_read)'
+const WRITE_PRICE = 'COALESCE(p.cache_write, pd.cache_write)'
+const HOUR_PRICE = `COALESCE(p.cache_write_1h, pd.cache_write_1h, ${WRITE_PRICE})`
+const PRICED = 'COALESCE(p.model, pd.model) IS NOT NULL'
+
+const SUMS = `
+  SUM(b.rows) AS requests,
+  SUM(b.turns) AS turns,
+  SUM(b.input) AS input,
+  SUM(b.output) AS output,
+  SUM(b.reasoning) AS reasoning,
+  SUM(b.cache_read) AS cache_read,
+  SUM(b.cache_write) AS cache_write,
+  SUM(CASE WHEN ${PRICED} THEN
+    b.input * ${INPUT_PRICE}
+    + (b.output + b.reasoning) * ${OUTPUT_PRICE}
+    + b.cache_read * ${READ_PRICE}
+    + (b.cache_write - b.cache_write_1h) * ${WRITE_PRICE}
+    + b.cache_write_1h * ${HOUR_PRICE}
+    ELSE NULL END) AS cost,
+  SUM(CASE WHEN ${PRICED} THEN 0
+    ELSE b.input + b.output + b.reasoning + b.cache_read + b.cache_write END) AS unpriced_tokens,
+  SUM(CASE WHEN ${PRICED} THEN b.cache_read * (${INPUT_PRICE} - ${READ_PRICE}) ELSE 0 END)
+    AS cache_saved`
 
 function prepareAll(db: DatabaseSync) {
   const sql = (text: string): StatementSync => db.prepare(text)
@@ -118,23 +210,25 @@ function prepareAll(db: DatabaseSync) {
     row: sql('SELECT * FROM usage WHERE key = ?'),
     insertRow: sql(`
       INSERT INTO usage (key, source, agent_id, session_id, project, model, at, input, output,
-        reasoning, cache_read, cache_write)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+        reasoning, cache_read, cache_write, cache_write_1h, turn)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     updateRow: sql(`
       UPDATE usage SET session_id = ?, project = ?, model = ?, at = ?, input = ?, output = ?,
-        reasoning = ?, cache_read = ?, cache_write = ?
+        reasoning = ?, cache_read = ?, cache_write = ?, cache_write_1h = ?, turn = ?
       WHERE key = ?`),
     addBucket: sql(`
       INSERT INTO buckets (quarter, source, agent_id, model, project, rows, input, output,
-        reasoning, cache_read, cache_write)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        reasoning, cache_read, cache_write, cache_write_1h, turns)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (quarter, source, agent_id, model, project) DO UPDATE SET
         rows = rows + excluded.rows,
         input = input + excluded.input,
         output = output + excluded.output,
         reasoning = reasoning + excluded.reasoning,
         cache_read = cache_read + excluded.cache_read,
-        cache_write = cache_write + excluded.cache_write`),
+        cache_write = cache_write + excluded.cache_write,
+        cache_write_1h = cache_write_1h + excluded.cache_write_1h,
+        turns = turns + excluded.turns`),
     dropEmptyBucket: sql(
       `DELETE FROM buckets
       WHERE quarter = ? AND source = ? AND agent_id = ? AND model = ? AND project = ? AND rows <= 0`,
@@ -151,17 +245,21 @@ function prepareAll(db: DatabaseSync) {
         state = excluded.state,
         seen_at = excluded.seen_at`),
     dayBuckets: sql(`
-      SELECT quarter, agent_id, source, ${SUMS} FROM buckets
-      WHERE quarter >= ? AND quarter < ? GROUP BY quarter, agent_id, source`),
+      SELECT b.quarter, b.agent_id, b.source, b.model, ${SUMS} FROM buckets b ${PRICE_JOIN}
+      WHERE b.quarter >= ? AND b.quarter < ?
+      GROUP BY b.quarter, b.agent_id, b.source, b.model`),
     modelBuckets: sql(`
-      SELECT agent_id, source, model, ${SUMS} FROM buckets
-      WHERE quarter >= ? AND quarter < ? GROUP BY agent_id, source, model`),
+      SELECT b.agent_id, b.source, b.model, ${SUMS} FROM buckets b ${PRICE_JOIN}
+      WHERE b.quarter >= ? AND b.quarter < ?
+      GROUP BY b.agent_id, b.source, b.model`),
     projectBuckets: sql(`
-      SELECT agent_id, source, project, ${SUMS} FROM buckets
-      WHERE quarter >= ? AND quarter < ? GROUP BY agent_id, source, project`),
+      SELECT b.agent_id, b.source, b.project, b.model, ${SUMS} FROM buckets b ${PRICE_JOIN}
+      WHERE b.quarter >= ? AND b.quarter < ?
+      GROUP BY b.agent_id, b.source, b.project, b.model`),
     totals: sql(`
-      SELECT agent_id, source, ${SUMS} FROM buckets
-      WHERE quarter >= ? AND quarter < ? GROUP BY agent_id, source`),
+      SELECT b.agent_id, b.source, b.model, ${SUMS} FROM buckets b ${PRICE_JOIN}
+      WHERE b.quarter >= ? AND b.quarter < ?
+      GROUP BY b.agent_id, b.source, b.model`),
     stats: sql(`
       SELECT agent_id, source, SUM(rows) AS rows, MIN(quarter) AS first, MAX(quarter) AS last
       FROM buckets GROUP BY agent_id, source`),
@@ -222,8 +320,11 @@ export class UsageDb {
         db.exec('PRAGMA journal_mode = WAL')
         db.exec(`BEGIN; ${SCHEMA} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`)
         if (this.status === 'ok') this.status = 'created'
+      } else if (version < SCHEMA_VERSION) {
+        this.upgrade(db, version)
       }
       db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;')
+      fillPrices(db)
       this.sql = prepareAll(db)
       this.db = db
     } catch (error) {
@@ -232,6 +333,19 @@ export class UsageDb {
       } catch {
         // Closing a handle that failed to read anything can fail too; the first error matters.
       }
+      throw error
+    }
+  }
+
+  /** Brings an older file to `SCHEMA_VERSION` in one transaction. */
+  private upgrade(db: DatabaseSync, from: number): void {
+    db.exec('BEGIN')
+    try {
+      if (from === 1) db.exec(UPGRADE_1)
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+      db.exec('COMMIT')
+    } catch (error) {
+      if (db.isTransaction) db.exec('ROLLBACK')
       throw error
     }
   }
@@ -295,6 +409,8 @@ export class UsageDb {
       sign * (row.reasoning ?? 0),
       sign * row.cacheRead,
       sign * row.cacheWrite,
+      sign * row.cacheWrite1h,
+      sign * row.turn,
     )
     if (sign < 0) sql.dropEmptyBucket.run(quarter, row.source, row.agentId, row.model, project)
   }
@@ -323,6 +439,8 @@ export class UsageDb {
               row.reasoning,
               row.cacheRead,
               row.cacheWrite,
+              row.cacheWrite1h,
+              row.turn,
             )
             this.bucket(sql, row, 1)
             changed++
@@ -340,6 +458,8 @@ export class UsageDb {
             row.reasoning,
             row.cacheRead,
             row.cacheWrite,
+            row.cacheWrite1h,
+            row.turn,
             row.key,
           )
           this.bucket(sql, previous, -1)
@@ -414,30 +534,40 @@ export class UsageDb {
             model: String(row.model),
             ...parts(row),
           }))
-        const projects = sql.projectBuckets
-          .all(quarterOf(from), quarterOf(to))
-          .filter(counts)
-          .map((row) => ({
-            agentId: String(row.agent_id) as AgentId,
-            project: row.project === '' ? null : String(row.project),
-            ...parts(row),
-          }))
-        return { days: [...days.values()], models, projects }
+        const projects = new Map<string, Omit<DbSummary['projects'][number], 'scratch'>>()
+        for (const row of sql.projectBuckets.all(quarterOf(from), quarterOf(to)).filter(counts)) {
+          const agentId = String(row.agent_id) as AgentId
+          const project = row.project === '' ? null : String(row.project)
+          const key = `${agentId}\n${project ?? ''}`
+          const sum = projects.get(key)
+          if (sum) addParts(sum, parts(row))
+          else projects.set(key, { agentId, project, ...parts(row) })
+        }
+        return {
+          days: [...days.values()],
+          models,
+          projects: [...projects.values()],
+          pricesAsOf: PRICES.asOf,
+        }
       },
-      { days: [], models: [], projects: [] },
+      { days: [], models: [], projects: [], pricesAsOf: PRICES.asOf },
     )
   }
 
   /** Each agent's sums over [from, to), for the counted sources. */
   totals(from: number, to: number, sources: SourceMap): (TokenParts & { agentId: AgentId })[] {
-    return this.guard(
-      (sql) =>
-        sql.totals
-          .all(quarterOf(from), quarterOf(to))
-          .filter((row) => sources[String(row.agent_id) as AgentId] === String(row.source))
-          .map((row) => ({ agentId: String(row.agent_id) as AgentId, ...parts(row) })),
-      [],
-    )
+    return this.guard((sql) => {
+      const agents = new Map<AgentId, TokenParts & { agentId: AgentId }>()
+      for (const row of sql.totals
+        .all(quarterOf(from), quarterOf(to))
+        .filter((row) => sources[String(row.agent_id) as AgentId] === String(row.source))) {
+        const agentId = String(row.agent_id) as AgentId
+        const sum = agents.get(agentId)
+        if (sum) addParts(sum, parts(row))
+        else agents.set(agentId, { agentId, ...parts(row) })
+      }
+      return [...agents.values()]
+    }, [])
   }
 
   stats(): SourceStats[] {
@@ -494,6 +624,12 @@ function addParts(sum: TokenParts, add: TokenParts): void {
   sum.reasoning += add.reasoning
   sum.cacheRead += add.cacheRead
   sum.cacheWrite += add.cacheWrite
+  sum.requests += add.requests
+  sum.turns += add.turns
+  sum.unpricedTokens += add.unpricedTokens
+  sum.cacheSaved += add.cacheSaved
+  // Priced groups add up; the sum stays null while every group it holds is unpriced.
+  if (add.cost !== null) sum.cost = (sum.cost ?? 0) + add.cost
 }
 
 function fromRow(row: Row): UsageRow {
@@ -510,5 +646,7 @@ function fromRow(row: Row): UsageRow {
     reasoning: row.reasoning === null ? null : num(row.reasoning),
     cacheRead: num(row.cache_read),
     cacheWrite: num(row.cache_write),
+    cacheWrite1h: num(row.cache_write_1h),
+    turn: num(row.turn),
   }
 }

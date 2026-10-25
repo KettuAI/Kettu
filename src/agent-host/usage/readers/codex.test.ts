@@ -272,6 +272,8 @@ describe('finding the logs', () => {
       reasoning: null,
       cacheRead: 40,
       cacheWrite: 0,
+      cacheWrite1h: 0,
+      turn: 0,
     })
     expect(table(ctx)).toEqual([
       [`codex:${PARENT}:1`, 60, 40, 10],

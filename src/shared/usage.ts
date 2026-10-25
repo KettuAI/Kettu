@@ -7,8 +7,22 @@ export type UsageSource = 'overbench' | 'log'
 /** Which numbers the page counts: the logs where they are on, or OverBench's record alone. */
 export type UsageScope = 'computer' | 'overbench'
 
+/** What a token sum carries beside the tokens: how many rows, turns, and what they cost. */
+export interface UsageFigures {
+  /** The rows summed: one per request in an agent's log, or OverBench's rows. */
+  requests: number
+  /** OverBench's turns, one per turn whatever its models; 0 for imported logs. */
+  turns: number
+  /** Dollars over the models with a price; null when none of them is priced. */
+  cost: number | null
+  /** Tokens of the models without a price, which no cost counts. */
+  unpricedTokens: number
+  /** Dollars the cache reads saved: cache reads times the input price less the cache read price. */
+  cacheSaved: number
+}
+
 /** Token counts; `reasoning` is 0 for agents whose output already includes it. */
-export interface TokenParts {
+export interface TokenParts extends UsageFigures {
   input: number
   output: number
   reasoning: number
@@ -45,9 +59,11 @@ export interface UsageSummary {
   first: number | null
   /** The agents with usage under either scope, at any time, so both offer the same agent filter. */
   agents: AgentId[]
+  /** The date of the price list the cost was computed with. */
+  pricesAsOf: string
 }
 
-export interface UsageTotal {
+export interface UsageTotal extends UsageFigures {
   total: number
   byAgent: Partial<Record<AgentId, number>>
 }

@@ -36,6 +36,9 @@ interface Line {
       output_tokens?: unknown
       cache_read_input_tokens?: unknown
       cache_creation_input_tokens?: unknown
+      cache_creation?: {
+        ephemeral_1h_input_tokens?: unknown
+      } | null
     } | null
   } | null
 }
@@ -192,6 +195,9 @@ function readLine(json: string, messages: Map<string, Message>, fallbackAt: numb
       reasoning: null,
       cacheRead: count(usage.cache_read_input_tokens),
       cacheWrite: count(usage.cache_creation_input_tokens),
+      // Read apart only here; the total still includes it.
+      cacheWrite1h: count(usage.cache_creation?.ephemeral_1h_input_tokens),
+      turn: 0,
     },
   })
 }

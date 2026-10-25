@@ -1817,6 +1817,11 @@ describe('a prompt turn', () => {
         reasoning: 0,
         cacheRead: 1200,
         cacheWrite: 200,
+        requests: 1,
+        turns: 1,
+        cost: null,
+        unpricedTokens: 2720,
+        cacheSaved: 0,
       },
     ])
     expect(summary.projects).toEqual([

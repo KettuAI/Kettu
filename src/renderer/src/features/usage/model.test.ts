@@ -42,7 +42,20 @@ const TODAY = day(2026, 10, 22) // a Thursday
 const HOUR = 3_600_000
 
 function usage(dayIndex: number, agentId: DayUsage['agentId'], output: number): DayUsage {
-  return { day: dayIndex, agentId, input: 0, output, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
+  return {
+    day: dayIndex,
+    agentId,
+    input: 0,
+    output,
+    reasoning: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    requests: 0,
+    turns: 0,
+    cost: null,
+    unpricedTokens: 0,
+    cacheSaved: 0,
+  }
 }
 
 describe('days', () => {
@@ -453,7 +466,17 @@ describe('heatLevels', () => {
 })
 
 describe('breakdowns', () => {
-  const parts = { input: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
+  const parts = {
+    input: 0,
+    reasoning: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    requests: 0,
+    turns: 0,
+    cost: null,
+    unpricedTokens: 0,
+    cacheSaved: 0,
+  }
   it('ranks models across agents and projects by folder', () => {
     const models = modelRows(
       {

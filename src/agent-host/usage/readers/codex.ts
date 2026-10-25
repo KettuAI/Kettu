@@ -437,6 +437,8 @@ function toRow(
     reasoning: null,
     cacheRead: cached,
     cacheWrite,
+    cacheWrite1h: 0,
+    turn: 0,
   }
 }
 
