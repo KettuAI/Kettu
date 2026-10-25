@@ -45,7 +45,14 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { inPinnedTree, pinnedTree, sessionTree, useSessionsStore } from '@renderer/stores/sessions'
+import {
+  inPinnedTree,
+  pinnedTree,
+  sessionTree,
+  sidebarTabStop,
+  type SidebarTabStop,
+  useSessionsStore,
+} from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
 import {
@@ -70,6 +77,15 @@ export function AppSidebar() {
   const loadError = useProjectsStore((s) => s.error)
   const sessionsById = useSessionsStore((s) => s.byId)
   const shownProjects = visibleProjects(projects, sessionsById)
+  const main = useViewStore((s) => s.main)
+  const collapsedProjects = useViewStore((s) => s.collapsedProjects)
+  const expandedParents = useViewStore((s) => s.expandedParents)
+  // The list has one Tab stop, chosen from the store so a hidden shown row leaves it to a header.
+  const stop = sidebarTabStop(
+    { main, collapsedProjects, expandedParents },
+    sessionsById,
+    shownProjects,
+  )
   const drafting = useViewStore((s) => s.main.kind === 'new' && !s.settings.open)
   // The viewer opened from the page belongs to it.
   const artifactsShown = useViewStore(
@@ -122,15 +138,20 @@ export function AppSidebar() {
             </SidebarMenu>
           ) : (
             <>
-              <PinnedGroup />
+              <PinnedGroup stop={stop} />
               {shownProjects.length === 0 ? (
                 <p className="px-2 py-1 text-xs leading-normal text-secondary">{t('nav.empty')}</p>
               ) : (
                 shownProjects.map((project) => (
-                  <ProjectGroup key={project.path} project={project} onImport={importSessions} />
+                  <ProjectGroup
+                    key={project.path}
+                    project={project}
+                    stop={stop}
+                    onImport={importSessions}
+                  />
                 ))
               )}
-              <ProjectGroup project={null} onImport={importSessions} />
+              <ProjectGroup project={null} stop={stop} onImport={importSessions} />
             </>
           )}
         </SidebarGroup>
@@ -264,9 +285,11 @@ function TightestLimit() {
 /** A project's sessions, or with a null project those started with No project, if any. */
 function ProjectGroup({
   project,
+  stop,
   onImport,
 }: {
   project: Project | null
+  stop: SidebarTabStop | null
   onImport: (project: Project) => void
 }) {
   const key = project?.path ?? NO_PROJECT_GROUP
@@ -287,12 +310,14 @@ function ProjectGroup({
   if (!project && tree.length === 0) return null
 
   const toggle = () => toggleGroup(key)
+  const groupStop = stop?.kind === 'group' && stop.key === key
+  const tabStopId = stop?.kind === 'session' ? stop.id : null
 
   const row = (
     <SidebarMenuButton
       size="row"
       data-sidebar-row=""
-      tabIndex={-1}
+      tabIndex={groupStop ? 0 : -1}
       aria-expanded={open}
       onClick={toggle}
       onKeyDown={(event) => {
@@ -400,7 +425,7 @@ function ProjectGroup({
       {open && tree.length > 0 && (
         <SidebarMenu className="gap-px">
           {tree.map((node) => (
-            <SessionRow key={node.summary.id} node={node} />
+            <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
           ))}
         </SidebarMenu>
       )}
@@ -418,7 +443,7 @@ function toggleGroup(key: string): void {
 }
 
 /** The pinned sessions across the projects, above them, while there are any. */
-function PinnedGroup() {
+function PinnedGroup({ stop }: { stop: SidebarTabStop | null }) {
   const { t } = useTranslation('sidebar')
   const open = useViewStore((s) => !s.collapsedProjects[PINNED_GROUP])
   const summaries = useSessionsStore(
@@ -430,12 +455,13 @@ function PinnedGroup() {
   )
   if (tree.length === 0) return null
   const toggle = () => toggleGroup(PINNED_GROUP)
+  const tabStopId = stop?.kind === 'session' ? stop.id : null
   return (
     <div className="flex flex-col gap-px">
       <SidebarMenuButton
         size="row"
         data-sidebar-row=""
-        tabIndex={-1}
+        tabIndex={stop?.kind === 'group' && stop.key === PINNED_GROUP ? 0 : -1}
         aria-expanded={open}
         onClick={toggle}
         onKeyDown={(event) => {
@@ -456,7 +482,7 @@ function PinnedGroup() {
       {open && (
         <SidebarMenu className="gap-px">
           {tree.map((node) => (
-            <SessionRow key={node.summary.id} node={node} />
+            <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
           ))}
         </SidebarMenu>
       )}

@@ -3,12 +3,10 @@ import { stepZoom, type ZoomStep } from '@shared/settings'
 import { errorMessage } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { flattenTree, pinnedTree, sessionTree, useSessionsStore } from '@renderer/stores/sessions'
+import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   settingsBack,
-  NO_PROJECT_GROUP,
-  PINNED_GROUP,
   openSession,
   openSettings,
   toggleSidebar,
@@ -121,17 +119,7 @@ function isEditable(target: EventTarget | null): boolean {
 function stepSession(delta: -1 | 1): void {
   const view = useViewStore.getState()
   const { byId } = useSessionsStore.getState()
-  const groups: (string | null)[] = [
-    ...useProjectsStore.getState().projects.map((p) => p.path),
-    null,
-  ]
-  const expanded = (id: string) => view.expandedParents[id] ?? false
-  const order = [
-    ...(view.collapsedProjects[PINNED_GROUP] ? [] : flattenTree(pinnedTree(byId), expanded)),
-    ...groups
-      .filter((p) => !view.collapsedProjects[p ?? NO_PROJECT_GROUP])
-      .flatMap((p) => flattenTree(sessionTree(byId, p), expanded)),
-  ]
+  const order = visibleOrder(view, byId, useProjectsStore.getState().projects)
   if (!order.length) return
   const currentId = view.main.kind === 'session' ? view.main.sessionId : null
   const at = currentId ? order.indexOf(currentId) : -1

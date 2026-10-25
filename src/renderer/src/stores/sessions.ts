@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { SessionSummary } from '@shared/agent-host'
+import type { Project, SessionSummary } from '@shared/agent-host'
 import { host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
+import { NO_PROJECT_GROUP, PINNED_GROUP, type MainView } from './view'
 
 interface SessionsStore {
   byId: Record<string, SessionSummary>
@@ -134,6 +135,57 @@ export function flattenTree(nodes: SessionNode[], expanded: (id: string) => bool
   }
   walk(nodes)
   return out
+}
+
+/** What the sidebar's list reads from the view store. */
+export interface SidebarView {
+  main: MainView
+  collapsedProjects: Record<string, true>
+  expandedParents: Record<string, boolean>
+}
+
+/** The list's one Tab stop: a session's row, or a group's header by its key. */
+export type SidebarTabStop = { kind: 'session'; id: string } | { kind: 'group'; key: string }
+
+/**
+ * The sessions the sidebar lists, in its order: Pinned, then each project's, then No project's.
+ * A collapsed group or parent leaves out the rows it hides.
+ */
+export function visibleOrder(
+  view: SidebarView,
+  byId: Record<string, SessionSummary>,
+  projects: readonly Project[],
+): string[] {
+  const expanded = (id: string) => view.expandedParents[id] ?? false
+  return [
+    ...(view.collapsedProjects[PINNED_GROUP] ? [] : flattenTree(pinnedTree(byId), expanded)),
+    ...projects
+      .filter((p) => !view.collapsedProjects[p.path])
+      .flatMap((p) => flattenTree(sessionTree(byId, p.path), expanded)),
+    ...(view.collapsedProjects[NO_PROJECT_GROUP]
+      ? []
+      : flattenTree(sessionTree(byId, null), expanded)),
+  ]
+}
+
+/**
+ * The list's one Tab stop: the shown session's row while the list shows it, otherwise the first
+ * group header, then no stop at all while the list has no rows.
+ */
+export function sidebarTabStop(
+  view: SidebarView,
+  byId: Record<string, SessionSummary>,
+  projects: readonly Project[],
+): SidebarTabStop | null {
+  const order = visibleOrder(view, byId, projects)
+  if (view.main.kind === 'session' && order.includes(view.main.sessionId)) {
+    return { kind: 'session', id: view.main.sessionId }
+  }
+  if (pinnedTree(byId).length > 0) return { kind: 'group', key: PINNED_GROUP }
+  const project = projects.find((p) => sessionTree(byId, p.path).length > 0)
+  if (project) return { kind: 'group', key: project.path }
+  if (sessionTree(byId, null).length > 0) return { kind: 'group', key: NO_PROJECT_GROUP }
+  return null
 }
 
 export function sessionTitle(summary: Pick<SessionSummary, 'title'>): string {
