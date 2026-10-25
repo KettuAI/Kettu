@@ -15,8 +15,8 @@ files:
 # The terminal host loads pty.node and starts spawn-helper from the real file system.
 asarUnpack:
   - node_modules/node-pty/**
-# The postinstall step (electron-builder install-app-deps) already built node-pty for Electron,
-# including the from-source build on Linux, where node-pty has no prebuilt binary.
+# The postinstall step (tools/install/app-deps.mjs) already readied node-pty for Electron: its
+# prebuilt binaries on Windows, a build from source on macOS and Linux.
 npmRebuild: false
 publish:
   provider: github

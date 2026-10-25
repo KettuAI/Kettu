@@ -31,7 +31,7 @@
     "dist:mac": "pnpm build && electron-builder --mac",
     "dist:win": "pnpm build && electron-builder --win",
     "dist:linux": "pnpm build && electron-builder --linux",
-    "postinstall": "install-electron && electron-builder install-app-deps",
+    "postinstall": "install-electron && node tools/install/app-deps.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
