@@ -1,5 +1,6 @@
 // Messages between the thread store in the host and the thread worker that owns the database.
 
+import type { OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall } from '../artifacts/model'
 import type { RoutineCall } from '../routines/calls'
@@ -28,13 +29,15 @@ export type ThreadDbStatus = 'ok' | 'created' | 'recovered' | 'newer' | 'unavail
 export type ThreadErrorCode = 'corrupt' | 'conflict' | 'unavailable' | 'not_found' | 'deleted'
 
 export type ThreadRequest =
-  | { id: number; op: 'page'; sessionId: string; before: number | null }
+  | { id: number; op: 'page'; sessionId: string; before: number | null; from: number | null }
   | { id: number; op: 'tail'; sessionId: string; from: number }
   | { id: number; op: 'load'; sessionId: string }
   | { id: number; op: 'write'; sessionId: string; change: ThreadWrite }
   | { id: number; op: 'remove'; sessionIds: string[] }
   | { id: number; op: 'blob'; sessionId: string; hash: string }
   | { id: number; op: 'mentions'; sessionId: string; text: string }
+  | { id: number; op: 'outline'; sessionId: string }
+  | { id: number; op: 'setOutlineTitles'; sessionId: string; titles: OutlineTitle[] }
   | { id: number; op: 'artifact'; call: ArtifactCall }
   | { id: number; op: 'routine'; call: RoutineCall }
   | { id: number; op: 'close' }

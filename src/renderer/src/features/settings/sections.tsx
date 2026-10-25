@@ -147,6 +147,21 @@ export function GeneralSwitch({
   )
 }
 
+export function OutlineSummaries({ label }: { label: string }) {
+  const checked = useSettings().thread.outlineSummaries
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        onChange={(v) => apply({ thread: { outlineSummaries: v } })}
+      />
+    </>
+  )
+}
+
 export function OpenAtLogin({ label, disabled }: { label: string; disabled: boolean }) {
   const checked = useSettings().general.openAtLogin
   const [apply, error] = useApply()

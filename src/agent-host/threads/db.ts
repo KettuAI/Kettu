@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
+import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
 import {
@@ -31,8 +32,10 @@ import {
   PAGE_LIMIT,
   parseStoredSession,
   turnOf,
+  type OutlineRow,
   type PositionedEntry,
   type StoredBlob,
+  type StoredOutline,
   type StoredSession,
   type StoredThread,
   type ThreadHead,
@@ -41,7 +44,7 @@ import {
 } from './model'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -115,8 +118,18 @@ const ROUTINE_RUNS = `
   CREATE UNIQUE INDEX routine_runs_by_id ON routine_runs (run_id);
 `
 
+// The message outline's titles, by the position of their user message.
+const OUTLINE_TITLES = `
+  CREATE TABLE outline_titles (
+    session_id TEXT NOT NULL REFERENCES threads (session_id) ON DELETE CASCADE,
+    pos        INTEGER NOT NULL,
+    title      TEXT NOT NULL,
+    PRIMARY KEY (session_id, pos)
+  ) STRICT, WITHOUT ROWID;
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
-const MIGRATIONS: Record<number, string> = { 2: ARTIFACTS, 3: ROUTINE_RUNS }
+const MIGRATIONS: Record<number, string> = { 2: ARTIFACTS, 3: ROUTINE_RUNS, 4: OUTLINE_TITLES }
 
 // SQLite's primary result codes, the low byte of node:sqlite's `errcode`.
 const SQLITE_CORRUPT = 11
@@ -226,6 +239,27 @@ function prepareAll(db: DatabaseSync) {
       "SELECT pos, json FROM entries WHERE session_id = ? AND kind = 'plan' ORDER BY pos DESC LIMIT 1",
     ),
     byId: sql('SELECT pos FROM entries WHERE session_id = ? AND entry_id = ?'),
+    turnFrom: sql(
+      'SELECT turn FROM entries WHERE session_id = ? AND pos >= ? ORDER BY pos LIMIT 1',
+    ),
+    // A message's text as `outlineText` reads it, in two parts.
+    userMessages: sql(`
+      SELECT e.pos, e.entry_id, t.title,
+        substr((SELECT group_concat(json_extract(part.value, '$.text'), char(10))
+          FROM json_each(e.json, '$.content') AS part
+          WHERE json_extract(part.value, '$.type') = 'text'), 1, ?2) AS text,
+        (SELECT group_concat(COALESCE(
+            json_extract(part.value, '$.ref.attachment.name'),
+            json_extract(part.value, '$.ref.name')), ', ')
+          FROM json_each(e.json, '$.content') AS part
+          WHERE json_extract(part.value, '$.type') = 'ref') AS names
+      FROM entries e LEFT JOIN outline_titles t ON t.session_id = e.session_id AND t.pos = e.pos
+      WHERE e.session_id = ?1 AND e.kind = 'user' ORDER BY e.pos`),
+    titles: sql('SELECT pos, title FROM outline_titles WHERE session_id = ?'),
+    userAt: sql("SELECT 1 FROM entries WHERE session_id = ? AND pos = ? AND kind = 'user'"),
+    putTitle: sql(`
+      INSERT INTO outline_titles (session_id, pos, title) VALUES (?, ?, ?)
+      ON CONFLICT (session_id, pos) DO UPDATE SET title = excluded.title`),
     insertEntry: sql(
       'INSERT INTO entries (session_id, pos, turn, entry_id, kind, json) VALUES (?, ?, ?, ?, ?, ?)',
     ),
@@ -567,12 +601,18 @@ export class ThreadDb {
 
   /**
    * The page that ends below `before`, or the latest page when it is null: at least
-   * `PAGE_ENTRIES` entries back to the start of their turn, cut at `PAGE_LIMIT`. Null when the
+   * `PAGE_ENTRIES` entries back to the start of their turn, cut at `PAGE_LIMIT`. With `reach`, it
+   * goes back to the start of the turn holding that position instead, uncut. Null when the
    * session has no stored thread, or a part of it does not parse.
    */
-  page(sessionId: string, before: number | null): ThreadPage | null {
+  page(sessionId: string, before: number | null, reach: number | null = null): ThreadPage | null {
     return this.guard((sql) => {
       const bound = before ?? END
+      if (reach !== null && reach < bound) {
+        const turn = sql.turnFrom.get(sessionId, reach)?.turn
+        const start = turn === undefined || turn === null ? reach : Math.min(Number(turn), reach)
+        return this.pageOf(sql, sessionId, start, bound)
+      }
       const start = sql.pageStart.get(sessionId, bound, PAGE_ENTRIES)?.start
       if (start === null || start === undefined) {
         const head = this.headOf(sql, sessionId)
@@ -591,6 +631,35 @@ export class ThreadDb {
   /** Everything from `from` to the end, for a window the renderer holds already. */
   tail(sessionId: string, from: number): ThreadPage | null {
     return this.guard((sql) => this.pageOf(sql, sessionId, from, END), null)
+  }
+
+  /** The session's user messages with their titles, oldest first; null without a stored thread. */
+  outline(sessionId: string): StoredOutline | null {
+    return this.guard((sql) => {
+      const head = this.headOf(sql, sessionId)
+      if (!head) return null
+      const entries: OutlineRow[] = sql.userMessages.all(sessionId, OUTLINE_TEXT).map((row) => ({
+        pos: Number(row.pos),
+        entryId: String(row.entry_id),
+        text: optionalText(row.text) || (optionalText(row.names) ?? ''),
+        title: optionalText(row.title),
+      }))
+      const { session, ...rest } = head
+      return { head: rest, session, entries }
+    }, null)
+  }
+
+  /** Stores the outline's titles of a session's messages; false when it has no stored thread. */
+  setOutlineTitles(sessionId: string, titles: readonly { pos: number; title: string }[]): boolean {
+    return this.guard(
+      (sql, db) =>
+        this.transaction(db, () => {
+          if (!sql.thread.get(sessionId)) return false
+          for (const { pos, title } of titles) sql.putTitle.run(sessionId, pos, title)
+          return true
+        }),
+      false,
+    )
   }
 
   /** The whole thread, for a session whose agent connects. */
@@ -639,11 +708,14 @@ export class ThreadDb {
       this.transaction(db, () => {
         // Writing whole drops the session's bytes with its rows; those its attachments name stay.
         const kept: StoredBlob[] = []
+        // So do the outline's titles, whose positions keep their messages.
+        let titles: Row[] = []
         if (change.replace) {
           for (const hash of attachmentBlobs(change.entries.map(({ entry }) => entry))) {
             const row = sql.blob.get(sessionId, hash)
             if (row) kept.push({ hash, mime: String(row.mime), data: row.data as Uint8Array })
           }
+          titles = sql.titles.all(sessionId)
           sql.deleteThread.run(sessionId)
         }
         const stored = sql.thread.get(sessionId)
@@ -686,6 +758,9 @@ export class ThreadDb {
             previous ? { kind: String(previous.kind), turn: Number(previous.turn) } : null,
           )
           sql.insertEntry.run(sessionId, pos, turn, entry.id, entry.kind, json)
+        }
+        for (const { pos, title } of titles) {
+          if (sql.userAt.get(sessionId, pos)) sql.putTitle.run(sessionId, pos, title)
         }
       })
     }, undefined)

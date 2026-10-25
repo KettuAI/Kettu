@@ -51,6 +51,7 @@ import {
   NotificationPreview,
   NotificationSwitch,
   OpenAtLogin,
+  OutlineSummaries,
   Proxy,
   ReduceMotion,
   RemoveAll,
@@ -97,6 +98,7 @@ export function useGeneralSection(): SectionDef {
   const en = english()
   const input = group('input', t('general.groups.input'))
   const sessions = group('sessions', t('general.groups.sessions'))
+  const thread = group('thread', t('general.groups.thread'))
   const startup = group('startup', t('general.groups.startup'))
   const loginItem = useLoginItemStatus()
   const openAtLoginDescription = loginItem
@@ -156,6 +158,15 @@ export function useGeneralSection(): SectionDef {
         render: () => (
           <GeneralSwitch field="confirmQuitWhileRunning" label={t('general.confirmQuit.name')} />
         ),
+      },
+      {
+        id: 'outline-summaries',
+        name: t('general.outlineSummaries.name'),
+        english: en('general.outlineSummaries.name'),
+        description: t('general.outlineSummaries.description'),
+        keywords: t('general.outlineSummaries.keywords'),
+        group: thread,
+        render: () => <OutlineSummaries label={t('general.outlineSummaries.name')} />,
       },
       {
         id: 'open-at-login',

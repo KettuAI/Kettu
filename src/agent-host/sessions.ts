@@ -2,6 +2,7 @@
 // session lifecycle, sub-sessions, and the session index.
 
 import { randomUUID } from 'node:crypto'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
@@ -10,12 +11,15 @@ import {
   type AttachmentBytes,
   type ContextBreakdown,
   type ImportableSession,
+  type OutlineEntry,
+  type OutlineTitle,
   type ReturnedMessage,
   type SessionAttention,
   type SessionSummary,
   type StartNotice,
 } from '@shared/agent-host'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
+import { firstLine, outlineText } from '@shared/outline'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import {
@@ -104,15 +108,19 @@ import {
 } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, ReturnedFile, SessionRecord, SessionsFile } from './storage'
+import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
 import {
   attachmentBlobs,
   changesStored,
+  opensTurn,
   pageStart,
   settled,
   splitLinks,
   storedSession,
+  type OutlineRow,
   type PositionedEntry,
   type StoredBlob,
+  type StoredOutline,
   type StoredThread,
   type ThreadPage,
   type ThreadWrite,
@@ -188,6 +196,8 @@ export interface SessionManagerDeps {
   portOpen(portId: string): boolean
   /** Where threads are stored; without it every session opens through its agent. */
   threads: ThreadStore | null
+  /** The empty folder the hidden sessions for the outline's titles run in. */
+  reportsDir: string
   diagnostics: Diagnostics
   git(): GitServiceApi | null
   events: SessionEvents
@@ -471,6 +481,9 @@ export class SessionManager {
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
   private readonly contextRuns = new Map<string, Promise<ContextBreakdown | null>>()
+  /** Sessions whose outline titles are being written, and when the last failed for others. */
+  private readonly titling = new Set<string>()
+  private readonly summaryFailedAt = new Map<string, number>()
   /** The last `seq` of sessions that are not live, so a reopened session continues it. */
   private readonly seqs = new Map<string, number>()
   private readonly listed = new Map<string, { title: string | null; updatedAt: string | null }>()
@@ -1012,26 +1025,137 @@ export class SessionManager {
     return null
   }
 
-  /** The page before the position `before`, for a renderer scrolling back through the thread. */
-  async page(sessionId: string, before: number): Promise<OlderPage> {
+  /**
+   * The page before the position `before`, for a renderer scrolling back through the thread; with
+   * `from`, everything back to the start of the turn holding that position, for a jump.
+   */
+  async page(sessionId: string, before: number, from?: number): Promise<OlderPage> {
     const live = this.live.get(sessionId)
     if (live) {
       // Patches go out before the page, so the renderer has every change to the entries it holds.
       this.flushPatches(live)
       const { order, byId } = live.thread
       const end = this.indexAt(live, before)
-      const start = pageStart(order, byId, end)
+      let start = from === undefined ? pageStart(order, byId, end) : this.indexAt(live, from)
+      if (from !== undefined) {
+        start = Math.min(start, end)
+        while (start > 0 && !opensTurn(byId[order[start]!]!, byId[order[start - 1]!]!)) start--
+      }
       return {
         entries: order.slice(start, end).map((id) => byId[id]!),
         older: start > 0 ? this.posAt(live, start) : null,
       }
     }
     const record = this.recordOf(sessionId)
-    const page = await this.readPage(record, (store) => store.page(sessionId, before))
-    if (this.live.has(sessionId) || !this.has(sessionId)) return this.page(sessionId, before)
+    const page = await this.readPage(record, (store) => store.page(sessionId, before, from ?? null))
+    if (this.live.has(sessionId) || !this.has(sessionId)) return this.page(sessionId, before, from)
     return page
       ? { entries: page.entries.map(settled), older: page.older }
       : { entries: [], older: null }
+  }
+
+  // The message outline.
+
+  /** The session's user messages, oldest first, each with its first line and stored title. */
+  async outline(sessionId: string): Promise<{ entries: OutlineEntry[] }> {
+    const { rows } = await this.outlineRows(sessionId)
+    return { entries: rows.map((row) => ({ ...row, text: firstLine(row.text) })) }
+  }
+
+  /**
+   * The user messages with their text and titles, and the session's model: from memory while it
+   * is live, with the titles stored, and from the thread store otherwise.
+   */
+  private async outlineRows(
+    sessionId: string,
+  ): Promise<{ rows: OutlineRow[]; model: string | null }> {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.recordOf(sessionId)
+    // The store gets the pending entries first, so it holds the thread titles are kept with.
+    if (live) this.checkpoint(live)
+    const stored = await this.readOutline(record)
+    const current = this.live.get(sessionId)
+    if (!current) {
+      return stored
+        ? { rows: stored.entries, model: modelOf(stored.session.config) }
+        : { rows: [], model: null }
+    }
+    const titles = new Map(stored?.entries.map((row) => [row.pos, row.title]))
+    const rows: OutlineRow[] = []
+    for (const id of current.thread.order) {
+      const entry = current.thread.byId[id]
+      const pos = current.positions.get(id)
+      if (entry?.kind !== 'user' || pos === undefined) continue
+      rows.push({
+        pos,
+        entryId: id,
+        text: outlineText(entry.content),
+        title: titles.get(pos) ?? null,
+      })
+    }
+    return { rows, model: modelOf(current.thread.session.config) }
+  }
+
+  private async readOutline(record: SessionRecord): Promise<StoredOutline | null> {
+    const store = this.deps.threads
+    if (!store || !record.acpSessionId) return null
+    try {
+      const outline = await store.outline(record.id)
+      return outline && this.isCurrent(record, outline.head) ? outline : null
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read the outline of session ${record.id}: ${(error as Error).message}`,
+      )
+      return null
+    }
+  }
+
+  /**
+   * Has the agent title the session's untitled messages and stores the titles. One runs at a time
+   * for a session, and none for 5 minutes after one failed; either way the answer is empty.
+   */
+  async outlineTitles(sessionId: string): Promise<{ titles: OutlineTitle[] }> {
+    const record = this.recordOf(sessionId)
+    const failedAt = this.summaryFailedAt.get(sessionId)
+    if (
+      record.origin === 'subagent' ||
+      this.titling.has(sessionId) ||
+      (failedAt !== undefined && this.now() - failedAt < SUMMARY_RETRY_MS)
+    ) {
+      return { titles: [] }
+    }
+    this.titling.add(sessionId)
+    try {
+      const { rows, model } = await this.outlineRows(sessionId)
+      const untitled = rows.filter((row) => row.title === null && row.text.trim() !== '')
+      if (untitled.length === 0) return { titles: [] }
+      const runtime = await this.deps.agents.ensureReady(record.agentId)
+      await mkdir(this.deps.reportsDir, { recursive: true })
+      const titles = await writeTitles(runtime, {
+        dir: this.deps.reportsDir,
+        sessionModel: model,
+        messages: untitled,
+        log: (message) => this.deps.diagnostics.log('warn', message),
+      })
+      this.summaryFailedAt.delete(sessionId)
+      await this.deps.threads?.setOutlineTitles(sessionId, titles).catch((error: unknown) => {
+        this.deps.diagnostics.log(
+          'warn',
+          `Could not store the outline titles of session ${sessionId}: ${(error as Error).message}`,
+        )
+      })
+      return { titles }
+    } catch (error) {
+      this.summaryFailedAt.set(sessionId, this.now())
+      this.deps.diagnostics.log(
+        'warn',
+        `${this.deps.agents.name(record.agentId)}: could not title the outline of session ${sessionId}: ${(error as Error).message}`,
+      )
+      return { titles: [] }
+    } finally {
+      this.titling.delete(sessionId)
+    }
   }
 
   private closedView(record: SessionRecord): SessionView {

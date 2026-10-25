@@ -54,9 +54,15 @@
       "unavailable": "仅在已安装的应用中可用。",
       "keywords": "登录 启动 开机 例程 login startup launch routine"
     },
+    "outlineSummaries": {
+      "name": "在大纲中总结消息",
+      "description": "大纲打开且有尚未总结的消息时，使用该会话 Agent 的小模型，并消耗其套餐额度或积分。",
+      "keywords": "大纲 标题 总结 模型 额度 outline titles summary"
+    },
     "groups": {
       "input": "语言与输入",
       "sessions": "会话",
+      "thread": "对话",
       "startup": "启动"
     }
   },

@@ -51,7 +51,7 @@ export function startThreadService(
 function run(db: ThreadDb, request: ThreadRequest): unknown {
   switch (request.op) {
     case 'page':
-      return db.page(request.sessionId, request.before)
+      return db.page(request.sessionId, request.before, request.from)
     case 'tail':
       return db.tail(request.sessionId, request.from)
     case 'load':
@@ -66,6 +66,10 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.blob(request.sessionId, request.hash)
     case 'mentions':
       return db.mentions(request.sessionId, request.text)
+    case 'outline':
+      return db.outline(request.sessionId)
+    case 'setOutlineTitles':
+      return db.setOutlineTitles(request.sessionId, request.titles)
     case 'routine':
       return db.routine(request.call)
     case 'artifact':

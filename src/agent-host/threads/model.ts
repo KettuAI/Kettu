@@ -124,6 +124,20 @@ export interface ThreadPage {
   plan: Extract<ThreadEntry, { kind: 'plan' }> | null
 }
 
+export interface OutlineRow {
+  pos: number
+  entryId: string
+  /** As `outlineText` reads it. */
+  text: string
+  title: string | null
+}
+
+export interface StoredOutline {
+  head: ThreadHead
+  session: StoredSession
+  entries: OutlineRow[]
+}
+
 export interface StoredThread {
   head: ThreadHead
   session: StoredSession

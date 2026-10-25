@@ -60,6 +60,19 @@ export interface PlanLimit {
   observedAt: number
 }
 
+/** A user message in the message outline: its first line and the title a model wrote, if any. */
+export interface OutlineEntry {
+  pos: number
+  entryId: string
+  text: string
+  title: string | null
+}
+
+export interface OutlineTitle {
+  pos: number
+  title: string
+}
+
 /** What fills a session's context, as the agent's own report breaks it down. */
 export interface ContextBreakdown {
   model: string | null
@@ -433,7 +446,14 @@ export interface HostContract {
   'sessions.open': { params: { sessionId: string }; result: SessionSnapshot }
   // With `from`, every entry from that position on, as a replica that holds older pages needs.
   'sessions.snapshot': { params: { sessionId: string; from?: number }; result: SessionSnapshot }
-  'sessions.page': { params: { sessionId: string; before: number }; result: OlderPage }
+  // With `from`, reaching back to the turn holding that position, for a jump in the outline.
+  'sessions.page': {
+    params: { sessionId: string; before: number; from?: number }
+    result: OlderPage
+  }
+  'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
+  // Summarizes the messages without a title; empty while a summary of the session runs.
+  'sessions.outlineTitles': { params: { sessionId: string }; result: { titles: OutlineTitle[] } }
   'sessions.watch': { params: { sessionId: string }; result: void }
   'sessions.unwatch': { params: { sessionId: string }; result: void }
   // The session a port shows in front, or null; a turn that ends out of view is unread.
@@ -615,6 +635,8 @@ export const HOST_METHODS = [
   'sessions.open',
   'sessions.snapshot',
   'sessions.page',
+  'sessions.outline',
+  'sessions.outlineTitles',
   'sessions.watch',
   'sessions.unwatch',
   'sessions.show',

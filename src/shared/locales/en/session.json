@@ -311,6 +311,11 @@
     "outOfCredit": {
       "details": "Details",
       "copy": "Copy the message"
+    },
+    "outline": {
+      "label_one": "Outline, {{count}} message",
+      "label_other": "Outline, {{count}} messages",
+      "start": "Session start"
     }
   },
   "routine": {

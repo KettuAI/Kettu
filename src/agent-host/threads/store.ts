@@ -2,11 +2,12 @@
 // SQLite file, so no query runs on the event loop that streams the sessions.
 
 import type { Worker } from 'node:worker_threads'
+import type { OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
 import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
 import type { LogFn } from '../storage'
-import type { StoredBlob, StoredThread, ThreadPage, ThreadWrite } from './model'
+import type { StoredBlob, StoredOutline, StoredThread, ThreadPage, ThreadWrite } from './model'
 import type {
   ThreadDbStatus,
   ThreadErrorCode,
@@ -143,9 +144,16 @@ export class ThreadStore {
     return promise
   }
 
-  /** The page ending below `before`, or the latest page; null when the session has no thread. */
-  page(sessionId: string, before: number | null = null): Promise<ThreadPage | null> {
-    return this.request({ op: 'page', sessionId, before })
+  /**
+   * The page ending below `before`, or the latest page; with `from`, reaching back to the turn
+   * holding it. Null when the session has no thread.
+   */
+  page(
+    sessionId: string,
+    before: number | null = null,
+    from: number | null = null,
+  ): Promise<ThreadPage | null> {
+    return this.request({ op: 'page', sessionId, before, from })
   }
 
   /** Everything from `from` on; null when the session has no thread. */
@@ -174,6 +182,16 @@ export class ThreadStore {
   /** Whether an agent or user entry of the stored thread holds `text`. */
   mentions(sessionId: string, text: string): Promise<boolean> {
     return this.request({ op: 'mentions', sessionId, text })
+  }
+
+  /** The user messages of the stored thread, with their titles; null when it has none. */
+  outline(sessionId: string): Promise<StoredOutline | null> {
+    return this.request({ op: 'outline', sessionId })
+  }
+
+  /** Stores outline titles; false when the session has no stored thread to keep them with. */
+  setOutlineTitles(sessionId: string, titles: OutlineTitle[]): Promise<boolean> {
+    return this.request({ op: 'setOutlineTitles', sessionId, titles })
   }
 
   /** A call on the artifact records, which share the database. */

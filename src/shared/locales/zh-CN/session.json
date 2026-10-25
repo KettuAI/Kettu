@@ -292,6 +292,10 @@
     "outOfCredit": {
       "details": "详情",
       "copy": "复制原始信息"
+    },
+    "outline": {
+      "label_other": "大纲，{{count}} 条消息",
+      "start": "会话开始"
     }
   },
   "routine": {

@@ -557,8 +557,14 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.page': (params) => {
       const o = fields(params)
-      return { sessionId: sessionId(o), before: position(o, 'before') }
+      return {
+        sessionId: sessionId(o),
+        before: position(o, 'before'),
+        ...(o.from === undefined ? {} : { from: position(o, 'from') }),
+      }
     },
+    'sessions.outline': session,
+    'sessions.outlineTitles': session,
     'sessions.watch': session,
     'sessions.unwatch': session,
     'sessions.show': (params) => {

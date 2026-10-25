@@ -18,6 +18,7 @@ import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
+import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
 import { buildItems, lastSent, replyKeys, signatureOf, type Item } from './thread-items'
 import { TurnStatus } from './turn-status'
@@ -29,14 +30,36 @@ import { TurnStatus } from './turn-status'
 // growing by a fixed step: N items take log2(N / 40) passes instead of N / 60.
 const FIRST_ITEMS = 40
 
-function useShownFrom(total: number): number {
+// A jump in the outline renders every loaded item at once, and waits until they are committed.
+function useShownFrom(total: number): [number, () => Promise<void>] {
   const [limit, setLimit] = useState(FIRST_ITEMS)
+  const [all, setAll] = useState(false)
   useEffect(() => {
-    if (limit >= total) return
+    if (all || limit >= total) return
     const frame = requestAnimationFrame(() => startTransition(() => setLimit((l) => l * 2)))
     return () => cancelAnimationFrame(frame)
-  }, [limit, total])
-  return Math.max(0, total - limit)
+  }, [all, limit, total])
+  const shownFrom = all ? 0 : Math.max(0, total - limit)
+  const shown = useRef(shownFrom)
+  const waiting = useRef<(() => void)[]>([])
+  useEffect(() => {
+    shown.current = shownFrom
+    if (shownFrom !== 0) return
+    const resolved = waiting.current
+    waiting.current = []
+    for (const resolve of resolved) resolve()
+  })
+  const revealAll = useCallback(
+    (): Promise<void> =>
+      shown.current === 0
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            waiting.current.push(resolve)
+            setAll(true)
+          }),
+    [],
+  )
+  return [shownFrom, revealAll]
 }
 
 /** The tool calls of a thread, whose rows sit close together. */
@@ -126,9 +149,10 @@ export const Thread = memo(function Thread({
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
   useEffect(() => () => hoverReply(null), [sessionId])
   const sent = lastSent(order ?? [], signature)
-  const shownFrom = useShownFrom(items.length)
+  const [shownFrom, revealAll] = useShownFrom(items.length)
   const hasOlder = useThreadsStore((s) => (s.replicas[sessionId]?.older ?? null) !== null)
   const viewport = useRef<HTMLDivElement | null>(null)
+  const content = useRef<HTMLDivElement | null>(null)
   const nearStart = useCallback(() => {
     const el = viewport.current
     if (el && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) loadOlder(sessionId)
@@ -166,6 +190,7 @@ export const Thread = memo(function Thread({
           className="outline-none [scroll-timeline:--scroll-fade-top_y]"
         >
           <MessageScrollerContent
+            ref={content}
             className="mx-auto w-full max-w-thread gap-0 px-6 pt-5 pb-8"
             onPointerLeave={() => hoverReply(null)}
           >
@@ -235,6 +260,12 @@ export const Thread = memo(function Thread({
           className="rounded-full shadow-md"
         />
         <OlderLoading sessionId={sessionId} />
+        <MessageOutline
+          sessionId={sessionId}
+          viewport={viewport}
+          content={content}
+          revealAll={revealAll}
+        />
       </MessageScroller>
     </MessageScrollerProvider>
   )

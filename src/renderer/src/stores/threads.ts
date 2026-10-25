@@ -49,6 +49,7 @@ const KEEP_WATCHED = 4
 const watched: string[] = [] // most recent last
 const pending = new Map<string, PatchBatch[]>() // batches that arrived before their snapshot
 const snapshotsInFlight = new Map<string, Promise<void>>()
+const pagesInFlight = new Map<string, Promise<boolean>>()
 // Entries added live, with when they arrived; they animate in once, on their first render.
 const fresh = new Map<string, Map<string, number>>()
 const FRESH_FOR_MS = 1000
@@ -186,15 +187,52 @@ export function loadOlder(sessionId: string): void {
   const replica = useThreadsStore.getState().replicas[sessionId]
   if (!replica?.state || replica.older === null || replica.loadingOlder) return
   if (snapshotsInFlight.has(sessionId)) return
-  const before = replica.older
+  void requestPage(sessionId, replica, replica.older)
+}
+
+/**
+ * Loads everything back to the position `pos` in one request, for a jump to an entry the replica
+ * does not hold yet. False when a page failed or the replica went away.
+ */
+export async function loadThrough(sessionId: string, pos: number): Promise<boolean> {
+  for (;;) {
+    const waiting = snapshotsInFlight.get(sessionId) ?? pagesInFlight.get(sessionId)
+    if (waiting) {
+      await waiting
+      continue
+    }
+    const replica = useThreadsStore.getState().replicas[sessionId]
+    if (!replica?.state) return false
+    if (replica.older === null || replica.older <= pos) return true
+    if (!(await requestPage(sessionId, replica, replica.older, pos))) return false
+  }
+}
+
+/** Requests the page before `before`, or back to `from`; resolves with whether it arrived. */
+function requestPage(
+  sessionId: string,
+  replica: Replica,
+  before: number,
+  from?: number,
+): Promise<boolean> {
   setReplica(sessionId, { ...replica, loadingOlder: true })
-  host('sessions.page', { sessionId, before })
-    .then((page) => receivePage(sessionId, before, page))
+  const run = host(
+    'sessions.page',
+    from === undefined ? { sessionId, before } : { sessionId, before, from },
+  )
+    .then((page) => {
+      receivePage(sessionId, before, page)
+      return true
+    })
     .catch((error: unknown) => {
       console.warn(`Could not load older entries of ${sessionId}: ${errorMessage(error)}`)
       const current = useThreadsStore.getState().replicas[sessionId]
       if (current?.loadingOlder) setReplica(sessionId, { ...current, loadingOlder: false })
+      return false
     })
+    .finally(() => pagesInFlight.delete(sessionId))
+  pagesInFlight.set(sessionId, run)
+  return run
 }
 
 function receivePage(sessionId: string, before: number, page: OlderPage): void {
