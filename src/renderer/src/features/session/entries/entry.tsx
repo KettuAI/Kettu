@@ -12,6 +12,7 @@ import {
   UserEntry,
 } from './basic'
 import { ArtifactEntry } from './artifact-entry'
+import { SessionStartedEntry } from './session-started-entry'
 import { SubagentCard } from './subagent-card'
 import { ToolCard } from './tool-card'
 
@@ -40,6 +41,8 @@ export const Entry = memo(function Entry({
       return <ToolCard {...props} projectPath={projectPath} agentName={agentName} />
     case 'subagent':
       return <SubagentCard {...props} projectPath={projectPath} />
+    case 'session_started':
+      return <SessionStartedEntry {...props} />
     case 'session_message':
       return <SessionMessageEntry {...props} />
     case 'plan':

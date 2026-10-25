@@ -40,6 +40,14 @@ export interface QueuedPrompt {
   id: string
   content: UserContent[]
   at: number
+  /** Set for a prompt another session's agent sent: whose it is, for its label. */
+  from?: FromSession
+}
+
+/** The session that started or messaged another one through the session tools. */
+export interface FromSession {
+  sessionId: string
+  title: string
 }
 
 export interface SessionUsage {
@@ -94,7 +102,15 @@ export interface SlashCommand {
 export type ThreadEntry =
   // `at`: when the message was sent or began, for live messages only; a replay carries no times.
   // `steered`: sent into a running turn rather than as a turn of its own.
-  | { kind: 'user'; id: string; content: UserContent[]; at?: number; steered?: boolean }
+  | {
+      kind: 'user'
+      id: string
+      content: UserContent[]
+      at?: number
+      steered?: boolean
+      /** Set for a prompt another session's agent sent. */
+      from?: FromSession
+    }
   | {
       kind: 'agent'
       id: string
@@ -106,6 +122,8 @@ export type ThreadEntry =
   | { kind: 'thought'; id: string; markdown: string; streaming: boolean; durationMs?: number }
   | ToolEntry
   | { kind: 'subagent'; id: string; sessionId: string } // a sub-session the agent started here
+  // A session the agent started through the session tools, kept across a replay as an artifact's entry is.
+  | { kind: 'session_started'; id: string; sessionId: string; after: string | null }
   | { kind: 'session_message'; id: string; senderId: string | null; content: UserContent[] }
   | { kind: 'plan'; id: string; items: PlanItem[] }
   | {
@@ -541,6 +559,11 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
       )
     case 'subagent':
       return typeof value.sessionId === 'string'
+    case 'session_started':
+      return (
+        typeof value.sessionId === 'string' &&
+        (value.after === null || typeof value.after === 'string')
+      )
     case 'plan':
       return isListOf(value.items, isRecord)
     case 'notice':

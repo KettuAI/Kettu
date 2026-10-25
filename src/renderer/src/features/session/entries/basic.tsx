@@ -43,6 +43,7 @@ export interface EntryProps {
 }
 
 export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'user')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
@@ -66,6 +67,12 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
             </BubbleContent>
           </Bubble>
         </Message>
+      )}
+      {/* A prompt another session's agent sent says whose it is, under the bubble. */}
+      {entry.from && (
+        <span className="pr-0.5 text-xs text-tertiary">
+          {t('userEntry.from', { title: entry.from.title })}
+        </span>
       )}
       <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
     </div>

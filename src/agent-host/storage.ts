@@ -243,6 +243,7 @@ export interface SessionRecord {
   model?: string // the model option as its last turn left it, which an estimate of the cache needs
   pinnedAt?: number // when the user pinned it, which orders the Pinned group
   archivedAt?: number // when the user archived it; off the sidebar while set
+  startedBy?: string // the session whose agent started it through start_session
   configDir?: string // the configuration folder picked for its agent when it was created
 }
 
@@ -370,7 +371,15 @@ function queueOf(value: unknown): { queue?: QueuedPrompt[] } {
           ((c.type === 'text' && isString(c.text)) || (c.type === 'ref' && isRecord(c.ref))),
       ),
   )
-  return queue.length > 0 ? { queue } : {}
+  return queue.length > 0 ? { queue: queue.map(withFrom) } : {}
+}
+
+/** A queued prompt another session's agent sent keeps whose it is, for its label. */
+function withFrom(item: QueuedPrompt): QueuedPrompt {
+  const { from, ...rest } = item as QueuedPrompt & { from?: unknown }
+  return isRecord(from) && isString(from.sessionId) && isString(from.title)
+    ? { ...rest, from: { sessionId: from.sessionId, title: from.title } }
+    : rest
 }
 
 function cacheOf(value: unknown): { cache?: PromptCache } {
@@ -421,6 +430,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isString(item.model) ? { model: item.model } : {}),
       ...(isTime(item.pinnedAt) ? { pinnedAt: item.pinnedAt } : {}),
       ...(isTime(item.archivedAt) ? { archivedAt: item.archivedAt } : {}),
+      ...(isString(item.startedBy) ? { startedBy: item.startedBy } : {}),
       ...(isString(item.configDir) && item.configDir !== '' ? { configDir: item.configDir } : {}),
     })
   }

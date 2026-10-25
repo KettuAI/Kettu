@@ -9,6 +9,13 @@ import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { LogFn } from '../storage'
+import {
+  SessionTools,
+  isSessionToolName,
+  SESSION_INSTRUCTIONS,
+  SESSION_TOOLS,
+  type SessionToolsDeps,
+} from '../session-tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import {
   ArtifactTools,
@@ -25,6 +32,9 @@ export const BODY_BYTES = 6 * 1024 * 1024
 const TOKEN_BYTES = 32
 /** Where OpenCode names the calling session on each `tools/call`, a subagent's own included. */
 const SESSION_META = 'ai.opencode/sessionID'
+
+/** The service's `instructions`: the artifact tools' and the session tools', together. */
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS}`
 
 // The SDK loads with the first request rather than with the host, which starts faster without it.
 function loadSdk() {
@@ -46,6 +56,8 @@ export interface AgentProcess {
 export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   log: LogFn
   appVersion: string
+  /** The session manager behind the session tools. */
+  sessions: SessionToolsDeps
   /**
    * The session in memory that a call of `process` names, a subagent's counting as the session
    * it runs under; null for an id OverBench does not have.
@@ -112,10 +124,12 @@ export class ArtifactService {
   /** Each agent process's folder tokens by folder, kept until the process exits. */
   private readonly folders = new Map<AgentProcess, Map<string, string>>()
   private readonly tools: ArtifactTools
+  private readonly sessionTools: SessionTools
   private sdk: Promise<Sdk> | null = null
 
   constructor(private readonly deps: ArtifactServiceDeps) {
     this.tools = new ArtifactTools(deps)
+    this.sessionTools = new SessionTools(deps.sessions)
   }
 
   /** Listens on a port the system picks; without it, sessions attach with no service. */
@@ -344,9 +358,11 @@ export class ArtifactService {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
     const server = new sdk.Server(
       { name: SERVICE_NAME, title: 'OverBench', version: this.deps.appVersion },
-      { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+      { capabilities: { tools: {} }, instructions: SERVICE_INSTRUCTIONS },
     )
-    server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }))
+    server.setRequestHandler(ListToolsRequestSchema, () => ({
+      tools: [...TOOLS, ...SESSION_TOOLS],
+    }))
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: input, _meta: meta } = request.params
       const caller = this.callerOf(grant, meta)
@@ -355,6 +371,14 @@ export class ArtifactService {
           ErrorCode.InvalidParams,
           'The call names no session of this agent in this folder',
         )
+      }
+      if (isSessionToolName(name)) {
+        try {
+          return await this.sessionTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
       }
       if (!isToolName(name)) throw new McpError(ErrorCode.InvalidParams, `Unknown tool ${name}`)
       try {

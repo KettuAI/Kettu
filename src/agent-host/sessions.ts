@@ -26,6 +26,7 @@ import {
   UnknownEntryError,
   type AgentId,
   type ConfigOption,
+  type FromSession,
   type OlderPage,
   type Patch,
   type PatchBatch,
@@ -50,7 +51,7 @@ import {
   type SessionTarget,
 } from './acp/connection'
 import type { ForkPoint } from './acp/fork-point'
-import { ReplayKeeper, writePatch, type ArtifactWrite } from './artifacts/entries'
+import { ReplayKeeper, startedPatch, writePatch, type ArtifactWrite } from './artifacts/entries'
 import {
   addTokenTotals,
   isStopReason,
@@ -88,6 +89,7 @@ import { isOutOfCredit } from './out-of-credit'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
+import { cutReply, type ToolSession } from './session-tools'
 import {
   CONTEXT_REPORT,
   hasContextReport,
@@ -313,7 +315,7 @@ interface Live {
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
   /** A new session's first message, in its thread already, to send once the session has started. */
-  first: { content: UserContent[]; entryId: string } | null
+  first: { content: UserContent[]; entryId: string; from?: FromSession } | null
   /** The values New session chose, set once `session/new` answers, also after a sign-in. */
   startValues: Record<string, string | boolean>
   /** A turn the host ended after a Stop the agent did not confirm, until its prompt is answered. */
@@ -326,6 +328,8 @@ interface Live {
   idleSince: number | null
   hiddenSince: number | null
   releaseTimer: ReturnType<typeof setTimeout> | null
+  /** The agent that asked for this session to be archived once its running turn ends. */
+  archiveAfterTurn: string | null
 }
 
 const TITLE_LENGTH = 60
@@ -1093,6 +1097,7 @@ export class SessionManager {
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
+      archiveAfterTurn: null,
     }
     this.live.set(record.id, live)
     this.deps.agents.sessionsChanged(record.agentId)
@@ -1458,6 +1463,11 @@ export class SessionManager {
   // Creating, opening and recovering.
 
   /** Without a `projectPath`, the session gets a scratch folder of its own. */
+  /**
+   * Without a `projectPath`, the session gets a scratch folder of its own. `portId` is the window
+   * that sent the first message, whose draft a failed start hands it back to; the session tools
+   * start sessions with no window and none.
+   */
   async create(
     params: {
       agentId: AgentId
@@ -1466,8 +1476,14 @@ export class SessionManager {
       options?: Record<string, string | boolean>
       prompt?: UserContent[]
       preparedId?: string
+      /** The session whose agent started it through the session tools. */
+      startedBy?: string
+      /** Whose prompt the first message is, when another session's agent sends it. */
+      from?: FromSession
+      /** Its title, when another session's agent starts it; the prompt's first line otherwise. */
+      title?: string
     },
-    portId: string,
+    portId?: string,
   ): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
@@ -1501,7 +1517,7 @@ export class SessionManager {
       agentId: params.agentId,
       acpSessionId: '',
       projectPath,
-      title: null,
+      title: params.title ?? null,
       createdAt: now,
       updatedAt: now,
       lastViewedAt: now,
@@ -1510,6 +1526,7 @@ export class SessionManager {
       description: null,
       branch: null,
     }
+    if (params.startedBy !== undefined) record.startedBy = params.startedBy
     const { [ULTRACODE_OPTION_ID]: ultracode, ...options } = params.options ?? {}
     if (typeof ultracode === 'boolean' && hasUltracode(record.agentId)) record.ultracode = ultracode
     const live = this.makeLive(record, false, 'starting')
@@ -1517,7 +1534,13 @@ export class SessionManager {
     live.used = true
     // The message shows at once and goes out as the session's first turn, so it never enters the
     // index without it.
-    if (prompt) live.first = { content: prompt, entryId: this.addPrompt(live, prompt, now) }
+    if (prompt) {
+      live.first = {
+        content: prompt,
+        entryId: this.addPrompt(live, prompt, now, params.from),
+        ...(params.from ? { from: params.from } : {}),
+      }
+    }
     this.touch(live.id)
     try {
       live.startValues = options
@@ -1530,7 +1553,7 @@ export class SessionManager {
           error.code === 'not_found' &&
           (error.data as { reason?: unknown } | undefined)?.reason === REMOVED_WHILE_STARTING
         // The window that sent the message has gone, so the host keeps it for the next one.
-        if (prompt && !removed && !this.deps.portOpen(portId)) {
+        if (prompt && portId !== undefined && !removed && !this.deps.portOpen(portId)) {
           this.returned.push({ sessionId: null, content: prompt, at: this.now() })
           this.saveReturned()
           const ids = attachmentIds(prompt)
@@ -1972,7 +1995,12 @@ export class SessionManager {
     ])
     this.update(live, {
       queue: [
-        { id: randomUUID(), content: first.content, at: this.now() },
+        {
+          id: randomUUID(),
+          content: first.content,
+          at: this.now(),
+          ...(first.from ? { from: first.from } : {}),
+        },
         ...live.thread.session.queue,
       ],
       queuePaused: true,
@@ -1987,7 +2015,7 @@ export class SessionManager {
    */
   private holdFirst(live: Live): void {
     if (!live.saved || !live.first) return
-    const { content } = live.first
+    const { content, from } = live.first
     live.first = null
     this.emit(live, [
       {
@@ -2003,7 +2031,7 @@ export class SessionManager {
     ])
     const queue = live.thread.session.queue
     this.update(live, {
-      queue: [{ id: randomUUID(), content, at: this.now() }, ...queue],
+      queue: [{ id: randomUUID(), content, at: this.now(), ...(from ? { from } : {}) }, ...queue],
       queuePaused: true,
     })
     this.persist(live)
@@ -2925,16 +2953,21 @@ export class SessionManager {
     this.sendPrompt(live, hydrated)
   }
 
-  private sendPrompt(live: Live, content: UserContent[]): void {
+  private sendPrompt(live: Live, content: UserContent[], from?: FromSession): void {
     live.used = true
     const now = this.now()
-    this.startTurn(live, content, now, this.addPrompt(live, content, now))
+    this.startTurn(live, content, now, this.addPrompt(live, content, now, from))
   }
 
   /** The user entry of a prompt, and the title it gives a session that has none; its entry id. */
-  private addPrompt(live: Live, content: UserContent[], now: number): string {
+  private addPrompt(live: Live, content: UserContent[], now: number, from?: FromSession): string {
     const entryId = this.nextId(live)
-    this.emit(live, [{ op: 'entry.add', entry: { kind: 'user', id: entryId, content, at: now } }])
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: { kind: 'user', id: entryId, content, at: now, ...(from ? { from } : {}) },
+      },
+    ])
     if (live.thread.session.title === null) {
       const title = fallbackTitle(content)
       if (title) this.update(live, { title })
@@ -3197,7 +3230,7 @@ export class SessionManager {
     const [next, ...rest] = queue
     if (!next || queuePaused || !canSend(status)) return
     this.update(live, { queue: rest })
-    this.sendPrompt(live, next.content)
+    this.sendPrompt(live, next.content, next.from)
   }
 
   private pauseQueue(live: Live): void {
@@ -3440,6 +3473,22 @@ export class SessionManager {
     this.deps.mcp?.turnEnded(live.id)
     this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
+    const byAgent = live.archiveAfterTurn
+    if (byAgent !== null) {
+      live.archiveAfterTurn = null
+      // After the turn's own entries, so the notice and the close come once it has ended. A
+      // session being closed or deleted already is left as the user asked.
+      if (!live.closing) {
+        queueMicrotask(() => {
+          void this.archiveByAgent(live.id, byAgent).catch((error: unknown) => {
+            this.deps.diagnostics.log(
+              'warn',
+              `Could not archive session ${live.id}: ${(error as Error).message}`,
+            )
+          })
+        })
+      }
+    }
     if (!stopReason) return null
     const id = this.nextId(live)
     this.emit(live, [
@@ -3893,9 +3942,257 @@ export class SessionManager {
     this.saveRecord(sessionId)
   }
 
-  /** Brings back the archived session at the top of this one's tree, if it is archived. */
+  // The session tools: what the artifacts service calls, under the caller's id.
+
+  /** A session the tools list: its record and live view, narrowed. */
+  private toolSession(record: SessionRecord): ToolSession {
+    const live = this.live.get(record.id)
+    return {
+      id: record.id,
+      title: record.customTitle ?? live?.thread.session.title ?? record.title,
+      agentId: record.agentId,
+      status: live?.thread.session.status ?? 'closed',
+      updatedAt: live?.thread.session.updatedAt ?? record.updatedAt,
+      createdAt: record.createdAt,
+      parentId: record.parentId,
+      startedBy: record.startedBy ?? null,
+      archived: this.isArchived(record),
+      projectPath: record.projectPath,
+    }
+  }
+
+  /** Archived itself, or below a parent that is: a sub-session leaves with its tree. */
+  private isArchived(record: SessionRecord): boolean {
+    let current: SessionRecord | undefined = record
+    const seen = new Set<string>()
+    while (current && !seen.has(current.id)) {
+      if (current.archivedAt !== undefined) return true
+      seen.add(current.id)
+      current =
+        current.parentId === null
+          ? undefined
+          : (this.live.get(current.parentId)?.record ?? this.records.get(current.parentId))
+    }
+    return false
+  }
+
+  /** The session as a tool sees it; null for one no session list shows. */
+  sessionInfo(sessionId: string): ToolSession | null {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    if (!record || record.origin === 'subagent' || this.live.get(sessionId)?.prepared) return null
+    return this.toolSession(record)
+  }
+
+  /** The project's sessions and their sub-sessions, as the tools list them, newest first. */
+  toolSessions(projectPath: string): ToolSession[] {
+    const key = pathKey(projectPath, this.deps.platform)
+    const ids = new Set<string>([...this.records.keys(), ...this.live.keys()])
+    const out: ToolSession[] = []
+    for (const id of ids) {
+      const info = this.sessionInfo(id)
+      if (!info || pathKey(info.projectPath, this.deps.platform) !== key) continue
+      out.push(info)
+    }
+    return out.sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
+  /** The sessions in the index or in memory that the given session's agent started. */
+  startedBy(callerId: string): ToolSession[] {
+    const seen = new Map<string, SessionRecord>()
+    for (const record of this.records.values()) seen.set(record.id, record)
+    for (const live of this.live.values()) seen.set(live.id, live.record)
+    const out: ToolSession[] = []
+    for (const record of seen.values()) {
+      if (record.startedBy === callerId) out.push(this.toolSession(record))
+    }
+    return out
+  }
+
+  /** The latest agent message of a session's thread, from memory or the stored one. */
+  async lastReply(sessionId: string): Promise<string | null> {
+    const live = this.live.get(sessionId)
+    if (live) {
+      this.flushPatches(live)
+      const { order, byId } = live.thread
+      for (let i = order.length - 1; i >= 0; i--) {
+        const entry = byId[order[i]!]
+        if (entry?.kind === 'agent' && entry.markdown.trim() !== '') return cutReply(entry.markdown)
+      }
+      return null
+    }
+    const record = this.recordOf(sessionId)
+    const stored = await this.readThread(record)
+    if (!stored) return null
+    for (let i = stored.entries.length - 1; i >= 0; i--) {
+      const entry = stored.entries[i]!.entry
+      if (entry.kind === 'agent' && entry.markdown.trim() !== '') return cutReply(entry.markdown)
+    }
+    return null
+  }
+
+  /** A session's agent's display name, for the notice an archive leaves. */
+  agentName(sessionId: string): string {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    return record ? this.deps.agents.name(record.agentId) : ''
+  }
+
+  /** The session's title as another thread's label shows it, "Untitled session" when it has none. */
+  toolName(sessionId: string): string {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    if (!record) return t('session.untitled')
+    return (
+      record.customTitle ??
+      this.live.get(sessionId)?.thread.session.title ??
+      record.title ??
+      t('session.untitled')
+    )
+  }
+
+  /** Sets a session's agent title, which a title the user gave still wins over. */
+  renameByAgent(sessionId: string, title: string): void {
+    const record = this.recordOf(sessionId)
+    if (record.customTitle !== undefined) return
+    const live = this.live.get(sessionId)
+    if (live) {
+      this.update(live, { title })
+      this.persist(live)
+      return
+    }
+    record.title = title
+    this.saveRecord(sessionId)
+  }
+
+  /** Archives the session when its running turn ends, however it ends; at once when none runs. */
+  archiveWhenIdle(sessionId: string, byAgent: string): void {
+    const live = this.live.get(sessionId)
+    if (live?.turn && !live.turn.ended) {
+      live.archiveAfterTurn = byAgent
+      return
+    }
+    void this.archiveByAgent(sessionId, byAgent).catch((error: unknown) => {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not archive session ${sessionId}: ${(error as Error).message}`,
+      )
+    })
+  }
+
+  /** Archives a session at once, as the session menu's Archive does; a sub-session, on its own. */
+  async archiveByAgent(sessionId: string, byAgent: string): Promise<void> {
+    const record = this.recordOf(sessionId)
+    // A session that is not in memory gets its stored thread back, so the notice stays with it.
+    if (!this.live.has(sessionId) && this.deps.threads) {
+      const stored = await this.readThread(record).catch(() => null)
+      if (stored) await this.revive(sessionId)
+    }
+    this.archiveNotice(sessionId, byAgent)
+    if (record.parentId === null) {
+      await this.archive(sessionId)
+      return
+    }
+    await this.settled(sessionId)
+    await this.closeAll([...this.descendants(sessionId), record], true)
+    delete record.pinnedAt
+    record.archivedAt = this.now()
+    this.saveRecord(sessionId)
+  }
+
+  /** The info notice an archived session's thread gets, "Claude Code archived this session". */
+  private archiveNotice(sessionId: string, byAgent: string): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('notice.archivedByAgent', { agent: byAgent }),
+        },
+      },
+    ])
+  }
+
+  /**
+   * Starts a sub-session of the caller with its first prompt, as New sub-session would: the
+   * caller's project and parent, and with the caller's agent its model, level and mode.
+   */
+  async startFromTool(
+    callerId: string,
+    params: { prompt: string; title?: string; agentId?: AgentId },
+  ): Promise<string> {
+    const caller = this.recordOf(callerId)
+    const agentId = params.agentId ?? caller.agentId
+    const from = { sessionId: callerId, title: this.toolName(callerId) }
+    const options: Record<string, string | boolean> = {}
+    if (agentId === caller.agentId) {
+      const live = this.live.get(callerId)
+      const config = live?.thread.session.config ?? []
+      for (const option of config) {
+        if (option.id === ULTRACODE_OPTION_ID) continue
+        if (
+          option.category !== 'model' &&
+          option.category !== 'thought_level' &&
+          option.category !== 'mode'
+        ) {
+          continue
+        }
+        options[option.id] = option.value
+      }
+    } else {
+      Object.assign(options, this.deps.options?.rememberedOf(agentId) ?? {})
+    }
+    const summary = await this.create({
+      agentId,
+      projectPath: caller.projectPath,
+      parentId: callerId,
+      options,
+      prompt: [{ type: 'text', text: params.prompt }],
+      startedBy: callerId,
+      from,
+      ...(params.title === undefined ? {} : { title: params.title }),
+    })
+    const live = this.live.get(callerId)
+    if (live) {
+      this.emit(live, [startedPatch(live.thread, summary.id, () => this.nextId(live))])
+      live.used = true
+    }
+    return summary.id
+  }
+
+  /** Prompts a session the caller started, or queues the prompt while that session works. */
+  async sendFromTool(
+    sessionId: string,
+    text: string,
+    from: FromSession,
+  ): Promise<'sent' | 'queued'> {
+    const content: UserContent[] = [{ type: 'text', text }]
+    this.unarchive(sessionId)
+    const live = await this.revive(sessionId)
+    const { status, queue, queuePaused } = live.thread.session
+    if (canSend(status) && (queue.length === 0 || queuePaused)) {
+      this.sendPrompt(live, content, from)
+      return 'sent'
+    }
+    if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
+      throw busyError(status)
+    }
+    const item = { id: randomUUID(), content, at: this.now(), from }
+    this.update(live, { queue: [...queue, item] })
+    this.persist(live)
+    this.touch(live.id)
+    return 'queued'
+  }
+
+  /** Brings back the archived session at the top of this one's tree, or the session itself. */
   unarchive(sessionId: string): void {
     let record = this.recordOf(sessionId)
+    if (record.archivedAt !== undefined) {
+      delete record.archivedAt
+      this.saveRecord(record.id)
+      return
+    }
     while (record.parentId !== null && this.has(record.parentId)) {
       record = this.recordOf(record.parentId)
     }

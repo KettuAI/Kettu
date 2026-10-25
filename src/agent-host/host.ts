@@ -210,6 +210,20 @@ export class AgentHost {
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
+      sessions: {
+        info: (sessionId) => this.sessions.sessionInfo(sessionId),
+        list: (projectPath) => this.sessions.toolSessions(projectPath),
+        lastReply: (sessionId) => this.sessions.lastReply(sessionId),
+        rename: (sessionId, title) => this.sessions.renameByAgent(sessionId, title),
+        archiveAfterTurn: (sessionId, agentName) =>
+          this.sessions.archiveWhenIdle(sessionId, agentName),
+        archiveNow: (sessionId, agentName) => this.sessions.archiveByAgent(sessionId, agentName),
+        start: (callerId, params) => this.sessions.startFromTool(callerId, params),
+        send: (sessionId, text, from) => this.sessions.sendFromTool(sessionId, text, from),
+        started: (callerId) => this.sessions.startedBy(callerId),
+        name: (sessionId) => this.sessions.toolName(sessionId),
+        agentName: (sessionId) => this.sessions.agentName(sessionId),
+      },
       log,
       appVersion: options.appVersion,
     })
