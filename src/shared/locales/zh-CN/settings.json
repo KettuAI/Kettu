@@ -392,7 +392,7 @@
       "name": "更新",
       "keywords": "更新 检查 下载 重启 update check download restart",
       "upToDateShort": "已是最新版本",
-      "upToDate": "已是最新版本",
+      "notChecked": "还没有检查过",
       "upToDateChecked": "已是最新版本 · 上次检查：{{ago}}",
       "checking": "正在检查更新…",
       "downloading": "正在下载 {{version}}",

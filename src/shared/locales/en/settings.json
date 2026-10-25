@@ -395,7 +395,7 @@
       "name": "Updates",
       "keywords": "update check download restart",
       "upToDateShort": "Up to date",
-      "upToDate": "You're up to date",
+      "notChecked": "Not checked yet",
       "upToDateChecked": "You're up to date · Checked {{ago}}",
       "checking": "Checking for updates…",
       "downloading": "Downloading {{version}}",
