@@ -205,7 +205,7 @@ export function AutomaticUpdates() {
     mode === 'link'
       ? [
           { value: 'notify', label: t('about.automatic.linkNotify') },
-          { value: 'off', label: t('about.automatic.off') },
+          { value: 'off', label: t('about.automatic.linkOff') },
         ]
       : [
           { value: 'download', label: t('about.automatic.download') },

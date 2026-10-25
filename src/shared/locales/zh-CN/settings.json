@@ -429,7 +429,8 @@
       "restart": "自动下载，重启时安装",
       "notify": "下载前询问",
       "off": "关闭：仅在我要求时检查",
-      "linkNotify": "有新版本时通知我"
+      "linkNotify": "有新版本时通知我",
+      "linkOff": "关闭"
     },
     "source": {
       "name": "源代码"

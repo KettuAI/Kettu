@@ -432,7 +432,8 @@
       "restart": "Download, install when I restart",
       "notify": "Ask before downloading",
       "off": "Off: check only when I ask",
-      "linkNotify": "Tell me about new versions"
+      "linkNotify": "Tell me about new versions",
+      "linkOff": "Off"
     },
     "source": {
       "name": "Source code"
