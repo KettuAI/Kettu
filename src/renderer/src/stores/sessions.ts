@@ -97,7 +97,7 @@ function buildTree(
   const children = new Map<string, SessionSummary[]>()
   const roots: SessionSummary[] = []
   for (const s of Object.values(byId)) {
-    if (!within(s)) continue
+    if (!within(s) || s.archivedAt) continue
     if (s.parentId && byId[s.parentId]) {
       const list = children.get(s.parentId) ?? []
       list.push(s)

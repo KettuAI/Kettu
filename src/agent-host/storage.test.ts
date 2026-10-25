@@ -232,6 +232,32 @@ describe('the host files', () => {
     expect(
       parseSessionsFile({ sessions: [{ ...session, queue: [{ id: 'q1', content: 'x', at: 5 }] }] }),
     ).toEqual({ version: 1, sessions: [session] })
+    // A prompt another session's agent sent keeps whose it is, and drops a from that does not parse.
+    const from = { sessionId: 's0', title: 'From another agent' }
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5, from }] }],
+      }),
+    ).toEqual({
+      version: 1,
+      sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5, from }] }],
+    })
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5, from: { title: 1 } }] }],
+      }),
+    ).toEqual({ version: 1, sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5 }] }] })
+  })
+
+  it('keeps the session an agent started, and drops one that does not parse', () => {
+    expect(parseSessionsFile({ sessions: [{ ...session, startedBy: 's0' }] })).toEqual({
+      version: 1,
+      sessions: [{ ...session, startedBy: 's0' }],
+    })
+    expect(parseSessionsFile({ sessions: [{ ...session, startedBy: 7 }] })).toEqual({
+      version: 1,
+      sessions: [session],
+    })
   })
 
   it('keeps the configuration folder a session started with, and drops one that does not parse', () => {

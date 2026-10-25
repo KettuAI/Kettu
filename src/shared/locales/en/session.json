@@ -102,6 +102,13 @@
     "from": "From {{title}}",
     "fromParent": "From the parent session"
   },
+  "userEntry": {
+    "from": "From {{title}}"
+  },
+  "sessionStarted": {
+    "label": "Started <title>{{title}}</title>",
+    "missing": "Started a session"
+  },
   "compaction": {
     "inProgress": "Compacting context…",
     "completed": "Context compacted",

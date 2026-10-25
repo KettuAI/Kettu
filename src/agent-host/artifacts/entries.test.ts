@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { ArtifactEntry, SessionView, ThreadEntry, ThreadState } from '@shared/thread'
-import { artifactWrite, ReplayKeeper, writePatch, type ArtifactWrite } from './entries'
+import {
+  artifactWrite,
+  ReplayKeeper,
+  startedPatch,
+  writePatch,
+  type ArtifactWrite,
+} from './entries'
 
 const ID = 'art_01JB2QZ8X4K7M9N3P5R6S8T0VW'
 const OTHER = 'art_01JB2QZ8X4K7M9N3P5R6S8T0VX'
@@ -181,5 +187,28 @@ describe('ReplayKeeper', () => {
     const keeper = new ReplayKeeper(threadOf([user('e:1'), card('a:2', { after: 'e:3' })]))
     expect(keeper.after(turnEnd('e:3'))).toEqual([])
     expect(new ReplayKeeper(threadOf([user('e:1'), tool('t:2')])).empty).toBe(true)
+  })
+
+  it('keeps a started session as it keeps an artifact', () => {
+    const keeper = new ReplayKeeper(
+      threadOf([
+        user('e:1'),
+        tool('t:2'),
+        { kind: 'session_started', id: 'e:3', sessionId: 'child', after: 't:2' },
+        { kind: 'session_started', id: 'e:4', sessionId: 'gone', after: 't:gone' },
+      ]),
+    )
+    expect(keeper.after(tool('t:2')).map((e) => e.id)).toEqual(['e:3'])
+    expect(keeper.rest().map((e) => e.id)).toEqual(['e:4'])
+  })
+})
+
+describe('startedPatch', () => {
+  it('adds the started session after the agent entry before it', () => {
+    const thread = threadOf([user('e:1'), tool('t:2'), turnEnd('e:3')])
+    expect(startedPatch(thread, 'child', () => 'e:4')).toEqual({
+      op: 'entry.add',
+      entry: { kind: 'session_started', id: 'e:4', sessionId: 'child', after: 't:2' },
+    })
   })
 })

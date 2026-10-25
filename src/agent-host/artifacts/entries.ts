@@ -4,6 +4,8 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ArtifactAction, ArtifactEntry, Patch, ThreadEntry, ThreadState } from '@shared/thread'
 
+type OwnEntry = Extract<ThreadEntry, { kind: 'artifact' | 'session_started' }>
+
 const ACTIONS: Record<string, ArtifactAction> = {
   create_artifact: 'create',
   update_artifact: 'update',
@@ -18,6 +20,29 @@ export interface ArtifactWrite {
   action: ArtifactAction
   /** The version written; null for a deletion. */
   version: number | null
+}
+
+/** The agent's entry before the thread's end, skipping the ones the host added itself. */
+function agentEntryBefore(thread: ThreadState): string | null {
+  const { order, byId } = thread
+  for (let i = order.length - 1; i >= 0; i--) {
+    const entry = byId[order[i]!]
+    if (entry && !OWN.has(entry.kind)) return entry.id
+  }
+  return null
+}
+
+/** The entry a session another one's agent started adds to the caller's thread. */
+export function startedPatch(thread: ThreadState, sessionId: string, newId: () => string): Patch {
+  return {
+    op: 'entry.add',
+    entry: {
+      kind: 'session_started',
+      id: newId(),
+      sessionId,
+      after: agentEntryBefore(thread),
+    },
+  }
 }
 
 /**
@@ -47,7 +72,13 @@ export async function artifactWrite(
 }
 
 /** Entries the host adds itself, which an agent's replay never sends again. */
-const OWN = new Set<ThreadEntry['kind']>(['notice', 'turn_end', 'git', 'artifact'])
+const OWN = new Set<ThreadEntry['kind']>([
+  'notice',
+  'turn_end',
+  'git',
+  'artifact',
+  'session_started',
+])
 
 /**
  * The patch a write makes: the latest turn's entry for the same artifact takes it, or a new entry
@@ -88,12 +119,12 @@ export function writePatch(thread: ThreadState, write: ArtifactWrite, newId: () 
 }
 
 /**
- * A thread's artifact entries, kept while a replay rebuilds the thread: each goes back after the
- * entry it followed, or, when the replay never sends that one, at the end of its turn, counted by
- * user messages.
+ * A thread's entries the host added and keeps while a replay rebuilds it: each goes back after
+ * the entry it followed, or, when the replay never sends that one, at the end of its turn,
+ * counted by user messages.
  */
 export class ReplayKeeper {
-  private kept: { entry: ArtifactEntry; turn: number }[] = []
+  private kept: { entry: OwnEntry; turn: number }[] = []
   private users = 0
 
   constructor(thread: ThreadState) {
@@ -101,7 +132,9 @@ export class ReplayKeeper {
     for (const id of thread.order) {
       const entry = thread.byId[id]
       if (entry?.kind === 'user') turn++
-      else if (entry?.kind === 'artifact') this.kept.push({ entry, turn })
+      else if (entry?.kind === 'artifact' || entry?.kind === 'session_started') {
+        this.kept.push({ entry, turn })
+      }
     }
   }
 
@@ -110,25 +143,25 @@ export class ReplayKeeper {
   }
 
   /** The kept entries that go in before this entry of the replay. */
-  before(entry: ThreadEntry): ArtifactEntry[] {
+  before(entry: ThreadEntry): OwnEntry[] {
     if (entry.kind !== 'user') return []
     const ended = this.users++
     return this.take((k) => k.turn <= ended)
   }
 
   /** The kept entries that go in right after this entry of the replay. */
-  after(entry: ThreadEntry): ArtifactEntry[] {
+  after(entry: ThreadEntry): OwnEntry[] {
     if (OWN.has(entry.kind)) return []
     return this.take((k) => k.entry.after === entry.id)
   }
 
   /** What the replay never came back to, for its end. */
-  rest(): ArtifactEntry[] {
+  rest(): OwnEntry[] {
     return this.take(() => true)
   }
 
-  private take(test: (kept: { entry: ArtifactEntry; turn: number }) => boolean): ArtifactEntry[] {
-    const out: ArtifactEntry[] = []
+  private take(test: (kept: { entry: OwnEntry; turn: number }) => boolean): OwnEntry[] {
+    const out: OwnEntry[] = []
     this.kept = this.kept.filter((k) => {
       if (!test(k)) return true
       out.push(k.entry)

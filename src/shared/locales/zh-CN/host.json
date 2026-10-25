@@ -28,6 +28,7 @@
     "attachmentDenied": "OverBench 没有读取 {{name}} 的权限。",
     "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的。请在「设置 › Agent」中切换回该目录以继续这个会话。",
     "topLevelOnly": "只有顶层会话可以置顶或归档",
+    "untitled": "未命名会话",
     "subagent": {
       "noPrompt": "子 Agent 会话从父会话接收指令",
       "noFork": "子 Agent 会话不能分叉",
@@ -53,6 +54,7 @@
       "titleNoModel": "{{agent}} 的模型服务商余额不足"
     },
     "turnFailed": "本轮对话失败",
+    "archivedByAgent": "{{agent}} 已归档此会话",
     "stopped": {
       "title": "{{agent}} 在本轮对话完成前退出了"
     },

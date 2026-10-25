@@ -12,6 +12,7 @@ import { ThreadStore } from '../threads/store'
 import { ArtifactService, BODY_BYTES, type AgentProcess } from './service'
 import { ArtifactStore } from './store'
 import { INSTRUCTIONS } from './tools'
+import { SESSION_INSTRUCTIONS } from '../session-tools'
 
 const cleanups: (() => Promise<void>)[] = []
 
@@ -50,6 +51,21 @@ async function setup(sessionOf: (process: AgentProcess, id: string) => string | 
     sessionTitle: () => 'A session',
     runningTurn: () => null,
     sessionOf,
+    sessions: {
+      info: () => null,
+      list: () => [],
+      lastReply: async () => null,
+      rename: () => {},
+      archiveAfterTurn: () => {},
+      archiveNow: async () => {},
+      start: async () => {
+        throw new Error('No session tools in this test')
+      },
+      send: async () => 'sent',
+      started: () => [],
+      name: () => 'A session',
+      agentName: () => 'Fake agent',
+    },
     log,
     appVersion: '0.0.0-test',
   })
@@ -151,10 +167,10 @@ describe('the artifacts service', () => {
   it('tells agents what it is for and serves the seven tools', async () => {
     const { connect } = await setup()
     const { client } = await connect('s1', '/p')
-    expect(client.getInstructions()).toBe(INSTRUCTIONS)
+    expect(client.getInstructions()).toBe(`${INSTRUCTIONS} ${SESSION_INSTRUCTIONS}`)
     expect(client.getServerVersion()).toMatchObject({ name: 'overbench', version: '0.0.0-test' })
     const { tools } = await client.listTools()
-    expect(tools.map((tool) => tool.name)).toHaveLength(7)
+    expect(tools.map((tool) => tool.name)).toHaveLength(13)
     expect(tools.find((tool) => tool.name === 'delete_artifact')?.annotations).toMatchObject({
       destructiveHint: true,
     })
@@ -371,7 +387,7 @@ describe('the artifacts service', () => {
     const servers = service.folderServers(agent, '/p', 's1')
     service.folderServers(agent, '/q', 's3')
     const { client } = await connect('s1', '/p', servers)
-    expect((await client.listTools()).tools).toHaveLength(7)
+    expect((await client.listTools()).tools).toHaveLength(13)
     const list = (meta?: Record<string, unknown>) =>
       client.callTool({ name: 'list_artifacts', arguments: {}, ...(meta ? { _meta: meta } : {}) })
     expect(await list({ 'ai.opencode/sessionID': 'acp-1' })).toMatchObject({

@@ -93,6 +93,13 @@
     "from": "来自 {{title}}",
     "fromParent": "来自父会话"
   },
+  "userEntry": {
+    "from": "来自 {{title}}"
+  },
+  "sessionStarted": {
+    "label": "已启动 <title>{{title}}</title>",
+    "missing": "已启动一个会话"
+  },
   "compaction": {
     "inProgress": "正在压缩上下文…",
     "completed": "上下文已压缩",

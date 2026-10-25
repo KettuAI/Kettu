@@ -28,6 +28,7 @@
     "attachmentDenied": "OverBench isn't allowed to read {{name}}.",
     "otherConfigFolder": "This session was started with the configuration folder {{path}}. Switch back to it in Settings › Agents to continue it.",
     "topLevelOnly": "Only a top-level session can be pinned or archived",
+    "untitled": "Untitled session",
     "subagent": {
       "noPrompt": "A subagent session takes its instructions from its parent",
       "noFork": "A subagent session cannot be forked",
@@ -53,6 +54,7 @@
       "titleNoModel": "{{agent}}'s model provider is out of credit"
     },
     "turnFailed": "The turn failed",
+    "archivedByAgent": "{{agent}} archived this session",
     "stopped": {
       "title": "{{agent}} exited before finishing this turn"
     },

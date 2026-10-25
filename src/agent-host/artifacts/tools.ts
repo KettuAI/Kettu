@@ -428,7 +428,7 @@ export function applyEdits(source: string, list: readonly Edit[]): string {
 }
 
 /** Lowercase, without accents, for matching titles. */
-function folded(text: string): string {
+export function folded(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 }
 
