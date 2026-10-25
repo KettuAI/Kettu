@@ -10,6 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CacheChip } from '@renderer/features/prompt-cache/cache-chip'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
@@ -97,18 +98,25 @@ export function SessionHeader({
           </Button>
         )}
         <DropdownMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-compact"
-                aria-label={t('row.more')}
-                className="text-muted-foreground"
-              />
-            }
-          >
-            <ChevronDownIcon className="size-3.5" />
-          </DropdownMenuTrigger>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-compact"
+                      aria-label={t('row.more')}
+                      className="text-muted-foreground"
+                    />
+                  }
+                />
+              }
+            >
+              <ChevronDownIcon className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>{t('row.more')}</TooltipContent>
+          </Tooltip>
           <DropdownMenuContent
             finalFocus={rename.menu.finalFocus}
             onKeyDown={runSessionMenuAccelerator}
