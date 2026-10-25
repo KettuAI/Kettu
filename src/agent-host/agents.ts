@@ -61,6 +61,7 @@ import {
   type Detection,
   type LaunchSpec,
 } from './catalog'
+import { removeReportThreads } from './codex-report-threads'
 import type { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { getEnv, isExecutableFile, type Env } from './find-command'
@@ -351,6 +352,9 @@ export class AgentManager {
   private updateAbort: AbortController | null = null
   private updateTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
+  /** Whether this launch tried removing the archived Codex threads the reports left. */
+  private reportThreadsTried = false
+  private codexReportThreadsRemovedAt: number | null = null
   private readonly cliVersions: CliVersions
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
@@ -445,6 +449,45 @@ export class AgentManager {
     }
     this.emit(slot)
     if (program) void this.askBinaryVersion(slot, program, env)
+    this.removeReportThreadsOnce(slot, detection, env)
+  }
+
+  /**
+   * The one-time removal of the archived Codex threads the plan limit reports left in its
+   * history, at the first detection that finds Codex available in a launch: its own binary,
+   * the `CODEX_PATH` its launch runs, listed and deleted through its app-server. A failure is
+   * logged, and the next launch tries again.
+   */
+  private removeReportThreadsOnce(slot: Slot, detection: Detection, env: Env): void {
+    if (slot.def.id !== 'codex' || detection.state !== 'available') return
+    if (this.reportThreadsTried || this.codexReportThreadsRemovedAt !== null || this.stopped) return
+    // Tried once a launch: without the binary the adapter would run through npm's `codex.js`.
+    this.reportThreadsTried = true
+    const binary = detection.spec?.env.CODEX_PATH ?? getEnv(env, 'CODEX_PATH', this.deps.platform)
+    if (!binary) return
+    void removeReportThreads({
+      binary,
+      env,
+      reportsDir: this.deps.reportsDir,
+      platform: this.deps.platform,
+      version: this.deps.appVersion,
+      log: (level, message) => this.deps.diagnostics.log(level, message),
+    }).then(
+      (count) => {
+        this.codexReportThreadsRemovedAt = Date.now()
+        this.remember()
+        this.deps.diagnostics.log(
+          'info',
+          `Removed ${count} archived Codex thread${count === 1 ? '' : 's'} that its plan limit reports left; this runs once`,
+        )
+      },
+      (error: unknown) => {
+        this.deps.diagnostics.log(
+          'warn',
+          `Could not remove the archived Codex threads its plan limit reports left, so the next launch tries again: ${(error as Error).message}`,
+        )
+      },
+    )
   }
 
   /** A program's `--version` answer: the test's probe, or the cache the CLIs are asked through. */
@@ -1764,6 +1807,7 @@ export class AgentManager {
 
   /** What the agents reported in an earlier run, shown until each reports again. */
   restore(file: AgentsFile): void {
+    this.codexReportThreadsRemovedAt = file.codexReportThreadsRemovedAt ?? null
     for (const [agentId, entry] of Object.entries(file.agents) as [
       AgentId,
       AgentsFile['agents'][AgentId],
@@ -2086,7 +2130,13 @@ export class AgentManager {
       const entry = rememberedEntry(slot)
       if (entry) agents[agentId] = entry
     }
-    this.deps.remember({ version: 1, agents })
+    this.deps.remember({
+      version: 1,
+      agents,
+      ...(this.codexReportThreadsRemovedAt === null
+        ? {}
+        : { codexReportThreadsRemovedAt: this.codexReportThreadsRemovedAt }),
+    })
   }
 
   private rememberUpdates(): void {

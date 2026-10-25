@@ -3,7 +3,7 @@
 import { chmod, mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentCliSource, AgentStatus, AgentUpdate } from '@shared/agent-host'
 import type { HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
@@ -28,6 +28,7 @@ import {
   OPENCODE,
   type AgentDefinition,
   type DetectContext,
+  type Detection,
   type LaunchSpec,
 } from './catalog'
 import { Diagnostics } from './diagnostics'
@@ -54,6 +55,22 @@ vi.mock('./adapter-install', async (importOriginal) => {
       removal.calls++
       if (removal.fail) throw removal.fail
       return actual.removeInstall(dir)
+    },
+  }
+})
+
+/** The removal of Codex's archived report threads, as each detection asks for it. */
+const reportThreads = vi.hoisted(() => ({
+  calls: [] as unknown[],
+  answer: (): Promise<number> => Promise.resolve(0),
+}))
+vi.mock('./codex-report-threads', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./codex-report-threads')>()
+  return {
+    ...actual,
+    removeReportThreads: (options: unknown) => {
+      reportThreads.calls.push(options)
+      return reportThreads.answer()
     },
   }
 })
@@ -1608,6 +1625,113 @@ describe('details', () => {
     await expect(m.agents.details('gemini' as AgentId)).rejects.toMatchObject({
       code: 'invalid_params',
     })
+  })
+})
+
+describe('the archived report threads', () => {
+  const def: AgentDefinition = { ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }
+  const spec = {
+    command: '/x/codex',
+    args: [],
+    env: { CODEX_PATH: '/x/codex' },
+    shell: false,
+    display: { command: '/x/codex', args: [], env: {} },
+  }
+  function codexManager(detection: Detection, environment: Env = process.env) {
+    const saved: AgentsFile[] = []
+    const env = new EnvironmentService({
+      platform: process.platform,
+      electronPath: process.execPath,
+      baseEnv: environment,
+      resolve: async ({ baseEnv }) => ({
+        env: baseEnv,
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: null,
+      }),
+      probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
+    })
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [def],
+        env,
+        remember: (file) => saved.push(file),
+        detect: async () => detection,
+      },
+    )
+    return { ...m, saved }
+  }
+  const logged = (m: ReturnType<typeof manager>, text: string): boolean =>
+    m.diagnostics.logEntries().some((entry) => entry.message.includes(text))
+
+  beforeEach(() => {
+    reportThreads.calls.length = 0
+    reportThreads.answer = () => Promise.resolve(0)
+  })
+
+  it('removes them once, through the binary its launch runs, and records that it did', async () => {
+    reportThreads.answer = () => Promise.resolve(3)
+    const m = codexManager({ state: 'available', spec, adapter: null })
+    await m.agents.list()
+    expect(reportThreads.calls).toEqual([
+      expect.objectContaining({ binary: '/x/codex', reportsDir: expect.any(String) }),
+    ])
+    await until(() => m.saved.some((file) => file.codexReportThreadsRemovedAt !== undefined))
+    expect(m.saved.at(-1)).toMatchObject({
+      version: 1,
+      codexReportThreadsRemovedAt: expect.any(Number),
+    })
+    expect(logged(m, 'Removed 3 archived Codex threads')).toBe(true)
+    // A later detection in the same launch leaves it alone.
+    await m.agents.check('codex')
+    expect(reportThreads.calls).toHaveLength(1)
+  })
+
+  it('records nothing after a failure, and logs it', async () => {
+    reportThreads.answer = () => Promise.reject(new Error('no rollout found'))
+    const m = codexManager({ state: 'available', spec, adapter: null })
+    await m.agents.list()
+    await until(() => logged(m, 'no rollout found'))
+    expect(m.saved.some((file) => file.codexReportThreadsRemovedAt !== undefined)).toBe(false)
+  })
+
+  it('runs nothing once an earlier run recorded that it did', async () => {
+    const m = codexManager({ state: 'available', spec, adapter: null })
+    m.agents.restore({ version: 1, agents: {}, codexReportThreadsRemovedAt: 7 })
+    await m.agents.list()
+    expect(reportThreads.calls).toEqual([])
+  })
+
+  it('takes the binary from the agent environment when the launch has none', async () => {
+    const m = codexManager(
+      { state: 'available', spec: { ...spec, env: {} }, adapter: null },
+      {
+        ...process.env,
+        CODEX_PATH: '/env/codex',
+      },
+    )
+    await m.agents.list()
+    expect(reportThreads.calls).toEqual([expect.objectContaining({ binary: '/env/codex' })])
+  })
+
+  it('runs nothing for an agent other than Codex, or while Codex is not available', async () => {
+    const other = { ...def, id: 'fake-agent' as const, name: 'Fake agent' }
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [other],
+        detect: async () => ({ state: 'available', spec, adapter: null }),
+      },
+    )
+    await m.agents.list()
+    expect(reportThreads.calls).toEqual([])
+    const missing = codexManager({ state: 'not-installed', detail: 'Codex is not installed.' })
+    await missing.agents.list()
+    expect(reportThreads.calls).toEqual([])
   })
 })
 

@@ -323,6 +323,18 @@ describe('the host files', () => {
     expect(agentsFile(dir, log).file).toBe(path.join(dir, 'state', 'agents.json'))
   })
 
+  it('keeps when the archived Codex report threads were removed, and drops a time that does not parse', () => {
+    expect(parseAgentsFile({ agents: {}, codexReportThreadsRemovedAt: 7 })).toEqual({
+      version: 1,
+      agents: {},
+      codexReportThreadsRemovedAt: 7,
+    })
+    expect(parseAgentsFile({ agents: {}, codexReportThreadsRemovedAt: 'x' })).toEqual({
+      version: 1,
+      agents: {},
+    })
+  })
+
   it('keeps what each update check found and drops what does not parse, entry by entry', () => {
     const latest = { adapterVersion: '2.2.2', cliVersion: '0.160.3' }
     expect(
