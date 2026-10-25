@@ -12,8 +12,11 @@ import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { SessionSummary } from '@shared/agent-host'
 import type { Attachment, ThreadEntry, ToolEntry, UserContent } from '@shared/thread'
 import { AgentRequestError } from './acp/connection'
+import type { AgentLauncher } from './agents'
 import { forkCut, unknownSession } from './sessions'
 import {
+  inProcessLauncher,
+  loadFakeAgent,
   startTestHost,
   type InProcessLauncher,
   type TestHost,
@@ -2500,6 +2503,102 @@ describe('sign-in', () => {
       (s) => s.id === 'fake-agent',
     )
     expect(status).toMatchObject({ signIn: 'signed-in' })
+  })
+})
+
+describe('retrying a start that failed', () => {
+  const sent = (t: TestHost, method: string) =>
+    t.host.diagnostics
+      .agentRecords('fake-agent')
+      .traffic.filter((r) => r.direction === 'out' && r.method === method).length
+
+  /** The in-process fake agent, with a switch that makes its next launches unable to start. */
+  async function setupWithBadStart(env: Record<string, string>) {
+    const module = await loadFakeAgent()
+    const base = inProcessLauncher(module, env)
+    let cannotStart = false
+    const launcher: AgentLauncher = {
+      launch: (def, spec, launchEnv, output) => {
+        if (cannotStart) throw new Error('the fake agent could not start')
+        return base.launch(def, spec, launchEnv, output)
+      },
+    }
+    const { t, port } = await setup({ launcher, agentEnv: env })
+    return {
+      t,
+      port,
+      base,
+      failStart: (value: boolean) => {
+        cannotStart = value
+      },
+    }
+  }
+
+  /** A session waiting for sign-in with its first message, whose agent then cannot start. */
+  async function waitingAfterABadStart() {
+    const marker = path.join(os.tmpdir(), `ob-login-${Date.now()}`)
+    const host = await setupWithBadStart({
+      FAKE_AGENT_AUTH: 'required',
+      FAKE_AGENT_LOGIN_MARKER: marker,
+    })
+    const summary = await host.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: host.t.project,
+      prompt: [{ type: 'text', text: 'first words' }],
+    })
+    expect(summary.status).toBe('auth_required')
+    const sessionId = summary.id
+    await host.port.open(sessionId)
+    // The agent exits, and its next start fails.
+    host.base.crash()
+    await vi.waitFor(() => expect(host.t.host.agents.status('fake-agent').state).not.toBe('ready'))
+    host.failStart(true)
+    await host.port.request('sessions.retry', { sessionId })
+    expect(host.port.summary(sessionId)?.status).toBe('failed')
+    expect(host.t.host.agents.status('fake-agent').state).toBe('failed')
+    return { ...host, marker, sessionId }
+  }
+
+  it('fails the session, keeping its first message, and sends it once the agent starts', async () => {
+    const { t, port, marker, sessionId, failStart } = await waitingAfterABadStart()
+    expect(port.thread(sessionId).session.status).toBe('failed')
+    expect(port.thread(sessionId).session.error?.message).toBeTruthy()
+    expect(sent(t, 'session/prompt')).toBe(0)
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'user')).toHaveLength(1)
+
+    // Signed in and able to start, Retry sends the message it held, once.
+    await writeFile(marker, '')
+    failStart(false)
+    await port.request('sessions.retry', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'agent')
+    expect(sent(t, 'session/prompt')).toBe(1)
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'user')).toHaveLength(1)
+  })
+
+  it('sends one session/new and one prompt for two retries at once', async () => {
+    const { t, port, marker, sessionId, failStart } = await waitingAfterABadStart()
+    await writeFile(marker, '')
+    failStart(false)
+    const news = sent(t, 'session/new')
+    const prompts = sent(t, 'session/prompt')
+    await Promise.all([
+      port.request('sessions.retry', { sessionId }),
+      port.request('sessions.retry', { sessionId }),
+    ])
+    await port.untilStatus(sessionId, 'ready')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'agent')
+    expect(sent(t, 'session/new')).toBe(news + 1)
+    expect(sent(t, 'session/prompt')).toBe(prompts + 1)
+    expect(port.entries(sessionId).filter((entry) => entry.kind === 'user')).toHaveLength(1)
+    // Nothing the two starts made is left open in the agent.
+    const listed = await port.request('agents.listSessions', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    expect(
+      listed.sessions.filter((session) => session.acpSessionId.startsWith('fake-')),
+    ).toHaveLength(1)
   })
 })
 
