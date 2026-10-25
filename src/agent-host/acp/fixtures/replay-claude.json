@@ -1,0 +1,35 @@
+[
+  {
+    "content": {
+      "text": "Please look at these and reply OK.",
+      "type": "text"
+    },
+    "messageId": "cc46fa2d-2f8a-4e34-ba18-e9260da4fa49",
+    "sessionUpdate": "user_message_chunk"
+  },
+  {
+    "content": {
+      "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAADAAEAAAAASUVORK5CYII=",
+      "mimeType": "image/png",
+      "type": "image"
+    },
+    "messageId": "cc46fa2d-2f8a-4e34-ba18-e9260da4fa49",
+    "sessionUpdate": "user_message_chunk"
+  },
+  {
+    "content": {
+      "text": "[@notes.txt](file:///tmp/overbench-140-proj/notes.txt)",
+      "type": "text"
+    },
+    "messageId": "cc46fa2d-2f8a-4e34-ba18-e9260da4fa49",
+    "sessionUpdate": "user_message_chunk"
+  },
+  {
+    "content": {
+      "text": "\n<context ref=\"file:///tmp/overbench-140-proj/notes.txt\">\nProject notes\nline two\n\n</context>",
+      "type": "text"
+    },
+    "messageId": "cc46fa2d-2f8a-4e34-ba18-e9260da4fa49",
+    "sessionUpdate": "user_message_chunk"
+  }
+]

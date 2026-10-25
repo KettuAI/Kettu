@@ -1,7 +1,7 @@
 // Live sessions: the authoritative thread state, prompts, permissions, cancellation, the
 // session lifecycle, sub-sessions, and the session index.
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -1378,6 +1378,32 @@ export class SessionManager {
           this.scheduleCacheRead(live)
         }
         break
+      case 'replayImage': {
+        // A replayed image has no file the host may read, so its bytes come with the replay and
+        // stay in the thread store, where a later open finds them.
+        const data = Buffer.from(effect.data, 'base64')
+        const hash = createHash('sha256').update(data).digest('hex')
+        live.blobs.set(hash, { hash, mime: effect.mimeType, data: new Uint8Array(data) })
+        const entry = live.thread.byId[effect.entryId]
+        if (entry?.kind !== 'user') break
+        let changed = false
+        const content = entry.content.map((item): UserContent => {
+          if (
+            item.type !== 'ref' ||
+            item.ref.kind !== 'attachment' ||
+            item.ref.attachment.id !== effect.attachmentId
+          ) {
+            return item
+          }
+          changed = true
+          return {
+            type: 'ref',
+            ref: { kind: 'attachment', attachment: { ...item.ref.attachment, blob: hash } },
+          }
+        })
+        if (changed) this.emit(live, [{ op: 'entry.update', id: entry.id, changes: { content } }])
+        break
+      }
     }
   }
 

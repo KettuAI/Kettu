@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { FileIcon, LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
@@ -9,6 +9,7 @@ import { host } from '@renderer/lib/host'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
 import { ImageDialog, type ImageDialogTarget } from '../attachments/image-dialog'
 import { openAttachmentPath } from '../attachments/open-attachment'
+import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
 
 /** Taller than this, a message collapses behind a fade and Show more. */
@@ -86,7 +87,6 @@ export function SentAttachments({
   sessionId: string | null
   attachments: Attachment[]
 }) {
-  const { t } = useTranslation('composer')
   const [viewing, setViewing] = useState<ImageDialogTarget | null>(null)
   const projectPath = useContext(ProjectPathContext)
   const open = (attachment: Attachment) => {
@@ -108,33 +108,76 @@ export function SentAttachments({
   }
   return (
     <div role="list" className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
-      {attachments.map((attachment) => {
-        const view = sentView(attachment, t)
-        return (
-          <div key={attachment.id} role="listitem">
-            <AttachmentTile
-              view={view}
-              role="button"
-              tabIndex={0}
-              aria-label={`${attachment.name}, ${view.tooltip.split('\n').at(-1)}`}
-              onClick={() => open(attachment)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return
-                event.preventDefault()
-                open(attachment)
-              }}
-            />
-          </div>
-        )
-      })}
+      {attachments.map((attachment) => (
+        <div key={attachment.id} role="listitem">
+          <SentAttachment sessionId={sessionId} attachment={attachment} onOpen={open} />
+        </div>
+      ))}
       <ImageDialog target={viewing} onClose={() => setViewing(null)} />
     </div>
   )
 }
 
+/**
+ * One sent attachment. A replayed image has no thumbnail, so its bytes are read and a thumbnail
+ * made the first time its tile shows.
+ */
+function SentAttachment({
+  sessionId,
+  attachment,
+  onOpen,
+}: {
+  sessionId: string | null
+  attachment: Attachment
+  onOpen: (attachment: Attachment) => void
+}) {
+  const { t } = useTranslation('composer')
+  // The made thumbnail belongs to the bytes it was made from, so another attachment or a byte
+  // set that arrives later starts over.
+  const key = attachment.thumb ?? attachment.blob
+  const [made, setMade] = useState<{
+    key: string | null
+    thumb: string | null
+    failed: boolean
+  }>({ key: null, thumb: null, failed: false })
+  useEffect(() => {
+    if (attachment.thumb || attachment.type !== 'image' || !attachment.blob || !sessionId) return
+    let cancelled = false
+    void replayThumb(sessionId, attachment).then((thumb) => {
+      if (!cancelled) setMade({ key, thumb, failed: thumb === null })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId, key, attachment])
+  const current = made.key === key
+  const thumb = attachment.thumb ?? (current ? made.thumb : null)
+  const failed = current && made.failed
+  const view = sentView(attachment, t, thumb, failed)
+  return (
+    <AttachmentTile
+      view={view}
+      role="button"
+      tabIndex={0}
+      aria-label={`${attachment.name}, ${view.tooltip.split('\n').at(-1)}`}
+      onClick={() => onOpen(attachment)}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onOpen(attachment)
+      }}
+    />
+  )
+}
+
 type T = ReturnType<typeof useTranslation<'composer'>>['t']
 
-function sentView(attachment: Attachment, t: T): TileView {
+function sentView(
+  attachment: Attachment,
+  t: T,
+  thumb: string | null = attachment.thumb,
+  failed = false,
+): TileView {
   const size =
     attachment.type === 'folder'
       ? t('attachments.folder')
@@ -158,12 +201,13 @@ function sentView(attachment: Attachment, t: T): TileView {
                   : 'attachments.sentLinked',
               )
             : null
+  const pendingThumb = !failed && attachment.type === 'image' && !thumb && attachment.blob !== null
   return {
     name: attachment.name,
     kind: attachment.type,
-    thumb: attachment.thumb,
-    status: 'ready',
-    detail: lines ?? size,
+    thumb,
+    status: failed ? 'failed' : pendingThumb ? 'adding' : 'ready',
+    detail: failed ? t('attachments.cannotRead') : (lines ?? size),
     tooltip: note ? `${facts}\n${note}` : facts,
     warn: attachment.type === 'image' && attachment.sent === 'linked',
   }

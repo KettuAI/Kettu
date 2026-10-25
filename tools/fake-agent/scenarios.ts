@@ -1355,6 +1355,31 @@ export function* syntheticHistory(entries: number): Generator<SessionUpdate> {
   }
 }
 
+/** A replayed user message with an embedded file and an image, as the CLI agents write them. */
+export function* syntheticAttachments(): Generator<SessionUpdate> {
+  const messageId = 'h-attachments'
+  yield {
+    sessionUpdate: 'user_message_chunk',
+    messageId,
+    content: text('Review these'),
+  }
+  yield {
+    sessionUpdate: 'user_message_chunk',
+    messageId,
+    content: text('[@notes.txt](file:///tmp/notes.txt)'),
+  }
+  yield {
+    sessionUpdate: 'user_message_chunk',
+    messageId,
+    content: text('\n<context ref="file:///tmp/notes.txt">\nProject notes\n</context>'),
+  }
+  yield {
+    sessionUpdate: 'user_message_chunk',
+    messageId,
+    content: { type: 'image', mimeType: 'image/png', data: 'AQIDBA==' },
+  }
+}
+
 function text(value: string): ContentBlock {
   return { type: 'text', text: value }
 }
