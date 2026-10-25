@@ -66,6 +66,8 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.blob(request.sessionId, request.hash)
     case 'mentions':
       return db.mentions(request.sessionId, request.text)
+    case 'routine':
+      return db.routine(request.call)
     case 'artifact':
       return artifact(db, request.call)
     case 'close':

@@ -19,6 +19,9 @@ type PageView =
   // of that session, in its project.
   | { kind: 'new'; agentId: AgentId | null; noProject: boolean; parentId?: string }
   | { kind: 'usage' } // the usage page, opened from the sidebar
+  // The Routines page, opened from the sidebar; with a null routine id, New routine.
+  | { kind: 'routines' }
+  | { kind: 'routine'; routineId: string | null }
   // The Artifacts page, opened from the sidebar; with `deleted`, its Recently deleted view.
   | { kind: 'artifacts'; deleted?: true }
 
@@ -145,6 +148,22 @@ export function openSession(sessionId: string, projectPath: string): void {
 export function openUsage(): void {
   useViewStore.setState((s) => ({
     main: { kind: 'usage' },
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** The Routines page from the sidebar: every routine. */
+export function openRoutines(): void {
+  useViewStore.setState((s) => ({
+    main: { kind: 'routines' },
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** A routine's page, or New routine with a null id. */
+export function openRoutine(routineId: string | null): void {
+  useViewStore.setState((s) => ({
+    main: { kind: 'routine', routineId },
     settings: { ...s.settings, open: false },
   }))
 }

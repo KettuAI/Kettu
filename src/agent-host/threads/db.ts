@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
+import { isRoutineRun, type RoutineRun } from '@shared/routines'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
 import {
   contentHash,
@@ -20,6 +21,7 @@ import type {
   ArtifactRecord,
   VersionRecord,
 } from '../artifacts/model'
+import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
 import {
   attachmentBlobs,
   EMPTY_SESSION,
@@ -39,7 +41,7 @@ import {
 } from './model'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -99,8 +101,22 @@ const ARTIFACTS = `
   ) STRICT, WITHOUT ROWID;
 `
 
+// Runs do not reference threads, so a run keeps its record when its session is deleted.
+const ROUTINE_RUNS = `
+  CREATE TABLE routine_runs (
+    routine_id TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    run_id     TEXT NOT NULL,
+    session_id TEXT,
+    status     TEXT NOT NULL,
+    json       TEXT NOT NULL,
+    PRIMARY KEY (routine_id, seq)
+  ) STRICT, WITHOUT ROWID;
+  CREATE UNIQUE INDEX routine_runs_by_id ON routine_runs (run_id);
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
-const MIGRATIONS: Record<number, string> = { 2: ARTIFACTS }
+const MIGRATIONS: Record<number, string> = { 2: ARTIFACTS, 3: ROUTINE_RUNS }
 
 // SQLite's primary result codes, the low byte of node:sqlite's `errcode`.
 const SQLITE_CORRUPT = 11
@@ -267,6 +283,41 @@ function prepareAll(db: DatabaseSync) {
     hashesOf: sql('SELECT DISTINCT hash FROM artifact_versions WHERE artifact_id = ?'),
     named: sql('SELECT 1 AS named FROM artifact_versions WHERE hash = ? LIMIT 1'),
     allHashes: sql('SELECT DISTINCT hash FROM artifact_versions'),
+    runSeq: sql('SELECT seq FROM routine_runs WHERE run_id = ?'),
+    lastSeq: sql('SELECT MAX(seq) AS seq FROM routine_runs WHERE routine_id = ?'),
+    insertRun: sql(
+      'INSERT INTO routine_runs (routine_id, seq, run_id, session_id, status, json) VALUES (?, ?, ?, ?, ?, ?)',
+    ),
+    updateRun: sql('UPDATE routine_runs SET session_id = ?, status = ?, json = ? WHERE run_id = ?'),
+    pageRuns: sql(
+      'SELECT seq, json FROM routine_runs WHERE routine_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?',
+    ),
+    lastRun: sql('SELECT json FROM routine_runs WHERE routine_id = ? ORDER BY seq DESC LIMIT 1'),
+    activeRun: sql(
+      "SELECT json FROM routine_runs WHERE routine_id = ? AND status IN ('queued', 'starting', 'running', 'waiting') ORDER BY seq DESC LIMIT 1",
+    ),
+    activeRuns: sql(
+      "SELECT json FROM routine_runs WHERE status IN ('queued', 'starting', 'running', 'waiting') ORDER BY routine_id, seq",
+    ),
+    sessionCount: sql(
+      'SELECT COUNT(*) AS n FROM routine_runs WHERE routine_id = ? AND session_id IS NOT NULL',
+    ),
+    unseenFailed: sql(
+      "SELECT COUNT(*) AS n FROM routine_runs WHERE routine_id = ? AND status IN ('failed', 'timed_out') AND json_extract(json, '$.seen') = 0",
+    ),
+    unseenEnded: sql(
+      "SELECT COUNT(*) AS n FROM routine_runs WHERE routine_id = ? AND status IN ('succeeded', 'failed', 'timed_out', 'cancelled', 'interrupted') AND json_extract(json, '$.seen') = 0",
+    ),
+    beyond: sql(
+      'SELECT run_id, session_id FROM routine_runs WHERE routine_id = ? AND session_id IS NOT NULL ORDER BY seq DESC LIMIT -1 OFFSET ?',
+    ),
+    runsOfSession: sql(
+      'SELECT seq, run_id, routine_id, json FROM routine_runs WHERE session_id = ?',
+    ),
+    unseenRuns: sql(
+      "SELECT seq, run_id, json FROM routine_runs WHERE routine_id = ? AND json_extract(json, '$.seen') = 0 AND status IN ('succeeded', 'failed', 'timed_out', 'cancelled', 'interrupted')",
+    ),
+    deleteRoutineRuns: sql('DELETE FROM routine_runs WHERE routine_id = ?'),
   }
 }
 
@@ -871,6 +922,164 @@ export class ThreadDb {
   }
 
   /** Folds the WAL into the file and closes it; a later call does nothing. */
+  // Routine runs.
+
+  private runOf(json: unknown): RoutineRun | null {
+    if (typeof json !== 'string') return null
+    try {
+      const value = JSON.parse(json) as unknown
+      return isRoutineRun(value) ? value : null
+    } catch {
+      return null
+    }
+  }
+
+  /** Adds the run with the routine's next seq, or updates it by its id. */
+  routinePut({ routineId, run }: RoutineCalls['put']['params']): { seq: number } {
+    return this.must((sql) => {
+      const existing = sql.runSeq.get(run.id) as { seq: number } | undefined
+      const json = JSON.stringify(run)
+      if (existing) {
+        sql.updateRun.run(run.sessionId, run.status, json, run.id)
+        return { seq: Number(existing.seq) }
+      }
+      const last = sql.lastSeq.get(routineId) as { seq: number | null } | undefined
+      const seq = Number(last?.seq ?? 0) + 1
+      sql.insertRun.run(routineId, seq, run.id, run.sessionId, run.status, json)
+      return { seq }
+    })
+  }
+
+  routinePage({
+    routineId,
+    before,
+    limit,
+  }: RoutineCalls['page']['params']): RoutineCalls['page']['result'] {
+    return this.must((sql) => {
+      const rows = sql.pageRuns.all(routineId, before ?? END, limit + 1) as {
+        seq: number
+        json: string
+      }[]
+      const shown = rows.slice(0, limit)
+      const runs = shown
+        .map((row) => this.runOf(row.json))
+        .filter((run): run is RoutineRun => run !== null)
+      const older = rows.length > limit ? Number(shown[shown.length - 1]!.seq) : null
+      return { runs, older }
+    })
+  }
+
+  routineStats({ routineId }: RoutineCalls['stats']['params']): RoutineRunStats {
+    return this.must((sql) => {
+      const count = (row: unknown): number => Number((row as { n?: number })?.n ?? 0)
+      const last = sql.lastRun.get(routineId) as { json: string } | undefined
+      const active = sql.activeRun.get(routineId) as { json: string } | undefined
+      return {
+        sessions: count(sql.sessionCount.get(routineId)),
+        unseenFailed: count(sql.unseenFailed.get(routineId)),
+        unseenEnded: count(sql.unseenEnded.get(routineId)),
+        last: last ? this.runOf(last.json) : null,
+        active: active ? this.runOf(active.json) : null,
+      }
+    })
+  }
+
+  /** The runs with a session beyond the newest `keep`, oldest first. */
+  routineBeyond({
+    routineId,
+    keep,
+  }: RoutineCalls['beyond']['params']): RoutineCalls['beyond']['result'] {
+    return this.must((sql) => {
+      const rows = sql.beyond.all(routineId, keep) as { run_id: string; session_id: string }[]
+      return rows
+        .map((row) => ({ runId: String(row.run_id), sessionId: String(row.session_id) }))
+        .reverse()
+    })
+  }
+
+  routineActive(): RoutineCalls['active']['result'] {
+    return this.guard((sql) => {
+      const rows = sql.activeRuns.all() as { json: string }[]
+      return rows
+        .map((row) => this.runOf(row.json))
+        .filter((run): run is RoutineRun => run !== null)
+    }, [])
+  }
+
+  routineClearSession({
+    sessionId,
+  }: RoutineCalls['clearSession']['params']): RoutineCalls['clearSession']['result'] {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        const rows = sql.runsOfSession.all(sessionId) as {
+          seq: number
+          run_id: string
+          routine_id: string
+          json: string
+        }[]
+        const updated: RoutineRun[] = []
+        for (const row of rows) {
+          const run = this.runOf(row.json)
+          if (!run) continue
+          const next: RoutineRun = { ...run, sessionId: null }
+          sql.updateRun.run(null, next.status, JSON.stringify(next), next.id)
+          updated.push(next)
+        }
+        return updated
+      }),
+    )
+  }
+
+  routineMarkSeen({ routineId }: RoutineCalls['markSeen']['params']): null {
+    this.must((sql, db) =>
+      this.transaction(db, () => {
+        const rows = sql.unseenRuns.all(routineId) as {
+          seq: number
+          run_id: string
+          json: string
+        }[]
+        for (const row of rows) {
+          const run = this.runOf(row.json)
+          if (!run || run.seen) continue
+          const next: RoutineRun = { ...run, seen: true }
+          sql.updateRun.run(next.sessionId, next.status, JSON.stringify(next), next.id)
+        }
+        return null
+      }),
+    )
+    return null
+  }
+
+  routineRemove({ routineId }: RoutineCalls['remove']['params']): null {
+    this.guard((sql, db) => {
+      this.transaction(db, () => sql.deleteRoutineRuns.run(routineId))
+      db.exec('PRAGMA incremental_vacuum')
+    }, undefined)
+    return null
+  }
+
+  /** One routine call, for the worker's `routine` op. */
+  routine(call: RoutineCall): unknown {
+    switch (call.name) {
+      case 'put':
+        return this.routinePut(call.params)
+      case 'page':
+        return this.routinePage(call.params)
+      case 'stats':
+        return this.routineStats(call.params)
+      case 'beyond':
+        return this.routineBeyond(call.params)
+      case 'active':
+        return this.routineActive()
+      case 'clearSession':
+        return this.routineClearSession(call.params)
+      case 'markSeen':
+        return this.routineMarkSeen(call.params)
+      case 'remove':
+        return this.routineRemove(call.params)
+    }
+  }
+
   close(checkpoint = true): void {
     const db = this.db
     this.db = null

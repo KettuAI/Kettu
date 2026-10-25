@@ -35,6 +35,7 @@ import type { ProcessControl } from '../process-tree'
 import type { CacheTtlReader } from '../prompt-cache'
 import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
+import type { RoutineTimings } from '../routines/manager'
 import type { LogReader } from '../usage/model'
 import { inThreadWorker } from './thread-worker'
 import { inUsageWorker } from './usage-worker'
@@ -252,6 +253,7 @@ export interface TestHostOptions {
   git?: GitServiceApi | null
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
+  routineTimings?: Partial<RoutineTimings>
   treeNoteMs?: number
   processControl?: ProcessControl
   launcher?: AgentLauncher
@@ -317,6 +319,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     },
     agentTimings: options.agentTimings ?? {},
     sessionTimings: options.sessionTimings ?? {},
+    ...(options.routineTimings ? { routineTimings: options.routineTimings } : {}),
     ...(options.treeNoteMs !== undefined ? { treeNoteMs: options.treeNoteMs } : {}),
     ...(options.processControl ? { processControl: options.processControl } : {}),
     threadWorker: inThreadWorker,

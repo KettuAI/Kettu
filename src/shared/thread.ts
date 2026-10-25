@@ -1,6 +1,8 @@
 // OverBench's own session and thread model, shared by the agent host and the renderer.
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
+import type { RoutineRef } from './routines'
+
 export type AgentId = 'claude-code' | 'codex' | 'opencode' | 'fake-agent'
 
 export const AGENT_IDS: readonly AgentId[] = ['claude-code', 'codex', 'opencode', 'fake-agent']
@@ -30,8 +32,9 @@ export interface SessionView {
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
-  origin: 'user' | 'subagent'
+  origin: 'user' | 'subagent' | 'routine'
   subagent: SubagentInfo | null // set when origin is 'subagent'
+  routine: RoutineRef | null // set when origin is 'routine'
   queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
   queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
 }
@@ -202,7 +205,11 @@ export interface ToolEntry {
   content: ToolContent[]
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null
-  permissionResult: { optionId: string; kind: PermissionKind } | 'cancelled' | 'withdrawn' | null
+  permissionResult:
+    | { optionId: string; kind: PermissionKind; by?: 'routine' } // by: answered within a scope
+    | 'cancelled'
+    | 'withdrawn'
+    | null
   rawInput?: string // the command or input as text, when the agent sent one
   description?: string // what a command does, in the agent's words (Claude Code's Bash)
 }

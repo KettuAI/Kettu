@@ -38,6 +38,8 @@ import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type PortChannel } from './rpc'
 import { Attachments } from './attachments'
+import { RoutinesManager, type RoutineTimings } from './routines/manager'
+import type { RoutineSessionHooksRef } from './routines/hooks'
 import { ScratchFolders } from './scratch'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
@@ -47,6 +49,7 @@ import {
   agentUpdatesFile,
   projectsFile,
   returnedFile,
+  routinesFile,
   sessionsFile,
   type AgentsFile,
   type AgentUpdatesFile,
@@ -79,6 +82,8 @@ export interface HostOptions {
   detect?: AgentManagerDeps['detect']
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
+  /** How long a minute of a run's time limit lasts, shortened by tests. */
+  routineTimings?: Partial<RoutineTimings>
   /** How long after an agent's traffic its process tree is listed again. */
   treeNoteMs?: number
   /** Lists and stops the agents' process trees; the system's tools by default. */
@@ -114,6 +119,8 @@ export class AgentHost {
   /** The agent processes and what they leave behind, until seen gone. */
   private readonly trees: AgentTrees
   readonly sessions: SessionManager
+  /** The saved routines and the lifecycle of their runs. */
+  readonly routines: RoutinesManager
   /** The attachments of drafts and queued prompts, until sent or removed. */
   readonly attachments: Attachments
   /** Every session's thread, read a page at a time, in a worker of its own. */
@@ -273,6 +280,7 @@ export class AgentHost {
       remember: (file) => this.remembered.save(file),
       rememberUpdates: (file) => this.updates.save(file),
     })
+    const routineHooks: RoutineSessionHooksRef = { current: null }
     this.sessions = new SessionManager({
       platform,
       agents: this.agents,
@@ -319,6 +327,7 @@ export class AgentHost {
           options.homeDir ?? os.homedir(),
           platform,
         ),
+      routine: routineHooks,
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
         summary: (summary, portIds) => {
@@ -343,6 +352,31 @@ export class AgentHost {
         badge: (count) => options.send({ type: 'host:badge', count }),
       },
     })
+    this.routines = new RoutinesManager({
+      userDataPath: options.userDataPath,
+      file: routinesFile(options.userDataPath, log),
+      threads: this.threads,
+      sessions: {
+        createRun: (params) => this.sessions.createRun(params),
+        cancel: (sessionId) => this.sessions.cancel(sessionId),
+        delete: (sessionId) => this.sessions.delete(sessionId),
+        has: (sessionId) => this.sessions.has(sessionId),
+        summary: (sessionId) =>
+          this.sessions.has(sessionId) ? this.sessions.summary(sessionId) : null,
+      },
+      log,
+      resolveProject: (value) => this.projects.resolveDirectory(value),
+      timings: options.routineTimings,
+      events: {
+        changed: (routine) => this.broadcast({ type: 'routine.changed', routine }),
+        removed: (routineId) => this.broadcast({ type: 'routine.removed', routineId }),
+        run: (run) => this.broadcast({ type: 'routine.run', run }),
+        working: (working) => options.send({ type: 'host:routines-working', working }),
+        attention: (kind, sessionId, title, body) =>
+          options.send({ type: 'host:attention', sessionId, kind, title, body }),
+      },
+    })
+    routineHooks.current = this.routines.hooks
     this.hub = new PortHub({
       handlers: this.handlers(),
       validators: createValidators(platform),
@@ -381,6 +415,7 @@ export class AgentHost {
       host.preparedRecords.load(),
       host.attachments.load(),
       host.artifactService.start(),
+      host.routines.load(),
     ])
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
@@ -528,6 +563,7 @@ export class AgentHost {
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
   shutdown(): Promise<void> {
     this.stopping ??= (async () => {
+      await this.routines.shutdown()
       this.sessions.shutdown()
       this.usage.stop()
       this.artifacts.stop()
@@ -633,7 +669,7 @@ export class AgentHost {
   }
 
   private handlers(): Handlers {
-    const { agents, sessions, projects, artifacts } = this
+    const { agents, sessions, projects, artifacts, routines } = this
     return {
       'agents.list': () => agents.list(),
       'agents.check': ({ agentId }) => agents.check(agentId),
@@ -715,6 +751,14 @@ export class AgentHost {
       },
       'sessions.removeEmpty': ({ keep }) => sessions.removeEmptyOnce(keep),
       'sessions.takeReturned': ({ sessionId }) => sessions.takeReturned(sessionId),
+      'routines.list': () => routines.list(),
+      'routines.create': (draft) => routines.create(draft),
+      'routines.update': ({ routineId, changes }) => routines.update(routineId, changes),
+      'routines.delete': ({ routineId }) => routines.delete(routineId),
+      'routines.runNow': ({ routineId }) => routines.runNow(routineId),
+      'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
+      'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
+      'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
       'sessions.removeAll': async () => {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })

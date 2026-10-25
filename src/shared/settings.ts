@@ -21,6 +21,7 @@ export interface SettingsFile {
     permission: boolean
     turnEnded: boolean
     error: boolean
+    routines: boolean // a routine's run ended, or its routines paused at a plan limit
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
   }
@@ -65,7 +66,14 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     confirmQuitWhileRunning: true,
   },
   appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system', zoom: 1 },
-  notifications: { permission: true, turnEnded: true, error: true, sound: false, badge: true },
+  notifications: {
+    permission: true,
+    turnEnded: true,
+    error: true,
+    routines: true,
+    sound: false,
+    badge: true,
+  },
   agents: {},
   proxy: { mode: 'environment' },
   terminal: { fontSize: 13 },

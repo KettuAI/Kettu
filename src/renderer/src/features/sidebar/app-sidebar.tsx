@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import {
+  CalendarClockIcon,
   ChartNoAxesColumnIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CircleAlertIcon,
   EllipsisIcon,
   HistoryIcon,
   PlusIcon,
@@ -11,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, PlanLimit, Project } from '@shared/agent-host'
+import type { RoutineView } from '@shared/routines'
 import { newSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -38,6 +41,8 @@ import {
 } from '@renderer/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { strongestSignal, signalText } from '@renderer/features/routines/model'
+import { RunningDot } from '@renderer/features/routines/run-mark'
 import { dayOf } from '@renderer/features/usage/model'
 import { limitLabel, tokens } from '@renderer/lib/format'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
@@ -45,6 +50,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { useRoutinesStore } from '@renderer/stores/routines'
 import {
   inPinnedTree,
   pinnedTree,
@@ -58,6 +64,7 @@ import { loadToday, useUsageStore } from '@renderer/stores/usage'
 import {
   NO_PROJECT_GROUP,
   openArtifacts,
+  openRoutines,
   openUsage,
   PINNED_GROUP,
   useViewStore,
@@ -120,6 +127,7 @@ export function AppSidebar() {
           onClick={openArtifacts}
         />
         <UsageNavRow />
+        <RoutinesNavRow />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
@@ -177,6 +185,7 @@ export function NavRow({
   current,
   onClick,
   extra,
+  ariaLabel,
 }: {
   icon: React.ReactNode
   label: string
@@ -184,12 +193,15 @@ export function NavRow({
   current?: boolean
   onClick?: () => void
   extra?: React.ReactNode
+  /** The row's name in words, when `extra` says more than its marks. */
+  ariaLabel?: string
 }) {
   return (
     <SidebarMenuButton
       size="row"
       isActive={current}
       onClick={onClick}
+      aria-label={ariaLabel}
       className="[&_svg]:size-5 data-active:font-medium"
     >
       {icon}
@@ -201,6 +213,58 @@ export function NavRow({
           </Kbd>
         ))}
     </SidebarMenuButton>
+  )
+}
+
+/** The Routines row; its end shows the strongest signal among the routines' runs. */
+function RoutinesNavRow() {
+  const { t } = useTranslation('sidebar')
+  const { t: tr } = useTranslation('routines')
+  const routines = useRoutinesStore(
+    useShallow((s) =>
+      s.order.map((id) => s.byId[id]).filter((routine): routine is RoutineView => !!routine),
+    ),
+  )
+  const main = useViewStore((s) => s.main)
+  const settingsOpen = useViewStore((s) => s.settings.open)
+  const runSession = useSessionsStore((s) =>
+    main.kind === 'session' ? s.byId[main.sessionId]?.origin === 'routine' : false,
+  )
+  const current =
+    !settingsOpen && (main.kind === 'routines' || main.kind === 'routine' || runSession)
+  const signal = strongestSignal(routines)
+  const name = signal ? tr('signal.name', { signal: signalText(signal) }) : t('nav.routines')
+
+  return (
+    <NavRow
+      icon={<CalendarClockIcon />}
+      label={t('nav.routines')}
+      current={current}
+      onClick={openRoutines}
+      ariaLabel={name}
+      extra={signal ? <RoutineSignalMark signal={signal} /> : undefined}
+    />
+  )
+}
+
+/** The routines' strongest signal, as a session row draws its own. */
+function RoutineSignalMark({
+  signal,
+}: {
+  signal: NonNullable<ReturnType<typeof strongestSignal>>
+}) {
+  return (
+    <span aria-hidden className="grid size-4 shrink-0 place-items-center">
+      {signal.kind === 'waiting' ? (
+        <span className="size-2 rounded-full bg-attention-dot" />
+      ) : signal.kind === 'failed' ? (
+        <CircleAlertIcon className="size-3.5 text-danger" />
+      ) : signal.kind === 'running' ? (
+        <RunningDot />
+      ) : (
+        <span className="size-2 rounded-full bg-current text-tertiary" />
+      )}
+    </span>
   )
 }
 

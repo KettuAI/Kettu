@@ -44,6 +44,7 @@ const baseSession: SessionView = {
   parentId: null,
   origin: 'user',
   subagent: null,
+  routine: null,
   queue: [],
   queuePaused: false,
 }

@@ -32,6 +32,8 @@ export interface AgentHostDeps {
   onMediaGrant(grant: MediaGrantRecord): void
   /** A session's grants are gone, or every grant for null, as when the host stopped. */
   onMediaRevoke(sessionId: string | null): void
+  /** Whether any routine run is starting or running, for keeping the computer awake. */
+  onRoutinesWorking(working: boolean): void
 }
 
 const MAX_LIST = 10_000
@@ -281,6 +283,9 @@ export class AgentHost {
       case 'host:badge':
         if (typeof message.count === 'number') this.deps.onBadge(message.count)
         break
+      case 'host:routines-working':
+        if (typeof message.working === 'boolean') this.deps.onRoutinesWorking(message.working)
+        break
       case 'host:busy': {
         const resolve = this.busyRequests.get(message.requestId)
         if (!resolve) break
@@ -334,6 +339,7 @@ export class AgentHost {
     for (const resolve of this.importRequests.values()) resolve(UNAVAILABLE)
     this.importRequests.clear()
     this.deps.onMediaRevoke(null)
+    this.deps.onRoutinesWorking(false)
     this.deps.onBadge(0)
     const roots = this.agentProcesses
     this.agentProcesses = []

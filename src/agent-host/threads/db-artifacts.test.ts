@@ -509,6 +509,8 @@ const ALL_TABLES = [
   'entries',
   'entries_by_id',
   'entries_by_kind',
+  'routine_runs',
+  'routine_runs_by_id',
   'threads',
 ]
 
@@ -517,7 +519,7 @@ describe('the thread database schema', () => {
     const { db, file } = setup()
     expect(db.status).toBe('created')
     db.close()
-    expect(tables(file)).toEqual({ version: 2, names: ALL_TABLES })
+    expect(tables(file)).toEqual({ version: 3, names: ALL_TABLES })
   })
 
   it('migrates a version 1 database, keeping its threads, to empty artifact tables', () => {
@@ -553,7 +555,7 @@ describe('the thread database schema', () => {
     expect(db.listArtifacts({ project: null, deleted: true })).toEqual([])
     create(db)
     db.close()
-    expect(tables(file)).toEqual({ version: 2, names: ALL_TABLES })
+    expect(tables(file)).toEqual({ version: 3, names: ALL_TABLES })
 
     const again = ThreadDb.open(
       file,

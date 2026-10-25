@@ -2,6 +2,7 @@
 // session lifecycle, sub-sessions, and the session index.
 
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import {
@@ -90,6 +91,7 @@ import { watchSettings, type PreparedRecords, type WatchTarget } from './prepare
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
 import { cutReply, type ToolSession } from './session-tools'
+import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import {
   CONTEXT_REPORT,
   hasContextReport,
@@ -205,6 +207,8 @@ export interface SessionManagerDeps {
   prepared?: PreparedRecords
   /** What to watch for changes to the agent's options in a folder; without it nothing is. */
   settingsTargets?: (agentId: AgentId, folder: string) => WatchTarget[]
+  /** What a routine's run hears of its session; set once the routines manager exists. */
+  routine?: RoutineSessionHooksRef
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -324,6 +328,10 @@ interface Live {
   background: boolean
   /** Set while it is a prepared session, not yet in the index. */
   prepared: Prepared | null
+  /** A run's session: the mode it must start in, and whether its first turn began and ended. */
+  routineMode: string | null
+  routineTurnStarted: boolean
+  routineTurnEnded: boolean
   /** Since when nothing has needed its agent, and since when no port has shown it in front. */
   idleSince: number | null
   hiddenSince: number | null
@@ -623,6 +631,7 @@ export class SessionManager {
       updatedAt: session?.updatedAt ?? record.updatedAt,
       parentId: record.parentId,
       origin: record.origin,
+      routine: record.routine ?? null,
       description: record.description,
       missing: this.missing.has(record.id),
       branch: record.branch,
@@ -651,6 +660,8 @@ export class SessionManager {
       // A prepared session is its window's alone until its first message.
       if (this.live.get(id)?.prepared) continue
       const summary = this.summary(id)
+      // A routine's runs are listed under their routine, never under their project.
+      if (summary.origin === 'routine') continue
       if (key === null || pathKey(summary.projectPath, this.deps.platform) === key)
         out.push(summary)
     }
@@ -1022,6 +1033,7 @@ export class SessionManager {
       updatedAt: record.updatedAt,
       parentId: record.parentId,
       origin: record.origin,
+      routine: record.routine ?? null,
       subagent:
         record.origin === 'subagent'
           ? {
@@ -1094,6 +1106,9 @@ export class SessionManager {
       unansweredCancel: null,
       background: false,
       prepared: null,
+      routineMode: null,
+      routineTurnStarted: false,
+      routineTurnEnded: false,
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
@@ -1569,6 +1584,55 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
+  /**
+   * A routine's run's session: created as `sessions.create` creates one, but top-level with
+   * `origin: 'routine'`, in the routine's folder, in the strictest mode that still asks, with
+   * the routine's prompt as its first message.
+   */
+  async createRun(params: RoutineSessionStart): Promise<SessionSummary> {
+    const { agents, projects, scratch } = this.deps
+    if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    const projectPath = await projects.resolveDirectory(params.projectPath)
+    if (!scratch.contains(projectPath)) await projects.add(projectPath)
+    const now = this.now()
+    const record: SessionRecord = {
+      id: randomUUID(),
+      agentId: params.agentId,
+      acpSessionId: '',
+      projectPath,
+      title: null,
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      parentId: null,
+      origin: 'routine',
+      routine: params.routine,
+      description: null,
+      branch: null,
+    }
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    live.used = true
+    live.routineMode = params.mode
+    const content: UserContent[] = [{ type: 'text', text: params.prompt }]
+    live.first = { content, entryId: this.addPrompt(live, content, now) }
+    this.touch(live.id)
+    // The run knows its session before anything goes out, so a permission request has somewhere
+    // to go from its first moment.
+    this.deps.routine?.current?.sessionCreated(live.id, params.routine)
+    try {
+      live.startValues = params.options
+      await this.startNew(live)
+    } catch (error) {
+      if (this.live.get(live.id) === live) {
+        this.dropLive(live)
+        this.forget(live.id)
+      }
+      throw error
+    }
+    return this.summary(live.id)
+  }
+
   /** Removes and returns the messages kept for a session, oldest first; a taken one is gone. */
   takeReturned(sessionId: string | null): UserContent[][] {
     const taken = this.returned.filter((message) => message.sessionId === sessionId)
@@ -1974,6 +2038,8 @@ export class SessionManager {
       if (first) this.startTurn(live, first.content, this.now(), first.entryId)
       return
     }
+    // A run starts in the strictest mode that still asks, before anything is sent.
+    if (live.record.origin === 'routine') await this.applyRoutineMode(live, runtime.connection)
     this.update(live, { status: 'ready' })
     this.deps.agents.signedIn(agentId)
     this.touch(live.id)
@@ -2133,6 +2199,49 @@ export class SessionManager {
       }
     }
     return current()
+  }
+
+  /**
+   * A run's session starts in the strictest mode that still asks; one that cannot be set fails
+   * the run before anything is sent, so it never starts in a broader mode than its scope.
+   */
+  private async applyRoutineMode(live: Live, connection: AgentConnection): Promise<void> {
+    const wanted = live.routineMode
+    if (wanted === null) return
+    const option = live.thread.session.config.find(
+      (candidate) => candidate.category === 'mode' && candidate.type === 'select',
+    )
+    // An agent that offers no modes has no broader one to choose, and its own rules ask.
+    if (!option) return
+    const choice = option.choices?.find((candidate) => candidate.value === wanted)
+    if (!choice) {
+      throw new HostError(
+        'restricted',
+        t('routines.noAskingMode', { agent: this.deps.agents.name(live.record.agentId) }),
+      )
+    }
+    if (option.value === wanted) return
+    try {
+      let config: ConfigOption[]
+      if (option.id === SYNTHETIC_MODE_ID) {
+        await connection.setMode(live.record.acpSessionId, wanted)
+        config = live.thread.session.config.map((current) =>
+          current.id === option.id ? { ...current, value: wanted } : current,
+        )
+      } else {
+        config = mergeConfig(
+          live.thread.session.config,
+          await connection.setConfigOption(live.record.acpSessionId, option.id, wanted),
+        )
+      }
+      this.update(live, { config: withUltracode(live.record, config) })
+      this.save(live)
+    } catch {
+      throw new HostError(
+        'restricted',
+        t('routines.modeFailed', { agent: this.deps.agents.name(live.record.agentId) }),
+      )
+    }
   }
 
   /** Records why a start failed; auth goes to `auth_required`, the rest to `failed`. */
@@ -2375,12 +2484,13 @@ export class SessionManager {
         this.update(live, { updatedAt: now })
         if (this.inFront(live.id)) live.record.lastViewedAt = now
         this.persist(live)
-        this.deps.events.attention(
-          live.id,
-          'error',
-          this.titleOf(live),
-          t('notice.stopped.title', { agent: name }),
-        )
+        const stopped: { message: string } = { message: t('notice.stopped.title', { agent: name }) }
+        const routineTurn = turn
+          ? this.reportRun(live, { stopReason: null, error: stopped, usage: null, turn })
+          : false
+        if (!routineTurn) {
+          this.deps.events.attention(live.id, 'error', this.titleOf(live), stopped.message)
+        }
       }
       held.push(live.record)
     }
@@ -2508,7 +2618,7 @@ export class SessionManager {
       clearTimeout(live.releaseTimer)
       live.releaseTimer = null
     }
-    if (this.stopped || live.closing || !live.saved || live.record.origin !== 'user') return
+    if (this.stopped || live.closing || !live.saved || live.record.origin === 'subagent') return
     if (this.holdsAgent(live)) {
       live.idleSince = null
       return
@@ -3264,6 +3374,10 @@ export class SessionManager {
     })
     this.persist(live)
     this.touch(live.id)
+    if (live.record.origin === 'routine' && !live.routineTurnStarted) {
+      live.routineTurnStarted = true
+      this.deps.routine?.current?.turnStarted(live.id)
+    }
     void this.runTurn(live, turn)
   }
 
@@ -3331,6 +3445,7 @@ export class SessionManager {
     const now = this.now()
     const record: SessionRecord = {
       ...source.record,
+      origin: 'user',
       id: forkId,
       acpSessionId: setup.acpSessionId,
       title: source.thread.session.title,
@@ -3343,6 +3458,7 @@ export class SessionManager {
     delete record.queue
     delete record.pinnedAt
     delete record.archivedAt
+    delete record.routine
     this.stampConfig(record)
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
@@ -3563,10 +3679,92 @@ export class SessionManager {
     else live.unread = true
     this.persist(live)
     this.touch(live.id)
-    this.deps.events.attention(live.id, 'turn-ended', this.titleOf(live), turnEndText(stopReason))
+    const routineTurn = this.reportRun(live, {
+      stopReason,
+      error: null,
+      usage: turnTokens ?? null,
+      turn,
+    })
+    // A run's end notifies as the routine's, once, so its session sends nothing here.
+    if (!routineTurn) {
+      this.deps.events.attention(live.id, 'turn-ended', this.titleOf(live), turnEndText(stopReason))
+    }
     if (stopReason === 'end_turn') this.drainQueue(live)
     else this.pauseQueue(live)
     this.checkpoint(live)
+  }
+
+  /**
+   * Reports the first turn of a run's session to the routines manager; true when it was one, so
+   * the session sends no ordinary turn notification for it.
+   */
+  private reportRun(
+    live: Live,
+    result: {
+      stopReason: StopReason | null
+      error: { message: string; detail?: string } | null
+      usage: TokenTotals | null
+      turn: Turn | null
+    },
+  ): boolean {
+    const hooks = this.deps.routine?.current
+    if (!hooks || live.record.origin !== 'routine' || live.routineTurnEnded) return false
+    live.routineTurnEnded = true
+    // A plain object, not an Error: a run's record is written as JSON.
+    const error = result.error
+      ? {
+          message: result.error.message,
+          ...(result.error.detail === undefined ? {} : { detail: result.error.detail }),
+        }
+      : null
+    hooks.turnEnded(live.id, {
+      stopReason: result.stopReason,
+      error,
+      output: result.turn ? this.turnAnswer(live, result.turn) : null,
+      usage: result.usage,
+      changedFiles: result.turn ? this.turnChanges(live, result.turn) : [],
+    })
+    return true
+  }
+
+  /** The entries of a turn, after the user entry that opened it. */
+  private turnEntries(live: Live, turn: Turn): ThreadEntry[] {
+    const order = live.thread.order
+    const at = turn.entryId ? order.indexOf(turn.entryId) : -1
+    const entries: ThreadEntry[] = []
+    for (const id of order.slice(at + 1)) {
+      const entry = live.thread.byId[id]
+      if (entry) entries.push(entry)
+    }
+    return entries
+  }
+
+  /** The turn's answer: its agent messages, joined as the thread folds them. */
+  private turnAnswer(live: Live, turn: Turn): string | null {
+    const parts = this.turnEntries(live, turn).flatMap((entry) =>
+      entry.kind === 'agent' && entry.markdown.trim() !== '' ? [entry.markdown] : [],
+    )
+    return parts.length > 0 ? parts.join('\n\n') : null
+  }
+
+  /** The paths a turn's edits touched, relative to the project when they lie inside it. */
+  private turnChanges(live: Live, turn: Turn): string[] {
+    const api = this.deps.platform === 'win32' ? path.win32 : path.posix
+    const root = live.record.projectPath
+    const paths = new Set<string>()
+    for (const entry of this.turnEntries(live, turn)) {
+      if (
+        entry.kind !== 'tool' ||
+        (entry.toolKind !== 'edit' && entry.toolKind !== 'delete' && entry.toolKind !== 'move')
+      ) {
+        continue
+      }
+      for (const location of entry.locations) {
+        const relative = api.relative(root, location.path)
+        paths.add(relative.startsWith('..') ? location.path : relative)
+      }
+    }
+    return [...paths]
   }
 
   private failTurn(live: Live, turn: Turn, error: unknown): void {
@@ -3637,7 +3835,15 @@ export class SessionManager {
     this.pauseQueue(live)
     this.persist(live)
     this.touch(live.id)
-    this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
+    const routineTurn = this.reportRun(live, {
+      stopReason: null,
+      error: mapped,
+      usage: null,
+      turn,
+    })
+    if (!routineTurn) {
+      this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
+    }
     this.checkpoint(live)
   }
 
@@ -3646,11 +3852,12 @@ export class SessionManager {
     this.finishTurn(live, turn, null)
     this.update(live, { turnStartedAt: null, turnStartUsed: null })
     this.pauseQueue(live)
-    this.failStart(live, error, {
+    const failure = this.failStart(live, error, {
       action: 'prompt',
       content: turn.content,
       entryId: turn.entryId,
     })
+    this.reportRun(live, { stopReason: null, error: failure, usage: null, turn })
     this.persist(live)
     this.checkpoint(live)
   }
@@ -3757,12 +3964,12 @@ export class SessionManager {
       this.touch(live.id)
       this.updateBadge()
       const tool = live.thread.byId[request.toolEntryId]
-      this.deps.events.attention(
-        live.id,
-        'permission',
-        this.titleOf(live),
-        tool?.kind === 'tool' ? tool.title : t('attention.permission'),
-      )
+      const title = tool?.kind === 'tool' ? tool.title : t('attention.permission')
+      if (live.record.origin === 'routine' && !live.routineTurnEnded) {
+        this.deps.routine?.current?.waiting(live.id, true, title)
+      } else {
+        this.deps.events.attention(live.id, 'permission', this.titleOf(live), title)
+      }
     })
   }
 
@@ -3786,6 +3993,9 @@ export class SessionManager {
     }
     if (live.permissions.size === 0 && live.thread.session.status === 'awaiting_permission') {
       this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
+    }
+    if (live.permissions.size === 0 && live.record.origin === 'routine') {
+      this.deps.routine?.current?.waiting(live.id, false)
     }
     this.updateBadge()
   }
@@ -4255,16 +4465,18 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (!live) return
     const connection = live.connection
-    if (live.turn && !live.turn.ended) {
+    const stopped = live.turn && !live.turn.ended ? live.turn : null
+    if (stopped) {
       await connection?.cancel(live.record.acpSessionId).catch(() => {})
-      this.finishTurn(live, live.turn, 'cancelled')
+      this.finishTurn(live, stopped, 'cancelled')
+      this.reportRun(live, { stopReason: 'cancelled', error: null, usage: null, turn: stopped })
     }
     this.clearPermissions(live, 'cancelled')
     if (kept) this.holdFirst(live)
     const runtime = this.deps.agents.runtime(live.record.agentId)
     if (
       connection &&
-      live.record.origin === 'user' &&
+      live.record.origin !== 'subagent' &&
       live.record.acpSessionId &&
       runtime?.init.capabilities.closeSession
     ) {
@@ -4299,7 +4511,7 @@ export class SessionManager {
     await this.closeAll(all, false)
     const deleting: { item: SessionRecord; acpSessionId: string; runtime: AgentRuntime }[] = []
     for (const item of all) {
-      if (item.origin !== 'user' || !item.acpSessionId) continue
+      if (item.origin === 'subagent' || !item.acpSessionId) continue
       try {
         const runtime = await this.deps.agents.ensureReady(item.agentId)
         if (runtime.init.capabilities.deleteSession) {
@@ -4342,11 +4554,13 @@ export class SessionManager {
   }
 
   private forget(sessionId: string, portIds?: readonly string[]): void {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
     const known = this.records.delete(sessionId) || this.lastSummaries.has(sessionId)
     this.lastSummaries.delete(sessionId)
     this.missing.delete(sessionId)
     this.watchers.delete(sessionId)
     this.seqs.delete(sessionId)
+    if (record?.origin === 'routine') this.deps.routine?.current?.sessionGone(sessionId)
     if (known) this.deps.events.removed(sessionId, portIds)
   }
 
@@ -4356,7 +4570,7 @@ export class SessionManager {
     await Promise.all([...this.live.values()].map((l) => this.dropPrepared(l)))
     const live = [...this.live.values()]
     await this.closeAll(
-      live.filter((l) => l.record.origin === 'user').map((l) => l.record),
+      live.filter((l) => l.record.origin !== 'subagent').map((l) => l.record),
       false,
     )
     for (const item of live) if (this.live.has(item.id)) this.dropLive(item)
@@ -4418,7 +4632,7 @@ export class SessionManager {
     const store = this.deps.threads
     if (!store) return
     const candidates = [...this.records.values()].filter(
-      (record) => this.atLaunch.has(record.id) && mayBeEmpty(record),
+      (record) => record.origin !== 'routine' && this.atLaunch.has(record.id) && mayBeEmpty(record),
     )
     const empty = new Set<string>()
     await Promise.all(

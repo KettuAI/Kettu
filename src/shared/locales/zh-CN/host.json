@@ -95,6 +95,19 @@
       "refusal": "Agent 拒绝了请求"
     }
   },
+  "routines": {
+    "busy": "此例程已经有一个运行正在工作",
+    "stopping": "OverBench 正在退出",
+    "noRun": "没有这个运行",
+    "notFound": "没有这个例程",
+    "unnamed": "例程",
+    "ended": "已完成",
+    "failed": "{{name}} 失败了",
+    "timedOut": "运行达到了时间上限",
+    "needsApproval": "{{name}} 需要批准",
+    "noAskingMode": "{{agent}} 没有提供会在行动前询问的模式",
+    "modeFailed": "{{agent}} 无法设置会在行动前询问的模式"
+  },
   "agent": {
     "stoppedBeforeAnswer": "Agent 在回复前停止了",
     "failedToStart": "{{agent}} 启动失败",

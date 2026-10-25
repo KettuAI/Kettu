@@ -2,6 +2,7 @@
 
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall } from '../artifacts/model'
+import type { RoutineCall } from '../routines/calls'
 import type { ThreadWrite } from './model'
 
 /** What the worker is started with: the database, and the folder of the artifacts' HTML. */
@@ -35,6 +36,7 @@ export type ThreadRequest =
   | { id: number; op: 'blob'; sessionId: string; hash: string }
   | { id: number; op: 'mentions'; sessionId: string; text: string }
   | { id: number; op: 'artifact'; call: ArtifactCall }
+  | { id: number; op: 'routine'; call: RoutineCall }
   | { id: number; op: 'close' }
 
 export type ThreadReply =
