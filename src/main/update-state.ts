@@ -92,6 +92,8 @@ export function nextState(
   if (state.kind === 'off') return state
   switch (event.type) {
     case 'checking':
+      // Keep an available update visible while a background check runs.
+      if (!event.manual && state.kind === 'available') return state
       return { kind: 'checking', manual: event.manual }
     case 'available':
       if (context.mode === 'install' && context.autoDownload) {

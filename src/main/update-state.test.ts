@@ -100,6 +100,33 @@ describe('dismissTarget', () => {
 describe('nextState', () => {
   const idle: UpdateState = { kind: 'idle', checkedAt: 1000 }
 
+  it('keeps an available update through an automatic check', () => {
+    const available: UpdateState = { kind: 'available', version: '0.4.0', mode: 'link' }
+    expect(nextState(available, { type: 'checking', manual: false }, install)).toBe(available)
+    const notify = { ...install, autoDownload: false }
+    expect(nextState(available, { type: 'checking', manual: false }, notify)).toBe(available)
+    expect(
+      nextState(available, { type: 'not-available', at: 5000 }, { ...install, mode: 'link' }),
+    ).toEqual({ kind: 'idle', checkedAt: 5000 })
+    expect(
+      nextState(available, { type: 'available', version: '0.5.0' }, { ...install, mode: 'link' }),
+    ).toEqual({ kind: 'available', version: '0.5.0', mode: 'link' })
+    expect(
+      nextState(
+        { kind: 'available', version: '0.4.0', mode: 'install' },
+        { type: 'available', version: '0.5.0' },
+        notify,
+      ),
+    ).toEqual({ kind: 'available', version: '0.5.0', mode: 'install' })
+    expect(
+      nextState(available, { type: 'error', message: 'offline', manual: false }, install),
+    ).toBe(available)
+    expect(nextState(available, { type: 'checking', manual: true }, install)).toEqual({
+      kind: 'checking',
+      manual: true,
+    })
+  })
+
   it('downloads at once in Install mode with automatic downloads', () => {
     const checking = nextState(idle, { type: 'checking', manual: false }, install)
     expect(checking).toEqual({ kind: 'checking', manual: false })
