@@ -98,25 +98,20 @@ export default function UsagePage() {
   let body: ReactNode
   if (unavailable) {
     body = <Unavailable />
-  } else if (error && !page) {
-    body = (
-      <Alert variant="destructive">
-        <CircleAlertIcon />
-        <AlertTitle>{t('error.title')}</AlertTitle>
-        <AlertDescription>{error}</AlertDescription>
-        <AlertAction>
-          <Button variant="outline" size="compact" onClick={() => void loadUsagePage()}>
-            {t('error.retry')}
-          </Button>
-        </AlertAction>
-      </Alert>
-    )
   } else if (!page) {
-    body = <LoadingState />
-  } else if (page.summary.first === null && !scanning && !narrowed) {
-    body = <FirstRun />
+    body = error ? <ReadFailed error={error} /> : <LoadingState />
   } else {
-    body = <Dashboard page={page} />
+    // The figures stay until a read replaces them, so a failure shows above them.
+    body = (
+      <>
+        {error && <ReadFailed error={error} />}
+        {page.summary.first === null && !scanning && !narrowed ? (
+          <FirstRun />
+        ) : (
+          <Dashboard page={page} />
+        )}
+      </>
+    )
   }
 
   return (
@@ -133,6 +128,23 @@ export default function UsagePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+/** A read that failed: what went wrong, and Retry, above the figures it could not replace. */
+function ReadFailed({ error }: { error: string }) {
+  const { t } = useTranslation('usage')
+  return (
+    <Alert variant="destructive">
+      <CircleAlertIcon />
+      <AlertTitle>{t('error.title')}</AlertTitle>
+      <AlertDescription>{error}</AlertDescription>
+      <AlertAction>
+        <Button variant="outline" size="compact" onClick={() => void loadUsagePage()}>
+          {t('error.retry')}
+        </Button>
+      </AlertAction>
+    </Alert>
   )
 }
 
