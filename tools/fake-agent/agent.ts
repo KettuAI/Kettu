@@ -33,7 +33,7 @@ import {
   type Env,
   type ScenarioName,
 } from './options.ts'
-import { SCENARIO_RUNNERS, compact, syntheticHistory } from './scenarios.ts'
+import { SCENARIO_RUNNERS, compact, syntheticAttachments, syntheticHistory } from './scenarios.ts'
 import { isTitlesPrompt, titles } from './titles.ts'
 import type { FakeSessionState, Turn } from './turn.ts'
 
@@ -514,8 +514,12 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       if (!session) {
         session = newSession(ctx.params.sessionId, ctx.params.cwd)
         session.title = 'Restored session'
+        const history =
+          ctx.params.sessionId === 'cli-replayed-attachments'
+            ? syntheticAttachments()
+            : syntheticHistory(8)
         if (session.largeHistory === null) {
-          for (const update of syntheticHistory(8)) record(session, session.id, update)
+          for (const update of history) record(session, session.id, update)
         }
       }
       await replay(ctx.client, session)

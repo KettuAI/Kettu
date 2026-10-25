@@ -203,6 +203,7 @@
   },
   "content": {
     "audio": "音频（{{type}}）",
+    "image": "图片 {{number}}",
     "resource": "嵌入资源 {{uri}}",
     "text": "文本",
     "unknown": "未知内容",

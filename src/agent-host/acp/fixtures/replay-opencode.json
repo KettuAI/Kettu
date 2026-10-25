@@ -1,0 +1,42 @@
+[
+  {
+    "content": {
+      "text": "Please look at these and reply OK. (opencode-bothBlob-1792958205741)",
+      "type": "text"
+    },
+    "messageId": "msg_174a316a3001BV1S04P6ald1c7",
+    "sessionUpdate": "user_message_chunk"
+  },
+  {
+    "content": {
+      "data": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAABsUlEQVR4nAXBkQKFMAAAwD4njuM4juP4JJk8mSSTZJJMkkkySfqsd9f1vsE3+ibf7Ft8q2/z8QVf9CVf9hVf9TVf13sH7+idvLN38a7ezcsbvNGbvNlbvNXbvF2vDdqoTdqsLdqqbRotaFFLWtaKVrWmdb1n8IyeyTN7Fs/q2Tw8wRM9yZM9xVM9zdP16qCO6qTO6qKu6qZSgxrVpGa1qFVtate7B/fontyze3Gv7s3NHdzRndzZXdzV3dxdrwzKqEzKrCzKqmwKJShRSUpWilKVpnS9a3CNrsk1uxbX6tpcXMEVXcmVXcVVXc3V9fIgj/Ikz/Iir/Imk4Mc5SRnuchVbnLXOwfn6Jycs3Nxrs7NyRmc0Zmc2Vmc1dmcXS8N0ihN0iwt0iptEilIUUpSlopUpSZ1vWNwjI7JMTsWx+rYHBzBER3JkR3FUR3N0fXiII7iJM7iIq7iJhKDGMUkZrGIVWxi1/sNfqPf5Df7LX6r3+bHL/hFv+SX/Ypf9Wt+XS8MwihMwiwswipsAiEIUUhCFopQhSZ0vX2wj/bJPtsX+2rf7OzBHu3Jnu3FXu3N/gd8/o2Qdf5Z6gAAAABJRU5ErkJggg==",
+      "mimeType": "image/png",
+      "uri": "file:///private/tmp/overbench-140-proj/image",
+      "type": "image"
+    },
+    "messageId": "msg_174a316a3001BV1S04P6ald1c7",
+    "sessionUpdate": "user_message_chunk"
+  },
+  {
+    "content": {
+      "resource": {
+        "mimeType": "text/plain",
+        "text": "Project notes\nline two\n",
+        "uri": "file:///private/tmp/overbench-140-proj/notes.txt"
+      },
+      "type": "resource"
+    },
+    "messageId": "msg_174a316a3001BV1S04P6ald1c7",
+    "sessionUpdate": "user_message_chunk"
+  },
+  {
+    "content": {
+      "mimeType": "text/plain",
+      "name": "notes.txt",
+      "uri": "file:///tmp/overbench-140-proj/notes.txt",
+      "type": "resource_link"
+    },
+    "messageId": "msg_174a316a3001BV1S04P6ald1c7",
+    "sessionUpdate": "user_message_chunk"
+  }
+]

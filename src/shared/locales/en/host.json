@@ -204,6 +204,7 @@
   },
   "content": {
     "audio": "Audio ({{type}})",
+    "image": "Image {{number}}",
     "resource": "Embedded resource {{uri}}",
     "text": "Text",
     "unknown": "Unknown content",

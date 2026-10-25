@@ -2231,6 +2231,39 @@ describe('opening and recovering', () => {
     expect(stored?.head).toEqual({ agentId: 'fake-agent', acpSessionId: 'cli-refactor-router' })
   })
 
+  it('keeps the bytes of images a replay carries in the thread store', async () => {
+    const { t, port } = await setup()
+    const imported = await port.request('sessions.import', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      acpSessionId: 'cli-replayed-attachments',
+    })
+    const snapshot = await port.open(imported.id)
+    const user = snapshot.entries.find((entry) => entry.kind === 'user')
+    const attachments =
+      user?.kind === 'user'
+        ? user.content.flatMap((item) =>
+            item.type === 'ref' && item.ref.kind === 'attachment' ? [item.ref.attachment] : [],
+          )
+        : []
+    const image = attachments.find((attachment) => attachment.type === 'image')
+    const hash = createHash('sha256').update(Buffer.from('AQIDBA==', 'base64')).digest('hex')
+    expect(image).toMatchObject({ name: 'Image 1', sent: 'image', thumb: null, blob: hash })
+    expect(attachments.find((attachment) => attachment.type === 'file')).toMatchObject({
+      name: 'notes.txt',
+      uri: 'file:///tmp/notes.txt',
+      sent: 'embedded',
+    })
+    const blob = await port.request('sessions.blob', { sessionId: imported.id, hash: hash! })
+    expect(new Uint8Array(blob.bytes)).toEqual(new Uint8Array([1, 2, 3, 4]))
+    // The store keeps them, so the session opens with its tile without its agent.
+    await t.host.threads!.flush()
+    expect(await t.host.threads!.blob(imported.id, hash!)).toMatchObject({
+      hash,
+      mime: 'image/png',
+    })
+  })
+
   it('closes the sessions of a crashed agent, and the next send starts it again', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)

@@ -8,6 +8,9 @@ import {
   type ThreadEntry,
   type ThreadState,
 } from '@shared/thread'
+import claudeReplay from './fixtures/replay-claude.json'
+import codexReplay from './fixtures/replay-codex.json'
+import opencodeReplay from './fixtures/replay-opencode.json'
 import {
   addTokenTotals,
   mapAuthStatus,
@@ -226,9 +229,173 @@ describe('user message chunks', () => {
     expect(entries[2]).toMatchObject({
       content: [
         { type: 'text', text: 'Again' },
-        { type: 'ref', ref: { kind: 'image' } },
+        {
+          type: 'ref',
+          ref: {
+            kind: 'attachment',
+            attachment: { type: 'image', name: 'Image 1', sent: 'image', thumb: null, blob: null },
+          },
+        },
       ],
     })
+  })
+})
+
+describe('replayed attachments', () => {
+  const fixture = (updates: unknown): SessionUpdate[] => updates as SessionUpdate[]
+  const userOf = (entries: ThreadEntry[]) => {
+    const entry = entries.find((item) => item.kind === 'user')
+    if (entry?.kind !== 'user') throw new Error('no user entry')
+    return entry
+  }
+  const attachments = (entries: ThreadEntry[]) =>
+    userOf(entries).content.flatMap((item) =>
+      item.type === 'ref' && item.ref.kind === 'attachment' ? [item.ref.attachment] : [],
+    )
+
+  it('maps Claude Code a file left as a link and its context block to one embedded tile', () => {
+    const { entries, effects } = run(fixture(claudeReplay), { replaying: true })
+    expect(entries.map((entry) => entry.kind)).toEqual(['user'])
+    expect(userOf(entries).content).toHaveLength(3)
+    expect(userOf(entries).content[0]).toEqual({
+      type: 'text',
+      text: 'Please look at these and reply OK.',
+    })
+    expect(attachments(entries)).toMatchObject([
+      {
+        type: 'image',
+        name: 'Image 1',
+        uri: null,
+        mimeType: 'image/png',
+        sent: 'image',
+        thumb: null,
+        blob: null,
+      },
+      {
+        type: 'file',
+        name: 'notes.txt',
+        uri: 'file:///tmp/overbench-140-proj/notes.txt',
+        sent: 'embedded',
+        thumb: null,
+        blob: null,
+      },
+    ])
+    const image = attachments(entries)[0]!
+    const entryId = userOf(entries).id
+    expect(image.id).toBe(`${entryId}:a1`)
+    expect(effects).toContainEqual({
+      kind: 'replayImage',
+      entryId,
+      attachmentId: image.id,
+      mimeType: 'image/png',
+      data: expect.any(String),
+    })
+  })
+
+  it('maps Codex one text block with the file link and its context block', () => {
+    const { entries, effects } = run(fixture(codexReplay), { replaying: true })
+    expect(entries.map((entry) => entry.kind)).toEqual(['user'])
+    expect(userOf(entries).content[0]).toEqual({
+      type: 'text',
+      text: 'Please look at these and reply OK.',
+    })
+    expect(attachments(entries)).toMatchObject([
+      { type: 'image', name: 'Image 1', sent: 'image' },
+      { type: 'file', name: 'notes.txt', sent: 'embedded' },
+    ])
+    expect(effects.filter((effect) => effect.kind === 'replayImage')).toHaveLength(1)
+  })
+
+  it('maps OpenCode resource, resource link and image blocks', () => {
+    const { entries } = run(fixture(opencodeReplay), { replaying: true })
+    expect(entries.map((entry) => entry.kind)).toEqual(['user'])
+    expect(attachments(entries)).toMatchObject([
+      { type: 'image', name: 'Image 1', uri: 'file:///private/tmp/overbench-140-proj/image' },
+      {
+        type: 'file',
+        name: 'notes.txt',
+        uri: 'file:///private/tmp/overbench-140-proj/notes.txt',
+        mimeType: 'text/plain',
+        size: 23,
+        sent: 'embedded',
+      },
+      {
+        type: 'file',
+        name: 'notes.txt',
+        uri: 'file:///tmp/overbench-140-proj/notes.txt',
+        mimeType: 'text/plain',
+        sent: 'linked',
+      },
+    ])
+  })
+
+  it('keeps the text around a file link and drops the context block', () => {
+    const { entries } = run(
+      [
+        {
+          sessionUpdate: 'user_message_chunk',
+          content: {
+            type: 'text',
+            text: 'Review this\n[@a file.md](file:///repo/a%20file.md)\n<context ref="file:///repo/a%20file.md">\n# A\n\n```ts\nconst a = 1\n```\n</context>\nThanks',
+          },
+        },
+      ],
+      { replaying: true },
+    )
+    const user = userOf(entries)
+    expect(user.content).toMatchObject([
+      { type: 'text', text: 'Review this' },
+      {
+        type: 'ref',
+        ref: {
+          kind: 'attachment',
+          attachment: {
+            type: 'file',
+            name: 'a file.md',
+            uri: 'file:///repo/a%20file.md',
+            sent: 'embedded',
+          },
+        },
+      },
+      { type: 'text', text: 'Thanks' },
+    ])
+  })
+
+  it('keeps a link that is not a file or a data image as text', () => {
+    const { entries, effects } = run(
+      [
+        {
+          sessionUpdate: 'user_message_chunk',
+          content: {
+            type: 'text',
+            text: 'See [@docs](https://example.com/docs) and [notes](file:///repo/notes.txt)',
+          },
+        },
+      ],
+      { replaying: true },
+    )
+    expect(userOf(entries).content).toEqual([
+      {
+        type: 'text',
+        text: 'See [@docs](https://example.com/docs) and [notes](file:///repo/notes.txt)',
+      },
+    ])
+    expect(effects).toEqual([])
+  })
+
+  it('keeps a link with no context block as a linked tile', () => {
+    const { entries } = run(
+      [
+        {
+          sessionUpdate: 'user_message_chunk',
+          content: { type: 'text', text: '[@notes.txt](file:///repo/notes.txt)' },
+        },
+      ],
+      { replaying: true },
+    )
+    expect(attachments(entries)).toMatchObject([
+      { type: 'file', name: 'notes.txt', sent: 'linked', thumb: null, blob: null },
+    ])
   })
 })
 
