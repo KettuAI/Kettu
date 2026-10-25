@@ -21,19 +21,18 @@ import {
 } from '@renderer/features/sidebar/session-menu'
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
-import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 
 /** A sub-session's parent at the start of the top bar, which opens it. */
-export function ParentLink({ parent, className }: { parent: SessionSummary; className?: string }) {
+export function ParentLink({ parent }: { parent: SessionSummary }) {
   return (
     <>
       <Button
         variant="quiet"
         size="compact"
-        className={cn('min-w-0 max-w-[30%] shrink px-1.5', className)}
+        className="min-w-16 shrink-100 px-1.5"
         onClick={() => openSession(parent.id, parent.projectPath)}
       >
         <span className="truncate">{sessionTitle(parent)}</span>
