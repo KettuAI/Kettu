@@ -143,7 +143,7 @@ export function TerminalPanel({
               />
             ))}
             {creating && (
-              <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-tertiary">
+              <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-ui text-tertiary">
                 <Spinner className="size-3" />
                 {t('panel.starting')}
               </span>
@@ -153,6 +153,7 @@ export function TerminalPanel({
         <PanelButton
           label={t('panel.newTerminal')}
           shortcut="Ctrl+Shift+`"
+          size="icon-sm"
           onClick={() => void newTerminal()}
         >
           <PlusIcon />
@@ -165,6 +166,7 @@ export function TerminalPanel({
         )}
         <PanelButton
           label={maximized ? t('panel.restore') : t('panel.maximize')}
+          size="icon-sm"
           onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
         >
           {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
@@ -172,6 +174,7 @@ export function TerminalPanel({
         <PanelButton
           label={t('common:actions.close')}
           shortcut="Ctrl+`"
+          size="icon-sm"
           onClick={() => toggleTerminal(projectPath, false)}
         >
           <XIcon />
@@ -224,7 +227,7 @@ export function TerminalPanel({
   )
 }
 
-function TerminalTab({
+export function TerminalTab({
   terminal,
   index,
   selected,
@@ -281,13 +284,12 @@ function TerminalTab({
       <ContextMenuTrigger
         ref={ref}
         className={cn(
-          'group/tab relative flex h-6 max-w-48 min-w-20 items-center rounded-md text-xs transition-[color,background-color,box-shadow] duration-(--duration-fast)',
+          'group/tab relative flex h-7 max-w-48 min-w-20 items-center rounded-lg text-ui transition-[color,background-color] duration-(--duration-fast)',
           editing
             ? 'bg-background text-primary ring-1 ring-border-strong ring-inset'
-            : // The selected tab is raised like a segmented control's thumb, apart from the hover fill.
-              selected || isDragging
-              ? 'bg-segment-thumb text-primary shadow-segment'
-              : 'text-tertiary hover:bg-hover hover:text-primary',
+            : selected || isDragging
+              ? 'bg-selected text-primary'
+              : 'text-secondary hover:bg-hover hover:text-primary',
         )}
       >
         {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
@@ -302,11 +304,10 @@ function TerminalTab({
           onDoubleClick={() => setEditing(true)}
           onAuxClick={(e) => e.button === 1 && onClose()}
           className={cn(
-            'flex h-full min-w-0 items-center gap-1.5 rounded-md pr-6 pl-2 outline-none focus-ring',
+            'flex h-full min-w-0 items-center gap-1.5 rounded-lg pr-6 pl-2.5 outline-none focus-ring',
             editing && 'invisible',
           )}
         >
-          <SquareTerminalIcon className="size-3.5 shrink-0" />
           <span className="truncate">{name}</span>
           {exited && (
             <span className={cn('shrink-0 tabular', terminal.exitCode !== 0 && 'text-danger')}>
@@ -329,7 +330,7 @@ function TerminalTab({
             aria-label={t('tab.close', { name })}
             onClick={onClose}
             className={cn(
-              'absolute right-0.5 flex size-5 items-center justify-center rounded-[5px] text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-background/60 hover:text-primary focus-visible:opacity-100 focus-ring group-hover/tab:opacity-100',
+              'absolute right-1.5 flex size-4 items-center justify-center rounded-md text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-pressed-hover hover:text-primary focus-visible:opacity-100 focus-ring group-focus-within/tab:opacity-100 group-hover/tab:opacity-100',
               selected && 'opacity-100',
             )}
           >
@@ -373,8 +374,7 @@ function TabNameInput({
     onFinish(value, restoreFocus)
   }
   return (
-    <div className="absolute inset-0 flex items-center gap-1.5 px-2">
-      <SquareTerminalIcon className="size-3.5 shrink-0" />
+    <div className="absolute inset-0 flex items-center px-2.5">
       <input
         autoFocus
         aria-label={label}
