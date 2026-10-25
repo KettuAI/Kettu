@@ -1401,15 +1401,7 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   )
 }
 
-function ConfigRow({
-  item,
-  note,
-  children,
-}: {
-  item: AgentConfigItem
-  note?: ReactNode
-  children?: ReactNode
-}) {
+function ConfigRow({ item }: { item: AgentConfigItem }) {
   const { t } = useTranslation('settings')
   return (
     <RowFrame
@@ -1417,33 +1409,40 @@ function ConfigRow({
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-ui font-medium">{t(`agents.config.${item.id}`)}</span>
           <PathText path={item.path} missing={!item.exists} />
-          {item.chosen ? (
-            <span className="text-xs text-tertiary">{t('agents.configFolder.chosen')}</span>
-          ) : (
-            item.env && (
-              <span className="text-xs text-tertiary">{t('agents.setBy', { env: item.env })}</span>
-            )
-          )}
-          {note}
+          <ConfigNote item={item} />
         </div>
       }
     >
-      {item.exists ? (
-        <>
-          <CopyAction text={item.path} label={t('advanced.dataFolder.copy')} />
-          <RevealAction path={item.path} />
-        </>
-      ) : (
-        <span className="text-xs text-tertiary">{t('agents.notCreated')}</span>
-      )}
-      {children}
+      <ConfigActions item={item} />
     </RowFrame>
+  )
+}
+
+/** What set the place: a folder picked in OverBench, or the variable that moved it. */
+function ConfigNote({ item }: { item: AgentConfigItem }) {
+  const { t } = useTranslation('settings')
+  const note = item.chosen
+    ? t('agents.configFolder.chosen')
+    : item.env && t('agents.setBy', { env: item.env })
+  return note ? <span className="text-xs text-tertiary">{note}</span> : null
+}
+
+function ConfigActions({ item }: { item: AgentConfigItem }) {
+  const { t } = useTranslation('settings')
+  return item.exists ? (
+    <>
+      <CopyAction text={item.path} label={t('advanced.dataFolder.copy')} />
+      <RevealAction path={item.path} />
+    </>
+  ) : (
+    <span className="text-xs text-tertiary">{t('agents.notCreated')}</span>
   )
 }
 
 /**
  * Claude Code's and Codex's folder: the environment's, or one of the agent's own picked in a
- * native dialog, which keeps its sign-in and settings apart from the CLI in a terminal.
+ * native dialog, which keeps its sign-in and settings apart from the CLI in a terminal. The choice
+ * takes a line of its own, so the path keeps the row's width.
  */
 function FolderRow({
   item,
@@ -1462,34 +1461,46 @@ function FolderRow({
   // The running agent keeps its folder until it stops, so another one waits for the next start.
   const pending = configDir.active !== null && configDir.active !== configDir.runs
   return (
-    <ConfigRow
-      item={item}
-      note={
-        pending && (
-          <span className="text-xs text-tertiary">{t('agents.configFolder.nextStart')}</span>
-        )
-      }
-    >
-      <ControlError error={applyError ?? chooseError} />
-      {chosen && (
-        <Button variant="outline" size="compact" disabled={choosing} onClick={choose}>
-          {t('agents.configFolder.choose')}
-        </Button>
-      )}
-      <Segmented
-        label={t('agents.configFolder.label', { name: status.name })}
-        value={chosen ? 'custom' : 'environment'}
-        options={[
-          { value: 'environment', label: t('agents.configFolder.useEnvironment') },
-          { value: 'custom', label: t('agents.configFolder.custom') },
-        ]}
-        onChange={(mode) => {
-          if (mode === 'environment') {
-            if (chosen) apply({ agents: { [status.id]: { configDir: null } } })
-          } else if (!chosen) choose()
-        }}
-      />
-    </ConfigRow>
+    <RowShell>
+      <div className="flex flex-col gap-1 py-3">
+        <div className="flex min-h-7 items-center gap-6">
+          <span className="min-w-0 flex-1 text-ui font-medium">{t('agents.config.folder')}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <ControlError error={applyError ?? chooseError} />
+            <Segmented
+              label={t('agents.configFolder.label', { name: status.name })}
+              value={chosen ? 'custom' : 'environment'}
+              options={[
+                { value: 'environment', label: t('agents.configFolder.useEnvironment') },
+                { value: 'custom', label: t('agents.configFolder.custom') },
+              ]}
+              onChange={(mode) => {
+                if (mode === 'environment') {
+                  if (chosen) apply({ agents: { [status.id]: { configDir: null } } })
+                } else if (!chosen) choose()
+              }}
+            />
+          </div>
+        </div>
+        <div className="flex min-h-7 items-center gap-6">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <PathText path={item.path} missing={!item.exists} />
+            <ConfigNote item={item} />
+            {pending && (
+              <span className="text-xs text-tertiary">{t('agents.configFolder.nextStart')}</span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ConfigActions item={item} />
+            {chosen && (
+              <Button variant="outline" size="compact" disabled={choosing} onClick={choose}>
+                {t('agents.configFolder.choose')}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </RowShell>
   )
 }
 
