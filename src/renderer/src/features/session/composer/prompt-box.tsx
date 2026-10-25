@@ -1,5 +1,5 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
-import { Autocomplete } from '@base-ui/react/autocomplete'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Popover } from '@base-ui/react/popover'
 import { AtSignIcon, FileIcon, FolderIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, SlashCommand } from '@shared/thread'
@@ -11,24 +11,21 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from '@renderer/components/ui/input-group'
+import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { ImageDialog, type ImageDialogTarget } from '../attachments/image-dialog'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
+import { ComposerEditor } from './editor'
 import { MentionFooter, MentionHeader, MentionItem } from './mention-popover'
 import {
   insertAt,
   mentionAt,
   mentionName,
   mentionShown,
+  moveHighlight,
   popoverKey,
   replaceMention,
   type MentionRow,
@@ -38,10 +35,6 @@ import type { PromptBoxState } from './use-prompt-box'
 
 // The box both composers share, the session's and New session's: the text with its slash and `@`
 // popovers, the attachments and **+**, kept in a draft. What sends, and how, is each one's own.
-
-type BaseUIKeyboardEvent = KeyboardEvent<HTMLTextAreaElement> & {
-  preventBaseUIHandler?: () => void
-}
 
 type PopoverItem = SlashCommand | MentionRow
 
@@ -55,7 +48,7 @@ export function PromptBox({
   commands,
   placeholder,
   label,
-  className,
+  size,
   top,
   wrap = false,
   stacked = false,
@@ -68,8 +61,8 @@ export function PromptBox({
   commands: SlashCommand[]
   placeholder: string
   label: string
-  /** The text area's size and padding. */
-  className: string
+  /** The text's least height and its padding, as CSS lengths. */
+  size: { minHeight: string; padding: string }
   /** What the box shows before the attachments, such as a notice; `wrap` while it shows. */
   top?: ReactNode
   wrap?: boolean
@@ -77,8 +70,8 @@ export function PromptBox({
   stacked?: boolean
   /** What follows the text on its last line, such as Send. */
   end: ReactNode
-  /** A key the popovers left to the composer. */
-  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
+  /** A key the popovers left to the composer, which calls preventDefault on one it takes. */
+  onKeyDown: (event: KeyboardEvent) => void
 }) {
   const { t } = useTranslation('composer')
   const {
@@ -88,7 +81,7 @@ export function PromptBox({
     text,
     attachments,
     update,
-    textarea,
+    editor,
     caret,
     setCaret,
     slashDismissed,
@@ -100,8 +93,11 @@ export function PromptBox({
   const [composition, setComposition] = useState<{ open: boolean } | null>(null)
   const [popover, setPopover] = useState<'slash' | MentionList | null>(null)
   const [viewing, setViewing] = useState<ImageDialogTarget | null>(null)
-  const highlighted = useRef<PopoverItem | undefined>(undefined)
+  // The highlighted row, for the list `list` names.
+  const [highlight, setHighlight] = useState({ list: '', index: 0 })
   const group = useRef<HTMLDivElement>(null)
+  const popup = useRef<HTMLDivElement>(null)
+  const listId = useId()
 
   const slashQuery = text.startsWith('/') && !/\s/.test(text) ? text.slice(1).toLowerCase() : null
   const slashMatches =
@@ -125,18 +121,44 @@ export function PromptBox({
   const showing = slashOpen ? 'slash' : mentionOpen ? mentions : popover
   if (showing !== popover) setPopover(showing)
   const listing = typeof showing === 'object' ? showing : null
+  const open = slashOpen || mentionOpen
+  const rows: PopoverItem[] = showing === 'slash' ? slashMatches : listing ? listing.rows : []
+  // A list opens, and a new query starts, on its first row.
+  const listKey = slashOpen
+    ? `/${slashQuery}`
+    : mentionOpen
+      ? `@${mention!.start}:${mention!.query}`
+      : ''
+  if (highlight.list !== listKey) setHighlight({ list: listKey, index: 0 })
+  const active = rows.length === 0 ? -1 : Math.min(highlight.index, rows.length - 1)
+  const optionId = (index: number) => `${listId}-${index}`
+  useLayoutEffect(() => {
+    if (open && active >= 0)
+      document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' })
+  }, [open, active, listId])
   const choose = (row: MentionRow) => {
     if (!mention || !projectPath) return
     const next = replaceMention(text, mention, mentionName(row))
     update(next.text, next.caret)
     box.limitError(attachMention(draft, projectPath, row.path, row.folder))
   }
+  const chooseItem = (item: PopoverItem | undefined) => {
+    if (!item) return
+    if (isMentionRow(item)) choose(item)
+    else update(`/${item.name} `)
+  }
+  const highlightRow = (index: number) => {
+    if (index !== active) setHighlight({ list: listKey, index })
+  }
+  const dismiss = () => {
+    if (slashOpen) setSlashDismissed(true)
+    if (mentionOpen && mention) setMentionDismissed(mention.start)
+  }
   const startMention = () => {
-    const el = textarea.current
-    const from = el?.selectionStart ?? text.length
-    const next = insertAt(text, from, el?.selectionEnd ?? from)
+    const current = editor.current?.text() ?? text
+    const { from, to } = editor.current?.selection() ?? { from: current.length, to: current.length }
+    const next = insertAt(current, from, to)
     update(next.text, next.caret)
-    el?.focus()
   }
   const hint = (() => {
     const match = /^\/(\S+)\s$/.exec(text)
@@ -150,199 +172,206 @@ export function PromptBox({
       full={box.full}
       commands={commands.length > 0}
       emptyDraft={text === ''}
-      textarea={textarea}
+      onFocusBox={box.focus}
       onPick={box.pick}
-      onSlash={() => {
-        update('/')
-        textarea.current?.focus()
-      }}
+      onSlash={() => update('/')}
       onMention={startMention}
     />
   )
 
-  const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const keyDown = (event: KeyboardEvent): boolean => {
+    const modified = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
     const handling = popoverKey(event.key, {
-      composing: event.nativeEvent.isComposing || event.keyCode === 229,
-      modified: event.shiftKey || event.ctrlKey || event.altKey || event.metaKey,
+      composing: event.isComposing || event.keyCode === 229,
+      modified,
       slashOpen,
       mentionOpen,
       mentionRows: mentions.rows.length > 0,
     })
     // IME composition: no key reaches a popover, and Enter confirms the candidate, never sends.
-    if (handling === 'block') {
-      ;(event as BaseUIKeyboardEvent).preventBaseUIHandler?.()
-      return
+    if (handling === 'block') return false
+    if (
+      open &&
+      !modified &&
+      rows.length > 0 &&
+      (event.key === 'ArrowDown' || event.key === 'ArrowUp')
+    ) {
+      setHighlight({ list: listKey, index: moveHighlight(active, rows.length, event.key) })
+      return true
     }
-    if (handling === 'popover') return
-    if (handling === 'choose') {
-      const item = highlighted.current
-      if (item && isMentionRow(item)) {
-        event.preventDefault()
-        choose(item)
-      }
-      return
+    if (handling === 'popover' && event.key === 'Escape') {
+      dismiss()
+      return true
     }
-    // With no list open, Base UI's autocomplete clears its input on Escape, which here is the draft.
-    if (event.key === 'Escape') (event as BaseUIKeyboardEvent).preventBaseUIHandler?.()
+    if (handling === 'popover' || handling === 'choose') {
+      chooseItem(rows[active])
+      return true
+    }
     onKeyDown(event)
+    return event.defaultPrevented
+  }
+  // Base UI closes on a press outside the popup; a press in the box, its anchor, only moves the caret.
+  const openChange = (next: boolean, details: Popover.Root.ChangeEventDetails) => {
+    if (next) return
+    if (details.reason === 'outside-press') {
+      const target = details.event.target
+      if (target instanceof Node && group.current?.contains(target)) {
+        details.cancel()
+        return
+      }
+    }
+    dismiss()
+  }
+  // Focus leaving the box closes the popover.
+  const blur = (event: FocusEvent) => {
+    if (event.relatedTarget instanceof Node && popup.current?.contains(event.relatedTarget)) return
+    dismiss()
   }
 
   return (
     <>
-      <Autocomplete.Root<PopoverItem>
-        items={listing ? listing.rows : commands}
-        filteredItems={listing ? listing.rows : undefined}
-        value={text}
-        onValueChange={(value, details) => {
-          // A row the pointer was released on: the composer writes the mention, not Base UI.
-          if (details.reason === 'item-press' && mentionOpen) {
-            const item = highlighted.current
-            if (item && isMentionRow(item)) choose(item)
-            return
-          }
-          update(value)
-        }}
-        open={slashOpen || mentionOpen}
-        onOpenChange={(open) => {
-          if (open) return
-          if (slashOpen) setSlashDismissed(true)
-          if (mentionOpen && mention) setMentionDismissed(mention.start)
-        }}
-        onItemHighlighted={(item) => {
-          highlighted.current = item
-        }}
-        filter={(item: PopoverItem, query: string) =>
-          !isMentionRow(item) &&
-          query.startsWith('/') &&
-          item.name.toLowerCase().includes(query.slice(1).toLowerCase())
-        }
-        itemToStringValue={(item: PopoverItem) =>
-          isMentionRow(item) ? `@${mentionName(item)} ` : `/${item.name} `
-        }
-        // A mention's first row is always the one Enter or Tab chooses.
-        autoHighlight={mentionOpen ? 'always' : true}
+      <InputGroup
+        ref={group}
+        variant="composer"
+        data-disabled={disabled || undefined}
+        className={cn(!stacked && (attachments.length > 0 || wrap) && 'flex-wrap')}
       >
-        <InputGroup
-          ref={group}
-          variant="composer"
-          data-disabled={disabled || undefined}
-          className={cn(!stacked && (attachments.length > 0 || wrap) && 'flex-wrap')}
-        >
-          {top}
-          <AttachmentTray
-            draft={draft}
-            agentId={agentId}
-            agentName={agentName}
-            projectPath={projectPath}
-            onOpen={setViewing}
-            onError={box.setError}
-            onLeave={() => textarea.current?.focus()}
+        {top}
+        <AttachmentTray
+          draft={draft}
+          agentId={agentId}
+          agentName={agentName}
+          projectPath={projectPath}
+          onOpen={setViewing}
+          onError={box.setError}
+          onLeave={box.focus}
+        />
+        {/* After the tiles in the DOM, so they keep the first row when the box wraps. */}
+        {!stacked && (
+          <InputGroupAddon align="inline-start" className="order-none self-end pb-3 pl-3">
+            {addMenu}
+          </InputGroupAddon>
+        )}
+        {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
+        <div className={cn('min-w-0', stacked ? 'w-full' : 'flex-[1_1_12rem] self-stretch')}>
+          <ComposerEditor
+            ref={editor}
+            initialText={text}
+            label={label}
+            placeholder={placeholder}
+            disabled={disabled}
+            hint={hint}
+            size={size}
+            popover={open ? { listId, activeId: active >= 0 ? optionId(active) : undefined } : null}
+            onChange={box.changed}
+            onCaret={setCaret}
+            onKeyDown={keyDown}
+            onPaste={box.onPaste}
+            onFocus={() => box.onActivity?.()}
+            onBlur={blur}
+            onCompositionStart={() => setComposition({ open: mentionOpen })}
+            onCompositionEnd={() => setComposition(null)}
           />
-          {/* After the tiles in the DOM, so they keep the first row when the box wraps. */}
-          {!stacked && (
-            <InputGroupAddon align="inline-start" className="order-none self-end pb-3 pl-3">
-              {addMenu}
-            </InputGroupAddon>
-          )}
-          {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
-          <div
-            className={cn('relative min-w-0', stacked ? 'w-full' : 'flex-[1_1_12rem] self-stretch')}
-          >
-            <Autocomplete.Input
-              render={
-                <InputGroupTextarea
-                  ref={textarea}
-                  rows={1}
-                  aria-label={label}
-                  placeholder={placeholder}
-                  disabled={disabled}
-                  onKeyDown={keyDown}
-                  onPaste={box.onPaste}
-                  onFocus={box.onActivity}
-                  onSelect={(event) => {
-                    const el = event.currentTarget
-                    setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null)
-                  }}
-                  onCompositionStart={() => setComposition({ open: mentionOpen })}
-                  onCompositionEnd={() => setComposition(null)}
-                  className={cn(
-                    'max-h-[min(40svh,24rem)] pr-1 pl-1.5 text-prose leading-6 placeholder:text-placeholder md:text-prose',
-                    className,
-                  )}
-                />
-              }
-            />
-            {hint && (
-              <div
-                aria-hidden
-                className={cn(
-                  'pointer-events-none absolute inset-0 overflow-hidden pr-1 pl-1.5 text-prose leading-6 whitespace-pre',
-                  className,
-                )}
-              >
-                <span className="invisible">{text}</span>
-                <span className="text-placeholder">{hint}</span>
-              </div>
-            )}
-          </div>
-          {stacked ? (
-            <InputGroupAddon align="block-end" className="gap-1.5 px-3 pb-3">
-              {addMenu}
-              <span className="flex-1" />
-              {end}
-            </InputGroupAddon>
-          ) : (
-            <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
-              {end}
-            </InputGroupAddon>
-          )}
-        </InputGroup>
-        <Autocomplete.Portal>
-          <Autocomplete.Positioner
+        </div>
+        {stacked ? (
+          <InputGroupAddon align="block-end" className="gap-1.5 px-3 pb-3">
+            {addMenu}
+            <span className="flex-1" />
+            {end}
+          </InputGroupAddon>
+        ) : (
+          <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
+            {end}
+          </InputGroupAddon>
+        )}
+      </InputGroup>
+      <Popover.Root open={open} onOpenChange={openChange}>
+        <Popover.Portal>
+          <Popover.Positioner
             anchor={group}
             side="top"
             align="start"
             sideOffset={6}
             className="isolate z-50 outline-none"
           >
-            <Autocomplete.Popup className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] flex origin-(--transform-origin) flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+            <Popover.Popup
+              ref={popup}
+              initialFocus={false}
+              finalFocus={false}
+              className="max-h-[min(var(--available-height),320px)] w-[min(var(--anchor-width),420px)] flex origin-(--transform-origin) flex-col overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+            >
               {listing?.used && listing.rows.length > 0 && <MentionHeader id={`${draft}-used`} />}
-              <Autocomplete.List
+              <div
+                role="listbox"
+                id={listId}
                 aria-labelledby={listing?.used ? `${draft}-used` : undefined}
                 aria-label={listing && !listing.used ? t('mentions.label') : undefined}
                 className={cn(
                   'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain p-1',
-                  listing?.rows.length === 0 && 'hidden',
+                  rows.length === 0 && 'hidden',
                 )}
               >
-                {(item: PopoverItem) =>
+                {rows.map((item, index) =>
                   isMentionRow(item) ? (
                     <MentionItem
                       key={`${item.folder ? 'd' : 'f'}:${item.path}`}
+                      id={optionId(index)}
                       row={item}
+                      highlighted={index === active}
+                      onHighlight={() => highlightRow(index)}
                       onChoose={choose}
                     />
                   ) : (
-                    <Autocomplete.Item
+                    <SlashItem
                       key={item.name}
-                      value={item}
-                      className="flex min-h-row cursor-default items-baseline gap-2 rounded-md px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
-                    >
-                      <span className="shrink-0 font-mono text-xs">/{item.name}</span>
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {item.description}
-                      </span>
-                    </Autocomplete.Item>
-                  )
-                }
-              </Autocomplete.List>
+                      id={optionId(index)}
+                      command={item}
+                      highlighted={index === active}
+                      onHighlight={() => highlightRow(index)}
+                      onChoose={() => chooseItem(item)}
+                    />
+                  ),
+                )}
+              </div>
               {listing && <MentionFooter list={listing} />}
-            </Autocomplete.Popup>
-          </Autocomplete.Positioner>
-        </Autocomplete.Portal>
-      </Autocomplete.Root>
+            </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
+      </Popover.Root>
       <ImageDialog target={viewing} onClose={() => setViewing(null)} />
     </>
+  )
+}
+
+/** A slash command's row: its name, then its description. */
+function SlashItem({
+  id,
+  command,
+  highlighted,
+  onHighlight,
+  onChoose,
+}: {
+  id: string
+  command: SlashCommand
+  highlighted: boolean
+  onHighlight: () => void
+  onChoose: () => void
+}) {
+  return (
+    <div
+      role="option"
+      id={id}
+      aria-selected={highlighted}
+      data-highlighted={highlighted ? '' : undefined}
+      // Pressing a row keeps the focus, and with it the caret, in the box.
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseMove={onHighlight}
+      onClick={onChoose}
+      className="flex min-h-row cursor-default items-baseline gap-2 rounded-md px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
+    >
+      <span className="shrink-0 font-mono text-xs">/{command.name}</span>
+      <span className="min-w-0 truncate text-muted-foreground">{command.description}</span>
+    </div>
   )
 }
 
@@ -356,7 +385,7 @@ function AddMenu({
   full,
   commands,
   emptyDraft,
-  textarea,
+  onFocusBox,
   onPick,
   onSlash,
   onMention,
@@ -366,7 +395,7 @@ function AddMenu({
   full: boolean
   commands: boolean
   emptyDraft: boolean
-  textarea: RefObject<HTMLTextAreaElement | null>
+  onFocusBox: () => void
   onPick: (kind: 'files' | 'folder') => void
   onSlash: () => void
   onMention: () => void
@@ -404,7 +433,15 @@ function AddMenu({
           {t('attachments.add')} <span className="opacity-60">{shortcut}</span>
         </TooltipContent>
       </Tooltip>
-      <DropdownMenuContent side="top" sideOffset={6} className="w-60" finalFocus={textarea}>
+      <DropdownMenuContent
+        side="top"
+        sideOffset={6}
+        className="w-60"
+        finalFocus={() => {
+          onFocusBox()
+          return false
+        }}
+      >
         <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
           <FileIcon />
           {t('attachments.addFiles')}

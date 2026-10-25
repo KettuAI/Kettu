@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowUpIcon, CircleAlertIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -148,7 +148,7 @@ function DraftComposer({
     disabled: false,
     onActivity: noteActivity,
   })
-  const { text, attachments, textarea } = box
+  const { text, attachments, editor } = box
   const ready = inScratch || (!!project && !project.missing)
   const held = attachmentsBlock(attachments, text)
   const canSend = !!agentId && ready && (text.trim().length > 0 || attachments.length > 0) && !held
@@ -169,8 +169,8 @@ function DraftComposer({
   }, [agentId, ready, signIn, projectPath, parentId])
 
   useEffect(() => {
-    textarea.current?.focus()
-  }, [textarea])
+    editor.current?.focus()
+  }, [editor])
 
   // The message leaves the draft with the request and comes back to it if the start fails.
   const send = async () => {
@@ -193,7 +193,7 @@ function DraftComposer({
     }
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter') return
     const sends = sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event)
     if (!sends) return
@@ -210,7 +210,7 @@ function DraftComposer({
         : byId[id]?.config
     const modelOption = config?.find((o) => o.category === 'model')
     if (model !== null && modelOption) setOption(id, modelOption.id, model)
-    requestAnimationFrame(() => textarea.current?.focus())
+    requestAnimationFrame(() => editor.current?.focus())
   }
 
   const blocked = !agentId
@@ -239,7 +239,7 @@ function DraftComposer({
               : t('newSession.describeTask')
         }
         label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
-        className="min-h-17 pt-3.5 pr-5 pb-1 pl-5"
+        size={{ minHeight: '68px', padding: '14px 20px 4px 20px' }}
         stacked
         onKeyDown={onKeyDown}
         end={

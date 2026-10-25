@@ -150,7 +150,7 @@ export function popoverKey(
   key: string,
   state: {
     composing: boolean
-    /** Shift, Ctrl, Alt or Cmd is held; Base UI leaves such keys to the composer. */
+    /** Shift, Ctrl, Alt or Cmd is held; such keys go to the composer. */
     modified: boolean
     slashOpen: boolean
     mentionOpen: boolean
@@ -167,6 +167,13 @@ export function popoverKey(
   if (key === 'Enter') return state.mentionRows ? 'popover' : 'composer'
   if (key === 'Tab' && state.mentionRows) return 'choose'
   return 'composer'
+}
+
+/** The row ArrowDown or ArrowUp moves the highlight to, round from the last row to the first. */
+export function moveHighlight(index: number, count: number, key: 'ArrowDown' | 'ArrowUp'): number {
+  if (count === 0) return -1
+  if (index < 0) return key === 'ArrowDown' ? 0 : count - 1
+  return key === 'ArrowDown' ? (index + 1) % count : (index - 1 + count) % count
 }
 
 /**

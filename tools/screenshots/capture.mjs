@@ -114,16 +114,18 @@ async function run() {
       await cdp.send('Input.dispatchMouseEvent', { type, ...point, button, clickCount: 1 })
     }
   }
-  const press = async (key, keyCode) => {
+  const press = async (key, keyCode, modifiers = 0) => {
     for (const type of ['keyDown', 'keyUp']) {
       await cdp.send('Input.dispatchKeyEvent', {
         type,
         key,
-        code: key,
+        code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
         windowsVirtualKeyCode: keyCode,
+        modifiers,
       })
     }
   }
+  const commandKey = process.platform === 'darwin' ? 4 : 2
   // Only the scale is emulated: the window keeps its real size, which the window controls
   // overlay on Windows and Linux is measured against.
   const setup = async () => {
@@ -210,8 +212,9 @@ async function run() {
   await press('Escape', 27)
   await sleep(300)
 
+  const composerText = "document.querySelector('[data-slot=input-group] .cm-content')"
   const prompt = async (text) => {
-    await cdp.evaluate(`document.querySelector('textarea').focus()`)
+    await cdp.evaluate(`${composerText}.focus()`)
     // The trailing space closes the slash menu, which would otherwise take the Enter.
     await cdp.send('Input.insertText', { text: `${text} ` })
     await press('Enter', 13)
@@ -265,13 +268,33 @@ async function run() {
   await sleep(300)
 
   // The @ popover with nothing typed: the files the turn read or edited.
-  await cdp.evaluate(`document.querySelector('textarea').focus()`)
+  await cdp.evaluate(`${composerText}.focus()`)
   await cdp.send('Input.insertText', { text: '@' })
   await waitFor(`document.body.innerText.includes('Used in this session')`, 'the @ popover')
   await sleep(400)
   await shoot('mention')
   await press('Escape', 27)
-  await cdp.evaluate(`document.querySelector('textarea').select()`)
+  await press('a', 65, commandKey)
+  await press('Backspace', 8)
+  await sleep(300)
+
+  // The composer's Markdown as drawn; unfocused, so every mark is hidden.
+  await cdp.evaluate(`${composerText}.focus()`)
+  const markdown = [
+    '## Plan',
+    'Keep **the key** out of `git`, as [the docs](https://example.com) say.',
+    '- one',
+    '> A quote',
+  ]
+  for (const [i, line] of markdown.entries()) {
+    if (i > 0) await press('Enter', 13, 8)
+    await cdp.send('Input.insertText', { text: line })
+  }
+  await cdp.evaluate(`document.activeElement.blur()`)
+  await sleep(300)
+  await shoot('composer-markdown')
+  await cdp.evaluate(`${composerText}.focus()`)
+  await press('a', 65, commandKey)
   await press('Backspace', 8)
   await sleep(300)
 
@@ -506,7 +529,7 @@ async function run() {
     `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.includes('Fix the flaky login test'))`,
     'the session row',
   )
-  await waitFor(`document.querySelector('textarea')`, 'the composer')
+  await waitFor(composerText, 'the composer')
   await prompt('/long-turn')
   await waitFor(
     `[...document.querySelectorAll('[role=status]')].some((s) => s.textContent.includes('tokens') && s.textContent.includes('Running a command'))`,
