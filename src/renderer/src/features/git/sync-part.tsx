@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { ArrowDownIcon, ArrowUpIcon, CloudUploadIcon, RefreshCwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { GitStatus } from '@shared/git'
+import { useRefresh } from '@renderer/components/refresh'
+import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -40,6 +42,7 @@ export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () =
   const gh = useGitStore((s) => s.tools?.gh.state ?? null)
   const running = useGitStore((s) => s.running[status.projectPath] ?? null)
   const failed = useGitStore((s) => s.failed[status.projectPath] ?? null)
+  const fetch = useRefresh({ busy: running?.kind === 'fetch' })
   const plan = planSync(status, gh)
   const upstream = status.upstream?.name ?? status.remote?.name ?? ''
   const words = {
@@ -68,6 +71,19 @@ export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () =
     }
   }
 
+  const fetchNow = (): void => {
+    void fetch
+      .run(async () => {
+        // A failed fetch is shown in the failure line, so reject to keep the icon from a check.
+        if (!(await runGitOperation(status.projectPath, { kind: 'fetch' }))) {
+          throw new Error('fetch failed')
+        }
+      })
+      .catch(() => {})
+  }
+
+  const fetching = fetch.phase === 'turning'
+
   return (
     <div className="flex flex-col gap-2 px-3.5 pt-2 pb-3">
       <div className="-mr-2 flex h-6 items-center gap-1.5 text-xs text-tertiary">
@@ -92,16 +108,13 @@ export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () =
                   variant="quiet"
                   size="icon-xs"
                   aria-label={t('sync.fetch')}
-                  disabled={!!running}
-                  onClick={() => void runGitOperation(status.projectPath, { kind: 'fetch' })}
+                  aria-busy={fetching}
+                  disabled={!!running || fetching}
+                  onClick={fetchNow}
                 />
               }
             >
-              {running?.kind === 'fetch' ? (
-                <Spinner className="size-3.5" />
-              ) : (
-                <RefreshCwIcon className="size-3.5" />
-              )}
+              <RefreshIcon phase={fetch.phase} className="size-3.5" />
             </TooltipTrigger>
             <TooltipContent>{commandOf(status, 'fetch')}</TooltipContent>
           </Tooltip>
@@ -119,10 +132,11 @@ export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () =
           />
         ))}
       </div>
-      {failed ? (
+      {failed && !(failed.kind === 'fetch' && fetching) ? (
         <FailureLine status={status} failed={failed} onClose={onClose} />
       ) : (
         !running &&
+        !fetching &&
         plan.hint && (
           <p className="text-xs leading-normal text-secondary">{t(`hint.${plan.hint}`, words)}</p>
         )

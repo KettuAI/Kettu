@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { CheckIcon, CircleCheckIcon, CopyIcon, ExternalLinkIcon, RefreshCwIcon } from 'lucide-react'
+import { CheckIcon, CircleCheckIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
 import { BrandLockup } from '@renderer/components/brand'
+import { useRefresh } from '@renderer/components/refresh'
+import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
@@ -40,6 +42,7 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
   const { t } = useTranslation('settings')
   const justChecked = useUpdatesStore((s) => s.justChecked)
   const now = useNow()
+  const refresh = useRefresh({ busy: status?.state.kind === 'checking' })
   const [error, setError] = useState<string | null>(null)
   const run = (action: () => Promise<unknown>) => {
     setError(null)
@@ -65,13 +68,18 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
     </a>
   )
   // While a check runs the button stays, busy, so the row does not change shape.
-  const check = (busy: boolean) => (
-    <Button variant="outline" size="compact" disabled={busy} onClick={() => run(checkForUpdates)}>
-      {busy ? (
-        <Spinner data-icon="inline-start" className="size-3.5" />
-      ) : (
-        <RefreshCwIcon data-icon="inline-start" />
-      )}
+  const check = (
+    <Button
+      variant="outline"
+      size="compact"
+      aria-busy={refresh.phase === 'turning'}
+      disabled={refresh.phase === 'turning'}
+      onClick={() => {
+        setError(null)
+        void refresh.run(checkForUpdates).catch((e: unknown) => setError(errorMessage(e)))
+      }}
+    >
+      <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
       {t('about.updates.check')}
     </Button>
   )
@@ -88,18 +96,18 @@ export function UpdateRow({ status, label }: { status: UpdateStatus | null; labe
         {t('about.updates.upToDateShort')}
       </span>
     )
-    action = check(false)
+    action = check
   } else {
     switch (state.kind) {
       case 'idle':
         text = state.checkedAt
           ? t('about.updates.upToDateChecked', { ago: longAgo(state.checkedAt, now) })
           : t('about.updates.upToDate')
-        action = check(false)
+        action = check
         break
       case 'checking':
         text = t('about.updates.checking')
-        action = check(true)
+        action = check
         break
       case 'downloading':
         text = (
