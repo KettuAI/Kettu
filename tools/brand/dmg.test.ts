@@ -48,8 +48,8 @@ describe.each(CONFIGS)('%s', (file) => {
   })
 })
 
-describe('the backgrounds', () => {
-  it('give a Developer ID build the one without the first-launch lines', async () => {
+describe('first-launch lines', () => {
+  it('are on the ad-hoc background and not on the Developer ID one', async () => {
     expect((await dmgOf('electron-builder.yml'))?.background).toBe('build/dmg-background.png')
     expect((await dmgOf('electron-builder.mac-signed.yml'))?.background).toBe(
       'build/dmg-background-signed.png',
