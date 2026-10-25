@@ -85,8 +85,7 @@ export function NewSessionView({
       <TopBar className="shadow-none">
         {parent && (
           <NoDrag className="min-w-0 gap-0.5">
-            {/* The label is short, so the parent's title takes the room left before the tools. */}
-            <ParentLink parent={parent} className="max-w-none" />
+            <ParentLink parent={parent} />
             <span className="shrink-0 truncate px-1.5 text-ui font-medium">
               {t('newSession.subSessionTitle')}
             </span>
