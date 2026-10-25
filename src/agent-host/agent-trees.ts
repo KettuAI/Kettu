@@ -46,7 +46,7 @@ export class AgentTrees {
   private leftovers: TreeRoot[] = []
   private readonly reaping = new Map<string, Promise<void>>()
   private leftoverStop: Promise<void> = Promise.resolve()
-  private listingFailed = false
+  private listingFailure: string | null = null
   private closed = false
 
   constructor(private readonly options: AgentTreesOptions) {}
@@ -91,12 +91,14 @@ export class AgentTrees {
     try {
       rows = await control.list(tools)
     } catch (error) {
-      // Once: without `ps` every listing fails alike.
-      if (!this.listingFailed)
+      // Once per kind: without `ps` every listing fails alike.
+      const failure = (error as NodeJS.ErrnoException).code ?? (error as Error).message
+      if (failure !== this.listingFailure)
         log('warn', `Could not list the processes: ${(error as Error).message}`)
-      this.listingFailed = true
+      this.listingFailure = failure
       return
     }
+    this.listingFailure = null
     const running = this.running.get(keyOf(root))
     if (!running) return
     const seenAt = Date.now()
