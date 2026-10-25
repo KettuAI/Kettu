@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { translate } from './i18n'
 import {
+  applyConfigFolder,
   applyProxy,
   defaultShell,
   EnvironmentService,
@@ -83,6 +84,19 @@ describe('environment cleanup', () => {
     })
     const env = { HTTP_PROXY: 'keep' }
     expect(applyProxy(env, { mode: 'environment' }, 'darwin')).toBe(env)
+  })
+
+  it("sets an agent's own folder over the same variable from the shell", () => {
+    const folder = { variable: 'CODEX_HOME', path: '/picked' }
+    expect(applyConfigFolder({ CODEX_HOME: '/shell', PATH: '/bin' }, folder, 'linux')).toEqual({
+      CODEX_HOME: '/picked',
+      PATH: '/bin',
+    })
+    expect(applyConfigFolder({ codex_home: 'C:\\shell' }, folder, 'win32')).toEqual({
+      CODEX_HOME: '/picked',
+    })
+    const env = { CODEX_HOME: '/shell' }
+    expect(applyConfigFolder(env, undefined, 'darwin')).toBe(env)
   })
 
   it('picks the default shell per platform', () => {
@@ -186,5 +200,37 @@ describe('EnvironmentService', () => {
     })
     await service.reload()
     expect(runs).toBe(2)
+  })
+
+  it("adds an agent's own folder after the proxy, for that agent alone", async () => {
+    const service = new EnvironmentService({
+      platform: 'linux',
+      electronPath: '/e',
+      baseEnv: {},
+      resolve: async () => ({
+        env: { PATH: '/login', CLAUDE_CONFIG_DIR: '/shell/claude' },
+        source: 'login-shell',
+        shell: '/bin/bash',
+        durationMs: 1,
+        warning: null,
+      }),
+      probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
+    })
+    await service.ready()
+    service.setProxy({ mode: 'custom', url: 'http://p', noProxy: '' })
+    const shell = { PATH: '/login', CLAUDE_CONFIG_DIR: '/shell/claude', HTTPS_PROXY: 'http://p' }
+    expect(service.agentEnv('claude-code')).toMatchObject(shell)
+    service.setConfigFolders({ 'claude-code': { variable: 'CLAUDE_CONFIG_DIR', path: '/picked' } })
+    expect(service.agentEnv('claude-code')).toMatchObject({
+      ...shell,
+      CLAUDE_CONFIG_DIR: '/picked',
+    })
+    expect(service.get('CLAUDE_CONFIG_DIR', 'claude-code')).toBe('/picked')
+    // Git, commands, the terminal and the other agents keep the shell's.
+    expect(service.agentEnv()).toMatchObject(shell)
+    expect(service.agentEnv('codex')).toMatchObject(shell)
+    expect(service.get('CLAUDE_CONFIG_DIR')).toBe('/shell/claude')
+    service.setConfigFolders({})
+    expect(service.agentEnv('claude-code')).toEqual(service.agentEnv())
   })
 })

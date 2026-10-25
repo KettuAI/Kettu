@@ -88,6 +88,7 @@ export interface IpcInvokeContract {
   'settings:update': { args: [patch: SettingsPatch]; result: SettingsFile }
   'dialog:open-project': { args: []; result: string | null }
   'dialog:choose-agent-binary': { args: [agentId: AgentId]; result: string | null }
+  'dialog:choose-agent-config-folder': { args: [agentId: AgentId]; result: string | null }
   'dialog:choose-shell': { args: []; result: string | null }
   // `defaultPath`: the folder the dialog opens in, the session's; an empty list when cancelled.
   'dialog:add-attachments': {
@@ -212,6 +213,8 @@ export interface OverbenchApi {
   dialogs: {
     openProject(): Promise<string | null>
     chooseAgentBinary(agentId: AgentId): Promise<string | null>
+    /** Picks or creates a configuration folder for Claude Code or Codex and stores it. */
+    chooseAgentConfigFolder(agentId: AgentId): Promise<string | null>
     chooseShell(): Promise<string | null>
   }
   diagnostics: {

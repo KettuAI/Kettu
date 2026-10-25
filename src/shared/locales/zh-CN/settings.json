@@ -292,6 +292,14 @@
       "settings": "设置文件",
       "instructions": "指令文件"
     },
+    "configFolder": {
+      "choose": "选择目录…",
+      "label": "{{name}} 的配置目录",
+      "useEnvironment": "使用环境变量",
+      "custom": "自定义",
+      "chosen": "在 OverBench 中选定",
+      "nextStart": "将在 Agent 下次启动时生效。"
+    },
     "setBy": "由 {{env}} 指定",
     "notCreated": "尚未创建",
     "showIn": "在{{name}}中显示",

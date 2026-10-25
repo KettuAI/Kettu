@@ -41,6 +41,7 @@
   "dialogs": {
     "openProject": "Open Project",
     "chooseAgentProgram": "Choose Agent Program",
+    "chooseAgentConfigFolder": "Choose Configuration Folder",
     "chooseShell": "Choose Shell",
     "exportDiagnostics": "Export Diagnostics",
     "programs": "Programs",

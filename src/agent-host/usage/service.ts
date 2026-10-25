@@ -80,7 +80,7 @@ export function startUsageService(
         const reader = readers.find((r) => r.agentId === agentId)
         if (!reader) continue
         const context: ScanContext = {
-          env: request.env,
+          env: request.envs[agentId] ?? {},
           home: request.home,
           platform: request.platform,
           signal: controller.signal,

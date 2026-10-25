@@ -23,6 +23,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   task: null,
   installMethods: [],
   cli: null,
+  configDir: null,
   capabilities: {
     loadSession: false,
     listSessions: false,

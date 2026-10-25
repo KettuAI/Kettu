@@ -452,6 +452,7 @@ export class SessionManager {
           pathKey(folder, deps.platform),
         )
       },
+      configChanged: (agentId) => this.configChanged(agentId),
     }
   }
 
@@ -1245,6 +1246,7 @@ export class SessionManager {
         origin: 'subagent',
         description: effect.description ?? null,
         branch: null,
+        ...(parent.record.configDir ? { configDir: parent.record.configDir } : {}),
       }
     }
     let child = this.live.get(record.id)
@@ -1660,6 +1662,7 @@ export class SessionManager {
       throw removedWhileStarting()
     }
     live.record.acpSessionId = setup.acpSessionId
+    this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     // The cache names values the session no longer lists, so it is read before it takes them.
     const cached = this.deps.options?.get(agentId)?.config ?? []
@@ -1822,6 +1825,7 @@ export class SessionManager {
       throw removedWhileStarting()
     }
     live.record.acpSessionId = setup.acpSessionId
+    this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     live.failure = null
     const { agentId } = live.record
@@ -2190,6 +2194,13 @@ export class SessionManager {
     }
   }
 
+  /** The agent's configuration folder changed: its prepared sessions belong to the old one. */
+  private configChanged(agentId: AgentId): void {
+    for (const live of [...this.live.values()]) {
+      if (live.record.agentId === agentId && live.prepared) void this.dropPrepared(live)
+    }
+  }
+
   /**
    * The agent exited unexpectedly: a running turn ends with a notice, and every session it held
    * goes back to closed with its thread stored, to attach again when it is used. Nothing restarts
@@ -2535,12 +2546,16 @@ export class SessionManager {
           )
         ).config
       } catch (error) {
-        if (!this.neverAnswered(live, error)) throw error
+        if (!this.neverAnswered(live, error)) throw this.otherConfig(live, error)
         config = await this.renew(live, connection, mcpServers)
       }
     } else if (caps.loadSession) {
-      config = (await this.loadQuietly(live, connection, this.mcpServers(live.id, record, runtime)))
-        .config
+      const mcpServers = this.mcpServers(live.id, record, runtime)
+      try {
+        config = (await this.loadQuietly(live, connection, mcpServers)).config
+      } catch (error) {
+        throw this.otherConfig(live, error)
+      }
     } else {
       throw new HostError(
         'agent_unavailable',
@@ -2658,6 +2673,28 @@ export class SessionManager {
     })
   }
 
+  /**
+   * An agent that does not have the session, while it runs with another configuration folder
+   * than the session was started with, likely keeps it in that folder: the error names it.
+   */
+  private otherConfig(live: Live, error: unknown): unknown {
+    if (!(error instanceof AgentRequestError) || !unknownSession(error)) return error
+    const { agentId, configDir } = live.record
+    const running = this.deps.agents.runningConfig(agentId)
+    const started = configDir ?? this.deps.agents.environmentConfig(agentId)
+    if (!running || !started || samePath(started, running.folder, this.deps.platform)) return error
+    return new HostError('agent_error', t('session.otherConfigFolder', { path: started }), {
+      code: error.code,
+    })
+  }
+
+  /** Notes the configuration folder picked for the agent a session was just made in. */
+  private stampConfig(record: SessionRecord): void {
+    const chosen = this.deps.agents.runningConfig(record.agentId)?.chosen ?? null
+    if (chosen) record.configDir = chosen
+    else delete record.configDir
+  }
+
   /** `session/new` in place of a session the agent does not have; the thread stays as it is. */
   private async renew(
     live: Live,
@@ -2670,6 +2707,7 @@ export class SessionManager {
       mcpServers,
     )
     live.record.acpSessionId = setup.acpSessionId
+    this.stampConfig(live.record)
     live.rewrite = true
     this.update(live, { acpSessionId: setup.acpSessionId })
     this.save(live)
@@ -3169,6 +3207,7 @@ export class SessionManager {
       lastViewedAt: now,
       branch: null,
     }
+    this.stampConfig(record)
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
@@ -4105,6 +4144,7 @@ export class SessionManager {
       description: null,
       branch: null,
     }
+    this.stampConfig(record)
     this.records.set(record.id, record)
     this.saveIndex()
     this.touch(record.id)

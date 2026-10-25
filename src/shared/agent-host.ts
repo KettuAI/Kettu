@@ -155,6 +155,9 @@ export interface AgentStatus {
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
   cli: AgentCli | null // which CLI a Claude Code or Codex adapter runs; null for the others
+  // The configuration folder a start uses and the one the running process uses (null while none
+  // runs); null for an agent whose folder cannot be chosen.
+  configDir: { runs: string; active: string | null } | null
   capabilities: {
     loadSession: boolean
     listSessions: boolean
@@ -206,6 +209,7 @@ export interface AgentConfigItem {
   path: string
   exists: boolean
   env: string | null // the variable that moved it, such as CLAUDE_CONFIG_DIR; null at the default
+  chosen: boolean // the folder picked in Settings (agents.<id>.configDir), whose env is then null
 }
 
 /** Where the agent environment came from, for Settings › Agents. */

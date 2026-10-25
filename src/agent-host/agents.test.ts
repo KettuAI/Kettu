@@ -22,6 +22,7 @@ import {
 } from './agents'
 import {
   CLAUDE_CODE,
+  configFolders,
   detectAgent,
   fakeAgent,
   OPENCODE,
@@ -134,6 +135,7 @@ function manager(
     signedIn: () => {},
     optionsKnown: () => true,
     optionsSeen: () => {},
+    configChanged: () => {},
   }
   return {
     agents,
@@ -1298,6 +1300,136 @@ describe('the CLI the user installed', () => {
   })
 })
 
+describe('a configuration folder of its own', () => {
+  const shellFolder = path.join(os.tmpdir(), 'overbench-shell-claude')
+  const picked = path.join(os.tmpdir(), 'overbench-picked-claude')
+  // The fake agent under Claude Code's id, whose folder can be picked.
+  const def: AgentDefinition = {
+    ...fakeAgent(FAKE_AGENT_MAIN),
+    id: 'claude-code',
+    configVariable: 'CLAUDE_CONFIG_DIR',
+  }
+  const settingsWith = (configDir?: string): HostSettings => ({
+    locale: 'en',
+    agents: configDir ? { 'claude-code': { configDir } } : {},
+    proxy: { mode: 'environment' },
+    git: { backgroundFetch: false },
+    usage: { fromComputer: false },
+  })
+
+  function folderManager() {
+    let current = settingsWith()
+    const env = new EnvironmentService({
+      platform: process.platform,
+      electronPath: process.execPath,
+      baseEnv: { ...process.env, CLAUDE_CONFIG_DIR: shellFolder },
+      resolve: async ({ baseEnv }) => ({
+        env: baseEnv,
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: null,
+      }),
+      probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
+    })
+    const launches: Env[] = []
+    const inner = inProcessLauncher(module)
+    const launcher: AgentLauncher = {
+      launch: (agent, spec, launchEnv, output) => {
+        launches.push(launchEnv)
+        return inner.launch(agent, spec, launchEnv, output)
+      },
+    }
+    const m = manager({}, {}, { catalog: [def], env, launcher, settings: () => current })
+    const changed: AgentId[] = []
+    m.agents.hooks.configChanged = (agentId) => changed.push(agentId)
+    const pick = async (folder?: string) => {
+      const previous = current
+      current = settingsWith(folder)
+      env.setConfigFolders(configFolders([def], current.agents))
+      await m.agents.settingsChanged(previous, current)
+    }
+    const status = () => m.agents.status('claude-code')
+    const restart = async () => {
+      await m.agents.stop('claude-code')
+      await m.agents.ensureReady('claude-code')
+    }
+    return { ...m, launches, changed, pick, status, restart }
+  }
+
+  it('applies a picked folder from the next start, and forgets what the old one reported', async () => {
+    const m = folderManager()
+    await m.agents.ensureReady('claude-code')
+    expect(m.launches[0]?.CLAUDE_CONFIG_DIR).toBe(shellFolder)
+    expect(m.status().configDir).toEqual({ runs: shellFolder, active: shellFolder })
+    await until(() => m.status().account !== null)
+
+    await m.pick(picked)
+    expect(m.changed).toEqual(['claude-code'])
+    expect(m.status()).toMatchObject({
+      configDir: { runs: picked, active: shellFolder },
+      account: null,
+      limits: [],
+      state: 'ready',
+    })
+    expect(m.launches).toHaveLength(1)
+
+    await m.restart()
+    expect(m.launches[1]?.CLAUDE_CONFIG_DIR).toBe(picked)
+    expect(m.status().configDir).toEqual({ runs: picked, active: picked })
+
+    await m.pick()
+    expect(m.changed).toEqual(['claude-code', 'claude-code'])
+    expect(m.status().configDir).toEqual({ runs: shellFolder, active: picked })
+    await m.restart()
+    expect(m.launches[2]?.CLAUDE_CONFIG_DIR).toBe(shellFolder)
+    await m.agents.stopAll()
+  })
+
+  it('signs in to the picked folder from a terminal', async () => {
+    const m = folderManager()
+    const command = () =>
+      m.status().authMethods.find((method) => method.type === 'terminal')?.command ?? ''
+    await m.agents.ensureReady('claude-code')
+    expect(command()).toContain('--login')
+    expect(command()).not.toContain('CLAUDE_CONFIG_DIR')
+    await m.pick(picked)
+    // The running agent still uses the environment's folder, which the terminal has too.
+    expect(command()).not.toContain('CLAUDE_CONFIG_DIR')
+    await m.restart()
+    expect(command()).toContain(`CLAUDE_CONFIG_DIR=${picked}`)
+    await m.agents.stopAll()
+  })
+
+  it('shows the picked folder on the page, in place of the variable', async () => {
+    const m = folderManager()
+    expect((await m.agents.details('claude-code')).config[0]).toEqual({
+      id: 'folder',
+      path: shellFolder,
+      exists: false,
+      env: 'CLAUDE_CONFIG_DIR',
+      chosen: false,
+    })
+    await m.pick(picked)
+    const { config } = await m.agents.details('claude-code')
+    expect(config[0]).toEqual({
+      id: 'folder',
+      path: picked,
+      exists: false,
+      env: null,
+      chosen: true,
+    })
+    expect(config[1]).toMatchObject({ path: path.join(picked, 'settings.json') })
+  })
+
+  it('has no folder to pick for an agent without a variable', async () => {
+    const m = manager()
+    await m.agents.ensureReady('fake-agent')
+    expect(m.agents.status('fake-agent').configDir).toBeNull()
+    await m.agents.stopAll()
+  })
+})
+
 describe('details', () => {
   it('reads the pinned adapter and the environment the agents see', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
@@ -1326,9 +1458,27 @@ describe('details', () => {
       expect(await m.agents.details('claude-code')).toEqual({
         cliVersion: '2.1.303',
         config: [
-          { id: 'folder', path: configDir, exists: false, env: 'CLAUDE_CONFIG_DIR' },
-          { id: 'settings', path: path.join(configDir, 'settings.json'), exists: false, env: null },
-          { id: 'instructions', path: path.join(configDir, 'CLAUDE.md'), exists: false, env: null },
+          {
+            id: 'folder',
+            path: configDir,
+            exists: false,
+            env: 'CLAUDE_CONFIG_DIR',
+            chosen: false,
+          },
+          {
+            id: 'settings',
+            path: path.join(configDir, 'settings.json'),
+            exists: false,
+            env: null,
+            chosen: false,
+          },
+          {
+            id: 'instructions',
+            path: path.join(configDir, 'CLAUDE.md'),
+            exists: false,
+            env: null,
+            chosen: false,
+          },
         ],
       })
     } finally {

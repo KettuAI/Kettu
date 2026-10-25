@@ -294,6 +294,14 @@
       "settings": "Settings file",
       "instructions": "Instructions"
     },
+    "configFolder": {
+      "choose": "Choose folder…",
+      "label": "Configuration folder for {{name}}",
+      "useEnvironment": "Use the environment",
+      "custom": "Custom",
+      "chosen": "Chosen in OverBench",
+      "nextStart": "Takes effect from the agent's next start."
+    },
     "setBy": "Set by {{env}}",
     "notCreated": "Not created yet",
     "showIn": "Show in {{name}}",

@@ -10,6 +10,7 @@ import {
   terminalSettings,
   validateSettingsPatch,
   withAgentBinary,
+  withAgentConfigDir,
   withShellPath,
 } from './settings-schema'
 
@@ -52,7 +53,9 @@ describe('validateSettingsPatch', () => {
     [{ notifications: { badge: 'yes' } }, '"notifications.badge" must be a boolean'],
     [{ agents: { cursor: { binaryPath: null } } }, 'Unknown agent "agents.cursor"'],
     [{ agents: { codex: { binaryPath: '/bin/sh' } } }, 'can only be cleared with null'],
-    [{ agents: { codex: { args: [] } } }, 'accepts only "binaryPath" and "cli"'],
+    [{ agents: { codex: { args: [] } } }, 'accepts only "binaryPath", "cli" and "configDir"'],
+    [{ agents: { codex: { configDir: '/srv/codex' } } }, 'choose a folder in the dialog'],
+    [{ agents: { opencode: { configDir: null } } }, 'has no configuration folder of its own'],
     [{ agents: { codex: { cli: 'path' } } }, '"agents.codex.cli" must be one of'],
     [{ terminal: { shellPath: '/bin/zsh' } }, 'can only be cleared with null'],
     [{ terminal: { fontSize: 16 } }, '"terminal.fontSize" must be one of'],
@@ -123,6 +126,16 @@ describe('mergeSettings', () => {
     })
   })
 
+  it('sets a configuration folder from the dialog and clears it with null', () => {
+    const picked = mergeSettings(withAgentConfigDir(defaults(), 'claude-code', '/srv/claude'), {
+      agents: { 'claude-code': { cli: 'bundled' } },
+    })
+    expect(picked.agents['claude-code']).toEqual({ configDir: '/srv/claude', cli: 'bundled' })
+    const patch = validateSettingsPatch({ agents: { 'claude-code': { configDir: null } } })
+    expect(mergeSettings(picked, patch).agents).toEqual({ 'claude-code': { cli: 'bundled' } })
+    expect(() => withAgentConfigDir(defaults(), 'opencode', '/srv/oc')).toThrow(SettingsError)
+  })
+
   it('keeps the shell path when only the font size changes', () => {
     const next = mergeSettings(withShellPath(defaults(), '/bin/fish'), {
       terminal: { fontSize: 12 },
@@ -154,6 +167,25 @@ describe('parseSettingsFile', () => {
       codex: { cli: 'bundled' },
     })
     expect(loaded.settings.terminal).toEqual({ shellPath: '/bin/fish', fontSize: 12 })
+  })
+
+  it('reads a stored configuration folder only for an agent that can have one', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      agents: {
+        codex: { configDir: '/srv/codex' },
+        'claude-code': { configDir: '' },
+        opencode: { configDir: '/srv/oc', binaryPath: '/opt/oc' },
+      },
+    })
+    expect(loaded.settings.agents).toEqual({
+      codex: { configDir: '/srv/codex' },
+      opencode: { binaryPath: '/opt/oc' },
+    })
+    expect(loaded.problems).toEqual([
+      '"agents.claude-code.configDir" must be a non-empty path',
+      '"agents.opencode" has no configuration folder of its own',
+    ])
   })
 
   it('keeps valid values and reports invalid ones', () => {
