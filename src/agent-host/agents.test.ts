@@ -36,7 +36,7 @@ import { CliVersions, type AdapterCli, type CliProbe } from './installed-cli'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
-import type { AgentsFile, AgentUpdatesFile } from './storage'
+import { parseAgentUpdatesFile, type AgentsFile, type AgentUpdatesFile } from './storage'
 import {
   FAKE_AGENT_MAIN,
   inProcessLauncher,
@@ -2111,6 +2111,76 @@ describe('updates', () => {
       code: 'invalid_params',
       message: 'Codex has no update to install',
     })
+  })
+})
+
+describe('skipped updates', () => {
+  it('skips the update the notice shows, and keeps it across a restart', async () => {
+    const m = await updateManager()
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    expect((await m.agents.checkUpdates())[0]).toMatchObject({ updateSkipped: false })
+
+    await m.agents.skipUpdate('codex')
+    expect(m.status()).toMatchObject({
+      update: { adapterVersion: '2.0.0', cliVersion: '0.160.3' },
+      updateSkipped: true,
+    })
+    const file = m.saved.at(-1)!
+    expect(file.agents.codex).toMatchObject({
+      skipped: { adapterVersion: '2.0.0', cliVersion: '0.160.3' },
+    })
+
+    // The next run reads the skip from the stored file, without the network.
+    const next = await updateManager()
+    await next.write('2.0.0', '2.0.0', '0.160.1', 1)
+    const stored = parseAgentUpdatesFile(
+      JSON.parse(JSON.stringify(file)) as Record<string, unknown>,
+    )
+    expect(typeof stored).toBe('object')
+    next.agents.restoreUpdates(stored as AgentUpdatesFile)
+    expect((await next.agents.list())[0]).toMatchObject({
+      update: { adapterVersion: '2.0.0', cliVersion: '0.160.3' },
+      updateSkipped: true,
+    })
+    expect(next.checks).toEqual([])
+  })
+
+  it('shows the update again once a newer CLI is found', async () => {
+    const m = await updateManager()
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    await m.agents.checkUpdates()
+    await m.agents.skipUpdate('codex')
+    expect(m.status().updateSkipped).toBe(true)
+
+    m.setCli('0.160.4')
+    expect((await m.agents.checkUpdates())[0]).toMatchObject({
+      update: { adapterVersion: '2.0.0', cliVersion: '0.160.4' },
+      updateSkipped: false,
+    })
+  })
+
+  it('clears the skip when the update installs', async () => {
+    const m = await updateManager({
+      latest: async () => ({ adapterVersion: '2.1.0', cliVersion: null }),
+    })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    await m.agents.checkUpdates()
+    await m.agents.skipUpdate('codex')
+    expect(m.status().updateSkipped).toBe(true)
+
+    await m.agents.update('codex')
+    expect(m.status()).toMatchObject({ update: null, updateSkipped: false })
+    expect(m.saved.at(-1)?.agents.codex).not.toHaveProperty('skipped')
+  })
+
+  it('leaves the skip alone when the update is gone by the click', async () => {
+    const m = await updateManager()
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    await m.agents.skipUpdate('codex')
+    expect(m.status().updateSkipped).toBe(false)
+    expect(m.saved).toEqual([])
   })
 })
 

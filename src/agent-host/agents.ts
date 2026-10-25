@@ -249,6 +249,8 @@ class Slot {
   /** What the last update check found, and when it finished. */
   latest: AgentUpdate | null = null
   checkedAt: number | null = null
+  /** The update whose notice the user dismissed in the sidebar, until a newer one is found. */
+  skipped: AgentUpdate | null = null
   /** When a check last ran for this agent, found or failed; the daily check waits from it. */
   attemptedAt: number | null = null
   rememberedUpdate = 'null'
@@ -336,7 +338,17 @@ function updateJson(slot: Slot): string {
 
 function updateEntry(slot: Slot): AgentUpdatesFile['agents'][AgentId] {
   if (slot.attemptedAt === null) return undefined
-  return { checkedAt: slot.checkedAt, attemptedAt: slot.attemptedAt, latest: slot.latest }
+  return {
+    checkedAt: slot.checkedAt,
+    attemptedAt: slot.attemptedAt,
+    latest: slot.latest,
+    ...(slot.skipped ? { skipped: slot.skipped } : {}),
+  }
+}
+
+/** Whether two updates name the same adapter and CLI versions. */
+function sameUpdate(a: AgentUpdate | null, b: AgentUpdate | null): boolean {
+  return !!a && !!b && a.adapterVersion === b.adapterVersion && a.cliVersion === b.cliVersion
 }
 
 export class AgentManager {
@@ -985,6 +997,7 @@ export class AgentManager {
       slot.latest = entry.latest
       slot.checkedAt = entry.checkedAt
       slot.attemptedAt = entry.attemptedAt
+      slot.skipped = entry.skipped ?? null
       slot.rememberedUpdate = updateJson(slot)
       this.emit(slot)
     }
@@ -1146,6 +1159,7 @@ export class AgentManager {
         })
         diagnostics.event(agentId, 'updated', `${installed.version} in ${Date.now() - started} ms`)
         await this.detect(slot)
+        slot.skipped = null
         // A fresh install can take another CLI than the check foresaw; what it took is the latest.
         if (this.updateOf(slot)) {
           slot.latest = { adapterVersion: installed.version, cliVersion: slot.installedCli }
@@ -1153,6 +1167,19 @@ export class AgentManager {
       },
       (message) => t('agent.updateFailed', { agent: slot.def.name, message }),
     )
+  }
+
+  /**
+   * Skips the agent's current update in the sidebar's notice, until a newer adapter or CLI is
+   * found. Installing an update clears the skip.
+   */
+  async skipUpdate(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    const update = this.updateOf(slot)
+    // The update can be gone by the time the click arrives, as when it installed meanwhile.
+    if (!update) return
+    slot.skipped = update
+    this.emit(slot)
   }
 
   /**
@@ -1942,6 +1969,7 @@ export class AgentManager {
     const capabilities = init?.capabilities ?? rememberedCapabilities(slot)
     const { launch } = slot.def
     const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+    const update = this.updateOf(slot)
     return {
       id: slot.def.id,
       name: slot.def.name,
@@ -1972,8 +2000,9 @@ export class AgentManager {
         slot.state === 'starting' || slot.state === 'installing' ? slot.progress.lastLines(5) : [],
       launchCommand: formatCommand(display, platform),
       binaryOverride: this.deps.settings().agents[slot.def.id]?.binaryPath ?? null,
-      update: this.updateOf(slot),
+      update,
       updateCheckedAt: launch.kind === 'package' ? slot.checkedAt : null,
+      updateSkipped: sameUpdate(update, slot.skipped),
       task: slot.task ? { ...slot.task, progress: slot.taskOutput.lastLines(5) } : null,
       installMethods: slot.installPlans.map(({ id, command, available }) => ({
         id,

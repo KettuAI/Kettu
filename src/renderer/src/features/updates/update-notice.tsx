@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { CircleArrowUpIcon, CircleCheckIcon, ExternalLinkIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
@@ -23,6 +24,73 @@ function noticeFor(status: UpdateStatus | null, updatedSeen: boolean): Notice | 
   return null
 }
 
+interface NoticeCardProps {
+  /** The full text the card explains on hover. */
+  tooltip: string
+  /** Called when the corner dismiss button is pressed. */
+  onDismiss: () => void
+  /** Set when the card itself opens something; it is a button then. */
+  onClick?: () => void
+  /** The card's row: its mark or icon, words and value. */
+  children: ReactNode
+}
+
+/** The footer's raised notice card, with its tooltip and corner dismiss button. */
+export function NoticeCard({ tooltip, onDismiss, onClick, children }: NoticeCardProps) {
+  const { t } = useTranslation('updates')
+  const row =
+    'flex min-h-9 items-center gap-2 rounded-[8px] bg-card pr-1.5 pl-2.5 text-xs shadow-card'
+  const card = onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        row,
+        'w-full text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring',
+      )}
+    >
+      {children}
+    </button>
+  ) : (
+    <div className={row}>{children}</div>
+  )
+
+  const close = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="outline"
+            size="icon-xs"
+            aria-label={t('notice.dismiss')}
+            onClick={onDismiss}
+            className="absolute -top-2 -right-1.5 size-4 rounded-full text-icon opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-primary focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+          />
+        }
+      >
+        <XIcon />
+      </TooltipTrigger>
+      <TooltipContent side="top">{t('notice.dismiss')}</TooltipContent>
+    </Tooltip>
+  )
+
+  // The dismiss button is a sibling of the card, so its own tooltip replaces the card's.
+  return (
+    <div
+      role="status"
+      className="group/update relative animate-in not-first:mt-1.5 animation-duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1"
+    >
+      <Tooltip>
+        <TooltipTrigger render={card} delay={500} />
+        <TooltipContent side="top" align="start" className="max-w-64">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+      {close}
+    </div>
+  )
+}
+
 /** The update notice: a raised, neutral row in the sidebar footer, above Settings. */
 export function UpdateNotice() {
   const { t } = useTranslation('updates')
@@ -36,37 +104,25 @@ export function UpdateNotice() {
     else void window.overbench.updates.dismiss()
   }
 
-  const close = (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="outline"
-            size="icon-xs"
-            aria-label={t('notice.dismiss')}
-            onClick={dismiss}
-            className="absolute -top-2 -right-1.5 size-4 rounded-full text-icon opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/update:opacity-100 group-hover/update:opacity-100 hover:text-primary focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-          />
-        }
-      >
-        <XIcon />
-      </TooltipTrigger>
-      <TooltipContent side="top">{t('notice.dismiss')}</TooltipContent>
-    </Tooltip>
-  )
-
   const version = (
     <span className="shrink-0 font-mono text-meta text-tertiary tabular">{notice.version}</span>
   )
 
-  // The words hide whole once the label cannot hold them beside the version.
-  const card = (
-    <div className="flex min-h-9 items-center gap-2 rounded-[8px] bg-card pr-1.5 pl-2.5 text-xs shadow-card">
+  const tooltip =
+    notice.kind === 'ready'
+      ? t('notice.readyTooltip', { version: notice.version })
+      : notice.kind === 'link'
+        ? t('notice.availableTooltip', { version: notice.version })
+        : t('notice.updatedTooltip', { version: notice.version })
+
+  return (
+    <NoticeCard tooltip={tooltip} onDismiss={dismiss}>
       {notice.kind === 'updated' ? (
         <CircleCheckIcon className="size-[15px] shrink-0 text-success" />
       ) : (
         <CircleArrowUpIcon className="size-[15px] shrink-0 text-info" />
       )}
+      {/* The words hide whole once the label cannot hold them beside the version. */}
       <span className="@container/notice flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
         {notice.kind === 'ready' && (
           <>
@@ -125,29 +181,6 @@ export function UpdateNotice() {
           </a>
         )}
       </span>
-    </div>
-  )
-
-  const tooltip =
-    notice.kind === 'ready'
-      ? t('notice.readyTooltip', { version: notice.version })
-      : notice.kind === 'link'
-        ? t('notice.availableTooltip', { version: notice.version })
-        : t('notice.updatedTooltip', { version: notice.version })
-
-  // The dismiss button is a sibling of the card, so its own tooltip replaces the card's.
-  return (
-    <div
-      role="status"
-      className="group/update relative animate-in not-first:mt-1.5 animation-duration-(--duration-slow) ease-out-quint fade-in slide-in-from-bottom-1"
-    >
-      <Tooltip>
-        <TooltipTrigger render={card} delay={500} />
-        <TooltipContent side="top" align="start" className="max-w-64">
-          {tooltip}
-        </TooltipContent>
-      </Tooltip>
-      {close}
-    </div>
+    </NoticeCard>
   )
 }

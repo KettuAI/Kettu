@@ -272,7 +272,16 @@ export interface AgentUpdatesFile {
    * that found something, or null. Files written before `attemptedAt` take `checkedAt` for it.
    */
   agents: Partial<
-    Record<AgentId, { checkedAt: number | null; attemptedAt: number; latest: AgentUpdate | null }>
+    Record<
+      AgentId,
+      {
+        checkedAt: number | null
+        attemptedAt: number
+        latest: AgentUpdate | null
+        /** The update whose notice the user dismissed, until a newer one is found. */
+        skipped?: AgentUpdate
+      }
+    >
   >
 }
 
@@ -504,8 +513,18 @@ export function parseAgentUpdatesFile(data: Record<string, unknown>): AgentUpdat
         : null
     const checkedAt = found && isTime(entry.checkedAt) ? entry.checkedAt : null
     const attemptedAt = isTime(entry.attemptedAt) ? entry.attemptedAt : checkedAt
+    const skippedEntry = isRecord(entry.skipped) ? entry.skipped : null
+    const skipped =
+      skippedEntry &&
+      isVersion(skippedEntry.adapterVersion) &&
+      (skippedEntry.cliVersion === null || isVersion(skippedEntry.cliVersion))
+        ? {
+            adapterVersion: skippedEntry.adapterVersion,
+            cliVersion: skippedEntry.cliVersion,
+          }
+        : null
     if (attemptedAt === null) continue
-    agents[id] = { checkedAt, attemptedAt, latest: found }
+    agents[id] = { checkedAt, attemptedAt, latest: found, ...(skipped ? { skipped } : {}) }
   }
   return { version: 1, agents }
 }

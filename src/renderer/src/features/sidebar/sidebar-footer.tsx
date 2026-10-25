@@ -1,6 +1,7 @@
 import { ArrowRightIcon, SettingsIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { AgentUpdateNotice } from '@renderer/features/updates/agent-update-notice'
 import { UpdateNotice } from '@renderer/features/updates/update-notice'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { openSettings, useViewStore } from '@renderer/stores/view'
@@ -12,6 +13,7 @@ export function SidebarFooterContent() {
   return (
     <>
       <SignInNotice />
+      <AgentUpdateNotice />
       <UpdateNotice />
       <NavRow
         icon={<SettingsIcon />}

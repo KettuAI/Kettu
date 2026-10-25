@@ -336,6 +336,7 @@ export function createValidators(platform: Platform): Validators {
     'agents.retry': agent,
     'agents.reinstall': agent,
     'agents.checkUpdates': none,
+    'agents.skipUpdate': agent,
     'agents.update': agent,
     'agents.install': (params) => {
       const o = fields(params)

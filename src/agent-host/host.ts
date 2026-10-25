@@ -631,6 +631,7 @@ export class AgentHost {
       'agents.retry': ({ agentId }) => agents.retry(agentId),
       'agents.reinstall': ({ agentId }) => agents.reinstall(agentId),
       'agents.checkUpdates': () => agents.checkUpdates(),
+      'agents.skipUpdate': ({ agentId }) => agents.skipUpdate(agentId),
       'agents.update': ({ agentId }) => agents.update(agentId),
       'agents.install': ({ agentId, method }) => agents.install(agentId, method),
       'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
