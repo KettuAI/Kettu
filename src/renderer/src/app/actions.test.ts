@@ -25,6 +25,7 @@ const {
   takeReturnedMessages,
   usePendingSession,
 } = await import('./actions')
+const { onAppEvent } = await import('./events')
 const { clearDraft, draftedSessions, NEW_SESSION_DRAFT, readDraft, writeDraft } =
   await import('@renderer/features/session/composer/drafts')
 const { draftAttachments, setDraftAttachments } = await import('@renderer/stores/attachments')
@@ -551,17 +552,20 @@ describe('takeReturnedMessages', () => {
     { type: 'ref', ref: { kind: 'attachment', attachment: shot } },
   ]
 
+  const returned = (sessionId: string | null) => async (method: string) =>
+    method === 'sessions.takeReturned' ? [{ sessionId, content: message }] : undefined
+
   beforeEach(() => {
     request.mockReset()
-    clearDraft(NEW_SESSION_DRAFT)
-    setDraftAttachments(NEW_SESSION_DRAFT, [])
+    for (const draft of [NEW_SESSION_DRAFT, 's1']) {
+      clearDraft(draft)
+      setDraftAttachments(draft, [])
+    }
   })
 
   it('puts the message into an empty draft', async () => {
-    request.mockImplementation(async (method: string) =>
-      method === 'sessions.takeReturned' ? [message] : undefined,
-    )
-    await takeReturnedMessages()
+    request.mockImplementation(returned(null))
+    await takeReturnedMessages(null)
     expect(request).toHaveBeenCalledWith('sessions.takeReturned', { sessionId: null })
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('Fix the build')
     expect(draftAttachments(NEW_SESSION_DRAFT).map((item) => item.attachment?.id)).toEqual(['a1'])
@@ -569,12 +573,47 @@ describe('takeReturnedMessages', () => {
 
   it('puts it after a draft written since, its attachments after the draft ones', async () => {
     writeDraft(NEW_SESSION_DRAFT, 'Something else')
-    request.mockImplementation(async (method: string) =>
-      method === 'sessions.takeReturned' ? [message] : undefined,
-    )
-    await takeReturnedMessages()
+    request.mockImplementation(returned(null))
+    await takeReturnedMessages(null)
     expect(readDraft(NEW_SESSION_DRAFT)).toBe('Something else\n\nFix the build')
     expect(draftAttachments(NEW_SESSION_DRAFT).map((item) => item.attachment?.id)).toEqual(['a1'])
+  })
+
+  it("puts a session's message into its empty draft", async () => {
+    request.mockImplementation(returned('s1'))
+    await takeReturnedMessages('s1')
+    expect(request).toHaveBeenCalledWith('sessions.takeReturned', { sessionId: 's1' })
+    expect(readDraft('s1')).toBe('Fix the build')
+    expect(draftAttachments('s1').map((item) => item.attachment?.id)).toEqual(['a1'])
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+  })
+
+  it("puts a session's message after its draft, and tells its composer", async () => {
+    writeDraft('s1', 'Something else')
+    const written: string[] = []
+    const off = onAppEvent((event) => {
+      if (event.kind === 'draft-written') written.push(event.draft)
+    })
+    onTestFinished(() => void off())
+    request.mockImplementation(returned('s1'))
+    await takeReturnedMessages('s1')
+    expect(readDraft('s1')).toBe('Something else\n\nFix the build')
+    expect(written).toEqual(['s1'])
+  })
+
+  it('takes every message at launch, each into its own draft', async () => {
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.takeReturned'
+        ? [
+            { sessionId: null, content: [{ type: 'text', text: 'First message' }] },
+            { sessionId: 's1', content: message },
+          ]
+        : undefined,
+    )
+    await takeReturnedMessages()
+    expect(request).toHaveBeenCalledWith('sessions.takeReturned', {})
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('First message')
+    expect(readDraft('s1')).toBe('Fix the build')
   })
 })
 

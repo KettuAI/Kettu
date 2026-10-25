@@ -93,6 +93,12 @@ export function usePromptBox({
       onAppEvent((event) => {
         onEvent(event)
         if (event.kind === 'focus-composer') editor.current?.focus()
+        if (event.kind === 'draft-written' && event.draft === draft) {
+          const next = readDraft(draft)
+          setText(next)
+          setCaret(null)
+          editor.current?.setText(next)
+        }
         if (
           event.kind === 'insert-into-composer' &&
           (!event.sessionId || event.sessionId === sessionId)

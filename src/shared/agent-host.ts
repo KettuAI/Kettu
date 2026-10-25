@@ -250,6 +250,12 @@ export type SessionAttention = 'none' | 'permission' | 'unread' | 'error'
  */
 export const REMOVED_WHILE_STARTING = 'removed_while_starting'
 
+/** A message the host kept to give back, to a session's composer or New session's (null). */
+export interface ReturnedMessage {
+  sessionId: string | null
+  content: UserContent[]
+}
+
 export interface SessionSummary {
   id: string
   agentId: AgentId
@@ -462,8 +468,9 @@ export interface HostContract {
   'sessions.delete': { params: { sessionId: string }; result: void }
   // Once per index: the sessions left with no message go, except `keep`, those with a draft.
   'sessions.removeEmpty': { params: { keep: string[] }; result: void }
-  // Messages the host kept to give back, oldest first, for a session or for New session (null).
-  'sessions.takeReturned': { params: { sessionId: string | null }; result: UserContent[][] }
+  // Messages the host kept to give back, oldest first, for a session or for New session (null);
+  // with no sessionId, every one.
+  'sessions.takeReturned': { params: { sessionId?: string | null }; result: ReturnedMessage[] }
   'sessions.removeAll': { params: void; result: void }
   'permissions.respond': {
     params: { sessionId: string; requestId: string; optionId: string }

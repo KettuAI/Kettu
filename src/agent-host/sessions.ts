@@ -10,6 +10,7 @@ import {
   type AttachmentBytes,
   type ContextBreakdown,
   type ImportableSession,
+  type ReturnedMessage,
   type SessionAttention,
   type SessionSummary,
   type StartNotice,
@@ -224,6 +225,10 @@ interface Turn {
   startedAt: number
   /** As the user wrote it, with the attachments as their records show them. */
   content: UserContent[]
+  /** The message as it came in, given back when the turn fails before the agent added anything. */
+  written: UserContent[]
+  /** The records the prompt was sent with, released as the turn ends unless it is given back. */
+  attachments: string[]
   /** The user entry the turn started with, which shows how its attachments went. */
   entryId: string | null
   ended: boolean
@@ -362,6 +367,19 @@ function attachmentIds(content: readonly UserContent[]): string[] {
   return content.flatMap((item) =>
     item.type === 'ref' && item.ref.kind === 'attachment' ? [item.ref.attachment.id] : [],
   )
+}
+
+/** Whether the agent added no message, thought, tool call or plan after the user entry `entryId`. */
+function agentAddedNothing(
+  thread: Pick<ThreadState, 'order' | 'byId'>,
+  entryId: string | null,
+): boolean {
+  const at = entryId ? thread.order.indexOf(entryId) : -1
+  if (at < 0) return false
+  return thread.order.slice(at + 1).every((id) => {
+    const kind = thread.byId[id]?.kind
+    return kind !== 'agent' && kind !== 'thought' && kind !== 'tool' && kind !== 'plan'
+  })
 }
 
 /** The attachments that sessions' queued prompts hold, which go with the sessions. */
@@ -1634,13 +1652,18 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
-  /** Removes and returns the messages kept for a session, oldest first; a taken one is gone. */
-  takeReturned(sessionId: string | null): UserContent[][] {
-    const taken = this.returned.filter((message) => message.sessionId === sessionId)
-    if (taken.length === 0) return []
-    this.returned = this.returned.filter((message) => message.sessionId !== sessionId)
+  /**
+   * Removes and returns the messages kept for a session, or for every one when `sessionId` is
+   * undefined, oldest first; a taken one is gone.
+   */
+  takeReturned(sessionId?: string | null): ReturnedMessage[] {
+    const taken = (message: ReturnedFile['messages'][number]) =>
+      sessionId === undefined || message.sessionId === sessionId
+    const messages = this.returned.filter(taken)
+    if (messages.length === 0) return []
+    this.returned = this.returned.filter((message) => !taken(message))
     this.saveReturned()
-    return taken.map((message) => message.content)
+    return messages.map(({ sessionId, content }) => ({ sessionId, content }))
   }
 
   private saveReturned(): void {
@@ -2465,6 +2488,8 @@ export class SessionManager {
         // The user had stopped it, so it ends stopped rather than cut short.
         this.endTurn(live, turn, 'cancelled', null)
       } else if (turn) {
+        const givenBack = agentAddedNothing(live.thread, turn.entryId)
+        if (givenBack) turn.attachments = []
         this.finishTurn(live, turn, null)
         this.emit(live, [
           {
@@ -2477,6 +2502,7 @@ export class SessionManager {
             },
           },
         ])
+        if (givenBack) this.giveBack(live, turn)
       }
       this.clearPermissions(live, 'withdrawn')
       live.childRunning = false
@@ -3188,7 +3214,7 @@ export class SessionManager {
     throw notFound(t('session.attachmentGone', { name }))
   }
 
-  /** Keeps the sent bytes for the thread store and lets the attachments' records go. */
+  /** Keeps the sent bytes for the thread store. */
   private commitAttachments(
     live: Live,
     resolved: { shown: UserContent[]; blobs: StoredBlob[]; ids: string[] },
@@ -3197,7 +3223,6 @@ export class SessionManager {
     for (const blob of resolved.blobs) live.blobs.set(blob.hash, blob)
     this.showSent(live, resolved.shown)
     this.scheduleCheckpoint(live)
-    void this.deps.attachments?.release(resolved.ids)
   }
 
   /**
@@ -3339,6 +3364,7 @@ export class SessionManager {
       },
     ])
     this.commitAttachments(live, resolved)
+    if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
     this.update(live, { queue: queue.filter((i) => i.id !== itemId) })
     this.persist(live)
     this.touch(live.id)
@@ -3374,6 +3400,8 @@ export class SessionManager {
     const turn: Turn = {
       startedAt: now,
       content,
+      written: content,
+      attachments: [],
       entryId,
       ended: false,
       cancelRequested: false,
@@ -3558,8 +3586,10 @@ export class SessionManager {
       const sending = connection.prompt(live.record.acpSessionId, resolved.wire).finally(() => {
         if (live.unansweredCancel === turn) live.unansweredCancel = null
       })
-      // Sent: the records go, and a retry after a failed sign-in sends what the thread shows.
+      // Sent: a retry after a failed sign-in sends what the thread shows, and the records stay
+      // until the turn ends, in case its message is given back.
       this.commitAttachments(live, resolved)
+      turn.attachments = resolved.ids
       turn.content = resolved.shown
       const result = await sending
       if (turn.ended) return
@@ -3604,6 +3634,8 @@ export class SessionManager {
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
     if (live.turn === turn) live.turn = null
+    if (turn.attachments.length > 0) void this.deps.attachments?.release(turn.attachments)
+    turn.attachments = []
     this.deps.mcp?.turnEnded(live.id)
     this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
@@ -3794,9 +3826,16 @@ export class SessionManager {
       this.endTurn(live, turn, 'cancelled', null)
       return
     }
+    const authRequired = mapped.code === 'auth_required'
+    // Sign-in and credit have Retry, which sends the message again.
+    const givenBack =
+      !authRequired &&
+      !isOutOfCredit(mapped) &&
+      !turn.cancelRequested &&
+      agentAddedNothing(live.thread, turn.entryId)
+    if (givenBack) turn.attachments = []
     this.finishTurn(live, turn, null)
     const now = this.now()
-    const authRequired = mapped.code === 'auth_required'
     this.emit(live, [
       {
         op: 'entry.add',
@@ -3853,6 +3892,7 @@ export class SessionManager {
     this.pauseQueue(live)
     this.persist(live)
     this.touch(live.id)
+    if (givenBack) this.giveBack(live, turn)
     const routineTurn = this.reportRun(live, {
       stopReason: null,
       error: mapped,
@@ -3863,6 +3903,21 @@ export class SessionManager {
       this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
     }
     this.checkpoint(live)
+  }
+
+  /**
+   * Keeps a failed turn's message for its session's composer, with the attachments whose records
+   * the host still holds; a retried message's were released when it first went.
+   */
+  private giveBack(live: Live, turn: Turn): void {
+    const held = new Set(this.deps.attachments?.held(attachmentIds(turn.written)) ?? [])
+    const content = turn.written.filter(
+      (item) =>
+        item.type !== 'ref' || item.ref.kind !== 'attachment' || held.has(item.ref.attachment.id),
+    )
+    this.returned.push({ sessionId: live.id, content, at: this.now() })
+    this.saveReturned()
+    this.deps.events.returned(live.id)
   }
 
   /** The session could not attach for the turn: it fails as a start does, and Retry sends again. */

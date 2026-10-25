@@ -1,4 +1,8 @@
-import { REMOVED_WHILE_STARTING, type SessionSummary } from '@shared/agent-host'
+import {
+  REMOVED_WHILE_STARTING,
+  type ReturnedMessage,
+  type SessionSummary,
+} from '@shared/agent-host'
 import type { AgentId, UserContent } from '@shared/thread'
 import {
   clearDraft,
@@ -28,6 +32,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
 import { openNewSession, openSession, placeNewSession, useViewStore } from '@renderer/stores/view'
 import { create } from 'zustand'
+import { emitAppEvent } from './events'
 
 /** A session being created: shown in place of the thread until `session/new` answers. */
 export interface PendingSession {
@@ -104,8 +109,8 @@ function draftIsPrompt(prompt: readonly UserContent[]): boolean {
   )
 }
 
-const draftIsEmpty = () =>
-  !readDraft(NEW_SESSION_DRAFT).trim() && draftAttachments(NEW_SESSION_DRAFT).length === 0
+const draftIsEmpty = (draft = NEW_SESSION_DRAFT) =>
+  !readDraft(draft).trim() && draftAttachments(draft).length === 0
 
 function removedWhileStarting(error: unknown): boolean {
   const data = (error as { data?: { reason?: unknown } } | null)?.data
@@ -190,23 +195,27 @@ export async function createSession(
 }
 
 /**
- * Takes the messages the host kept when no window could, into New session's draft: an empty one
- * gets the text and attachments, one written since gets the text after a blank line.
+ * Takes the messages the host kept to give back, for a session, for New session (null), or every
+ * one when `sessionId` is undefined, into its draft: an empty one gets the text and attachments,
+ * one written since gets the text after a blank line and the attachments after its own.
  */
-export async function takeReturnedMessages(): Promise<void> {
-  let messages: UserContent[][]
+export async function takeReturnedMessages(sessionId?: string | null): Promise<void> {
+  let messages: ReturnedMessage[]
   try {
-    messages = await host('sessions.takeReturned', { sessionId: null })
+    messages = await host('sessions.takeReturned', sessionId === undefined ? {} : { sessionId })
   } catch (error) {
     console.warn(`Could not take the returned messages: ${errorMessage(error)}`)
     return
   }
-  for (const content of messages) {
+  for (const { sessionId, content } of messages) {
+    const draft = sessionId ?? NEW_SESSION_DRAFT
     const text = promptText(content)
-    const draft = readDraft(NEW_SESSION_DRAFT)
-    writeDraft(NEW_SESSION_DRAFT, draftIsEmpty() ? text : draft ? `${draft}\n\n${text}` : text)
-    restoreAttachments(NEW_SESSION_DRAFT, content)
-    flushDraft(NEW_SESSION_DRAFT)
+    const written = readDraft(draft)
+    const next = draftIsEmpty(draft) || !written ? text : text ? `${written}\n\n${text}` : written
+    writeDraft(draft, next)
+    restoreAttachments(draft, content)
+    flushDraft(draft)
+    emitAppEvent({ kind: 'draft-written', draft })
   }
 }
 

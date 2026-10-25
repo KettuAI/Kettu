@@ -5,6 +5,7 @@ export type AppEvent =
   | { kind: 'ask-selection' } // Mod+L with text selected in the terminal
   | { kind: 'new-terminal' }
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
+  | { kind: 'draft-written'; draft: string } // written from outside its composer, which reloads it
   | { kind: 'add-attachments' } // Mod+U: the composer's Add files or photos…
   | { kind: 'drop-attachments'; draft: string; files: File[] } // a session's id, or New session's draft
   | { kind: 'run-in-terminal'; projectPath: string; command: string }
