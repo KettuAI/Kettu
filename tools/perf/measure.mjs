@@ -290,23 +290,29 @@ const after = await evaluate('window.overbench.app.perfMetrics()')
 const agentHost = after.processes.find((p) => p.name === 'OverBench Agent Host')
 results.agentHostMB = agentHost ? agentHost.workingSetKB / 1024 : null
 
-/** Closes the shown session through its menu, which leaves it for New session. */
-async function closeShownSession() {
+/**
+ * Archives the shown session through its menu, which closes it and leaves it for New session, then
+ * brings it back from Settings' side: it returns to the sidebar closed, so it reopens from the store.
+ */
+async function archiveAndRestore(sessionId) {
   await click(
     `return document.querySelector('header [data-slot=dropdown-menu-trigger]')`,
     'the session menu',
   )
-  await waitFor(
-    `[...document.querySelectorAll('[role=menuitem]')].some((m) => m.textContent.trim() === 'Close')`,
-    { what: 'the session menu' },
-  )
-  await click(
-    `return [...document.querySelectorAll('[role=menuitem]')].find((m) => m.textContent.trim() === 'Close')`,
-    'Close',
-  )
-  await waitFor(`!document.querySelector('header [data-slot=dropdown-menu-trigger]')`, {
-    what: 'New session after Close',
+  await waitFor(`Boolean(document.querySelector('[role=menuitem][data-accelerator="A"]'))`, {
+    what: 'the session menu',
   })
+  await click(`return document.querySelector('[role=menuitem][data-accelerator="A"]')`, 'Archive')
+  await waitFor(`!document.querySelector('header [data-slot=dropdown-menu-trigger]')`, {
+    what: 'New session after Archive',
+  })
+  await evaluate(
+    `window.overbench.agents.request('sessions.unarchive', { sessionId: ${JSON.stringify(sessionId)} })`,
+  )
+  await waitFor(
+    `Boolean(document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]'))`,
+    { what: 'the restored session in the sidebar' },
+  )
 }
 
 /**
@@ -344,8 +350,8 @@ async function switchTo(sessionId, what) {
 
 /**
  * A session of `entries` entries, imported from the fake agent as from its CLI. Its first open
- * replays the history with `session/load` and stores it; closed again, it reopens from the store,
- * a page at a time, as any session with a long history does.
+ * replays the history with `session/load` and stores it; archived and brought back, it reopens
+ * from the store, a page at a time, as any session with a long history does.
  */
 async function storedHistory(entries) {
   const sessionId = await evaluate(`(async () => {
@@ -365,7 +371,7 @@ async function storedHistory(entries) {
     },
   )
   await switchTo(sessionId, `the imported ${entries}-entry session`)
-  await closeShownSession()
+  await archiveAndRestore(sessionId)
   return sessionId
 }
 
