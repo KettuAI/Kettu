@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { levelsOf, splitName, tierOf, type SelectOption } from './levels'
+import { levelRows, levelsOf, splitName, tierOf, type SelectOption } from './levels'
 
 const effort = (names: string[], value: string, defaultDescription?: string): SelectOption => ({
   id: 'effort',
@@ -81,6 +81,32 @@ describe('levelsOf', () => {
     expect(result.fallback).toBeUndefined()
     expect(result.levels).toHaveLength(2)
     expect(result.shown).toBe('max')
+  })
+})
+
+describe('levelRows', () => {
+  it('keeps the agent order and every choice', () => {
+    const rows = levelRows(effort(['Default', 'Low', 'High'], 'low'))
+    expect(rows.map((r) => r.value)).toEqual(['default', 'low', 'high'])
+    expect(rows.map((r) => r.label)).toEqual(['Default', 'Low', 'High'])
+  })
+
+  it('names the Default row with the level the agent says it stands for', () => {
+    const named = effort(['Low', 'Default (High)', 'High'], 'default-high')
+    expect(levelRows(named).find((r) => r.value === 'default-high')?.label).toBe('Default (High)')
+    const described = effort(['Default', 'Low', 'Medium'], 'default', 'Uses medium effort')
+    expect(levelRows(described).find((r) => r.value === 'default')?.label).toBe('Default (Medium)')
+  })
+
+  it('keeps a row description for its tooltip', () => {
+    const rows = levelRows(effort(['Default', 'Low'], 'low', 'Uses low effort'))
+    expect(rows.find((r) => r.value === 'default')?.description).toBe('Uses low effort')
+    expect(rows.find((r) => r.value === 'low')?.description).toBeUndefined()
+  })
+
+  it('lists every choice when the agent offers no default', () => {
+    const rows = levelRows(effort(['Low', 'Max'], 'max'))
+    expect(rows.map((r) => r.value)).toEqual(['low', 'max'])
   })
 })
 

@@ -24,7 +24,10 @@
     "options": "Options",
     "changesBetweenTurns": "Changes between turns",
     "useFallback": "Use {{name}}",
-    "useDefault": "Use the agent's default"
+    "useDefault": "Use the agent's default",
+    "levelsHint": "Higher levels think longer and use more of your plan.",
+    "moreModels": "More models",
+    "searchModels": "Search models"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",

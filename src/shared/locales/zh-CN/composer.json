@@ -24,7 +24,10 @@
     "options": "选项",
     "changesBetweenTurns": "仅在两轮对话之间可更改",
     "useFallback": "使用 {{name}}",
-    "useDefault": "使用 Agent 的默认值"
+    "useDefault": "使用 Agent 的默认值",
+    "levelsHint": "级别越高，思考越久，消耗的套餐额度也越多。",
+    "moreModels": "更多模型",
+    "searchModels": "搜索模型"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",
