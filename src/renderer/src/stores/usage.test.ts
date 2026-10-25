@@ -26,6 +26,7 @@ const empty: UsageSummary = {
   sources: {},
   first: null,
   agents: [],
+  pricesAsOf: '2026-10-25',
 }
 
 describe('usage store', () => {

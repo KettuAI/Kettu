@@ -139,6 +139,9 @@ jobs:
         run: npm pkg set "version=$VERSION"
         env:
           VERSION: ${{ inputs.version }}
+      # A release prices with its day's list; a failed fetch keeps the committed snapshot and warns.
+      - name: Update the price snapshot
+        run: node tools/usage/update-prices.mjs --if-changed
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}

@@ -48,6 +48,8 @@ export function recordRows(turn: RecordedTurn): UsageRow[] {
       reasoning: apart ? 0 : null,
       cacheRead: 0,
       cacheWrite: 0,
+      cacheWrite1h: 0,
+      turn: 0,
     }
     row.input += tokens.input
     row.output += tokens.output
@@ -56,7 +58,10 @@ export function recordRows(turn: RecordedTurn): UsageRow[] {
     row.cacheWrite += tokens.cacheWrite ?? 0
     rows.set(key, row)
   }
-  return [...rows.values()].filter(
+  const recorded = [...rows.values()].filter(
     (row) => row.input + row.output + (row.reasoning ?? 0) + row.cacheRead + row.cacheWrite > 0,
   )
+  // The page counts turns by one row each; the models of a turn share its time and key prefix.
+  if (recorded[0]) recorded[0].turn = 1
+  return recorded
 }

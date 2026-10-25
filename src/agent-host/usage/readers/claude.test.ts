@@ -52,6 +52,7 @@ interface Block {
   output?: number
   cacheRead?: number
   cacheWrite?: number
+  cacheWrite1h?: number
   stop?: string | null
   model?: string
   timestamp?: string
@@ -74,6 +75,10 @@ function assistant(block: Block): string {
         output_tokens: block.output ?? 5,
         cache_read_input_tokens: block.cacheRead ?? 100,
         cache_creation_input_tokens: block.cacheWrite ?? 50,
+        cache_creation: {
+          ephemeral_5m_input_tokens: (block.cacheWrite ?? 50) - (block.cacheWrite1h ?? 0),
+          ephemeral_1h_input_tokens: block.cacheWrite1h ?? 0,
+        },
       },
     },
     requestId: `req_${block.id}`,
@@ -130,8 +135,25 @@ describe('claudeReader', () => {
         reasoning: null,
         cacheRead: 5000,
         cacheWrite: 10000,
+        cacheWrite1h: 0,
+        turn: 0,
       },
     ])
+  })
+
+  it("reads the hour's cache writes apart, with the total still in cacheWrite", async () => {
+    write('p/s.jsonl', [
+      assistant({ id: 'msg_hour', cacheWrite: 10_000, cacheWrite1h: 4_000 }),
+      // A log without the split, or with an unusable one, keeps the hour at 0.
+      assistant({ id: 'msg_flat' }).replace(/"cache_creation":\{[^}]*\},/, ''),
+    ])
+    const ctx = context()
+    await claudeReader.scan(ctx)
+    expect(ctx.rows.get('claude:msg_hour')).toMatchObject({
+      cacheWrite: 10_000,
+      cacheWrite1h: 4_000,
+    })
+    expect(ctx.rows.get('claude:msg_flat')).toMatchObject({ cacheWrite: 50, cacheWrite1h: 0 })
   })
 
   it('normalizes the model and leaves it empty when unknown', async () => {

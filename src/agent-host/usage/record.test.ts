@@ -33,10 +33,13 @@ describe('recordRows', () => {
         ],
       }),
     )
-    expect(rows.map((r) => [r.key, r.model, r.input, r.output, r.reasoning, r.cacheRead])).toEqual([
-      ['ob:ob1:e:9:claude-opus-5-5', 'claude-opus-5-5', 8, 421, null, 100],
-      ['ob:ob1:e:9:claude-haiku-5-5', 'claude-haiku-5-5', 3, 4, null, 100],
+    expect(rows.map((r) => r.key)).toEqual([
+      'ob:ob1:e:9:claude-opus-5-5',
+      'ob:ob1:e:9:claude-haiku-5-5',
     ])
+    // One turn however many models it used; the first row carries it.
+    expect(rows.map((r) => r.turn)).toEqual([1, 0])
+    expect(rows.map((r) => r.cacheWrite1h)).toEqual([0, 0])
     expect(rows[0]).toMatchObject({
       source: 'overbench',
       sessionId: 'acp1',

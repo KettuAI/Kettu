@@ -4,6 +4,7 @@
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import type { UsageSource } from '@shared/usage'
+import prices from './prices.json'
 
 export type { UsageSource }
 
@@ -26,7 +27,11 @@ export interface UsageRow {
   /** Only where the agent reports it apart from output. */
   reasoning: number | null
   cacheRead: number
+  /** All cache writes; the hour's part is also counted in `cacheWrite1h`. */
   cacheWrite: number
+  cacheWrite1h: number
+  /** 1 on one row of each of OverBench's turns, else 0. */
+  turn: number
 }
 
 /** How far a log file, or a reader's database, has been read. */
@@ -89,4 +94,29 @@ export function normalizeModel(name: string | null | undefined): string {
   if (parts.length > 1 && EFFORTS.has(parts[parts.length - 1]!)) parts.pop()
   model = parts[parts.length - 1] ?? ''
   return model.replace(/-\d{8}$/, '').replace(/-\d{4}-\d{2}-\d{2}$/, '')
+}
+
+/** One model's prices, in dollars per token. */
+export interface ModelPrice {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  /** The hour's cache writes, where LiteLLM prices them apart. */
+  cacheWrite1h?: number
+}
+
+/** LiteLLM's chat models, cut by `tools/usage/update-prices.mjs` and keyed by `normalizeModel`. */
+export interface PriceList {
+  /** The date the snapshot was taken. */
+  asOf: string
+  models: Record<string, ModelPrice>
+}
+
+export const PRICES: PriceList = prices
+
+/** A model's price: its own name, then without a trailing date a stored row may still carry. */
+export function priceFor(model: string): ModelPrice | null {
+  const dated = model.replace(/-\d{8}$/, '')
+  return PRICES.models[model] ?? (dated === model ? null : (PRICES.models[dated] ?? null))
 }

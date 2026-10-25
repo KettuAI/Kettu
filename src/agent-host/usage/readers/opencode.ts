@@ -197,6 +197,8 @@ function rowOf(session: Session, message: Row): UsageRow | null {
     reasoning,
     cacheRead,
     cacheWrite,
+    cacheWrite1h: 0,
+    turn: 0,
   }
 }
 

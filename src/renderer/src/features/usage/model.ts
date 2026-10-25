@@ -25,7 +25,18 @@ export const BREAKDOWN_ROWS = 6
 
 const HOUR_MS = 3_600_000
 
-const ZERO: TokenParts = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
+const ZERO: TokenParts = {
+  input: 0,
+  output: 0,
+  reasoning: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  requests: 0,
+  turns: 0,
+  cost: null,
+  unpricedTokens: 0,
+  cacheSaved: 0,
+}
 
 /** The start of the local day `at` falls in. */
 export function dayOf(at: number): number {
@@ -171,6 +182,11 @@ function addInto(sum: TokenParts, add: TokenParts): void {
   sum.reasoning += add.reasoning
   sum.cacheRead += add.cacheRead
   sum.cacheWrite += add.cacheWrite
+  sum.requests += add.requests
+  sum.turns += add.turns
+  sum.unpricedTokens += add.unpricedTokens
+  sum.cacheSaved += add.cacheSaved
+  if (add.cost !== null) sum.cost = (sum.cost ?? 0) + add.cost
 }
 
 export interface Figures {
