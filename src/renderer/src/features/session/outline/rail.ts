@@ -46,13 +46,14 @@ export class ReadingTracker {
   private readonly passed = new Set<string>()
   private current: string | null = null
   private readonly listeners = new Set<() => void>()
-  private readonly intersections: IntersectionObserver
-  private readonly mutations: MutationObserver
+  private intersections: IntersectionObserver | null = null
+  private mutations: MutationObserver | null = null
+  private content: Element | null = null
 
-  constructor(
-    viewport: Element,
-    private readonly content: Element,
-  ) {
+  /** Starts following the user messages among the content's children, as the viewport shows them. */
+  attach(viewport: Element, content: Element): void {
+    this.detach()
+    this.content = content
     this.intersections = new IntersectionObserver(
       (records) => {
         for (const record of records) {
@@ -73,6 +74,18 @@ export class ReadingTracker {
       this.update()
     })
     this.mutations.observe(content, { childList: true })
+    for (const child of content.children) this.place(child)
+    this.update()
+  }
+
+  detach(): void {
+    this.intersections?.disconnect()
+    this.mutations?.disconnect()
+    this.intersections = null
+    this.mutations = null
+    this.content = null
+    this.placed.clear()
+    this.passed.clear()
   }
 
   /** The user messages, oldest first, by the ids their items carry. */
@@ -82,13 +95,13 @@ export class ReadingTracker {
     for (const [id, element] of this.placed) {
       if (!this.wanted.has(id)) this.unplace(element)
     }
-    for (const child of this.content.children) this.place(child)
+    for (const child of this.content?.children ?? []) this.place(child)
     this.update()
   }
 
   private place(node: Node): void {
     const id = node instanceof HTMLElement ? node.dataset.messageId : undefined
-    if (!id || !this.wanted.has(id) || this.placed.get(id) === node) return
+    if (!id || !this.intersections || !this.wanted.has(id) || this.placed.get(id) === node) return
     this.placed.set(id, node as Element)
     this.intersections.observe(node as Element)
   }
@@ -98,7 +111,7 @@ export class ReadingTracker {
     if (!id || this.placed.get(id) !== node) return
     this.placed.delete(id)
     this.passed.delete(id)
-    this.intersections.unobserve(node as Element)
+    this.intersections?.unobserve(node as Element)
   }
 
   private update(): void {
@@ -113,11 +126,5 @@ export class ReadingTracker {
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
-  }
-
-  disconnect(): void {
-    this.intersections.disconnect()
-    this.mutations.disconnect()
-    this.listeners.clear()
   }
 }

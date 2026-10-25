@@ -34,6 +34,7 @@ import {
   type ScenarioName,
 } from './options.ts'
 import { SCENARIO_RUNNERS, compact, syntheticHistory } from './scenarios.ts'
+import { isTitlesPrompt, titles } from './titles.ts'
 import type { FakeSessionState, Turn } from './turn.ts'
 
 export const FAKE_AGENT_VERSION = '0.1.0'
@@ -795,7 +796,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
             updatedAt: session.updatedAt,
           })
         }
-        const run = choice.scenario === 'compact' ? compact : SCENARIO_RUNNERS[choice.scenario]
+        const run = isTitlesPrompt(text)
+          ? titles
+          : choice.scenario === 'compact'
+            ? compact
+            : SCENARIO_RUNNERS[choice.scenario]
         const stopReason: StopReason = await run(turn)
         return {
           stopReason: abort.signal.aborted ? 'cancelled' : stopReason,

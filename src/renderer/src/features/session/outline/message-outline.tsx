@@ -1,6 +1,5 @@
 import {
   memo,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -26,9 +25,6 @@ import { useOutline, type OutlineRow } from './use-outline'
 const ROOM_PX = 40
 // A row shows the spinner only for a jump that waits this long for its pages.
 const SPINNER_AFTER_MS = 200
-
-const noSubscribe = (): (() => void) => () => {}
-const noReading = (): string | null => null
 
 const reducedMotion = (): boolean =>
   document.documentElement.dataset.reduceMotion === 'always' ||
@@ -88,22 +84,18 @@ export const MessageOutline = memo(function MessageOutline({
   const { height, room } = useRailBox(viewport, content)
   const { scrollToMessage, scrollToStart } = useMessageScroller()
 
-  const [tracker, setTracker] = useState<ReadingTracker | null>(null)
+  const [tracker] = useState(() => new ReadingTracker())
   useEffect(() => {
     const view = viewport.current
     const column = content.current
     if (!view || !column) return
-    const next = new ReadingTracker(view, column)
-    setTracker(next)
-    return () => {
-      next.disconnect()
-      setTracker(null)
-    }
-  }, [viewport, content])
+    tracker.attach(view, column)
+    return () => tracker.detach()
+  }, [tracker, viewport, content])
   useEffect(() => {
-    tracker?.setMessages(rows.map((row) => row.entryId))
+    tracker.setMessages(rows.map((row) => row.entryId))
   }, [tracker, rows])
-  const reading = useSyncExternalStore(tracker?.subscribe ?? noSubscribe, tracker?.get ?? noReading)
+  const reading = useSyncExternalStore(tracker.subscribe, tracker.get)
   const readingIndex = Math.max(
     0,
     rows.findIndex((row) => row.entryId === reading),
@@ -125,62 +117,59 @@ export const MessageOutline = memo(function MessageOutline({
     if (next) opened()
   }
 
-  const jump = useCallback(
-    async (row: OutlineRow | null) => {
-      const view = viewport.current
-      const column = content.current
-      if (!view || !column) return
-      const id = ++jumping.current
-      const key = row?.entryId ?? 'start'
-      const replica = useThreadsStore.getState().replicas[sessionId]
-      const loaded = row
-        ? replica?.state?.byId[row.entryId] !== undefined
-        : (replica?.older ?? null) === null
-      if (!loaded) {
-        const timer = setTimeout(() => {
-          if (jumping.current === id) setWaiting(key)
-        }, SPINNER_AFTER_MS)
-        const done = await loadThrough(sessionId, row?.pos ?? 0)
-        clearTimeout(timer)
-        if (jumping.current !== id) return
-        setWaiting(null)
-        if (!done) return
-      }
-      await revealAll()
+  const jump = async (row: OutlineRow | null): Promise<void> => {
+    const view = viewport.current
+    const column = content.current
+    if (!view || !column) return
+    const id = ++jumping.current
+    const key = row?.entryId ?? 'start'
+    const replica = useThreadsStore.getState().replicas[sessionId]
+    const loaded = row
+      ? replica?.state?.byId[row.entryId] !== undefined
+      : (replica?.older ?? null) === null
+    if (!loaded) {
+      const timer = setTimeout(() => {
+        if (jumping.current === id) setWaiting(key)
+      }, SPINNER_AFTER_MS)
+      const done = await loadThrough(sessionId, row?.pos ?? 0)
+      clearTimeout(timer)
       if (jumping.current !== id) return
-      const behavior = reducedMotion() ? 'auto' : 'smooth'
-      if (!row) {
-        scrollToStart({ behavior })
-        setOpen(false)
-        return
-      }
-      const margin = jumpMargin(view, column)
-      scrollToMessage(row.entryId, { align: 'start', behavior, scrollMargin: margin })
+      setWaiting(null)
+      if (!done) return
+    }
+    await revealAll()
+    if (jumping.current !== id) return
+    const behavior = reducedMotion() ? 'auto' : 'smooth'
+    if (!row) {
+      scrollToStart({ behavior })
       setOpen(false)
-      // Items above the target keep an estimated height until they render, so a long smooth
-      // scroll can land off; it is set right once it ends.
-      if (behavior === 'smooth') {
-        view.addEventListener(
-          'scrollend',
-          () => {
-            const target = column.querySelector(`[data-message-id="${CSS.escape(row.entryId)}"]`)
-            if (!target) return
-            const inset = Number.parseFloat(getComputedStyle(column).paddingTop) || 0
-            const top = target.getBoundingClientRect().top - view.getBoundingClientRect().top
-            if (Math.abs(top - inset - margin) > 1) {
-              scrollToMessage(row.entryId, {
-                align: 'start',
-                behavior: 'auto',
-                scrollMargin: margin,
-              })
-            }
-          },
-          { once: true },
-        )
-      }
-    },
-    [sessionId, viewport, content, revealAll, scrollToMessage, scrollToStart],
-  )
+      return
+    }
+    const margin = jumpMargin(view, column)
+    scrollToMessage(row.entryId, { align: 'start', behavior, scrollMargin: margin })
+    setOpen(false)
+    // Items above the target keep an estimated height until they render, so a long smooth
+    // scroll can land off; it is set right once it ends.
+    if (behavior === 'smooth') {
+      view.addEventListener(
+        'scrollend',
+        () => {
+          const target = column.querySelector(`[data-message-id="${CSS.escape(row.entryId)}"]`)
+          if (!target) return
+          const inset = Number.parseFloat(getComputedStyle(column).paddingTop) || 0
+          const top = target.getBoundingClientRect().top - view.getBoundingClientRect().top
+          if (Math.abs(top - inset - margin) > 1) {
+            scrollToMessage(row.entryId, {
+              align: 'start',
+              behavior: 'auto',
+              scrollMargin: margin,
+            })
+          }
+        },
+        { once: true },
+      )
+    }
+  }
 
   // The list opens scrolled to the reading position, and a keyboard opening highlights it.
   const popup = useRef<HTMLDivElement | null>(null)

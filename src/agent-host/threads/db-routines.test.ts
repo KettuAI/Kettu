@@ -56,9 +56,11 @@ describe('the routine runs table', () => {
     const first = ThreadDb.open(file, () => {})
     first.close()
 
-    // Version 2 is the schema before this table; removing it and lowering the version says so.
+    // Version 2 is the schema before this table and the later ones; removing them and lowering the
+    // version says so.
     const raw = new DatabaseSync(file)
     raw.exec('DROP TABLE routine_runs')
+    raw.exec('DROP TABLE outline_titles')
     raw.exec('PRAGMA user_version = 2')
     raw.close()
 
