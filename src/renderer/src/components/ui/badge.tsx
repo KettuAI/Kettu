@@ -20,7 +20,8 @@ const badgeVariants = cva(
         info: 'bg-info-tint text-info [button]:hover:bg-info-tint-hover',
         warning: 'bg-warning-tint text-warning',
         error: 'bg-danger-tint text-danger [button]:hover:bg-destructive-tint-hover',
-        neutral: 'bg-muted font-normal text-muted-foreground',
+        neutral:
+          'bg-muted font-normal text-muted-foreground shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
       },
     },
     defaultVariants: {

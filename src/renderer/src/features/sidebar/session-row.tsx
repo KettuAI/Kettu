@@ -197,7 +197,7 @@ export const SessionRow = memo(function SessionRow({
             size="row"
             isActive={current}
             style={{ paddingLeft: pad }}
-            className="bg-selected pr-2 text-primary data-active:font-medium"
+            className="bg-surface pr-2 text-primary shadow-outline data-active:font-medium"
           >
             {lead}
             <SessionTitleField

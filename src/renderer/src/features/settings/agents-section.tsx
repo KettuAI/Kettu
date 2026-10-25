@@ -82,7 +82,7 @@ import {
   Segmented,
   SettingSelect,
 } from './controls'
-import { GroupLabel, RowFrame, RowShell, RowText } from './rows'
+import { GroupLabel, RowFrame, RowGroup, RowShell, RowText } from './rows'
 import { useApply } from './use-apply'
 
 const VENDORS: Partial<Record<AgentId, string>> = {
@@ -697,17 +697,19 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         {installed && (
           <section className="flex flex-col">
             <GroupLabel group={{ id: 'account', label: t('agents.account') }} />
-            {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
-            <Fact
-              name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}
-            >
-              {status.account?.label}
-            </Fact>
-            {status.account?.email && (
-              <Fact name={t('agents.email')}>
-                <Masked>{status.account.email}</Masked>
+            <RowGroup>
+              {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
+              <Fact
+                name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}
+              >
+                {status.account?.label}
               </Fact>
-            )}
+              {status.account?.email && (
+                <Fact name={t('agents.email')}>
+                  <Masked>{status.account.email}</Masked>
+                </Fact>
+              )}
+            </RowGroup>
           </section>
         )}
 
@@ -715,7 +717,9 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
 
         <section className="flex flex-col">
           <GroupLabel group={{ id: 'configuration', label: t('agents.configuration') }} />
-          <ConfigRows status={status} override={override ?? null} />
+          <RowGroup>
+            <ConfigRows status={status} override={override ?? null} />
+          </RowGroup>
         </section>
 
         {installed && (
@@ -725,51 +729,57 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
               {t('agents.advanced')}
             </CollapsibleTrigger>
             <CollapsibleContent className={PANEL}>
-              <RowFrame
-                text={
-                  <RowText
-                    name={t('agents.launch')}
-                    description={
-                      <code className="font-mono text-meta break-all" data-selectable="">
-                        {status.launchCommand}
-                      </code>
+              <div className="pb-1">
+                <RowGroup>
+                  <RowFrame
+                    text={
+                      <RowText
+                        name={t('agents.launch')}
+                        description={
+                          <code className="font-mono text-meta break-all" data-selectable="">
+                            {status.launchCommand}
+                          </code>
+                        }
+                      />
                     }
-                  />
-                }
-              >
-                <CopyAction text={status.launchCommand} label={t('agents.copyLaunch')} />
-              </RowFrame>
-              {status.package && (
-                <RowFrame
-                  text={
-                    <RowText
-                      name={t('agents.adapter')}
-                      description={
-                        <code className="font-mono text-meta break-all" data-selectable="">
-                          {status.package.name}@{status.package.version}
-                        </code>
+                  >
+                    <CopyAction text={status.launchCommand} label={t('agents.copyLaunch')} />
+                  </RowFrame>
+                  {status.package && (
+                    <RowFrame
+                      text={
+                        <RowText
+                          name={t('agents.adapter')}
+                          description={
+                            <code className="font-mono text-meta break-all" data-selectable="">
+                              {status.package.name}@{status.package.version}
+                            </code>
+                          }
+                        />
                       }
-                    />
-                  }
-                >
-                  {status.package.installed && (
-                    <Button
-                      variant="outline"
-                      size="compact"
-                      disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
-                      onClick={() => act(() => host('agents.reinstall', { agentId: status.id }))}
                     >
-                      {busy && <Spinner data-icon="inline-start" />}
-                      {t('agents.reinstall')}
-                    </Button>
+                      {status.package.installed && (
+                        <Button
+                          variant="outline"
+                          size="compact"
+                          disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
+                          onClick={() =>
+                            act(() => host('agents.reinstall', { agentId: status.id }))
+                          }
+                        >
+                          {busy && <Spinner data-icon="inline-start" />}
+                          {t('agents.reinstall')}
+                        </Button>
+                      )}
+                    </RowFrame>
                   )}
-                </RowFrame>
-              )}
-              {status.package && environment?.nodeVersion && (
-                <Fact name="Node.js" mono>
-                  {environment.nodeVersion}
-                </Fact>
-              )}
+                  {status.package && environment?.nodeVersion && (
+                    <Fact name="Node.js" mono>
+                      {environment.nodeVersion}
+                    </Fact>
+                  )}
+                </RowGroup>
+              </div>
             </CollapsibleContent>
           </Collapsible>
         )}
@@ -816,34 +826,36 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
   return (
     <section className="flex flex-col">
       <GroupLabel group={{ id: 'version', label: t('agents.versionGroup') }} />
-      <RowFrame
-        text={
-          <RowText
-            name={
-              <span className="flex items-baseline gap-2">
-                {t('agents.currentVersion')}
-                <span className="font-mono text-meta font-normal text-tertiary">
-                  {version ?? t('agents.notReported')}
+      <RowGroup>
+        <RowFrame
+          text={
+            <RowText
+              name={
+                <span className="flex items-baseline gap-2">
+                  {t('agents.currentVersion')}
+                  <span className="font-mono text-meta font-normal text-tertiary">
+                    {version ?? t('agents.notReported')}
+                  </span>
                 </span>
-              </span>
-            }
-            description={line}
-          />
-        }
-      >
-        {status.package && (
-          <Button
-            variant="outline"
-            size="compact"
-            aria-busy={refresh.phase === 'turning'}
-            disabled={refresh.phase === 'turning' || updating}
-            onClick={() => void refresh.run(checkForAgentUpdates).catch(() => {})}
-          >
-            <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
-            {t('agents.update.check')}
-          </Button>
-        )}
-      </RowFrame>
+              }
+              description={line}
+            />
+          }
+        >
+          {status.package && (
+            <Button
+              variant="outline"
+              size="compact"
+              aria-busy={refresh.phase === 'turning'}
+              disabled={refresh.phase === 'turning' || updating}
+              onClick={() => void refresh.run(checkForAgentUpdates).catch(() => {})}
+            >
+              <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
+              {t('agents.update.check')}
+            </Button>
+          )}
+        </RowFrame>
+      </RowGroup>
     </section>
   )
 }
@@ -1170,67 +1182,69 @@ function UsageGroup({
   return (
     <section className="flex flex-col">
       <GroupLabel group={{ id: 'usage', label: t('agents.usage'), actions }} />
-      {status.limits.length > 0 ? (
-        status.limits.map((limit) => {
-          const tone = usageTone(limit)
-          const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
-          return (
-            <RowFrame
-              key={limit.window}
-              text={
-                <RowText
-                  name={limitLabel(limit)}
-                  description={
-                    limit.resetsAt
-                      ? left
-                        ? t('agents.resetsIn', { time: left })
-                        : t('agents.resetsAt', { time: resetTime(limit.resetsAt, now) })
-                      : undefined
-                  }
-                />
-              }
-            >
-              <Progress
-                value={limit.usedPercent ?? 0}
-                tone={tone}
-                className="w-40"
-                aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
-              />
-              <span
-                className={cn(
-                  'w-10 text-right text-small font-medium tabular',
-                  USAGE_TONE_TEXT[tone],
-                )}
+      <RowGroup>
+        {status.limits.length > 0 ? (
+          status.limits.map((limit) => {
+            const tone = usageTone(limit)
+            const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
+            return (
+              <RowFrame
+                key={limit.window}
+                text={
+                  <RowText
+                    name={limitLabel(limit)}
+                    description={
+                      limit.resetsAt
+                        ? left
+                          ? t('agents.resetsIn', { time: left })
+                          : t('agents.resetsAt', { time: resetTime(limit.resetsAt, now) })
+                        : undefined
+                    }
+                  />
+                }
               >
-                {percent(limit)}
-              </span>
-            </RowFrame>
-          )
-        })
-      ) : reading && status.capabilities.reports ? (
-        <RowShell>
-          <p className="py-3 text-xs text-tertiary">{t('agents.readingUsage')}</p>
-        </RowShell>
-      ) : limitsReadable(status) && !running ? (
-        <RowFrame text={<RowText name={t('agents.planLimits')} />}>
-          <ControlError error={error} />
-          <Button
-            variant="outline"
-            size="compact"
-            disabled={busy}
-            onClick={() => act(() => refreshLimits(status.id))}
-          >
-            {busy && <Spinner data-icon="inline-start" />}
-            {t('agents.checkLimits')}
-          </Button>
-        </RowFrame>
-      ) : (
-        <RowShell>
-          <p className="py-3 text-xs text-secondary">
-            {t('agents.usageNotReported', { name: status.name })}
-          </p>
-        </RowShell>
-      )}
+                <Progress
+                  value={limit.usedPercent ?? 0}
+                  tone={tone}
+                  className="w-40"
+                  aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+                />
+                <span
+                  className={cn(
+                    'w-10 text-right text-small font-medium tabular',
+                    USAGE_TONE_TEXT[tone],
+                  )}
+                >
+                  {percent(limit)}
+                </span>
+              </RowFrame>
+            )
+          })
+        ) : reading && status.capabilities.reports ? (
+          <RowShell>
+            <p className="py-3 text-xs text-tertiary">{t('agents.readingUsage')}</p>
+          </RowShell>
+        ) : limitsReadable(status) && !running ? (
+          <RowFrame text={<RowText name={t('agents.planLimits')} />}>
+            <ControlError error={error} />
+            <Button
+              variant="outline"
+              size="compact"
+              disabled={busy}
+              onClick={() => act(() => refreshLimits(status.id))}
+            >
+              {busy && <Spinner data-icon="inline-start" />}
+              {t('agents.checkLimits')}
+            </Button>
+          </RowFrame>
+        ) : (
+          <RowShell>
+            <p className="py-3 text-xs text-secondary">
+              {t('agents.usageNotReported', { name: status.name })}
+            </p>
+          </RowShell>
+        )}
+      </RowGroup>
       {(error ?? refreshError) && status.limits.length > 0 && (
         <p className="px-1 pt-1 text-xs text-danger">{error ?? refreshError}</p>
       )}

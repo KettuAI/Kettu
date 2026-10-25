@@ -1,6 +1,17 @@
-import { useContext, type ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 import { cn } from '@renderer/lib/utils'
 import { FlashContext, type GroupDef, type RowDef, type SectionDef } from './model'
+
+const CardContext = createContext(false)
+
+/** One group's rows on a card, divided by separators inset to the text. */
+export function RowGroup({ children }: { children: ReactNode }) {
+  return (
+    <CardContext.Provider value>
+      <div className="rounded-xl bg-card shadow-card">{children}</div>
+    </CardContext.Provider>
+  )
+}
 
 /** A section's rows, each run of rows that share a group under its label. */
 export function SectionBody({ section }: { section: SectionDef }) {
@@ -15,15 +26,17 @@ export function SectionBody({ section }: { section: SectionDef }) {
       {groups.map(({ group, rows }, i) => (
         <section key={group?.id ?? i} aria-label={group?.label} className="flex flex-col">
           {group && <GroupLabel group={group} />}
-          {rows.map((row) =>
-            row.layout === 'custom' ? (
-              <RowShell key={row.id} id={row.id} plain>
-                {row.render(null)}
-              </RowShell>
-            ) : (
-              <Row key={row.id} row={row} />
-            ),
-          )}
+          <RowGroup>
+            {rows.map((row) =>
+              row.layout === 'custom' ? (
+                <RowShell key={row.id} id={row.id} plain>
+                  {row.render(null)}
+                </RowShell>
+              ) : (
+                <Row key={row.id} row={row} />
+              ),
+            )}
+          </RowGroup>
         </section>
       ))}
     </div>
@@ -65,7 +78,8 @@ function Row({ row }: { row: RowDef }) {
 }
 
 /**
- * Every row draws the hairline above it, so the first one also underlines its group's label.
+ * Outside a card, every row draws the hairline above it, so the first one also underlines its
+ * group's label. On a card, a separator starts at the text's inset and the first row has none.
  * `plain` rows draw their own padding, as an agent's row does.
  */
 export function RowShell({
@@ -78,13 +92,26 @@ export function RowShell({
   children: ReactNode
 }) {
   const flash = useContext(FlashContext)
+  const card = useContext(CardContext)
   return (
-    <div data-setting-row={id} className={cn('relative border-t border-subtle', !plain && 'px-1')}>
+    <div
+      data-setting-row={id}
+      className={cn(
+        'relative',
+        card
+          ? cn(
+              'before:absolute before:top-0 before:right-0 before:left-4 before:h-(--hairline) before:bg-border-soft first:rounded-t-xl first:before:hidden last:rounded-b-xl',
+              plain ? 'px-3' : 'pr-3 pl-4',
+            )
+          : cn('border-t border-subtle', !plain && 'px-1'),
+      )}
+    >
       {id && (
         <span
           aria-hidden
           className={cn(
-            'pointer-events-none absolute -inset-x-2 inset-y-0 rounded-lg bg-mark opacity-0 transition-opacity duration-(--duration-slower)',
+            'pointer-events-none absolute inset-y-0 rounded-[inherit] bg-mark opacity-0 transition-opacity duration-(--duration-slower)',
+            card ? 'inset-x-0' : '-inset-x-2 rounded-lg',
             flash === id && 'opacity-100',
           )}
         />
@@ -107,8 +134,9 @@ export function RowText({ name, description }: { name: ReactNode; description?: 
 
 /** A row's first line: its text on the left, its control on the right. */
 export function RowLine({ text, children }: { text: ReactNode; children?: ReactNode }) {
+  const card = useContext(CardContext)
   return (
-    <div className="flex min-h-7 items-center gap-6 py-3">
+    <div className={cn('flex items-center gap-6 py-3', card ? 'min-h-9' : 'min-h-7')}>
       <div className="min-w-0 flex-1">{text}</div>
       {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
     </div>

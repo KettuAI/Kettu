@@ -7,8 +7,10 @@ const variants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/80',
-        outline: 'bg-card text-foreground shadow-outline hover:bg-accent aria-expanded:bg-accent',
+        default:
+          'bg-(image:--primary-gradient) text-primary-foreground shadow-primary hover:bg-(image:--primary-gradient-hover)',
+        outline:
+          'bg-card text-foreground shadow-outline hover:shadow-outline-hover aria-expanded:bg-accent',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-hover aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
         ghost:
@@ -17,7 +19,7 @@ const variants = cva(
           'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 dark:bg-destructive/20 dark:hover:bg-destructive/30',
         link: 'text-primary underline-offset-4 hover:underline',
         quiet:
-          'text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground aria-pressed:bg-pressed aria-pressed:text-foreground aria-pressed:shadow-[inset_0_0_0_var(--hairline)_var(--border)] aria-pressed:hover:bg-pressed-hover',
+          'text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground aria-pressed:bg-pressed aria-pressed:text-foreground aria-pressed:shadow-sunk aria-pressed:hover:bg-pressed-hover',
       },
       size: {
         default:

@@ -28,6 +28,7 @@ const toggleVariants = cva(
         legend: 'h-control-sm min-w-0 gap-1.5 px-1.5 text-xs',
       },
     },
+    compoundVariants: [{ variant: 'segmented', size: 'compact', class: 'text-small' }],
     defaultVariants: {
       variant: 'default',
       size: 'default',

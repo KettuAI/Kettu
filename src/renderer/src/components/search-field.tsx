@@ -26,7 +26,12 @@ export function SearchField({
   className?: string
 }) {
   return (
-    <InputGroup className={cn('h-control bg-card shadow-outline', className)}>
+    <InputGroup
+      className={cn(
+        'h-control bg-card shadow-outline hover:shadow-outline-hover focus-within:shadow-outline-hover',
+        className,
+      )}
+    >
       <InputGroupAddon>
         <SearchIcon className="size-3.5" />
       </InputGroupAddon>
