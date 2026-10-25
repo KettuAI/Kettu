@@ -428,6 +428,14 @@ describe('the host files', () => {
         },
       }),
     ).toEqual({ version: 1, agents: { 'claude-code': { account, limits: [limit] } } })
+    expect(
+      parseAgentsFile({
+        agents: { 'claude-code': { account: { ...account, tier: '5x' }, limits: [] } },
+      }),
+    ).toEqual({
+      version: 1,
+      agents: { 'claude-code': { account: { ...account, tier: '5x' }, limits: [] } },
+    })
     const init = { version: '0.94.0', capabilities: { forkSession: true, steering: 'yes' } }
     expect(
       parseAgentsFile({

@@ -67,6 +67,7 @@ import { HostError, invalidParams } from './errors'
 import { getEnv, isExecutableFile, type Env } from './find-command'
 import { t } from './i18n'
 import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
+import { claudeJsonPath, readPlanTier } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import {
@@ -1642,10 +1643,41 @@ export class AgentManager {
 
   private setAccount(slot: Slot, account: AgentAccount): void {
     const wasRequired = slot.signIn === 'required'
-    slot.account = account
+    const before = slot.account
+    const same =
+      before?.kind === account.kind &&
+      before.label === account.label &&
+      before.email === account.email
+    slot.account = same && before.tier ? { ...account, tier: before.tier } : account
     slot.signIn = account.kind === 'none' ? 'required' : 'signed-in'
     this.emit(slot)
     if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.def.id)
+    if (slot.def.id === 'claude-code' && account.kind === 'account') {
+      void this.readTier(slot, slot.account)
+    }
+  }
+
+  /** Adds the subscription's tier, which only Claude Code's own `.claude.json` holds. */
+  private async readTier(slot: Slot, account: AgentAccount): Promise<void> {
+    const { platform } = this.deps
+    const env = this.deps.env.agentEnv(slot.def.id)
+    const folder = configLocations(
+      slot.def.id,
+      (name) => getEnv(env, name, platform),
+      os.homedir(),
+      platform,
+      this.chosenFolder(slot),
+    ).find((location) => location.id === 'folder')
+    if (!folder) return
+    const file = claudeJsonPath(folder, os.homedir(), platform)
+    const tier = await readPlanTier(file, (level, message) =>
+      this.deps.diagnostics.log(level, message),
+    )
+    // The account may have changed, or the agent been stopped and its account forgotten, meanwhile.
+    if (slot.account !== account || (account.tier ?? null) === tier) return
+    slot.account = { kind: account.kind, label: account.label, email: account.email }
+    if (tier) slot.account.tier = tier
+    this.emit(slot)
   }
 
   setLimit(agentId: AgentId, limit: PlanLimit): void {

@@ -95,6 +95,15 @@
   --heat-hue: oklch(0.6 0.17 255);
   --heat-0: rgb(0 0 0 / 5.5%);
 
+  /* What fills the context in the usage popover, by source. */
+  --context-1: oklch(0.58 0.15 255);
+  --context-2: oklch(0.62 0.11 195);
+  --context-3: oklch(0.58 0.15 300);
+  --context-4: oklch(0.7 0.13 75);
+  --context-5: oklch(0.6 0.13 150);
+  --context-6: oklch(0.62 0.14 350);
+  --context-7: oklch(0.6 0.04 255);
+
   /* Terminal, read by xterm.js. VS Code's default ANSI colors (MIT). */
   --ansi-black: #000000;
   --ansi-red: #cd3131;
@@ -184,6 +193,15 @@
     --heat-hue: oklch(0.66 0.15 255);
     --heat-0: rgb(255 255 255 / 6.5%);
 
+    /* What fills the context in the usage popover, by source. */
+    --context-1: oklch(0.7 0.13 255);
+    --context-2: oklch(0.72 0.11 195);
+    --context-3: oklch(0.7 0.13 300);
+    --context-4: oklch(0.76 0.12 75);
+    --context-5: oklch(0.72 0.12 150);
+    --context-6: oklch(0.72 0.12 350);
+    --context-7: oklch(0.68 0.04 255);
+
     --ansi-green: #0dbc79;
     --ansi-yellow: #e5e510;
     --ansi-blue: #2472c8;
@@ -265,6 +283,15 @@
   --heat-hue: oklch(0.66 0.15 255);
   --heat-0: rgb(255 255 255 / 6.5%);
 
+  /* What fills the context in the usage popover, by source. */
+  --context-1: oklch(0.7 0.13 255);
+  --context-2: oklch(0.72 0.11 195);
+  --context-3: oklch(0.7 0.13 300);
+  --context-4: oklch(0.76 0.12 75);
+  --context-5: oklch(0.72 0.12 150);
+  --context-6: oklch(0.72 0.12 350);
+  --context-7: oklch(0.68 0.04 255);
+
   --ansi-green: #0dbc79;
   --ansi-yellow: #e5e510;
   --ansi-blue: #2472c8;
@@ -338,6 +365,13 @@
   --heat-2: color-mix(in oklch, var(--heat-hue) 48%, transparent);
   --heat-3: color-mix(in oklch, var(--heat-hue) 74%, transparent);
   --heat-4: var(--heat-hue);
+
+  /* The autocompact buffer in the context bar. */
+  --context-hatch: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--text-primary) 22%, transparent) 0 2px,
+    transparent 2px 4px
+  );
 
   --terminal-background: var(--bg-sidebar);
   --terminal-foreground: var(--text-primary);
