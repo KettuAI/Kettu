@@ -281,7 +281,9 @@ function ProjectGroup({
     () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath),
     [summaries, projectPath],
   )
-  if (!project && tree.length === 0) return null
+  // A project is listed while it has a session to show, as No project is: one just opened,
+  // or whose sessions are all archived, waits for its next session.
+  if (tree.length === 0) return null
 
   const toggle = () => toggleGroup(key)
 
