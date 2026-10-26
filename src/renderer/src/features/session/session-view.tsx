@@ -6,6 +6,7 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/comp
 import { Button } from '@renderer/components/ui/button'
 import { markThreadShown } from '@renderer/app/perf'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles } from '@renderer/stores/files'
@@ -20,7 +21,13 @@ import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { PlanBar } from './plan-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
-import { ComposerPlaceholder, FailedState, StartingAgent, ThreadSkeleton } from './session-states'
+import {
+  ColumnScroller,
+  ComposerPlaceholder,
+  FailedState,
+  StartingAgent,
+  ThreadSkeleton,
+} from './session-states'
 import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
@@ -58,7 +65,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const [queueOpen, setQueueOpen] = useState(false)
   // A queued message's failed action; the stack clears it with its next action or its last item.
   const [queueError, setQueueError] = useState<string | null>(null)
-  const [gutter, setGutter] = useState(0)
+  const gutter = useScrollbarGutter()
   const status = session?.status ?? summary.status
   const running = status === 'running' || status === 'awaiting_permission'
   const fail = useCallback((e: unknown) => setActionError(errorMessage(e)), [])
@@ -79,41 +86,49 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   if (!session) {
     body =
       replicaStatus === 'error' ? (
-        <div className="mx-auto w-full max-w-thread px-6 pt-6">
-          <FailedState
-            title={t('view.couldntOpen')}
-            message={replicaError ?? t('view.hostSilent')}
-            onRetry={() => void reloadSession(sessionId)}
-          />
-        </div>
+        <ColumnScroller>
+          <div className="mx-auto w-full max-w-thread px-6 pt-6">
+            <FailedState
+              title={t('view.couldntOpen')}
+              message={replicaError ?? t('view.hostSilent')}
+              onRetry={() => void reloadSession(sessionId)}
+            />
+          </div>
+        </ColumnScroller>
       ) : (
         // A session that is not live waits for its agent and the whole `session/load` replay; the
         // composer's placeholder says which.
-        <ThreadSkeleton />
+        <ColumnScroller>
+          <ThreadSkeleton />
+        </ColumnScroller>
       )
   } else if (status === 'auth_required' && empty) {
     body = (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
+      <ColumnScroller className="flex items-center justify-center">
         <SignIn agentId={summary.agentId} projectPath={summary.projectPath} onRetry={retry} />
-      </div>
+      </ColumnScroller>
     )
   } else if (status === 'starting' && empty) {
     body = (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <ColumnScroller className="flex flex-col">
         <StartingAgent agentId={summary.agentId} />
         <ThreadSkeleton className="opacity-70" />
-      </div>
+      </ColumnScroller>
     )
   } else if (empty && (status === 'ready' || status === 'closed')) {
     body = (
-      <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-16">
+      <ColumnScroller className="flex items-center justify-center px-6 pb-16">
         <p className="animate-in text-[15px] text-muted-foreground fade-in animation-duration-(--duration-slow)">
           {t('newSession.whatToWorkOn', { agent: name })}
         </p>
-      </div>
+      </ColumnScroller>
     )
   } else if (!renderersReady) {
-    body = <ThreadSkeleton />
+    body = (
+      <ColumnScroller>
+        <ThreadSkeleton />
+      </ColumnScroller>
+    )
   } else {
     showsThread = true
     body = (
@@ -123,7 +138,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         agentName={name}
         working={running}
         progressNotes={progressNotes}
-        onGutter={setGutter}
       />
     )
   }
@@ -138,7 +152,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       <ProjectPathContext value={summary.projectPath}>
         <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </ProjectPathContext>
-      {/* Leaves the width the thread's scrollbar takes, so the composer lines up with its column. */}
+      {/* Leaves the width the column's scrollbar takes, so the composer lines up with the column. */}
       <div style={{ paddingRight: gutter }}>
         <div className="mx-auto flex w-full max-w-thread flex-col gap-2 px-6 pb-3">
           {session && status === 'failed' && (

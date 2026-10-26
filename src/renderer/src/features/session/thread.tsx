@@ -114,7 +114,6 @@ export const Thread = memo(function Thread({
   agentName,
   working,
   progressNotes,
-  onGutter,
 }: {
   sessionId: string
   projectPath: string
@@ -123,8 +122,6 @@ export const Thread = memo(function Thread({
   working: boolean
   /** The agent's messages that more work follows show as muted notes between runs. */
   progressNotes: boolean
-  /** Told the width the viewport's scrollbar takes, so the composer can leave the same. */
-  onGutter: (width: number) => void
 }) {
   const { t } = useTranslation('session')
   const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
@@ -172,32 +169,13 @@ export const Thread = memo(function Thread({
   }, [sessionId, held, hasOlder, shownFrom])
   // Also after each prepend, and for a page too short to scroll.
   useEffect(nearStart, [nearStart, items.length])
-  // Where scrollbars take room (Windows, and macOS set to show them), the column centres in what
-  // the gutter leaves; this reports the gutter whenever the viewport changes size. The first
-  // report is made here, in the commit, so the thread's first frame already has it.
-  const viewportRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      viewport.current = el
-      if (!el) return
-      const report = () => onGutter(el.offsetWidth - el.clientWidth)
-      report()
-      const observer = new ResizeObserver(report)
-      observer.observe(el)
-      return () => {
-        observer.disconnect()
-        viewport.current = null
-        onGutter(0)
-      }
-    },
-    [onGutter],
-  )
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
       <ScrollOnSend sent={sent} />
       <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay">
         <MessageScrollerViewport
-          ref={viewportRef}
+          ref={viewport}
           onScroll={nearStart}
           aria-label={t('thread.label')}
           className="outline-none [scroll-timeline:--scroll-fade-top_y]"
