@@ -4,10 +4,10 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { errorMessage, host } from '@renderer/lib/host'
 import { openAgentSettings, openSettings } from '@renderer/stores/view'
 import { agentUpdateLabel, type AgentUpdateNotice } from './agent-updates'
-import { NoticeRow, NoticeVersion } from './update-notice'
+import { NoticeCard, NoticeVersion } from './update-notice'
 
-/** A newer Claude Code or Codex, or adapter, as a row in the sidebar's notices. */
-export function AgentUpdateRow({ notice }: { notice: AgentUpdateNotice }) {
+/** A newer Claude Code or Codex, or adapter, as a card in the sidebar's notices. */
+export function AgentUpdateCard({ notice }: { notice: AgentUpdateNotice }) {
   const { t } = useTranslation('updates')
 
   const open = () => {
@@ -25,12 +25,12 @@ export function AgentUpdateRow({ notice }: { notice: AgentUpdateNotice }) {
   }
 
   return (
-    <NoticeRow
+    <NoticeCard
       icon={
         notice.kind === 'one' ? (
-          <AgentMark agent={notice.agentId} size={16} />
+          <AgentMark agent={notice.agentId} size={14} />
         ) : (
-          <BotIcon className="size-4 text-icon" />
+          <BotIcon className="size-3.5 text-icon" />
         )
       }
       text={

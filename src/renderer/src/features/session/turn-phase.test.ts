@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView, ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { inLatestTurn, turnPhase, turnTokens } from './turn-phase'
+import { endedOnRejection, inLatestTurn, turnPhase, turnTokens } from './turn-phase'
 
 function tool(
   id: string,
@@ -167,5 +167,39 @@ describe('inLatestTurn', () => {
 
   it('does not hold for an entry the thread does not have', () => {
     expect(inLatestTurn(state([user('u1'), agent('a1')]), 'n1')).toBe(false)
+  })
+})
+
+describe('endedOnRejection', () => {
+  const answered = (id: string, result: ToolEntry['permissionResult']): ToolEntry => ({
+    ...tool(id, 'execute', 'failed'),
+    permissionResult: result,
+  })
+
+  it('holds when the latest tool call was rejected, whatever the agent wrote after it', () => {
+    const rejected = answered('t1', { optionId: 'no', kind: 'reject_once' })
+    expect(endedOnRejection(state([user('u1'), rejected], 'ready'))).toBe(true)
+    expect(endedOnRejection(state([user('u1'), rejected, agent('a1'), plan('p1')], 'ready'))).toBe(
+      true,
+    )
+    const always = answered('t1', { optionId: 'never', kind: 'reject_always', by: 'routine' })
+    expect(endedOnRejection(state([user('u1'), always], 'ready'))).toBe(true)
+  })
+
+  it('does not hold once you wrote since, or a later tool call ran', () => {
+    const rejected = answered('t1', { optionId: 'no', kind: 'reject_once' })
+    expect(endedOnRejection(state([rejected, user('u2')], 'ready'))).toBe(false)
+    expect(endedOnRejection(state([rejected, tool('t2', 'read', 'completed')], 'ready'))).toBe(
+      false,
+    )
+  })
+
+  it('does not hold for an allowed, stopped or unanswered call, or without a thread', () => {
+    const allowed = answered('t1', { optionId: 'yes', kind: 'allow_once' })
+    expect(endedOnRejection(state([user('u1'), allowed], 'ready'))).toBe(false)
+    expect(endedOnRejection(state([user('u1'), answered('t1', 'cancelled')], 'ready'))).toBe(false)
+    expect(endedOnRejection(state([user('u1'), tool('t1', 'execute')]))).toBe(false)
+    expect(endedOnRejection(state([user('u1'), agent('a1')], 'ready'))).toBe(false)
+    expect(endedOnRejection(undefined)).toBe(false)
   })
 })

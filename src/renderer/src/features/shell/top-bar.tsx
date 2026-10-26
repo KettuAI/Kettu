@@ -7,30 +7,39 @@ import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
-import { useBesideSidePanel } from './side-panel'
 
 /**
- * The 40 px top bar of the main area: the window's drag region. With the sidebar collapsed it
- * leaves room for the macOS traffic lights and carries the sidebar toggle; on Windows and Linux it
- * leaves room for the window controls unless the side panel takes the window's right edge.
+ * The top bar of the main area, at the top of its sheet: the window's drag region. On macOS with
+ * the sidebar collapsed it leaves room for the traffic lights and carries the sidebar toggle, which
+ * on Windows and Linux sits in the band above the sheets instead.
  */
 export function TopBar({ children, className }: { children: ReactNode; className?: string }) {
-  const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  const besidePanel = useBesideSidePanel()
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && isMac
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-2.5 pl-5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-        collapsed && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
-        !isMac &&
-          !besidePanel &&
-          'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-2.5 pl-4 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         className,
       )}
     >
-      {collapsed && <SidebarToggle className="-ml-1" />}
+      {cornered && <SidebarToggle className="-ml-1" />}
       {children}
     </header>
+  )
+}
+
+/**
+ * Windows and Linux: the band of desk across the top of the main area, beside the window controls.
+ * It drags the window and, while the sidebar is collapsed, holds the sidebar toggle.
+ */
+export function TitleBand() {
+  const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  if (isMac) return null
+  return (
+    <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-(--sheet-gap)">
+      {collapsed && <SidebarToggle />}
+    </div>
   )
 }
 
@@ -62,7 +71,7 @@ export function SidebarToggle({ className }: { className?: string }) {
     handOff = false
     element.focus()
   }, [collapsed])
-  // Collapsed, the sidebar's notices pill is out of sight, so the toggle marks and names them.
+  // Collapsed, the sidebar's notices are out of sight, so the toggle marks and names them.
   const notices = collapsed ? summary : null
   const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
   return (
@@ -72,11 +81,12 @@ export function SidebarToggle({ className }: { className?: string }) {
           <Button
             ref={button}
             data-sidebar-toggle=""
-            variant="ghost"
+            variant="quiet"
             size="icon-compact"
             aria-label={label}
+            aria-description={notices?.name}
             onClick={toggleSidebar}
-            className={cn('app-region-no-drag relative', className)}
+            className={cn('app-region-no-drag relative text-secondary', className)}
           />
         }
       >
@@ -100,9 +110,4 @@ export function SidebarToggle({ className }: { className?: string }) {
       </TooltipContent>
     </Tooltip>
   )
-}
-
-/** A hairline between groups of top bar controls. */
-export function TopBarRule() {
-  return <span aria-hidden className="mx-1 h-4 w-(--hairline) shrink-0 bg-border" />
 }

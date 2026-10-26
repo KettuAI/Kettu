@@ -1,6 +1,13 @@
 // A routine's page, and New routine, which uses the same fields before the routine exists.
 
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import {
   ArrowLeftIcon,
   CalendarClockIcon,
@@ -8,6 +15,7 @@ import {
   CircleAlertIcon,
   EllipsisIcon,
   PlayIcon,
+  TriangleAlertIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
@@ -26,7 +34,7 @@ import {
 } from '@shared/routines'
 import type { ScheduleProblem } from '@shared/schedule'
 import type { AgentId } from '@shared/thread'
-import { AgentTile } from '@renderer/components/agents/agent-mark'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -34,30 +42,37 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { InputGroup, InputGroupTextarea } from '@renderer/components/ui/input-group'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Switch } from '@renderer/components/ui/switch'
-import { Textarea } from '@renderer/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { isEditable } from '@renderer/features/artifacts/keys'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { ProjectMenu } from '@renderer/features/session/new-session/project-menu'
 import { canStart, startValues } from '@renderer/features/session/new-session/start-options'
-import { SettingSelect } from '@renderer/features/settings/controls'
-import { RowLine, RowShell, RowText } from '@renderer/features/settings/rows'
-import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
+import { TopBar } from '@renderer/features/shell/top-bar'
 import { basename } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
-import { i18n } from '@renderer/lib/i18n'
+import { cn } from '@renderer/lib/utils'
 import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
 import { useAgentsStore, agentName } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { loadRoutinePage, useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { openRoutine, openRoutines, openSession, useViewStore } from '@renderer/stores/view'
+import { openRoutine, openRoutines, useViewStore } from '@renderer/stores/view'
+import { openActiveRun } from './actions'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
-import { optionValues, pauseNotice, routineOptions, routineState, stateText } from './model'
+import { FieldFrame, FieldRow, FieldSelect, RoutineSection } from './fields'
+import {
+  minutesLabel,
+  optionValues,
+  pauseNotice,
+  routineOptions,
+  routineState,
+  stateText,
+} from './model'
 import { PermissionField } from './permission-field'
 import { RoutineMenuItems } from './routine-menu'
 import { RunAnnouncements, RunHistory } from './run-history'
@@ -97,14 +112,20 @@ function ExistingRoutine({ routineId }: { routineId: string }) {
             <p className="text-small text-secondary">
               {loadError ? t('page.loadFailed') : t('routine.deleted')}
             </p>
-            <Button variant="outline" onClick={openRoutines}>
+            <Button variant="outline" size="sm" onClick={openRoutines}>
               {t('routine.backToRoutines')}
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-3" aria-hidden>
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-24 w-full" />
+          <div aria-hidden>
+            <div className="flex items-center gap-3">
+              <Skeleton className="size-11 rounded-xl" />
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-5 w-56" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+            </div>
+            <Skeleton className="mt-9 h-24 w-full rounded-xl" />
           </div>
         )}
       </RoutineShell>
@@ -116,20 +137,24 @@ function ExistingRoutine({ routineId }: { routineId: string }) {
 
 function RoutineBody({ routine }: { routine: RoutineView }) {
   const { t } = useTranslation('routines')
-  const activeSession = useSessionsStore((s) => {
-    const id = routine.activeRun?.sessionId
-    return id ? s.byId[id] : undefined
-  })
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(routine.name)
   const [prompt, setPrompt] = useState(routine.prompt)
   const nameField = useRef<HTMLInputElement>(null)
+  const nameButton = useRef<HTMLButtonElement>(null)
   const nameCancelled = useRef(false)
+  // Enter and Esc hand the focus back to the name; a click elsewhere keeps it where it went.
+  const refocusName = useRef(false)
 
   useEffect(() => {
-    if (renaming) nameField.current?.select()
+    if (renaming) {
+      nameField.current?.select()
+    } else if (refocusName.current) {
+      refocusName.current = false
+      nameButton.current?.focus()
+    }
   }, [renaming])
 
   const save = (changes: RoutineChanges) => {
@@ -188,160 +213,188 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
   }
 
   const openRun = () => {
-    if (!activeSession) return
-    useSessionsStore.getState().upsert(activeSession)
-    openSession(activeSession.id, activeSession.projectPath)
+    setError(null)
+    openActiveRun(routine).catch((failure: unknown) => setError(errorMessage(failure)))
   }
 
   const state = routineState(routine)
   const now = useNow()
 
+  const notices: ReactNode[] = []
+  if (state.kind === 'waiting') {
+    notices.push(
+      <Alert key="waiting" variant="warning" className="has-data-[slot=alert-action]:pr-32">
+        <TriangleAlertIcon />
+        <AlertTitle>{t('routine.waitingTitle')}</AlertTitle>
+        <AlertDescription>{t('routine.waitingDescription')}</AlertDescription>
+        {routine.activeRun?.sessionId && (
+          <AlertAction className="top-1/2 right-3.5 -translate-y-1/2">
+            <Button variant="outline" size="sm" onClick={openRun}>
+              {t('routine.openRun')}
+            </Button>
+          </AlertAction>
+        )}
+      </Alert>,
+    )
+  }
+  if (state.kind === 'paused' && state.pause) {
+    notices.push(
+      <Alert key="paused" variant="info">
+        <ChartNoAxesColumnIcon />
+        <AlertTitle>{t('pause.title', { agent: agentName(state.pause.agentId) })}</AlertTitle>
+        <AlertDescription>{pauseNotice(state.pause, now)}</AlertDescription>
+      </Alert>,
+    )
+  }
+  if (error) {
+    notices.push(
+      <Alert key="error" variant="error">
+        <CircleAlertIcon />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>,
+    )
+  }
+
   return (
     <RoutineShell>
       <RunAnnouncements />
-      <div className="flex items-start gap-3">
+      <header className="mb-5.5 flex items-center gap-3">
         <RoutineTile agent={routine.agentId} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="min-w-0 flex-1">
           {renaming ? (
-            <input
+            <NameField
               ref={nameField}
               value={name}
-              maxLength={ROUTINE_NAME_CHARS}
-              aria-label={t('routine.name')}
               onChange={(event) => setName(event.target.value)}
               onBlur={saveName}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault()
+                  refocusName.current = true
                   saveName()
                 } else if (event.key === 'Escape') {
                   event.preventDefault()
                   nameCancelled.current = true
+                  refocusName.current = true
                   setRenaming(false)
                   setName(routine.name)
                 }
               }}
-              className="min-w-0 rounded-[6px] bg-transparent text-title font-semibold outline-none focus-visible:outline-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-offset-2"
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => setRenaming(true)}
-              title={t('routine.rename')}
-              className="min-w-0 truncate rounded-[6px] text-left text-title font-semibold outline-none hover:text-primary focus-ring"
-            >
-              {routine.name}
-            </button>
+            <h1 className="flex font-heading text-title font-semibold">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      ref={nameButton}
+                      type="button"
+                      onClick={() => setRenaming(true)}
+                      className="-mx-1.25 min-w-0 truncate rounded-md px-1.25 text-left transition-colors duration-(--duration-fast) outline-none focus-ring hover:bg-hover"
+                    />
+                  }
+                >
+                  {routine.name}
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start">
+                  {t('routine.rename')}
+                </TooltipContent>
+              </Tooltip>
+            </h1>
           )}
-          <p className="text-small leading-normal text-secondary">{stateText(routine, now)}</p>
+          <p
+            className={cn(
+              'mt-0.5 text-small text-tertiary',
+              state.kind === 'waiting' && 'text-attention',
+              state.kind === 'running' && state.status === 'running' && 'text-info',
+            )}
+          >
+            {stateText(routine, now)}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button variant="outline" disabled={!!routine.activeRun} onClick={runNow}>
-            <PlayIcon />
-            {t('routine.runNow')}
-          </Button>
-          <Switch
-            checked={routine.enabled}
-            onCheckedChange={(enabled) => save({ enabled })}
-            aria-label={t(routine.enabled ? 'page.switchOff' : 'page.switchOn', {
-              name: routine.name,
-            })}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="quiet" size="icon" aria-label={t('routine.more')}>
-                  <EllipsisIcon />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <RoutineMenuItems
-                routine={routine}
-                onDelete={() => setDeleting(true)}
-                onError={setError}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {state.kind === 'waiting' && (
-        <Alert variant="warning">
-          <CircleAlertIcon />
-          <AlertTitle>{t('routine.waitingTitle')}</AlertTitle>
-          <AlertDescription>{t('routine.waitingDescription')}</AlertDescription>
-          {activeSession && (
-            <AlertAction>
-              <Button variant="outline" size="xs" onClick={openRun}>
-                {t('routine.openRun')}
-              </Button>
-            </AlertAction>
-          )}
-        </Alert>
-      )}
-      {state.kind === 'paused' && state.pause && (
-        <Alert variant="info">
-          <ChartNoAxesColumnIcon />
-          <AlertTitle>{t('pause.title', { agent: agentName(state.pause.agentId) })}</AlertTitle>
-          <AlertDescription>{pauseNotice(state.pause, now)}</AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="error">
-          <CircleAlertIcon />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex flex-col gap-6">
-        <RoutineFields
-          prompt={prompt}
-          onPrompt={setPrompt}
-          onPromptBlur={savePrompt}
-          projectPath={routine.projectPath}
-          noProject={routine.projectPath === null}
-          onProject={(projectPath) => save({ projectPath })}
-          onProjectError={setError}
-          agentId={routine.agentId}
-          values={optionValues(routine.options)}
-          onChoose={(agentId, model) => {
-            const entry = useAgentOptionsStore.getState().byId[agentId]
-            const seed =
-              agentId === routine.agentId
-                ? optionValues(routine.options)
-                : { ...(useAgentOptionsStore.getState().picks[agentId] ?? {}) }
-            const modelOption = entry?.config.find((option) => option.category === 'model')
-            const next = { ...seed }
-            if (modelOption) {
-              if (model === null) delete next[modelOption.id]
-              else next[modelOption.id] = model
-            }
-            save({
-              agentId,
-              options: entry ? routineOptions(entry, next) : optionsFrom(next),
-            })
-          }}
-          onValues={(optionId, value) => {
-            const entry = useAgentOptionsStore.getState().byId[routine.agentId]
-            if (!entry) return
-            save({
-              options: routineOptions(entry, {
-                ...optionValues(routine.options),
-                [optionId]: value,
-              }),
-            })
-          }}
-          timeLimit={routine.timeLimitMinutes}
-          onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
-          scope={routine.scope}
-          onScope={(scope) => save({ scope })}
-          schedule={routine.trigger.schedule}
-          savedSchedule={routine.trigger.schedule}
-          onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
+        <Button variant="outline" size="sm" disabled={!!routine.activeRun} onClick={runNow}>
+          <PlayIcon data-icon="inline-start" />
+          {t('routine.runNow')}
+        </Button>
+        <Switch
+          checked={routine.enabled}
+          onCheckedChange={(enabled) => save({ enabled })}
+          aria-label={t(routine.enabled ? 'page.switchOff' : 'page.switchOn', {
+            name: routine.name,
+          })}
         />
-        <RunHistory routine={routine} />
-      </div>
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <DropdownMenuTrigger
+                  render={<Button variant="quiet" size="icon-sm" aria-label={t('routine.more')} />}
+                />
+              }
+            >
+              <EllipsisIcon />
+            </TooltipTrigger>
+            <TooltipContent>{t('routine.more')}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <RoutineMenuItems
+              routine={routine}
+              onDelete={() => setDeleting(true)}
+              onError={setError}
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+
+      {notices.length > 0 && <div className="flex flex-col gap-2">{notices}</div>}
+
+      <RoutineFields
+        prompt={prompt}
+        onPrompt={setPrompt}
+        onPromptBlur={savePrompt}
+        projectPath={routine.projectPath}
+        noProject={routine.projectPath === null}
+        onProject={(projectPath) => save({ projectPath })}
+        onProjectError={setError}
+        agentId={routine.agentId}
+        values={optionValues(routine.options)}
+        onChoose={(agentId, model) => {
+          const entry = useAgentOptionsStore.getState().byId[agentId]
+          const seed =
+            agentId === routine.agentId
+              ? optionValues(routine.options)
+              : { ...(useAgentOptionsStore.getState().picks[agentId] ?? {}) }
+          const modelOption = entry?.config.find((option) => option.category === 'model')
+          const next = { ...seed }
+          if (modelOption) {
+            if (model === null) delete next[modelOption.id]
+            else next[modelOption.id] = model
+          }
+          save({
+            agentId,
+            options: entry ? routineOptions(entry, next) : optionsFrom(next),
+          })
+        }}
+        onValues={(optionId, value) => {
+          const entry = useAgentOptionsStore.getState().byId[routine.agentId]
+          if (!entry) return
+          save({
+            options: routineOptions(entry, {
+              ...optionValues(routine.options),
+              [optionId]: value,
+            }),
+          })
+        }}
+        timeLimit={routine.timeLimitMinutes}
+        onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
+        scope={routine.scope}
+        onScope={(scope) => save({ scope })}
+        schedule={routine.trigger.schedule}
+        savedSchedule={routine.trigger.schedule}
+        done={routine.state === 'done'}
+        onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
+      />
+      <RunHistory routine={routine} />
 
       {deleting && (
         <DeleteRoutineDialog
@@ -429,33 +482,33 @@ function NewRoutine() {
 
   return (
     <RoutineShell>
-      <div className="flex items-start gap-3">
+      <header className="mb-5.5 flex items-center gap-3">
         <RoutineTile agent={agentId} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <input
+        <div className="min-w-0 flex-1">
+          <NameField
             value={name}
-            maxLength={ROUTINE_NAME_CHARS}
             placeholder={t('routine.untitled')}
-            aria-label={t('routine.name')}
             onChange={(event) => setName(event.target.value)}
-            className="min-w-0 rounded-[6px] bg-transparent text-title font-semibold outline-none placeholder:text-tertiary focus-visible:outline-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-offset-2"
           />
-          <p className="text-small leading-normal text-secondary">{t('routine.newLine')}</p>
+          <p className="mt-0.5 text-small text-tertiary">
+            {name.trim() ? t('routine.notSaved') : t('routine.newNotSaved')}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex" />}>
-              <Button disabled={!!missing || creating} onClick={() => void create()}>
-                {t('routine.create')}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{missing ?? t('routine.createReady')}</TooltipContent>
-          </Tooltip>
-          <Button variant="outline" onClick={openRoutines}>
-            {t('routine.cancel')}
-          </Button>
-        </div>
-      </div>
+        <Button variant="outline" size="sm" onClick={openRoutines}>
+          {t('routine.cancel')}
+        </Button>
+        {/* Says what is missing; once nothing is, the button needs no words of its own. */}
+        <Tooltip disabled={!missing}>
+          <TooltipTrigger render={<span className="inline-flex" />}>
+            <Button size="sm" disabled={!!missing || creating} onClick={() => void create()}>
+              {t('routine.create')}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="end">
+            {missing}
+          </TooltipContent>
+        </Tooltip>
+      </header>
 
       {error && (
         <Alert variant="error">
@@ -502,23 +555,42 @@ function NewRoutine() {
   )
 }
 
-function RoutineShell({ children }: { children: React.ReactNode }) {
+function RoutineShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation('routines')
   return (
     <div className="flex h-full flex-col">
-      <TopBar>
-        <NoDrag>
-          <Button variant="quiet" size="compact" className="gap-1.5 px-1.5" onClick={openRoutines}>
-            <ArrowLeftIcon />
-            {t('routine.back')}
-          </Button>
-        </NoDrag>
-        <span className="flex-1" />
-      </TopBar>
-      <div className="min-h-0 flex-1 overflow-y-auto px-7 pt-2 pb-9 [scrollbar-gutter:stable]">
-        <div className="mx-auto flex w-full max-w-thread flex-col gap-6">{children}</div>
+      <TopBar className="shadow-none">{null}</TopBar>
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        {/* Block flow, so a section's margin and the header's meet as one gap. */}
+        <div className="@container/routine mx-auto w-full max-w-210 px-10 pb-20">
+          <div className="mb-3.5 flex">
+            <Button variant="quiet" size="sm" className="-ml-2 gap-1.5 px-2" onClick={openRoutines}>
+              <ArrowLeftIcon />
+              {t('routine.back')}
+            </Button>
+          </div>
+          {children}
+        </div>
       </div>
     </div>
+  )
+}
+
+/** The name as an underlined field: New routine's, and a routine's while it is renamed. */
+function NameField({ className, ...props }: ComponentProps<'input'>) {
+  const { t } = useTranslation('routines')
+  return (
+    <input
+      maxLength={ROUTINE_NAME_CHARS}
+      aria-label={t('routine.name')}
+      autoComplete="off"
+      spellCheck={false}
+      className={cn(
+        '-mx-1.25 block h-7.5 w-105 max-w-full rounded-t-md bg-transparent px-1.25 font-heading text-title font-semibold text-primary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)] transition-shadow duration-(--duration-fast) outline-none placeholder:text-placeholder selection:bg-edit-selection hover:shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-strong)] focus-visible:rounded-md focus-visible:shadow-none focus-visible:outline-[1.5px] focus-visible:outline-offset-1 focus-visible:outline-edit-ring focus-visible:outline-solid',
+        className,
+      )}
+      {...props}
+    />
   )
 }
 
@@ -541,13 +613,14 @@ function RoutineFields({
   onScope,
   schedule,
   savedSchedule,
+  done = false,
   onSchedule,
   onScheduleProblem,
 }: {
   prompt: string
   onPrompt: (prompt: string) => void
   onPromptBlur?: () => void
-  promptField?: React.RefObject<HTMLTextAreaElement | null>
+  promptField?: RefObject<HTMLTextAreaElement | null>
   projectPath: string | null
   /** Whether the project row says No project now. */
   noProject: boolean
@@ -563,6 +636,8 @@ function RoutineFields({
   onScope: (scope: PermissionScope) => void
   schedule: Schedule
   savedSchedule: Schedule | null
+  /** A one-time routine that has run. */
+  done?: boolean
   onSchedule: (schedule: Schedule) => void
   onScheduleProblem?: (problem: ScheduleProblem | null) => void
 }) {
@@ -578,110 +653,80 @@ function RoutineFields({
           lastOpenedAt: 0,
         })
   const limitOptions = TIME_LIMITS.map((minutes) => ({
-    value: String(minutes),
-    label:
-      minutes < 60
-        ? i18n.t('routines:limit.minutes', { count: minutes })
-        : i18n.t('routines:limit.hours', { count: minutes / 60 }),
+    value: String(minutes) as `${TimeLimitMinutes}`,
+    label: minutesLabel(minutes),
   }))
 
   return (
     <>
-      <section aria-label={t('routine.task')} className="flex flex-col">
-        <h2 className="flex h-7.5 items-center px-1 text-xs font-medium text-tertiary">
-          {t('routine.task')}
-        </h2>
-        <RowShell>
-          <div className="py-3">
-            <RowText name={t('routine.prompt')} description={t('routine.promptDescription')} />
-            <Textarea
+      <RoutineSection title={t('routine.task')}>
+        <FieldRow name={t('routine.prompt')} description={t('routine.promptDescription')} wide>
+          <InputGroup variant="prompt">
+            <InputGroupTextarea
               ref={promptField}
               value={prompt}
               aria-label={t('routine.prompt')}
+              placeholder={t('routine.promptPlaceholder')}
               onChange={(event) => onPrompt(event.target.value)}
               onBlur={onPromptBlur}
-              className="mt-2 min-h-24 rounded-xl border-0 bg-card px-3.5 py-2.5 text-prose leading-normal shadow-card focus-visible:border-0"
+              className="min-h-24 px-3.5 py-3 text-prose leading-normal md:text-prose"
             />
-          </div>
-        </RowShell>
-        <RowShell>
-          <RowLine
-            text={
-              <RowText name={t('routine.project')} description={t('routine.projectDescription')} />
-            }
-          >
+          </InputGroup>
+        </FieldRow>
+        <FieldRow name={t('routine.project')} description={t('routine.projectDescription')}>
+          <FieldFrame>
             <ProjectMenu
               project={project}
               noProject={noProject}
               onError={onProjectError}
               onChoose={onProject}
             />
-          </RowLine>
-        </RowShell>
-        <RowShell>
-          <RowLine
-            text={<RowText name={t('routine.agent')} description={t('routine.agentDescription')} />}
-          >
+          </FieldFrame>
+        </FieldRow>
+        <FieldRow name={t('routine.agent')} description={t('routine.agentDescription')}>
+          <FieldFrame>
             <AgentMenu agentId={agentId} values={values} onChoose={onChoose} onValues={onValues} />
-          </RowLine>
-        </RowShell>
-      </section>
-      <section aria-label={t('routine.howItRuns')} className="flex flex-col">
-        <h2 className="flex h-7.5 items-center px-1 text-xs font-medium text-tertiary">
-          {t('routine.howItRuns')}
-        </h2>
-        <RowShell>
-          <div className="py-3">
-            <RowText name={t('routine.schedule')} description={t('routine.scheduleDescription')} />
-            <ScheduleField
-              schedule={schedule}
-              saved={savedSchedule}
-              onSchedule={onSchedule}
-              {...(onScheduleProblem ? { onProblem: onScheduleProblem } : {})}
-            />
-          </div>
-        </RowShell>
-        <RowShell>
-          <div className="py-3">
-            <RowText
-              name={t('routine.permissions')}
-              description={t('routine.permissionsDescription')}
-            />
-            <div className="mt-2">
-              <PermissionField scope={scope} agentId={agentId} onChange={onScope} />
-            </div>
-          </div>
-        </RowShell>
-        <RowShell>
-          <RowLine
-            text={
-              <RowText
-                name={t('routine.timeLimit')}
-                description={t('routine.timeLimitDescription')}
-              />
-            }
-          >
-            <SettingSelect
-              label={t('routine.timeLimit')}
-              value={String(timeLimit)}
-              options={limitOptions}
-              onChange={(value) => onTimeLimit(Number(value) as TimeLimitMinutes)}
-            />
-          </RowLine>
-        </RowShell>
-      </section>
+          </FieldFrame>
+        </FieldRow>
+      </RoutineSection>
+      <RoutineSection title={t('routine.howItRuns')}>
+        <FieldRow name={t('routine.schedule')} description={t('routine.scheduleDescription')} wide>
+          <ScheduleField
+            schedule={schedule}
+            saved={savedSchedule}
+            done={done}
+            onSchedule={onSchedule}
+            {...(onScheduleProblem ? { onProblem: onScheduleProblem } : {})}
+          />
+        </FieldRow>
+        <FieldRow
+          name={t('routine.permissions')}
+          description={t('routine.permissionsDescription')}
+          wide
+        >
+          <PermissionField scope={scope} agentId={agentId} onChange={onScope} />
+        </FieldRow>
+        <FieldRow name={t('routine.timeLimit')} description={t('routine.timeLimitDescription')}>
+          <FieldSelect
+            label={t('routine.timeLimit')}
+            value={String(timeLimit) as `${TimeLimitMinutes}`}
+            options={limitOptions}
+            onChange={(value) => onTimeLimit(Number(value) as TimeLimitMinutes)}
+          />
+        </FieldRow>
+      </RoutineSection>
     </>
   )
 }
 
+/** The routine's agent on a raised tile, or a calendar before New routine has an agent. */
 function RoutineTile({ agent }: { agent: AgentId | null }) {
-  if (agent) return <AgentTile agent={agent} />
   return (
     <span
       aria-hidden
-      className="grid size-8 shrink-0 place-items-center rounded-[8px] bg-tile text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+      className="grid size-11 shrink-0 place-items-center rounded-xl bg-card text-icon shadow-card"
     >
-      <CalendarClockIcon className="size-4" />
+      {agent ? <AgentMark agent={agent} size={20} /> : <CalendarClockIcon className="size-5" />}
     </span>
   )
 }

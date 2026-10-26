@@ -31,7 +31,7 @@ const SETTLE_MS = 160
 /** A press that moves less than this is a click. */
 const DRAG_SLOP = 3
 const LABEL_HEIGHT = 20
-const TITLE_ABOVE = 42
+const TITLE_ABOVE = 40
 
 /**
  * An artifact's pages side by side on a surface that pans and zooms: one transform on the layer,
@@ -67,12 +67,15 @@ export const CanvasView = memo(function CanvasView({
   const camera = useRef<Camera>({ x: 0, y: 0, z: 1 })
   const view = useRef<Size>({ width: 0, height: 0 })
   const fitted = useRef(false)
+  // Whether the camera is where Zoom to fit put it; a resize or a new layout fits again then.
+  const atFit = useRef(false)
   const glideTo = useRef<AnimationPlaybackControls | null>(null)
   const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const liveFrame = useRef(0)
   const [live, setLive] = useState<ReadonlySet<number>>(new Set())
   const [picked, setSelected] = useState(0)
   const [hovered, setHovered] = useState(-1)
+  const [dragging, setDragging] = useState(false)
   const [focusedAt, setFocused] = useState<number | null>(null)
   const { pages, titles } = layout
   const selected = Math.min(picked, pages.length - 1)
@@ -134,13 +137,14 @@ export const CanvasView = memo(function CanvasView({
       label.style.transform = `translate(${p.x * z + x}px, ${p.y * z + y - LABEL_HEIGHT}px)`
       label.style.maxWidth = `${p.width * z}px`
     })
-    controls.publish({ zoom: z })
+    controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
   }, [pages, titles, controls, syncLive])
 
   const place = useCallback(
-    (next: Camera) => {
+    (next: Camera, fit = false) => {
       glideTo.current?.stop()
+      atFit.current = fit
       camera.current = next
       draw()
     },
@@ -149,9 +153,10 @@ export const CanvasView = memo(function CanvasView({
 
   /** Moves the camera for a button or key: a glide, or a jump under reduce motion. */
   const moveTo = useCallback(
-    (target: Camera) => {
+    (target: Camera, fit = false) => {
       glideTo.current?.stop()
-      if (prefersReducedMotion()) return place(target)
+      if (prefersReducedMotion()) return place(target, fit)
+      atFit.current = fit
       const from = camera.current
       glideTo.current = animate(0, 1, {
         ...glide,
@@ -171,8 +176,8 @@ export const CanvasView = memo(function CanvasView({
         view.current,
         top,
       )
-      if (glides) moveTo(target)
-      else place(target)
+      if (glides) moveTo(target, true)
+      else place(target, true)
     },
     [layout.width, layout.height, top, moveTo, place],
   )
@@ -212,15 +217,20 @@ export const CanvasView = memo(function CanvasView({
     [pages, moveTo],
   )
 
-  // The view's size; the first one fits every page.
+  // The view's size; the first one fits every page, and a fitted canvas fits again as it changes.
   useLayoutEffect(() => {
     const el = stage.current
     if (!el) return
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return
-      view.current = { width: entry.contentRect.width, height: entry.contentRect.height }
-      if (!fitted.current && view.current.width > 0) {
+      const { width, height } = entry.contentRect
+      // Observing again reports the same size, which leaves a glide under way alone.
+      if (width === view.current.width && height === view.current.height) return
+      view.current = { width, height }
+      if (!fitted.current && width > 0) {
         fitted.current = true
+        fitAll(false)
+      } else if (atFit.current) {
         fitAll(false)
       } else {
         draw()
@@ -230,18 +240,26 @@ export const CanvasView = memo(function CanvasView({
     return () => observer.disconnect()
   }, [fitAll, draw])
 
-  // A new version may hold other pages: the camera stays, the selection stays on the canvas.
+  // A new version may hold other pages: the camera stays, or fits them all if it was fitted; the
+  // selection stays on the canvas.
+  const lastLayout = useRef(layout)
   useEffect(() => {
-    if (fitted.current) draw()
-  }, [pages, draw])
+    if (lastLayout.current === layout) return
+    lastLayout.current = layout
+    if (!fitted.current) return
+    if (atFit.current) fitAll(false)
+    else draw()
+  }, [layout, fitAll, draw])
 
   // A bar that comes or goes moves the canvas with it, so it never covers what was in view.
   const lastTop = useRef(top)
   useEffect(() => {
     const by = top - lastTop.current
     lastTop.current = top
-    if (by !== 0 && fitted.current) moveTo({ ...camera.current, y: camera.current.y + by })
-  }, [top, moveTo])
+    if (by === 0 || !fitted.current) return
+    if (atFit.current) fitAll(true)
+    else moveTo({ ...camera.current, y: camera.current.y + by })
+  }, [top, moveTo, fitAll])
 
   useEffect(() => {
     controls.publish({ selected, focused, count: pages.length })
@@ -357,13 +375,14 @@ export const CanvasView = memo(function CanvasView({
             <div
               key={`${p.group}.${p.index}`}
               className={cn(
+                // Each page lies on the desk; its edge keeps a screen hairline at any zoom.
                 'absolute overflow-hidden bg-canvas',
                 i === selected
-                  ? // A gap of the surface first, so the ring shows beside a page of any color.
-                    'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary)]'
+                  ? // A gap of the desk first, so the ring shows beside a page of any color.
+                    'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary),var(--elevation-page)]'
                   : i === hovered
-                    ? 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-strong)]'
-                    : 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-default)]',
+                    ? 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-strong),var(--elevation-page)]'
+                    : 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-default),var(--elevation-page)]',
               )}
               style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
             >
@@ -390,7 +409,7 @@ export const CanvasView = memo(function CanvasView({
         </div>
         <div
           aria-hidden
-          className="absolute inset-0"
+          className={cn('absolute inset-0', dragging ? 'cursor-grabbing' : 'cursor-grab')}
           onPointerDown={(event) => {
             if (event.button !== 0) return
             event.currentTarget.setPointerCapture(event.pointerId)
@@ -410,17 +429,25 @@ export const CanvasView = memo(function CanvasView({
             }
             const dx = event.clientX - held.x
             const dy = event.clientY - held.y
-            if (!held.moved && Math.hypot(dx, dy) > DRAG_SLOP) held.moved = true
+            if (!held.moved && Math.hypot(dx, dy) > DRAG_SLOP) {
+              held.moved = true
+              setDragging(true)
+            }
             if (held.moved) place({ ...held.camera, x: held.camera.x + dx, y: held.camera.y + dy })
           }}
           onPointerUp={(event) => {
             const held = press.current
             press.current = null
+            setDragging(false)
             if (!held || held.moved) return
             const { sx, sy } = point(event)
             const index = pageAt(pages, camera.current, sx, sy)
             if (index >= 0) setSelected(index)
             stage.current?.focus({ preventScroll: true })
+          }}
+          onPointerCancel={() => {
+            press.current = null
+            setDragging(false)
           }}
           onPointerLeave={() => setHovered(-1)}
           onDoubleClick={(event) => {
@@ -438,10 +465,7 @@ export const CanvasView = memo(function CanvasView({
               ref={(el) => {
                 labels.current[i] = el
               }}
-              className={cn(
-                'absolute top-0 left-0 truncate text-xs whitespace-nowrap',
-                i === selected ? 'text-primary' : 'text-tertiary',
-              )}
+              className="absolute top-0 left-0 truncate text-xs whitespace-nowrap text-secondary"
             >
               {name(p)}
             </span>
@@ -576,11 +600,11 @@ function FocusedPage({
         event.stopPropagation()
       }}
       style={{ paddingTop: top }}
-      className="absolute inset-0 flex items-center justify-center bg-sidebar outline-none"
+      className="absolute inset-0 flex items-center justify-center bg-sidebar outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
     >
       {size && (
         <div
-          className="relative shrink-0 overflow-hidden bg-canvas shadow-[0_0_0_var(--hairline)_var(--border-default)]"
+          className="relative shrink-0 overflow-hidden bg-canvas shadow-(--elevation-page)"
           style={{ width: page.width * scale, height: page.height * scale }}
         >
           <iframe

@@ -77,6 +77,7 @@
       "catalog": "主题库",
       "more": "“{{name}}”的更多操作",
       "export": "导出为文件…",
+      "exported": "已将 {{file}} 保存到 {{folder}}",
       "remove": "移除…",
       "install": "从文件安装…",
       "installHint": ".json 主题文件",
@@ -94,6 +95,7 @@
       "removeTitle": "移除主题“{{name}}”？",
       "removeDescription": "已安装的文件会被删除。如果正在使用它，将改用 OverBench 主题。",
       "removeConfirm": "移除",
+      "removed": "已移除主题“{{name}}”",
       "loadFailed": "主题“{{id}}”无法加载",
       "loadFailedDescription": "已改用 OverBench 主题：{{reason}}。",
       "useBuiltIn": "使用 OverBench",
@@ -254,25 +256,29 @@
     },
     "test": "发送测试通知",
     "testUnsupported": "这个系统不显示通知",
+    "sent": "已发送",
     "previewTitle": "Claude Code 需要授权",
     "previewBody": "overbench · 运行 {{command}}",
     "previewTime": "现在"
   },
   "shortcuts": {
     "openProject": "打开项目",
-    "newSession": "在当前项目中新建会话",
+    "newSession": "新建会话",
     "toggleSidebar": "显示或隐藏侧边栏",
-    "focusComposer": "聚焦输入框，或就终端中选中的内容提问",
+    "focusComposer": "聚焦输入框",
+    "addFiles": "向输入框添加文件或照片",
     "previousSession": "侧边栏中的上一个会话",
     "nextSession": "侧边栏中的下一个会话",
     "settings": "打开设置；按 Esc 返回",
     "zoomIn": "放大",
     "zoomOut": "缩小",
-    "resetZoom": "重置为默认缩放",
+    "resetZoom": "将缩放重置为 100%",
     "toggleTerminal": "显示或隐藏终端",
     "newTerminal": "新建终端",
     "cancelTurn": "停止本轮对话",
     "answerPermission": "回应待处理的授权请求",
+    "askSelection": "就选中的内容询问 Agent",
+    "askSelectionNote": "在终端中选中文本时",
     "groups": {
       "sessions": "会话",
       "window": "窗口",
@@ -289,6 +295,9 @@
       "dialogDescription": "浏览器页面里的登录状态和已保存的表单内容会被移除。已经打开的页面不会关闭。",
       "confirm": "清除",
       "cleared": "浏览数据已清除"
+    },
+    "groups": {
+      "siteData": "站点数据"
     }
   },
   "advanced": {
@@ -300,7 +309,9 @@
       "custom": "自定义",
       "url": "URL",
       "noProxyFor": "不使用代理的地址",
-      "invalid": "请输入 URL，例如 http://proxy.example.com:8080"
+      "invalid": "请输入 URL，例如 http://proxy.example.com:8080",
+      "environmentNote": "在填入 URL 之前，仍使用环境变量中的代理。",
+      "inUse": "新的连接会使用这个代理。"
     },
     "diagnostics": {
       "name": "诊断信息",
@@ -323,7 +334,8 @@
       "button": "移除所有会话…",
       "dialogTitle_other": "从 OverBench 中移除全部 {{count}} 个会话？",
       "dialogDescription": "侧边栏将变为空白。Agent 会保留各自的对话记录，之后可以在侧边栏中项目的菜单里重新导入这些会话。",
-      "confirm": "全部移除"
+      "confirm": "全部移除",
+      "removed": "已从 OverBench 中移除所有会话"
     },
     "groups": {
       "network": "网络",
@@ -335,20 +347,23 @@
     "keywords": "登录 安装 套餐 限额 用量 sign in login install node binary plan limits",
     "signOut": "退出登录",
     "needsSignIn": "{{name}} 需要你先登录。",
+    "signInTitle": "登录 {{name}} 后才能使用",
     "launch": "启动命令",
     "copyLaunch": "复制启动命令",
     "adapter": "适配器",
     "reinstall": "重新安装",
     "installsOnFirstUse": "首次使用时安装",
     "account": "账号",
-    "usage": "用量",
+    "usage": "套餐用量",
     "checkLimits": "查看套餐限额",
     "program": "程序",
     "programOnPath": "PATH 中的 opencode",
+    "binaryDescription": "OverBench 启动的 {{command}} 程序。",
     "reset": "重置",
     "chooseBinary": "选择可执行文件…",
     "cli": {
       "choose": "运行哪个 {{name}}",
+      "description": "适配器运行的 {{command}} 程序。",
       "installed": "已安装",
       "bundled": "内置",
       "bundledLine": "适配器内置",
@@ -370,7 +385,8 @@
       "loginShellPlain": "已从登录 Shell 读取。",
       "inherited": "继承自 OverBench 的启动方式。",
       "fallback": "正在使用备用 PATH。",
-      "reload": "重新加载环境"
+      "reload": "重新加载环境",
+      "keywords": "环境 环境变量 PATH shell node npm"
     },
     "groups": {
       "installed": "已安装",
@@ -387,15 +403,16 @@
     "usageNotReported": "{{name}} 不提供套餐用量。",
     "configuration": "配置",
     "config": {
-      "folder": "配置目录",
+      "folder": "目录",
       "settings": "设置文件",
       "instructions": "指令文件"
     },
     "configFolder": {
       "choose": "选择目录…",
       "label": "{{name}} 的配置目录",
+      "description": "{{name}} 存放登录信息、设置和历史记录的位置。",
       "useEnvironment": "使用环境变量",
-      "custom": "自定义",
+      "custom": "单独的目录",
       "chosen": "在 OverBench 中选定",
       "nextStart": "将在 Agent 下次启动时生效。"
     },
@@ -422,11 +439,14 @@
     "resetsAt": "{{time}} 重置",
     "versionGroup": "版本",
     "currentVersion": "当前版本",
+    "ownInstaller": "由它自己的安装程序更新，不经过 OverBench。",
     "update": {
       "mark": "{{names}} 有可用更新",
       "check": "检查更新",
       "checking": "正在检查…",
       "checkedAgo": "{{ago}}检查过",
+      "checkedAgoUpdates_one": "{{ago}}检查过 · {{count}} 个可更新",
+      "checkedAgoUpdates_other": "{{ago}}检查过 · {{count}} 个可更新",
       "justChecked_other": "刚刚检查 · {{count}} 个可更新",
       "allCurrent": "刚刚检查 · 都是最新",
       "checkFailed": "无法检查更新",
@@ -448,6 +468,8 @@
       "noticeBody": "当前是 {{current}}。新版本装在当前版本旁边：正在运行的会话不受影响，{{name}} 下次启动时使用新版本；装不上也不影响现在的版本。",
       "button": "更新",
       "progressTitle": "正在更新 {{name}}",
+      "progressTitleTo": "正在将 {{name}} 更新到 {{version}}…",
+      "progressBody": "正在运行的会话不受影响。",
       "failedTitle": "更新失败",
       "failedBody": "现在的版本照常可用。如果是网络问题，可以先看看 高级 › 代理，再重试。",
       "doneTitle": "{{name}} 已更新",
@@ -490,9 +512,9 @@
     "updates": {
       "name": "更新",
       "keywords": "更新 检查 下载 重启 update check download restart",
-      "upToDateShort": "已是最新版本",
+      "upToDate": "已是最新版本",
       "notChecked": "还没有检查过",
-      "upToDateChecked": "已是最新版本 · 上次检查：{{ago}}",
+      "checkedAgo": "上次检查：{{ago}}",
       "checking": "正在检查更新…",
       "downloading": "正在下载 {{version}}",
       "downloadProgress": "下载进度",
@@ -566,9 +588,13 @@
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",
+    "group": "已归档",
     "restore": "恢复",
+    "restored": "已恢复到 {{project}}",
     "delete": "删除…",
-    "empty": "没有已归档的会话。可以在侧边栏会话的菜单里归档。",
+    "deleted": "会话已删除",
+    "emptyTitle": "没有已归档的会话",
+    "emptyHint": "可以在侧边栏中从会话的菜单里归档。",
     "keywords": "归档 恢复 archive"
   },
   "sharing": {
@@ -582,11 +608,20 @@
       "keywords": "分享 发布 链接 cloudflare workers token 账号",
       "id": "账号 ID",
       "idPlaceholder": "32 位十六进制字符",
+      "idHint": "在 Cloudflare 控制台的 Workers 页面上可以找到。",
+      "idInvalid": "账号 ID 是 32 位十六进制字符。",
       "token": "API token",
+      "tokenPlaceholder": "粘贴 token",
       "createToken": "创建具有 Workers Scripts Write 权限的 token",
       "connect": "连接",
+      "checking": "正在检查…",
+      "kept": "由系统加密保存，只存放在这台电脑上。",
+      "refused": "Cloudflare 拒绝了 API token。请检查它是否有 Workers Scripts Write 权限、是否已过期。",
       "connected": "已连接",
       "remove": "移除",
+      "removeTitle": "要移除 Cloudflare 账号吗？",
+      "removeBody": "OverBench 会删除保存的 token。已发布的页面仍然在线；之后要取消发布，需要重新连接这个账号。",
+      "removed": "已移除 Cloudflare 账号",
       "plainText": "此系统没有钥匙串，token 会以不加密的方式保存。",
       "dashboard": "在 Cloudflare 中选择子域名"
     },
@@ -594,8 +629,13 @@
       "version": "版本 {{version}}，发布于{{ago}}",
       "keywords": "分享 发布 链接 url",
       "unpublish": "取消发布",
+      "unpublishTitle": "要取消发布“{{title}}”吗？",
+      "unpublished": "已取消发布",
       "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
       "empty": "还没有发布任何 artifact。"
     }
+  },
+  "usage": {
+    "cleared": "已清除 OverBench 的记录"
   }
 }

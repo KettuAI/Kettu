@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -11,8 +11,10 @@ import {
   ExternalLinkIcon,
   EyeIcon,
   EyeOffIcon,
-  LogOutIcon,
+  LogInIcon,
   RotateCwIcon,
+  SquareTerminalIcon,
+  TriangleAlertIcon,
   XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -50,7 +52,6 @@ import {
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
 import { Progress } from '@renderer/components/ui/progress'
-import { Separator } from '@renderer/components/ui/separator'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
@@ -75,6 +76,7 @@ import {
 import {
   ControlError,
   CopyAction,
+  GROUP_ACTION,
   IconAction,
   Masked,
   PathText,
@@ -82,7 +84,8 @@ import {
   Segmented,
   SettingSelect,
 } from './controls'
-import { GroupLabel, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { FlashMark, GroupLabel, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { environmentText } from './environment-text'
 import { useApply } from './use-apply'
 
 const VENDORS: Partial<Record<AgentId, string>> = {
@@ -404,71 +407,73 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
     <span className="text-xs text-tertiary">{t('agents.noUsage')}</span>
   )
   return (
-    <div className="relative -mx-2 rounded-lg px-3 py-3 transition-colors duration-(--duration-fast) has-[>[data-row-hit]:hover]:bg-hover">
+    <div className="relative -mx-3 flex items-start gap-3 rounded-[inherit] py-3 pr-3 pl-4">
       {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
       <button
         type="button"
-        data-row-hit=""
+        data-agent-row={status.id}
         aria-label={status.name}
         onClick={() => openAgentSettings(status.id)}
-        className="absolute inset-0 rounded-lg outline-none focus-ring"
+        className="absolute inset-0 rounded-[inherit] outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
       />
-      <div className="pointer-events-none relative flex items-start gap-3">
-        <AgentTile agent={status.id} mono={!installed} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex h-5 min-w-0 items-center gap-2">
-            <span className="truncate text-ui font-medium">{status.name}</span>
-            {version && (
-              <span className="shrink-0 font-mono text-meta text-tertiary">{version}</span>
-            )}
-            <span className="pointer-events-auto flex shrink-0">
-              <AgentPill status={status} />
-            </span>
-          </div>
-          {summary && (
-            <span className="truncate text-xs leading-normal text-secondary">{summary}</span>
-          )}
-          {usage}
+      <span className="pointer-events-none relative">
+        <AgentTile agent={status.id} mono={!installed} size={30} glyph={16} />
+      </span>
+      <div className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-h-5.5 min-w-0 items-center gap-2">
+          <span className="truncate text-ui font-medium">{status.name}</span>
+          {version && <span className="shrink-0 font-mono text-xs text-tertiary">{version}</span>}
+          <span className="pointer-events-auto flex shrink-0">
+            <AgentPill status={status} />
+          </span>
         </div>
-        <div className="flex h-8 shrink-0 items-center gap-2">
-          {installed && <AgentStateLine status={status} />}
-          <ChevronRightIcon className="size-4 text-icon" />
-        </div>
+        {summary && (
+          <span className="flex min-h-4.5 min-w-0 items-center text-command leading-4.5 text-secondary">
+            <span className="min-w-0 truncate">{summary}</span>
+          </span>
+        )}
+        {usage && <div className="mt-1.25 flex flex-wrap gap-x-5.5 gap-y-1">{usage}</div>}
+      </div>
+      <div className="pointer-events-none relative flex h-5.5 shrink-0 items-center gap-2">
+        {installed && (
+          <span className="pointer-events-auto flex">
+            <AgentStateLine status={status} className="text-command" />
+          </span>
+        )}
+        <ChevronRightIcon className="size-4 text-icon" />
       </div>
     </div>
   )
 }
 
-/** Up to two current windows, each a label, its percentage, the time left and a bar. */
+/** Up to two current windows, each its label, a short bar, its percentage and the time left. */
 function UsageMeters({ limits }: { limits: PlanLimit[] }) {
   const { t } = useTranslation(['settings', 'composer'])
   const now = useNow()
-  return (
-    <div className="mt-2 grid grid-cols-2 gap-x-5">
-      {limits.slice(0, 2).map((limit) => {
-        const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
-        const tone = usageTone(limit)
-        return (
-          <div key={limit.window} className="flex min-w-0 flex-col gap-1.5 text-xs tabular">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-tertiary">{limitLabel(limit)}</span>
-              <span className={cn('font-medium', USAGE_TONE_TEXT[tone])}>{percent(limit)}</span>
-              {left && (
-                <span className="ml-auto truncate text-tertiary">
-                  {t('agents.resetsIn', { time: left })}
-                </span>
-              )}
-            </div>
-            <Progress
-              value={limit.usedPercent ?? 0}
-              tone={tone}
-              aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
+  return limits.slice(0, 2).map((limit) => {
+    const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
+    const tone = usageTone(limit)
+    return (
+      <span
+        key={limit.window}
+        className="inline-flex items-center gap-1.75 text-xs leading-4 text-tertiary tabular"
+      >
+        <span className="text-secondary">{limitLabel(limit)}</span>
+        <Progress
+          value={limit.usedPercent ?? 0}
+          tone={tone}
+          className="w-13"
+          aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+        />
+        <span
+          className={cn('min-w-6.5', tone !== 'success' && 'font-medium', USAGE_TONE_TEXT[tone])}
+        >
+          {percent(limit)}
+        </span>
+        {left && <span title={t('agents.resetsIn', { time: left })}>{left}</span>}
+      </span>
+    )
+  })
 }
 
 /** The Installed group's own actions: check for updates, and hide the account details. */
@@ -495,7 +500,11 @@ export function AgentsGroupActions() {
         t('agents.update.allCurrent')
       )
     ) : lastAt ? (
-      t('agents.update.checkedAgo', { ago: longAgo(lastAt, now) })
+      pending > 0 ? (
+        t('agents.update.checkedAgoUpdates', { ago: longAgo(lastAt, now), count: pending })
+      ) : (
+        t('agents.update.checkedAgo', { ago: longAgo(lastAt, now) })
+      )
     ) : null
   return (
     <>
@@ -503,25 +512,29 @@ export function AgentsGroupActions() {
       {checkable && (
         <Button
           variant="quiet"
-          size="xs"
+          size="sm"
           aria-busy={refresh.phase === 'turning'}
           disabled={refresh.phase === 'turning'}
           onClick={() => void refresh.run(checkForAgentUpdates).catch(() => {})}
+          className={GROUP_ACTION}
         >
           <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
           {t('agents.update.check')}
         </Button>
       )}
-      {checkable && <Separator orientation="vertical" className="mx-0.5 h-3 self-center" />}
       <ControlError error={error} />
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
               variant="quiet"
-              size="xs"
+              size="sm"
               aria-pressed={hidden}
               onClick={() => apply({ privacy: { hideAccount: !hidden } })}
+              className={cn(
+                GROUP_ACTION,
+                'aria-pressed:bg-transparent aria-pressed:text-primary aria-pressed:shadow-none aria-pressed:hover:bg-hover',
+              )}
             />
           }
         >
@@ -546,13 +559,58 @@ function BackToAgents() {
   return (
     <Button
       variant="quiet"
-      size="compact"
-      className="-ml-1.5 mb-3 w-max px-1.5"
+      size="sm"
+      className="-mt-1 mb-3.5 -ml-2 w-max gap-1.5 pr-2.5 pl-2 text-secondary"
       onClick={() => openAgentSettings(null)}
     >
       <ArrowLeftIcon data-icon="inline-start" />
       {t('sections.agents')}
     </Button>
+  )
+}
+
+/** The agent's state under its name: Ready in words here, as the list says it with a dot. */
+function PageState({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation('agents')
+  if (readiness(status).kind !== 'ready') {
+    return <AgentStateLine status={status} className="text-command" />
+  }
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 font-medium text-secondary">
+      <span aria-hidden className="size-1.5 rounded-full bg-success" />
+      {t('state.ready')}
+    </span>
+  )
+}
+
+/** A notice under an agent's title: its icon and words, an action at its end, more under it. */
+function Notice({
+  variant,
+  icon,
+  title,
+  action,
+  children,
+  more,
+}: {
+  variant: 'info' | 'success' | 'warning' | 'error'
+  icon: ReactNode
+  title: ReactNode
+  action?: ReactNode
+  children?: ReactNode
+  more?: ReactNode
+}) {
+  return (
+    <Alert variant={variant}>
+      {icon}
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <AlertTitle>{title}</AlertTitle>
+          {children && <AlertDescription>{children}</AlertDescription>}
+        </div>
+        {action && <div className="-my-1 flex shrink-0 items-center gap-1.5">{action}</div>}
+      </div>
+      {more && <div className="col-start-2 mt-2.5 flex flex-col gap-2.5">{more}</div>}
+    </Alert>
   )
 }
 
@@ -586,21 +644,25 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   return (
     <div className="flex flex-col">
       <BackToAgents />
-      <header className="flex items-center gap-3 px-1 pb-7">
-        <AgentTile agent={status.id} mono={!installed} size={40} glyph={21} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h2 className="flex min-w-0 text-title font-semibold">
+      <header data-setting-row={status.id} className="relative mb-6 flex items-center gap-3.5">
+        <FlashMark id={status.id} />
+        <span className="relative grid size-10 shrink-0 place-items-center rounded-code bg-surface shadow-card">
+          <AgentMark agent={status.id} size={22} mono={!installed} />
+        </span>
+        <div className="relative flex min-w-0 flex-1 flex-col gap-0.75">
+          <h2 className="flex min-w-0 font-heading text-title font-semibold">
             <AgentPicker status={status} />
           </h2>
-          <p className="flex items-center gap-2 text-small text-secondary">
-            {installed && <AgentStateLine status={status} />}
-            {connection}
+          <p className="flex min-w-0 items-center gap-1.75 text-command leading-4.5 text-tertiary">
+            {installed && <PageState status={status} />}
+            {installed && connection && <span aria-hidden>·</span>}
+            {connection && <span className="truncate">{connection}</span>}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="relative flex shrink-0 items-center gap-1.5">
           {r.kind === 'failed' && (
             <Button
-              size="compact"
+              size="sm"
               variant="outline"
               disabled={busy}
               onClick={() => act(() => host('agents.retry', { agentId: status.id }))}
@@ -618,7 +680,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
               href={r.url}
               target="_blank"
               rel="noreferrer"
-              className={buttonVariants({ variant: 'outline', size: 'compact' })}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
               {r.action}
               <ExternalLinkIcon data-icon="inline-end" />
@@ -626,12 +688,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           )}
           {status.canLogout && status.signIn === 'signed-in' && (
             <Button
-              size="compact"
-              variant="quiet"
+              size="sm"
+              variant="outline"
               disabled={busy}
               onClick={() => act(() => host('agents.logout', { agentId: status.id }))}
             >
-              <LogOutIcon data-icon="inline-start" />
               {t('agents.signOut')}
             </Button>
           )}
@@ -656,36 +717,14 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </p>
         )}
         {r.kind === 'sign-in' && status.authMethods.length > 0 && (
-          <Alert variant="warning">
-            <AlertTitle>{t('agents.needsSignIn', { name: status.name })}</AlertTitle>
-            <AlertDescription className="mt-2 flex flex-wrap gap-1.5">
-              {status.authMethods.map((method) =>
-                method.type === 'terminal' && method.command ? (
-                  <Button
-                    key={method.id}
-                    size="compact"
-                    variant="outline"
-                    onClick={() => signInTerminal(method.command!)}
-                  >
-                    {method.name}
-                  </Button>
-                ) : (
-                  <Button
-                    key={method.id}
-                    size="compact"
-                    disabled={busy}
-                    onClick={() =>
-                      act(() =>
-                        host('agents.authenticate', { agentId: status.id, methodId: method.id }),
-                      )
-                    }
-                  >
-                    {method.name}
-                  </Button>
-                ),
-              )}
-            </AlertDescription>
-          </Alert>
+          <SignInNotice
+            status={status}
+            busy={busy}
+            onTerminal={signInTerminal}
+            onAuthenticate={(methodId) =>
+              act(() => host('agents.authenticate', { agentId: status.id, methodId }))
+            }
+          />
         )}
         {error && <p className="-mt-4 px-1 text-xs text-danger">{error}</p>}
 
@@ -796,7 +835,9 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
   const now = useNow()
   const checkedAt = status.updateCheckedAt
   const updating = status.task?.kind === 'update' && status.task.state === 'running'
-  const line: ReactNode = !status.package ? null : refresh.phase === 'turning' ? (
+  const line: ReactNode = !status.package ? (
+    t('agents.ownInstaller')
+  ) : refresh.phase === 'turning' ? (
     t('agents.update.checking')
   ) : updating ? (
     t('agents.update.updating')
@@ -817,10 +858,12 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
             },
           )
         : t('agents.update.upToDate')}
-      {' · '}
-      {checkedAt
-        ? t('agents.update.checkedAgo', { ago: longAgo(checkedAt, now) })
-        : t('agents.update.notChecked')}
+      <span className="text-tertiary">
+        {' · '}
+        {checkedAt
+          ? t('agents.update.checkedAgo', { ago: longAgo(checkedAt, now) })
+          : t('agents.update.notChecked')}
+      </span>
     </>
   )
   return (
@@ -831,12 +874,13 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
           text={
             <RowText
               name={
-                <span className="flex items-baseline gap-2">
-                  {t('agents.currentVersion')}
-                  <span className="font-mono text-meta font-normal text-tertiary">
-                    {version ?? t('agents.notReported')}
+                version ? (
+                  <span className="font-mono" data-selectable="">
+                    {version}
                   </span>
-                </span>
+                ) : (
+                  <span className="font-normal text-tertiary">{t('agents.notReported')}</span>
+                )
               }
               description={line}
             />
@@ -844,8 +888,9 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
         >
           {status.package && (
             <Button
-              variant="outline"
-              size="compact"
+              variant="quiet"
+              size="sm"
+              className="text-secondary"
               aria-busy={refresh.phase === 'turning'}
               disabled={refresh.phase === 'turning' || updating}
               onClick={() => void refresh.run(checkForAgentUpdates).catch(() => {})}
@@ -873,28 +918,32 @@ function TaskNotice({
   const { t } = useTranslation(['settings', 'common'])
   const updated = useAgentsStore((s) => s.updated[status.id])
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
+  const [doneSeen, setDoneSeen] = useState(false)
   // An install of an agent that is not installed shows in its install notice instead.
   const task = status.task && (status.task.kind === 'update' || installed) ? status.task : null
   const updating = task?.kind === 'update'
+  const next = status.update ? (status.update.cliVersion ?? status.update.adapterVersion) : null
   if (task?.state === 'running') {
     return (
-      <Alert variant="info">
-        <Spinner />
-        <AlertTitle>
-          {t(updating ? 'agents.update.progressTitle' : 'agents.install.progressTitle', {
-            name: status.name,
-          })}
-        </AlertTitle>
-        <AlertDescription className="flex flex-col gap-2.5">
-          <span className="truncate">{task.progress.at(-1) ?? task.command}</span>
-          <TaskLog task={task} />
-          <span>
-            <Button variant="outline" size="compact" onClick={() => cancelTask(status.id)}>
-              {t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
-            </Button>
-          </span>
-        </AlertDescription>
-      </Alert>
+      <Notice
+        variant="info"
+        icon={<Spinner />}
+        title={
+          updating && next
+            ? t('agents.update.progressTitleTo', { name: status.name, version: next })
+            : t(updating ? 'agents.update.progressTitle' : 'agents.install.progressTitle', {
+                name: status.name,
+              })
+        }
+        action={
+          <Button variant="outline" size="sm" onClick={() => cancelTask(status.id)}>
+            {t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
+          </Button>
+        }
+        more={<TaskLog task={task} />}
+      >
+        {updating ? t('agents.update.progressBody') : (task.progress.at(-1) ?? task.command)}
+      </Notice>
     )
   }
   if (task?.state === 'failed') {
@@ -902,76 +951,78 @@ function TaskNotice({
   }
   if (taskError && !status.task) {
     return (
-      <Alert variant="error">
-        <CircleAlertIcon />
-        <AlertTitle>
-          {t(
-            taskError.kind === 'update'
-              ? 'agents.update.failedTitle'
-              : 'agents.install.failedTitle',
-          )}
-        </AlertTitle>
-        <AlertDescription className="flex flex-col gap-2.5">
-          <span data-selectable="">{taskError.message}</span>
-          <span>
-            <Button variant="quiet" size="compact" onClick={() => cancelTask(status.id)}>
-              {t('agents.task.dismiss')}
-            </Button>
-          </span>
-        </AlertDescription>
-      </Alert>
+      <Notice
+        variant="error"
+        icon={<CircleAlertIcon />}
+        title={t(
+          taskError.kind === 'update' ? 'agents.update.failedTitle' : 'agents.install.failedTitle',
+        )}
+        action={<DismissButton onClick={() => cancelTask(status.id)} />}
+      >
+        <span data-selectable="">{taskError.message}</span>
+      </Notice>
     )
   }
   if (status.update) {
-    const next = status.update.cliVersion
     const adapter = adapterOnlyUpdate(status)
+    const cli = status.update.cliVersion
     return (
-      <Alert variant="info">
-        <CircleArrowUpIcon />
-        <AlertTitle>
-          {adapter
+      <Notice
+        variant="info"
+        icon={<CircleArrowUpIcon />}
+        title={
+          adapter
             ? t('agents.update.noticeTitleAdapterOnly', {
                 package: adapter.name,
                 version: status.update.adapterVersion,
               })
-            : next && next !== version
-              ? t('agents.update.noticeTitle', { name: status.name, version: next })
-              : t('agents.update.noticeTitleAdapter', { name: status.name })}
-        </AlertTitle>
-        <AlertDescription className="flex flex-col gap-2.5">
-          <span>
-            {adapter
-              ? t('agents.update.noticeBodyAdapterOnly', {
-                  package: adapter.name,
-                  current: adapter.version,
-                  command: status.cli?.command ?? '',
-                  name: status.name,
-                })
-              : t('agents.update.noticeBody', {
-                  current: version ?? status.package?.version ?? '',
-                  name: status.name,
-                })}
-          </span>
-          <span>
-            <Button size="compact" onClick={() => startUpdate(status.id)}>
-              <DownloadIcon data-icon="inline-start" />
-              {t('agents.update.button')}
-            </Button>
-          </span>
-        </AlertDescription>
-      </Alert>
+            : cli && cli !== version
+              ? t('agents.update.noticeTitle', { name: status.name, version: cli })
+              : t('agents.update.noticeTitleAdapter', { name: status.name })
+        }
+        action={
+          <Button size="sm" onClick={() => startUpdate(status.id)}>
+            {t('agents.update.button')}
+          </Button>
+        }
+      >
+        {adapter
+          ? t('agents.update.noticeBodyAdapterOnly', {
+              package: adapter.name,
+              current: adapter.version,
+              command: status.cli?.command ?? '',
+              name: status.name,
+            })
+          : t('agents.update.noticeBody', {
+              current: version ?? status.package?.version ?? '',
+              name: status.name,
+            })}
+      </Notice>
     )
   }
-  if (updated) {
+  if (updated && !doneSeen) {
     return (
-      <Alert variant="success">
-        <CircleCheckIcon />
-        <AlertTitle>{t('agents.update.doneTitle', { name: status.name })}</AlertTitle>
-        <AlertDescription>{t('agents.update.doneBody', { name: status.name })}</AlertDescription>
-      </Alert>
+      <Notice
+        variant="success"
+        icon={<CircleCheckIcon />}
+        title={t('agents.update.doneTitle', { name: status.name })}
+        action={<DismissButton onClick={() => setDoneSeen(true)} />}
+      >
+        {t('agents.update.doneBody', { name: status.name })}
+      </Notice>
     )
   }
   return null
+}
+
+/** The small x at a notice's end that puts it away. */
+function DismissButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation('settings')
+  return (
+    <IconAction label={t('agents.task.dismiss')} onClick={onClick}>
+      <XIcon />
+    </IconAction>
+  )
 }
 
 /** A failed install or update: why, its log, and retry, copy or dismiss. */
@@ -979,30 +1030,108 @@ function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTa
   const { t } = useTranslation(['settings', 'common'])
   const updating = task.kind === 'update'
   return (
-    <Alert variant="error">
-      <CircleAlertIcon />
-      <AlertTitle>
-        {t(updating ? 'agents.update.failedTitle' : 'agents.install.failedTitle')}
-      </AlertTitle>
-      <AlertDescription className="flex flex-col gap-2.5">
-        {updating ? (
-          <span>{t('agents.update.failedBody')}</span>
-        ) : (
-          task.error && <span data-selectable="">{task.error}</span>
-        )}
-        <TaskLog task={task} />
-        <span className="flex flex-wrap gap-1.5">
-          <Button size="compact" onClick={() => retryTask(status.id, task)}>
-            <RotateCwIcon data-icon="inline-start" />
-            {t('common:actions.retry')}
+    <Notice
+      variant="error"
+      icon={<CircleAlertIcon />}
+      title={t(updating ? 'agents.update.failedTitle' : 'agents.install.failedTitle')}
+      action={<DismissButton onClick={() => cancelTask(status.id)} />}
+      more={
+        <>
+          <TaskLog task={task} />
+          <span className="flex flex-wrap gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => retryTask(status.id, task)}>
+              <RotateCwIcon data-icon="inline-start" />
+              {t('common:actions.retry')}
+            </Button>
+            <LogCopyButton task={task} />
+          </span>
+        </>
+      }
+    >
+      {updating
+        ? t('agents.update.failedBody')
+        : task.error && <span data-selectable="">{task.error}</span>}
+    </Notice>
+  )
+}
+
+/** What an agent that needs a sign-in asks: its command in a terminal, or a way it signs in itself. */
+function SignInNotice({
+  status,
+  busy,
+  onTerminal,
+  onAuthenticate,
+}: {
+  status: AgentStatus
+  busy: boolean
+  onTerminal: (command: string) => void
+  onAuthenticate: (methodId: string) => void
+}) {
+  const { t } = useTranslation(['settings', 'session'])
+  const inTerminal = status.authMethods.filter((m) => m.type === 'terminal' && m.command)
+  const first = inTerminal[0]
+  const others = status.authMethods.filter((m) => m !== first)
+  return (
+    <Notice
+      variant="warning"
+      icon={<LogInIcon />}
+      title={t('agents.signInTitle', { name: status.name })}
+      action={
+        first?.command && (
+          <Button size="sm" onClick={() => onTerminal(first.command!)}>
+            <SquareTerminalIcon data-icon="inline-start" />
+            {t('session:signIn.inTerminal')}
           </Button>
-          <LogCopyButton task={task} />
-          <Button variant="quiet" size="compact" onClick={() => cancelTask(status.id)}>
-            {t('agents.task.dismiss')}
-          </Button>
-        </span>
-      </AlertDescription>
-    </Alert>
+        )
+      }
+      more={
+        (first?.command || others.length > 0) && (
+          <>
+            {first?.command && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-code-block py-0.75 pr-0.75 pl-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]">
+                <code
+                  className="min-w-0 flex-1 truncate font-mono text-code text-primary"
+                  data-selectable=""
+                  title={first.command}
+                >
+                  {first.command}
+                </code>
+                <CopyAction text={first.command} label={t('session:signIn.copyCommand')} />
+              </div>
+            )}
+            {others.length > 0 && (
+              <span className="flex flex-wrap gap-1.5">
+                {others.map((method) =>
+                  method.type === 'terminal' && method.command ? (
+                    <Button
+                      key={method.id}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onTerminal(method.command!)}
+                    >
+                      {method.name}
+                    </Button>
+                  ) : (
+                    <Button
+                      key={method.id}
+                      size="sm"
+                      variant={first ? 'outline' : 'default'}
+                      disabled={busy}
+                      title={method.description}
+                      onClick={() => onAuthenticate(method.id)}
+                    >
+                      {method.name}
+                    </Button>
+                  ),
+                )}
+              </span>
+            )}
+          </>
+        )
+      }
+    >
+      {first?.description}
+    </Notice>
   )
 }
 
@@ -1015,88 +1144,94 @@ function InstallNotice({ status }: { status: AgentStatus }) {
   if (task?.state === 'running' || status.state === 'installing') {
     const lines = task ? task.progress : status.progress
     return (
-      <Alert variant="info">
-        <Spinner />
-        <AlertTitle>{t('agents.install.progressTitle', { name: status.name })}</AlertTitle>
-        <AlertDescription className="flex flex-col gap-2.5">
-          <span className="truncate">{lines.at(-1) ?? task?.command}</span>
-          {lines.length > 0 && <Log lines={lines} />}
-          {(task || status.package) && (
-            <span>
-              <Button variant="outline" size="compact" onClick={() => cancelTask(status.id)}>
-                {t('agents.install.cancel')}
-              </Button>
-            </span>
-          )}
-        </AlertDescription>
-      </Alert>
+      <Notice
+        variant="info"
+        icon={<Spinner />}
+        title={t('agents.install.progressTitle', { name: status.name })}
+        action={
+          (task || status.package) && (
+            <Button variant="outline" size="sm" onClick={() => cancelTask(status.id)}>
+              {t('agents.install.cancel')}
+            </Button>
+          )
+        }
+        more={lines.length > 0 && <Log lines={lines} />}
+      >
+        {lines.at(-1) ?? task?.command}
+      </Notice>
     )
   }
   if (task?.state === 'failed') return <FailedTaskNotice status={status} task={task} />
   if (!canInstall(status)) return null
   return (
-    <Alert variant="info">
-      <DownloadIcon />
-      <AlertTitle>{t('agents.install.title', { name: status.name })}</AlertTitle>
-      <AlertDescription className="flex flex-col gap-2.5">
-        <span>
-          {status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
-            ? t('agents.install.adapterBodyCli', {
-                package: status.package.name,
-                command: status.cli.command,
-                version: status.cli.installed.version,
-                name: status.name,
-              })
-            : status.package
-              ? t('agents.install.adapterBody', { package: status.package.name })
-              : t('agents.install.body')}
-        </span>
-        {!status.package && (
-          <span className="flex items-center gap-3">
-            <span>{t('agents.install.method')}</span>
-            <SettingSelect
-              label={t('agents.install.method')}
-              value={method?.id ?? ''}
-              options={status.installMethods.map((m) => ({
-                value: m.id,
-                label: methodName(t, m),
-                hint: m.available ? undefined : t('agents.install.notFound'),
-                disabled: !m.available,
-              }))}
-              onChange={(id) => setPicked(id)}
-            />
-          </span>
-        )}
-        {method && (
-          <code
-            className="block truncate rounded-lg bg-card px-3 py-2 font-mono text-code text-primary"
-            data-selectable=""
-            title={method.command}
-          >
-            {method.command}
-          </code>
-        )}
-        <span className="flex flex-wrap gap-1.5">
-          <Button size="compact" onClick={() => startInstall(status.id, method?.id)}>
-            <DownloadIcon data-icon="inline-start" />
-            {t('agents.install.button')}
-          </Button>
-          {!status.package && (
-            <Button
-              variant="quiet"
-              size="compact"
-              onClick={() =>
-                void window.overbench.dialogs
-                  .chooseAgentBinary(status.id)
-                  .catch((e: unknown) => console.warn(errorMessage(e)))
-              }
-            >
-              {t('agents.install.elsewhere')}
-            </Button>
-          )}
-        </span>
-      </AlertDescription>
-    </Alert>
+    <Notice
+      variant="info"
+      icon={<DownloadIcon />}
+      title={t('agents.install.title', { name: status.name })}
+      action={
+        <Button size="sm" onClick={() => startInstall(status.id, method?.id)}>
+          {t('agents.install.button')}
+        </Button>
+      }
+      more={
+        (!status.package || method) && (
+          <>
+            {!status.package && (
+              <span className="flex items-center gap-3 text-small text-secondary">
+                <span>{t('agents.install.method')}</span>
+                <SettingSelect
+                  label={t('agents.install.method')}
+                  value={method?.id ?? ''}
+                  options={status.installMethods.map((m) => ({
+                    value: m.id,
+                    label: methodName(t, m),
+                    hint: m.available ? undefined : t('agents.install.notFound'),
+                    disabled: !m.available,
+                  }))}
+                  onChange={(id) => setPicked(id)}
+                />
+              </span>
+            )}
+            {method && (
+              <code
+                className="block truncate rounded-lg bg-code-block px-2.5 py-1.5 font-mono text-code text-primary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+                data-selectable=""
+                title={method.command}
+              >
+                {method.command}
+              </code>
+            )}
+            {!status.package && (
+              <span>
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  className="-ml-2 text-secondary"
+                  onClick={() =>
+                    void window.overbench.dialogs
+                      .chooseAgentBinary(status.id)
+                      .catch((e: unknown) => console.warn(errorMessage(e)))
+                  }
+                >
+                  {t('agents.install.elsewhere')}
+                </Button>
+              </span>
+            )}
+          </>
+        )
+      }
+    >
+      {status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
+        ? t('agents.install.adapterBodyCli', {
+            package: status.package.name,
+            command: status.cli.command,
+            version: status.cli.installed.version,
+            name: status.name,
+          })
+        : status.package
+          ? t('agents.install.adapterBody', { package: status.package.name })
+          : t('agents.install.body')}
+    </Notice>
   )
 }
 
@@ -1105,17 +1240,33 @@ function TaskLog({ task }: { task: AgentTask }) {
   return <Log lines={lines} error={task.state === 'failed'} />
 }
 
+/** A task's output, newest line last and in view: in the text color, or the danger one once failed. */
 function Log({ lines, error }: { lines: string[]; error?: boolean }) {
+  const box = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [lines])
   return (
-    <pre
+    <div
+      ref={box}
+      role="log"
       data-selectable=""
-      className={cn(
-        'max-h-40 overflow-auto rounded-lg bg-card px-3 py-2 font-mono text-meta whitespace-pre-wrap',
-        error ? 'text-danger' : 'text-tertiary',
-      )}
+      className="max-h-21.5 overflow-auto rounded-lg bg-code-block px-2.5 py-1.75 font-mono text-meta leading-4.5 text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
     >
-      {lines.join('\n')}
-    </pre>
+      {lines.map((line, i) => (
+        <span
+          key={i}
+          className={cn(
+            'block truncate',
+            i === lines.length - 1 && (error ? 'text-danger' : 'text-primary'),
+          )}
+          title={line}
+        >
+          {line}
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -1125,7 +1276,8 @@ function LogCopyButton({ task }: { task: AgentTask }) {
   return (
     <Button
       variant="quiet"
-      size="compact"
+      size="sm"
+      className="text-secondary"
       onClick={() => {
         const text = [`$ ${task.command}`, ...task.progress, task.error ?? ''].join('\n')
         void navigator.clipboard.writeText(text).then(() => {
@@ -1182,9 +1334,9 @@ function UsageGroup({
   return (
     <section className="flex flex-col">
       <GroupLabel group={{ id: 'usage', label: t('agents.usage'), actions }} />
-      <RowGroup>
-        {status.limits.length > 0 ? (
-          status.limits.map((limit) => {
+      {status.limits.length > 0 ? (
+        <RowGroup>
+          {status.limits.map((limit) => {
             const tone = usageTone(limit)
             const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
             return (
@@ -1203,33 +1355,36 @@ function UsageGroup({
                   />
                 }
               >
-                <Progress
-                  value={limit.usedPercent ?? 0}
-                  tone={tone}
-                  className="w-40"
-                  aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
-                />
-                <span
-                  className={cn(
-                    'w-10 text-right text-small font-medium tabular',
-                    USAGE_TONE_TEXT[tone],
-                  )}
-                >
-                  {percent(limit)}
+                <span className="flex items-center gap-3">
+                  <Progress
+                    value={limit.usedPercent ?? 0}
+                    tone={tone}
+                    className="w-42 [&_[data-slot=progress-track]]:h-1.5"
+                    aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+                  />
+                  <span
+                    className={cn(
+                      'w-9 text-right text-command tabular',
+                      tone !== 'success' && 'font-medium',
+                      USAGE_TONE_TEXT[tone],
+                    )}
+                  >
+                    {percent(limit)}
+                  </span>
                 </span>
               </RowFrame>
             )
-          })
-        ) : reading && status.capabilities.reports ? (
-          <RowShell>
-            <p className="py-3 text-xs text-tertiary">{t('agents.readingUsage')}</p>
-          </RowShell>
-        ) : limitsReadable(status) && !running ? (
+          })}
+        </RowGroup>
+      ) : reading && status.capabilities.reports ? (
+        <p className="px-1 py-0.5 text-small text-tertiary">{t('agents.readingUsage')}</p>
+      ) : limitsReadable(status) && !running ? (
+        <RowGroup>
           <RowFrame text={<RowText name={t('agents.planLimits')} />}>
             <ControlError error={error} />
             <Button
               variant="outline"
-              size="compact"
+              size="sm"
               disabled={busy}
               onClick={() => act(() => refreshLimits(status.id))}
             >
@@ -1237,14 +1392,12 @@ function UsageGroup({
               {t('agents.checkLimits')}
             </Button>
           </RowFrame>
-        ) : (
-          <RowShell>
-            <p className="py-3 text-xs text-secondary">
-              {t('agents.usageNotReported', { name: status.name })}
-            </p>
-          </RowShell>
-        )}
-      </RowGroup>
+        </RowGroup>
+      ) : (
+        <p className="px-1 py-0.5 text-small text-tertiary">
+          {t('agents.usageNotReported', { name: status.name })}
+        </p>
+      )}
       {(error ?? refreshError) && status.limits.length > 0 && (
         <p className="px-1 pt-1 text-xs text-danger">{error ?? refreshError}</p>
       )}
@@ -1256,15 +1409,70 @@ function UsageGroup({
 function Fact({ name, mono, children }: { name: string; mono?: boolean; children: ReactNode }) {
   const { t } = useTranslation('settings')
   return (
-    <RowFrame text={<RowText name={name} />}>
+    <RowFrame compact text={<RowText name={name} />}>
       {children ? (
-        <span className={cn('text-ui', mono && 'font-mono text-meta')} data-selectable="">
+        <span className={cn('text-small', mono && 'font-mono text-code')} data-selectable="">
           {children}
         </span>
       ) : (
-        <span className="text-xs text-tertiary">{t('agents.notReported')}</span>
+        <span className="text-small text-tertiary">{t('agents.notReported')}</span>
       )}
     </RowFrame>
+  )
+}
+
+/** A path as a place on a line of its own, then what describes it, then its actions at the end. */
+function PathLine({
+  path,
+  missing,
+  children,
+  actions,
+}: {
+  path: string
+  missing?: boolean
+  children?: ReactNode
+  actions?: ReactNode
+}) {
+  return (
+    <div className="flex min-h-6.5 min-w-0 items-center gap-2">
+      <PathText path={path} missing={missing} />
+      {children}
+      {actions && <span className="ml-auto flex shrink-0 items-center gap-0.5">{actions}</span>}
+    </div>
+  )
+}
+
+/** A word on a path, such as that its file is not there yet. */
+function PathNote({ children }: { children: ReactNode }) {
+  return (
+    <span className="h-4.5 shrink-0 rounded-full bg-subtle px-1.5 text-xs leading-4.5 text-tertiary">
+      {children}
+    </span>
+  )
+}
+
+/** A row of the Configuration group: its name and line, then its place and notes under them. */
+function ConfigFrame({
+  name,
+  description,
+  control,
+  children,
+}: {
+  name: string
+  description?: ReactNode
+  control?: ReactNode
+  children?: ReactNode
+}) {
+  return (
+    <RowShell>
+      <div className="flex flex-col gap-1.5 py-2.5">
+        <div className="flex min-h-7 items-center gap-4">
+          <RowText name={name} description={description} />
+          {control && <div className="ml-auto flex shrink-0 items-center gap-2">{control}</div>}
+        </div>
+        {children}
+      </div>
+    </RowShell>
   )
 }
 
@@ -1274,47 +1482,55 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
   const [act, , error] = useAction()
   return (
     <>
-      {status.cli && <CliRow status={status} cli={status.cli} />}
-      {status.id === 'opencode' && (
-        <RowFrame
-          text={
-            <RowText
-              name={t('agents.program')}
-              description={override ? <PathText path={override} /> : t('agents.programOnPath')}
-            />
-          }
-        >
-          <ControlError error={error} />
-          {override && (
-            <Button
-              variant="quiet"
-              size="compact"
-              onClick={() =>
-                act(() =>
-                  useSettingsStore
-                    .getState()
-                    .update({ agents: { opencode: { binaryPath: null } } }),
-                )
-              }
-            >
-              {t('agents.reset')}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="compact"
-            onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary('opencode'))}
-          >
-            {t('agents.chooseBinary')}
-          </Button>
-        </RowFrame>
-      )}
       {details?.config.map((item) =>
         item.id === 'folder' && status.configDir ? (
           <FolderRow key={item.id} item={item} status={status} configDir={status.configDir} />
         ) : (
-          <ConfigRow key={item.id} item={item} />
+          <ConfigRow key={item.id} item={item} status={status} />
         ),
+      )}
+      {status.cli && <CliRow status={status} cli={status.cli} />}
+      {status.id === 'opencode' && (
+        <ConfigFrame
+          name={t('agents.program')}
+          description={t('agents.binaryDescription', { command: 'opencode' })}
+          control={
+            <>
+              <ControlError error={error} />
+              {override && (
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  className="text-secondary"
+                  onClick={() =>
+                    act(() =>
+                      useSettingsStore
+                        .getState()
+                        .update({ agents: { opencode: { binaryPath: null } } }),
+                    )
+                  }
+                >
+                  {t('agents.reset')}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary('opencode'))}
+              >
+                {t('agents.chooseBinary')}
+              </Button>
+            </>
+          }
+        >
+          {override ? (
+            <PathLine path={override} actions={<PathActions path={override} />} />
+          ) : (
+            <span className="flex min-h-6.5 items-center text-xs text-tertiary">
+              {t('agents.programOnPath')}
+            </span>
+          )}
+        </ConfigFrame>
       )}
       {details && details.config.length === 0 && status.id !== 'opencode' && (
         <RowShell>
@@ -1361,93 +1577,121 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   const missing = cli.runs === 'bundled' && cli.needsCopy
   // The running adapter keeps its CLI until it stops, so another choice waits for the next start.
   const pending = cli.active !== null && cli.active !== cli.runs
+  const versionTag = version && !missing && (
+    <span className="shrink-0 font-mono text-xs text-tertiary">{version}</span>
+  )
   return (
-    <RowFrame
-      text={
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-ui font-medium">{t('agents.program')}</span>
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            {cli.runs === 'installed' && installed ? (
-              <PathText path={installed.path} />
-            ) : (
-              <span className="text-xs text-tertiary">
-                {t(missing ? 'agents.cli.notDownloaded' : 'agents.cli.bundledLine')}
-              </span>
-            )}
-            {version && !missing && (
-              <span className="shrink-0 font-mono text-meta text-tertiary">{version}</span>
-            )}
-          </span>
-          {note && (
-            <span
-              className={cn('text-xs', attention ? 'text-secondary' : 'text-tertiary')}
-              data-selectable=""
-            >
-              {note}
-            </span>
-          )}
-          {cli.runs === 'bundled' && installed && <PathText path={installed.path} />}
+    <ConfigFrame
+      name={t('agents.program')}
+      description={t('agents.cli.description', { command })}
+      control={
+        <>
+          <ControlError error={error ?? retryError} />
           {problem?.kind === 'failed' && (
-            <span className="text-xs text-tertiary" data-selectable="">
-              {problem.reason}
-            </span>
+            <Button
+              variant="quiet"
+              size="sm"
+              className="text-secondary"
+              aria-busy={refresh.phase === 'turning'}
+              disabled={refresh.phase === 'turning'}
+              onClick={() => {
+                setRetryError(null)
+                void refresh
+                  .run(() => useAgentsStore.getState().reloadEnvironment())
+                  .catch((e: unknown) => setRetryError(errorMessage(e)))
+              }}
+            >
+              <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
+              {t('common:actions.retry')}
+            </Button>
           )}
-          {missing && (
-            <span className="text-xs text-tertiary">
-              {t('agents.cli.downloadsNext', { size: cli.copyMegabytes })}
-            </span>
+          {installed && !installed.variable && (
+            <Segmented
+              label={t('agents.cli.choose', { name: status.name })}
+              value={cli.prefer}
+              options={[
+                { value: 'installed', label: t('agents.cli.installed') },
+                { value: 'bundled', label: t('agents.cli.bundled') },
+              ]}
+              onChange={(choice: AgentCliSource) =>
+                apply({ agents: { [status.id]: { cli: choice } } })
+              }
+            />
           )}
-          {pending && <span className="text-xs text-tertiary">{t('agents.cli.nextStart')}</span>}
-        </div>
+        </>
       }
     >
-      <ControlError error={error ?? retryError} />
-      {problem?.kind === 'failed' && (
-        <Button
-          variant="quiet"
-          size="compact"
-          aria-busy={refresh.phase === 'turning'}
-          disabled={refresh.phase === 'turning'}
-          onClick={() => {
-            setRetryError(null)
-            void refresh
-              .run(() => useAgentsStore.getState().reloadEnvironment())
-              .catch((e: unknown) => setRetryError(errorMessage(e)))
-          }}
+      {cli.runs === 'installed' && installed ? (
+        <PathLine path={installed.path} actions={<PathActions path={installed.path} />}>
+          {versionTag}
+        </PathLine>
+      ) : (
+        <span className="flex min-h-6.5 items-center gap-2">
+          <span className="text-command font-medium">
+            {t(missing ? 'agents.cli.notDownloaded' : 'agents.cli.bundledLine')}
+          </span>
+          {versionTag}
+        </span>
+      )}
+      {note && (
+        <span
+          className={cn('text-xs', attention ? 'text-secondary' : 'text-tertiary')}
+          data-selectable=""
         >
-          <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
-          {t('common:actions.retry')}
-        </Button>
+          {note}
+        </span>
       )}
-      {installed && !installed.variable && (
-        <Segmented
-          label={t('agents.cli.choose', { name: status.name })}
-          value={cli.prefer}
-          options={[
-            { value: 'installed', label: t('agents.cli.installed') },
-            { value: 'bundled', label: t('agents.cli.bundled') },
-          ]}
-          onChange={(choice: AgentCliSource) => apply({ agents: { [status.id]: { cli: choice } } })}
-        />
+      {cli.runs === 'bundled' && installed && (
+        <PathLine path={installed.path} actions={<PathActions path={installed.path} />} />
       )}
-    </RowFrame>
+      {problem?.kind === 'failed' && (
+        <span className="text-xs text-tertiary" data-selectable="">
+          {problem.reason}
+        </span>
+      )}
+      {missing && (
+        <span className="text-xs text-tertiary">
+          {t('agents.cli.downloadsNext', { size: cli.copyMegabytes })}
+        </span>
+      )}
+      {pending && <span className="text-xs text-tertiary">{t('agents.cli.nextStart')}</span>}
+    </ConfigFrame>
   )
 }
 
-function ConfigRow({ item }: { item: AgentConfigItem }) {
+function ConfigRow({ item, status }: { item: AgentConfigItem; status: AgentStatus }) {
   const { t } = useTranslation('settings')
   return (
-    <RowFrame
-      text={
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-ui font-medium">{t(`agents.config.${item.id}`)}</span>
-          <PathText path={item.path} missing={!item.exists} />
-          <ConfigNote item={item} />
-        </div>
+    <ConfigFrame
+      name={t(`agents.config.${item.id}`)}
+      description={
+        item.id === 'folder' ? t('agents.configFolder.description', { name: status.name }) : null
       }
     >
-      <ConfigActions item={item} />
-    </RowFrame>
+      <ConfigPath item={item} />
+      <ConfigNote item={item} />
+    </ConfigFrame>
+  )
+}
+
+/** A configuration place: its path, a word when it is not there yet, and copy and show. */
+function ConfigPath({ item, extra }: { item: AgentConfigItem; extra?: ReactNode }) {
+  const { t } = useTranslation('settings')
+  return (
+    <PathLine
+      path={item.path}
+      missing={!item.exists}
+      actions={
+        (extra || item.exists) && (
+          <>
+            {extra}
+            {item.exists && <PathActions path={item.path} />}
+          </>
+        )
+      }
+    >
+      {!item.exists && <PathNote>{t('agents.notCreated')}</PathNote>}
+    </PathLine>
   )
 }
 
@@ -1460,15 +1704,13 @@ function ConfigNote({ item }: { item: AgentConfigItem }) {
   return note ? <span className="text-xs text-tertiary">{note}</span> : null
 }
 
-function ConfigActions({ item }: { item: AgentConfigItem }) {
+function PathActions({ path }: { path: string }) {
   const { t } = useTranslation('settings')
-  return item.exists ? (
+  return (
     <>
-      <CopyAction text={item.path} label={t('advanced.dataFolder.copy')} />
-      <RevealAction path={item.path} />
+      <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
+      <RevealAction path={path} />
     </>
-  ) : (
-    <span className="text-xs text-tertiary">{t('agents.notCreated')}</span>
   )
 }
 
@@ -1494,46 +1736,47 @@ function FolderRow({
   // The running agent keeps its folder until it stops, so another one waits for the next start.
   const pending = configDir.active !== null && configDir.active !== configDir.runs
   return (
-    <RowShell>
-      <div className="flex flex-col gap-1 py-3">
-        <div className="flex min-h-7 items-center gap-6">
-          <span className="min-w-0 flex-1 text-ui font-medium">{t('agents.config.folder')}</span>
-          <div className="flex shrink-0 items-center gap-2">
-            <ControlError error={applyError ?? chooseError} />
-            <Segmented
-              label={t('agents.configFolder.label', { name: status.name })}
-              value={chosen ? 'custom' : 'environment'}
-              options={[
-                { value: 'environment', label: t('agents.configFolder.useEnvironment') },
-                { value: 'custom', label: t('agents.configFolder.custom') },
-              ]}
-              onChange={(mode) => {
-                if (mode === 'environment') {
-                  if (chosen) apply({ agents: { [status.id]: { configDir: null } } })
-                } else if (!chosen) choose()
-              }}
-            />
-          </div>
-        </div>
-        <div className="flex min-h-7 items-center gap-6">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <PathText path={item.path} missing={!item.exists} />
-            <ConfigNote item={item} />
-            {pending && (
-              <span className="text-xs text-tertiary">{t('agents.configFolder.nextStart')}</span>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ConfigActions item={item} />
-            {chosen && (
-              <Button variant="outline" size="compact" disabled={choosing} onClick={choose}>
-                {t('agents.configFolder.choose')}
-              </Button>
-            )}
-          </div>
-        </div>
+    <ConfigFrame
+      name={t('agents.config.folder')}
+      description={t('agents.configFolder.description', { name: status.name })}
+    >
+      <div className="mt-1 mb-0.5 flex items-center gap-2">
+        <Segmented
+          label={t('agents.configFolder.label', { name: status.name })}
+          value={chosen ? 'custom' : 'environment'}
+          options={[
+            { value: 'environment', label: t('agents.configFolder.useEnvironment') },
+            { value: 'custom', label: t('agents.configFolder.custom') },
+          ]}
+          onChange={(mode) => {
+            if (mode === 'environment') {
+              if (chosen) apply({ agents: { [status.id]: { configDir: null } } })
+            } else if (!chosen) choose()
+          }}
+        />
+        <ControlError error={applyError ?? chooseError} />
       </div>
-    </RowShell>
+      <ConfigPath
+        item={item}
+        extra={
+          chosen && (
+            <Button
+              variant="outline"
+              size="xs"
+              className="mr-1.5"
+              disabled={choosing}
+              onClick={choose}
+            >
+              {t('agents.configFolder.choose')}
+            </Button>
+          )
+        }
+      />
+      <ConfigNote item={item} />
+      {pending && (
+        <span className="text-xs text-tertiary">{t('agents.configFolder.nextStart')}</span>
+      )}
+    </ConfigFrame>
   )
 }
 
@@ -1553,7 +1796,7 @@ function AgentPicker({ status }: { status: AgentStatus }) {
       itemToStringLabel={name}
       filter={(id: AgentId, query: string) => contains(name(id), query)}
     >
-      <ComboboxTrigger className="-ml-1.5 flex min-w-0 items-center gap-1.5 rounded-lg px-1.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring data-popup-open:bg-hover">
+      <ComboboxTrigger className="-mx-1.5 flex min-w-0 items-center gap-1.25 rounded-lg pr-1.25 pl-1.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring data-popup-open:bg-hover [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:transition-transform [&>svg]:duration-(--duration-base) data-popup-open:[&>svg]:rotate-180">
         <span className="truncate">{status.name}</span>
       </ComboboxTrigger>
       <ComboboxContent className="w-72">
@@ -1590,34 +1833,22 @@ export function EnvironmentFooter() {
   const refresh = useRefresh()
   const [error, setError] = useState<string | null>(null)
   const source = environment?.source
-  const text =
-    !environment || source === 'pending'
-      ? t('agents.environment.pending')
-      : source === 'login-shell'
-        ? environment.shell && environment.resolvedAt && environment.durationMs
-          ? t('agents.environment.loginShell', {
-              shell: environment.shell,
-              ago: longAgo(environment.resolvedAt, now),
-              ms: environment.durationMs,
-            })
-          : t('agents.environment.loginShellPlain')
-        : source === 'inherited'
-          ? t('agents.environment.inherited')
-          : t('agents.environment.fallback')
+  const text = environmentText(t, environment, now)
   return (
-    <div className="flex flex-col gap-1 px-1 pt-5">
-      <div className="flex items-center gap-2 text-xs text-tertiary">
-        <span
-          aria-hidden
-          className={cn(
-            'size-1.5 shrink-0 rounded-full bg-current',
-            source === 'login-shell' ? 'text-secondary' : 'text-tertiary',
-          )}
-        />
+    <div data-setting-row="environment" className="relative mt-3.5 flex flex-col gap-1 px-1">
+      <FlashMark id="environment" />
+      <div className="relative flex items-center gap-2 text-command text-tertiary">
+        {!environment || source === 'pending' ? (
+          <Spinner className="size-3.5" />
+        ) : source === 'fallback' ? (
+          <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0 text-warning" />
+        ) : (
+          <CheckIcon aria-hidden className="size-3.5 shrink-0 text-success" />
+        )}
         <span className="min-w-0 flex-1">{text}</span>
         <Button
-          variant="quiet"
-          size="xs"
+          variant="outline"
+          size="sm"
           aria-busy={refresh.phase === 'turning'}
           disabled={refresh.phase === 'turning'}
           onClick={() => {
@@ -1631,8 +1862,10 @@ export function EnvironmentFooter() {
           {t('agents.environment.reload')}
         </Button>
       </div>
-      {environment?.warning && <p className="text-xs text-secondary">{environment.warning}</p>}
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {environment?.warning && (
+        <p className="relative text-xs text-secondary">{environment.warning}</p>
+      )}
+      {error && <p className="relative text-xs text-danger">{error}</p>}
     </div>
   )
 }

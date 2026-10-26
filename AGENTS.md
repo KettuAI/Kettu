@@ -135,8 +135,8 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 ## Gotchas
 
 - shadcn/ui here is built on Base UI, not Radix: components take a `render` prop instead of `asChild`. To make a link look like a button, put `buttonVariants()` on a plain `<a>` rather than `<Button render={<a />}>`.
-- `BACKGROUND_COLOR` in `src/main/window.ts` must match `--background` in `globals.css`, or the window flashes on load.
-- On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`.
+- `BACKGROUND_COLOR` in `src/main/window.ts` must match the desk, `--bg-sidebar` in `tokens.css`, or the window flashes on load.
+- On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`. The desk around the sheets drags the window too, so a sheet takes `SHEET` from `features/shell/sheet.ts`, which opts out.
 - `@dnd-kit/react` is still 0.x; read its changelog before bumping the minor version, and never mix in the legacy `@dnd-kit/core` packages.
 - Enter-to-send handlers must ignore IME composition (`event.nativeEvent.isComposing`, or `keyCode` 229), or Chinese, Japanese and Korean input sends half-typed text.
 - macOS, Windows and Linux are equal targets. Code that spawns processes, resolves executables or compares paths handles each: a minimal `PATH` when the app starts from the macOS or Linux desktop, `PATHEXT` and `.cmd` shims on Windows, and paths compared only after `path.resolve` and `fs.realpath.native`, case-insensitively on Windows.

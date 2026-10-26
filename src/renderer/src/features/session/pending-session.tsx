@@ -43,7 +43,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   } else if (error) {
     body = (
       <ColumnScroller>
-        <div className="mx-auto w-full max-w-thread px-6 pt-6">
+        <div className="mx-auto w-full max-w-thread px-7 pt-7">
           <FailedState
             title={t('pending.couldntStart', { agent: name })}
             message={error.message}
@@ -83,7 +83,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
               : t('newSession.title')}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <AgentMark agent={pending.agentId} size={13} />
+            <AgentMark agent={pending.agentId} size={12} />
             {name}
           </span>
         </NoDrag>
@@ -93,23 +93,25 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       {/* Leaves the width the column's scrollbar takes, as the session's composer row does. */}
       <div style={{ paddingRight: gutter }}>
-        <div className="mx-auto w-full max-w-thread px-6 pb-3">
-          <InputGroup variant="composer" data-disabled>
-            <InputGroupTextarea
-              rows={1}
-              disabled
-              aria-label={t('newSession.messageAgent', { agent: name })}
-              placeholder={
-                error
-                  ? t('pending.notRunning', { agent: name })
-                  : t(installing ? 'agentStart.installing' : 'agentStart.starting', {
-                      agent: name,
-                    })
-              }
-              className="min-h-(--composer-min) py-[15px] pl-4 text-prose leading-[22px] md:text-prose"
-            />
-          </InputGroup>
-          <div className="h-row" />
+        <div className="px-7 pb-3.5">
+          <div className="mx-auto w-full max-w-thread">
+            <InputGroup variant="composer" data-disabled>
+              <InputGroupTextarea
+                rows={1}
+                disabled
+                aria-label={t('newSession.messageAgent', { agent: name })}
+                placeholder={
+                  error
+                    ? t('pending.notRunning', { agent: name })
+                    : t(installing ? 'agentStart.installing' : 'agentStart.starting', {
+                        agent: name,
+                      })
+                }
+                className="min-h-(--composer-min) py-[15px] pl-4 text-prose leading-[22px] md:text-prose"
+              />
+            </InputGroup>
+            <div className="h-9" />
+          </div>
         </div>
       </div>
     </div>

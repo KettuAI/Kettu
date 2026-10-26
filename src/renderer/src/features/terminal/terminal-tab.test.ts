@@ -62,10 +62,22 @@ describe('TerminalTab', () => {
     expect(markup).toContain('group-focus-within/tab:opacity-100')
   })
 
-  it('fills the active tab with the selected color and leaves the others flat', () => {
-    expect(render({}, true)).toContain('bg-selected')
-    expect(render({}, true)).not.toContain('shadow-segment')
-    expect(render({}, false)).not.toContain('bg-selected')
+  it('raises the active tab on the surface and leaves the others flat', () => {
+    expect(render({}, true)).toContain('bg-surface')
+    expect(render({}, true)).toContain('shadow-outline')
+    expect(render({}, false)).not.toContain('bg-surface')
+    expect(render({}, false)).not.toContain('shadow-outline')
+  })
+
+  it('marks a tab whose command is running, in place of its new output', () => {
+    const running = render({ busy: true, activity: true }, false)
+    expect(running).toContain('aria-label="Running"')
+    expect(running).toContain('bg-success')
+    expect(running).not.toContain('aria-label="New output"')
+
+    expect(render({ busy: true }, true)).toContain('aria-label="Running"')
+    expect(render({ busy: false }, false)).not.toContain('aria-label="Running"')
+    expect(render({ busy: true, exitCode: 0 }, false)).not.toContain('aria-label="Running"')
   })
 
   it('marks output printed while hidden and shows the exit code of an exited shell', () => {

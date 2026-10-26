@@ -11,24 +11,29 @@ import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { PlanList } from './entries/basic'
 import { PANEL } from './entries/helpers'
+import { TurnStatus } from './turn-status'
 
 /**
- * The latest plan, pinned above the composer as one row: a segment per step, the count and the
- * current step. It opens upward to the whole list, and steps aside while the queue fans out over
- * it (`hidden`).
+ * The row above the composer: the latest plan on its left, as a segment per step, the count and
+ * the current step, which opens to the whole list under it; the running turn's status on its
+ * right. It steps aside while the queue fans out over it (`hidden`).
  */
 export function PlanBar({
   sessionId,
+  withPlan,
   running,
   hidden,
 }: {
   sessionId: string
+  /** A subagent's row shows its status alone. */
+  withPlan: boolean
   running: boolean
   hidden: boolean
 }) {
   const { t } = useTranslation('session')
   const [open, setOpen] = useState(false)
   const plan = useThreadsStore((s) => {
+    if (!withPlan) return null
     const replica = s.replicas[sessionId]
     const state = replica?.state
     if (!state) return null
@@ -39,10 +44,29 @@ export function PlanBar({
     // The latest plan lies on a page not loaded yet.
     return replica.plan
   })
-  if (!plan || plan.items.length === 0) return null
-  const done = plan.items.filter((i) => i.status === 'completed').length
-  if (done === plan.items.length && !running) return null
-  const current = plan.items.find((i) => i.status === 'in_progress')
+  const items = plan && plan.items.length > 0 ? plan.items : null
+  const done = items ? items.filter((i) => i.status === 'completed').length : 0
+  const showsPlan = !!items && (running || done < items.length)
+  if (!showsPlan && !running) return null
+
+  const shell = cn(
+    'transition-[opacity,translate] duration-(--duration-fast) ease-out-quart',
+    hidden && '-translate-y-1 opacity-0 motion-reduce:translate-y-0',
+  )
+  const row = 'flex min-h-7.5 min-w-0 items-center gap-2 px-1 pb-1'
+  const status = running && <TurnStatus sessionId={sessionId} />
+  if (!items || !showsPlan) {
+    return (
+      <div
+        inert={hidden}
+        aria-hidden={hidden || undefined}
+        className={cn(row, 'justify-end', shell)}
+      >
+        {status}
+      </div>
+    )
+  }
+  const current = items.find((i) => i.status === 'in_progress')
 
   return (
     <Collapsible
@@ -50,41 +74,42 @@ export function PlanBar({
       onOpenChange={setOpen}
       inert={hidden}
       aria-hidden={hidden || undefined}
-      className={cn(
-        'mb-2 transition-[opacity,translate] duration-(--duration-fast) ease-out-quart',
-        hidden && '-translate-y-1 opacity-0 motion-reduce:translate-y-0',
-      )}
+      className={shell}
     >
-      <CollapsibleTrigger className="flex h-row w-full items-center gap-2.5 rounded-lg px-4 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
-        <ChevronRightIcon
-          aria-hidden
-          className={cn(
-            'size-3 shrink-0 text-icon transition-transform duration-(--duration-fast) motion-reduce:transition-none',
-            open && 'rotate-90',
-          )}
-        />
-        <span className="shrink-0 text-xs text-muted-foreground">{t('planBar.label')}</span>
-        <Segments items={plan.items} />
-        <span
-          key={done}
-          aria-hidden
-          className="shrink-0 animate-in text-xs text-muted-foreground tabular fade-in animation-duration-(--duration-base)"
-        >
-          {t('planBar.count', { done, total: plan.items.length })}
-        </span>
-        <span className="sr-only">{t('planBar.progress', { done, total: plan.items.length })}</span>
-        {current && !open && (
+      <div className={row}>
+        <CollapsibleTrigger className="-ml-2 flex h-7 min-w-0 items-center gap-2 rounded-lg px-2 text-left text-ui text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
+          <ChevronRightIcon
+            aria-hidden
+            className={cn(
+              'size-3.5 shrink-0 transition-transform duration-(--duration-fast) motion-reduce:transition-none',
+              open && 'rotate-90',
+            )}
+          />
+          <span className="shrink-0">{t('planBar.label')}</span>
+          <Segments items={items} />
           <span
-            key={current.content}
-            className="min-w-0 flex-1 animate-in truncate text-small font-medium text-primary fade-in animation-duration-(--duration-base)"
+            key={done}
+            aria-hidden
+            className="shrink-0 animate-in tabular fade-in animation-duration-(--duration-base)"
           >
-            {current.content}
+            {t('planBar.count', { done, total: items.length })}
           </span>
-        )}
-      </CollapsibleTrigger>
+          <span className="sr-only">{t('planBar.progress', { done, total: items.length })}</span>
+          {current && (
+            <span
+              key={current.content}
+              className="min-w-0 animate-in truncate font-medium text-foreground fade-in animation-duration-(--duration-base)"
+            >
+              {current.content}
+            </span>
+          )}
+        </CollapsibleTrigger>
+        <span className="flex-1" />
+        {status}
+      </div>
       <CollapsibleContent className={PANEL}>
-        <div className="max-h-42 scroll-fade-y overflow-y-auto overscroll-contain pt-1 pr-2 pb-0.5 pl-4">
-          <PlanList items={plan.items} />
+        <div className="max-h-42 scroll-fade-y overflow-y-auto overscroll-contain pt-1 pr-2 pb-2 pl-3.5">
+          <PlanList items={items} />
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -95,18 +120,18 @@ export function PlanBar({
 function Segments({ items }: { items: PlanItem[] }) {
   const crowded = items.length > 8
   return (
-    <span aria-hidden className={cn('flex shrink-0 gap-0.5', crowded && 'w-28')}>
+    <span aria-hidden className={cn('flex shrink-0 gap-0.75', crowded && 'w-28')}>
       {items.map((item, i) => (
         <span
           key={i}
           className={cn(
-            'h-1 rounded-full transition-colors duration-(--duration-base)',
+            'h-1 rounded-xs transition-colors duration-(--duration-base)',
             crowded ? 'min-w-px flex-1' : 'w-3.5',
             item.status === 'completed'
               ? 'bg-current text-secondary'
               : item.status === 'in_progress'
                 ? 'bg-current text-tertiary'
-                : 'bg-border',
+                : 'bg-border-strong',
           )}
         />
       ))}

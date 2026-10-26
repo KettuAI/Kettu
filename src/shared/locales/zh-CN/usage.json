@@ -31,7 +31,11 @@
       "computer": "本机",
       "overbench": "仅 OverBench"
     },
-    "importing": "正在读取 Agent 的日志：{{done}} / {{total}}"
+    "importing": "正在读取 Agent 的日志：{{done}} / {{total}}",
+    "importingFrom": "{{agents}}，{{date}} 以来的日志。读完后页面就会填满。",
+    "importingAgents": "{{agents}}。日志读完后，页面就会填满。",
+    "importingNote": "日志读完后，页面就会填满。",
+    "loading": "正在载入用量"
   },
   "metrics": {
     "tokens": "Token",
@@ -47,7 +51,9 @@
     "turns": "{{value}} 轮"
   },
   "figures": {
+    "label": "数据概览",
     "today": "今天",
+    "sinceMidnight": "今天零点起",
     "total": "总 token",
     "cost": "估算费用",
     "tokensPerRequest": "每次请求 token",
@@ -91,11 +97,18 @@
     "agent": "{{agent}} {{tokens}}",
     "agentCount": "{{agent}} {{value}}",
     "agentCost": "{{agent}} {{cost}}",
-    "legend": "图表中显示的 Agent"
+    "legend": "图表中显示的 Agent",
+    "keepOne": "图表中至少保留一个 Agent"
   },
   "limits": {
     "title": "套餐限额",
-    "none": "还没有 Agent 报告套餐限额。"
+    "none": "还没有 Agent 报告套餐限额。",
+    "read": "{{ago}}读取",
+    "used": "已使用：{{limit}}",
+    "resetsIn": "{{time}}后重置",
+    "resetsAt": "{{time}} 重置",
+    "notReported": "{{name}} 不提供套餐用量。",
+    "notYet": "还没有报告套餐用量。"
   },
   "activity": {
     "title": "活动",
@@ -139,6 +152,7 @@
   "error": {
     "title": "无法读取用量",
     "retry": "重试",
+    "kept": "下面是上次读取到的数据。",
     "unavailable": "无法读取用量数据库。请重启 OverBench；如果仍然无法读取，请导出诊断信息。",
     "export": "导出诊断信息",
     "savedTo": "已保存到 {{path}}"
@@ -162,6 +176,7 @@
     "start": "开始",
     "end": "结束",
     "days_other": "共 {{count}} 天",
+    "pickStart": "请选择开始日期",
     "errors": {
       "format": "请按 YYYY-MM-DD 输入日期",
       "future": "不能晚于今天",

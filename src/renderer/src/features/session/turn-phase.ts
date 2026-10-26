@@ -95,3 +95,21 @@ export function inLatestTurn(state: ThreadState, entryId: string): boolean {
   }
   return false
 }
+
+/**
+ * Whether the thread's latest tool call is one you rejected, with no message from you since: what
+ * you write next most likely says what to do instead.
+ */
+export function endedOnRejection(state: ThreadState | null | undefined): boolean {
+  if (!state) return false
+  const { order, byId } = state
+  for (let i = order.length - 1; i >= Math.max(0, order.length - LOOKBACK); i--) {
+    const entry = byId[order[i]!]
+    if (entry?.kind === 'user') return false
+    if (entry?.kind === 'tool') {
+      const result = entry.permissionResult
+      return typeof result === 'object' && result !== null && result.kind.startsWith('reject')
+    }
+  }
+  return false
+}

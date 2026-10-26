@@ -63,7 +63,7 @@ function FullText({ target, onClose }: { target: TextDialogTarget; onClose: () =
   return (
     <>
       <div className="min-w-0 pr-8">
-        <DialogTitle className="truncate text-ui">{target.name}</DialogTitle>
+        <DialogTitle className="truncate font-sans text-ui font-medium">{target.name}</DialogTitle>
         {loaded.state === 'ready' && (
           <p className="text-meta text-tertiary tabular">
             {t('attachments.lines', { count: lineCount(loaded.text) })} · {formatBytes(loaded.size)}

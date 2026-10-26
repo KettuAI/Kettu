@@ -1,5 +1,15 @@
-import { useEffect, useState } from 'react'
-import { ArrowDownIcon, ArrowUpIcon, CloudUploadIcon, RefreshCwIcon } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import type { TFunction } from 'i18next'
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CloudUploadIcon,
+  InfoIcon,
+  RefreshCwIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { GitStatus } from '@shared/git'
 import { useRefresh } from '@renderer/components/refresh'
@@ -21,36 +31,35 @@ import {
 import {
   commandOf,
   failureOf,
+  HINT_TONE,
   lastLine,
   planSync,
   pushesToDefault,
   pushTargetOf,
+  stepOf,
+  type NoteTone,
   type SyncButton,
 } from './sync'
+import { Part } from './timeline'
 
-const OPERATION_STEP = {
-  merge: 'merge',
-  rebase: 'rebase',
-  'cherry-pick': 'cherryPick',
-  revert: 'revert',
-} as const
+/** The values the reasons and hints name: where the branch tracks, and what blocks it. */
+function syncWords(
+  status: GitStatus,
+  t: TFunction<'git'>,
+): { upstream: string; operation: string } {
+  return {
+    upstream: status.upstream?.name ?? status.remote?.name ?? '',
+    operation: t(`sync.step.${stepOf(status)}`),
+  }
+}
 
-/** The upstream and when it was fetched, then Pull and Push, then the next step or a failure. */
-export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () => void }) {
+/** Pull and Push beside the branch: the next step with its label and count, the other an arrow. */
+export function SyncButtons({ status, onClose }: { status: GitStatus; onClose: () => void }) {
   const { t } = useTranslation('git')
-  const now = useNow()
   const gh = useGitStore((s) => s.tools?.gh.state ?? null)
   const running = useGitStore((s) => s.running[status.projectPath] ?? null)
-  const failed = useGitStore((s) => s.failed[status.projectPath] ?? null)
-  const fetch = useRefresh({ busy: running?.kind === 'fetch' })
   const plan = planSync(status, gh)
-  const upstream = status.upstream?.name ?? status.remote?.name ?? ''
-  const words = {
-    upstream,
-    operation: t(
-      `sync.step.${status.operation ? OPERATION_STEP[status.operation.kind] : 'conflicts'}`,
-    ),
-  }
+  const words = syncWords(status, t)
 
   const run = (button: SyncButton): void => {
     const { projectPath } = status
@@ -71,86 +80,28 @@ export function SyncPart({ status, onClose }: { status: GitStatus; onClose: () =
     }
   }
 
-  const fetchNow = (): void => {
-    void fetch
-      .run(async () => {
-        // A failed fetch is shown in the failure line, so reject to keep the icon from a check.
-        if (!(await runGitOperation(status.projectPath, { kind: 'fetch' }))) {
-          throw new Error('fetch failed')
-        }
-      })
-      .catch(() => {})
-  }
-
-  const fetching = fetch.phase === 'turning'
-
   return (
-    <div className="flex flex-col gap-2 px-3.5 pt-2 pb-3">
-      <div className="-mr-2 flex h-6 items-center gap-1.5 text-xs text-tertiary">
-        <span className="min-w-0 flex-1 truncate">
-          {status.remote ? (
-            <>
-              {upstream && <span className="font-mono text-meta">{upstream}</span>}
-              {upstream && ' · '}
-              {status.lastFetchedAt
-                ? t('sync.fetched', { when: longAgo(status.lastFetchedAt, now) })
-                : t('sync.neverFetched')}
-            </>
-          ) : (
-            t('sync.noRemote')
-          )}
-        </span>
-        {status.remote && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="quiet"
-                  size="icon-xs"
-                  aria-label={t('sync.fetch')}
-                  aria-busy={fetching}
-                  disabled={!!running || fetching}
-                  onClick={fetchNow}
-                />
-              }
-            >
-              <RefreshIcon phase={fetch.phase} className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipContent>{commandOf(status, 'fetch')}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-1.5">
-        {[plan.pull, plan.push].map((button) => (
-          <SyncButtonView
-            key={button === plan.pull ? 'pull' : 'push'}
-            status={status}
-            button={button}
-            running={running}
-            reason={button.reason && t(`reason.${button.reason}`, words)}
-            onRun={() => run(button)}
-          />
-        ))}
-      </div>
-      {failed && !(failed.kind === 'fetch' && fetching) ? (
-        <FailureLine status={status} failed={failed} onClose={onClose} />
-      ) : (
-        !running &&
-        !fetching &&
-        plan.hint && (
-          <p className="text-xs leading-normal text-secondary">{t(`hint.${plan.hint}`, words)}</p>
-        )
-      )}
+    <div role="group" aria-label={t('sync.label')} className="flex shrink-0 items-center gap-0.5">
+      {[plan.pull, plan.push].map((button) => (
+        <SyncButtonView
+          key={button === plan.pull ? 'pull' : 'push'}
+          status={status}
+          button={button}
+          running={running}
+          reason={button.reason && t(`reason.${button.reason}`, words)}
+          onRun={() => run(button)}
+        />
+      ))}
     </div>
   )
 }
 
 const ICON = {
+  fetch: RefreshCwIcon,
   pull: ArrowDownIcon,
   push: ArrowUpIcon,
   publishBranch: CloudUploadIcon,
   publishRepo: CloudUploadIcon,
-  fetch: RefreshCwIcon,
 } as const
 
 function SyncButtonView({
@@ -168,30 +119,67 @@ function SyncButtonView({
 }) {
   const { t } = useTranslation('git')
   const mine = running?.kind === button.kind
+  const big = mine || (button.enabled && button.next)
+  const disabled = !button.enabled || !!running
   const Icon = ICON[button.kind]
-  const enabled = button.enabled && !running
+  const label = t(LABEL_KEY[button.kind])
+  // Publishing names no count: it sends the whole branch, or creates the repository.
+  const shown = button.kind === 'pull' || button.kind === 'push' ? button.count : 0
+  const count = shown > 0 && <span className="tabular">{shown}</span>
+  const view = big ? (
+    <Button
+      variant="default"
+      size="sm"
+      disabled={disabled}
+      onClick={onRun}
+      className={cn('ml-1', mine && 'disabled:opacity-100')}
+    >
+      {/* Both labels share one cell, so the button keeps its width when it starts to run. */}
+      <span className="grid">
+        <span
+          className={cn(
+            'col-start-1 row-start-1 inline-flex items-center justify-center gap-1',
+            mine && 'invisible',
+          )}
+        >
+          <Icon />
+          {label}
+          {count}
+        </span>
+        <span
+          aria-hidden={!mine}
+          className={cn(
+            'col-start-1 row-start-1 inline-flex items-center justify-center gap-1',
+            !mine && 'invisible',
+          )}
+        >
+          {mine ? <Spinner className="size-3.5" /> : <span className="size-3.5" />}
+          {mine ? (
+            <Elapsed kind={button.kind} since={running.startedAt} />
+          ) : (
+            t(RUNNING_KEY[button.kind], { seconds: 0 })
+          )}
+        </span>
+      </span>
+    </Button>
+  ) : (
+    <Button
+      variant="quiet"
+      size="sm"
+      disabled={disabled}
+      aria-label={shown > 0 ? `${label} ${shown}` : label}
+      onClick={onRun}
+      className="min-w-7 px-1.75"
+    >
+      <Icon />
+      {count}
+    </Button>
+  )
+  if (mine) return view
   return (
     <Tooltip>
       {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
-      <TooltipTrigger render={<span className="flex min-w-0" />}>
-        <Button
-          variant={button.next && !running ? 'default' : 'outline'}
-          size="compact"
-          disabled={!enabled}
-          onClick={onRun}
-          className={cn('min-w-0 flex-1', mine && 'disabled:opacity-100')}
-        >
-          {mine ? <Spinner data-icon="inline-start" /> : <Icon data-icon="inline-start" />}
-          <span className="truncate">
-            {mine ? (
-              <Elapsed kind={button.kind} since={running.startedAt} />
-            ) : (
-              t(LABEL_KEY[button.kind])
-            )}
-          </span>
-          {!mine && button.count > 0 && <span className="tabular opacity-70">{button.count}</span>}
-        </Button>
-      </TooltipTrigger>
+      <TooltipTrigger render={<span className="inline-flex" />}>{view}</TooltipTrigger>
       <TooltipContent>
         {reason ?? (running ? t('sync.waiting') : commandOf(status, button.kind))}
       </TooltipContent>
@@ -210,7 +198,57 @@ function Elapsed({ kind, since }: { kind: GitOperationKind; since: number }) {
   return t(RUNNING_KEY[kind], { seconds: Math.max(0, Math.floor((now - since) / 1000)) })
 }
 
-function FailureLine({
+const NOTE = {
+  ok: { Icon: CircleCheckIcon, box: 'bg-success-tint', icon: 'text-success' },
+  info: { Icon: InfoIcon, box: 'bg-info-tint', icon: 'text-info' },
+  warning: { Icon: TriangleAlertIcon, box: 'bg-warning-tint', icon: 'text-warning' },
+  error: {
+    Icon: CircleAlertIcon,
+    box: 'bg-danger-tint text-danger shadow-[inset_0_0_0_var(--hairline)_var(--danger-border)]',
+    icon: 'text-danger',
+  },
+} as const
+
+function Note({
+  tone,
+  children,
+  action,
+}: {
+  tone: NoteTone
+  children: ReactNode
+  action?: ReactNode
+}) {
+  const { Icon, box, icon } = NOTE[tone]
+  return (
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={cn(
+        'mt-2.75 flex items-start gap-2 rounded-lg py-1.75 pr-2.5 pl-2.25 text-small',
+        box,
+      )}
+    >
+      <span className={cn('flex h-lh shrink-0 items-center', icon)}>
+        <Icon aria-hidden className="size-3.5" />
+      </span>
+      <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">{children}</p>
+      {action}
+    </div>
+  )
+}
+
+/** Under the branch: what failed, until the next operation, else the next step in words. */
+export function SyncNote({ status, onClose }: { status: GitStatus; onClose: () => void }) {
+  const { t } = useTranslation('git')
+  const gh = useGitStore((s) => s.tools?.gh.state ?? null)
+  const running = useGitStore((s) => s.running[status.projectPath] ?? null)
+  const failed = useGitStore((s) => s.failed[status.projectPath] ?? null)
+  if (failed) return <FailureNote status={status} failed={failed} onClose={onClose} />
+  const { hint } = planSync(status, gh)
+  if (running || !hint) return null
+  return <Note tone={HINT_TONE[hint]}>{t(`hint.${hint}`, syncWords(status, t))}</Note>
+}
+
+function FailureNote({
   status,
   failed,
   onClose,
@@ -226,21 +264,91 @@ function FailureLine({
     detail: lastLine(failed.log),
   })
   return (
-    <div className="-mr-2 flex items-start gap-2 text-xs text-danger">
-      <p className="min-w-0 flex-1 pt-1 leading-normal [overflow-wrap:anywhere]">{sentence}</p>
-      {failed.log && !failed.busy && (
-        <Button
-          variant="quiet"
-          size="xs"
-          onClick={() => {
-            onClose()
-            openGitDialog(status.projectPath, { kind: 'log' })
-          }}
-        >
-          {t('failure.showLog')}
-        </Button>
-      )}
-    </div>
+    <Note
+      tone="error"
+      action={
+        failed.log &&
+        !failed.busy && (
+          <button
+            type="button"
+            className="shrink-0 rounded-sm font-medium text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
+            onClick={() => {
+              onClose()
+              openGitDialog(status.projectPath, { kind: 'log' })
+            }}
+          >
+            {t('failure.showLog')}
+          </button>
+        )
+      }
+    >
+      {sentence}
+    </Note>
+  )
+}
+
+/** The remote and when it was last fetched, with Fetch. */
+export function SyncFooter({ status }: { status: GitStatus }) {
+  const { t } = useTranslation('git')
+  const now = useNow()
+  const running = useGitStore((s) => s.running[status.projectPath] ?? null)
+  const fetching = running?.kind === 'fetch' ? running : null
+  const refresh = useRefresh({ busy: !!fetching })
+  const { remote } = status
+
+  const fetchNow = (): void => {
+    void refresh
+      .run(async () => {
+        // A failed fetch is shown under the branch, so reject to keep the icon from a check.
+        if (!(await runGitOperation(status.projectPath, { kind: 'fetch' }))) {
+          throw new Error('fetch failed')
+        }
+      })
+      .catch(() => {})
+  }
+
+  return (
+    <Part>
+      <div className="flex h-9.5 shrink-0 items-center gap-2 pr-1.75 pl-3.5 text-xs text-tertiary">
+        <span className="min-w-0 flex-1 truncate tabular">
+          {remote ? (
+            <>
+              {remote.name} ·{' '}
+              {fetching ? (
+                <Elapsed kind="fetch" since={fetching.startedAt} />
+              ) : status.lastFetchedAt ? (
+                t('sync.fetched', { when: longAgo(status.lastFetchedAt, now) })
+              ) : (
+                t('sync.neverFetched')
+              )}
+            </>
+          ) : (
+            t('sync.noRemote')
+          )}
+        </span>
+        <Tooltip>
+          <TooltipTrigger render={<span className="inline-flex" />}>
+            <Button
+              variant="quiet"
+              size="icon-xs"
+              aria-label={t('sync.fetch')}
+              aria-busy={refresh.phase === 'turning'}
+              disabled={!remote || !!running || refresh.phase === 'turning'}
+              onClick={fetchNow}
+            >
+              <RefreshIcon phase={refresh.phase} className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {!remote
+              ? t('reason.noRemote')
+              : running && !fetching
+                ? t('sync.waiting')
+                : commandOf(status, 'fetch')}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </Part>
   )
 }
 

@@ -1,4 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from 'react'
+import type { Popover as PopoverPrimitive } from '@base-ui/react/popover'
 import type { TFunction } from 'i18next'
 import {
   ArrowDownIcon,
@@ -10,15 +11,18 @@ import {
   TriangleAlertIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { GitStatus } from '@shared/git'
+import type { GitStatus, PullRequest } from '@shared/git'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { cn } from '@renderer/lib/utils'
-import { host } from '@renderer/lib/host'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { host } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
 import { loadGitTools, receiveCurrentPr, receiveGitStatus, useGitStore } from '@renderer/stores/git'
 import { BranchPopover } from './branch-popover'
 import { GitDialogs } from './git-dialogs'
+import { branchName, followPointer, popoverKeys } from './popover-keys'
 import { ChecksIcon, PrIcon } from './pr-icon'
+import { prStateText } from './pr-text'
 
 /** Middle truncation keeps both ends of a branch name, where the meaning usually is. */
 function middleTruncate(text: string, max: number): string {
@@ -28,19 +32,27 @@ function middleTruncate(text: string, max: number): string {
   return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`
 }
 
-const segment =
-  'app-region-no-drag inline-flex h-control items-center gap-1 rounded-lg px-1.5 text-xs whitespace-nowrap text-secondary tabular outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring aria-expanded:bg-hover'
+/** The branch chip: a quiet button at the small control height, filled under the pointer. */
+const CHIP =
+  'app-region-no-drag inline-flex h-control-sm items-center rounded-md px-2 text-xs whitespace-nowrap text-secondary tabular outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring aria-expanded:bg-hover aria-expanded:text-primary'
 
-/** The project's repository at a glance: branch, sync, changes, operation, pull request. */
+/** The project's repository at a glance: the branch and its state, then the pull request. */
 export function GitStatusCluster({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('git')
   const status = useGitStore((s) => s.status[projectPath])
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
   const [open, setOpen] = useState(false)
   const popup = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  // A commit's card is a popup outside the popover's own, which the same Escape would close too.
+  const cardEscape = useRef<Event | null>(null)
   if (!status?.repo) return null
 
-  const onOpenChange = (next: boolean): void => {
+  const onOpenChange = (next: boolean, details: PopoverPrimitive.Root.ChangeEventDetails): void => {
+    if (!next && details.reason === 'escape-key' && details.event === cardEscape.current) {
+      details.cancel()
+      return
+    }
     setOpen(next)
     if (!next) return
     // Opening shows the repository as it is now, not as the last watch event left it.
@@ -56,12 +68,14 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
     <div
       role="group"
       aria-label={t('status.repository')}
-      className="inline-flex min-w-0 items-center gap-px"
+      className="inline-flex min-w-0 items-center gap-1"
       onKeyDown={arrowFocus}
     >
       <Popover open={open} onOpenChange={onOpenChange}>
+        {/* Shrinks first in a crowded bar: the name gives way, then all but the icon. */}
         <PopoverTrigger
-          className={cn(segment, 'min-w-0 overflow-hidden')}
+          ref={trigger}
+          className={cn(CHIP, 'min-w-7.5 gap-2.25 overflow-hidden')}
           aria-label={branchLabel(status, t)}
         >
           <BranchSummary status={status} />
@@ -70,27 +84,30 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
           ref={popup}
           align="end"
           sideOffset={6}
-          initialFocus={() => popup.current?.querySelector<HTMLElement>('[data-git-row]') ?? true}
-          className="max-h-(--available-height) w-98 gap-0 overflow-x-hidden overflow-y-auto p-0"
+          // From the keyboard the first row takes focus, as in a menu; from the pointer, none.
+          initialFocus={(type) =>
+            type === 'mouse' || type === 'touch' || type === 'pen'
+              ? popup.current
+              : (popup.current?.querySelector<HTMLElement>('[data-git-row]') ?? true)
+          }
+          onKeyDown={(event) => {
+            // The card closes on Escape from its own row; from another row it is told apart here.
+            if (
+              event.key === 'Escape' &&
+              document.querySelector('[data-slot=hover-card-content][data-open]')
+            ) {
+              cardEscape.current = event.nativeEvent
+            }
+            popoverKeys(event, branchName(status))
+          }}
+          onPointerMove={followPointer}
+          className="max-h-[min(47rem,var(--available-height))] w-98 gap-0 overflow-y-auto p-0"
         >
           <BranchPopover status={status} pr={pr} onClose={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
-      <GitDialogs status={status} />
-      {pr && (
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noreferrer"
-          tabIndex={-1}
-          aria-label={t('status.pullRequest', { number: pr.number })}
-          className={cn(segment, 'shrink-0')}
-        >
-          <PrIcon state={pr.state} size={14} />
-          <span className="text-secondary">#{pr.number}</span>
-          <ChecksIcon state={pr.checks.state} />
-        </a>
-      )}
+      <GitDialogs status={status} returnFocus={trigger} />
+      {pr && <PrChip pr={pr} />}
     </div>
   )
 }
@@ -109,89 +126,85 @@ const RUNNING_KEY = {
   publishRepo: 'status.running.publish',
 } as const
 
+/** Each part enters when its count changes, so a new commit or a pushed one is noticed. */
+const ENTER =
+  'animate-in animation-duration-(--duration-base) fade-in slide-in-from-bottom-1 motion-reduce:animate-none'
+
 function BranchSummary({ status }: { status: GitStatus }) {
   const { t } = useTranslation('git')
   const running = useGitStore((s) => s.running[status.projectPath]?.kind ?? null)
   const { head, upstream, changes, operation } = status
   const changed = changes.staged + changes.unstaged + changes.untracked
   const unborn = !head.oid
+  const Icon = head.detached ? GitCommitHorizontalIcon : GitBranchIcon
   return (
     <>
-      {head.detached ? (
-        <GitCommitHorizontalIcon className="size-3.5 shrink-0" />
-      ) : (
-        <GitBranchIcon className="size-3.5 shrink-0" />
-      )}
-      {/* The branch takes a quarter of the bar at most and truncates first; below 720 px
-          "Not published" keeps only its icon, so the title keeps room. */}
-      <span
-        className="min-w-0 max-w-[25cqw] truncate font-mono text-xs text-secondary @max-[520px]/top-bar:max-w-24"
-        title={head.branch ?? undefined}
-      >
-        {head.detached
-          ? (head.oid?.slice(0, 7) ?? 'HEAD')
-          : middleTruncate(head.branch ?? 'HEAD', 28)}
+      <span className="inline-flex min-w-0 items-center gap-1.25">
+        <Icon aria-hidden className="size-3.5 shrink-0" />
+        {/* The name takes a quarter of the bar at most and truncates first; below 720 px
+            "Not published" keeps only its icon, so the title keeps room. */}
+        <span
+          className="max-w-[25cqw] min-w-0 truncate font-mono text-xs @max-[520px]/top-bar:max-w-24"
+          title={head.branch ?? undefined}
+        >
+          {head.detached
+            ? (head.oid?.slice(0, 7) ?? 'HEAD')
+            : middleTruncate(head.branch ?? 'HEAD', 28)}
+        </span>
       </span>
-      {head.detached && <span>{t('status.detached')}</span>}
-      {unborn && !head.detached && <span>{t('status.noCommits')}</span>}
+      {head.detached && <span className="shrink-0">{t('status.detached')}</span>}
+      {unborn && !head.detached && <span className="shrink-0">{t('status.noCommits')}</span>}
       {/* A pull, push or publish takes the place of the sync arrows, so the popover can close. */}
       {running && running !== 'fetch' ? (
-        <span
-          role="status"
-          aria-label={t(RUNNING_KEY[running])}
-          className="ml-1 inline-flex items-center"
-        >
-          <Spinner className="size-3" />
+        <span role="status" aria-label={t(RUNNING_KEY[running])} className="inline-flex shrink-0">
+          <Spinner aria-hidden className="size-3 text-tertiary" />
         </span>
       ) : (
         <>
           {!upstream && !head.detached && !unborn && (
-            <span className="ml-1 inline-flex shrink-0 items-center gap-1">
-              <CloudUploadIcon className="size-[13px]" />
+            <span className="inline-flex shrink-0 items-center gap-1 text-tertiary">
+              <CloudUploadIcon aria-hidden className="size-3.5" />
               <span className="@max-[720px]/top-bar:sr-only">{t('status.notPublished')}</span>
             </span>
           )}
           {upstream && upstream.ahead > 0 && (
             <span
-              className="ml-1 inline-flex animate-in items-center gap-px text-secondary animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
               key={`a${upstream.ahead}`}
+              className={cn('inline-flex shrink-0 items-center gap-0.5 text-primary', ENTER)}
             >
-              <ArrowUpIcon className="size-3" />
+              <ArrowUpIcon aria-hidden className="size-3" />
               {upstream.ahead}
             </span>
           )}
           {upstream && upstream.behind > 0 && (
             <span
-              className={cn(
-                'inline-flex animate-in items-center gap-px animation-duration-(--duration-base) fade-in slide-in-from-bottom-1',
-                upstream.ahead ? 'ml-0.5' : 'ml-1',
-              )}
               key={`b${upstream.behind}`}
+              className={cn('inline-flex shrink-0 items-center gap-0.5 text-tertiary', ENTER)}
             >
-              <ArrowDownIcon className="size-3" />
+              <ArrowDownIcon aria-hidden className="size-3" />
               {upstream.behind}
             </span>
           )}
         </>
       )}
       {operation && (
-        <span className="ml-1 font-medium text-secondary">
+        <span className="shrink-0">
           {t(OPERATION_KEY[operation.kind])}
           {operation.step && ` ${operation.step[0]}/${operation.step[1]}`}
         </span>
       )}
       {changes.conflicted > 0 ? (
-        <span className="ml-1 inline-flex items-center gap-[3px] font-medium text-danger">
-          <TriangleAlertIcon className="size-[13px]" />
+        <span className="inline-flex shrink-0 items-center gap-1 text-danger">
+          <TriangleAlertIcon aria-hidden className="size-3.5" />
           {changes.conflicted}
         </span>
       ) : (
         changed > 0 && (
           <span
-            className="ml-1 inline-flex animate-in items-center gap-[3px] animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
             key={`c${changed}`}
+            className={cn('inline-flex shrink-0 items-center gap-1', ENTER)}
           >
-            <FileDiffIcon className="size-[13px]" />
+            <FileDiffIcon aria-hidden className="size-3.5" />
             {changed}
           </span>
         )
@@ -206,6 +219,41 @@ const OPERATION_KEY = {
   'cherry-pick': 'status.operation.cherryPick',
   revert: 'status.operation.revert',
 } as const
+
+const CHECKS_KEY = {
+  passing: 'pr.checks.passing',
+  failing: 'pr.checks.failing',
+  pending: 'pr.checks.pending',
+} as const
+
+/** The branch's pull request as a chip with its checks; it opens the pull request. */
+function PrChip({ pr }: { pr: PullRequest }) {
+  const { t } = useTranslation('git')
+  const live = pr.state === 'open' || pr.state === 'draft'
+  const state =
+    live && pr.checks.state !== 'none' ? t(CHECKS_KEY[pr.checks.state]) : prStateText(pr.state)
+  const label = t('status.pullRequestState', { number: pr.number, state })
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <a
+            href={pr.url}
+            target="_blank"
+            rel="noreferrer"
+            tabIndex={-1}
+            aria-label={label}
+            className="app-region-no-drag inline-flex h-6 shrink-0 items-center gap-1.25 rounded-md px-2 text-xs whitespace-nowrap text-secondary tabular shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
+          />
+        }
+      >
+        <PrIcon state={pr.state} size={12} />#{pr.number}
+        {live && <ChecksIcon state={pr.checks.state} size={12} />}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 /** The cluster is one Tab stop; the arrow keys move between its parts. */
 function arrowFocus(event: KeyboardEvent<HTMLDivElement>): void {

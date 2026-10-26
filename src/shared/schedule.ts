@@ -694,9 +694,12 @@ export function validateSchedule(
 
 const SUNDAY = new Date(2024, 0, 7).getTime()
 
+/** The catalog's keys for a schedule on one weekday, 0 being Sunday: schedule.weeklyFriday. */
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
 interface WordFormats {
   weekday: Intl.DateTimeFormat
-  monthDay: Intl.DateTimeFormat
+  weekdayDate: Intl.DateTimeFormat
   clock: Intl.DateTimeFormat
   list: Intl.ListFormat
 }
@@ -708,7 +711,11 @@ function words(locale: string): WordFormats {
   if (!made) {
     made = {
       weekday: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
-      monthDay: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
+      weekdayDate: new Intl.DateTimeFormat(locale, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      }),
       clock: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }),
       list: new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }),
     }
@@ -733,20 +740,24 @@ export function scheduleWords(
       if (!civil) return t('schedule.once', { date: schedule.at, time: '' })
       const date = new Date(civil.year, civil.month - 1, civil.day)
       return t('schedule.once', {
-        date: words(locale).monthDay.format(date),
+        date: words(locale).weekdayDate.format(date),
         time: clockWords(locale, civil.hour, civil.minute),
       })
     }
-    case 'every':
+    case 'every': {
+      const from = new Date(schedule.from)
+      const time = clockWords(locale, from.getHours(), from.getMinutes())
       return schedule.minutes % 60 === 0
-        ? t('schedule.everyHours', { count: schedule.minutes / 60 })
-        : t('schedule.everyMinutes', { count: schedule.minutes })
+        ? t('schedule.everyHours', { count: schedule.minutes / 60, time })
+        : t('schedule.everyMinutes', { count: schedule.minutes, time })
+    }
     case 'weekly': {
       const days = [...schedule.days].sort((a, b) => a - b)
       const time = clockCivil(schedule.time)
       const clock = time ? clockWords(locale, time.hour, time.minute) : schedule.time
       if (days.length === 7) return t('schedule.daily', { time: clock })
       if (days.join() === '1,2,3,4,5') return t('schedule.weekdays', { time: clock })
+      if (days.length === 1) return t(`schedule.weekly${WEEKDAYS[days[0]!]}`, { time: clock })
       const names = days.map((day) => words(locale).weekday.format(SUNDAY + day * DAY))
       return t('schedule.weekly', { days: words(locale).list.format(names), time: clock })
     }

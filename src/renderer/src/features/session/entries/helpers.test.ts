@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ToolEntry } from '@shared/thread'
 import {
+  commandOutput,
   forkEntry,
   groupLabel,
+  primaryOption,
   runSummary,
   stopReasonText,
   toolLabel,
@@ -340,5 +342,36 @@ describe('forkEntry', () => {
   it('offers nothing without session/fork', () => {
     expect(forkEntry(reply(true), { forkSession: false, forkAtMessage: false })).toBeNull()
     expect(forkEntry(reply(true), undefined)).toBeNull()
+  })
+})
+
+describe('primaryOption', () => {
+  it('is allowing once, wherever the agent lists it', () => {
+    expect(primaryOption([{ kind: 'allow_always' }, { kind: 'allow_once' }])).toBe(1)
+    expect(primaryOption([{ kind: 'allow_once' }, { kind: 'reject_once' }])).toBe(0)
+  })
+
+  it('is the first option when none allows once', () => {
+    expect(primaryOption([{ kind: 'reject_once' }, { kind: 'allow_always' }])).toBe(0)
+    expect(primaryOption([])).toBe(0)
+  })
+})
+
+describe('commandOutput', () => {
+  const md = (markdown: string) => ({ type: 'markdown' as const, markdown })
+
+  it('is the text of one fenced block, with or without a language', () => {
+    expect(commandOutput([md('```\nok 1\nok 2\n```')])).toBe('ok 1\nok 2')
+    expect(commandOutput([md('\n```console\n$ ls\na.ts\n```\n')])).toBe('$ ls\na.ts')
+    expect(commandOutput([md('````\nuses ``` inside\n````'), md('more')])).toBe('uses ``` inside')
+    expect(commandOutput([md('```\n```')])).toBe('')
+  })
+
+  it('is null for prose, several blocks, or content that is not Markdown first', () => {
+    expect(commandOutput([md('Tests passed.')])).toBeNull()
+    expect(commandOutput([md('Output:\n```\nok\n```')])).toBeNull()
+    expect(commandOutput([md('```\na\n```\n\n```\nb\n```')])).toBeNull()
+    expect(commandOutput([{ type: 'diff', path: 'a.ts', oldText: null, newText: 'x' }])).toBeNull()
+    expect(commandOutput([])).toBeNull()
   })
 })

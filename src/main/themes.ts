@@ -350,7 +350,7 @@ export class ThemeStore {
   }
 
   /** `themes:export`: checks the file the renderer built, then saves it where the user says. */
-  async export(window: BrowserWindow | null, text: unknown): Promise<boolean> {
+  async export(window: BrowserWindow | null, text: unknown): Promise<string | null> {
     if (typeof text !== 'string') throw new Error('A theme file must be text')
     const parsed = parseThemeFile(text)
     if (!parsed.ok) throw new Error(`Not a theme file: ${parsed.error.code}`)
@@ -362,9 +362,9 @@ export class ThemeStore {
     const result = window
       ? await dialog.showSaveDialog(window, options)
       : await dialog.showSaveDialog(options)
-    if (result.canceled || !result.filePath) return false
+    if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, text, 'utf8')
-    return true
+    return result.filePath
   }
 
   /** `themes:reveal`: selects the theme's file in the file manager. */
@@ -445,19 +445,19 @@ const WHITE: Rgba = { r: 1, g: 1, b: 1, a: 1 }
 const BLACK: Rgba = { r: 0, g: 0, b: 0, a: 1 }
 
 /**
- * A variant's window colors in hex, which Electron takes: its `bg-app` laid over white in light
- * and black in dark, and its `text-primary` over that; `fallback` for what it leaves out.
+ * A variant's window colors in hex, which Electron takes: its desk, `bg-sidebar`, laid over white
+ * in light and black in dark, and its `text-primary` over that; `fallback` for what it leaves out.
  */
 export function windowColors(
   colors: ThemeColors,
   mode: ThemeMode,
   fallback: WindowColors,
 ): WindowColors {
-  const color = (token: 'bg-app' | 'text-primary') => {
+  const color = (token: 'bg-sidebar' | 'text-primary') => {
     const value = colors[token]
     return value === undefined ? null : parseColor(value)
   }
-  const bg = color('bg-app')
+  const bg = color('bg-sidebar')
   const background = bg ? toHex(bg, mode === 'light' ? WHITE : BLACK) : fallback.background
   const fg = color('text-primary')
   return { background, symbol: fg ? toHex(fg, parseColor(background)!) : fallback.symbol }

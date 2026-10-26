@@ -20,6 +20,16 @@
     "noLine": "没有包含“{{query}}”的行。",
     "truncated_other": "仅显示前 {{count}} 行。"
   },
+  "change": {
+    "added": "已添加",
+    "untracked": "未跟踪",
+    "modified": "已修改",
+    "renamed": "已重命名",
+    "copied": "已复制",
+    "typechange": "类型已更改",
+    "deleted": "已删除",
+    "conflicted": "有冲突"
+  },
   "preview": {
     "emptyTitle": "打开的文件会显示在这里",
     "emptyDescription": "在文件树中选择文件，或点击对话中的文件路径。",

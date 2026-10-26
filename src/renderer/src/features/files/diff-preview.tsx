@@ -14,13 +14,13 @@ export function DiffPreview({ projectPath, diff }: { projectPath: string; diff: 
   const folder = folderOf(diff.path)
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-row shrink-0 items-center gap-1 border-b border-subtle pr-1 pl-3 text-xs">
+      <div className="flex h-row shrink-0 items-center gap-1 border-b border-subtle pr-1.5 pl-3.5 text-xs">
         <FileTypeIcon path={diff.path} className="mr-1 size-4" />
         <span
           className="flex min-w-0 flex-1 items-baseline gap-1.5"
           title={diff.oldPath ? `${diff.oldPath} → ${diff.path}` : diff.path}
         >
-          <span className="shrink-0 font-medium">{nameOf(diff.path)}</span>
+          <span className="shrink-0 font-mono text-code font-medium">{nameOf(diff.path)}</span>
           <span className="shrink-0 text-tertiary">
             {diff.ref ? (
               <span className="font-mono text-meta">{diff.ref.slice(0, 7)}</span>
@@ -35,12 +35,12 @@ export function DiffPreview({ projectPath, diff }: { projectPath: string; diff: 
             label={t('diff.openFile')}
             onClick={() => openFile(projectPath, diff.projectFile!)}
           >
-            <FileSymlinkIcon />
+            <FileSymlinkIcon className="size-3.5" />
           </PanelButton>
         )}
         <CopyButton text={diff.path} label={t('preview.copyPath')} />
         <PanelButton label={t('diff.close')} onClick={() => closeDiff(projectPath)}>
-          <XIcon />
+          <XIcon className="size-3.5" />
         </PanelButton>
       </div>
       <div className="relative min-h-0 flex-1">

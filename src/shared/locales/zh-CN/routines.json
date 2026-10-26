@@ -6,9 +6,9 @@
     "on": "开启",
     "off": "关闭",
     "emptyTitle": "还没有例程",
-    "emptyDescription": "例程会自己发送提示词，并把每次运行保存在一个可以之后打开的会话里。",
-    "unreadableTitle": "无法读取例程",
-    "unreadable": "OverBench 已将文件移到 {{backup}}，并以空列表开始。",
+    "emptyDescription": "例程在 OverBench 打开时按计划把提示词发给 Agent，每次运行都在一个单独的会话里。",
+    "unreadableTitle": "无法读取你的例程",
+    "unreadable": "routines.json 已另存为 {{backup}}，没有丢失任何内容。新建例程不受影响。",
     "unreadableGone": "OverBench 以空列表开始。",
     "loadFailed": "无法加载例程。",
     "retry": "重试",
@@ -18,6 +18,12 @@
     "lastFailed": "它上次运行失败",
     "openAtLogin": "例程只在 OverBench 打开时运行。",
     "openAtLoginAction": "登录时打开"
+  },
+  "row": {
+    "waiting": "等待批准",
+    "since": "{{time}} 起",
+    "today": "今天 · {{away}}",
+    "tomorrow": "明天"
   },
   "signal": {
     "name": "例程，{{signal}}",
@@ -33,10 +39,14 @@
     "done": "已完成",
     "paused": "已暂停",
     "waiting": "等待批准",
+    "waitingSince": "自 {{time}} 起等待你的批准",
     "running": "运行中",
+    "runningSince": "自 {{time}} 起运行中",
     "starting": "启动中",
     "queued": "排队中",
     "next": "下次运行 {{when}} · {{away}}",
+    "nextToday": "下次运行 今天 {{time}} · {{away}}",
+    "nextTomorrow": "下次运行 明天 {{time}} · {{away}}",
     "resumes": "{{time}} 恢复",
     "resumesDay": "{{day}} {{time}} 恢复",
     "pausedUntil": "暂停至 {{time}}：{{reason}}",
@@ -56,17 +66,31 @@
   "when": {
     "today": "今天 {{time}}",
     "tomorrow": "明天 {{time}}",
+    "yesterday": "昨天 {{time}}",
     "weekday": "{{weekday}} {{time}}",
     "date": "{{date}} {{time}}"
+  },
+  "away": {
+    "minutes": "{{count}} 分钟后",
+    "hours": "{{hours}} 小时后",
+    "hoursMinutes": "{{hours}} 小时 {{minutes}} 分钟后",
+    "days_other": "{{count}} 天后"
   },
   "schedule": {
     "daily": "每天 {{time}}",
     "weekdays": "工作日 {{time}}",
     "weekly": "{{days}} {{time}}",
-    "once": "{{date}} {{time}}",
-    "everyMinutes": "每 {{count}} 分钟",
-    "everyHours_one": "每小时",
-    "everyHours_other": "每 {{count}} 小时",
+    "weeklySunday": "每周日 {{time}}",
+    "weeklyMonday": "每周一 {{time}}",
+    "weeklyTuesday": "每周二 {{time}}",
+    "weeklyWednesday": "每周三 {{time}}",
+    "weeklyThursday": "每周四 {{time}}",
+    "weeklyFriday": "每周五 {{time}}",
+    "weeklySaturday": "每周六 {{time}}",
+    "once": "{{date}} {{time}}，仅一次",
+    "everyMinutes": "每 {{count}} 分钟，从 {{time}} 起算",
+    "everyHours_one": "每小时，从 {{time}} 起算",
+    "everyHours_other": "每 {{count}} 小时，从 {{time}} 起算",
     "cron": "Cron {{expression}}",
     "kind": {
       "once": "一次",
@@ -75,19 +99,25 @@
       "weekly": "每周",
       "cron": "Cron"
     },
-    "nextRuns": "接下来几次",
-    "runAt": "{{when}} · {{away}}",
     "clockGap": "钟表跳过这个时间，将在 {{time}} 运行。",
     "clockOverlap": "钟表重复这个时间，只在第一次运行。",
+    "ranOnce": "它已在 {{date}} {{time}} 运行，不会再运行。",
     "everyValue": "每隔",
-    "unit": "单位",
-    "minutesUnit": "分钟",
-    "hoursUnit": "小时",
+    "countedFrom": "起算时间",
     "date": "日期",
     "time": "时间",
     "days": "星期",
+    "on": "日期",
     "expression": "Cron 表达式",
     "expressionHint": "0 9 * * 1-5",
+    "cronFields": {
+      "minute": "分钟",
+      "hour": "小时",
+      "dayOfMonth": "日",
+      "month": "月",
+      "dayOfWeek": "星期"
+    },
+    "cronSyntax": "* 任意 · a-b 范围 · a,b 列表 · */n 每隔 n · 可用 MON、JAN 等名称",
     "field": {
       "date": "日期",
       "time": "时间",
@@ -113,8 +143,10 @@
   "routine": {
     "back": "例程",
     "untitled": "未命名例程",
+    "notSaved": "尚未保存",
+    "newNotSaved": "新例程 · 尚未保存",
     "name": "例程名称",
-    "rename": "重命名例程",
+    "rename": "重命名",
     "create": "创建例程",
     "cancel": "取消",
     "runNow": "立即运行",
@@ -123,9 +155,9 @@
     "delete": "删除…",
     "task": "任务",
     "howItRuns": "运行方式",
-    "newLine": "每次运行都会新建一个会话。",
     "prompt": "提示词",
     "promptDescription": "例程每次运行时原样发送。",
+    "promptPlaceholder": "每次运行时，Agent 要做什么？",
     "project": "项目",
     "projectDescription": "它的运行在此工作。",
     "noProject": "无项目",
@@ -142,6 +174,7 @@
     "waitingTitle": "有一个运行正在等待你的批准",
     "waitingDescription": "它请求做超出其权限的事。其间到期的运行会被跳过。",
     "openRun": "打开该运行",
+    "openRunFailed": "无法打开这次运行的会话，请稍后再试。",
     "runs": "运行记录",
     "noRuns": "还没有运行。",
     "showMore": "显示更多",
@@ -150,7 +183,6 @@
     "createMissingPrompt": "先写提示词。",
     "createMissingProject": "先选择项目。",
     "createMissingAgent": "先选择 Agent。",
-    "createReady": "创建这个例程。",
     "saveFailed": "无法保存更改：{{error}}",
     "runFailed": "无法开始运行：{{error}}",
     "deleted": "这个例程已被删除。",
@@ -161,6 +193,12 @@
     "deleteNoSessions": "它没有运行会话。",
     "deleteConfirm": "删除",
     "deleteFailed": "无法删除例程：{{error}}"
+  },
+  "runsHint": {
+    "now": "立即运行可以先试一次。",
+    "today": "立即运行可以先试一次，或等到今天 {{time}}。",
+    "tomorrow": "立即运行可以先试一次，或等到明天 {{time}}。",
+    "later": "立即运行可以先试一次，或等到 {{when}}。"
   },
   "permission": {
     "levels": "权限",
@@ -213,7 +251,7 @@
     "skippedLimit": "已跳过：接近套餐限额。",
     "duration": "工作了 {{duration}}",
     "working": "已工作 {{duration}}",
-    "waited": "等待了 {{duration}}",
+    "waitingFor": "已等待 {{duration}}",
     "announce": "{{name}}：{{status}}"
   }
 }

@@ -10,8 +10,9 @@ import { CacheDetails } from './cache-details'
 import { CacheHourglass } from './cache-hourglass'
 import { useCacheLeft, useCachePhase } from './cache-phase'
 
+// It gives way before the title, down to its hourglass, so a narrow bar never overlaps it.
 const CHIP =
-  'ml-1 inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-subtle px-2 text-xs text-tertiary tabular'
+  'ml-1.5 inline-flex h-6 min-w-7 shrink-100 items-center gap-[5px] overflow-hidden rounded-md bg-subtle px-2 text-xs text-tertiary tabular'
 
 /**
  * The top bar's chip: the time the session's prompt cache has left, between turns, which a click
@@ -30,8 +31,8 @@ export function CacheChip({ session }: { session: SessionView }) {
   if (state.kind === 'unknown') {
     return (
       <span className={CHIP}>
-        <HourglassIcon aria-hidden className="size-3" />
-        {t('usage.cache.chipNotReported')}
+        <HourglassIcon aria-hidden className="size-3 shrink-0" />
+        <span className="truncate">{t('usage.cache.chipNotReported')}</span>
       </span>
     )
   }
@@ -49,14 +50,18 @@ export function CacheChip({ session }: { session: SessionView }) {
             type="button"
             className={cn(
               CHIP,
-              'animate-in outline-none fade-in transition-colors duration-(--duration-fast) hover:bg-hover hover:text-secondary focus-ring data-popup-open:bg-hover',
-              phase === 'ending' && 'text-warning hover:text-warning',
+              'animate-in outline-none fade-in transition-colors duration-(--duration-fast) focus-ring',
+              // Its own fill a step darker under the pointer and while its card is open.
+              'hover:bg-[color-mix(in_srgb,var(--bg-subtle),var(--text-primary)_6%)] data-popup-open:bg-[color-mix(in_srgb,var(--bg-subtle),var(--text-primary)_6%)]',
+              phase === 'ending'
+                ? 'text-warning'
+                : 'hover:text-secondary data-popup-open:text-secondary',
             )}
           />
         }
       >
-        <CacheHourglass expiresAt={cache.expiresAt} ttl={cache.ttl} className="size-3" />
-        {label}
+        <CacheHourglass expiresAt={cache.expiresAt} ttl={cache.ttl} className="size-3 shrink-0" />
+        <span className="truncate">{label}</span>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={6} className="w-[320px] gap-0 px-3.5 pt-3 pb-3">
         <CacheDetails cache={cache} used={session.usage.used} heading />

@@ -11,6 +11,7 @@
     "rename": "Rename",
     "nameLabel": "Terminal name",
     "newOutput": "New output",
+    "running": "Running",
     "close": "Close {{name}}"
   },
   "closeDialog": {

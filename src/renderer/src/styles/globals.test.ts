@@ -51,3 +51,105 @@ describe('reduce motion in globals.css', () => {
     expect(stoppedSelectors(settingBlocks[0])).toEqual(stoppedSelectors(osBlocks[0]))
   })
 })
+
+// The declarations of the one block after `header`, without its nested rules and comments.
+function declarationsAfter(header: string): Map<string, string> {
+  const blocks = blocksAfter(header)
+  expect(blocks, `one block after ${header}`).toHaveLength(1)
+  return declarations(blocks[0])
+}
+
+function declarations(block: string): Map<string, string> {
+  const found = new Map<string, string>()
+  let depth = 0
+  let text = ''
+  for (const char of block.replace(/\/\*[\s\S]*?\*\//g, '')) {
+    if (char === '{') {
+      // What came before a nested block is its selector.
+      if (depth++ === 0) text = ''
+    } else if (char === '}') depth--
+    else if (depth > 0) continue
+    else if (char === ';') {
+      const colon = text.indexOf(':')
+      if (colon > 0) {
+        found.set(
+          text.slice(0, colon).trim(),
+          text
+            .slice(colon + 1)
+            .replace(/\s+/g, ' ')
+            .trim(),
+        )
+      }
+      text = ''
+    } else text += char
+  }
+  return found
+}
+
+// A size in px from a product of px values, numbers and var(--prose-size), as calc() takes it.
+function pixels(value: string, proseSize: string): number {
+  const product = /^calc\((.*)\)$/.exec(value)?.[1] ?? value
+  return product.split('*').reduce((total, term) => {
+    const factor = term.trim() === 'var(--prose-size)' ? proseSize : term.trim()
+    const number = Number(factor.replace(/px$/, ''))
+    expect(Number.isFinite(number), `cannot read ${term} in ${value}`).toBe(true)
+    return total * number
+  }, 1)
+}
+
+describe('type in globals.css', () => {
+  const textSizes = {
+    small: declarationsAfter(":root[data-text-size='small']").get('--prose-size')!,
+    default: declarationsAfter(':root {').get('--prose-size')!,
+    large: declarationsAfter(":root[data-text-size='large']").get('--prose-size')!,
+  }
+
+  it.each([
+    ['small', 14, 15.4],
+    ['default', 15, 16.5],
+    ['large', 16, 17.6],
+  ] as const)(
+    "sets the agent's prose at 1.1 times the prose size at the %s text size",
+    (size, user, agent) => {
+      const prose = textSizes[size]
+      expect(pixels(prose, prose)).toBe(user)
+      expect(pixels(declarationsAfter('.markdown {').get('font-size')!, prose)).toBeCloseTo(agent)
+    },
+  )
+
+  it("sets thoughts, notes and summaries at 0.88 of the agent's prose", () => {
+    const muted = declarationsAfter('.markdown-muted {').get('font-size')!
+    expect(pixels(muted, textSizes.default)).toBeCloseTo(16.5 * 0.88)
+  })
+
+  // Chinese goes through the alias family, so the dark theme's lighter weights keep its faces.
+  const alias = blocksAfter('@font-face')
+    .map(declarations)
+    .filter((face) => face.get('font-family') === "'Platform Chinese'")
+  const faceFor = (weight: string) =>
+    alias.filter((face) => {
+      const [from, to] = face.get('font-weight')!.split(' ').map(Number)
+      return from <= Number(weight) && Number(weight) <= to
+    })
+  const light = declarationsAfter(':root {')
+  const dark = declarationsAfter("[data-theme='dark'] {")
+
+  it.each([
+    ['--weight-normal', ['PingFangSC-Regular', 'MicrosoftYaHei', 'NotoSansCJKsc-Regular']],
+    ['--weight-medium', ['PingFangSC-Medium', 'MicrosoftYaHei', 'NotoSansCJKsc-Medium']],
+    ['--weight-semibold', ['PingFangSC-Semibold', 'MicrosoftYaHei-Bold', 'NotoSansCJKsc-Bold']],
+  ])('maps %s to the same Chinese faces in both themes', (token, faces) => {
+    for (const weight of [light.get(token)!, dark.get(token)!]) {
+      const matched = faceFor(weight)
+      expect(matched, `one face for weight ${weight}`).toHaveLength(1)
+      for (const face of faces) expect(matched[0].get('src')).toContain(`local('${face}')`)
+    }
+  })
+
+  it('puts the alias family right after the Latin face of the sans and the serif', () => {
+    const theme = declarationsAfter('@theme inline')
+    for (const stack of ['--font-sans', '--font-serif']) {
+      expect(theme.get(stack)!.split(',')[1].trim()).toBe("'Platform Chinese'")
+    }
+  })
+})

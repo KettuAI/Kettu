@@ -143,7 +143,7 @@ export function ImportSessionsDialog({
             return (
               <section key={agent.id} className="flex flex-col gap-1">
                 <h3 className="flex items-center gap-2 text-xs font-medium text-tertiary">
-                  <AgentMark agent={agent.id} size={13} />
+                  <AgentMark agent={agent.id} size={12} />
                   {agent.name}
                 </h3>
                 {list?.error ? (
@@ -174,7 +174,7 @@ export function ImportSessionsDialog({
                             </span>
                           )}
                           {s.updatedAt && (
-                            <span className="text-[11.5px] text-tertiary tabular">
+                            <span className="text-meta text-tertiary tabular">
                               {shortAgo(Date.parse(s.updatedAt))}
                             </span>
                           )}

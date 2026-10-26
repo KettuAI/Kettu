@@ -3,11 +3,13 @@ import type { GitStatus, PushTarget } from '@shared/git'
 import {
   commandOf,
   failureOf,
+  HINT_TONE,
   lastLine,
   planSync,
   projectRelative,
   pullRequestHead,
   pushesToDefault,
+  stepOf,
   suggestPullRequest,
 } from './sync'
 
@@ -134,6 +136,42 @@ describe('planSync', () => {
       push: { enabled: false, reason: 'operation' },
       hint: 'operation',
     })
+  })
+
+  it('says to finish a rebase, which detaches the head while it runs', () => {
+    const rebasing = status({
+      head: { branch: null, oid: 'a'.repeat(40), detached: true },
+      upstream: null,
+      push: null,
+      operation: { kind: 'rebase', step: [2, 5] },
+    })
+    expect(planSync(rebasing, 'ready')).toMatchObject({
+      pull: { enabled: false, reason: 'operation' },
+      push: { enabled: false, reason: 'operation' },
+      hint: 'operation',
+    })
+  })
+})
+
+describe('stepOf', () => {
+  it('asks for the conflicts first, then the operation that is under way', () => {
+    const conflicted = { ...status().changes, conflicted: 2 }
+    expect(stepOf(status({ operation: { kind: 'rebase' }, changes: conflicted }))).toBe('conflicts')
+    expect(stepOf(status({ operation: { kind: 'rebase', step: [2, 5] } }))).toBe('rebase')
+    expect(stepOf(status({ operation: { kind: 'cherry-pick' } }))).toBe('cherryPick')
+    expect(stepOf(status({ changes: conflicted }))).toBe('conflicts')
+  })
+})
+
+describe('HINT_TONE', () => {
+  it('reads as done only when up to date, and as a warning where something is in the way', () => {
+    expect(HINT_TONE.upToDate).toBe('ok')
+    expect([HINT_TONE.diverged, HINT_TONE.operation, HINT_TONE.ghSignedOut]).toEqual([
+      'warning',
+      'warning',
+      'warning',
+    ])
+    expect([HINT_TONE.publishBranch, HINT_TONE.publishRepo]).toEqual(['info', 'info'])
   })
 })
 

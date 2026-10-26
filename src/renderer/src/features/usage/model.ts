@@ -438,15 +438,22 @@ export function widest(texts: readonly string[], measure: (text: string) => numb
   return best
 }
 
-/** The trend's bars are at most this wide and this far apart, in px; the chart draws them so. */
+/** The trend's bars are at most this wide, in px; the chart draws them so. */
 export const BAR_WIDTH = 48
-export const BAR_GAP = 1
+/** Up to this many bars stand 3 px apart, more of them 1 px, so they stay wider than the gaps. */
+const SPACED_BARS = 45
+
+/** The room between two of `count` bars, in px. */
+export function barGap(count: number): number {
+  return count <= SPACED_BARS ? 3 : 1
+}
 
 /** The middle of each bar in a row `width` px wide, where the bars sit centred. */
 export function barCenters(count: number, width: number): number[] {
-  const bar = Math.max(0, Math.min(BAR_WIDTH, (width - (count - 1) * BAR_GAP) / count))
-  const offset = (width - count * bar - (count - 1) * BAR_GAP) / 2
-  return Array.from({ length: count }, (_, i) => offset + i * (bar + BAR_GAP) + bar / 2)
+  const gap = barGap(count)
+  const bar = Math.max(0, Math.min(BAR_WIDTH, (width - (count - 1) * gap) / count))
+  const offset = (width - count * bar - (count - 1) * gap) / 2
+  return Array.from({ length: count }, (_, i) => offset + i * (bar + gap) + bar / 2)
 }
 
 export interface AxisLabel {
@@ -559,6 +566,21 @@ export function heatLevels(totals: readonly number[]): number[] {
   const at = (p: number) => used[Math.min(used.length - 1, Math.floor(used.length * p))]!
   const [q1, q2, q3] = [at(0.25), at(0.5), at(0.75)]
   return totals.map((t) => (t <= 0 ? 0 : t <= q1 ? 1 : t <= q2 ? 2 : t <= q3 ? 3 : 4))
+}
+
+/**
+ * Where the `index`th of `count` figures sits when the figures' card holds two to a row: with an
+ * odd count the first takes a row of its own. A cell draws the hairline on its top when a row is
+ * above it, and on its left when a cell is beside it.
+ */
+export function ledgerCell(
+  index: number,
+  count: number,
+): { span: boolean; top: boolean; left: boolean } {
+  const lead = count % 2
+  if (index < lead) return { span: true, top: false, left: false }
+  const at = index - lead
+  return { span: false, top: lead + Math.floor(at / 2) > 0, left: at % 2 === 1 }
 }
 
 export interface BreakdownRow {
@@ -743,6 +765,20 @@ export function typedRange(
   if (error === null && from !== null && to !== null && from > to) error = 'order'
   if (error !== null || pending) return { range: null, error }
   return { range: from === null ? { from: to, to } : { from, to }, error: null }
+}
+
+/** The agents whose plans the page lists: each with plan limits, and each other with usage. */
+export function planAgents<T extends { id: AgentId; limits: readonly unknown[] }>(
+  agents: readonly T[],
+  used: readonly AgentId[],
+): T[] {
+  return agents.filter((agent) => agent.limits.length > 0 || used.includes(agent.id))
+}
+
+/** How a plan window's reset reads: the time left when it is within a day, else when it is. */
+export function resetForm(resetsAt: number, now: number): 'in' | 'at' {
+  const left = resetsAt - now
+  return left > 0 && left < 86_400_000 ? 'in' : 'at'
 }
 
 /** Each agent's series color, from its mark. */

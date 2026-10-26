@@ -4,6 +4,8 @@ import {
   Minimize2Icon,
   MinusIcon,
   PlusIcon,
+  RefreshCwIcon,
+  RotateCcwIcon,
   ScanIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -15,6 +17,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSessionWithArtifact } from '@renderer/stores/view'
+import { atMaxZoom, atMinZoom } from './camera'
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { CanvasView } from './canvas-view'
 import { daysLeft } from './model'
@@ -23,18 +26,23 @@ import { pageUrl, type Presence as PresenceState, type ShownVersion } from './us
 
 type Size = 'compact' | 'pane'
 
-/** A quiet icon button with its label, and its key, in a tooltip. */
+/**
+ * A quiet icon button with its label, and its key, in a tooltip: `compact` in the top bar, `group`
+ * inside one of its control groups, `pane` in a pane's header.
+ */
 export function BarButton({
   label,
   shortcut,
   size = 'compact',
+  pressed,
   disabled,
   onClick,
   children,
 }: {
   label: string
   shortcut?: string
-  size?: Size
+  size?: Size | 'group'
+  pressed?: boolean
   disabled?: boolean
   onClick: () => void
   children: React.ReactNode
@@ -45,8 +53,9 @@ export function BarButton({
         render={
           <Button
             variant="quiet"
-            size={size === 'pane' ? 'icon-xs' : 'icon-compact'}
+            size={size === 'pane' ? 'icon-xs' : size === 'group' ? 'icon-sm' : 'icon-compact'}
             aria-label={label}
+            aria-pressed={pressed}
             disabled={disabled}
             onClick={onClick}
             className="text-foreground"
@@ -59,6 +68,76 @@ export function BarButton({
         {label} {shortcut && <span className="opacity-60">{shortcut}</span>}
       </TooltipContent>
     </Tooltip>
+  )
+}
+
+/** A hairline between the bar's groups of controls. */
+function Rule({ size }: { size: Size }) {
+  return (
+    <span
+      aria-hidden
+      className={cn('mx-1.5 w-(--hairline) shrink-0 bg-border', size === 'pane' ? 'h-4' : 'h-4.5')}
+    />
+  )
+}
+
+/** Controls that go together in the bar, inside one hairline. */
+function ControlGroup({
+  label,
+  size,
+  children,
+}: {
+  label: string
+  size: Size
+  children: React.ReactNode
+}) {
+  return (
+    <span
+      role="group"
+      aria-label={label}
+      className={cn(
+        'flex shrink-0 items-center rounded-lg shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+        size === 'pane' ? 'h-6' : 'h-7',
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+/**
+ * The viewer's title: the artifact's and the version shown, or on a focused page the page's name
+ * and then the artifact's.
+ */
+export function ViewerTitle({
+  title,
+  version,
+  controls,
+  pageName,
+}: {
+  title: string
+  version: string | null
+  controls: CanvasControls
+  /** A canvas's page names; null for a single page. */
+  pageName: ((index: number) => string) | null
+}) {
+  const { focused } = useCanvasState(controls)
+  const page = focused !== null && pageName ? pageName(focused) : null
+  if (page !== null) {
+    return (
+      <h1 className="ml-1.5 flex min-w-0 items-baseline gap-2">
+        <span className="max-w-60 shrink-0 truncate text-ui font-medium">{page}</span>
+        <span className="min-w-0 truncate text-small text-secondary">{title}</span>
+      </h1>
+    )
+  }
+  return (
+    <div className="ml-1.5 flex min-w-0 items-baseline gap-2">
+      {title && <h1 className="min-w-0 truncate text-ui font-medium">{title}</h1>}
+      {version && (
+        <span className="shrink-0 text-small text-secondary tabular-nums">{version}</span>
+      )}
+    </div>
   )
 }
 
@@ -91,10 +170,10 @@ export function Presence({
             render={
               <Button
                 variant="quiet"
-                size={size === 'pane' ? 'xs' : 'compact'}
+                size={size === 'pane' ? 'xs' : 'sm'}
                 aria-label={t('viewer.editingLabel', { session: name })}
                 onClick={() => openSessionWithArtifact(editor.id, editor.projectPath, id)}
-                className="max-w-80 min-w-0 gap-1.5 px-2 text-xs font-normal text-secondary"
+                className="max-w-80 min-w-0 gap-1.75 px-2 text-xs font-normal text-secondary"
               />
             }
           >
@@ -114,12 +193,15 @@ export function Presence({
           <TooltipContent>{t('viewer.placesTip', { count: places })}</TooltipContent>
         </Tooltip>
       )}
-      <span aria-hidden className="mx-1.5 h-4 w-(--hairline) shrink-0 bg-border" />
+      <Rule size={size} />
     </>
   )
 }
 
-/** The canvas's controls in a bar: the zoom and Zoom to fit, or a focused page's own. */
+/**
+ * The canvas's controls in a bar: the zoom and Zoom to fit, or a focused page's own. The top bar
+ * names a focused page in its title; the pane's header, here.
+ */
 export function CanvasBarControls({
   controls,
   pageName,
@@ -135,86 +217,106 @@ export function CanvasBarControls({
   const { t } = useTranslation('artifacts')
   const state = useCanvasState(controls)
   const commands = controls.commands
+  const inner = size === 'pane' ? 'pane' : 'group'
   if (state.focused === null && !zoom) return null
   if (state.focused !== null) {
     return (
       <>
-        <span className="max-w-60 truncate px-1.5 text-ui font-medium">
-          {pageName(state.focused)}
-        </span>
-        <BarButton
-          label={t('canvas.previous')}
-          shortcut="←"
-          size={size}
-          disabled={state.focused === 0}
-          onClick={() => commands?.focus(state.focused! - 1)}
-        >
-          <ChevronLeftIcon />
-        </BarButton>
-        <span className="min-w-10 text-center text-xs text-secondary tabular-nums">
-          {t('canvas.counter', { number: state.focused + 1, count: state.count })}
-        </span>
-        <BarButton
-          label={t('canvas.next')}
-          shortcut="→"
-          size={size}
-          disabled={state.focused === state.count - 1}
-          onClick={() => commands?.focus(state.focused! + 1)}
-        >
-          <ChevronRightIcon />
-        </BarButton>
+        {size === 'pane' && (
+          <span className="max-w-60 truncate px-1.5 text-ui font-medium">
+            {pageName(state.focused)}
+          </span>
+        )}
+        <ControlGroup label={t('canvas.pages')} size={size}>
+          <BarButton
+            label={t('canvas.previous')}
+            shortcut="←"
+            size={inner}
+            disabled={state.focused === 0}
+            onClick={() => commands?.focus(state.focused! - 1)}
+          >
+            <ChevronLeftIcon />
+          </BarButton>
+          <span className="min-w-11.5 text-center text-xs text-secondary tabular-nums">
+            {t('canvas.counter', { number: state.focused + 1, count: state.count })}
+          </span>
+          <BarButton
+            label={t('canvas.next')}
+            shortcut="→"
+            size={inner}
+            disabled={state.focused === state.count - 1}
+            onClick={() => commands?.focus(state.focused! + 1)}
+          >
+            <ChevronRightIcon />
+          </BarButton>
+        </ControlGroup>
         <BarButton
           label={t('canvas.backToCanvas')}
           shortcut="Esc"
-          size={size}
+          size={inner}
           onClick={() => commands?.focus(null)}
         >
           <Minimize2Icon />
         </BarButton>
+        {size === 'compact' && <Rule size={size} />}
       </>
     )
   }
   return (
     <>
-      <span
-        className={cn(
-          'flex shrink-0 items-center rounded-lg bg-subtle p-0.5',
-          size === 'pane' ? 'h-6' : 'h-7',
-        )}
-      >
+      <ControlGroup label={t('canvas.zoomGroup')} size={size}>
         <BarButton
           label={t('canvas.zoomOut')}
           shortcut="−"
-          size="pane"
+          size={inner}
+          disabled={atMinZoom(state.zoom)}
           onClick={() => commands?.zoomStep(-1)}
         >
           <MinusIcon />
         </BarButton>
-        <span className="min-w-12 text-center text-xs text-secondary tabular-nums">
+        <span className="min-w-11.5 text-center text-xs text-secondary tabular-nums">
           {t('canvas.zoom', { percent: Math.round(state.zoom * 100) })}
         </span>
         <BarButton
           label={t('canvas.zoomIn')}
           shortcut="+"
-          size="pane"
+          size={inner}
+          disabled={atMaxZoom(state.zoom)}
           onClick={() => commands?.zoomStep(1)}
         >
           <PlusIcon />
         </BarButton>
-      </span>
+      </ControlGroup>
       <BarButton
         label={t('canvas.zoomToFit')}
         shortcut="⇧1"
-        size={size}
+        size={inner}
+        pressed={state.fitted}
         onClick={() => commands?.fitAll()}
       >
         <ScanIcon />
       </BarButton>
+      {size === 'compact' && <Rule size={size} />}
     </>
   )
 }
 
-/** A bar over the top of the page: what shows instead of the latest, and how to restore it. */
+/** Reload, whose icon turns once at each press. */
+export function ReloadButton({ reloads, onClick }: { reloads: number; onClick: () => void }) {
+  const { t } = useTranslation('artifacts')
+  return (
+    <BarButton label={t('viewer.reload')} onClick={onClick}>
+      <RefreshCwIcon
+        key={reloads}
+        className={cn(
+          reloads > 0 && 'motion-safe:animate-[spin_var(--duration-slower)_var(--ease-out-quart)]',
+        )}
+      />
+    </BarButton>
+  )
+}
+
+/** A bar over the top of the area: what shows instead of the latest, and how to restore it. */
 export function StatusBar({
   lead,
   rest,
@@ -229,13 +331,14 @@ export function StatusBar({
   return (
     <div
       role="status"
-      className="absolute inset-x-3 top-2.5 z-10 flex min-h-11 items-center gap-2.5 rounded-2xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"
+      className="absolute top-3.5 left-1/2 z-10 flex h-10 max-w-[calc(100%-24px)] -translate-x-1/2 animate-in items-center gap-3.5 rounded-xl bg-surface pr-1.5 pl-3.5 text-small whitespace-nowrap text-secondary shadow-menu fade-in slide-in-from-top-1 duration-(--duration-fast)"
     >
-      <span className="min-w-0 flex-1 truncate text-secondary">
+      <span className="min-w-0 truncate">
         <span className="font-medium text-foreground">{lead}</span>
         {rest}
       </span>
-      <Button variant="outline" size="compact" onClick={onAction}>
+      <Button variant="outline" size="sm" onClick={onAction}>
+        <RotateCcwIcon data-icon="inline-start" />
         {action}
       </Button>
     </div>

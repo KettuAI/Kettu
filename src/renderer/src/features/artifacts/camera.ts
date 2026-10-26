@@ -35,6 +35,17 @@ export function clampZoom(z: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 }
 
+// A glide ends on its zoom through a logarithm, a hair off the limit it was clamped to.
+/** Whether `z` is as far out as the canvas zooms. */
+export function atMinZoom(z: number): boolean {
+  return z <= MIN_ZOOM * 1.001
+}
+
+/** Whether `z` is as far in as the canvas zooms. */
+export function atMaxZoom(z: number): boolean {
+  return z >= MAX_ZOOM / 1.001
+}
+
 /** The camera that shows `box` whole and centred, never above 100%; `top` is covered by a bar. */
 export function fitBox(box: Box, view: Size, top = 0): Camera {
   const room = {

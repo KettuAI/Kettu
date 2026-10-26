@@ -1,11 +1,20 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeftIcon, ChevronRightIcon, CircleArrowUpIcon, SearchIcon } from 'lucide-react'
+import { ArrowLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SearchField } from '@renderer/components/search-field'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@renderer/components/ui/empty'
-import { isMac, isMod } from '@renderer/lib/platform'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@renderer/components/ui/empty'
+import { Kbd } from '@renderer/components/ui/kbd'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { DESK, ON_DESK, SHEET } from '@renderer/features/shell/sheet'
+import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useUpdatesStore } from '@renderer/stores/updates'
@@ -17,8 +26,8 @@ import {
 } from '@renderer/stores/view'
 import { AgentPage } from './agents-section'
 import { footerLabel } from './footer-label'
-import { FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
-import { SectionBody } from './rows'
+import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
+import { GroupLabel, RowGroup, SectionBody } from './rows'
 import {
   useAboutSection,
   useArchivedSection,
@@ -70,6 +79,7 @@ export default function SettingsPage() {
   const search = useRef<HTMLInputElement>(null)
   const [jump, setJump] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+  const lastAgent = useRef(agent)
 
   // Opening a section from elsewhere, such as the app menu, leaves the results behind.
   const [seen, setSeen] = useState(active)
@@ -85,23 +95,30 @@ export default function SettingsPage() {
 
   const go = (section: SectionDef, row: RowDef) => {
     setQuery('')
-    if (row.open) {
-      row.open()
-      return
-    }
-    openSettings(section.id)
+    if (row.open) row.open()
+    else openSettings(section.id)
     setJump(row.id)
   }
 
-  // Every page, and the results, start at the top; a search result starts at its row.
+  // Every page, and the results, start at the top; a search result starts at its row, and the
+  // agent list, back from an agent's page, at that agent, which takes the focus.
   useLayoutEffect(() => {
     const view = scroller.current
+    const left = lastAgent.current
+    lastAgent.current = agent
     if (!view) return
     const row = jump ? view.querySelector<HTMLElement>(`[data-setting-row="${jump}"]`) : null
+    const item =
+      left && !agent && !searching
+        ? view.querySelector<HTMLElement>(`[data-agent-row="${left}"]`)
+        : null
     if (row) {
       row.scrollIntoView({ block: 'center' })
       setFlash(jump)
       setJump(null)
+    } else if (item) {
+      item.scrollIntoView({ block: 'center' })
+      item.focus({ preventScroll: true })
     } else {
       view.scrollTop = 0
     }
@@ -125,30 +142,45 @@ export default function SettingsPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // The desk drags the window; the column and the page's sheet on it opt out.
   return (
-    <div className="flex h-full animate-in bg-background fade-in animation-duration-(--duration-fast)">
-      <aside className="flex w-[244px] shrink-0 flex-col bg-sidebar">
-        <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2.5 pl-3">
-          {isMac && <span aria-hidden className="w-[calc(14px+var(--traffic-lights))] shrink-0" />}
+    <div
+      className={cn(
+        'flex h-full animate-in bg-sidebar fade-in animation-duration-(--duration-fast)',
+        DESK,
+      )}
+    >
+      <aside className={cn('flex w-[268px] shrink-0 flex-col pb-2', ON_DESK)}>
+        {/* As the sidebar's header: level with the top bar on macOS, in the band elsewhere. */}
+        <div
+          className={cn(
+            'app-region-drag flex shrink-0 items-center px-2',
+            isMac
+              ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)'
+              : 'h-(--title-bar)',
+          )}
+        >
+          {isMac && <span aria-hidden className="w-[calc(26px+var(--traffic-lights))] shrink-0" />}
           <BackButton />
         </div>
-        <div className="flex flex-col gap-3 px-3 pt-1.5 pb-3.5">
-          <h1 className="px-1 text-heading font-semibold">{t('page.title')}</h1>
-          <SearchField
-            value={query}
-            onChange={setQuery}
-            label={t('page.search')}
-            clearLabel={t('page.clearSearch')}
-            inputRef={search}
-          />
-        </div>
+        <h1 className="mx-4.5 mt-1.5 mb-3 font-heading text-subheading font-semibold">
+          {t('page.title')}
+        </h1>
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          label={t('page.search')}
+          clearLabel={t('page.clearSearch')}
+          inputRef={search}
+          className="mx-2.5 mb-2.5 h-7.5 w-auto"
+        />
+        {/* Padded inside the scroller, so the rows' focus rings are not cut off. */}
         <nav
           aria-label={t('page.sections')}
-          className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2 pb-3"
+          className="-my-1 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 py-1"
         >
           {clusters.map((cluster, i) => (
-            <Fragment key={i}>
-              {i > 0 && <span aria-hidden className="h-2.5 shrink-0" />}
+            <div key={i} className="flex flex-col gap-0.5">
               {cluster.map((section) => {
                 const count = hits.find((h) => h.id === section.id)?.rows.length ?? 0
                 return (
@@ -162,14 +194,21 @@ export default function SettingsPage() {
                   />
                 )
               })}
-            </Fragment>
+            </div>
           ))}
         </nav>
         <AppFooter />
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <div className="app-region-drag h-top-bar shrink-0" />
+      <main
+        className={cn(
+          'my-(--sheet-gap) mr-(--sheet-gap) flex min-w-0 flex-1 flex-col',
+          !isMac && 'mt-[calc(var(--title-bar)+var(--sheet-gap))]',
+          SHEET,
+        )}
+      >
+        {/* A drag region; with the desk above the sheet it spans a top bar's height. */}
+        <div className="app-region-drag h-[calc(var(--top-bar)-var(--sheet-gap))] shrink-0" />
         <div
           ref={scroller}
           className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]"
@@ -177,7 +216,7 @@ export default function SettingsPage() {
           <FlashContext.Provider value={flash}>
             <div
               key={searching ? 'results' : agent ? `agents/${agent}` : page.id}
-              className="mx-auto flex w-full max-w-[560px] animate-in flex-col pt-1 pb-24 fade-in animation-duration-(--duration-fast)"
+              className="mx-auto flex w-full max-w-[560px] animate-in flex-col pt-1 pb-24 fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
             >
               {searching ? (
                 <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
@@ -213,11 +252,11 @@ export function PageHeader({
   children?: ReactNode
 }) {
   return (
-    <header className="flex flex-col gap-1.5 px-1 pb-7">
-      <h2 id={id} className="text-title font-semibold text-balance">
+    <header className="flex flex-col gap-1 pb-7">
+      <h2 id={id} className="font-heading text-title font-semibold text-balance">
         {title}
       </h2>
-      {children && <p className="text-small text-pretty text-secondary">{children}</p>}
+      {children && <p className="text-small text-pretty text-tertiary">{children}</p>}
     </header>
   )
 }
@@ -231,6 +270,7 @@ function NavRow({
 }: {
   section: SectionDef
   selected: boolean
+  /** While searching, a section without matches; it stays a way to its page. */
   dim: boolean
   count: number | null
   onChoose: () => void
@@ -239,15 +279,12 @@ function NavRow({
   return (
     <button
       type="button"
-      disabled={dim}
       aria-current={selected ? 'page' : undefined}
       onClick={onChoose}
       className={cn(
-        'group flex h-8 shrink-0 items-center gap-2.5 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-ring',
-        selected
-          ? 'bg-surface font-medium text-primary shadow-outline'
-          : 'text-secondary hover:bg-hover hover:text-primary',
-        dim && 'pointer-events-none opacity-40',
+        'group flex h-8 shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-ui text-primary outline-none transition-[background-color,opacity] duration-(--duration-fast) focus-ring',
+        selected ? 'bg-surface font-medium shadow-outline' : 'hover:bg-hover',
+        dim && 'opacity-42',
       )}
     >
       <Icon
@@ -257,22 +294,21 @@ function NavRow({
         )}
       />
       <span className="min-w-0 flex-1 truncate">{section.title}</span>
-      {count !== null ? (
+      {section.mark && (
+        <span
+          role="img"
+          aria-label={section.mark}
+          title={section.mark}
+          className="mr-1 size-1.5 shrink-0 rounded-full bg-info"
+        />
+      )}
+      {count !== null && (
         <span
           key={count}
-          className="animate-in text-xs text-tertiary tabular fade-in animation-duration-(--duration-base)"
+          className="h-4.5 min-w-4.5 shrink-0 animate-in rounded-full bg-surface px-1.25 text-center text-meta leading-4.5 font-normal text-secondary tabular shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] fade-in animation-duration-(--duration-base)"
         >
           {count}
         </span>
-      ) : (
-        section.mark && (
-          <span
-            role="img"
-            aria-label={section.mark}
-            title={section.mark}
-            className="size-1.5 shrink-0 rounded-full bg-current text-info"
-          />
-        )
       )}
     </button>
   )
@@ -286,21 +322,20 @@ function AppFooter() {
   const label = footerLabel(status.state)
   const end: ReactNode = !label ? null : label.pill ? (
     <Badge variant="info" className="min-w-0 shrink">
-      <CircleArrowUpIcon data-icon="inline-start" />
       <span className="truncate">{t(label.key, label.values)}</span>
     </Badge>
   ) : (
-    <span className="truncate tabular">{t(label.key, label.values)}</span>
+    <span className="truncate text-xs text-tertiary tabular">{t(label.key, label.values)}</span>
   )
   return (
     <button
       type="button"
       title={t('footer.about')}
       onClick={() => openSettings('about')}
-      className="group mx-2 mb-2.5 flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-left text-xs text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
+      className="mx-2 flex h-8 shrink-0 items-center gap-1.5 rounded-lg pr-1.5 pl-2.5 text-left text-command text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
     >
-      <span className="font-medium text-secondary group-hover:text-primary">OverBench</span>
-      <span className="font-mono text-meta">{status.current}</span>
+      <span>OverBench</span>
+      <span className="font-mono text-code text-tertiary">{status.current}</span>
       <span className="ml-auto flex min-w-0 items-center">{end}</span>
     </button>
   )
@@ -318,56 +353,58 @@ function SearchResults({
   onGo: (section: SectionDef, row: RowDef) => void
 }) {
   const { t } = useTranslation('settings')
-  if (count === 0) {
-    return (
-      <Empty className="pt-16">
-        <EmptyHeader>
-          <SearchIcon className="size-4 text-icon" />
-          <EmptyTitle>{t('page.noMatch', { query })}</EmptyTitle>
-          <EmptyDescription>{t('page.noMatchHint')}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
-  }
   return (
     <>
       <PageHeader id="settings-results" title={t('page.results')}>
-        {t('page.resultsLine', { query, count })}
+        {count > 0 && t('page.resultsLine', { query, count })}
       </PageHeader>
-      <div className="flex flex-col gap-7">
-        {hits.map(
-          (section) =>
-            section.rows.length > 0 && (
-              <section key={section.id} aria-label={section.title} className="flex flex-col">
-                <div className="flex h-7.5 items-center gap-1.5 px-1 text-xs font-medium text-tertiary">
-                  <h3>{section.title}</h3>
-                  <span className="font-normal tabular">{section.rows.length}</span>
-                </div>
-                {section.rows.map((row) => (
-                  <div key={row.id} className="border-t border-subtle">
-                    <button
-                      type="button"
-                      onClick={() => onGo(section, row)}
-                      className="-mx-2 flex w-[calc(100%+--spacing(4))] items-center gap-4 rounded-lg px-3 py-3 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
-                    >
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="text-ui font-medium">
-                          <Marked text={row.name} query={query} />
-                        </span>
-                        {row.description && (
-                          <span className="text-xs leading-normal text-secondary">
-                            <Marked text={row.description} query={query} />
+      {count === 0 ? (
+        <Empty className="px-6 py-14">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <SearchIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t('page.noMatch', { query })}</EmptyTitle>
+            <EmptyDescription>{t('page.noMatchHint')}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <div className="flex flex-col gap-7">
+          {hits.map(
+            (section) =>
+              section.rows.length > 0 && (
+                <section key={section.id} aria-label={section.title} className="flex flex-col">
+                  <GroupLabel
+                    group={{ id: section.id, label: section.title, count: section.rows.length }}
+                  />
+                  <RowGroup>
+                    {section.rows.map((row) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() => onGo(section, row)}
+                        className="relative flex min-h-15 w-full items-center gap-4 py-2.5 pr-3 pl-4 text-left outline-none transition-colors duration-(--duration-fast) before:absolute before:top-0 before:right-0 before:left-4 before:h-(--hairline) before:bg-border-soft first:rounded-t-xl first:before:hidden last:rounded-b-xl hover:bg-hover focus-ring"
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="text-ui font-medium">
+                            <Marked text={row.name} query={query} />
                           </span>
-                        )}
-                      </span>
-                      <ChevronRightIcon className="size-4 shrink-0 text-icon" />
-                    </button>
-                  </div>
-                ))}
-              </section>
-            ),
-        )}
-      </div>
+                          {row.description && !row.aside && (
+                            <span className="mt-0.5 line-clamp-2 text-xs leading-4 text-secondary">
+                              <Marked text={excerpt(row.description, query)} query={query} />
+                            </span>
+                          )}
+                        </span>
+                        {row.aside?.()}
+                        <ChevronRightIcon className="size-4 shrink-0 text-icon" />
+                      </button>
+                    ))}
+                  </RowGroup>
+                </section>
+              ),
+          )}
+        </div>
+      )}
     </>
   )
 }
@@ -375,7 +412,7 @@ function SearchResults({
 function Marked({ text, query }: { text: string; query: string }) {
   return highlight(text, query).map((part, i) =>
     part.match ? (
-      <mark key={i} className="rounded-sm bg-mark px-px text-inherit">
+      <mark key={i} className="rounded-sm bg-mark text-inherit">
         {part.text}
       </mark>
     ) : (
@@ -390,22 +427,32 @@ function BackButton() {
     Object.values(s.byId).reduce((sum, x) => sum + x.permissionCount, 0),
   )
   return (
-    <Button
-      variant="quiet"
-      size="compact"
-      className="app-region-no-drag gap-1.5 px-2"
-      onClick={closeSettings}
-    >
-      <ArrowLeftIcon data-icon="inline-start" />
-      {t('page.back')}
-      {waiting > 0 && (
-        <span
-          aria-label={t('page.waiting', { count: waiting })}
-          className="ml-0.5 inline-flex h-[18px] min-w-[18px] animate-in items-center justify-center rounded-full bg-attention px-1.5 text-meta font-semibold text-attention-foreground tabular zoom-in-75 fade-in"
-        >
-          {waiting}
-        </span>
-      )}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="quiet"
+            size="sm"
+            className="app-region-no-drag gap-1.5 pr-2 pl-1.5 text-ui font-normal text-primary"
+            onClick={closeSettings}
+          />
+        }
+      >
+        <ArrowLeftIcon data-icon="inline-start" className="size-4" />
+        {t('page.back')}
+        {waiting > 0 && (
+          <span
+            aria-label={t('page.waiting', { count: waiting })}
+            className="ml-0.5 inline-flex h-4.5 min-w-4.5 animate-in items-center justify-center rounded-full bg-attention px-1.25 text-meta font-semibold text-attention-foreground tabular zoom-in-75 fade-in"
+          >
+            {waiting}
+          </span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {t('page.back')}
+        <Kbd>{formatShortcut('Esc')}</Kbd>
+      </TooltipContent>
+    </Tooltip>
   )
 }

@@ -24,6 +24,7 @@ import {
   markSessionUnread,
   pinSession,
   renameSession,
+  unarchiveSession,
 } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -45,6 +46,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { toast } from '@renderer/components/ui/toast'
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { errorMessage, host } from '@renderer/lib/host'
 import { fileManagerName } from '@renderer/lib/platform'
@@ -193,7 +195,17 @@ export function SessionMenuItems({
         )
       case 'archive':
         return (
-          <DropdownMenuItem {...props} onClick={() => void archiveSession(id)}>
+          <DropdownMenuItem
+            {...props}
+            onClick={() =>
+              void archiveSession(id).then(() =>
+                toast(t('row.archived', { title: sessionTitle(summary) }), {
+                  label: t('row.undo'),
+                  onClick: () => void unarchiveSession(id),
+                }),
+              )
+            }
+          >
             <ArchiveIcon />
             {t('row.archive')}
             {shortcut}
@@ -292,11 +304,13 @@ export function DeleteSessionDialog({
   title,
   open,
   onOpenChange,
+  onDeleted,
 }: {
   sessionId: string
   title: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  onDeleted?: () => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
   const count = open ? descendantCount(sessionId) : 0
@@ -311,7 +325,10 @@ export function DeleteSessionDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => void deleteSession(sessionId)}>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => void deleteSession(sessionId).then(onDeleted)}
+          >
             {t('row.delete')}
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -279,27 +279,26 @@ async function run() {
     'the fixture page',
   )
   await sleep(1200)
-  const maximize = await cdp.evaluate(`(() => {
-    const r = document.querySelector('[data-browser-panel] button[aria-label="Maximize"]').getBoundingClientRect()
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-  })()`)
-  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...maximize })
+  // The reply's link asks first, in a dialog centred over the pane. A tooltip in the pane's header
+  // would not do: below a title bar it opens above its button, clear of the page.
+  await click(byText('p button', 'Node.js timers guide'), 'the link in the reply')
   await waitFor(
     `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`,
     'the still of the page',
   )
   await sleep(500)
   await shoot('browser-overlay')
-  // The same still without the tooltip that asked for it.
-  await cdp.evaluate(
-    `document.querySelectorAll('[data-overlay-layer]').forEach((el) => (el.style.visibility = 'hidden'))`,
-  )
+  // The same still without the dialog that asked for it.
+  const dialogLayers = `document.querySelectorAll('[data-overlay-layer], [data-slot=alert-dialog-overlay]')`
+  await cdp.evaluate(`${dialogLayers}.forEach((el) => (el.style.visibility = 'hidden'))`)
   await sleep(200)
   await shoot('browser-page')
-  await cdp.evaluate(
-    `document.querySelectorAll('[data-overlay-layer]').forEach((el) => (el.style.visibility = ''))`,
+  await cdp.evaluate(`${dialogLayers}.forEach((el) => (el.style.visibility = ''))`)
+  await press('Escape', 27)
+  await waitFor(
+    `!document.querySelector('[data-browser-panel] img[aria-hidden]')`,
+    'the page in place of its still',
   )
-  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
   await sleep(400)
   await click(
     `return [...document.querySelectorAll('[data-browser-panel] button')].find((b) => b.getAttribute('aria-label') === 'Close')`,
@@ -719,7 +718,7 @@ async function run() {
 
   // The sidebar footer and its notices, in a launch after an update, so the "Updated to" notice
   // shows beside the fake agent's sign-in; agent updates need a package agent's npm check and the
-  // other update notices a packaged build. The steps also check how the notices popover behaves.
+  // other update notices a packaged build. The steps also check how the notice cards behave.
   cdp.close()
   await stopApp(app)
   const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../package.json')))
@@ -750,57 +749,44 @@ async function run() {
   // Starts with the fake agent signed out and "Updated to" showing, and ends signed out.
   async function footerScreens({ suffix, dismiss, agents }) {
     const footer = '[data-sidebar=footer]'
-    const pill = `document.querySelector('${footer} button[aria-haspopup=dialog]')`
-    const popover = `document.querySelector('[data-slot=popover-content]:not([data-closed])')`
-    const rows = `[...document.querySelectorAll('[data-slot=popover-content]:not([data-closed]) [data-row-hit]')].map((b) => b.getAttribute('aria-label'))`
+    const cards = `[...document.querySelectorAll('${footer} [data-notice]')]`
+    const names = `${cards}.map((c) => c.querySelector('[data-notice-hit]')?.getAttribute('aria-label') ?? '')`
     const shootFooter = async (name) => {
-      // Script focus after this tool's input draws the focus ring, which a click would not.
-      await cdp.evaluate(`${popover}?.focus()`)
       const clip = await cdp.evaluate(`(() => {
         const f = document.querySelector('${footer}').getBoundingClientRect()
-        const p = ${popover}?.getBoundingClientRect()
-        const top = Math.min(f.top, p ? p.top : f.top) - 16
-        return { x: 0, y: top, width: Math.max(f.right, p ? p.right : 0) + 16, height: f.bottom - top }
+        return { x: 0, y: f.top - 16, width: f.right + 16, height: f.height + 16 }
       })()`)
       await shoot(`footer-${name}${suffix}`, clip)
     }
-    const openNotices = async () => {
-      await click(`return ${pill}`, 'the notices pill')
-      await waitFor(popover, 'the notices popover')
-      await sleep(300)
-    }
 
-    await waitFor(`${pill}?.textContent.startsWith('2')`, 'two notices')
+    await waitFor(
+      `(() => { const n = ${names}; return n.length === 2 && n[0].startsWith('Fake agent') })()`,
+      'the sign-in notice over the update notice',
+    )
+    await sleep(300)
     await shootFooter('two')
-    await openNotices()
-    await waitFor(
-      `(() => { const r = ${rows}; return r.length === 2 && r[0].startsWith('Fake agent') })()`,
-      'the sign-in row before the update row',
-    )
-    await shootFooter('popover')
     await click(
-      `return document.querySelector('[data-slot=popover-content] [data-notice-row] button[aria-label="${dismiss}"]')`,
-      'the dismiss button of the update row',
+      `return ${cards}[1].querySelector('button[aria-label="${dismiss}"]')`,
+      'the dismiss button of the update notice',
     )
-    await waitFor(`${popover} && ${rows}.length === 1`, 'the dismissed row to go, the popover open')
-    await press('Escape', 27)
-    await waitFor(`!${popover}`, 'the popover to close')
+    await waitFor(`${cards}.length === 1`, 'the dismissed notice to go')
+    // Off the cards, so none shows its hover.
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 700, y: 450 })
+    await sleep(300)
     await shootFooter('one')
-    await openNotices()
-    await click(`return document.querySelector('[data-row-hit]')`, 'the sign-in row')
+    await click(`return ${cards}[0].querySelector('[data-notice-hit]')`, 'the sign-in notice')
     await waitFor(
-      `!${popover} && document.querySelector('[aria-current=page]')?.textContent.trim() === '${agents}'`,
-      'Settings › Agents, the popover closed',
+      `document.querySelector('[aria-current=page]')?.textContent.trim() === '${agents}'`,
+      'Settings › Agents',
     )
     await press('Escape', 27)
-    await waitFor(`${pill}`, 'the sidebar again')
-    await openNotices()
+    await waitFor(`${cards}.length === 1`, 'the sidebar again')
     await fake('authenticate', `, methodId: 'fake-login'`)
-    await waitFor(`!${popover} && !${pill}`, 'the popover to close with its last notice')
+    await waitFor(`${cards}.length === 0`, 'the sign-in notice to go')
     await sleep(300)
     await shootFooter('none')
     await fake('logout')
-    await waitFor(pill, 'the sign-in notice')
+    await waitFor(`${cards}.length === 1`, 'the sign-in notice')
     const edge = await cdp.evaluate(`(() => {
       const r = document.querySelector('[data-slot=resizable-handle]').getBoundingClientRect()
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
@@ -835,8 +821,8 @@ async function run() {
     await drag(edge, { x: 120, y: edge.y })
     // The panels restore their layout in percentages, so the minimum can land just off 200 px.
     await waitFor(
-      `Math.round(document.querySelector('${footer}').getBoundingClientRect().width) === 200 && ${pill}.innerText.trim() === '1'`,
-      'the compact pill at the minimum width',
+      `Math.round(document.querySelector('${footer}').getBoundingClientRect().width) === 200`,
+      'the sidebar at its minimum width',
     )
     await shootFooter('compact')
     await drag({ x: 200, y: edge.y }, edge)

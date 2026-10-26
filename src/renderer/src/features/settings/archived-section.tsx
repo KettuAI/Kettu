@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { unarchiveSession } from '@renderer/app/actions'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
+import { toast } from '@renderer/components/ui/toast'
 import { DeleteSessionDialog } from '@renderer/features/sidebar/session-menu'
 import { errorMessage } from '@renderer/lib/host'
 import { longAgo } from '@renderer/lib/format'
@@ -22,18 +23,17 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
     setError(null)
     try {
       await unarchiveSession(summary.id)
+      toast(t('archived.restored', { project: where }))
     } catch (e) {
       setError(errorMessage(e))
     }
   }
   return (
-    <div className="px-1">
+    <div className="pl-1">
       <RowLine
         text={
-          <div className="flex min-w-0 items-start gap-2.5">
-            <span className="grid h-5 shrink-0 place-items-center">
-              <AgentMark agent={summary.agentId} size={14} />
-            </span>
+          <div className="flex min-w-0 items-center gap-3">
+            <AgentTile agent={summary.agentId} size={30} glyph={16} />
             <RowText
               name={<span className="block truncate">{title}</span>}
               description={t('archived.description', {
@@ -45,10 +45,15 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
         }
       >
         <ControlError error={error} />
-        <Button variant="outline" size="compact" onClick={() => void restore()}>
+        <Button variant="outline" size="sm" onClick={() => void restore()}>
           {t('archived.restore')}
         </Button>
-        <Button variant="destructive" size="compact" onClick={() => setDeleting(true)}>
+        <Button
+          variant="quiet"
+          size="sm"
+          className="text-danger hover:bg-danger-tint hover:text-danger aria-expanded:bg-danger-tint aria-expanded:text-danger"
+          onClick={() => setDeleting(true)}
+        >
           {t('archived.delete')}
         </Button>
       </RowLine>
@@ -57,6 +62,7 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
         title={title}
         open={deleting}
         onOpenChange={setDeleting}
+        onDeleted={() => toast(t('archived.deleted'))}
       />
     </div>
   )

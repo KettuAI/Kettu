@@ -48,7 +48,7 @@ function ActionButton({
             aria-label={label}
             disabled={disabled}
             onClick={onClick}
-            className="shrink-0 rounded-[6px] [&_svg]:size-3.5"
+            className="shrink-0 [&_svg]:size-3.5"
           />
         }
       >
@@ -156,7 +156,7 @@ export const ReplyFooter = memo(
     return (
       <div
         className={cn(
-          'group/actions -ml-1 flex h-7 min-w-0 items-center gap-0.5 text-xs text-muted-foreground',
+          'group/actions -ml-1 flex h-6 min-w-0 items-center gap-0.5 text-xs text-muted-foreground',
           animation,
         )}
       >

@@ -16,7 +16,7 @@ import {
   useTerminalsStore,
 } from '@renderer/stores/terminals'
 import { toggleTerminal, useViewStore } from '@renderer/stores/view'
-import { SidePanelContext } from './side-panel'
+import { SHEET, SHEET_PANEL } from './sheet'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
 const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
@@ -96,58 +96,59 @@ export function SidePanelArea({
   )
 
   return (
-    <SidePanelContext value={!!pane}>
-      <ResizablePanelGroup
-        orientation="horizontal"
-        defaultLayout={layout.defaultLayout}
-        onLayoutChanged={layout.onLayoutChanged}
-        className="relative"
-      >
-        <ResizablePanel id="content" minSize="360px" className="min-w-0">
-          {/* Under the maximized panel the content keeps its state but is not rendered. */}
-          <div
-            inert={maximized}
-            className={cn('h-full', maximized && '[content-visibility:hidden]')}
+    <ResizablePanelGroup
+      orientation="horizontal"
+      defaultLayout={layout.defaultLayout}
+      onLayoutChanged={layout.onLayoutChanged}
+      className="relative"
+    >
+      <ResizablePanel id="content" minSize="360px" className="min-w-0" style={SHEET_PANEL}>
+        {/* Under the maximized panel the content keeps its state but is not rendered, and its
+            sheet's edge gives way to the panel's. */}
+        <div
+          inert={maximized}
+          className={cn('h-full', SHEET, maximized && 'shadow-none [content-visibility:hidden]')}
+        >
+          {children}
+        </div>
+      </ResizablePanel>
+      {pane && (
+        <>
+          {/* The desk between the two sheets. */}
+          <ResizableHandle
+            withHandle={!maximized}
+            className={cn('app-region-no-drag w-(--sheet-gap)', maximized && 'pointer-events-none')}
+          />
+          <ResizablePanel
+            key={pane}
+            {...PANES[pane]}
+            groupResizeBehavior="preserve-pixel-size"
+            className="min-w-0"
+            style={SHEET_PANEL}
           >
-            {children}
-          </div>
-        </ResizablePanel>
-        {pane && (
-          <>
-            <ResizableHandle
-              withHandle={!maximized}
-              className={cn('bg-border-soft', maximized && 'pointer-events-none')}
-            />
-            <ResizablePanel
-              key={pane}
-              {...PANES[pane]}
-              groupResizeBehavior="preserve-pixel-size"
-              className="min-w-0"
-            >
-              {pane === 'terminal' ? (
-                <TerminalPanel projectPath={projectPath} maximized={maximized} />
-              ) : (
-                <Suspense fallback={<div className="h-full bg-sidebar" />}>
-                  {pane === 'files' ? (
-                    <FilesPanel projectPath={projectPath} maximized={maximized} />
-                  ) : pane === 'browser' ? (
-                    <BrowserPane projectPath={projectPath} maximized={maximized} />
-                  ) : (
-                    artifact && (
-                      <ArtifactPane
-                        key={artifact}
-                        projectPath={projectPath}
-                        id={artifact}
-                        maximized={maximized}
-                      />
-                    )
-                  )}
-                </Suspense>
-              )}
-            </ResizablePanel>
-          </>
-        )}
-      </ResizablePanelGroup>
-    </SidePanelContext>
+            {pane === 'terminal' ? (
+              <TerminalPanel projectPath={projectPath} maximized={maximized} />
+            ) : (
+              <Suspense fallback={<div className={cn('h-full', SHEET)} />}>
+                {pane === 'files' ? (
+                  <FilesPanel projectPath={projectPath} maximized={maximized} />
+                ) : pane === 'browser' ? (
+                  <BrowserPane projectPath={projectPath} maximized={maximized} />
+                ) : (
+                  artifact && (
+                    <ArtifactPane
+                      key={artifact}
+                      projectPath={projectPath}
+                      id={artifact}
+                      maximized={maximized}
+                    />
+                  )
+                )}
+              </Suspense>
+            )}
+          </ResizablePanel>
+        </>
+      )}
+    </ResizablePanelGroup>
   )
 }

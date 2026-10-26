@@ -13,15 +13,20 @@ import {
   RepeatIcon,
   SearchIcon,
   SquareTerminalIcon,
-  Trash2Icon,
+  TrashIcon,
   WrenchIcon,
   XIcon,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { PermissionKind, ToolContent, ToolEntry, ToolKind } from '@shared/thread'
+import type {
+  PendingPermission,
+  PermissionKind,
+  ToolContent,
+  ToolEntry,
+  ToolKind,
+} from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
-import { Button } from '@renderer/components/ui/button'
 import { Card } from '@renderer/components/ui/card'
 import {
   Collapsible,
@@ -34,6 +39,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { basename, dirname, relativePath } from '@renderer/lib/format'
@@ -49,13 +55,13 @@ import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { LocalMedia } from '../media/local-media'
 import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
-import { PANEL, respondToPermission, toolLabel } from './helpers'
+import { commandOutput, primaryOption, PANEL, respondToPermission, toolLabel } from './helpers'
 import { useDiffStats } from './use-diff-stats'
 
 const KIND_ICON: Record<ToolKind, LucideIcon> = {
   read: FileTextIcon,
   edit: FilePenIcon,
-  delete: Trash2Icon,
+  delete: TrashIcon,
   move: ArrowRightLeftIcon,
   search: SearchIcon,
   execute: SquareTerminalIcon,
@@ -77,6 +83,8 @@ const ASK_KEY = {
   switch_mode: 'switchMode',
   other: 'other',
 } as const satisfies Record<ToolKind, string>
+
+type PermissionOption = PendingPermission['options'][number]
 
 const ANSWER_KEY = {
   allow_once: 'allowOnce',
@@ -116,13 +124,15 @@ export const ToolCard = memo(function ToolCard({
 
   if (!entry) return null
   const label = toolLabel(entry, projectPath)
+  const command = label.kind === 'command' ? label.target : null
+  // A command's output shows under it, in the same block, as a terminal prints it.
+  const output = command ? commandOutput(entry.content) : null
+  const content = output === null ? entry.content : entry.content.slice(1)
   const hasBody =
     entry.content.length > 0 ||
     media.length > 0 ||
     !!permission ||
-    (label.kind === 'command' &&
-      !!label.target &&
-      (label.target.length > 60 || label.target.includes('\n')))
+    (!!command && (command.length > 60 || command.includes('\n')))
   const autoOpen =
     hasBody &&
     (!!permission ||
@@ -141,6 +151,8 @@ export const ToolCard = memo(function ToolCard({
           <Card
             ref={ref}
             variant="tool"
+            role="group"
+            aria-label={t('permission.label')}
             data-entry-id={entryId}
             className={cn('animate-attention shadow-attention', animation)}
           />
@@ -161,36 +173,33 @@ export const ToolCard = memo(function ToolCard({
           <div
             className={cn(
               'flex flex-col',
-              framed ? 'border-t border-border-soft' : 'gap-1.5 pt-1 pb-2 pl-[22px]',
+              framed ? 'border-t border-border-soft p-3' : 'gap-1.5 pt-1.5 pb-0.5 pl-5.5',
             )}
           >
-            {label.kind === 'command' && label.target && (
-              <CommandBlock command={label.target} framed={framed} />
-            )}
-            {entry.content.map((c, i) => (
-              <ContentBlock
-                key={i}
-                sessionId={sessionId}
-                entryId={entryId}
-                index={i}
-                content={c}
-                projectPath={projectPath}
-                framed={framed}
-              />
-            ))}
-            {media.length > 0 && (
-              <SessionIdContext value={sessionId}>
-                <EntryIdContext value={entryId}>
-                  <div
-                    className={cn('flex flex-col items-start gap-3 empty:hidden', framed && 'p-3')}
-                  >
-                    {media.map((path) => (
-                      <LocalMedia key={path} path={path} imageHeight={MEDIA_IMAGE_HEIGHT} />
-                    ))}
-                  </div>
-                </EntryIdContext>
-              </SessionIdContext>
-            )}
+            <div className={cn('flex flex-col', framed && 'gap-2')}>
+              {command && <CommandBlock command={command} output={output} />}
+              {content.map((c, i) => (
+                <ContentBlock
+                  key={i}
+                  sessionId={sessionId}
+                  entryId={entryId}
+                  index={output === null ? i : i + 1}
+                  content={c}
+                  projectPath={projectPath}
+                />
+              ))}
+              {media.length > 0 && (
+                <SessionIdContext value={sessionId}>
+                  <EntryIdContext value={entryId}>
+                    <div className="flex flex-col items-start gap-3 empty:hidden">
+                      {media.map((path) => (
+                        <LocalMedia key={path} path={path} imageHeight={MEDIA_IMAGE_HEIGHT} />
+                      ))}
+                    </div>
+                  </EntryIdContext>
+                </SessionIdContext>
+              )}
+            </div>
             {permission && (
               <PermissionPrompt sessionId={sessionId} entry={entry} agentName={agentName} />
             )}
@@ -200,8 +209,7 @@ export const ToolCard = memo(function ToolCard({
     </Collapsible>
   )
 
-  if (entry.toolKind !== 'execute' || !label.target) return card
-  const command = label.target
+  if (entry.toolKind !== 'execute' || !command) return card
   return (
     <ContextMenu>
       <ContextMenuTrigger render={<div />}>{card}</ContextMenuTrigger>
@@ -256,12 +264,12 @@ function ToolHeader({
         )}
       </span>
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        {label.verb && <span className="shrink-0 font-medium">{label.verb}</span>}
+        {label.verb && <span className="shrink-0 font-medium text-secondary">{label.verb}</span>}
         {label.target && <Target label={label} />}
       </span>
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
-        <span className="shrink-0 animate-in font-mono text-[11.5px] tabular animation-duration-(--duration-base) fade-in">
-          <span className="text-success">+{stats.insertions}</span>{' '}
+        <span className="flex shrink-0 animate-in gap-2 tabular animation-duration-(--duration-base) fade-in">
+          <span className="text-success">+{stats.insertions}</span>
           <span className="text-danger">−{stats.deletions}</span>
         </span>
       )}
@@ -273,8 +281,8 @@ function ToolHeader({
   )
   // A flat row reaches past the column by its padding, so its icon lines up with the prose.
   const row = framed
-    ? 'group/tool flex h-card-header w-full min-w-0 items-center gap-2 px-3 text-left outline-none'
-    : 'group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[13px] leading-[1.6] text-muted-foreground outline-none'
+    ? 'group/tool flex h-card-header w-full min-w-0 items-center gap-2 px-3 text-left text-tertiary outline-none'
+    : 'group/tool -mx-1.5 flex h-6.5 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none'
   if (!toggle) return <div className={row}>{content}</div>
   return (
     <CollapsibleTrigger
@@ -295,13 +303,13 @@ function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
   const folder = label.kind === 'path' ? dirname(target) : ''
   const text =
     label.kind === 'path' ? (
-      <span className="flex min-w-0 font-mono text-xs text-muted-foreground">
+      <span className="flex min-w-0 font-mono text-xs text-secondary">
         {/* An empty truncating span would put the row's baseline at its bottom edge. */}
         {folder && <span className="truncate">{folder}</span>}
         <span className="shrink-0">{basename(target)}</span>
       </span>
     ) : label.kind === 'command' ? (
-      <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+      <span className="min-w-0 truncate font-mono text-xs text-secondary">
         {target.split('\n')[0]}
       </span>
     ) : (
@@ -310,7 +318,7 @@ function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="flex min-w-0" />}>{text}</TooltipTrigger>
-      <TooltipContent className="max-w-[480px] font-mono text-[11.5px] break-all whitespace-pre-wrap">
+      <TooltipContent className="max-w-[480px] font-mono text-meta break-all whitespace-pre-wrap">
         {target}
       </TooltipContent>
     </Tooltip>
@@ -321,8 +329,11 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   const { t } = useTranslation('session')
   if (entry.permission) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-attention">
-        <span aria-hidden className="size-1.5 rounded-full bg-attention-dot" />
+      <span className="inline-flex shrink-0 items-center gap-1.75 text-xs font-medium text-attention">
+        <span
+          aria-hidden
+          className="size-2 rounded-full bg-attention-dot ring-3 ring-attention-dot/16"
+        />
         {t('status.needsApproval')}
       </span>
     )
@@ -372,18 +383,30 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   }
 }
 
-function CommandBlock({ command, framed }: { command: string; framed: boolean }) {
+/** The command, and what it printed under it once it has run, as a terminal shows them. */
+function CommandBlock({ command, output }: { command: string; output: string | null }) {
+  const { t } = useTranslation('session')
+  const printed = !!output
   return (
-    <pre
+    <div
       data-selectable=""
       className={cn(
-        'overflow-x-auto rounded-lg bg-code-block shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] px-2.5 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]',
-        framed && 'mx-3 mt-2.5 mb-0.5',
+        'flex flex-col rounded-code bg-code-block px-3 font-mono shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+        printed ? 'py-2.25 text-code' : 'py-2 text-command',
       )}
     >
-      <span className="text-muted-foreground select-none">$ </span>
-      {command}
-    </pre>
+      <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
+        <span className="mr-2 text-tertiary select-none">$</span>
+        {command}
+      </pre>
+      {printed && (
+        <Clamp maxHeight={260} more={t('tool.showAll')} buttonClassName="-mx-1.5">
+          <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
+            {output}
+          </pre>
+        </Clamp>
+      )}
+    </div>
   )
 }
 
@@ -396,7 +419,6 @@ function ContentBlock({
   index,
   content,
   projectPath,
-  framed,
 }: {
   sessionId: string
   entryId: string
@@ -404,30 +426,21 @@ function ContentBlock({
   index: number
   content: ToolContent
   projectPath: string
-  framed: boolean
 }) {
   const { t } = useTranslation('session')
   switch (content.type) {
     case 'markdown':
       return (
-        <div className={cn(framed && 'px-3 py-2.5')} data-selectable="">
+        <div data-selectable="">
           <Clamp maxHeight={320} more={t('tool.showAll')}>
             <Markdown markdown={content.markdown} className="markdown-compact" />
           </Clamp>
         </div>
       )
     case 'diff':
-      // Inset by the hairline so the diff's opaque lines leave the card's inset ring visible; a
-      // flat row frames its diff like a code block.
+      // Framed like a code block, in a row's details and in a request's card alike.
       return (
-        <div
-          className={cn(
-            'flex flex-col',
-            framed
-              ? 'mx-(--hairline) last:mb-(--hairline)'
-              : 'overflow-hidden rounded-lg border border-subtle',
-          )}
-        >
+        <div className="flex flex-col overflow-hidden rounded-code border border-subtle">
           <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
             <Diff
               path={relativePath(content.path, projectPath)}
@@ -440,32 +453,28 @@ function ContentBlock({
     case 'ref':
       if (content.ref.kind === 'image') {
         return (
-          <div className={cn(framed && 'px-3 py-2')}>
-            <CarriedImage
-              sessionId={sessionId}
-              entryId={entryId}
-              index={index}
-              mimeType={content.ref.mimeType}
-              data={content.ref.data}
-              className="max-h-40 max-w-full rounded-lg shadow-card"
-            />
-          </div>
+          <CarriedImage
+            sessionId={sessionId}
+            entryId={entryId}
+            index={index}
+            mimeType={content.ref.mimeType}
+            data={content.ref.data}
+            className="max-h-40 max-w-full self-start rounded-lg shadow-card"
+          />
         )
       }
       if (content.ref.kind === 'audio' || content.ref.kind === 'video') {
         return (
-          <div className={cn(framed && 'px-3 py-2')}>
-            <CarriedMedia
-              sessionId={sessionId}
-              entryId={entryId}
-              index={index}
-              carried={content.ref}
-            />
-          </div>
+          <CarriedMedia
+            sessionId={sessionId}
+            entryId={entryId}
+            index={index}
+            carried={content.ref}
+          />
         )
       }
       return (
-        <div className={cn('text-xs text-muted-foreground', framed && 'px-3 py-2')}>
+        <div className="text-xs text-muted-foreground">
           {content.ref.kind === 'link'
             ? content.ref.name || content.ref.uri
             : content.ref.kind === 'unsupported'
@@ -476,14 +485,11 @@ function ContentBlock({
   }
 }
 
-// Rejecting is neither a failure nor a deletion, so it stays neutral beside the attention ring.
-const OPTION_VARIANT: Record<PermissionKind, 'default' | 'outline'> = {
-  allow_once: 'default',
-  allow_always: 'outline',
-  reject_once: 'outline',
-  reject_always: 'outline',
-}
-
+/**
+ * The agent's sentence and its options, one per line in the agent's order, each with its number.
+ * The usual answer is drawn as the primary row and starts highlighted; the arrow keys move the
+ * highlight and Enter answers it. Outside a field, the number keys and Enter answer too.
+ */
 function PermissionPrompt({
   sessionId,
   entry,
@@ -498,15 +504,21 @@ function PermissionPrompt({
   const level = useRoutinesStore((s) =>
     routine ? (s.byId[routine.routineId]?.scope.level ?? null) : null,
   )
+  const permission = entry.permission!
+  const primary = primaryOption(permission.options)
+  const [highlight, setHighlight] = useState(primary)
   const [answering, setAnswering] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const permission = entry.permission!
+  const list = useRef<HTMLDivElement>(null)
 
-  const respond = async (optionId: string) => {
-    setAnswering(optionId)
+  const respond = async (option: PermissionOption) => {
+    // An answer from the card's own rows would leave the focus on nothing once the card goes.
+    const focused = !!list.current?.contains(document.activeElement)
+    setAnswering(option.id)
     setError(null)
     try {
-      await respondToPermission(sessionId, permission.requestId, optionId)
+      await respondToPermission(sessionId, permission.requestId, option.id)
+      if (focused) emitAppEvent({ kind: 'focus-composer' })
     } catch (e) {
       setError(errorMessage(e))
       setAnswering(null)
@@ -514,55 +526,82 @@ function PermissionPrompt({
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'))
     const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
     if (at < 0) return
+    const last = buttons.length - 1
+    const next =
+      event.key === 'ArrowDown' || event.key === 'ArrowRight'
+        ? at === last
+          ? 0
+          : at + 1
+        : event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+          ? at === 0
+            ? last
+            : at - 1
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? last
+              : null
+    if (next === null) return
     event.preventDefault()
-    buttons[(at + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length]?.focus()
+    buttons[next]?.focus()
   }
 
   return (
-    <div className="flex flex-col gap-2.5 px-3 pt-2.5 pb-3">
-      <p className="text-ui text-muted-foreground">
+    <div className="flex flex-col">
+      <p className="mx-0.5 my-2.5 text-ui text-secondary">
         {t(`permission.ask.${ASK_KEY[entry.toolKind]}`, { agent: agentName })}
       </p>
       {level && (
-        <p className="text-xs text-tertiary">
+        <p className="mx-0.5 -mt-1 mb-2.5 text-xs text-tertiary">
           {t('permission.outsideScope', {
             level: t(`routines:permission.level.${level}.name`),
           })}
         </p>
       )}
       <div
+        ref={list}
         role="group"
         aria-label={t('permission.answerGroup')}
-        className="flex flex-wrap gap-1.5"
+        className="-mx-1.5 mt-0.5 -mb-1 flex flex-col gap-px"
         onKeyDown={onKeyDown}
       >
         {permission.options.map((option, i) => (
-          <Button
+          <button
             key={option.id}
-            variant={OPTION_VARIANT[option.kind]}
-            size="compact"
+            type="button"
             disabled={answering !== null}
             data-permission-option={i + 1}
-            onClick={() => void respond(option.id)}
+            data-highlighted={i === highlight ? '' : undefined}
+            aria-keyshortcuts={i < 4 ? String(i + 1) : undefined}
+            onPointerEnter={() => setHighlight(i)}
+            onFocus={() => setHighlight(i)}
+            onClick={() => void respond(option)}
+            className="flex h-8.5 w-full min-w-0 cursor-default items-center gap-2.5 rounded-lg pr-2.5 pl-2 text-left text-ui text-foreground outline-none transition-colors duration-(--duration-fast) focus-ring disabled:opacity-60 data-highlighted:bg-selected"
           >
             {answering === option.id ? (
-              <Spinner data-icon="inline-start" className="size-3" />
+              <span className="flex size-5 shrink-0 items-center justify-center">
+                <Spinner className="size-3.5" />
+              </span>
+            ) : i < 4 ? (
+              <Kbd aria-hidden variant={i === primary ? 'primary' : 'default'}>
+                {i + 1}
+              </Kbd>
             ) : (
-              i < 4 && (
-                <span aria-hidden className="text-[11px] tabular opacity-55">
-                  {i + 1}
-                </span>
-              )
+              <span aria-hidden className="size-5 shrink-0" />
             )}
-            {option.name}
-          </Button>
+            <span className="min-w-0 flex-1 truncate">{option.name}</span>
+            {i === highlight && answering === null && (
+              <span aria-hidden className="shrink-0 text-tertiary">
+                ↵
+              </span>
+            )}
+          </button>
         ))}
       </div>
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p className="mx-0.5 mt-2 text-xs text-danger">{error}</p>}
     </div>
   )
 }
@@ -577,15 +616,8 @@ function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissio
         : result.by === 'routine'
           ? t('permission.answer.allowedByRoutine')
           : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
-  const rejected =
-    result !== 'cancelled' && result !== 'withdrawn' && result.kind.startsWith('reject')
   return (
-    <span
-      className={cn(
-        'shrink-0 animate-in text-xs text-muted-foreground animation-duration-(--duration-base) fade-in',
-        rejected && 'text-secondary',
-      )}
-    >
+    <span className="shrink-0 animate-in text-xs text-tertiary animation-duration-(--duration-base) fade-in">
       {text}
     </span>
   )

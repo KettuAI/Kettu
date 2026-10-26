@@ -23,8 +23,9 @@ const bubbleVariants = cva(
           '*:data-[slot=bubble-content]:bg-primary *:data-[slot=bubble-content]:text-primary-foreground [&>[data-slot=bubble-content]:is(button,a):hover]:bg-primary/80',
         secondary:
           '*:data-[slot=bubble-content]:bg-secondary *:data-[slot=bubble-content]:text-secondary-foreground [&>[data-slot=bubble-content]:is(button,a):hover]:bg-hover',
+        // The user's message: a fill on the sheet, set in the prose size.
         muted:
-          '*:data-[slot=bubble-content]:bg-subtle [&>[data-slot=bubble-content]:is(button,a):hover]:bg-hover',
+          'max-w-[85%] *:data-[slot=bubble-content]:rounded-2xl *:data-[slot=bubble-content]:bg-subtle *:data-[slot=bubble-content]:px-3.75 *:data-[slot=bubble-content]:py-2.5 *:data-[slot=bubble-content]:text-prose *:data-[slot=bubble-content]:leading-normal [&>[data-slot=bubble-content]:is(button,a):hover]:bg-hover',
         tinted:
           '*:data-[slot=bubble-content]:bg-selected *:data-[slot=bubble-content]:text-foreground [&>[data-slot=bubble-content]:is(button,a):hover]:bg-hover',
         outline:

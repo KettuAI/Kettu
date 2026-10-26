@@ -78,6 +78,7 @@
       "catalog": "Catalog",
       "more": "More for “{{name}}”",
       "export": "Export…",
+      "exported": "Saved {{file}} to {{folder}}",
       "remove": "Remove…",
       "install": "Install from file…",
       "installHint": ".json theme file",
@@ -95,6 +96,7 @@
       "removeTitle": "Remove the theme “{{name}}”?",
       "removeDescription": "Its installed file is deleted. If you're using it, OverBench's theme takes its place.",
       "removeConfirm": "Remove",
+      "removed": "{{name}} is removed",
       "loadFailed": "The theme “{{id}}” couldn't load",
       "loadFailedDescription": "OverBench's theme shows instead: {{reason}}.",
       "useBuiltIn": "Use OverBench",
@@ -255,25 +257,29 @@
     },
     "test": "Send a test notification",
     "testUnsupported": "This system does not show notifications",
+    "sent": "Sent",
     "previewTitle": "Claude Code needs your approval",
     "previewBody": "overbench · run {{command}}",
     "previewTime": "now"
   },
   "shortcuts": {
     "openProject": "Open project",
-    "newSession": "New session in the current project",
+    "newSession": "New session",
     "toggleSidebar": "Toggle the sidebar",
-    "focusComposer": "Focus the composer, or ask about the terminal selection",
+    "focusComposer": "Focus the composer",
+    "addFiles": "Add files or photos to the composer",
     "previousSession": "Previous session in the sidebar",
     "nextSession": "Next session in the sidebar",
     "settings": "Settings; Esc goes back",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
-    "resetZoom": "Reset zoom to the default",
+    "resetZoom": "Reset the zoom to 100%",
     "toggleTerminal": "Show or hide the terminal",
     "newTerminal": "New terminal",
     "cancelTurn": "Cancel the running turn",
     "answerPermission": "Answer the pending permission request",
+    "askSelection": "Ask the agent about the selection",
+    "askSelectionNote": "With text selected in the terminal",
     "groups": {
       "sessions": "Sessions",
       "window": "Window",
@@ -290,6 +296,9 @@
       "dialogDescription": "Sign-ins and saved form entries in the browser's pages will be lost. Pages that are open stay open.",
       "confirm": "Clear",
       "cleared": "Browsing data cleared"
+    },
+    "groups": {
+      "siteData": "Site data"
     }
   },
   "advanced": {
@@ -301,7 +310,9 @@
       "custom": "Custom",
       "url": "URL",
       "noProxyFor": "No proxy for",
-      "invalid": "Enter a URL such as http://proxy.example.com:8080"
+      "invalid": "Enter a URL such as http://proxy.example.com:8080",
+      "environmentNote": "The environment's proxy stays in use until a URL is in.",
+      "inUse": "In use for new connections."
     },
     "diagnostics": {
       "name": "Diagnostics",
@@ -325,7 +336,8 @@
       "dialogTitle_one": "Remove the only session from OverBench?",
       "dialogTitle_other": "Remove all {{count}} sessions from OverBench?",
       "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from each project's menu in the sidebar.",
-      "confirm": "Remove all"
+      "confirm": "Remove all",
+      "removed": "Every session is removed from OverBench"
     },
     "groups": {
       "network": "Network",
@@ -337,20 +349,23 @@
     "keywords": "sign in login install node binary plan limits",
     "signOut": "Sign out",
     "needsSignIn": "{{name}} needs you to sign in.",
+    "signInTitle": "Sign in to {{name}} to use it",
     "launch": "Launch",
     "copyLaunch": "Copy launch command",
     "adapter": "Adapter",
     "reinstall": "Reinstall",
     "installsOnFirstUse": "Installs on first use",
     "account": "Account",
-    "usage": "Usage",
+    "usage": "Plan usage",
     "checkLimits": "Check plan limits",
     "program": "Program",
     "programOnPath": "opencode on PATH",
+    "binaryDescription": "The {{command}} binary OverBench starts.",
     "reset": "Reset",
     "chooseBinary": "Choose binary…",
     "cli": {
       "choose": "Which {{name}} runs",
+      "description": "The {{command}} program the adapter runs.",
       "installed": "Installed",
       "bundled": "Bundled",
       "bundledLine": "Bundled with the adapter",
@@ -372,7 +387,8 @@
       "loginShellPlain": "Read from your login shell.",
       "inherited": "Inherited from how OverBench was started.",
       "fallback": "Using a fallback PATH.",
-      "reload": "Reload environment"
+      "reload": "Reload environment",
+      "keywords": "PATH shell node npm environment variables"
     },
     "groups": {
       "installed": "Installed",
@@ -389,15 +405,16 @@
     "usageNotReported": "{{name}} does not report plan usage.",
     "configuration": "Configuration",
     "config": {
-      "folder": "Config folder",
+      "folder": "Folder",
       "settings": "Settings file",
-      "instructions": "Instructions"
+      "instructions": "Instructions file"
     },
     "configFolder": {
       "choose": "Choose folder…",
       "label": "Configuration folder for {{name}}",
+      "description": "Where {{name}} keeps its sign-in, settings and history.",
       "useEnvironment": "Use the environment",
-      "custom": "Custom",
+      "custom": "A folder of its own",
       "chosen": "Chosen in OverBench",
       "nextStart": "Takes effect from the agent's next start."
     },
@@ -424,11 +441,14 @@
     "resetsAt": "Resets {{time}}",
     "versionGroup": "Version",
     "currentVersion": "Current version",
+    "ownInstaller": "Updated by its own installer, not by OverBench.",
     "update": {
       "mark": "Update available: {{names}}",
       "check": "Check for updates",
       "checking": "Checking…",
       "checkedAgo": "Checked {{ago}}",
+      "checkedAgoUpdates_one": "Checked {{ago}} · {{count}} update",
+      "checkedAgoUpdates_other": "Checked {{ago}} · {{count}} updates",
       "justChecked_one": "Checked just now · {{count}} update",
       "justChecked_other": "Checked just now · {{count}} updates",
       "allCurrent": "Checked just now · all up to date",
@@ -451,6 +471,8 @@
       "noticeBody": "You have {{current}}. The new version installs next to it: running sessions keep going, and {{name}} uses it from its next start. If it cannot install, the current version stays.",
       "button": "Update",
       "progressTitle": "Updating {{name}}",
+      "progressTitleTo": "Updating {{name}} to {{version}}…",
+      "progressBody": "Running sessions keep going.",
       "failedTitle": "Update failed",
       "failedBody": "The current version still works. Check Advanced › Proxy if the network is the problem, then retry.",
       "doneTitle": "{{name}} is updated",
@@ -493,9 +515,9 @@
     "updates": {
       "name": "Updates",
       "keywords": "update check download restart",
-      "upToDateShort": "Up to date",
+      "upToDate": "You're up to date",
       "notChecked": "Not checked yet",
-      "upToDateChecked": "You're up to date · Checked {{ago}}",
+      "checkedAgo": "Checked {{ago}}",
       "checking": "Checking for updates…",
       "downloading": "Downloading {{version}}",
       "downloadProgress": "Download progress",
@@ -569,9 +591,13 @@
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",
+    "group": "Archived",
     "restore": "Restore",
+    "restored": "Restored to {{project}}",
     "delete": "Delete…",
-    "empty": "No archived sessions. Archive one from its menu in the sidebar.",
+    "deleted": "The session is deleted",
+    "emptyTitle": "No archived sessions",
+    "emptyHint": "Archive one from its menu in the sidebar.",
     "keywords": "archive restore"
   },
   "sharing": {
@@ -585,11 +611,20 @@
       "keywords": "share publish link cloudflare workers token account",
       "id": "Account ID",
       "idPlaceholder": "32 hexadecimal characters",
+      "idHint": "On the Workers page of your Cloudflare dashboard.",
+      "idInvalid": "An account ID is 32 hexadecimal characters.",
       "token": "API token",
+      "tokenPlaceholder": "Paste the token",
       "createToken": "Create a token with Workers Scripts Write",
       "connect": "Connect",
+      "checking": "Checking…",
+      "kept": "Kept encrypted by the system, only on this computer.",
+      "refused": "Cloudflare refused the API token. Check that it has Workers Scripts Write and hasn't expired.",
       "connected": "Connected",
       "remove": "Remove",
+      "removeTitle": "Remove the Cloudflare account?",
+      "removeBody": "OverBench forgets the token. Published pages stay online; unpublishing them needs the account again.",
+      "removed": "The Cloudflare account is removed",
       "plainText": "This system has no keyring, so the token is stored without the system's encryption.",
       "dashboard": "Choose a subdomain in Cloudflare"
     },
@@ -597,8 +632,13 @@
       "version": "Version {{version}}, published {{ago}}",
       "keywords": "share published link url",
       "unpublish": "Unpublish",
+      "unpublishTitle": "Unpublish “{{title}}”?",
+      "unpublished": "Unpublished",
       "otherAccount": "Published with another Cloudflare account. Connect that account to change it.",
       "empty": "Nothing is published yet."
     }
+  },
+  "usage": {
+    "cleared": "OverBench's record is cleared"
   }
 }

@@ -2,22 +2,24 @@ import { memo, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } 
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import {
   addDays,
   AGENT_FILL,
   axisLabels,
-  BAR_GAP,
+  barGap,
   BAR_WIDTH,
   heatLevels,
   widest,
   type DayRange,
-  type DayTotal,
   type TrendBar,
 } from './model'
 
 const HEAT_FILL = ['bg-heat-0', 'bg-heat-1', 'bg-heat-2', 'bg-heat-3', 'bg-heat-4'] as const
+/** The heatmap's rows, one line of its weekday labels each. */
+const HEAT_ROWS = 'grid-rows-[repeat(7,--spacing(4))]'
 
 /** Where the arrow keys, Home and End take an index; `vertical` is how far up and down go. */
 function moveIndex(
@@ -47,8 +49,9 @@ function moveIndex(
 }
 
 /**
- * The range's tokens as bars, stacked by agent and scaled to `max`, under a grid line at it. A bar
- * chosen with the pointer or the arrow keys dims the others; the keys start from the shown one.
+ * The range's amounts as bars, stacked by agent and scaled to `max`, on a baseline and under a grid
+ * line at `max`. A bar chosen with the pointer or the arrow keys dims the others; the keys start
+ * from the shown one.
  */
 export function TrendChart({
   bars,
@@ -63,7 +66,7 @@ export function TrendChart({
   bars: TrendBar[]
   /** The series to stack, bottom first. */
   series: readonly AgentId[]
-  /** The tallest bar's tokens from those series: the top of the scale. */
+  /** The tallest bar's amount from those series: the top of the scale. */
   max: number
   /** The bar the header names. */
   shown: number | null
@@ -75,17 +78,17 @@ export function TrendChart({
 }) {
   const begun = bars.length - future
   return (
-    <div className="relative h-40">
+    <div className="relative flex min-h-49 flex-1 flex-col shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
       <span
         aria-hidden
-        className="absolute inset-x-0 top-0 border-t border-dashed border-default"
+        className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-strong"
       />
       <div
         role="group"
         tabIndex={0}
         aria-label={label}
-        className="relative flex h-full items-end justify-center rounded-md outline-none focus-ring"
-        style={{ gap: BAR_GAP }}
+        className="relative flex flex-1 items-end justify-center rounded-md outline-none focus-ring"
+        style={{ gap: barGap(bars.length) }}
         onPointerLeave={() => onChoose(null)}
         onBlur={() => onChoose(null)}
         onKeyDown={(event) => {
@@ -95,32 +98,37 @@ export function TrendChart({
       >
         {bars.map((bar, i) => {
           const parts = series.filter((id) => (bar.byAgent[id] ?? 0) > 0)
+          const total = parts.reduce((sum, id) => sum + bar.byAgent[id]!, 0)
           return (
             <div
               key={bar.from}
               className={cn(
-                'flex h-full min-w-0 flex-1 flex-col-reverse rounded-t-xs transition-opacity duration-(--duration-fast)',
-                chosen !== null && chosen !== i && 'opacity-60',
+                'flex h-full min-w-0 flex-1 items-end transition-opacity duration-(--duration-fast)',
+                chosen !== null && chosen !== i && 'opacity-40',
                 i >= begun && 'opacity-35',
               )}
               // A few days stay bars, not blocks across the chart; the dates are placed by it too.
               style={{ maxWidth: BAR_WIDTH }}
               onPointerEnter={i < begun ? () => onChoose(i) : undefined}
             >
-              {parts.length === 0 ? (
-                <span className="h-px w-full bg-heat-0" />
-              ) : (
-                parts.map((agentId) => (
-                  <span
-                    key={agentId}
-                    className={cn(
-                      // Usage too small for a pixel still shows, apart from a day without any.
-                      'min-h-px w-full first:rounded-b-none last:rounded-t-xs',
-                      AGENT_FILL[agentId],
-                    )}
-                    style={{ height: `${(bar.byAgent[agentId]! / max) * 100}%` }}
-                  />
-                ))
+              {parts.length > 0 && (
+                <div
+                  className="flex w-full flex-col-reverse overflow-hidden rounded-t-xs"
+                  // Each part keeps a pixel, so usage too small for one still shows.
+                  style={{ height: `${(total / max) * 100}%`, minHeight: parts.length }}
+                >
+                  {parts.map((agentId, k) => (
+                    <span
+                      key={agentId}
+                      className={cn(
+                        'min-h-px basis-0',
+                        k > 0 && 'shadow-[inset_0_calc(-1*var(--hairline))_0_var(--bg-surface)]',
+                        AGENT_FILL[agentId],
+                      )}
+                      style={{ flexGrow: bar.byAgent[agentId] }}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           )
@@ -193,7 +201,7 @@ export const TrendAxis = memo(function TrendAxis({
     return axisLabels({ count, width, anchor, steps, pick, gap: LABEL_GAP, text, measure })
   }, [box, count, anchor, steps, pick, text])
   return (
-    <div ref={row} aria-hidden className="relative h-4 text-xs text-tertiary tabular-nums">
+    <div ref={row} aria-hidden className="relative mt-1.5 h-5 text-meta text-tertiary tabular-nums">
       {labels.map((l) => (
         <span key={l.index} className="absolute top-0 whitespace-nowrap" style={{ left: l.left }}>
           {l.text}
@@ -205,7 +213,7 @@ export const TrendAxis = memo(function TrendAxis({
 
 /**
  * The trend's series as toggle buttons that show or hide each one, the last one shown staying,
- * each with its tokens in the bar the header names. A value keeps the room of the widest it takes
+ * each with its amount in the bar the header names. A value keeps the room of the widest it takes
  * in any bar, so moving along the bars never moves a key.
  */
 export const TrendLegend = memo(function TrendLegend({
@@ -214,6 +222,7 @@ export const TrendLegend = memo(function TrendLegend({
   series,
   shown,
   label,
+  keepOne,
   formatValue,
   onChange,
 }: {
@@ -222,13 +231,15 @@ export const TrendLegend = memo(function TrendLegend({
   series: readonly AgentId[]
   shown: readonly AgentId[]
   label: string
+  /** Why the last key shown stays pressed, in its tooltip. */
+  keepOne: string
   formatValue: (value: number) => string
   onChange: (shown: AgentId[]) => void
 }) {
   const { i18n } = useTranslation()
   const room = useMemo(
     () => {
-      const font = `12px ${getComputedStyle(document.body).fontFamily}`
+      const font = `500 12.5px ${getComputedStyle(document.body).fontFamily}`
       const values = (id: AgentId) => bars.map((bar) => partValue(bar.byAgent[id], formatValue))
       return new Map(series.map((id) => [id, widest(values(id), (t) => textWidth(t, font))]))
     },
@@ -243,29 +254,50 @@ export const TrendLegend = memo(function TrendLegend({
       onValueChange={(next) => onChange(next as AgentId[])}
       aria-label={label}
       variant="legend"
-      size="legend"
-      spacing={1}
-      className="-mr-1.5 flex-wrap justify-end"
+      className="min-w-0 flex-1 flex-wrap gap-x-2.5 gap-y-0.5"
     >
-      {series.map((id) => (
-        <ToggleGroupItem key={id} value={id}>
-          <span
-            aria-hidden
-            className={cn(
-              'size-2 rounded-xs',
-              shown.includes(id) ? AGENT_FILL[id] : 'ring-1 ring-border-strong ring-inset',
-            )}
-          />
-          {agentName(id)}
-          {/* The header reads the values out; the button's name stays the agent's. */}
-          <span aria-hidden className="grid text-left text-tertiary tabular-nums">
-            <span className="invisible col-start-1 row-start-1">{room.get(id)}</span>
-            <span className="col-start-1 row-start-1">
-              {bar && partValue(bar.byAgent[id], formatValue)}
-            </span>
-          </span>
-        </ToggleGroupItem>
-      ))}
+      {series.map((id) => {
+        const on = shown.includes(id)
+        const last = on && shown.length === 1
+        return (
+          <Tooltip key={id} disabled={!last}>
+            <TooltipTrigger
+              render={
+                <ToggleGroupItem
+                  value={id}
+                  className={cn(
+                    'h-6 min-w-0 gap-1.5 rounded-md px-1.5 text-command text-tertiary aria-pressed:text-secondary aria-pressed:hover:text-foreground',
+                    last && 'cursor-default hover:bg-transparent aria-pressed:hover:bg-transparent',
+                  )}
+                />
+              }
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  'size-2.25 rounded-xs',
+                  on ? AGENT_FILL[id] : 'shadow-[inset_0_0_0_1.5px_var(--border-strong)]',
+                )}
+              />
+              {agentName(id)}
+              {/* The header reads the values out; the button's name stays the agent's. */}
+              <span
+                aria-hidden
+                className={cn(
+                  'grid text-left font-medium tabular-nums',
+                  on ? 'text-foreground' : 'text-tertiary',
+                )}
+              >
+                <span className="invisible col-start-1 row-start-1">{room.get(id)}</span>
+                <span className="col-start-1 row-start-1">
+                  {bar && partValue(bar.byAgent[id], formatValue)}
+                </span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{keepOne}</TooltipContent>
+          </Tooltip>
+        )
+      })}
     </ToggleGroup>
   )
 })
@@ -285,7 +317,11 @@ const Cells = memo(function Cells({
         <span
           key={i}
           data-i={i}
-          className={cn('aspect-square rounded-xs', HEAT_FILL[level], outside[i] && 'opacity-35')}
+          className={cn(
+            'aspect-square self-center rounded-xs',
+            HEAT_FILL[level],
+            outside[i] && 'opacity-35',
+          )}
         />
       ))}
       {Array.from({ length: future }, (_, i) => (
@@ -295,52 +331,54 @@ const Cells = memo(function Cells({
   )
 })
 
-/**
- * 53 weeks of days, a column per week starting on the locale's first day. The shade is the day's
- * quartile among the days with usage. One pointer listener and the arrow keys pick a day; only
- * the outline moves, so the 371 cells never re-render on hover.
- */
 /** Monday, Wednesday and Friday, as GitHub labels its contribution graph, whatever the week's start. */
 const LABELLED_WEEKDAYS = new Set([1, 3, 5])
 
+/**
+ * 53 weeks of days, a column per week starting on the locale's first day, a row per weekday as
+ * tall as its label. The shade is the day's quartile among the days with usage. One pointer
+ * listener and the arrow keys pick a day; only the outline moves, so the 371 cells never
+ * re-render on hover.
+ */
 export function Heatmap({
   days,
+  values,
   range,
   label,
   monthLabel,
   weekdayLabel,
   onShow,
 }: {
-  /** The heatmap's days, oldest first, starting on the first day of a week. */
-  days: DayTotal[]
+  /** The heatmap's day starts, oldest first, starting on the first day of a week. */
+  days: readonly number[]
+  /** Each day's amount, which shades it. */
+  values: readonly number[]
   range: DayRange
   label: string
   monthLabel: (day: number) => string
   weekdayLabel: (day: number) => string
-  onShow: (day: DayTotal | null) => void
+  /** The day the header names: the one chosen, else the busiest in the range. */
+  onShow: (index: number | null) => void
 }) {
   const grid = useRef<HTMLDivElement>(null)
   const [chosen, setChosen] = useState<number | null>(null)
   const [box, setBox] = useState<{ x: number; y: number; size: number } | null>(null)
-  const levels = useMemo(() => heatLevels(days.map((d) => d.total)), [days])
-  const outside = useMemo(
-    () => days.map((d) => d.day < range.from || d.day >= range.to),
-    [days, range],
-  )
+  const levels = useMemo(() => heatLevels(values), [values])
+  const outside = useMemo(() => days.map((d) => d < range.from || d >= range.to), [days, range])
   const busiest = useMemo(
     () =>
-      days.reduce(
-        (best, d, i) => (!outside[i] && d.total > (days[best]?.total ?? 0) ? i : best),
+      values.reduce(
+        (best, value, i) => (!outside[i] && value > (values[best] ?? 0) ? i : best),
         days.length - 1,
       ),
-    [days, outside],
+    [values, days.length, outside],
   )
   const shown = chosen ?? busiest
   const future = (7 - (days.length % 7)) % 7
   const columns = Math.ceil(days.length / 7)
 
   useLayoutEffect(() => {
-    onShow(days[shown] ?? null)
+    onShow(days.length > 0 ? shown : null)
     const cell = grid.current?.querySelector<HTMLElement>(`[data-i="${shown}"]`)
     setBox(
       chosen !== null && cell
@@ -354,24 +392,21 @@ export function Heatmap({
     for (let column = 0; column < columns; column++) {
       for (let row = 0; row < 7; row++) {
         const day = days[column * 7 + row]
-        if (day && new Date(day.day).getDate() === 1) {
-          labels.push({ column, text: monthLabel(day.day) })
+        if (day !== undefined && new Date(day).getDate() === 1) {
+          labels.push({ column, text: monthLabel(day) })
           break
         }
       }
     }
     return labels
   }, [days, columns, monthLabel])
-  const weekStart = days[0]?.day ?? 0
+  const weekStart = days[0] ?? 0
+  const template = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }
 
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1">
+    <div className="grid grid-cols-[--spacing(7.5)_minmax(0,1fr)] gap-x-1.5">
       <span />
-      <div
-        className="grid text-xs tabular-nums text-tertiary"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-        aria-hidden
-      >
+      <div aria-hidden className="grid h-4.5 text-meta text-tertiary" style={template}>
         {months.map((m) => (
           <span
             key={m.column}
@@ -382,11 +417,11 @@ export function Heatmap({
           </span>
         ))}
       </div>
-      <div className="grid grid-rows-7 text-xs tabular-nums text-tertiary" aria-hidden>
+      <div aria-hidden className={cn('grid gap-y-0.75 text-meta text-tertiary', HEAT_ROWS)}>
         {[0, 1, 2, 3, 4, 5, 6].map((row) => {
           const day = addDays(weekStart, row)
           return (
-            <span key={row} className="flex items-center leading-none">
+            <span key={row} className="flex items-center">
               {LABELLED_WEEKDAYS.has(new Date(day).getDay()) ? weekdayLabel(day) : ''}
             </span>
           )
@@ -397,8 +432,11 @@ export function Heatmap({
         role="group"
         tabIndex={0}
         aria-label={label}
-        className="relative grid grid-flow-col grid-rows-7 gap-0.5 rounded-xs outline-none focus-ring"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        className={cn(
+          'relative grid grid-flow-col gap-0.75 rounded-xs outline-none focus-ring',
+          HEAT_ROWS,
+        )}
+        style={template}
         onPointerOver={(event) => {
           const index = (event.target as HTMLElement).dataset.i
           if (index !== undefined) setChosen(Number(index))
@@ -415,7 +453,7 @@ export function Heatmap({
         {box && (
           <span
             aria-hidden
-            className="pointer-events-none absolute top-0 left-0 rounded-xs ring-1 ring-foreground"
+            className="pointer-events-none absolute top-0 left-0 rounded-xs ring-[1.5px] ring-foreground"
             style={{
               width: box.size,
               height: box.size,
@@ -431,12 +469,12 @@ export function Heatmap({
 /** The heatmap's scale, from none to the top quartile. */
 export function HeatLegend({ less, more }: { less: string; more: string }) {
   return (
-    <span className="flex items-center gap-1 text-xs tabular-nums text-tertiary">
-      {less}
+    <span className="flex items-center gap-1 text-meta text-tertiary">
+      <span className="mx-0.75">{less}</span>
       {HEAT_FILL.map((fill) => (
-        <span key={fill} aria-hidden className={cn('size-2.5 rounded-xs', fill)} />
+        <span key={fill} aria-hidden className={cn('size-2.75 rounded-xs', fill)} />
       ))}
-      {more}
+      <span className="mx-0.75">{more}</span>
     </span>
   )
 }

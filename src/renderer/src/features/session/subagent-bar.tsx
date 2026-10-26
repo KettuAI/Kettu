@@ -39,30 +39,32 @@ export function SubagentBar({
   }
 
   return (
-    <div className="flex min-h-(--composer-min) items-center gap-2 rounded-2xl bg-card px-4 py-2 shadow-card">
-      <BotIcon className="size-4 shrink-0 text-muted-foreground" />
+    <div className="flex min-h-13 items-center gap-2 rounded-3xl bg-subtle py-2 pr-2 pl-4 text-ui text-secondary">
+      <BotIcon className="size-3.5 shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col">
-        <p className="truncate text-ui text-muted-foreground">
+        <p className="truncate">
           {parent ? (
             <Trans
               t={t}
               i18nKey="subagentBar.runsFor"
               values={{ agent: agentName(summary.agentId) }}
-              components={{ parent: <span className="text-foreground">{parentTitle}</span> }}
+              components={{
+                parent: <span className="font-medium text-foreground">{parentTitle}</span>,
+              }}
             />
           ) : (
             <Trans
               t={t}
               i18nKey="subagentBar.runsForParent"
               values={{ agent: agentName(summary.agentId) }}
-              components={{ parent: <span className="text-foreground" /> }}
+              components={{ parent: <span className="font-medium text-foreground" /> }}
             />
           )}
         </p>
         {error && <p className="truncate text-xs text-danger">{error}</p>}
       </div>
       {canStop && (
-        <Button variant="outline" size="compact" disabled={stopping} onClick={() => void stop()}>
+        <Button variant="outline" size="sm" disabled={stopping} onClick={() => void stop()}>
           {stopping ? (
             <Spinner data-icon="inline-start" className="size-3" />
           ) : (
@@ -73,14 +75,13 @@ export function SubagentBar({
       )}
       {parent && (
         <Button
-          variant="quiet"
-          size="compact"
+          variant="outline"
+          size="sm"
+          aria-label={t('subagentBar.back', { title: parentTitle })}
           onClick={() => openSession(parent.id, parent.projectPath)}
         >
           <ArrowLeftIcon data-icon="inline-start" />
-          {t('subagentBar.back', {
-            title: parentTitle.length > 24 ? `${parentTitle.slice(0, 23)}…` : parentTitle,
-          })}
+          {t('subagentBar.backShort')}
         </Button>
       )}
     </div>

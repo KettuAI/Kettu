@@ -1,20 +1,38 @@
 // A routine's schedule: the kind and its fields, the runs ahead, and what is wrong with it.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { CalendarIcon, ChevronDownIcon, CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { enUS, zhCN } from 'react-day-picker/locale'
 import { nextRuns, validateSchedule, type ScheduleProblem } from '@shared/schedule'
 import type { Schedule } from '@shared/routines'
-import { Input } from '@renderer/components/ui/input'
 import { SegmentedControl } from '@renderer/components/segmented-control'
+import { Button } from '@renderer/components/ui/button'
+import { Calendar } from '@renderer/components/ui/calendar'
+import { Input } from '@renderer/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
-import { SettingSelect } from '@renderer/features/settings/controls'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
-import { clockTime, dayTime, scheduleWords, untilTime } from './model'
+import { cn } from '@renderer/lib/utils'
+import { FieldSelect } from './fields'
+import {
+  CRON_FIELDS,
+  clockTime,
+  cronFieldAt,
+  dayDate,
+  everyChoices,
+  minutesLabel,
+  runDay,
+  scheduleWords,
+  untilTime,
+} from './model'
 
 type Segment = 'once' | 'every' | 'daily' | 'weekly' | 'cron'
 
 const SEGMENTS: Segment[] = ['once', 'every', 'daily', 'weekly', 'cron']
+
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6]
 
 function segmentOf(schedule: Schedule): Segment {
   if (schedule.kind === 'weekly') return schedule.days.length === 7 ? 'daily' : 'weekly'
@@ -28,31 +46,45 @@ function dateOf(at: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+function clockOf(at: number): string {
+  const date = new Date(at)
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/** A local 'YYYY-MM-DD', and 'HH:mm' when given, as an instant. */
+function localTime(date: string, time = '00:00'): number {
+  const [year, month, day] = date.split('-').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+  return new Date(year!, month! - 1, day, hour, minute).getTime()
+}
+
 function timeOf(schedule: Schedule): string {
   if (schedule.kind === 'once') return schedule.at.slice(11, 16)
   if (schedule.kind === 'weekly') return schedule.time
   return '09:00'
 }
 
-interface EveryParts {
-  value: string
-  unit: 'minutes' | 'hours'
+const isClock = (text: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(text)
+
+/** The next whole hour, which a new Every schedule is counted from. */
+function nextHour(): number {
+  const date = new Date()
+  date.setMinutes(60, 0, 0)
+  return date.getTime()
 }
 
-function everyParts(minutes: number): EveryParts {
-  return minutes >= 60 && minutes % 60 === 0
-    ? { value: String(minutes / 60), unit: 'hours' }
-    : { value: String(minutes), unit: 'minutes' }
-}
-
-function everyMinutes(value: string, unit: EveryParts['unit']): number {
-  const number = Number(value)
-  return unit === 'hours' ? number * 60 : number
+/** Today at a local 'HH:mm', which an Every schedule is counted from. */
+function todayAt(time: string): number {
+  return localTime(dateOf(Date.now()), time)
 }
 
 function weekdayName(day: number, width: 'narrow' | 'long'): string {
-  const monday = new Date(2024, 0, 7 + day)
-  return new Intl.DateTimeFormat(currentLocale(), { weekday: width }).format(monday)
+  const sunday = new Date(2024, 0, 7 + day)
+  return new Intl.DateTimeFormat(currentLocale(), { weekday: width }).format(sunday)
+}
+
+function sameSchedule(a: Schedule, b: Schedule | null): boolean {
+  return b !== null && JSON.stringify(a) === JSON.stringify(b)
 }
 
 function problemText(
@@ -81,6 +113,16 @@ function problemText(
   }
 }
 
+/** A field of the schedule with its label before it. */
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2.5">
+      <span className="w-11 shrink-0 text-small text-secondary">{label}</span>
+      {children}
+    </div>
+  )
+}
+
 /**
  * The schedule of a routine, edited in place. A valid change is saved at once; an invalid one is
  * kept here, said to be unsaved, and `saved` still runs.
@@ -88,33 +130,44 @@ function problemText(
 export function ScheduleField({
   schedule,
   saved,
+  done = false,
   onSchedule,
   onProblem,
 }: {
   schedule: Schedule
   /** The last saved schedule, for the note under an invalid change; null on a new routine. */
   saved: Schedule | null
+  /** A one-time routine that has run: its past time says when it ran, not what is wrong. */
+  done?: boolean
   onSchedule: (schedule: Schedule) => void
   onProblem?: (problem: ScheduleProblem | null) => void
 }) {
   const { t } = useTranslation('routines')
   const now = useNow()
   const [draft, setDraft] = useState<Schedule>(schedule)
-  const [every, setEveryState] = useState<EveryParts>(() =>
-    everyParts(schedule.kind === 'every' ? schedule.minutes : 60),
+  const [minutes, setMinutes] = useState(() => (schedule.kind === 'every' ? schedule.minutes : 60))
+  const [from, setFrom] = useState<number | null>(() =>
+    schedule.kind === 'every' ? schedule.from : null,
   )
+  // What the counted-from field shows while a time is being typed into it.
+  const [fromText, setFromText] = useState<string | null>(null)
   const [date, setDate] = useState(() =>
     schedule.kind === 'once' ? schedule.at.slice(0, 10) : dateOf(Date.now()),
   )
   const [time, setTime] = useState(() => timeOf(schedule))
   const [days, setDays] = useState<number[]>(() =>
-    schedule.kind === 'weekly' ? [...schedule.days].sort((a, b) => a - b) : [1, 2, 3, 4, 5],
+    schedule.kind === 'weekly' && schedule.days.length < 7
+      ? [...schedule.days].sort((a, b) => a - b)
+      : [1, 2, 3, 4, 5],
   )
   const [expression, setExpression] = useState(() =>
     schedule.kind === 'cron' ? schedule.expression : '0 9 * * 1-5',
   )
+  const [caretField, setCaretField] = useState<number | null>(null)
+  const [picking, setPicking] = useState(false)
   const report = useRef(onProblem)
   const problem = validateSchedule(draft, now)
+  const ran = done && draft.kind === 'once' && sameSchedule(draft, saved)
 
   useEffect(() => {
     report.current = onProblem
@@ -135,15 +188,13 @@ export function ScheduleField({
       return
     }
     if (segment === 'every') {
-      update({
-        kind: 'every',
-        minutes: everyMinutes(every.value, every.unit),
-        from: Date.now(),
-      })
+      const start = from ?? nextHour()
+      setFrom(start)
+      update({ kind: 'every', minutes, from: start })
       return
     }
     if (segment === 'daily') {
-      update({ kind: 'weekly', days: [0, 1, 2, 3, 4, 5, 6], time })
+      update({ kind: 'weekly', days: EVERY_DAY, time })
       return
     }
     if (segment === 'weekly') {
@@ -153,22 +204,20 @@ export function ScheduleField({
     update({ kind: 'cron', expression })
   }
 
-  const setEvery = (value: string, unit: EveryParts['unit']) => {
-    setEveryState({ value, unit })
-    update({ kind: 'every', minutes: everyMinutes(value, unit), from: Date.now() })
-  }
-
   const setClock = (next: string) => {
     setTime(next)
-    update(
-      segmentOf(draft) === 'daily'
-        ? { kind: 'weekly', days: [0, 1, 2, 3, 4, 5, 6], time: next }
-        : { kind: 'weekly', days, time: next },
-    )
+    if (segmentOf(draft) === 'once') update({ kind: 'once', at: `${date}T${next}` })
+    else
+      update({ kind: 'weekly', days: segmentOf(draft) === 'daily' ? EVERY_DAY : days, time: next })
+  }
+
+  const trackCaret = (input: HTMLInputElement) => {
+    setCaretField(cronFieldAt(input.value, input.selectionStart ?? input.value.length))
   }
 
   const preview = problem ? [] : nextRuns(draft, now, { count: 3 })
   const showWords =
+    ran ||
     !problem ||
     problem.reason === 'range' ||
     problem.reason === 'past' ||
@@ -179,154 +228,190 @@ export function ScheduleField({
     key: string,
     params?: Record<string, string | number>,
   ) => string
+  const today = localTime(dateOf(now))
+  const onceAt =
+    draft.kind === 'once' && isClock(draft.at.slice(11, 16))
+      ? localTime(draft.at.slice(0, 10), draft.at.slice(11, 16))
+      : null
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl
-          aria-label={t('routine.schedule')}
-          value={segment}
-          segments={SEGMENTS.map((value) => ({
-            value,
-            label: t(`schedule.kind.${value}`),
-          }))}
-          onChange={choose}
-        />
-        {segment === 'once' && (
-          <div className="flex items-center gap-2">
-            <Input
-              type="date"
-              value={date}
-              aria-label={t('schedule.date')}
-              onChange={(event) => {
-                setDate(event.target.value)
-                update({ kind: 'once', at: `${event.target.value}T${time}` })
-              }}
-              className="w-40"
-            />
-            <Input
-              type="time"
-              value={time}
-              aria-label={t('schedule.time')}
-              onChange={(event) => {
-                setTime(event.target.value)
-                update({ kind: 'once', at: `${date}T${event.target.value}` })
-              }}
-              className="w-32"
-            />
-          </div>
-        )}
-        {segment === 'every' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-tertiary">{t('schedule.everyValue')}</span>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              value={every.value}
-              aria-label={t('schedule.everyValue')}
-              onChange={(event) => setEvery(event.target.value, every.unit)}
-              className="w-20"
-            />
-            <SettingSelect
-              label={t('schedule.unit')}
-              value={every.unit}
-              options={[
-                { value: 'minutes', label: t('schedule.minutesUnit') },
-                { value: 'hours', label: t('schedule.hoursUnit') },
-              ]}
-              onChange={(unit) => {
-                const minutes = everyMinutes(every.value, every.unit)
-                const value =
-                  unit === 'hours' ? String(Math.max(1, Math.round(minutes / 60))) : String(minutes)
-                setEvery(value, unit)
-              }}
-            />
-          </div>
-        )}
-        {(segment === 'daily' || segment === 'weekly') && (
-          <div className="flex items-center gap-3">
-            {segment === 'weekly' && (
-              <ToggleGroup
-                aria-label={t('schedule.days')}
-                multiple
-                value={days.map(String)}
-                onValueChange={(next) => {
-                  const picked = next.map(Number).sort((a, b) => a - b)
-                  setDays(picked)
-                  update({ kind: 'weekly', days: picked, time })
+    <div className="flex w-full flex-col gap-3">
+      <SegmentedControl
+        aria-label={t('routine.schedule')}
+        value={segment}
+        segments={SEGMENTS.map((value) => ({
+          value,
+          label: t(`schedule.kind.${value}`),
+        }))}
+        onChange={choose}
+        className="self-start"
+      />
+      {segment === 'once' && (
+        <Row label={t('schedule.on')}>
+          <Popover open={picking} onOpenChange={setPicking}>
+            <PopoverTrigger render={<Button variant="outline" aria-label={t('schedule.date')} />}>
+              <CalendarIcon data-icon="inline-start" className="size-3.5 text-icon" />
+              <span className="tabular-nums">{dayDate(localTime(date), now)}</span>
+              <ChevronDownIcon data-icon="inline-end" className="size-3.5 text-icon" />
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto p-0">
+              <Calendar
+                mode="single"
+                required
+                selected={new Date(localTime(date))}
+                defaultMonth={new Date(localTime(date))}
+                disabled={{ before: new Date(today) }}
+                locale={currentLocale() === 'zh-CN' ? zhCN : enUS}
+                onSelect={(day: Date) => {
+                  const next = dateOf(day.getTime())
+                  setDate(next)
+                  setPicking(false)
+                  update({ kind: 'once', at: `${next}T${time}` })
                 }}
-                variant="segmented"
-                size="compact"
-                spacing={0.5}
+              />
+            </PopoverContent>
+          </Popover>
+        </Row>
+      )}
+      {segment === 'every' && (
+        <Row label={t('schedule.everyValue')}>
+          <FieldSelect
+            label={t('schedule.everyValue')}
+            value={String(minutes)}
+            options={everyChoices(minutes).map((choice) => ({
+              value: String(choice),
+              label: minutesLabel(choice),
+            }))}
+            onChange={(value) => {
+              const next = Number(value)
+              const start = from ?? nextHour()
+              setMinutes(next)
+              setFrom(start)
+              update({ kind: 'every', minutes: next, from: start })
+            }}
+          />
+          <span className="text-small text-secondary">{t('schedule.countedFrom')}</span>
+          <Input
+            type="time"
+            value={fromText ?? clockOf(from ?? nextHour())}
+            aria-label={t('schedule.countedFrom')}
+            onChange={(event) => {
+              const text = event.target.value
+              setFromText(text)
+              if (!isClock(text)) return
+              const start = todayAt(text)
+              setFrom(start)
+              update({ kind: 'every', minutes, from: start })
+            }}
+            onBlur={() => setFromText(null)}
+            className="w-30"
+          />
+        </Row>
+      )}
+      {segment === 'weekly' && (
+        <Row label={t('schedule.days')}>
+          <ToggleGroup
+            aria-label={t('schedule.days')}
+            multiple
+            value={days.map(String)}
+            onValueChange={(next) => {
+              // At least one day stays on, so the schedule always runs.
+              if (next.length === 0) return
+              const picked = next.map(Number).sort((a, b) => a - b)
+              setDays(picked)
+              update({ kind: 'weekly', days: picked, time })
+            }}
+            variant="fill"
+            spacing={1}
+          >
+            {EVERY_DAY.map((day) => (
+              <ToggleGroupItem
+                key={day}
+                value={String(day)}
+                aria-label={weekdayName(day, 'long')}
+                className="w-8 px-0 text-small"
               >
-                {[0, 1, 2, 3, 4, 5, 6].map((day) => (
-                  <ToggleGroupItem
-                    key={day}
-                    value={String(day)}
-                    aria-label={weekdayName(day, 'long')}
-                    className="w-8 justify-center px-0"
-                  >
-                    {weekdayName(day, 'narrow')}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            )}
-            <Input
-              type="time"
-              value={time}
-              aria-label={t('schedule.time')}
-              onChange={(event) => setClock(event.target.value)}
-              className="w-32"
-            />
-          </div>
-        )}
-        {segment === 'cron' && (
+                {weekdayName(day, 'narrow')}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </Row>
+      )}
+      {(segment === 'once' || segment === 'daily' || segment === 'weekly') && (
+        <Row label={t('schedule.time')}>
+          <Input
+            type="time"
+            value={time}
+            aria-label={t('schedule.time')}
+            onChange={(event) => setClock(event.target.value)}
+            className="w-30"
+          />
+        </Row>
+      )}
+      {segment === 'cron' && (
+        <div className="flex flex-col gap-1.5">
           <Input
             value={expression}
             aria-label={t('schedule.expression')}
             placeholder={t('schedule.expressionHint')}
+            spellCheck={false}
             onChange={(event) => {
               setExpression(event.target.value)
+              trackCaret(event.target)
               update({ kind: 'cron', expression: event.target.value })
             }}
-            className="max-w-64"
+            onSelect={(event) => trackCaret(event.currentTarget)}
+            onFocus={(event) => trackCaret(event.currentTarget)}
+            onBlur={() => setCaretField(null)}
+            className="font-mono text-command md:text-command"
           />
-        )}
-      </div>
+          <div aria-hidden className="flex flex-wrap gap-x-3.5 px-0.5 text-xs text-tertiary">
+            {CRON_FIELDS.map((field, index) => (
+              <span key={field} className={cn(index === caretField && 'font-medium text-primary')}>
+                {t(`schedule.cronFields.${field}`)}
+              </span>
+            ))}
+          </div>
+          <p className="px-0.5 text-xs text-tertiary">{t('schedule.cronSyntax')}</p>
+        </div>
+      )}
 
-      <div className="flex flex-col gap-1.5 rounded-lg bg-card px-3 py-2.5">
-        {showWords && <p className="text-ui font-medium">{scheduleWords(draft)}</p>}
-        {problem ? (
-          <p className="text-xs leading-normal text-danger">{problemText(problem, translate)}</p>
+      <div className="rounded-code bg-subtle px-3.5 py-3">
+        {showWords && <p className="mb-1.5 text-ui font-medium">{scheduleWords(draft)}</p>}
+        {ran && onceAt !== null ? (
+          <p className="text-small text-secondary">
+            {t('schedule.ranOnce', { date: dayDate(onceAt, now), time: clockTime(onceAt) })}
+          </p>
+        ) : problem ? (
+          <p className="flex gap-1.5 text-small text-danger">
+            <CircleAlertIcon aria-hidden className="mt-1 size-3 shrink-0" />
+            {problemText(problem, translate)}
+          </p>
         ) : (
-          <>
-            <p className="text-xs font-medium text-tertiary">{t('schedule.nextRuns')}</p>
-            <ul className="flex flex-col gap-0.5 text-xs leading-normal text-secondary">
-              {preview.map((run) => (
-                <li key={`${run.at}-${run.shift ?? ''}`} className="flex flex-col">
-                  <span>
-                    {t('schedule.runAt', {
-                      when: dayTime(run.at, now),
-                      away: untilTime(run.at, now),
-                    })}
+          <ul className="flex flex-col">
+            {preview.map((run) => (
+              <li key={`${run.at}-${run.shift ?? ''}`} className="flex flex-col">
+                <span className="flex min-h-6.5 items-center gap-3 text-small text-secondary">
+                  <span className="min-w-0 flex-1 truncate">{runDay(run.at, now)}</span>
+                  <span className="shrink-0 text-xs text-tertiary tabular">
+                    {untilTime(run.at, now)}
                   </span>
-                  {run.shift === 'gap' && (
-                    <span className="text-tertiary">
-                      {t('schedule.clockGap', { time: clockTime(run.at) })}
-                    </span>
-                  )}
-                  {run.shift === 'overlap' && (
-                    <span className="text-tertiary">{t('schedule.clockOverlap')}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </>
+                </span>
+                {run.shift === 'gap' && (
+                  <span className="text-xs text-tertiary">
+                    {t('schedule.clockGap', { time: clockTime(run.at) })}
+                  </span>
+                )}
+                {run.shift === 'overlap' && (
+                  <span className="text-xs text-tertiary">{t('schedule.clockOverlap')}</span>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
-      {problem && saved && (
+      {problem && !ran && saved && (
         <p className="text-xs leading-normal text-tertiary">
           {t('schedule.unvalid', { schedule: scheduleWords(saved) })}
         </p>

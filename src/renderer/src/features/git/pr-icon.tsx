@@ -1,6 +1,5 @@
 import {
   CircleCheckIcon,
-  CircleDotIcon,
   CircleXIcon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
@@ -9,7 +8,13 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { PullRequest, PullRequestState } from '@shared/git'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
+
+/** The steps of the icon scale these icons are drawn at. */
+export type IconSize = 12 | 14 | 16
+
+const ICON_SIZE = { 12: 'size-3', 14: 'size-3.5', 16: 'size-4' } as const
 
 const STATE = {
   open: { Icon: GitPullRequestIcon, color: 'text-success', label: 'pr.icon.open' },
@@ -25,7 +30,7 @@ export function PrIcon({
   className,
 }: {
   state: PullRequestState | null
-  size?: number
+  size?: IconSize
   className?: string
 }) {
   const { t } = useTranslation('git')
@@ -34,9 +39,7 @@ export function PrIcon({
       <GitPullRequestIcon
         role="img"
         aria-label={t('pr.icon.none')}
-        style={{ width: size, height: size }}
-
-        className={cn('shrink-0 text-icon', className)}
+        className={cn('shrink-0 text-icon', ICON_SIZE[size], className)}
       />
     )
   }
@@ -45,9 +48,7 @@ export function PrIcon({
     <Icon
       role="img"
       aria-label={t(label)}
-      style={{ width: size, height: size }}
-
-      className={cn('shrink-0', color, className)}
+      className={cn('shrink-0', ICON_SIZE[size], color, className)}
     />
   )
 }
@@ -55,26 +56,29 @@ export function PrIcon({
 const CHECKS = {
   passing: { Icon: CircleCheckIcon, color: 'text-success', label: 'pr.checks.passing' },
   failing: { Icon: CircleXIcon, color: 'text-danger', label: 'pr.checks.failing' },
-  pending: { Icon: CircleDotIcon, color: 'text-info', label: 'pr.checks.pending' },
 } as const
 
+/** The checks' worst state; checks still running turn, as running work does. */
 export function ChecksIcon({
   state,
-  size = 13,
+  size = 12,
 }: {
   state: PullRequest['checks']['state']
-  size?: number
+  size?: IconSize
 }) {
   const { t } = useTranslation('git')
   if (state === 'none') return null
+  if (state === 'pending') {
+    return (
+      <Spinner
+        role="img"
+        aria-label={t('pr.checks.pending')}
+        className={cn('shrink-0 text-info', ICON_SIZE[size])}
+      />
+    )
+  }
   const { Icon, color, label } = CHECKS[state]
   return (
-    <Icon
-      role="img"
-      aria-label={t(label)}
-      style={{ width: size, height: size }}
-
-      className={cn('shrink-0', color)}
-    />
+    <Icon role="img" aria-label={t(label)} className={cn('shrink-0', ICON_SIZE[size], color)} />
   )
 }

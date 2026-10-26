@@ -31,7 +31,11 @@
       "computer": "This computer",
       "overbench": "OverBench only"
     },
-    "importing": "Reading the agents' logs: {{done}} of {{total}}"
+    "importing": "Reading the agents' logs: {{done}} of {{total}}",
+    "importingFrom": "{{agents}}, since {{date}}. The page fills in when the logs are read.",
+    "importingAgents": "{{agents}}. The page fills in when the logs are read.",
+    "importingNote": "The page fills in when the logs are read.",
+    "loading": "Loading usage"
   },
   "metrics": {
     "tokens": "Tokens",
@@ -47,7 +51,9 @@
     "turns": "{{value}} turns"
   },
   "figures": {
+    "label": "Figures",
     "today": "Today",
+    "sinceMidnight": "Since midnight",
     "total": "Tokens",
     "cost": "Estimated cost",
     "tokensPerRequest": "Tokens per request",
@@ -94,11 +100,18 @@
     "agent": "{{agent}} {{tokens}}",
     "agentCount": "{{agent}} {{value}}",
     "agentCost": "{{agent}} {{cost}}",
-    "legend": "Agents shown in the chart"
+    "legend": "Agents shown in the chart",
+    "keepOne": "At least one agent stays in the chart"
   },
   "limits": {
     "title": "Plan limits",
-    "none": "No agent has reported plan limits yet."
+    "none": "No agent has reported plan limits yet.",
+    "read": "Read {{ago}}",
+    "used": "{{limit}} used",
+    "resetsIn": "Resets in {{time}}",
+    "resetsAt": "Resets {{time}}",
+    "notReported": "{{name}} does not report plan usage.",
+    "notYet": "No plan usage reported yet."
   },
   "activity": {
     "title": "Activity",
@@ -142,6 +155,7 @@
   "error": {
     "title": "The usage could not be read",
     "retry": "Retry",
+    "kept": "The figures below are the last ones read.",
     "unavailable": "The usage database cannot be read. Restart OverBench; if it still cannot, export diagnostics.",
     "export": "Export diagnostics",
     "savedTo": "Saved to {{path}}"
@@ -166,6 +180,7 @@
     "end": "End",
     "days_one": "{{count}} day",
     "days_other": "{{count}} days",
+    "pickStart": "Pick a start",
     "errors": {
       "format": "Enter a date as YYYY-MM-DD",
       "future": "Choose a day up to today",

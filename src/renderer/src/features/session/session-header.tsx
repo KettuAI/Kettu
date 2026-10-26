@@ -87,26 +87,28 @@ export function SessionHeader({
           </>
         )}
         {parent && <ParentLink parent={parent} />}
-        {summary.origin === 'subagent' ? (
-          <BotIcon className="ml-1.5 size-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <AgentMark agent={summary.agentId} size={14} className="ml-1.5 shrink-0" />
-        )}
+        <span className="mr-[3px] grid w-4 shrink-0 place-items-center">
+          {summary.origin === 'subagent' ? (
+            <BotIcon className="size-3.5 text-secondary" />
+          ) : (
+            <AgentMark agent={summary.agentId} size={14} />
+          )}
+        </span>
         {rename.renaming ? (
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            // The ring's outer edge is the button's box (25 px tall, text 4 px in, 6 px radius), so
+            // The ring's outer edge is the button's box (30 px tall, text 4 px in, 6 px radius), so
             // the hover fill and the ring match and the text does not move.
             style={{ minWidth: Math.max(titleWidth - 5, 0) }}
-            className="mx-[5.5px] field-sizing-content h-5 rounded-[3.5px] bg-transparent px-[1.5px] py-0 text-control font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
+            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-heading text-subheading font-semibold outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <Button
             ref={titleButton}
             variant="ghost"
             title={`${title} · ${agentName(summary.agentId)}`}
-            className="mx-[3px] h-[25px] min-w-0 shrink rounded-[6px] px-[3px] text-control focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
+            className="mx-[3px] h-7.5 min-w-0 shrink rounded-md px-[3px] font-heading text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
             onClick={() => {
               measureTitle()
               rename.start()
@@ -123,15 +125,15 @@ export function SessionHeader({
                   render={
                     <Button
                       variant="ghost"
-                      size="icon-compact"
+                      size="icon-sm"
                       aria-label={t('row.more')}
-                      className="text-muted-foreground"
+                      className="-ml-0.5 text-secondary"
                     />
                   }
                 />
               }
             >
-              <ChevronDownIcon className="size-3.5" />
+              <ChevronDownIcon />
             </TooltipTrigger>
             <TooltipContent>{t('row.more')}</TooltipContent>
           </Tooltip>

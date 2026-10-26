@@ -3,6 +3,7 @@
 
 import { writeFile } from 'node:fs/promises'
 import { app, BrowserWindow } from 'electron'
+import type { Rectangle } from 'electron'
 import type { BrowserState } from '@shared/browser'
 import { BrowserViews } from '../views'
 
@@ -20,6 +21,7 @@ interface Result {
   dialog?: string | null
   evicted?: string | null
   forbidden?: boolean
+  layout?: { bounds: Rectangle; children: Rectangle[] }[]
 }
 
 async function main(): Promise<Result> {
@@ -67,9 +69,14 @@ async function main(): Promise<Result> {
   const result: Result = {}
   const session = 's1'
   views.show(session)
-  views.setBounds(session, { x: 0, y: 0, width: 800, height: 600 })
+  // Under a 48 px header, in a pane whose lower corners round by 12 px.
+  views.setBounds(session, { x: 0, y: 48, width: 800, height: 600, radius: 12 })
   views.navigate(session, `${FIXTURE}/one`)
   result.one = (await loaded(session, '/one')).title
+  result.layout = window.contentView.children.map((child) => ({
+    bounds: child.getBounds(),
+    children: child.children.map((inner) => inner.getBounds()),
+  }))
 
   views.navigate(session, `${FIXTURE}/two`)
   result.two = (await loaded(session, '/two')).title

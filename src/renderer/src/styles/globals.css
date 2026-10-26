@@ -3,7 +3,33 @@
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter/opsz.css';
 @import '@fontsource-variable/source-serif-4/opsz.css';
+@import '@fontsource-variable/source-serif-4/opsz-italic.css';
+@import '@fontsource-variable/jetbrains-mono/wght.css';
 @import './tokens.css';
+
+/* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
+   its Light. Each range takes the Regular, Medium or Semibold, or the nearest weight a face has. */
+@font-face {
+  font-family: 'Platform Chinese';
+  font-weight: 300 449;
+  src:
+    local('PingFang SC Regular'), local('PingFangSC-Regular'), local('Microsoft YaHei'),
+    local('MicrosoftYaHei'), local('Noto Sans CJK SC Regular'), local('NotoSansCJKsc-Regular');
+}
+@font-face {
+  font-family: 'Platform Chinese';
+  font-weight: 450 549;
+  src:
+    local('PingFang SC Medium'), local('PingFangSC-Medium'), local('Microsoft YaHei'),
+    local('MicrosoftYaHei'), local('Noto Sans CJK SC Medium'), local('NotoSansCJKsc-Medium');
+}
+@font-face {
+  font-family: 'Platform Chinese';
+  font-weight: 550 700;
+  src:
+    local('PingFang SC Semibold'), local('PingFangSC-Semibold'), local('Microsoft YaHei Bold'),
+    local('MicrosoftYaHei-Bold'), local('Noto Sans CJK SC Bold'), local('NotoSansCJKsc-Bold');
+}
 
 /* Streamdown and its code plugin style their elements with Tailwind classes. */
 @source '../../../../node_modules/streamdown/dist/*.js';
@@ -29,15 +55,16 @@
 }
 
 @theme inline {
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-serif);
   --font-sans:
-    'Inter Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
+    'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    system-ui, sans-serif;
   --font-mono:
-    ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
-  /* The New session heading only; Chinese falls through to the sans faces, as in the reference. */
+    'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  /* Titles and the agent's prose; Chinese falls through to the sans faces, as in the reference. */
   --font-serif:
-    'Source Serif 4 Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', ui-serif,
-    Georgia, serif;
+    'Source Serif 4 Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', ui-serif, Georgia, serif;
 
   /* The palette's own names, from tokens.css: bg-app, text-secondary, border-subtle, ... */
   --background-color-app: var(--bg-app);
@@ -98,6 +125,7 @@
   --color-border-soft: var(--border-soft);
   --color-border-strong: var(--border-strong);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-tint: var(--destructive-tint);
   --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-accent-foreground: var(--accent-foreground);
@@ -143,13 +171,13 @@
   --color-heat-3: var(--heat-3);
   --color-heat-4: var(--heat-4);
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-code: calc(var(--radius) * 1.25);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 1.75);
+  --radius-3xl: calc(var(--radius) * 2);
 
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -158,7 +186,9 @@
   --shadow-outline: var(--outline-ring);
   --shadow-outline-hover: var(--outline-hover);
   --shadow-sunk: var(--sunk-ring);
+  --shadow-field: var(--field-shadow);
   --shadow-primary: var(--primary-shadow);
+  --shadow-destructive: var(--destructive-shadow);
   --shadow-float: var(--float-shadow);
   --shadow-menu: var(--menu-ring);
   --shadow-dialog: var(--dialog-ring);
@@ -169,6 +199,7 @@
   --shadow-attention: var(--attention-ring-shadow);
   --shadow-segment: var(--segment-ring);
   --shadow-thumb: var(--thumb-shadow);
+  --shadow-sheet: var(--elevation-sheet);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);
@@ -179,25 +210,37 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
   --text-prose: var(--prose-size);
-  /* The thread's column: 50em of prose, about 50 Chinese characters a line, plus its gutters. */
-  --container-thread: calc(50 * var(--prose-size) + 3rem);
+  /* The thread's column, 28 px gutters included: 48em of prose, 720 px at the default size. */
+  --container-thread: calc(48 * var(--prose-size));
   --text-ui: var(--ui-size);
   --text-prose--line-height: 1.45;
-  /* The type scale of the design system, used by Settings first. */
+  /* The type scale of the design system. Titles are the serif, through font-heading. */
   --text-greeting: 34px;
   --text-greeting--line-height: 40px;
   --text-greeting--letter-spacing: -0.01em;
-  --text-title: 22px;
-  --text-title--line-height: 28px;
-  --text-title--letter-spacing: -0.015em;
-  --text-heading: 16px;
+  /* A figure on the usage page, the serif at weight 500 with tabular figures. */
+  --text-figure: 27px;
+  --text-figure--line-height: 32px;
+  --text-figure--letter-spacing: -0.015em;
+  --text-title: 24px;
+  --text-title--line-height: 30px;
+  --text-title--letter-spacing: -0.008em;
+  --text-heading: 18px;
   --text-heading--line-height: 24px;
+  --text-subheading: 16.5px;
+  --text-subheading--line-height: 22px;
+  --text-subheading--letter-spacing: -0.006em;
+  --text-group: 13.5px;
+  --text-group--line-height: 20px;
+  --text-group--letter-spacing: -0.003em;
   --text-small: 13px;
-  --text-small--line-height: 1.6;
+  --text-small--line-height: 1.5;
   --text-control: 14px;
   --text-control--line-height: 20px;
+  --text-command: 12.5px;
+  --text-command--line-height: 20px;
   --text-code: 12px;
-  --text-code--line-height: 18px;
+  --text-code--line-height: 20px;
   --text-meta: 11.5px;
   --text-meta--line-height: 16px;
 }
@@ -212,10 +255,15 @@
   --row-height: 32px;
   /* Interface text: the sidebar, menus and controls. Prose has its own size below. */
   --ui-size: 14px;
-  --card-header: 36px;
+  --card-header: 40px;
   --composer-min: 56px;
   --icon-size: 20px;
-  --top-bar: 40px;
+  --top-bar: 48px;
+  /* The desk around a sheet, and between two sheets. */
+  --sheet-gap: 8px;
+  /* Windows and Linux: the band of desk across the window's top, where the window controls sit;
+     main's title bar overlay has the same height. */
+  --title-bar: 40px;
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
   --zoom: 1;
   --traffic-lights: calc(52px / var(--zoom));
@@ -236,6 +284,12 @@
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
+  /* Diffs: code at the code step, separators in Inter. @pierre/diffs reads these in its shadow
+     root, where its own fallbacks are the platform's faces. */
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: var(--text-code);
+  --diffs-line-height: var(--text-code--line-height);
+  --diffs-header-font-family: var(--font-sans);
 }
 
 /* Light text on a dark surface looks heavier than it is. */
@@ -262,10 +316,12 @@
     text-rendering: optimizeLegibility;
     scrollbar-color: var(--scrollbar-thumb) transparent;
     scrollbar-width: thin;
+    /* The window is the desk the sheets lie on. */
+    background-color: var(--bg-sidebar);
   }
   /* Interface text is --ui-size; the root stays 16 px so Tailwind's rem scale is unchanged. */
   body {
-    @apply bg-background text-foreground;
+    @apply bg-sidebar text-foreground;
     font-size: var(--ui-size);
     line-height: 1.4;
     font-weight: var(--weight-normal);
@@ -298,6 +354,17 @@
   }
   kbd {
     font-family: var(--font-mono);
+  }
+  /* JetBrains Mono's ligatures stay off, so -> and != show as typed. Diffs and the terminal draw
+     their text inside these hosts, which pass it on. */
+  code,
+  pre,
+  kbd,
+  samp,
+  .font-mono,
+  .diff,
+  .xterm {
+    font-variant-ligatures: none;
   }
 }
 
@@ -477,22 +544,22 @@
   animation: sheen var(--duration-slower) var(--ease-out-quart) 1 both;
 }
 
-/* One-time attention pulse: the halo grows to 6 px and settles at 3 px. */
+/* One-time attention pulse: a wave leaves the ring and fades by 14 px. */
 @keyframes attention-pulse {
   0% {
     box-shadow:
-      inset 0 0 0 1px var(--attention-ring),
-      0 0 0 0 var(--attention-halo),
-      var(--highlight);
+      var(--attention-ring-shadow),
+      0 0 0 0 color-mix(in srgb, var(--attention-dot) 16%, transparent);
   }
   40% {
     box-shadow:
-      inset 0 0 0 1px var(--attention-ring),
-      0 0 0 6px var(--attention-halo),
-      var(--highlight);
+      var(--attention-ring-shadow),
+      0 0 0 8px color-mix(in srgb, var(--attention-dot) 16%, transparent);
   }
   100% {
-    box-shadow: var(--attention-ring-shadow);
+    box-shadow:
+      var(--attention-ring-shadow),
+      0 0 0 14px transparent;
   }
 }
 
@@ -523,6 +590,7 @@
   }
   .animate-pulse,
   .animate-spin,
+  .animate-attention,
   .shimmer,
   [data-caret] {
     animation: none !important;
@@ -546,6 +614,7 @@
   }
   & .animate-pulse,
   & .animate-spin,
+  & .animate-attention,
   & .shimmer,
   & [data-caret] {
     animation: none !important;
@@ -555,17 +624,24 @@
   }
 }
 
-/* A sidebar toggle in the workbench (app.tsx); resizing by drag follows the pointer at once. */
+/* A sidebar toggle in the workbench (app.tsx); resizing by drag follows the pointer at once. The
+   sidebar's panel cuts off the content held against its right edge, and the main panel's frame
+   cuts its sheets. */
 [data-slot='resizable-panel-group'][data-sliding] > [data-panel] {
   transition: flex-grow var(--duration-slow) var(--ease-out-quart);
 }
 
 /* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not in a layer, so they win over the utility
    classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
-   scales them; the spec's pixel values are those of the default 15 px. */
+   scales them; the spec's pixel values are those of the default 16.5 px. */
 .markdown {
-  font-size: var(--prose-size);
-  line-height: 1.45;
+  font-family: var(--font-serif);
+  /* The serif reads about a size smaller than Inter at the same pixel size. */
+  font-size: calc(var(--prose-size) * 1.1);
+  line-height: 1.56;
+  letter-spacing: -0.002em;
+  /* Italics are the serif's own; Chinese, which has none, stays upright. */
+  font-synthesis-style: none;
   color: var(--text-primary);
   overflow-wrap: anywhere;
   user-select: text;
@@ -588,9 +664,11 @@
   & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)) > :last-child {
     margin-bottom: 0;
   }
-  /* Media a block's file references name, under it (markdown-impl.tsx). */
+  /* Media a block's file references name, under it (markdown-impl.tsx). Its captions and
+     buttons are interface, so they stay Inter. */
   & :where([data-media-block]) {
     margin: 0 0 0.75em;
+    font-family: var(--font-sans);
   }
   & [data-media-block]:empty {
     display: none;
@@ -673,7 +751,7 @@
     color: var(--text-primary);
     padding: 0.1em 0.35em;
     font-family: var(--font-mono);
-    font-size: 0.8em;
+    font-size: 0.74em;
   }
 
   /* A file reference is a chip, not a link: its type's icon and its name, the path in its
@@ -682,31 +760,34 @@
     display: inline-flex;
     vertical-align: middle;
     align-items: center;
-    gap: 3px;
-    margin-left: 4px;
+    gap: 4px;
+    margin-inline: 1px;
     /* The line counts the chip as 18 px, so it never makes a 1.45 line taller, down to 14 px. */
-    margin-block: -1px;
-    border-radius: 5px;
-    background: var(--muted);
+    margin-block: -2px;
+    border-radius: var(--radius-md);
+    background: var(--bg-code-inline);
     padding: 0 6px;
-    height: 20px;
-    color: var(--muted-foreground);
-    font-family: var(--font-mono);
-    font-size: 11.5px;
+    height: 22px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-small);
+    font-weight: var(--font-weight-medium);
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
     outline: none;
-    transition:
-      color var(--duration-fast),
-      background-color var(--duration-fast);
+    transition: background-color var(--duration-fast);
     &:hover {
-      background: var(--accent);
-      color: var(--foreground);
+      background: var(--bg-selected);
     }
     &:focus-visible {
       outline: 2px solid var(--focus);
       outline-offset: 2px;
+    }
+    /* The line it points at, after the name. */
+    & > span + span {
+      color: var(--text-tertiary);
+      font-weight: var(--font-weight-normal);
     }
   }
 
@@ -714,7 +795,7 @@
     margin-block: 1em;
     gap: 0;
     border: 1px solid var(--border-subtle);
-    border-radius: 8px;
+    border-radius: var(--radius-code);
     background: var(--bg-code-block);
     padding: 0;
     overflow: hidden;
@@ -770,8 +851,7 @@
     border-radius: 0;
     background: transparent;
     padding: 0 14px 12px;
-    font-size: 13px;
-    line-height: 1.6;
+    @apply text-code;
     overflow-x: auto;
   }
   & [data-streamdown='code-block-body'] pre {
@@ -851,16 +931,25 @@
   }
 }
 
-/* Thoughts and summaries: the same structure, quieter. */
+/* Thoughts, progress notes and summaries: the same structure, quieter. */
 .markdown-muted {
-  color: var(--muted-foreground);
-  font-size: 13px;
+  color: var(--text-tertiary);
+  font-size: calc(var(--prose-size) * 1.1 * 0.88);
+  line-height: 1.55;
+}
+/* A thought; notes and summaries stay upright, since they are messages. */
+.markdown-thought {
+  font-style: italic;
 }
 
-/* Tool output inside a card. */
+/* Tool output inside a card: what a tool returned, not the agent's writing, so Inter. */
 .markdown-compact {
+  font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.55;
+  letter-spacing: normal;
+  /* Inter's italic is not bundled. */
+  font-synthesis-style: auto;
 }
 
 /* Diffs sit on the code block surface, not on the Shiki theme's own background. Outer

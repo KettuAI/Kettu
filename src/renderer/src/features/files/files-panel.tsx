@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  ChevronRightIcon,
   FolderIcon,
   FolderTreeIcon,
   ListIcon,
@@ -13,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
+import type { ChangeStatus } from '@shared/git'
 import {
   Empty,
   EmptyDescription,
@@ -29,6 +29,7 @@ import {
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PanelButton } from '@renderer/features/shell/panel-button'
+import { SHEET } from '@renderer/features/shell/sheet'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
@@ -36,6 +37,8 @@ import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { loadFiles, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
+import { ChangeBadge } from './change-badge'
+import { useFileChanges } from './changes'
 import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
 import { FileTypeIcon } from './file-type-icon'
@@ -64,11 +67,12 @@ export default function FilesPanel({
   maximized: boolean
 }) {
   const { t } = useTranslation(['files', 'common'])
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
   const open = useFilesStore((s) => s.open[projectPath] ?? null)
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const [query, setQuery] = useState('')
   const [flat, setFlat] = useState(false)
+  const changes = useFileChanges(projectPath)
   const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
   // The list folds away to read a file undisturbed; the saved layout keeps it folded.
   const list = usePanelRef()
@@ -97,16 +101,16 @@ export default function FilesPanel({
   return (
     <div
       className={cn(
-        'flex h-full min-h-0 animate-in flex-col bg-sidebar fade-in animation-duration-(--duration-fast)',
+        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
+        SHEET,
         maximized && 'absolute inset-0 z-10',
       )}
     >
       {/* A window drag region, as the terminal's header; its controls opt out. */}
       <div
         className={cn(
-          'app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2 pl-2',
-          cornered && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
-          !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+8px)]',
+          'app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+          cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}
@@ -115,12 +119,11 @@ export default function FilesPanel({
             label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}
             onClick={() => (listHidden ? list.current?.expand() : list.current?.collapse())}
           >
-            {/* At the top bar's pane toggle size, as the Folder toggle beside it. */}
-            <FolderTreeIcon className="size-[15px]" />
+            <FolderTreeIcon className="size-3.5" />
           </PanelButton>
         )}
         {listShown && (
-          <InputGroup className="app-region-no-drag h-7 max-w-80 min-w-0 flex-1 bg-background/60">
+          <InputGroup className="app-region-no-drag h-7 w-80 min-w-0">
             <InputGroupAddon>
               <SearchIcon />
             </InputGroupAddon>
@@ -141,20 +144,24 @@ export default function FilesPanel({
             label={flat ? t('panel.showTree') : t('panel.showList')}
             onClick={() => setFlat(!flat)}
           >
-            {flat ? <ListTreeIcon /> : <ListIcon />}
+            {flat ? <ListTreeIcon className="size-3.5" /> : <ListIcon className="size-3.5" />}
           </PanelButton>
         )}
         <PanelButton
           label={maximized ? t('panel.restore') : t('panel.maximize')}
           onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
         >
-          {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
+          {maximized ? (
+            <Minimize2Icon className="size-3.5" />
+          ) : (
+            <Maximize2Icon className="size-3.5" />
+          )}
         </PanelButton>
         <PanelButton
           label={t('common:actions.close')}
           onClick={() => toggleSidePane(projectPath, 'files', false)}
         >
-          <XIcon />
+          <XIcon className="size-3.5" />
         </PanelButton>
       </div>
       {bare ? (
@@ -184,14 +191,24 @@ export default function FilesPanel({
             onResize={(size) => setListHidden(size.inPixels === 0)}
             className="min-w-0"
           >
-            <Browser projectPath={projectPath} query={query} flat={flat} openPath={open?.path} />
+            <Browser
+              projectPath={projectPath}
+              query={query}
+              flat={flat}
+              openPath={open?.path}
+              changes={changes}
+            />
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
             {diff ? (
               <DiffPreview projectPath={projectPath} diff={diff} />
             ) : (
-              <FilePreview projectPath={projectPath} file={open} />
+              <FilePreview
+                projectPath={projectPath}
+                file={open}
+                change={open ? changes.get(open.path) : undefined}
+              />
             )}
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -207,11 +224,13 @@ function Browser({
   query,
   flat,
   openPath,
+  changes,
 }: {
   projectPath: string
   query: string
   flat: boolean
   openPath: string | undefined
+  changes: ReadonlyMap<string, ChangeStatus>
 }) {
   const { t } = useTranslation('files')
   const files = useFilesStore((s) => s.byProject[projectPath])
@@ -229,14 +248,15 @@ function Browser({
         paths={files.paths}
         query={query}
         openPath={openPath}
+        changes={changes}
       />
     )
   }
   if (files.paths.length === 0) return <Message>{t('browser.empty')}</Message>
   return flat ? (
-    <FlatList projectPath={projectPath} paths={files.paths} openPath={openPath} />
+    <FlatList projectPath={projectPath} paths={files.paths} openPath={openPath} changes={changes} />
   ) : (
-    <Tree projectPath={projectPath} paths={files.paths} openPath={openPath} />
+    <Tree projectPath={projectPath} paths={files.paths} openPath={openPath} changes={changes} />
   )
 }
 
@@ -244,10 +264,12 @@ function Tree({
   projectPath,
   paths,
   openPath,
+  changes,
 }: {
   projectPath: string
   paths: string[]
   openPath: string | undefined
+  changes: ReadonlyMap<string, ChangeStatus>
 }) {
   const index = useMemo(() => indexFolders(paths), [paths])
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
@@ -271,11 +293,12 @@ function Tree({
     <VirtualRows
       count={rows.length}
       scrollTo={openIndex < 0 ? null : openIndex}
-      className="h-full py-1"
+      className="h-full p-1.5"
     >
       {(i) => {
         const row = rows[i]!
         const isOpen = expanded.has(row.path)
+        const change = row.folder ? undefined : changes.get(row.path)
         return (
           <Row
             key={row.path}
@@ -285,20 +308,9 @@ function Tree({
             aria-expanded={row.folder ? isOpen : undefined}
             onClick={() => (row.folder ? toggle(row.path) : openFile(projectPath, row.path))}
           >
-            {row.folder ? (
-              <>
-                <ChevronRightIcon
-                  className={cn(
-                    'size-3 shrink-0 text-icon transition-transform duration-(--duration-fast)',
-                    isOpen && 'rotate-90',
-                  )}
-                />
-                <FileTypeIcon path={row.path} folder open={isOpen} className="size-4" />
-              </>
-            ) : (
-              <FileTypeIcon path={row.path} className="ml-4 size-4" />
-            )}
-            <span className="truncate">{nameOf(row.path)}</span>
+            <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
+            <span className="min-w-0 flex-1 truncate">{nameOf(row.path)}</span>
+            {change && <ChangeBadge status={change} />}
           </Row>
         )
       }}
@@ -310,17 +322,19 @@ function FlatList({
   projectPath,
   paths,
   openPath,
+  changes,
 }: {
   projectPath: string
   paths: string[]
   openPath: string | undefined
+  changes: ReadonlyMap<string, ChangeStatus>
 }) {
   const openIndex = openPath ? paths.indexOf(openPath) : -1
   return (
     <VirtualRows
       count={paths.length}
       scrollTo={openIndex < 0 ? null : openIndex}
-      className="h-full py-1"
+      className="h-full p-1.5"
     >
       {(i) => (
         <FileRow
@@ -328,6 +342,7 @@ function FlatList({
           projectPath={projectPath}
           match={{ path: paths[i]!, score: 0, positions: [] }}
           selected={paths[i] === openPath}
+          change={changes.get(paths[i]!)}
         />
       )}
     </VirtualRows>
@@ -339,11 +354,13 @@ function FilteredList({
   paths,
   query,
   openPath,
+  changes,
 }: {
   projectPath: string
   paths: string[]
   query: string
   openPath: string | undefined
+  changes: ReadonlyMap<string, ChangeStatus>
 }) {
   const { t } = useTranslation('files')
   const { matches, total } = useMemo(() => filterPaths(query, paths, FILTER_LIMIT), [query, paths])
@@ -351,18 +368,19 @@ function FilteredList({
   const more = total - matches.length
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <VirtualRows count={matches.length} className="flex-1 py-1">
+      <VirtualRows count={matches.length} className="flex-1 p-1.5">
         {(i) => (
           <FileRow
             key={matches[i]!.path}
             projectPath={projectPath}
             match={matches[i]!}
             selected={matches[i]!.path === openPath}
+            change={changes.get(matches[i]!.path)}
           />
         )}
       </VirtualRows>
       {more > 0 && (
-        <p className="shrink-0 border-t border-subtle px-3 py-1.5 text-xs text-tertiary">
+        <p className="shrink-0 border-t border-subtle px-3.5 py-1.5 text-xs text-tertiary">
           {t('browser.moreMatches', { count: more })}
         </p>
       )}
@@ -375,10 +393,12 @@ function FileRow({
   projectPath,
   match,
   selected,
+  change,
 }: {
   projectPath: string
   match: PathMatch
   selected: boolean
+  change: ChangeStatus | undefined
 }) {
   const { path, positions } = match
   const nameStart = path.lastIndexOf('/') + 1
@@ -387,7 +407,7 @@ function FileRow({
   return (
     <Row selected={selected} title={path} onClick={() => openFile(projectPath, path)}>
       <FileTypeIcon path={path} className="size-4" />
-      <span className="flex min-w-0 items-baseline gap-1.5">
+      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="shrink-0">
           {[...path.slice(nameStart)].map((char, i) =>
             marked.has(nameStart + i) ? (
@@ -405,6 +425,7 @@ function FileRow({
           </span>
         )}
       </span>
+      {change && <ChangeBadge status={change} />}
     </Row>
   )
 }
@@ -463,7 +484,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
   if (rows.length === 0) return <Message>{t('browser.noLine', { query })}</Message>
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <VirtualRows count={rows.length} className="flex-1 py-1">
+      <VirtualRows count={rows.length} className="flex-1 p-1.5">
         {(i) => {
           const row = rows[i]!
           if (row.kind === 'file') {
@@ -471,7 +492,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
               <div
                 key={`f:${row.path}`}
                 title={row.path}
-                className="flex h-row items-center gap-1.5 truncate px-3 text-xs font-medium"
+                className="flex h-control-sm items-center gap-2 truncate px-2 text-xs font-medium text-primary"
               >
                 <FileTypeIcon path={row.path} className="size-4" />
                 <span className="truncate">{row.path}</span>
@@ -485,7 +506,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
               title={row.text}
               onClick={() => openFile(projectPath, row.path, row.line)}
             >
-              <span className="w-8 shrink-0 text-right font-mono text-[11.5px] text-tertiary tabular">
+              <span className="w-8 shrink-0 text-right font-mono text-meta text-tertiary tabular">
                 {row.line}
               </span>
               <span className="truncate font-mono text-xs">
@@ -496,7 +517,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
         }}
       </VirtualRows>
       {state.result.truncated && (
-        <p className="shrink-0 border-t border-subtle px-3 py-1.5 text-xs text-tertiary">
+        <p className="shrink-0 border-t border-subtle px-3.5 py-1.5 text-xs text-tertiary">
           {t('browser.truncated', { count: state.result.matches.length })}
         </p>
       )}
@@ -537,10 +558,10 @@ function Row({
       title={title}
       onClick={onClick}
       {...aria}
-      style={{ paddingLeft: 8 + depth * 12 }}
+      style={{ paddingLeft: 8 + depth * 16 }}
       className={cn(
-        'flex h-row w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-ui outline-none focus-ring',
-        selected ? 'bg-selected text-primary' : 'hover:bg-hover',
+        'flex h-control-sm w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-ring',
+        selected ? 'bg-selected text-primary' : 'text-secondary hover:bg-hover hover:text-primary',
       )}
     >
       {children}
@@ -552,7 +573,7 @@ function Message({ tone, children }: { tone?: 'error'; children: ReactNode }) {
   return (
     <p
       className={cn(
-        'flex items-center gap-2 px-3 py-3 text-xs leading-normal',
+        'flex items-center gap-2 px-3.5 py-3 text-xs leading-normal',
         tone === 'error' ? 'text-danger' : 'text-secondary',
       )}
     >
@@ -563,7 +584,7 @@ function Message({ tone, children }: { tone?: 'error'; children: ReactNode }) {
 
 function LoadingRows() {
   return (
-    <div className="flex flex-col gap-2.5 px-3 py-3">
+    <div className="flex flex-col gap-2.5 px-3.5 py-3">
       {[60, 45, 70, 50, 35].map((w) => (
         <Skeleton key={w} className="h-3" style={{ width: `${w}%` }} />
       ))}

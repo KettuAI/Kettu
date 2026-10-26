@@ -462,14 +462,16 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
           initial={{ opacity: 0 }}
           animate={{ opacity: closing ? 0 : 1 }}
           transition={fade}
+          // Level with the window controls: on macOS its controls sit below the gap above the
+          // sheets, as the sidebar header's do; elsewhere it is as tall as the band.
           className={cn(
-            'flex h-top-bar shrink-0 items-center gap-1 pr-2.5 pl-5 app-region-drag',
+            'flex shrink-0 items-center gap-1 pr-2.5 pl-5 app-region-drag',
             isMac
-              ? 'pl-[calc(32px+var(--traffic-lights))]'
-              : 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
+              ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap) pl-[calc(32px+var(--traffic-lights))]'
+              : 'h-(--title-bar) pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
           )}
         >
-          <DialogTitle className="min-w-0 truncate font-sans text-ui leading-normal">
+          <DialogTitle className="min-w-0 truncate font-sans text-ui leading-normal font-medium">
             {name}
           </DialogTitle>
           {facts.length > 0 && (

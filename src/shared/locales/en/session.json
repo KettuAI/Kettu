@@ -90,7 +90,8 @@
       "allowedByRoutine": "Allowed by the routine",
       "cancelled": "Cancelled",
       "withdrawn": "No longer needed"
-    }
+    },
+    "label": "Permission request"
   },
   "subagent": {
     "fallbackTitle": "Subagent"
@@ -99,7 +100,8 @@
     "runsFor": "{{agent}} runs this subagent for <parent/>",
     "runsForParent": "{{agent}} runs this subagent for <parent>its parent session</parent>",
     "stop": "Stop",
-    "back": "Back to {{title}}"
+    "back": "Back to {{title}}",
+    "backShort": "Back"
   },
   "sessionMessage": {
     "from": "From {{title}}",

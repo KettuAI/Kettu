@@ -514,18 +514,18 @@ describe('estimateOf', () => {
         agent('a5'),
         waiting,
       ]),
-    ).toMatchObject({ 'run:x1': 24, 'run:r1': 24, 'run:x3': 24, x9: 24, p1: 16, c1: 16 })
+    ).toMatchObject({ 'run:x1': 28, 'run:r1': 28, 'run:x3': 28, x9: 24, p1: 16, c1: 16 })
   })
 
   it('gives the reply row its height', () => {
-    expect(estimates([user('u1'), agent('a1'), end('t1')])).toMatchObject({ 'reply:u1': 28 })
+    expect(estimates([user('u1'), agent('a1'), end('t1')])).toMatchObject({ 'reply:u1': 24 })
   })
 
   it('gives a message and a thought one line', () => {
     const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
     expect(
       estimates([user('u1'), thought('h1'), agent('a1'), steered, agent('a2'), end('t1')]),
-    ).toEqual({ u1: 69, h1: 18, a1: 20, s1: 69, a2: 20, 'reply:u1': 28 })
+    ).toEqual({ u1: 69, h1: 18, a1: 20, s1: 69, a2: 20, 'reply:u1': 24 })
   })
 
   it('gives a progress note one line of a thought', () => {

@@ -47,12 +47,12 @@ export function ThreadSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'mx-auto flex w-full max-w-thread animate-in flex-col px-6 pt-5 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
+        'mx-auto flex w-full max-w-thread animate-in flex-col px-7 pt-7 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
         className,
       )}
       aria-hidden
     >
-      <Skeleton className="ml-auto h-[42px] w-2/5 rounded-[14px]" />
+      <Skeleton className="ml-auto h-[42px] w-2/5 rounded-2xl" />
       {/* Bars of 10 px on the prose's 26 px lines, and a folded run's shorter line between. */}
       <div className="flex flex-col gap-4 pt-12">
         <Skeleton className="h-2.5 w-11/12" />
@@ -86,7 +86,7 @@ export function StartingAgent({ agentId }: { agentId: AgentId }) {
         </span>
       </span>
       {progress.length > 0 && (
-        <div className="flex max-w-[560px] flex-col gap-0.5 font-mono text-[11.5px] text-tertiary">
+        <div className="flex max-w-[560px] flex-col gap-0.5 font-mono text-meta text-tertiary">
           {progress.slice(-3).map((line, i) => (
             <span
               key={`${i}-${line}`}
@@ -117,7 +117,7 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
           agent: agentName(agentId),
         })
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col">
       <InputGroup variant="composer">
         <div
           role="status"
@@ -128,17 +128,27 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
             <span className="truncate shimmer">{text}</span>
           </span>
         </div>
-        <InputGroupAddon align="inline-end" className="self-end pr-3 pb-3 pl-1">
-          <InputGroupButton size="round" variant="secondary" disabled tabIndex={-1} aria-hidden>
+        <InputGroupAddon
+          align="inline-end"
+          className="self-end pr-2.5 pb-2.5 pl-1.5 has-[>button]:mr-0"
+        >
+          <InputGroupButton
+            size="round"
+            variant="secondary"
+            disabled
+            tabIndex={-1}
+            aria-hidden
+            className="disabled:text-disabled disabled:opacity-100"
+          >
             <ArrowUpIcon />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
-      <div className="flex min-h-row items-center px-2">
+      <div className="flex min-h-9 items-center px-2">
         {progress && (
           <span
             key={progress}
-            className="truncate font-mono text-[11.5px] text-tertiary animate-in fade-in animation-duration-(--duration-base)"
+            className="truncate font-mono text-meta text-tertiary animate-in fade-in animation-duration-(--duration-base)"
           >
             {progress}
           </span>
@@ -160,7 +170,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
     <ColumnScroller>
-      <div className="mx-auto flex w-full max-w-thread flex-col px-6 pt-5">
+      <div className="mx-auto flex w-full max-w-thread flex-col px-7 pt-7">
         {/* As the thread shows a user entry, so nothing moves when the session takes over. */}
         <div className="flex flex-col items-end gap-0.5">
           {attachments.length > 0 && (
@@ -170,8 +180,8 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
           )}
           {rest.length > 0 && (
             <Message align="end">
-              <Bubble variant="muted" className="max-w-[85%]">
-                <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
+              <Bubble variant="muted">
+                <BubbleContent>
                   <UserContentView content={rest} />
                 </BubbleContent>
               </Bubble>
@@ -189,7 +199,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
           {progress.slice(-3).map((line, i) => (
             <span
               key={`${i}-${line}`}
-              className="truncate font-mono text-[11.5px] text-tertiary animate-in fade-in animation-duration-(--duration-base)"
+              className="truncate font-mono text-meta text-tertiary animate-in fade-in animation-duration-(--duration-base)"
             >
               {line}
             </span>
@@ -244,7 +254,7 @@ export function FailedState({
       {detail && (
         <pre
           data-selectable=""
-          className="max-h-40 overflow-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-muted-foreground"
+          className="max-h-40 overflow-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-meta leading-relaxed whitespace-pre-wrap text-muted-foreground"
         >
           {detail}
         </pre>

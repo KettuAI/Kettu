@@ -1,7 +1,7 @@
 {
   "status": {
     "repository": "仓库",
-    "pullRequest": "Pull Request #{{number}}",
+    "pullRequestState": "Pull Request #{{number}} · {{state}}",
     "detachedAt": "HEAD 已分离于 {{ref}}",
     "branch": "分支 {{name}}",
     "detached": "已分离",
@@ -72,16 +72,18 @@
     "copyId": "复制提交 ID",
     "copyMessage": "复制提交信息",
     "openOnGitHub": "在 GitHub 上打开",
-    "onRemote": "已在 {{upstream}}",
-    "notPushed": "未推送",
-    "notPublished": "未发布",
     "more": "还有 {{count}} 个",
     "baseAhead_other": "分出后有 {{count}} 个新提交",
     "baseEven": "分出后没有新提交"
   },
   "prPart": {
-    "meta": "<state>{{state}}</state> · <head/> → <base/> · {{when}}更新",
+    "meta": "<state>{{state}}</state> · <nw><head/> → <base/></nw> · <nw>{{when}}更新</nw>",
     "queued": "排队中",
+    "run": {
+      "passed": "已通过",
+      "failed": "失败",
+      "running": "运行中"
+    },
     "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看和创建 Pull Request。",
     "signInGh": "登录 GitHub CLI 后即可查看 Pull Request：",
     "copyCommand": "复制命令",
@@ -97,6 +99,7 @@
     }
   },
   "sync": {
+    "label": "同步",
     "fetched": "{{when}}抓取",
     "neverFetched": "从未抓取",
     "noRemote": "没有远程仓库",

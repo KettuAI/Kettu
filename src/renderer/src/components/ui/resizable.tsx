@@ -27,7 +27,7 @@ function ResizableHandle({
       data-slot="resizable-handle"
       className={cn(
         'group relative flex w-(--hairline) items-center justify-center bg-transparent transition-colors duration-(--duration-fast)',
-        // With a grip, the grip shows the state and the line keeps its color.
+        // No line at rest: the grip shows the state, or a line while hovered or dragged.
         !withHandle &&
           'data-[separator=active]:bg-border-strong data-[separator=hover]:bg-border-strong',
         'after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 focus-ring aria-[orientation=horizontal]:h-(--hairline) aria-[orientation=horizontal]:w-full aria-[orientation=horizontal]:after:left-0 aria-[orientation=horizontal]:after:h-1 aria-[orientation=horizontal]:after:w-full aria-[orientation=horizontal]:after:translate-x-0 aria-[orientation=horizontal]:after:-translate-y-1/2 [&[aria-orientation=horizontal]>div]:rotate-90',

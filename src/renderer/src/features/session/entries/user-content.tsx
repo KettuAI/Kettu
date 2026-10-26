@@ -105,7 +105,7 @@ export function RefChip({
         : contentRef.label
   return (
     <span
-      className="inline-flex h-6 max-w-60 items-center gap-1.5 rounded-[6px] bg-background/60 px-2 text-xs text-muted-foreground shadow-card"
+      className="inline-flex h-6 max-w-60 items-center gap-1.5 rounded-md bg-background/60 px-2 text-xs text-muted-foreground shadow-card"
       title={link ? contentRef.uri : label}
     >
       {link &&

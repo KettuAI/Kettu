@@ -11,6 +11,7 @@ import {
   MIN_RATIO,
   PAIRS,
   parseColor,
+  parseRgba,
   parseTokens,
 } from './contrast.mjs'
 
@@ -50,6 +51,14 @@ describe('parseColor', () => {
     expect(parseColor('#112233ff')).toEqual([17, 34, 51])
     expect(parseColor('rgb(37 99 235)')).toEqual([37, 99, 235])
     expect(parseColor('rgb(37, 99, 235)')).toEqual([37, 99, 235])
+  })
+
+  it('reads alpha where parseRgba is asked for it', () => {
+    expect(parseRgba('rgb(28 27 24 / 6.5%)')).toEqual([28, 27, 24, 0.065])
+    expect(parseRgba('rgba(0, 0, 0, 0.5)')).toEqual([0, 0, 0, 0.5])
+    expect(parseRgba('#11223380')).toEqual([17, 34, 51, 128 / 255])
+    expect(parseRgba('#fff')).toEqual([255, 255, 255, 1])
+    expect(parseRgba('oklch(0.6 0.17 255)')).toBeNull()
   })
 
   it('skips colors with alpha and other forms', () => {
@@ -153,10 +162,23 @@ describe('checkContrast', () => {
     expect(missing).toMatchObject({ ratio: null, ok: false, note: 'missing --nope' })
   })
 
-  it('skips a pair that is not an opaque color', () => {
+  it('skips a pair whose foreground is not an opaque color', () => {
     const [skipped] = checkContrast(blocks, [{ fg: '--focus', bg: '--bg-app' }])
     expect(skipped).toMatchObject({ ratio: null, ok: true })
     expect(skipped.note).toMatch(/^skipped/)
+  })
+
+  it('lays a translucent surface over each opaque base and keeps the weakest ratio', () => {
+    const fill = parseTokens(
+      SAMPLE.replace(
+        '--focus: rgb(37 99 235 / 55%);',
+        '--bg-sidebar: #808080;\n  --bg-hover: rgb(0 0 0 / 50%);',
+      ),
+    )
+    const [light] = checkContrast(fill, [{ fg: '--text-primary', bg: '--bg-hover' }])
+    // Black text on half-black over the grey sidebar is the weakest of the two bases.
+    expect(light.ratio).toBeCloseTo(contrastRatio([0, 0, 0], [64, 64, 64]), 5)
+    expect(light.ok).toBe(false)
   })
 })
 
@@ -172,11 +194,12 @@ describe('the real token file', () => {
     expect(compareDarkBlocks(mediaDark, dark)).toEqual([])
   })
 
-  it('declares every token of every pair, in hex', () => {
+  it('declares every token of every pair as an sRGB color, every foreground opaque', () => {
     const { light, dark } = parseTokens(css)
     const tokens = new Map([...light, ...dark])
     for (const { fg, bg } of PAIRS) {
-      for (const name of [fg, bg]) expect(parseColor(tokens.get(name) ?? ''), name).not.toBeNull()
+      expect(parseColor(tokens.get(fg) ?? ''), fg).not.toBeNull()
+      expect(parseRgba(tokens.get(bg) ?? ''), bg).not.toBeNull()
     }
   })
 

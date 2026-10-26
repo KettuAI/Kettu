@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { PlusIcon } from 'lucide-react'
+import { FolderIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
 import { addProjectFromDialog } from '@renderer/app/actions'
@@ -17,7 +17,9 @@ import {
   ComboboxTrigger,
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
+import { InputGroupAddon } from '@renderer/components/ui/input-group'
 import { errorMessage } from '@renderer/lib/host'
+import { formatShortcut } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
 import { nameHints } from '../project-names'
@@ -92,14 +94,15 @@ export function ProjectMenu({
         render={
           <Button
             variant="quiet"
-            size="compact"
+            size="sm"
             aria-label={t('newSession.project')}
             title={noProject ? undefined : project?.path}
-            className="min-w-12 shrink-10 gap-1 px-2"
+            className="min-w-13 shrink-10 gap-1 px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
           />
         }
       >
-        <span className="truncate font-medium text-foreground">
+        <FolderIcon />
+        <span className="truncate text-foreground">
           {noProject
             ? t('newSession.noProject')
             : (project?.name ?? t('newSession.chooseProjectShort'))}
@@ -108,13 +111,17 @@ export function ProjectMenu({
           <span className="shrink-0 text-danger">{t('newSession.missing')}</span>
         )}
       </ComboboxTrigger>
-      <ComboboxContent sideOffset={6} className="max-w-80">
+      <ComboboxContent sideOffset={6} className="max-w-80 min-w-60">
         <ComboboxInput
           showTrigger={false}
           placeholder={t('newSession.searchProjects')}
           aria-label={t('newSession.searchProjectsLabel')}
           spellCheck={false}
-        />
+        >
+          <InputGroupAddon>
+            <SearchIcon className="size-3.5" />
+          </InputGroupAddon>
+        </ComboboxInput>
         <ComboboxList className="max-h-none overflow-y-visible">
           {(group: ProjectGroup, index: number) =>
             group.value === 'none' ? (
@@ -165,9 +172,11 @@ export function ProjectMenu({
                 )}
                 <ComboboxCollection>
                   {(value: string) => (
-                    <ComboboxItem key={value} value={value}>
-                      <PlusIcon className="size-3.5 text-icon" />
+                    <ComboboxItem key={value} value={value} className="pr-2">
                       {t('newSession.openProject')}
+                      <span className="ml-auto pl-4 text-xs text-muted-foreground tabular">
+                        {formatShortcut('Mod+O')}
+                      </span>
                     </ComboboxItem>
                   )}
                 </ComboboxCollection>

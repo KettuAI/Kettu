@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
   ExternalLinkIcon,
   GlobeIcon,
   Maximize2Icon,
@@ -19,6 +19,7 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { PanelButton } from '@renderer/features/shell/panel-button'
+import { SHEET } from '@renderer/features/shell/sheet'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -41,8 +42,9 @@ export function BrowserPane({
   const state = useBrowserStore((s) => (sessionId ? s.bySession[sessionId] : undefined))
   const still = useBrowserStore((s) => (sessionId ? s.stills[sessionId] : undefined))
   const overlayOpen = useOverlayOpen()
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
+  const sheet = useRef<HTMLDivElement>(null)
   const page = useRef<HTMLDivElement>(null)
 
   const navigate = (url: string) => {
@@ -58,16 +60,20 @@ export function BrowserPane({
     }
   }, [sessionId])
 
-  // The page's area, in the window's own pixels: the renderer's zoom scales CSS pixels.
+  // The page's area, in the window's own pixels: the renderer's zoom scales CSS pixels. The page
+  // fills the sheet's lower corners, which the sheet cannot clip on a native view, so main rounds
+  // them on the page.
   const report = useCallback(() => {
     const element = page.current
-    if (!element || !sessionId) return
+    if (!element || !sheet.current || !sessionId) return
     const rect = element.getBoundingClientRect()
+    const radius = parseFloat(getComputedStyle(sheet.current).borderBottomLeftRadius) || 0
     void window.overbench.browser.setBounds(sessionId, {
       x: Math.round(rect.left * zoom),
       y: Math.round(rect.top * zoom),
       width: Math.round(rect.width * zoom),
       height: Math.round(rect.height * zoom),
+      radius: Math.round(radius * zoom),
     })
   }, [sessionId, zoom])
 
@@ -131,86 +137,84 @@ export function BrowserPane({
 
   return (
     <div
+      ref={sheet}
       className={cn(
-        'flex h-full min-h-0 animate-in flex-col bg-sidebar fade-in animation-duration-(--duration-fast)',
+        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
+        SHEET,
         maximized && 'absolute inset-0 z-10',
       )}
       data-browser-panel=""
     >
       <div
         className={cn(
-          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2',
-          cornered && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
-          !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+8px)]',
+          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+          cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}
         <div className="app-region-no-drag flex min-w-0 items-center gap-0.5">
           <PanelButton
             label={t('actions.back')}
-            size="icon-sm"
             shortcut={isMac ? '⌘[' : 'Ctrl+['}
             disabled={!state?.canGoBack}
             onClick={() => sessionId && void window.overbench.browser.back(sessionId)}
           >
-            <ChevronLeftIcon />
+            <ArrowLeftIcon className="size-3.5" />
           </PanelButton>
           <PanelButton
             label={t('actions.forward')}
-            size="icon-sm"
             shortcut={isMac ? '⌘]' : 'Ctrl+]'}
             disabled={!state?.canGoForward}
             onClick={() => sessionId && void window.overbench.browser.forward(sessionId)}
           >
-            <ChevronRightIcon />
+            <ArrowRightIcon className="size-3.5" />
           </PanelButton>
           {state?.loading ? (
             <PanelButton
               label={t('actions.stop')}
-              size="icon-sm"
               onClick={() => sessionId && void window.overbench.browser.stop(sessionId)}
             >
-              <XIcon />
+              <XIcon className="size-3.5" />
             </PanelButton>
           ) : (
             <PanelButton
               label={t('actions.reload')}
-              size="icon-sm"
               shortcut={isMac ? '⌘R' : 'Ctrl+R'}
               disabled={!hasPage}
               onClick={() => sessionId && void window.overbench.browser.reload(sessionId)}
             >
-              <RotateCwIcon />
+              <RotateCwIcon className="size-3.5" />
             </PanelButton>
           )}
         </div>
         {hasPage && state?.url ? (
-          <AddressField url={state.url} onNavigate={navigate} className="mx-1 flex-1" />
+          <AddressField url={state.url} onNavigate={navigate} className="mx-1.5 flex-1" />
         ) : (
           <span className="min-w-2 flex-1" />
         )}
         <div className="app-region-no-drag flex items-center gap-0.5">
           <PanelButton
             label={t('actions.openExternal')}
-            size="icon-sm"
             disabled={!hasPage}
             onClick={() => sessionId && void window.overbench.browser.openExternal(sessionId)}
           >
-            <ExternalLinkIcon />
+            <ExternalLinkIcon className="size-3.5" />
           </PanelButton>
           <PanelButton
             label={maximized ? t('actions.restore') : t('actions.maximize')}
-            size="icon-sm"
             onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
           >
-            {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
+            {maximized ? (
+              <Minimize2Icon className="size-3.5" />
+            ) : (
+              <Maximize2Icon className="size-3.5" />
+            )}
           </PanelButton>
           <PanelButton
             label={t('common:actions.close')}
-            size="icon-sm"
             onClick={() => toggleSidePane(projectPath, 'browser', false)}
           >
-            <XIcon />
+            <XIcon className="size-3.5" />
           </PanelButton>
         </div>
       </div>
@@ -237,7 +241,7 @@ export function BrowserPane({
               </EmptyHeader>
               {sessionId && (
                 <div className="w-full max-w-sm">
-                  <AddressField url={null} onNavigate={navigate} autoFocus className="bg-subtle" />
+                  <AddressField url={null} onNavigate={navigate} autoFocus />
                 </div>
               )}
             </Empty>

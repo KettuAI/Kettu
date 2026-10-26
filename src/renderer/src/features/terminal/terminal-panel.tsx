@@ -30,6 +30,7 @@ import {
 } from '@renderer/components/ui/context-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PanelButton } from '@renderer/features/shell/panel-button'
+import { SHEET } from '@renderer/features/shell/sheet'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -73,8 +74,8 @@ export function TerminalPanel({
   maximized: boolean
 }) {
   const { t } = useTranslation(['terminal', 'common'])
-  // Maximized with the sidebar collapsed, the header is the window's top left corner.
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
+  // On macOS, maximized with the sidebar collapsed, the header is the window's top left corner.
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
   const list = useTerminalsStore(
     useShallow((s) => terminalsOf(s.byId, projectPath, s.order[projectPath])),
   )
@@ -109,7 +110,8 @@ export function TerminalPanel({
   return (
     <div
       className={cn(
-        'flex h-full min-h-0 animate-in flex-col bg-sidebar fade-in animation-duration-(--duration-fast)',
+        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
+        SHEET,
         // Maximized, it leaves its slot and covers the whole main area.
         maximized && 'absolute inset-0 z-10',
       )}
@@ -119,10 +121,8 @@ export function TerminalPanel({
           buttons opt out. */}
       <div
         className={cn(
-          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2',
-          cornered && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
-          // The panel reaches the window's right edge, where Windows and Linux put the controls.
-          !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+8px)]',
+          'app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+          cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}
@@ -143,7 +143,7 @@ export function TerminalPanel({
               />
             ))}
             {creating && (
-              <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-ui text-tertiary">
+              <span className="inline-flex h-6.5 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-command text-tertiary">
                 <Spinner className="size-3" />
                 {t('panel.starting')}
               </span>
@@ -153,10 +153,9 @@ export function TerminalPanel({
         <PanelButton
           label={t('panel.newTerminal')}
           shortcut="Ctrl+Shift+`"
-          size="icon-sm"
           onClick={() => void newTerminal()}
         >
-          <PlusIcon />
+          <PlusIcon className="size-3.5" />
         </PanelButton>
         <span className="min-w-2 flex-1" />
         {error && (
@@ -166,18 +165,20 @@ export function TerminalPanel({
         )}
         <PanelButton
           label={maximized ? t('panel.restore') : t('panel.maximize')}
-          size="icon-sm"
           onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
         >
-          {maximized ? <Minimize2Icon /> : <Maximize2Icon />}
+          {maximized ? (
+            <Minimize2Icon className="size-3.5" />
+          ) : (
+            <Maximize2Icon className="size-3.5" />
+          )}
         </PanelButton>
         <PanelButton
           label={t('common:actions.close')}
           shortcut="Ctrl+`"
-          size="icon-sm"
           onClick={() => toggleTerminal(projectPath, false)}
         >
-          <XIcon />
+          <XIcon className="size-3.5" />
         </PanelButton>
       </div>
       <div className="relative min-h-0 flex-1">
@@ -257,6 +258,7 @@ export function TerminalTab({
   const automatic = terminal.title || terminal.shell
   const name = terminal.name ?? automatic
   const exited = terminal.exitCode !== null
+  const running = terminal.busy && !exited
 
   useEffect(() => {
     if (editing || !refocus.current) return
@@ -284,12 +286,12 @@ export function TerminalTab({
       <ContextMenuTrigger
         ref={ref}
         className={cn(
-          'group/tab relative flex h-7 max-w-48 min-w-20 items-center rounded-lg text-ui transition-[color,background-color] duration-(--duration-fast)',
+          'group/tab relative flex h-6.5 max-w-48 min-w-20 items-center rounded-md text-command transition-[color,background-color,box-shadow] duration-(--duration-fast)',
           editing
-            ? 'bg-background text-primary ring-1 ring-border-strong ring-inset'
+            ? 'bg-surface text-primary ring-1 ring-border-strong ring-inset'
             : selected || isDragging
-              ? 'bg-selected text-primary'
-              : 'text-secondary hover:bg-hover hover:text-primary',
+              ? 'bg-surface text-primary shadow-outline'
+              : 'text-tertiary hover:bg-hover hover:text-secondary',
         )}
       >
         {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
@@ -304,7 +306,7 @@ export function TerminalTab({
           onDoubleClick={() => setEditing(true)}
           onAuxClick={(e) => e.button === 1 && onClose()}
           className={cn(
-            'flex h-full min-w-0 items-center gap-1.5 rounded-lg pr-6 pl-2.5 outline-none focus-ring',
+            'flex h-full min-w-0 items-center gap-1.5 rounded-md pr-6 pl-2.5 outline-none focus-ring',
             editing && 'invisible',
           )}
         >
@@ -314,12 +316,21 @@ export function TerminalTab({
               {terminal.exitCode}
             </span>
           )}
-          {terminal.activity && !selected && (
+          {running ? (
             <span
               role="img"
-              aria-label={t('tab.newOutput')}
-              className="size-1.5 shrink-0 rounded-full bg-current text-tertiary"
+              aria-label={t('tab.running')}
+              className="size-1.5 shrink-0 rounded-full bg-success"
             />
+          ) : (
+            terminal.activity &&
+            !selected && (
+              <span
+                role="img"
+                aria-label={t('tab.newOutput')}
+                className="size-1.5 shrink-0 rounded-full bg-current text-tertiary"
+              />
+            )
           )}
         </button>
         {editing ? (
@@ -330,7 +341,7 @@ export function TerminalTab({
             aria-label={t('tab.close', { name })}
             onClick={onClose}
             className={cn(
-              'absolute right-1.5 flex size-4 items-center justify-center rounded-md text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-pressed-hover hover:text-primary focus-visible:opacity-100 focus-ring group-focus-within/tab:opacity-100 group-hover/tab:opacity-100',
+              'absolute right-1.5 flex size-4 items-center justify-center rounded-sm text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-pressed-hover hover:text-primary focus-visible:opacity-100 focus-ring group-focus-within/tab:opacity-100 group-hover/tab:opacity-100',
               selected && 'opacity-100',
             )}
           >

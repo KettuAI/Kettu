@@ -1,108 +1,125 @@
-import { useContext, useId, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { CircleArrowUpIcon, CircleCheckIcon, ExternalLinkIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { CloseNoticesContext } from '@renderer/features/sidebar/notices'
 import { errorMessage } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openSettings } from '@renderer/stores/view'
 import { appUpdateRow, type AppUpdateNotice } from './app-updates'
 
-interface NoticeRowProps {
-  /** The 16 px icon or agent mark. */
+interface NoticeCardProps {
+  /** The 14 px icon or agent mark. */
   icon: ReactNode
-  /** The first line; it wraps, never inside a version. */
+  /** The words and the version; they wrap, never inside a version. */
   text: ReactNode
-  /** The first line as one string, the row's name. */
+  /** The words as one string, the card's name. */
   label: string
-  /** The muted second line. */
-  detail: ReactNode
-  /** Opens what the row is about, and closes the popover. */
+  /** What the notice is about, in the card's tooltip. */
+  detail?: string | null
+  /** Opens what the notice is about. */
   onOpen?: () => void
-  /** The row's small outline action. */
+  /** The card's one action, a small secondary button. */
   action?: ReactNode
+  /** A line under the words, such as a download's progress. */
+  below?: ReactNode
   onDismiss?: () => void
+  /** Stops what the notice shows, in the dismiss button's place, which then always shows. */
+  onCancel?: () => void
 }
 
-/** A row in the sidebar's notices popover. */
-export function NoticeRow({
+/** A notice in the sidebar footer: a raised card above Settings. */
+export function NoticeCard({
   icon,
   text,
   label,
   detail,
   onOpen,
   action,
+  below,
   onDismiss,
-}: NoticeRowProps) {
+  onCancel,
+}: NoticeCardProps) {
   const { t } = useTranslation('updates')
-  const close = useContext(CloseNoticesContext)
-  const detailId = useId()
+  const close = onCancel ?? onDismiss
+  const closeLabel = onCancel ? t('notice.cancel') : t('notice.dismiss')
   return (
     <div
-      data-notice-row=""
-      className="group/notice relative rounded-lg px-2 py-1.5 transition-colors duration-(--duration-fast) has-[>[data-row-hit]:hover]:bg-hover"
+      data-notice=""
+      className="group/notice relative animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-slow) ease-out-quint"
     >
-      {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
-      {onOpen && (
-        <button
-          type="button"
-          data-row-hit=""
-          aria-label={label}
-          aria-describedby={detailId}
-          onClick={() => {
-            close()
-            onOpen()
-          }}
-          className="absolute inset-0 rounded-lg outline-none focus-ring"
-        />
-      )}
-      <div className="pointer-events-none relative grid grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2">
-        <span className="flex h-5 items-center justify-center">{icon}</span>
-        <span className="text-ui font-medium">{text}</span>
-        <span className="pointer-events-auto flex h-5 shrink-0 items-center gap-0.5">
-          {action}
-          {onDismiss && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={t('notice.dismiss')}
-                    onClick={onDismiss}
-                    className="text-icon opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/notice:opacity-100 group-hover/notice:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-                  />
-                }
-              >
-                <XIcon />
-              </TooltipTrigger>
-              <TooltipContent>{t('notice.dismiss')}</TooltipContent>
-            </Tooltip>
-          )}
+      <div
+        className={cn(
+          'relative flex min-h-11 items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3 shadow-card transition-shadow duration-(--duration-fast)',
+          onOpen && 'has-[>[data-notice-hit]:hover]:shadow-outline-hover',
+        )}
+      >
+        {/* Buttons cannot nest, so the card opens through a button laid under its content. */}
+        {onOpen && (
+          <Tooltip disabled={!detail}>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  data-notice-hit=""
+                  aria-label={label}
+                  aria-description={detail ?? undefined}
+                  onClick={onOpen}
+                  className="absolute inset-0 rounded-xl outline-none focus-ring"
+                />
+              }
+              delay={500}
+            />
+            <TooltipContent side="top" align="start" className="max-w-64">
+              {detail}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <span className="pointer-events-none relative grid size-3.5 shrink-0 place-items-center">
+          {icon}
         </span>
-        <span id={detailId} className="col-span-2 col-start-2 text-xs text-secondary">
-          {detail}
+        <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-1 py-0.5">
+          <span className="text-command leading-4 font-medium text-pretty">{text}</span>
+          {below}
         </span>
+        {action && <span className="relative flex shrink-0 items-center">{action}</span>}
       </div>
+      {close && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon-xs"
+                aria-label={closeLabel}
+                onClick={close}
+                className={cn(
+                  'absolute -top-1.5 -right-1.5 size-5 rounded-full text-icon hover:text-primary [&_svg:not([class*=size-])]:size-3',
+                  !onCancel &&
+                    'opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/notice:opacity-100 group-hover/notice:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+                )}
+              />
+            }
+          >
+            <XIcon />
+          </TooltipTrigger>
+          <TooltipContent>{closeLabel}</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   )
 }
 
 /** A version beside a notice's words, which never breaks across lines. */
 export function NoticeVersion({ children }: { children: ReactNode }) {
-  return (
-    <span className="font-mono text-meta font-normal whitespace-nowrap text-tertiary tabular">
-      {children}
-    </span>
-  )
+  return <span className="font-normal whitespace-nowrap text-tertiary tabular">{children}</span>
 }
 
-/** The app's update notice as a row: an update ready, on offer, downloading or just installed. */
-export function UpdateNoticeRow({ notice }: { notice: AppUpdateNotice }) {
+/** The app's update notice as a card: an update ready, on offer, downloading or just installed. */
+export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
   const { t } = useTranslation('updates')
-  const close = useContext(CloseNoticesContext)
   const row = appUpdateRow(notice)
   const version = <NoticeVersion>{notice.version}</NoticeVersion>
 
@@ -114,7 +131,6 @@ export function UpdateNoticeRow({ notice }: { notice: AppUpdateNotice }) {
   const run = () => {
     switch (row.action) {
       case 'restart':
-        close()
         void window.overbench.updates.restart()
         break
       case 'update':
@@ -124,36 +140,34 @@ export function UpdateNoticeRow({ notice }: { notice: AppUpdateNotice }) {
             console.warn(`Could not download the update: ${errorMessage(error)}`),
           )
         break
-      case 'cancel':
-        void window.overbench.updates.cancel()
-        break
     }
   }
 
-  const action = row.href ? (
-    <a
-      href={row.href}
-      target="_blank"
-      rel="noreferrer"
-      onClick={close}
-      className={buttonVariants({ variant: 'outline', size: 'xs' })}
-    >
-      {row.action === 'download' && <ExternalLinkIcon data-icon="inline-start" />}
-      {row.actionLabel}
-    </a>
-  ) : (
-    <Button variant="outline" size="xs" onClick={run}>
-      {row.actionLabel}
-    </Button>
-  )
+  // A download in progress is cancelled from the card's corner, so it has no action of its own.
+  const action =
+    row.action === 'cancel' ? null : row.href ? (
+      <a
+        href={row.href}
+        target="_blank"
+        rel="noreferrer"
+        className={buttonVariants({ variant: 'outline', size: 'xs' })}
+      >
+        {row.action === 'download' && <ExternalLinkIcon data-icon="inline-start" />}
+        {row.actionLabel}
+      </a>
+    ) : (
+      <Button variant="outline" size="xs" onClick={run}>
+        {row.actionLabel}
+      </Button>
+    )
 
   return (
-    <NoticeRow
+    <NoticeCard
       icon={
         notice.kind === 'updated' ? (
-          <CircleCheckIcon className="size-4 text-success" />
+          <CircleCheckIcon className="size-3.5 text-success" />
         ) : (
-          <CircleArrowUpIcon className="size-4 text-info" />
+          <CircleArrowUpIcon className="size-3.5 text-info" />
         )
       }
       text={
@@ -168,9 +182,10 @@ export function UpdateNoticeRow({ notice }: { notice: AppUpdateNotice }) {
         )
       }
       label={row.label}
-      detail={
-        notice.kind === 'downloading' ? (
-          <span className="flex items-center gap-2 py-1">
+      detail={row.detail}
+      below={
+        notice.kind === 'downloading' && (
+          <span className="flex items-center gap-2">
             <Progress
               value={notice.percent}
               aria-label={t('notice.downloadProgress')}
@@ -180,13 +195,12 @@ export function UpdateNoticeRow({ notice }: { notice: AppUpdateNotice }) {
               {notice.percent}%
             </span>
           </span>
-        ) : (
-          row.detail
         )
       }
       onOpen={() => openSettings('about')}
       action={action}
       onDismiss={row.dismissible ? dismiss : undefined}
+      onCancel={row.action === 'cancel' ? () => void window.overbench.updates.cancel() : undefined}
     />
   )
 }

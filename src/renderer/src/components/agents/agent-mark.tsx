@@ -90,7 +90,7 @@ export function AgentTile({
     <span
       aria-hidden
       style={{ width: size, height: size }}
-      className="grid shrink-0 place-items-center rounded-[8px] bg-tile text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+      className="grid shrink-0 place-items-center rounded-lg bg-tile text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
     >
       <AgentMark agent={agent} size={glyph} mono={mono} />
     </span>

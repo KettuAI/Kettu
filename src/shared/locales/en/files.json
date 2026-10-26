@@ -21,6 +21,16 @@
     "truncated_one": "Showing the first line.",
     "truncated_other": "Showing the first {{count}} lines."
   },
+  "change": {
+    "added": "Added",
+    "untracked": "Untracked",
+    "modified": "Modified",
+    "renamed": "Renamed",
+    "copied": "Copied",
+    "typechange": "Type changed",
+    "deleted": "Deleted",
+    "conflicted": "Conflicted"
+  },
   "preview": {
     "emptyTitle": "Open files appear here",
     "emptyDescription": "Pick a file in the tree, or click a file path in the conversation.",

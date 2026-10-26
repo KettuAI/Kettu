@@ -28,6 +28,7 @@ function loadModules(): Promise<Modules> {
     import('@xterm/addon-webgl'),
     import('@xterm/addon-web-links'),
     import('@xterm/xterm/css/xterm.css'),
+    loadFont(),
   ]).then(([xterm, fit, webgl, links]) => ({
     Terminal: xterm.Terminal,
     FitAddon: fit.FitAddon,
@@ -81,6 +82,16 @@ function fontFamily(): string {
   return (
     getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'monospace'
   )
+}
+
+/** xterm.js measures its cells as a terminal opens, so the face must be loaded by then. */
+async function loadFont(): Promise<void> {
+  const size = useSettingsStore.getState().settings.terminal.fontSize
+  try {
+    await document.fonts.load(`${size}px ${fontFamily()}`)
+  } catch (error) {
+    console.warn('Terminal font unavailable; using a fallback', error)
+  }
 }
 
 let watching = false

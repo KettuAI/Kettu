@@ -27,7 +27,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { Kbd } from '@renderer/components/ui/kbd'
 import {
   Sidebar,
   SidebarContent,
@@ -39,6 +38,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
 } from '@renderer/components/ui/sidebar'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { strongestSignal, signalText } from '@renderer/features/routines/model'
@@ -107,13 +107,24 @@ export function AppSidebar() {
   const importSessions = (project: Project) => setImporting({ project, open: true })
 
   return (
-    <Sidebar collapsible="none" role="navigation" className="w-full" aria-label={t('nav.label')}>
-      <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-2 pr-2.5 pl-4">
+    <Sidebar
+      collapsible="none"
+      role="navigation"
+      className="w-full bg-transparent"
+      aria-label={t('nav.label')}
+    >
+      {/* On macOS level with the top bar, under the gap above the sheets; elsewhere in the band. */}
+      <div
+        className={cn(
+          'app-region-drag flex shrink-0 items-center gap-2 pr-2 pl-4',
+          isMac ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)' : 'h-(--title-bar)',
+        )}
+      >
         {isMac && <span aria-hidden className="w-(--traffic-lights)" />}
         <span className="flex-1" />
         <SidebarToggle />
       </div>
-      <div className="flex shrink-0 flex-col gap-0.5 px-2 pt-0.5 pb-2.5">
+      <div className="flex shrink-0 flex-col gap-0.5 px-2 pt-0.5">
         <NavRow
           icon={<PlusIcon />}
           label={t('nav.newSession')}
@@ -130,26 +141,42 @@ export function AppSidebar() {
         <UsageNavRow />
         <RoutinesNavRow />
       </div>
-      <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
+      <SidebarContent className="scroll-fade-y gap-0 px-2 pt-1.5 pb-2" onKeyDown={moveRowFocus}>
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
-        <SidebarGroup role="group" aria-label={t('nav.sessions')} className="gap-0.5 p-0">
+        <SidebarGroup
+          role="group"
+          aria-label={t('nav.sessions')}
+          className={cn(
+            'gap-0.5 p-0',
+            loaded &&
+              'motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-(--duration-base)',
+          )}
+        >
           {!loaded && loadError ? (
-            <p className="px-2 py-1 text-xs leading-normal text-secondary">
+            <p className="mt-3.5 px-2.5 py-1 text-xs leading-normal text-secondary">
               {t('nav.unavailable')}
             </p>
           ) : !loaded ? (
-            <SidebarMenu className="gap-px">
-              {[0, 1, 2, 3].map((i) => (
-                <SidebarMenuItem key={i}>
-                  <SidebarMenuSkeleton className="h-row" />
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            // A project's label and its rows at their real sizes, so nothing moves as they arrive.
+            <>
+              <div className="mt-3.5 flex h-[30px] items-center pl-2.5">
+                <Skeleton className="h-3 w-20" />
+              </div>
+              <SidebarMenu className="gap-0.5">
+                {[0, 1, 2, 3].map((i) => (
+                  <SidebarMenuItem key={i}>
+                    <SidebarMenuSkeleton showIcon className="h-row gap-[9px] px-2.5" />
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </>
           ) : (
             <>
               <PinnedGroup stop={stop} />
               {shownProjects.length === 0 ? (
-                <p className="px-2 py-1 text-xs leading-normal text-secondary">{t('nav.empty')}</p>
+                <p className="mt-3.5 px-2.5 py-1 text-xs leading-normal text-secondary">
+                  {t('nav.empty')}
+                </p>
               ) : (
                 shownProjects.map((project) => (
                   <ProjectGroup
@@ -165,7 +192,7 @@ export function AppSidebar() {
           )}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="gap-1 p-2">
+      <SidebarFooter className="gap-1.5 p-2">
         <SidebarFooterContent />
       </SidebarFooter>
       {importing && (
@@ -197,23 +224,30 @@ export function NavRow({
   /** The row's name in words, when `extra` says more than its marks. */
   ariaLabel?: string
 }) {
-  return (
+  const row = (
     <SidebarMenuButton
       size="row"
       isActive={current}
       onClick={onClick}
       aria-label={ariaLabel}
-      className="[&_svg]:size-5 data-active:font-medium"
+      className="[&_svg]:size-5 data-active:font-normal"
     >
-      {icon}
-      <span className="flex-1">{label}</span>
-      {extra ??
-        (shortcut && (
-          <Kbd className="h-auto bg-transparent p-0 text-[11px] font-normal text-tertiary group-data-active/menu-button:text-secondary">
-            {formatShortcut(shortcut)}
-          </Kbd>
-        ))}
+      <span className="contents text-secondary group-data-active/menu-button:text-primary">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {extra}
     </SidebarMenuButton>
+  )
+  // A shortcut shows in the row's tooltip, never as a hint on the row.
+  if (!shortcut) return row
+  return (
+    <Tooltip>
+      <TooltipTrigger render={row} delay={700} />
+      <TooltipContent side="right">
+        {label} <span className="opacity-60">{formatShortcut(shortcut)}</span>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -248,17 +282,25 @@ function RoutinesNavRow() {
   )
 }
 
-/** The routines' strongest signal, as a session row draws its own. */
+/** The routines' strongest signal, as a session row draws its own; runs waiting are counted. */
 function RoutineSignalMark({
   signal,
 }: {
   signal: NonNullable<ReturnType<typeof strongestSignal>>
 }) {
+  if (signal.kind === 'waiting') {
+    return (
+      <span
+        aria-hidden
+        className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-attention px-[5px] text-meta font-semibold text-attention-foreground tabular"
+      >
+        {signal.count}
+      </span>
+    )
+  }
   return (
     <span aria-hidden className="grid size-4 shrink-0 place-items-center">
-      {signal.kind === 'waiting' ? (
-        <span className="size-2 rounded-full bg-attention-dot" />
-      ) : signal.kind === 'failed' ? (
+      {signal.kind === 'failed' ? (
         <CircleAlertIcon className="size-3.5 text-danger" />
       ) : signal.kind === 'running' ? (
         <RunningDot />
@@ -302,7 +344,7 @@ function TodayTokens() {
   // Quiet until there is something to count.
   if (!today) return null
   return (
-    <span className="text-xs font-normal text-tertiary tabular-nums group-data-active/menu-button:text-secondary">
+    <span className="text-xs font-normal text-tertiary tabular-nums">
       <span aria-hidden>{tokens(today)}</span>
       <span className="sr-only">{t('nav.today', { tokens: tokens(today) })}</span>
     </span>
@@ -321,9 +363,7 @@ function TodayCost() {
   return (
     <Tooltip>
       <TooltipTrigger
-        render={
-          <span className="text-xs font-normal text-tertiary tabular-nums group-data-active/menu-button:text-secondary" />
-        }
+        render={<span className="text-xs font-normal text-tertiary tabular-nums" />}
         delay={700}
       >
         <span aria-hidden>{text}</span>
@@ -413,7 +453,7 @@ function ProjectGroup({
 
   const row = (
     <SidebarMenuButton
-      size="row"
+      size="label"
       data-sidebar-row=""
       tabIndex={groupStop ? 0 : -1}
       aria-expanded={open}
@@ -426,22 +466,10 @@ function ProjectGroup({
         } else if (event.key === 'ArrowRight' && !open) toggle()
         else if (event.key === 'ArrowLeft' && open) toggle()
       }}
-      className={cn(
-        'gap-1 text-small font-medium',
-        // Room for the More button before the +, so the name never runs under it.
-        project && !project.missing && 'group-has-data-[sidebar=menu-action]/menu-item:pr-13',
-        project?.missing ? 'text-disabled' : 'text-secondary',
-      )}
+      className={cn(GROUP_LABEL, project?.missing ? 'text-disabled' : 'hover:text-secondary')}
     >
-      <span className="min-w-0 truncate">{name}</span>
-      <span className="grid size-3 shrink-0 place-items-center text-icon">
-        {open ? <ChevronDownIcon className="size-3!" /> : <ChevronRightIcon className="size-3!" />}
-      </span>
-      {project?.missing && (
-        <span className="ml-auto text-[11.5px] font-normal text-tertiary">
-          {t('project.missing')}
-        </span>
-      )}
+      <span className="min-w-0 truncate font-heading text-group font-semibold">{name}</span>
+      <FoldChevron open={open} />
     </SidebarMenuButton>
   )
   const tooltip = project ? (
@@ -454,8 +482,8 @@ function ProjectGroup({
   const menuItems = project && <ProjectMenuItems onImport={() => onImport(project)} />
 
   return (
-    <div className="flex flex-col gap-px">
-      <div className="group/menu-item relative">
+    <div className="flex flex-col gap-0.5">
+      <div className={cn('group/menu-item', GROUP_ROW)}>
         {project ? (
           <ContextMenu>
             {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
@@ -471,6 +499,11 @@ function ProjectGroup({
             {tooltip}
           </Tooltip>
         )}
+        {project?.missing && (
+          <span className="ml-1.5 shrink-0 text-meta text-tertiary">{t('project.missing')}</span>
+        )}
+        {/* Room for the More button and the +, so the name never runs under them. */}
+        <span className="min-w-13 flex-1" />
         {project && (
           <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
             <Tooltip>
@@ -482,10 +515,7 @@ function ProjectGroup({
                         showOnHover
                         tabIndex={-1}
                         aria-label={t('row.more')}
-                        className={cn(
-                          'top-1.5 text-icon [&>svg]:size-3.5',
-                          !project.missing && 'right-6.5',
-                        )}
+                        className={cn(GROUP_ACTION, !project.missing && 'right-7.5')}
                       />
                     }
                   />
@@ -508,7 +538,7 @@ function ProjectGroup({
                     project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')
                   }
                   onClick={() => newSession(projectPath, !project)}
-                  className="top-1.5 text-icon [&>svg]:size-3.5"
+                  className={GROUP_ACTION}
                 />
               }
             >
@@ -521,13 +551,28 @@ function ProjectGroup({
         )}
       </div>
       {open && tree.length > 0 && (
-        <SidebarMenu className="gap-px">
+        <SidebarMenu className="gap-0.5">
           {tree.map((node) => (
             <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
           ))}
         </SidebarMenu>
       )}
     </div>
+  )
+}
+
+// A group's label row: the label hugs its name, as a heading over its rows, with its buttons at
+// the row's end.
+const GROUP_ROW = 'relative mt-3.5 flex h-[30px] items-center pr-1 pl-2.5'
+const GROUP_LABEL = '-ml-1.5 min-w-0 group-has-data-[sidebar=menu-action]/menu-item:pr-1.5'
+const GROUP_ACTION =
+  'top-[3px] right-1 w-6 text-tertiary peer-hover/menu-button:text-tertiary [&>svg]:size-3.5'
+
+function FoldChevron({ open }: { open: boolean }) {
+  return (
+    <span className="grid size-3 shrink-0 place-items-center text-icon">
+      {open ? <ChevronDownIcon className="size-3!" /> : <ChevronRightIcon className="size-3!" />}
+    </span>
   )
 }
 
@@ -555,30 +600,26 @@ function PinnedGroup({ stop }: { stop: SidebarTabStop | null }) {
   const toggle = () => toggleGroup(PINNED_GROUP)
   const tabStopId = stop?.kind === 'session' ? stop.id : null
   return (
-    <div className="flex flex-col gap-px">
-      <SidebarMenuButton
-        size="row"
-        data-sidebar-row=""
-        tabIndex={stop?.kind === 'group' && stop.key === PINNED_GROUP ? 0 : -1}
-        aria-expanded={open}
-        onClick={toggle}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowRight' && !open) toggle()
-          else if (event.key === 'ArrowLeft' && open) toggle()
-        }}
-        className="gap-1 text-small font-medium text-secondary"
-      >
-        <span className="min-w-0 truncate">{t('pinned.label')}</span>
-        <span className="grid size-3 shrink-0 place-items-center text-icon">
-          {open ? (
-            <ChevronDownIcon className="size-3!" />
-          ) : (
-            <ChevronRightIcon className="size-3!" />
-          )}
-        </span>
-      </SidebarMenuButton>
+    <div className="flex flex-col gap-0.5">
+      <div className={GROUP_ROW}>
+        <SidebarMenuButton
+          size="label"
+          data-sidebar-row=""
+          tabIndex={stop?.kind === 'group' && stop.key === PINNED_GROUP ? 0 : -1}
+          aria-expanded={open}
+          onClick={toggle}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight' && !open) toggle()
+            else if (event.key === 'ArrowLeft' && open) toggle()
+          }}
+          className={cn(GROUP_LABEL, 'text-xs font-medium text-tertiary hover:text-secondary')}
+        >
+          <span className="min-w-0 truncate">{t('pinned.label')}</span>
+          <FoldChevron open={open} />
+        </SidebarMenuButton>
+      </div>
       {open && (
-        <SidebarMenu className="gap-px">
+        <SidebarMenu className="gap-0.5">
           {tree.map((node) => (
             <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
           ))}

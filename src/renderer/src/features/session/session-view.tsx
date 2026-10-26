@@ -87,7 +87,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     body =
       replicaStatus === 'error' ? (
         <ColumnScroller>
-          <div className="mx-auto w-full max-w-thread px-6 pt-6">
+          <div className="mx-auto w-full max-w-thread px-7 pt-7">
             <FailedState
               title={t('view.couldntOpen')}
               message={replicaError ?? t('view.hostSilent')}
@@ -118,7 +118,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   } else if (empty && (status === 'ready' || status === 'closed')) {
     body = (
       <ColumnScroller className="flex items-center justify-center px-6 pb-16">
-        <p className="animate-in text-[15px] text-muted-foreground fade-in animation-duration-(--duration-slow)">
+        <p className="animate-in text-ui text-muted-foreground fade-in animation-duration-(--duration-slow)">
           {t('newSession.whatToWorkOn', { agent: name })}
         </p>
       </ColumnScroller>
@@ -152,58 +152,61 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       <ProjectPathContext value={summary.projectPath}>
         <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       </ProjectPathContext>
-      {/* Leaves the width the column's scrollbar takes, so the composer lines up with the column. */}
+      {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
       <div style={{ paddingRight: gutter }}>
-        <div className="mx-auto flex w-full max-w-thread flex-col gap-2 px-6 pb-3">
-          {session && status === 'failed' && (
-            <FailedState
-              title={t('view.stopped', { agent: name })}
-              message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
-              detail={session.error?.detail}
-              onRetry={retry}
-            />
-          )}
-          {session && status === 'auth_required' && !empty && (
-            <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
-              <CircleAlertIcon />
-              <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
-              <AlertDescription>{t('view.historyStays')}</AlertDescription>
-              <AlertAction className="flex gap-1.5">
-                <Button size="xs" variant="outline" onClick={retry}>
-                  {t('common:actions.retry')}
-                </Button>
-                <Button size="xs" onClick={() => openSettings('agents')}>
-                  {t('view.signIn')}
-                </Button>
-              </AlertAction>
-            </Alert>
-          )}
-          {(actionError || queueError) && (
-            <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
-              {actionError ?? queueError}
-            </p>
-          )}
-          <div className="flex flex-col">
-            {session && summary.origin !== 'subagent' && (
-              <PlanBar
-                sessionId={sessionId}
-                running={running}
-                hidden={queueOpen && session.queue.length > 0}
+        <div className="px-7 pb-3.5">
+          <div className="mx-auto flex w-full max-w-thread flex-col gap-2">
+            {session && status === 'failed' && (
+              <FailedState
+                title={t('view.stopped', { agent: name })}
+                message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
+                detail={session.error?.detail}
+                onRetry={retry}
               />
             )}
-            {/* Mounted only while something waits; its cards sit behind the composer. */}
-            {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
-              <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
+            {session && status === 'auth_required' && !empty && (
+              <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
+                <CircleAlertIcon />
+                <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
+                <AlertDescription>{t('view.historyStays')}</AlertDescription>
+                <AlertAction className="flex gap-1.5">
+                  <Button size="xs" variant="outline" onClick={retry}>
+                    {t('common:actions.retry')}
+                  </Button>
+                  <Button size="xs" onClick={() => openSettings('agents')}>
+                    {t('view.signIn')}
+                  </Button>
+                </AlertAction>
+              </Alert>
             )}
-            {summary.origin === 'subagent' ? (
-              <SubagentBar summary={summary} session={session} />
-            ) : session ? (
-              <div className="relative z-10">
-                <Composer key={sessionId} session={session} agentName={name} />
-              </div>
-            ) : (
-              <ComposerPlaceholder agentId={summary.agentId} />
+            {(actionError || queueError) && (
+              <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
+                {actionError ?? queueError}
+              </p>
             )}
+            <div className="flex flex-col">
+              {session && (
+                <PlanBar
+                  sessionId={sessionId}
+                  withPlan={summary.origin !== 'subagent'}
+                  running={running}
+                  hidden={queueOpen && session.queue.length > 0}
+                />
+              )}
+              {/* Mounted only while something waits; its cards sit behind the composer. */}
+              {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
+                <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
+              )}
+              {summary.origin === 'subagent' ? (
+                <SubagentBar summary={summary} session={session} />
+              ) : session ? (
+                <div className="relative z-10">
+                  <Composer key={sessionId} session={session} agentName={name} />
+                </div>
+              ) : (
+                <ComposerPlaceholder agentId={summary.agentId} />
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -248,13 +251,27 @@ const isEditable = (target: EventTarget | null) =>
 const overlayOpen = () =>
   !!document.querySelector('[role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"]')
 
-/** Number keys 1 to 4 answer the first pending permission request while the composer is empty. */
+// What answers Enter itself, so it never also answers a request.
+const handlesEnter = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  !!target.closest(
+    'button, a[href], summary, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], [role="checkbox"], [role="switch"]',
+  )
+
+/**
+ * Number keys 1 to 4 answer the first pending permission request while the composer is empty,
+ * and Enter answers it with its highlighted option, unless the focus is on a control of its own.
+ */
 function usePermissionKeys(sessionId: string): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat) return
+      const enter = event.key === 'Enter'
       const n = Number(event.key)
-      if (!Number.isInteger(n) || n < 1 || n > 4) return
+      if (!enter && (!Number.isInteger(n) || n < 1 || n > 4)) return
+      if (enter && (event.defaultPrevented || event.isComposing || handlesEnter(event.target))) {
+        return
+      }
       if (isEditable(event.target) || overlayOpen() || readDraft(sessionId).trim()) return
       const state = useThreadsStore.getState().replicas[sessionId]?.state
       if (!state) return
@@ -263,7 +280,7 @@ function usePermissionKeys(sessionId: string): void {
         if (entry?.kind !== 'tool' || !entry.permission) continue
         // Through the card's own button, so a failure shows where the answer was given.
         const button = document.querySelector<HTMLButtonElement>(
-          `[data-entry-id="${CSS.escape(id)}"] [data-permission-option="${n}"]`,
+          `[data-entry-id="${CSS.escape(id)}"] ${enter ? '[data-permission-option][data-highlighted]' : `[data-permission-option="${n}"]`}`,
         )
         if (!button || button.disabled) return
         event.preventDefault()

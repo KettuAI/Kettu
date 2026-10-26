@@ -1,16 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
-  ArrowDownUpIcon,
   ArrowLeftIcon,
+  ArrowRightIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   CircleAlertIcon,
   FileUpIcon,
-  Rows3Icon,
-  ShapesIcon,
   TrashIcon,
   XIcon,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import { SearchField } from '@renderer/components/search-field'
@@ -24,6 +23,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import {
@@ -36,10 +36,11 @@ import {
 } from '@renderer/components/ui/empty'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { TopBar } from '@renderer/features/shell/top-bar'
+import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { basename, longAgo } from '@renderer/lib/format'
-import { isMod } from '@renderer/lib/platform'
+import { isMac, isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
+import { cn } from '@renderer/lib/utils'
 import {
   artifactListShown,
   dismissImportFailure,
@@ -71,8 +72,8 @@ import {
   type Group,
 } from './model'
 
-/** Cards at least 280 px wide, 16 px apart: three across at 960 px. */
-const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(--spacing(70),1fr))] gap-4'
+/** Cards at least 250 px wide, 20 px apart: three across in the 896 px column. */
+const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(--spacing(62.5),1fr))] gap-x-5 gap-y-6.5'
 
 interface SessionInfo {
   title: string | null
@@ -159,9 +160,10 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     [i18n.language],
   )
   const day = new Date(now).setHours(0, 0, 0, 0)
+  const shown = useMemo(() => (list ? filterByTitle(list, filter) : []), [list, filter])
   const groups = useMemo(() => {
     if (!list) return []
-    return groupArtifacts(filterByTitle(list, filter), group, sort, {
+    return groupArtifacts(shown, group, sort, {
       projects,
       session: (id) => {
         const info = sessions.get(id)
@@ -174,7 +176,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       collator,
       now: day,
     })
-  }, [list, filter, group, sort, projects, sessions, collator, day, t])
+  }, [list, shown, group, sort, projects, sessions, collator, day, t])
 
   const projectName = (artifact: ArtifactSummary): string =>
     artifact.scratch
@@ -197,12 +199,15 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     />
   )
   const cardsProps = {
-    className: 'flex flex-col gap-7',
     onKeyDown: moveCardFocus,
     onFocus: (event: React.FocusEvent) => {
       const id = (event.target as HTMLElement).dataset.artifactCard
       if (id) setActive(id)
     },
+  }
+  const clearFilter = () => {
+    setArtifactsFilter('')
+    filterField.current?.focus()
   }
 
   let body
@@ -215,19 +220,17 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       body = (
         <>
           {error && <ListError error={error} />}
-          <div {...cardsProps}>
-            <div className={GRID}>
-              {trash.map((artifact) =>
-                card(
-                  artifact,
-                  t('card.daysLeft', {
-                    project: projectName(artifact),
-                    count: daysLeft(artifact.deletedAt ?? now, now),
-                  }),
-                  tabbable,
-                ),
-              )}
-            </div>
+          <div {...cardsProps} className={GRID}>
+            {trash.map((artifact) =>
+              card(
+                artifact,
+                t('card.daysLeft', {
+                  project: projectName(artifact),
+                  count: daysLeft(artifact.deletedAt ?? now, now),
+                }),
+                tabbable,
+              ),
+            )}
           </div>
         </>
       )
@@ -238,16 +241,17 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     if (list === null && error) body = <ListError error={error} />
     else if (list === null) body = <LoadingList />
     else if (list.length === 0) body = <NoArtifacts />
-    else if (groups.length === 0) body = <NoMatch />
+    else if (groups.length === 0) body = <NoMatch onClear={clearFilter} />
     else {
       body = (
         <>
           {error && <ListError error={error} />}
           <div {...cardsProps}>
-            {groups.map((g) => (
+            {groups.map((g, i) => (
               <GroupView
                 key={g.key}
                 group={g}
+                first={i === 0}
                 grouping={group}
                 sessions={sessions}
                 now={now}
@@ -270,77 +274,97 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     }
   }
 
-  const controls = list === null ? !error : list.length > 0
+  const sessionsShown = sessionCount(shown)
+  const summary =
+    sessionsShown > 0
+      ? t('page.summary', { count: shown.length, sessions: sessionsShown })
+      : t('page.count', { count: shown.length })
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar className="shadow-none">{null}</TopBar>
+      <DragStrip />
       <div
         ref={scroller}
         onScroll={(event) => (scrolledTo = event.currentTarget.scrollTop)}
-        className="min-h-0 flex-1 overflow-y-auto px-7 pt-4 pb-14 [scrollbar-gutter:stable]"
+        className="min-h-0 flex-1 overflow-y-auto px-8 pb-18 [scrollbar-gutter:stable]"
       >
-        <div className="@container mx-auto flex max-w-240 flex-col">
+        <div className="@container mx-auto flex max-w-224 flex-col">
           {deleted ? (
-            <header className="mb-7">
-              <div className="flex items-center gap-1.5">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="quiet"
-                        size="icon-compact"
-                        aria-label={t('page.backToArtifacts')}
-                        onClick={() => openRecentlyDeleted(false)}
-                        className="-ml-0.5 text-foreground"
-                      />
-                    }
-                  >
-                    <ArrowLeftIcon />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {t('viewer.back')} <span className="opacity-60">Esc</span>
-                  </TooltipContent>
-                </Tooltip>
-                <h1 className="text-title">{t('page.recentlyDeleted')}</h1>
-              </div>
-              <p className="mt-1 pl-8.5 text-xs text-secondary">{t('page.deletedDescription')}</p>
-            </header>
+            <>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      onClick={() => openRecentlyDeleted(false)}
+                      className="mb-2 -ml-2.25 self-start"
+                    />
+                  }
+                >
+                  <ArrowLeftIcon data-icon="inline-start" />
+                  {t('page.title')}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {t('page.backToArtifacts')} <span className="opacity-60">Esc</span>
+                </TooltipContent>
+              </Tooltip>
+              <header className="mb-7.5">
+                <h1 className="font-heading text-title font-semibold">
+                  {t('page.recentlyDeleted')}
+                </h1>
+                <p className="mt-1.5 text-small leading-5.5 text-secondary">
+                  {t('page.deletedDescription')}
+                </p>
+              </header>
+            </>
           ) : (
-            <header className="mb-7 flex items-end gap-4">
+            <header className="mb-7.5 flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <h1 className="text-title">{t('page.title')}</h1>
+                <h1 className="font-heading text-title font-semibold">{t('page.title')}</h1>
                 {list && list.length > 0 && (
-                  <p className="mt-1 text-xs text-secondary">
-                    {t('page.summary', { count: list.length, sessions: sessionCount(list) })}
+                  <p className="mt-1.5 text-small leading-5.5 text-secondary">
+                    <Trans
+                      t={t}
+                      i18nKey="page.sentence"
+                      values={{
+                        summary,
+                        grouping: t(`page.groupedBy.${group}`),
+                        sorting: t(`page.sortedBy.${sort}`),
+                      }}
+                      components={{
+                        group: (
+                          <InlineChoice
+                            title={t('page.groupBy')}
+                            label={t('page.groupByChoice', {
+                              choice: t(`page.groupings.${group}`),
+                            })}
+                            choices={GROUPINGS.map((g) => [g, t(`page.groupings.${g}`)] as const)}
+                            value={group}
+                            onPick={(g: ArtifactGrouping) => setArtifactsView({ group: g })}
+                          />
+                        ),
+                        sort: (
+                          <InlineChoice
+                            title={t('page.sort')}
+                            label={t('page.sortChoice', { choice: t(`page.sorts.${sort}`) })}
+                            choices={SORTS.map((s) => [s, t(`page.sorts.${s}`)] as const)}
+                            value={sort}
+                            onPick={(s: ArtifactSort) => setArtifactsView({ sort: s })}
+                          />
+                        ),
+                      }}
+                    />
                   </p>
                 )}
                 {list === null && !error && (
-                  <div className="mt-1 flex h-4 items-center">
-                    <Skeleton className="h-3 w-33" />
+                  <div className="mt-1.5 flex h-5.5 items-center">
+                    <Skeleton className="h-3 w-55" />
                   </div>
                 )}
               </div>
-              {controls && (
-                <div className="flex shrink-0 items-center gap-2">
-                  <div className="flex items-center gap-0.5">
-                    <ChoiceMenu
-                      icon={<Rows3Icon data-icon="inline-start" />}
-                      title={t('page.groupBy')}
-                      name={(choice) => t('page.groupByChoice', { choice })}
-                      choices={GROUPINGS.map((g) => [g, t(`page.groupings.${g}`)] as const)}
-                      value={group}
-                      onPick={(g: ArtifactGrouping) => setArtifactsView({ group: g })}
-                    />
-                    <ChoiceMenu
-                      icon={<ArrowDownUpIcon data-icon="inline-start" />}
-                      title={t('page.sort')}
-                      name={(choice) => t('page.sortChoice', { choice })}
-                      choices={SORTS.map((s) => [s, t(`page.sorts.${s}`)] as const)}
-                      value={sort}
-                      onPick={(s: ArtifactSort) => setArtifactsView({ sort: s })}
-                    />
-                  </div>
+              {list && list.length > 0 && (
+                <>
                   <SearchField
                     value={filter}
                     onChange={setArtifactsFilter}
@@ -355,38 +379,33 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                         render={
                           <DropdownMenuTrigger
                             render={
-                              <Button
-                                variant="quiet"
-                                size="icon-compact"
-                                aria-label={t('page.import')}
-                              />
+                              <Button variant="outline" size="icon" aria-label={t('page.import')} />
                             }
                           />
                         }
                       >
-                        <FileUpIcon className="size-4" />
+                        <FileUpIcon />
                       </TooltipTrigger>
                       <TooltipContent>{t('page.import')}</TooltipContent>
                     </Tooltip>
                   </ImportMenu>
-                </div>
+                </>
               )}
             </header>
           )}
           {!deleted && importFailed && <ImportError failure={importFailed} />}
           {body}
           {!deleted && list !== null && trash !== null && trash.length > 0 && (
-            <div className="mt-10 pt-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-              <button
-                type="button"
-                onClick={() => openRecentlyDeleted(true)}
-                className="-ml-2 flex h-row items-center gap-2 rounded-lg px-2 text-ui text-secondary outline-none hover:bg-hover focus-ring"
-              >
-                <TrashIcon className="size-4 text-icon" />
-                {t('page.recentlyDeleted')}
-                <span className="text-meta text-tertiary">{trash.length}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => openRecentlyDeleted(true)}
+              className="mt-10 flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui text-secondary shadow-[0_calc(-1*var(--hairline))_0_var(--border-subtle)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
+            >
+              <TrashIcon className="size-4 text-icon" />
+              {t('page.recentlyDeleted')}
+              <span className="text-xs text-tertiary tabular-nums">{trash.length}</span>
+              <ChevronRightIcon className="ml-auto size-3.5 text-icon" />
+            </button>
           )}
         </div>
       </div>
@@ -394,15 +413,35 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   )
 }
 
-/** One group: its label and count, then each session's row over its cards, or one grid. */
+/**
+ * The window's drag region over the page, a top bar's height with the desk above the sheet. On
+ * macOS with the sidebar collapsed it holds the sidebar toggle, level with the traffic lights.
+ */
+function DragStrip() {
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && isMac
+  return (
+    <div
+      className={cn(
+        'app-region-drag flex h-[calc(var(--top-bar)-var(--sheet-gap))] shrink-0 items-end',
+        cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
+      )}
+    >
+      {cornered && <SidebarToggle className="-ml-1" />}
+    </div>
+  )
+}
+
+/** One group: its heading and count, then each session's row over its cards, or one grid. */
 function GroupView({
   group,
+  first,
   grouping,
   sessions,
   now,
   render,
 }: {
   group: Group
+  first: boolean
   grouping: ArtifactGrouping
   sessions: Map<string, SessionInfo>
   now: number
@@ -419,26 +458,40 @@ function GroupView({
           ? t(`page.dates.${of.bucket}`)
           : null
   return (
-    <section className="flex flex-col gap-2.5">
+    <section
+      aria-label={label ?? undefined}
+      className={cn(
+        'flex min-w-0 flex-col',
+        !first && 'mt-10 pt-7 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]',
+      )}
+    >
       {label !== null && (
-        <h2
-          title={of.kind === 'project' ? of.path : undefined}
-          className="flex items-baseline gap-1.5 text-xs font-medium text-tertiary"
-        >
-          <span className="truncate">{label}</span>
-          <span className="text-meta font-normal">{group.count}</span>
+        <h2 className="mb-1 flex min-w-0 items-baseline gap-2 font-heading text-heading font-semibold">
+          {of.kind === 'project' ? (
+            <Tooltip>
+              <TooltipTrigger render={<span className="truncate" />} delay={700}>
+                {label}
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="font-mono">
+                {of.path}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="truncate">{label}</span>
+          )}
+          <span className="font-sans text-xs font-normal text-tertiary tabular-nums">
+            {group.count}
+          </span>
         </h2>
       )}
-      <div className="flex flex-col gap-4">
-        {group.sections.map((section) => (
-          <div key={section.key} className="flex min-w-0 flex-col gap-2">
-            {grouping === 'project-session' && section.sessionId && (
-              <SessionRow id={section.sessionId} info={sessions.get(section.sessionId)} now={now} />
-            )}
-            <div className={GRID}>{section.artifacts.map(render)}</div>
-          </div>
-        ))}
-      </div>
+      {group.sections.map((section, i) => (
+        <div key={section.key} className={cn('flex min-w-0 flex-col', i === 0 ? 'mt-2' : 'mt-7')}>
+          {grouping === 'project-session' && section.sessionId && (
+            <SessionRow id={section.sessionId} info={sessions.get(section.sessionId)} now={now} />
+          )}
+          <div className={GRID}>{section.artifacts.map(render)}</div>
+        </div>
+      ))}
     </section>
   )
 }
@@ -448,7 +501,7 @@ function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefin
   const { t } = useTranslation(['artifacts', 'common'])
   if (!info) {
     return (
-      <span className="flex h-row items-center truncate font-medium text-secondary">
+      <span className="mb-2.5 flex h-7 items-center truncate text-ui font-medium text-secondary">
         {t(id === NO_SESSION ? 'page.imported' : 'page.deletedSession')}
       </span>
     )
@@ -460,59 +513,56 @@ function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefin
           <button
             type="button"
             onClick={() => openSession(id, info.projectPath)}
-            className="-ml-2 flex h-row max-w-full min-w-0 items-center gap-2 self-start rounded-lg px-2 text-ui outline-none hover:bg-hover focus-ring"
+            className="group/session mb-2.5 -ml-2 flex h-7 max-w-full min-w-0 items-center gap-2 self-start rounded-lg px-2 text-ui text-primary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
           />
         }
         delay={700}
       >
         <span className="truncate font-medium">{info.title ?? t('common:untitledSession')}</span>
-        <span className="shrink-0 text-meta text-tertiary">{longAgo(info.updatedAt, now)}</span>
+        <span className="shrink-0 text-xs text-tertiary">{longAgo(info.updatedAt, now)}</span>
+        <ArrowRightIcon className="size-3.5 shrink-0 text-tertiary opacity-0 transition-[opacity,translate] duration-(--duration-fast) group-hover/session:translate-x-0 group-hover/session:opacity-100 group-focus-visible/session:translate-x-0 group-focus-visible/session:opacity-100 motion-safe:-translate-x-0.75" />
       </TooltipTrigger>
       <TooltipContent>{t('page.openSession')}</TooltipContent>
     </Tooltip>
   )
 }
 
-/** A quiet button showing the current choice, whose menu picks another and closes. */
-function ChoiceMenu<T extends string>({
-  icon,
+/**
+ * A choice inside the page's sentence, "by project and session": the words open a menu that picks
+ * another and closes. `children` are the words, as the sentence's translation places them.
+ */
+function InlineChoice<T extends string>({
   title,
-  name,
+  label,
   choices,
   value,
   onPick,
+  children,
 }: {
-  icon: React.ReactNode
   title: string
-  name: (choice: string) => string
+  /** The trigger's name: what it chooses and the current choice. */
+  label: string
   choices: readonly (readonly [T, string])[]
   value: T
   onPick: (value: T) => void
+  children?: React.ReactNode
 }) {
-  const current = choices.find(([v]) => v === value)?.[1] ?? ''
   return (
     <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <DropdownMenuTrigger
-              render={<Button variant="quiet" size="compact" aria-label={name(current)} />}
-            />
-          }
-        >
-          {icon}
-          <span className="hidden @min-[40rem]:inline">{current}</span>
-          <ChevronDownIcon data-icon="inline-end" />
-        </TooltipTrigger>
-        <TooltipContent>{name(current)}</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="end">
+      <DropdownMenuTrigger
+        aria-label={label}
+        className="-mr-0.75 -ml-1 inline-flex h-5.5 items-center gap-0.5 rounded-md pr-0.75 pl-1 align-top font-medium text-primary underline decoration-border-strong decoration-dotted underline-offset-4 outline-none transition-colors duration-(--duration-fast) focus-ring hover:bg-hover hover:decoration-transparent aria-expanded:bg-hover aria-expanded:decoration-transparent"
+      >
+        {children}
+        <ChevronDownIcon className="size-3 text-tertiary" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" alignOffset={-6} sideOffset={6} className="min-w-53">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{title}</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={value} onValueChange={(v) => onPick(v as T)}>
-            {choices.map(([v, label]) => (
+            {choices.map(([v, name]) => (
               <DropdownMenuRadioItem key={v} value={v} closeOnClick>
-                {label}
+                {name}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
@@ -621,40 +671,43 @@ function useSessionInfo(...lists: (ArtifactSummary[] | null)[]): Map<string, Ses
 function LoadingList() {
   const { t } = useTranslation('artifacts')
   return (
-    <div aria-busy aria-label={t('page.loading')} className="flex flex-col gap-2.5">
-      <Skeleton className="my-0.5 h-3 w-18" />
-      <div className="flex flex-col gap-4">
-        {[3, 1].map((count, i) => (
-          <div key={i} className="flex flex-col gap-2">
-            <div className="flex h-row items-center">
-              <Skeleton className={i === 0 ? 'h-3 w-57' : 'h-3 w-44'} />
-            </div>
-            <div className={GRID}>
-              {Array.from({ length: count }, (_, j) => (
-                <CardSkeleton key={j} />
-              ))}
-            </div>
-          </div>
+    <div aria-busy aria-label={t('page.loading')} className="flex flex-col">
+      <Skeleton className="mt-2 mb-4.5 h-4 w-45" />
+      <div className={GRID}>
+        {Array.from({ length: 3 }, (_, i) => (
+          <CardSkeleton key={i} />
         ))}
       </div>
     </div>
   )
 }
 
+/** An empty tray, drawn for an empty list. */
+function EmptyTray() {
+  return (
+    <EmptyMedia className="mb-3">
+      <span
+        aria-hidden
+        className="relative block aspect-16/10 w-33 rounded-code bg-sidebar shadow-sunk"
+      >
+        <span className="absolute inset-[14%] rounded-xs border-[1.5px] border-dashed border-strong" />
+      </span>
+    </EmptyMedia>
+  )
+}
+
 function NoArtifacts() {
   const { t } = useTranslation('artifacts')
   return (
-    <Empty className="py-24">
+    <Empty className="py-18">
       <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <ShapesIcon />
-        </EmptyMedia>
+        <EmptyTray />
         <EmptyTitle>{t('page.emptyTitle')}</EmptyTitle>
         <EmptyDescription>{t('page.emptyDescription')}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <ImportMenu align="start">
-          <DropdownMenuTrigger render={<Button variant="outline" size="compact" />}>
+        <ImportMenu align="center">
+          <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
             <FileUpIcon data-icon="inline-start" />
             {t('page.importEllipsis')}
           </DropdownMenuTrigger>
@@ -667,28 +720,47 @@ function NoArtifacts() {
 function NothingDeleted() {
   const { t } = useTranslation('artifacts')
   return (
-    <div className="flex flex-col items-center gap-1 py-26 text-center">
-      <p className="text-ui text-secondary">{t('page.nothingDeleted')}</p>
-      <p className="text-xs text-tertiary">{t('page.nothingDeletedHint')}</p>
-    </div>
+    <Empty className="py-18">
+      <EmptyHeader>
+        <EmptyTray />
+        <EmptyTitle>{t('page.nothingDeleted')}</EmptyTitle>
+      </EmptyHeader>
+    </Empty>
   )
 }
 
-/** "Import into": the sidebar's projects in its order, then No project; each opens the dialog. */
-function ImportMenu({ align, children }: { align: 'start' | 'end'; children: React.ReactNode }) {
+/**
+ * "Import into": the sidebar's projects in its order, each with its folder in a tooltip, then No
+ * project; each opens the dialog.
+ */
+function ImportMenu({
+  align,
+  children,
+}: {
+  align: 'start' | 'center' | 'end'
+  children: React.ReactNode
+}) {
   const { t } = useTranslation('artifacts')
   const projects = useProjectsStore((s) => s.projects)
   return (
     <DropdownMenu>
       {children}
-      <DropdownMenuContent align={align} className="min-w-50">
+      <DropdownMenuContent align={align} sideOffset={6} className="min-w-50">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t('page.importInto')}</DropdownMenuLabel>
           {projects.map((project) => (
-            <DropdownMenuItem key={project.path} onClick={() => void importArtifact(project.path)}>
-              <span className="truncate">{project.name}</span>
-            </DropdownMenuItem>
+            <Tooltip key={project.path}>
+              <TooltipTrigger
+                render={<DropdownMenuItem onClick={() => void importArtifact(project.path)} />}
+              >
+                <span className="truncate">{project.name}</span>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-sm font-mono break-all">
+                {project.path}
+              </TooltipContent>
+            </Tooltip>
           ))}
+          {projects.length > 0 && <DropdownMenuSeparator />}
           <DropdownMenuItem onClick={() => void importArtifact(null)}>
             {t('page.noProject')}
           </DropdownMenuItem>
@@ -701,7 +773,7 @@ function ImportMenu({ align, children }: { align: 'start' | 'end'; children: Rea
 function ImportError({ failure }: { failure: ImportFailure }) {
   const { t } = useTranslation(['artifacts', 'common'])
   return (
-    <Alert variant="destructive" className="mb-7">
+    <Alert variant="error" className="mb-7">
       <CircleAlertIcon />
       <AlertTitle>{t('page.importFailedTitle')}</AlertTitle>
       <AlertDescription>{t(`page.importFailed.${failure}`)}</AlertDescription>
@@ -719,12 +791,16 @@ function ImportError({ failure }: { failure: ImportFailure }) {
   )
 }
 
-function NoMatch() {
+function NoMatch({ onClear }: { onClear: () => void }) {
   const { t } = useTranslation('artifacts')
   return (
-    <div className="flex flex-col items-center gap-1 py-26 text-center">
-      <p className="text-ui text-secondary">{t('page.noMatch')}</p>
-      <p className="text-xs text-tertiary">{t('page.noMatchHint')}</p>
+    <div className="flex flex-col items-center gap-1.5 py-14 text-center">
+      <p className="font-heading text-subheading font-semibold text-secondary">
+        {t('page.noMatch')}
+      </p>
+      <Button variant="quiet" size="sm" onClick={onClear}>
+        {t('page.clearFilter')}
+      </Button>
     </div>
   )
 }
@@ -732,12 +808,12 @@ function NoMatch() {
 function ListError({ error }: { error: string }) {
   const { t } = useTranslation(['artifacts', 'common'])
   return (
-    <Alert variant="destructive" className="mb-7">
+    <Alert variant="error" className="mb-7">
       <CircleAlertIcon />
       <AlertTitle>{t('page.errorTitle')}</AlertTitle>
-      <AlertDescription>{error}</AlertDescription>
+      <AlertDescription>{t('page.errorDescription', { error })}</AlertDescription>
       <AlertAction>
-        <Button variant="outline" size="compact" onClick={retryArtifacts}>
+        <Button variant="outline" size="sm" onClick={retryArtifacts}>
           {t('common:actions.retry')}
         </Button>
       </AlertAction>

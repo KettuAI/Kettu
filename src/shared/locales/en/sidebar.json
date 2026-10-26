@@ -40,7 +40,9 @@
     "fork": "Fork",
     "openPullRequest": "Open pull request #{{number}}",
     "showIn": "Show in {{name}}",
-    "archive": "Archive"
+    "archive": "Archive",
+    "archived": "Archived “{{title}}”",
+    "undo": "Undo"
   },
   "import": {
     "title": "Import sessions",
@@ -91,11 +93,6 @@
     "signInOne": "{{name}} needs you to sign in",
     "signInMany": "{{count}} agents need you to sign in",
     "signInDetail": "Open Settings › Agents to sign in",
-    "notices": "Notices",
-    "noticesCount_one": "{{count}} notice",
-    "noticesCount_other": "{{count}} notices",
-    "noticeWords_one": "notice",
-    "noticeWords_other": "notices",
     "noticesName": "Notices: {{list}}",
     "listSeparator": ", "
   },

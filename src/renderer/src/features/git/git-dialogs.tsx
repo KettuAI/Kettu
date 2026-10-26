@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { CheckIcon, GlobeIcon, LockIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { isRepositoryName, type GitStatus, type RepositoryVisibility } from '@shared/git'
 import { SegmentedControl } from '@renderer/components/segmented-control'
@@ -22,7 +23,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@renderer/components/ui/dialog'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@renderer/components/ui/field'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Switch } from '@renderer/components/ui/switch'
@@ -38,25 +45,41 @@ import {
 import { CopyButton } from './copy-button'
 import { failureOf, lastLine, pullRequestHead, suggestPullRequest } from './sync'
 
-/** The branch popover's dialogs, kept outside it so the popover can close under them. */
-export function GitDialogs({ status }: { status: GitStatus }) {
+type ReturnFocus = RefObject<HTMLElement | null>
+
+/**
+ * The branch popover's dialogs, kept outside it so the popover can close under them. The popover's
+ * button is gone when one closes, so focus goes back to `returnFocus`.
+ */
+export function GitDialogs({
+  status,
+  returnFocus,
+}: {
+  status: GitStatus
+  returnFocus?: ReturnFocus
+}) {
   const dialog = useGitStore((s) => s.dialogs[status.projectPath] ?? null)
   const close = (): void => closeGitDialog(status.projectPath)
   return (
     <>
-      <ConfirmPushDialog status={status} dialog={dialog} onClose={close} />
+      <ConfirmPushDialog
+        status={status}
+        dialog={dialog}
+        returnFocus={returnFocus}
+        onClose={close}
+      />
       <Dialog open={dialog?.kind === 'publishRepo'} onOpenChange={(open) => !open && close()}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent finalFocus={returnFocus} showCloseButton={false}>
           {dialog?.kind === 'publishRepo' && <PublishForm status={status} onClose={close} />}
         </DialogContent>
       </Dialog>
       <Dialog open={dialog?.kind === 'createPr'} onOpenChange={(open) => !open && close()}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent finalFocus={returnFocus} showCloseButton={false} className="sm:max-w-115">
           {dialog?.kind === 'createPr' && <CreatePrForm status={status} onClose={close} />}
         </DialogContent>
       </Dialog>
       <Dialog open={dialog?.kind === 'log'} onOpenChange={(open) => !open && close()}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent finalFocus={returnFocus} showCloseButton={false} className="sm:max-w-160">
           {dialog?.kind === 'log' && <LogView projectPath={status.projectPath} />}
         </DialogContent>
       </Dialog>
@@ -67,10 +90,12 @@ export function GitDialogs({ status }: { status: GitStatus }) {
 function ConfirmPushDialog({
   status,
   dialog,
+  returnFocus,
   onClose,
 }: {
   status: GitStatus
   dialog: GitDialog | null
+  returnFocus?: ReturnFocus
   onClose: () => void
 }) {
   const { t } = useTranslation(['git', 'common'])
@@ -80,7 +105,7 @@ function ConfirmPushDialog({
   const count = confirm?.count ?? 0
   return (
     <AlertDialog open={!!confirm} onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent className="sm:max-w-sm">
+      <AlertDialogContent finalFocus={returnFocus} className="sm:max-w-sm">
         <AlertDialogHeader>
           <AlertDialogTitle>{t('dialog.confirmPush.title', { branch })}</AlertDialogTitle>
           <AlertDialogDescription>
@@ -103,6 +128,40 @@ function ConfirmPushDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/** Settings under the fields, one per row: the label and a line about it, the control at the end. */
+function Rows({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col divide-y divide-subtle border-t border-subtle">{children}</div>
+  )
+}
+
+function Row({
+  label,
+  description,
+  htmlFor,
+  children,
+}: {
+  label: string
+  description?: ReactNode
+  htmlFor?: string
+  children: ReactNode
+}) {
+  return (
+    <Field
+      orientation="horizontal"
+      className="min-h-12 gap-4 py-1.5 has-[>[data-slot=field-content]]:items-center"
+    >
+      <FieldContent>
+        <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>
+        {description && (
+          <FieldDescription className="text-xs text-tertiary">{description}</FieldDescription>
+        )}
+      </FieldContent>
+      {children}
+    </Field>
   )
 }
 
@@ -149,8 +208,8 @@ function PublishForm({ status, onClose }: { status: GitStatus; onClose: () => vo
             )}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2 rounded-lg bg-subtle py-1 pr-1 pl-3">
-          <code className="flex-1 font-mono text-xs">gh auth login</code>
+        <div className="flex items-center gap-2 rounded-lg bg-code-block py-1 pr-1 pl-3">
+          <code className="flex-1 font-mono text-code">gh auth login</code>
           <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />
         </div>
         <DialogFooter showCloseButton />
@@ -176,24 +235,39 @@ function PublishForm({ status, onClose }: { status: GitStatus; onClose: () => vo
         />
         {!valid && <FieldError>{t('dialog.publish.nameInvalid')}</FieldError>}
       </Field>
-      <Field>
-        <FieldLabel>{t('dialog.publish.visibility')}</FieldLabel>
-        <SegmentedControl
-          aria-label={t('dialog.publish.visibility')}
-          value={visibility}
-          onChange={setVisibility}
-          className="w-fit"
-          segments={[
-            { value: 'private', label: t('dialog.publish.private') },
-            { value: 'public', label: t('dialog.publish.public') },
-          ]}
-        />
-        {gh.account && (
-          <FieldDescription>
-            {t('dialog.publish.account', { account: gh.account })}
-          </FieldDescription>
-        )}
-      </Field>
+      <Rows>
+        <Row
+          label={t('dialog.publish.visibility')}
+          description={gh.account && t('dialog.publish.account', { account: gh.account })}
+        >
+          <SegmentedControl
+            aria-label={t('dialog.publish.visibility')}
+            value={visibility}
+            onChange={setVisibility}
+            className="w-fit shrink-0"
+            segments={[
+              {
+                value: 'private',
+                label: (
+                  <span className="inline-flex items-center gap-1.5">
+                    <LockIcon aria-hidden className="size-3.5" />
+                    {t('dialog.publish.private')}
+                  </span>
+                ),
+              },
+              {
+                value: 'public',
+                label: (
+                  <span className="inline-flex items-center gap-1.5">
+                    <GlobeIcon aria-hidden className="size-3.5" />
+                    {t('dialog.publish.public')}
+                  </span>
+                ),
+              },
+            ]}
+          />
+        </Row>
+      </Rows>
       {failed && (
         <p className="text-xs leading-normal text-danger [overflow-wrap:anywhere]">
           {t(`failure.${failed.busy ? 'busy' : failureOf(failed.log)}`, {
@@ -257,7 +331,7 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
             t={t}
             i18nKey="dialog.createPr.description"
             values={{ head, repo: github ? `${github.owner}/${github.repo}` : '' }}
-            components={{ branch: <span className="font-mono text-control text-primary" /> }}
+            components={{ branch: <span className="font-mono text-command text-primary" /> }}
           />
         </DialogDescription>
       </DialogHeader>
@@ -271,31 +345,28 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
           id="pr-body"
           value={body}
           rows={5}
-          className="max-h-60 font-mono text-xs"
+          className="max-h-60"
           onChange={(e) => setBody(e.target.value)}
         />
       </Field>
-      <div className="flex items-start gap-4">
-        <Field className="w-40">
-          <FieldLabel htmlFor="pr-base">{t('dialog.createPr.base')}</FieldLabel>
+      <Rows>
+        <Row label={t('dialog.createPr.base')} htmlFor="pr-base">
           <Input
             id="pr-base"
             value={base}
             spellCheck={false}
-            className="font-mono text-xs"
+            className="w-40 shrink-0 font-mono text-command"
             onChange={(e) => setBase(e.target.value.trim())}
           />
-        </Field>
-        <Field orientation="horizontal" className="mt-7 flex-1">
+        </Row>
+        <Row
+          label={t('dialog.createPr.draft')}
+          description={t('dialog.createPr.draftHint')}
+          htmlFor="pr-draft"
+        >
           <Switch id="pr-draft" checked={draft} onCheckedChange={setDraft} />
-          <FieldLabel htmlFor="pr-draft" className="font-normal">
-            {t('dialog.createPr.draft')}
-          </FieldLabel>
-        </Field>
-      </div>
-      {draft && (
-        <FieldDescription className="-mt-2">{t('dialog.createPr.draftHint')}</FieldDescription>
-      )}
+        </Row>
+      </Rows>
       {error && <FailureText log={error} />}
       <DialogFooter>
         <DialogClose render={<Button variant="outline" />}>
@@ -326,11 +397,18 @@ const LOG_TITLE = {
   publishRepo: 'failure.operation.publish',
 } as const
 
-/** The failed operation's whole output, selectable, with Copy. */
+/** The failed operation's whole output, as git wrote it, with Copy. */
 function LogView({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation(['git', 'common'])
   const failed = useGitStore((s) => s.failed[projectPath] ?? null)
+  const [copied, setCopied] = useState(false)
   const log = failed?.log ?? ''
+  const copy = (): void => {
+    void navigator.clipboard.writeText(log).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
   return (
     <>
       <DialogHeader>
@@ -338,15 +416,17 @@ function LogView({ projectPath }: { projectPath: string }) {
           {t('dialog.log.title', { operation: t(LOG_TITLE[failed?.kind ?? 'push']) })}
         </DialogTitle>
       </DialogHeader>
+      {/* git aligns its output in columns, so lines scroll rather than wrap. */}
       <pre
         data-selectable=""
-        className="max-h-96 overflow-auto rounded-lg bg-subtle p-3 font-mono text-xs leading-normal whitespace-pre-wrap [overflow-wrap:anywhere]"
+        className="max-h-75 overflow-auto rounded-code border border-subtle bg-code-block px-3.5 py-3 font-mono text-code whitespace-pre"
       >
         {log || t('dialog.log.empty')}
       </pre>
       <DialogFooter>
-        <Button variant="outline" onClick={() => void navigator.clipboard.writeText(log)}>
-          {t('dialog.log.copy')}
+        <Button variant="outline" disabled={!log} onClick={copy}>
+          {copied && <CheckIcon data-icon="inline-start" />}
+          {copied ? t('common:actions.copied') : t('dialog.log.copy')}
         </Button>
         <DialogClose render={<Button />}>{t('common:actions.close')}</DialogClose>
       </DialogFooter>

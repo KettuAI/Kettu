@@ -1,5 +1,14 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { BellIcon, CircleHelpIcon, FileDownIcon, MinusIcon, PlusIcon } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  BellIcon,
+  CheckIcon,
+  CircleHelpIcon,
+  FileDownIcon,
+  GlobeIcon,
+  ListIcon,
+  MinusIcon,
+  PlusIcon,
+} from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
@@ -13,6 +22,7 @@ import {
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { BrandMark } from '@renderer/components/brand'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,15 +35,16 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import { Kbd, KbdGroup } from '@renderer/components/ui/kbd'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { toast } from '@renderer/components/ui/toast'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
 import { basename } from '@renderer/lib/format'
-import { formatShortcut, isWindows } from '@renderer/lib/platform'
+import { fileManagerName, formatShortcut, isMac, isWindows } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { AGENT_NAMES, isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { loadGitTools, useGitStore } from '@renderer/stores/git'
@@ -41,8 +52,11 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useAppInfo } from './use-app-info'
 import {
+  CONFIRM,
   ControlError,
   CopyAction,
+  FIELD_LABEL,
+  GROUP_ACTION,
   Masked,
   PathText,
   RevealAction,
@@ -54,12 +68,18 @@ import { useApply } from './use-apply'
 
 const useSettings = () => useSettingsStore((s) => s.settings)
 
-// The recessed panel behind a live preview: text size, terminal font, notification banner.
-const PREVIEW_BOX =
-  'rounded-xl bg-sidebar shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]'
+// The panel behind a live preview: text size, terminal font, notification banner.
+const PREVIEW_BOX = 'rounded-code bg-app shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]'
 
 // A block row's first line: the row's text on the left, its control on the right.
-const BLOCK_LINE = 'flex min-h-7 items-center gap-6'
+const BLOCK_LINE = 'flex min-h-10 items-center gap-4'
+
+/**
+ * A picture tile in a tile ToggleGroup: its picture rests on a ring, which turns into the chosen
+ * one two pixels clear of it.
+ */
+export const TILE =
+  'w-full items-stretch gap-2 [&>[data-tile]]:shadow-(--elevation-card) hover:[&>[data-tile]]:ring-border-strong aria-pressed:[&>[data-tile]]:ring-offset-2 aria-pressed:[&>[data-tile]]:ring-offset-[color:var(--bg-app)]'
 
 // ---- General
 
@@ -190,7 +210,10 @@ export function SendKey() {
         value={value}
         options={[
           { value: 'enter', label: 'Enter' },
-          { value: 'mod-enter', label: formatShortcut('Mod+Enter') },
+          {
+            value: 'mod-enter',
+            label: isMac ? `${formatShortcut('Mod')} Enter` : formatShortcut('Mod+Enter'),
+          },
         ]}
         onChange={(v) => apply({ general: { sendKey: v } })}
       />
@@ -214,25 +237,18 @@ export function ColorModeTiles() {
         aria-label={t('appearance.colorMode.name')}
         variant="tile"
         size="tile"
-        spacing={3.5}
+        spacing={3}
         value={[value]}
         onValueChange={(next) => {
           const picked = next[0] as ColorMode | undefined
           if (picked && picked !== value) apply({ appearance: { theme: picked } })
         }}
-        className="grid w-full grid-cols-3 items-stretch"
+        className="grid w-full grid-cols-3 items-start"
       >
         {COLOR_MODES.map((mode) => (
-          <ToggleGroupItem
-            key={mode}
-            value={mode}
-            className="items-stretch gap-2 hover:[&>[data-tile]]:ring-border-strong"
-          >
+          <ToggleGroupItem key={mode} value={mode} className={TILE}>
             <ColorModePreview kind={mode} />
-            <span className="flex items-center gap-2 pl-0.5 text-small text-primary">
-              <RadioDot />
-              {t(`appearance.colorMode.${mode}`)}
-            </span>
+            <TileLabel name={t(`appearance.colorMode.${mode}`)} />
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
@@ -241,14 +257,25 @@ export function ColorModeTiles() {
   )
 }
 
-// Reads the toggle it sits in: filled with a dot while that toggle is pressed.
+// Reads the toggle it sits in: a thick ring around a light center while that toggle is pressed.
 export function RadioDot() {
   return (
     <span
       aria-hidden
-      className="grid size-3.5 shrink-0 place-items-center rounded-full ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-primary group-aria-pressed/toggle:ring-0"
+      className="grid size-3.5 shrink-0 place-items-center rounded-full bg-surface ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-primary group-aria-pressed/toggle:ring-0"
     >
-      <span className="size-1.5 scale-0 rounded-full bg-background transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100" />
+      <span className="size-1.25 scale-0 rounded-full bg-surface transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100" />
+    </span>
+  )
+}
+
+/** A tile's line under its picture: the radio, the name, and what follows it. */
+export function TileLabel({ name, children }: { name: string; children?: ReactNode }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.75 px-0.5 text-ui">
+      <RadioDot />
+      <span className="truncate font-medium text-primary">{name}</span>
+      {children}
     </span>
   )
 }
@@ -262,7 +289,7 @@ function ColorModePreview({ kind }: { kind: ColorMode }) {
     <span
       data-tile=""
       aria-hidden
-      className="relative block h-26 w-full overflow-hidden rounded-xl"
+      className="relative block h-21.5 w-full overflow-hidden rounded-code"
     >
       {kind !== 'dark' && <MiniWindow dark={false} />}
       {kind !== 'light' && <MiniWindow dark cut={kind === 'system'} />}
@@ -271,12 +298,14 @@ function ColorModePreview({ kind }: { kind: ColorMode }) {
 }
 
 function MiniLine({ className }: { className?: string }) {
-  return <span className={cn('block h-1.25 rounded-full bg-border', className)} />
+  return <span className={cn('block h-0.75 rounded-full bg-(--text-tertiary)', className)} />
 }
 
 /**
- * The wrapper's mode makes the tokens inside resolve for it, whatever the app shows; `style` can
- * set the tokens themselves, for a theme that is not the chosen one.
+ * A window in miniature: the sidebar's lines on the desk and a sheet with a title, text and a
+ * button. The wrapper's mode makes the tokens inside resolve for it, whatever the app shows;
+ * `style` can set the tokens themselves, for a theme that is not the chosen one. `cut` keeps the
+ * half under the diagonal, for the dark side of a pair.
  */
 export function MiniWindow({
   dark,
@@ -292,24 +321,20 @@ export function MiniWindow({
       data-theme={dark ? 'dark' : 'light'}
       style={style}
       className={cn(
-        'absolute inset-0 flex bg-background',
-        cut && '[clip-path:polygon(62%_0,100%_0,100%_100%,38%_100%)]',
+        'absolute inset-0 block bg-sidebar',
+        cut && '[clip-path:polygon(100%_0,100%_100%,0_100%)]',
       )}
     >
-      <span className="flex w-1/3 flex-col gap-1.5 border-r border-subtle bg-sidebar px-2 py-3">
-        <span className="block h-2 rounded-sm bg-selected" />
+      <span className="absolute top-3.5 left-1.75 flex w-5.5 flex-col gap-1.25 opacity-55">
+        <MiniLine className="w-[70%]" />
         <MiniLine />
-        <MiniLine className="w-3/4" />
-        <MiniLine className="w-5/6" />
+        <MiniLine />
       </span>
-      <span className="flex flex-1 flex-col gap-1.5 px-3 pt-3.5 pb-2.5">
-        <MiniLine className="w-2/5 bg-border-strong" />
-        <span className="block h-3 w-1/2 self-end rounded-md bg-subtle" />
-        <MiniLine className="w-11/12" />
-        <MiniLine className="w-2/3" />
-        <span className="mt-auto flex h-5 items-center justify-end rounded-md bg-card pr-0.75 shadow-card">
-          <span className="size-3.5 rounded-sm bg-(image:--primary-gradient)" />
-        </span>
+      <span className="absolute top-2 right-0 bottom-0 left-9 flex flex-col gap-1.25 rounded-tl-md bg-app p-2.5 shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">
+        <span className="block h-1 w-[46%] rounded-full bg-primary opacity-90" />
+        <MiniLine className="w-[84%] opacity-50" />
+        <MiniLine className="w-[60%] opacity-50" />
+        <span className="mt-0.75 block h-2.25 w-6.5 rounded-[5px] bg-(image:--primary-gradient)" />
       </span>
     </span>
   )
@@ -338,7 +363,7 @@ function StepButton({
             aria-label={label}
             disabled={disabled}
             onClick={onClick}
-            className="hover:bg-segment-thumb hover:shadow-segment"
+            className="h-6.5 w-7.5 text-secondary hover:bg-transparent hover:text-primary disabled:opacity-40 [&_svg:not([class*='size-'])]:size-3.5"
           />
         }
       >
@@ -358,17 +383,17 @@ export function Zoom() {
   const [apply, error] = useApply()
   const step = (by: ZoomStep) => apply({ appearance: { zoom: stepZoom(zoom, by) } })
   return (
-    <>
+    <div className="flex items-center gap-1.5">
       <ControlError error={error} />
       {zoom !== DEFAULT_SETTINGS.appearance.zoom && (
-        <Button variant="quiet" size="compact" onClick={() => step(0)}>
+        <Button variant="quiet" size="sm" className="text-secondary" onClick={() => step(0)}>
           {t('appearance.zoom.reset')}
         </Button>
       )}
       <div
         role="group"
         aria-label={t('appearance.zoom.name')}
-        className="inline-flex items-center rounded-lg bg-segment-track p-0.5"
+        className="inline-flex items-center gap-0.5 rounded-lg bg-segment-track p-0.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
       >
         <StepButton
           label={t('appearance.zoom.zoomOut')}
@@ -380,7 +405,7 @@ export function Zoom() {
         </StepButton>
         <span
           aria-live="polite"
-          className="min-w-12 text-center text-control tabular-nums"
+          className="min-w-11.5 text-center text-small font-medium text-primary tabular-nums"
         >{`${Math.round(zoom * 100)}%`}</span>
         <StepButton
           label={t('appearance.zoom.zoomIn')}
@@ -391,8 +416,25 @@ export function Zoom() {
           <PlusIcon />
         </StepButton>
       </div>
-    </>
+    </div>
   )
+}
+
+/** The text with each of `keys` in it shown as a keycap, as a row's description names shortcuts. */
+export function WithKeys({ text, keys }: { text: string; keys: readonly string[] }) {
+  const parts: ReactNode[] = []
+  let rest = text
+  for (;;) {
+    const next = keys
+      .map((key) => ({ key, at: rest.indexOf(key) }))
+      .filter((found) => found.at >= 0)
+      .sort((a, b) => a.at - b.at)[0]
+    if (!next) break
+    parts.push(rest.slice(0, next.at), <Kbd key={parts.length}>{next.key}</Kbd>)
+    rest = rest.slice(next.at + next.key.length)
+  }
+  parts.push(rest)
+  return parts
 }
 
 export function TextSize({ label }: { label: ReactNode }) {
@@ -415,19 +457,16 @@ export function TextSize({ label }: { label: ReactNode }) {
           onChange={(v) => apply({ appearance: { textSize: v } })}
         />
       </div>
-      <div aria-hidden className={cn(PREVIEW_BOX, 'flex flex-col gap-3 px-4 py-4 text-prose')}>
-        <div className="max-w-4/5 self-end rounded-xl bg-subtle px-3 py-1.5 leading-relaxed">
+      <div aria-hidden className={cn(PREVIEW_BOX, 'flex flex-col gap-2.5 p-4 text-prose')}>
+        <div className="max-w-4/5 self-end rounded-2xl bg-subtle px-3.25 py-2 leading-normal">
           {t('appearance.textSize.previewUser')}
         </div>
-        <p className="text-primary">
+        {/* The thread's own prose rules, its inline code included. */}
+        <p className="markdown">
           <Trans
             t={t}
             i18nKey="appearance.textSize.previewAgent"
-            components={{
-              code: (
-                <code className="rounded-sm bg-subtle px-[0.35em] py-[0.1em] font-mono text-[0.85em]" />
-              ),
-            }}
+            components={{ code: <code data-streamdown="inline-code" /> }}
           />
         </p>
       </div>
@@ -483,20 +522,24 @@ export function ShellPicker() {
       <Badge
         variant="neutral"
         title={shellPath ?? undefined}
-        className={cn('max-w-48 min-w-0 shrink', isProgram && 'font-mono text-meta')}
+        className={cn(
+          'max-w-48 min-w-0 shrink text-primary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+          isProgram && 'font-mono text-meta',
+        )}
       >
         <span className="truncate">{program}</span>
       </Badge>
       {shellPath && (
         <Button
           variant="quiet"
-          size="compact"
+          size="sm"
+          className="text-secondary"
           onClick={() => apply({ terminal: { shellPath: null } })}
         >
           {t('terminal.shell.reset')}
         </Button>
       )}
-      <Button variant="outline" size="compact" onClick={() => void choose()}>
+      <Button variant="outline" size="sm" onClick={() => void choose()}>
         {t('terminal.shell.choose')}
       </Button>
     </div>
@@ -608,8 +651,8 @@ export function GitTool() {
   const { found, version } = tools.git
   if (!found) return <Badge variant="neutral">{t('git.git.notFound')}</Badge>
   return (
-    <Badge variant="success" className="gap-1.5">
-      <StatusDot />
+    <Badge variant="success">
+      <CheckIcon data-icon="inline-start" />
       {version ? (
         <>
           <span className="sr-only">{t('git.git.found')}</span>
@@ -621,6 +664,9 @@ export function GitTool() {
     </Badge>
   )
 }
+
+// i18next fills a value with this, so the sentence can be split where the value goes, to mark it up.
+const SLOT = '\uE001'
 
 export function GhTool() {
   const { t } = useTranslation('settings')
@@ -653,19 +699,23 @@ export function GhTool() {
       </span>
     )
   }
+  const [before = '', after = ''] = gh.account
+    ? t('git.gh.signedInAs', { account: SLOT }).split(SLOT)
+    : [t('git.gh.signedIn')]
   return (
     <Badge
       variant="success"
       title={gh.version ? `gh ${gh.version}` : undefined}
-      className="gap-1.5 overflow-visible"
+      className="overflow-visible"
     >
-      <StatusDot />
-      {t('git.gh.signedIn')}
+      <CheckIcon data-icon="inline-start" />
+      {before}
       {gh.account && (
-        <span className="font-normal">
+        <span className="font-normal text-primary">
           <Masked>{gh.account}</Masked>
         </span>
       )}
+      {after}
     </Badge>
   )
 }
@@ -717,43 +767,64 @@ export function NotificationPreview() {
   const [before = '', after = ''] = t('notifications.previewBody', {
     command: COMMAND_MARK,
   }).split(COMMAND_MARK)
+  // A system banner over the desktop, which a tint of the desk stands for.
   return (
-    <div className="px-1 py-3">
-      <div aria-hidden className={cn(PREVIEW_BOX, 'flex h-29 items-center justify-center px-4')}>
-        <div className="flex w-86 max-w-full items-center gap-3 rounded-2xl bg-popover px-3 py-2.5 shadow-menu">
-          <span className="size-8 shrink-0 rounded-lg bg-primary" />
-          <div className="flex min-w-0 flex-1 flex-col gap-px text-control">
-            <div className="flex items-baseline gap-2">
-              <span className="min-w-0 flex-1 truncate font-semibold">
-                {t('notifications.previewTitle')}
-              </span>
-              <span className="shrink-0 text-meta text-tertiary">
-                {t('notifications.previewTime')}
-              </span>
-            </div>
-            <span className="truncate">
-              {before}
-              <code className="font-mono text-meta">pnpm test</code>
-              {after}
+    <div
+      aria-hidden
+      className="grid place-items-center rounded-xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--bg-sidebar),var(--info)_10%),var(--bg-sidebar))] px-4 py-5.5 shadow-card"
+    >
+      <div className="flex w-87.5 max-w-full gap-2.5 rounded-3xl bg-surface/88 px-3 py-2.5 shadow-menu backdrop-blur-xl">
+        {/* The app's icon, which is light in either mode. */}
+        <span
+          data-theme="light"
+          className="grid size-8 shrink-0 place-items-center rounded-lg bg-subtle shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]"
+        >
+          <BrandMark width={22} className="text-primary" />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-px text-command">
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate font-semibold">
+              {t('notifications.previewTitle')}
+            </span>
+            <span className="shrink-0 text-meta text-tertiary">
+              {t('notifications.previewTime')}
             </span>
           </div>
+          <span className="truncate text-secondary">
+            {before}
+            <code className="font-mono text-meta">pnpm vitest run src/usage</code>
+            {after}
+          </span>
         </div>
       </div>
     </div>
   )
 }
 
+// How long the test button shows that the notification went out.
+const SENT_MS = 2000
+
 export function TestNotification() {
   const { t } = useTranslation('settings')
   const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
   const [unsupported, setUnsupported] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
   const run = async () => {
     setBusy(true)
+    setSent(false)
     setUnsupported(false)
     setError(null)
     try {
-      setUnsupported(!(await window.overbench.notifications.test()))
+      const shown = await window.overbench.notifications.test()
+      setUnsupported(!shown)
+      if (shown) {
+        setSent(true)
+        clearTimeout(timer.current)
+        timer.current = setTimeout(() => setSent(false), SENT_MS)
+      }
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -767,17 +838,22 @@ export function TestNotification() {
           {t('notifications.testUnsupported')}
         </span>
       )}
+      <span role="status" className="sr-only">
+        {sent ? t('notifications.sent') : ''}
+      </span>
       <ControlError error={error} />
       <Button
         variant="quiet"
-        size="xs"
+        size="sm"
         disabled={busy}
         title={unsupported ? t('notifications.testUnsupported') : undefined}
         onClick={() => void run()}
-        className="-mr-2"
+        className={GROUP_ACTION}
       >
         {busy ? (
-          <Spinner data-icon="inline-start" className="size-3" />
+          <Spinner data-icon="inline-start" className="size-3.5" />
+        ) : sent ? (
+          <CheckIcon data-icon="inline-start" className="text-success" />
         ) : (
           <BellIcon data-icon="inline-start" />
         )}
@@ -792,26 +868,20 @@ export function TestNotification() {
 // "1-4" is a range of keys, not a chord.
 const KEY_RANGE = /^(\d)-(\d)$/
 
-const KEYCAP = 'h-5.5 min-w-5.5 rounded-md bg-card px-1.5 text-primary shadow-outline'
-
 export function ShortcutKeys({ keys }: { keys: string }) {
   const range = KEY_RANGE.exec(keys)
   return (
-    <KbdGroup className="gap-1">
+    <KbdGroup className="shrink-0 gap-1.5">
       {range ? (
         <>
-          <Kbd className={KEYCAP}>{range[1]}</Kbd>
-          <span aria-hidden className="self-center text-xs text-tertiary">
+          <Kbd>{range[1]}</Kbd>
+          <span aria-hidden className="text-xs text-tertiary">
             {'–'}
           </span>
-          <Kbd className={KEYCAP}>{range[2]}</Kbd>
+          <Kbd>{range[2]}</Kbd>
         </>
       ) : (
-        keys.split(/\+(?=.)/).map((key, i) => (
-          <Kbd key={i} className={KEYCAP}>
-            {formatShortcut(key)}
-          </Kbd>
-        ))
+        keys.split(/\+(?=.)/).map((key, i) => <Kbd key={i}>{formatShortcut(key)}</Kbd>)
       )}
     </KbdGroup>
   )
@@ -829,7 +899,9 @@ export function Proxy({ label }: { label: ReactNode }) {
   // Custom shows its fields before any URL is saved; the setting changes once a valid URL is in.
   const [choosing, setChoosing] = useState(false)
   const custom = proxy.mode === 'custom' || choosing
+  const inUse = proxy.mode === 'custom'
   const urlInput = useRef<HTMLInputElement>(null)
+  const noteId = useId()
 
   const save = () => {
     const trimmed = url.trim()
@@ -847,7 +919,7 @@ export function Proxy({ label }: { label: ReactNode }) {
       <div className={BLOCK_LINE}>
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
-        <Segmented
+        <SettingSelect
           label={t('advanced.proxy.name')}
           value={custom ? 'custom' : 'environment'}
           options={[
@@ -868,43 +940,68 @@ export function Proxy({ label }: { label: ReactNode }) {
         />
       </div>
       {custom && (
-        <div className="grid animate-in grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 fade-in animation-duration-(--duration-base)">
-          <label htmlFor="proxy-url" className="text-xs text-tertiary">
+        <div className="grid animate-in grid-cols-2 gap-x-3 gap-y-2.5 fade-in animation-duration-(--duration-base)">
+          <label className={FIELD_LABEL}>
             {t('advanced.proxy.url')}
+            <InputGroup>
+              <InputGroupAddon>
+                <GlobeIcon className="size-3.5 text-icon" />
+              </InputGroupAddon>
+              <InputGroupInput
+                ref={urlInput}
+                value={url}
+                placeholder="http://proxy.example.com:8080"
+                spellCheck={false}
+                aria-invalid={invalid || undefined}
+                aria-describedby={noteId}
+                onChange={(e) => setUrl(e.target.value)}
+                onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
+                onKeyDown={(e) => e.key === 'Enter' && save()}
+                className="text-small font-normal md:text-small"
+              />
+            </InputGroup>
           </label>
-          <Input
-            ref={urlInput}
-            id="proxy-url"
-            value={url}
-            placeholder="http://proxy.example.com:8080"
-            aria-invalid={invalid}
-            onChange={(e) => setUrl(e.target.value)}
-            onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
-            onKeyDown={(e) => e.key === 'Enter' && save()}
-            className="h-control font-mono text-xs"
-          />
-          <label htmlFor="proxy-no" className="text-xs text-tertiary">
+          <label className={FIELD_LABEL}>
             {t('advanced.proxy.noProxyFor')}
+            <InputGroup>
+              <InputGroupAddon>
+                <ListIcon className="size-3.5 text-icon" />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={noProxy}
+                placeholder="localhost, 127.0.0.1, .internal"
+                spellCheck={false}
+                onChange={(e) => setNoProxy(e.target.value)}
+                onBlur={() => url.trim() && save()}
+                onKeyDown={(e) => e.key === 'Enter' && save()}
+                className="text-small font-normal md:text-small"
+              />
+            </InputGroup>
           </label>
-          <Input
-            id="proxy-no"
-            value={noProxy}
-            placeholder="localhost, 127.0.0.1, .internal"
-            onChange={(e) => setNoProxy(e.target.value)}
-            onBlur={() => url.trim() && save()}
-            onKeyDown={(e) => e.key === 'Enter' && save()}
-            className="h-control font-mono text-xs"
-          />
-          {invalid && (
-            <p className="col-start-2 text-xs text-danger">{t('advanced.proxy.invalid')}</p>
-          )}
+          <p
+            id={noteId}
+            role="status"
+            className={cn(
+              'col-span-2 flex items-center gap-1.5 text-xs',
+              invalid ? 'text-danger' : inUse ? 'text-success' : 'text-tertiary',
+            )}
+          >
+            {!invalid && inUse && <CheckIcon className="size-3.5 shrink-0" />}
+            {t(
+              invalid
+                ? 'advanced.proxy.invalid'
+                : inUse
+                  ? 'advanced.proxy.inUse'
+                  : 'advanced.proxy.environmentNote',
+            )}
+          </p>
         </div>
       )}
     </div>
   )
 }
 
-export function Diagnostics() {
+export function Diagnostics({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ path: string } | { error: string } | null>(null)
@@ -920,24 +1017,22 @@ export function Diagnostics() {
       setBusy(false)
     }
   }
-  const noteText =
-    note && ('error' in note ? note.error : t('advanced.diagnostics.saved', { path: note.path }))
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      {note && (
-        <span
-          className={cn(
-            'max-w-56 min-w-0 truncate text-xs',
-            'error' in note ? 'text-danger' : 'text-tertiary',
-          )}
-          title={noteText ?? undefined}
-        >
-          {noteText}
-        </span>
-      )}
+    <div className={BLOCK_LINE}>
+      <div className="min-w-0 flex-1">
+        {label}
+        {note &&
+          ('error' in note ? (
+            <p role="alert" className="mt-1.5 text-xs text-danger">
+              {note.error}
+            </p>
+          ) : (
+            <SavedTo path={note.path} />
+          ))}
+      </div>
       <Button
         variant="outline"
-        size="compact"
+        size="sm"
         disabled={busy}
         aria-label={t('advanced.diagnostics.export')}
         onClick={() => void run()}
@@ -953,22 +1048,58 @@ export function Diagnostics() {
   )
 }
 
-export function DataFolder({ label }: { label: ReactNode }) {
+/** Where the diagnostics file went, and the way to it. */
+function SavedTo({ path }: { path: string }) {
   const { t } = useTranslation('settings')
+  const [error, setError] = useState<string | null>(null)
+  const [before, after] = t('advanced.diagnostics.saved', { path: SLOT }).split(SLOT)
+  return (
+    <div
+      role="status"
+      className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary"
+    >
+      <span className="flex max-w-full min-w-0 items-center whitespace-pre">
+        {before}
+        <PathText path={path} />
+        {after}
+      </span>
+      <button
+        type="button"
+        className="rounded-sm font-medium text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
+        onClick={() => {
+          setError(null)
+          window.overbench.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
+        }}
+      >
+        {t('agents.showIn', { name: fileManagerName() })}
+      </button>
+      <ControlError error={error} />
+    </div>
+  )
+}
+
+/** The data folder's description, with the folder itself under it. */
+export function DataFolderText({ text }: { text: string }) {
   const path = useAppInfo()?.userDataPath
   return (
-    <div className="flex w-full flex-col gap-1.5">
-      <div className={BLOCK_LINE}>
-        <div className="min-w-0 flex-1">{label}</div>
-        {path && (
-          <span className="flex shrink-0 items-center gap-0.5">
-            <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
-            <RevealAction path={path} />
-          </span>
-        )}
-      </div>
-      {path ? <PathText path={path} /> : <Skeleton className="h-4 w-64" />}
-    </div>
+    <>
+      {text}
+      <span className="mt-0.5 flex">
+        {path ? <PathText path={path} /> : <Skeleton className="my-0.5 h-3.5 w-48" />}
+      </span>
+    </>
+  )
+}
+
+export function DataFolderActions() {
+  const { t } = useTranslation('settings')
+  const path = useAppInfo()?.userDataPath
+  if (!path) return null
+  return (
+    <span className="flex items-center gap-0.5">
+      <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
+      <RevealAction path={path} />
+    </span>
   )
 }
 
@@ -976,15 +1107,13 @@ export function ClearBrowsingData() {
   const { t } = useTranslation(['settings', 'common'])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [cleared, setCleared] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const clear = async () => {
     setBusy(true)
     setError(null)
-    setCleared(false)
     try {
       await window.overbench.browser.clearData()
-      setCleared(true)
+      toast(t('browser.clearData.cleared'))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -993,18 +1122,13 @@ export function ClearBrowsingData() {
   }
   return (
     <>
-      {cleared && (
-        <span role="status" className="text-xs text-tertiary">
-          {t('browser.clearData.cleared')}
-        </span>
-      )}
       <ControlError error={error} />
-      <Button variant="outline" size="compact" disabled={busy} onClick={() => setOpen(true)}>
+      <Button variant="outline" size="sm" disabled={busy} onClick={() => setOpen(true)}>
         {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('browser.clearData.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('browser.clearData.dialogTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1041,6 +1165,7 @@ export function RemoveAll() {
     try {
       await host('sessions.removeAll', undefined)
       await useSessionsStore.getState().refresh()
+      toast(t('advanced.removeSessions.removed'))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -1051,8 +1176,8 @@ export function RemoveAll() {
     <>
       <ControlError error={error} />
       <Button
-        variant="destructive"
-        size="compact"
+        variant="destructive-outline"
+        size="sm"
         disabled={count === 0 || busy}
         onClick={() => setOpen(true)}
       >
@@ -1060,7 +1185,7 @@ export function RemoveAll() {
         {t('advanced.removeSessions.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t('advanced.removeSessions.dialogTitle', { count })}

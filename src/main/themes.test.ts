@@ -269,7 +269,7 @@ describe('ThemeStore', () => {
     const target = path.join(dir, 'out.json')
     electron.save.mockResolvedValue({ canceled: false, filePath: target })
     const source = theme('My Theme')
-    expect(await themes.export(WINDOW, source)).toBe(true)
+    expect(await themes.export(WINDOW, source)).toBe(target)
     expect(await readFile(target, 'utf8')).toBe(source)
     expect(electron.save).toHaveBeenCalledWith(WINDOW, {
       title: 'Export Theme',
@@ -278,7 +278,7 @@ describe('ThemeStore', () => {
     })
 
     electron.save.mockResolvedValue({ canceled: true, filePath: '' })
-    expect(await themes.export(null, source)).toBe(false)
+    expect(await themes.export(null, source)).toBeNull()
     await expect(themes.export(null, '{"name": "x"}')).rejects.toThrow('Not a theme file')
     await expect(themes.export(null, 5)).rejects.toThrow('must be text')
     expect(electron.save).toHaveBeenCalledTimes(2)
@@ -446,19 +446,27 @@ describe('readThemeSources', () => {
 describe('windowColors', () => {
   const fallback = { background: '#ffffff', symbol: '#262626' }
 
-  it("takes the variant's background and text as hex", () => {
-    expect(
-      windowColors({ 'bg-app': '#2E3440', 'text-primary': 'rgb(236 239 244)' }, 'dark', fallback),
-    ).toEqual({ background: '#2e3440', symbol: '#eceff4' })
+  it("takes the variant's desk and text as hex", () => {
+    const colors = {
+      'bg-app': '#ffffff',
+      'bg-sidebar': '#2E3440',
+      'text-primary': 'rgb(236 239 244)',
+    }
+    expect(windowColors(colors, 'dark', fallback)).toEqual({
+      background: '#2e3440',
+      symbol: '#eceff4',
+    })
   })
 
   it('lays a translucent background over white or black, and the text over the background', () => {
-    const colors = { 'bg-app': 'rgb(255 255 255 / 50%)', 'text-primary': 'rgb(0 0 0 / 50%)' }
+    const colors = { 'bg-sidebar': 'rgb(255 255 255 / 50%)', 'text-primary': 'rgb(0 0 0 / 50%)' }
     expect(windowColors(colors, 'dark', fallback)).toEqual({
       background: '#808080',
       symbol: '#404040',
     })
-    expect(windowColors({ 'bg-app': 'transparent' }, 'light', fallback).background).toBe('#ffffff')
+    expect(windowColors({ 'bg-sidebar': 'transparent' }, 'light', fallback).background).toBe(
+      '#ffffff',
+    )
   })
 
   it('keeps the fallback for what the theme leaves out', () => {

@@ -1,5 +1,6 @@
 import {
   entryMessageId,
+  type PermissionKind,
   type StopReason,
   type ToolContent,
   type ToolEntry,
@@ -47,6 +48,31 @@ export function toolLabel(
 
 export function respondToPermission(sessionId: string, requestId: string, optionId: string) {
   return host('permissions.respond', { sessionId, requestId, optionId })
+}
+
+/** The usual answer to a request: allowing it once, else the agent's first option. */
+export function primaryOption(options: readonly { kind: PermissionKind }[]): number {
+  return Math.max(
+    0,
+    options.findIndex((o) => o.kind === 'allow_once'),
+  )
+}
+
+const FENCED = /^(`{3,})[^\n`]*\n([\s\S]*?)\n?\1$/
+
+/**
+ * What a command printed, when its result is one fenced block of text, as agents send a shell's
+ * output; null for anything else, which shows as Markdown.
+ */
+export function commandOutput(content: readonly ToolContent[]): string | null {
+  const first = content[0]
+  if (first?.type !== 'markdown') return null
+  const match = FENCED.exec(first.markdown.trim())
+  if (!match) return null
+  const [, fence, body] = match
+  // A fence as long inside would have closed the block there.
+  if (body!.split('\n').some((line) => line.trimStart().startsWith(fence!))) return null
+  return body!
 }
 
 /** A run of completed lookups as one line: "Read a.ts, b.ts and 2 more · Searched 3 times". */

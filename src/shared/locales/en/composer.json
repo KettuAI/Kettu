@@ -7,7 +7,8 @@
       "steer": "Ask {{agent}} to…   {{queue}} to queue, {{steer}} to steer",
       "queue": "Ask {{agent}} to…   {{queue}} to queue",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
-      "ask": "Ask {{agent}} to…"
+      "ask": "Ask {{agent}} to…",
+      "denied": "Tell {{agent}} what to do differently"
     },
     "queue": "Queue",
     "stop": "Stop",
@@ -65,7 +66,6 @@
     "limits": {
       "plan": "Plan",
       "tier": "{{plan}} ({{tier}})",
-      "title": "Plan limits",
       "used": "{{limit}} used",
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}"

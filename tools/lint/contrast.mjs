@@ -108,6 +108,30 @@ export function compareDarkBlocks(a, b) {
 }
 
 /**
+ * Reads an sRGB color with its alpha: a hex color, or `rgb()` with or without alpha. Anything else
+ * (oklch, var()) returns null.
+ *
+ * @param {string} value
+ * @returns {[number, number, number, number] | null} channels from 0 to 255, alpha from 0 to 1
+ */
+export function parseRgba(value) {
+  const text = value.trim().toLowerCase()
+  const hex = /^#([\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/.exec(text)?.[1]
+  if (hex) {
+    const full = hex.length <= 4 ? [...hex].map((c) => c + c).join('') : hex
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16))
+    return [r, g, b, full.length === 8 ? parseInt(full.slice(6), 16) / 255 : 1]
+  }
+  const rgb =
+    /^rgba?\(\s*(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)(?:\s*[,/]\s*(\d+(?:\.\d+)?)(%?))?\s*\)$/.exec(
+      text,
+    )
+  if (!rgb) return null
+  const alpha = rgb[4] === undefined ? 1 : Number(rgb[4]) / (rgb[5] ? 100 : 1)
+  return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), alpha]
+}
+
+/**
  * Reads an opaque sRGB color: a hex color or `rgb()` without alpha. Anything else (alpha, oklch,
  * var()) returns null.
  *
@@ -115,18 +139,14 @@ export function compareDarkBlocks(a, b) {
  * @returns {[number, number, number] | null} channels from 0 to 255
  */
 export function parseColor(value) {
-  const text = value.trim().toLowerCase()
-  const hex = /^#([\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/.exec(text)?.[1]
-  if (hex) {
-    const full = hex.length <= 4 ? [...hex].map((c) => c + c).join('') : hex
-    if (full.length === 8 && full.slice(6) !== 'ff') return null
-    const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16))
-    return [r, g, b]
-  }
-  const rgb = /^rgb\(\s*(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)\s*\)$/.exec(text)
-  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])]
-  return null
+  const color = parseRgba(value)
+  return color && color[3] === 1 ? [color[0], color[1], color[2]] : null
 }
+
+/**
+ * The opaque surfaces a translucent fill, such as a hovered row or inline code, is laid on.
+ */
+export const BASES = ['--bg-app', '--bg-sidebar', '--bg-surface']
 
 /** @param {[number, number, number]} rgb WCAG 2.x relative luminance */
 export function luminance([r, g, b]) {
@@ -154,6 +174,31 @@ export function contrastRatio(a, b) {
  */
 
 /**
+ * The opaque colors a background shows as: itself, or a translucent one laid over each of the
+ * opaque bases, so a pair on it is checked against the weakest.
+ *
+ * @param {string} value
+ * @param {Declarations} tokens
+ * @returns {[number, number, number][]}
+ */
+function surfaces(value, tokens) {
+  const color = parseRgba(value)
+  if (!color || color[3] === 0) return []
+  const [r, g, b, a] = color
+  if (a === 1) return [[r, g, b]]
+  /** @type {[number, number, number][]} */
+  const unders = []
+  for (const base of BASES) {
+    const under = parseColor(tokens.get(base) ?? '')
+    if (!under) continue
+    unders.push(
+      /** @type {[number, number, number]} */ (under.map((c, i) => [r, g, b][i] * a + c * (1 - a))),
+    )
+  }
+  return unders
+}
+
+/**
  * Checks every pair in both themes. The dark theme is the light block with the dark block on top.
  *
  * @param {Blocks} blocks
@@ -175,12 +220,13 @@ export function checkContrast(blocks, pairs = PAIRS) {
         rows.push({ theme, fg, bg, ratio: null, ok: false, note: `missing ${missing.join(', ')}` })
         continue
       }
-      const [fgColor, bgColor] = values.map((value) => parseColor(/** @type {string} */ (value)))
-      if (!fgColor || !bgColor) {
+      const fgColor = parseColor(/** @type {string} */ (values[0]))
+      const unders = surfaces(/** @type {string} */ (values[1]), tokens)
+      if (!fgColor || unders.length === 0) {
         rows.push({ theme, fg, bg, ratio: null, ok: true, note: 'skipped: not an opaque color' })
         continue
       }
-      const ratio = contrastRatio(fgColor, bgColor)
+      const ratio = Math.min(...unders.map((under) => contrastRatio(fgColor, under)))
       rows.push({ theme, fg, bg, ratio, ok: ratio >= MIN_RATIO })
     }
   }

@@ -26,12 +26,7 @@ export function SearchField({
   className?: string
 }) {
   return (
-    <InputGroup
-      className={cn(
-        'h-control bg-card shadow-outline hover:shadow-outline-hover focus-within:shadow-outline-hover',
-        className,
-      )}
-    >
+    <InputGroup className={cn('h-control', className)}>
       <InputGroupAddon>
         <SearchIcon className="size-3.5" />
       </InputGroupAddon>
@@ -63,7 +58,9 @@ export function SearchField({
             <XIcon className="size-3" />
           </button>
         ) : (
-          <Kbd className="h-auto bg-transparent p-0 font-normal">{formatShortcut('Mod+F')}</Kbd>
+          <Kbd className="h-4.5 min-w-4.5 text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]">
+            {formatShortcut('Mod+F')}
+          </Kbd>
         )}
       </InputGroupAddon>
     </InputGroup>

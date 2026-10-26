@@ -34,6 +34,9 @@ import { useRenaming } from './use-renaming'
 
 /** The sidebar indents two levels at most and lists deeper sub-sessions at the second level. */
 const MAX_DEPTH = 2
+/** A row's padding before its mark, and how far each level of sub-sessions indents it. */
+const ROW_PAD = 10
+const INDENT = 24
 
 export const SessionRow = memo(function SessionRow({
   node,
@@ -74,16 +77,18 @@ export const SessionRow = memo(function SessionRow({
   const [moreOpen, setMoreOpen] = useState(false)
   const row = useRef<HTMLDivElement>(null)
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
-  const pad = 26 + Math.min(depth, MAX_DEPTH) * 16
+  const pad = ROW_PAD + Math.min(depth, MAX_DEPTH) * INDENT
   const subagent = summary.origin === 'subagent'
   const cache = useSessionCache(summary)
   const gone = useGoneLabel(cache)
   const expiring = cache?.state === 'ending' ? cache.cache : null
 
   const lead = subagent ? (
-    <BotIcon className="text-icon" />
+    <span className="grid size-4 shrink-0 place-items-center text-secondary">
+      <BotIcon />
+    </span>
   ) : (
-    <span className="relative grid size-3.5 shrink-0 place-items-center">
+    <span className="relative grid size-4 shrink-0 place-items-center">
       <AgentMark
         agent={summary.agentId}
         size={14}
@@ -102,13 +107,9 @@ export const SessionRow = memo(function SessionRow({
             event.stopPropagation()
             setExpanded(!expanded)
           }}
-          className="absolute inset-0 grid place-items-center text-icon opacity-0 group-hover/menu-button:opacity-100"
+          className="absolute top-1/2 left-1/2 grid size-6 -translate-1/2 place-items-center rounded-md text-secondary opacity-0 group-hover/menu-button:opacity-100 hover:bg-selected hover:text-primary"
         >
-          {expanded ? (
-            <ChevronDownIcon className="size-3!" />
-          ) : (
-            <ChevronRightIcon className="size-3!" />
-          )}
+          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
         </span>
       )}
     </span>
@@ -142,7 +143,7 @@ export const SessionRow = memo(function SessionRow({
         }
       }}
       style={{ paddingLeft: pad }}
-      className="pr-2 data-active:font-medium"
+      className="gap-[9px] data-active:font-medium"
     >
       {lead}
       <span className="min-w-0 flex-1 truncate">
@@ -154,13 +155,13 @@ export const SessionRow = memo(function SessionRow({
           </span>
         )}
       </span>
-      {summary.pr && <PrIcon state={summary.pr.state} size={13} />}
+      {summary.pr && <PrIcon state={summary.pr.state} size={12} />}
       {hasChildren && !expanded && (
         <span
           aria-label={t('row.subSessions', { count: children.length })}
-          className="inline-flex items-center gap-0.5 text-[11.5px] text-tertiary tabular group-data-active/menu-button:text-secondary"
+          className="inline-flex items-center gap-0.5 text-meta text-tertiary tabular group-data-active/menu-button:text-secondary"
         >
-          <CornerDownRightIcon className="size-[11px]!" />
+          <CornerDownRightIcon className="size-3!" />
           {children.length}
         </span>
       )}
@@ -197,7 +198,7 @@ export const SessionRow = memo(function SessionRow({
             size="row"
             isActive={current}
             style={{ paddingLeft: pad }}
-            className="bg-surface pr-2 text-primary shadow-outline data-active:font-medium"
+            className="gap-[9px] bg-surface text-primary shadow-outline data-active:font-medium"
           >
             {lead}
             <SessionTitleField
@@ -211,14 +212,17 @@ export const SessionRow = memo(function SessionRow({
             <ContextMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
               {/*
                * A trigger's render must take its props, so the tooltip Root wraps the menu trigger.
-               * It stays without content, so the row is not mounted again as the cache expires.
                */}
-              <Tooltip disabled={!summary.branch && !gone && !expiring}>
+              <Tooltip>
                 <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
                 <TooltipContent side="right" className="flex-col items-start gap-0.5">
+                  <span>
+                    {sessionTitle(summary)}
+                    {subagent && summary.description && ` · ${summary.description}`}
+                  </span>
                   {summary.branch && <span className="font-mono">{summary.branch}</span>}
                   {summary.branch && summary.pr && (
-                    <span className="opacity-70">
+                    <span>
                       #{summary.pr.number} · {prStateText(summary.pr.state)}
                     </span>
                   )}
@@ -247,7 +251,7 @@ export const SessionRow = memo(function SessionRow({
                           type="button"
                           tabIndex={-1}
                           aria-label={t('row.more')}
-                          className="absolute top-1/2 right-1 grid size-5 -translate-y-1/2 place-items-center rounded-md text-icon opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-background/60 hover:text-primary data-popup-open:opacity-100 [&_svg]:size-3.5"
+                          className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded-md text-secondary opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-selected hover:text-primary data-popup-open:opacity-100 [&_svg]:size-4"
                         />
                       }
                     />
@@ -269,10 +273,11 @@ export const SessionRow = memo(function SessionRow({
         )}
       </div>
       {expanded && (
-        <ul className="relative flex flex-col gap-px pt-px">
+        <ul className="relative flex flex-col gap-0.5 pt-0.5">
+          {/* Under the parent's mark, along its sub-sessions' rows. */}
           <span
             aria-hidden
-            className="absolute top-0 bottom-3.5 w-(--hairline) bg-border"
+            className="absolute inset-y-0 w-(--hairline) bg-border"
             style={{ left: pad + 7 }}
           />
           {children.map((child) => (

@@ -475,22 +475,33 @@ export interface ContrastIssue {
   ratio: number
 }
 
+// The opaque surfaces a translucent fill, such as a hovered row, is laid on.
+const BASES = ['bg-app', 'bg-sidebar', 'bg-surface']
+
 /**
  * The pairs `tools/lint/contrast.mjs` checks in tokens.css that fall under MIN_CONTRAST, for colors
- * that hold every token of both modes. A pair whose surface is not opaque is skipped, as there.
+ * that hold every token of both modes. A translucent surface is laid over each opaque base, as
+ * there, and its weakest ratio counts.
  */
 export function contrastIssues(colors: Record<ThemeMode, Record<string, string>>): ContrastIssue[] {
   const issues: ContrastIssue[] = []
   for (const mode of THEME_MODES) {
+    const read = (token: string) => {
+      const value = colors[mode][token]
+      return value === undefined ? null : parseColor(value)
+    }
+    const bases = BASES.map(read).filter((base): base is Rgba => base !== null && base.a === 1)
     for (const { fg: fgToken, on } of contrastPairs.groups) {
       const fg = fgToken.slice(2)
+      const fgColor = read(fg)
+      if (!fgColor) continue
       for (const bgToken of on) {
         const bg = bgToken.slice(2)
-        const [fgColor, bgColor] = [colors[mode][fg], colors[mode][bg]].map((value) =>
-          value === undefined ? null : parseColor(value),
-        )
-        if (!fgColor || !bgColor || bgColor.a < 1) continue
-        const ratio = contrastRatio(fgColor, bgColor)
+        const bgColor = read(bg)
+        if (!bgColor || bgColor.a === 0) continue
+        const unders = bgColor.a < 1 ? bases.map((base) => composite(bgColor, base)) : [bgColor]
+        if (unders.length === 0) continue
+        const ratio = Math.min(...unders.map((under) => contrastRatio(fgColor, under)))
         if (ratio < MIN_CONTRAST) issues.push({ mode, fg, bg, ratio })
       }
     }

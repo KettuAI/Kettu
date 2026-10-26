@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, SaveIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import type { ChangeStatus } from '@shared/git'
 import type { MediaGrant } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -34,13 +35,22 @@ import {
   useFilesStore,
   type OpenFile,
 } from '@renderer/stores/files'
+import { ChangeBadge } from './change-badge'
 import { FileTypeIcon } from './file-type-icon'
 import { folderOf, nameOf } from './paths'
 
 const CodeEditor = lazy(() => import('./code-editor'))
 
 /** The open file, in the editor, or what stands in for it. */
-export function FilePreview({ projectPath, file }: { projectPath: string; file: OpenFile | null }) {
+export function FilePreview({
+  projectPath,
+  file,
+  change,
+}: {
+  projectPath: string
+  file: OpenFile | null
+  change?: ChangeStatus
+}) {
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
   const svgSource = useFilesStore((s) => s.svgSource)
@@ -70,10 +80,11 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
         void saveFile(projectPath)
       }}
     >
-      <div className="flex h-row shrink-0 items-center gap-1 border-b border-subtle pr-1 pl-3 text-xs">
+      <div className="flex h-row shrink-0 items-center gap-1 border-b border-subtle pr-1.5 pl-3.5 text-xs">
         <FileTypeIcon path={file.path} className="mr-1 size-4" />
         <span className="flex min-w-0 flex-1 items-baseline gap-1.5" title={file.path}>
-          <span className="shrink-0 font-medium">{nameOf(file.path)}</span>
+          <span className="shrink-0 font-mono text-code font-medium">{nameOf(file.path)}</span>
+          {change && <ChangeBadge status={change} />}
           {file.dirty && (
             <span
               role="img"
@@ -89,7 +100,7 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
             shortcut={formatShortcut('Mod+S')}
             onClick={() => void saveFile(projectPath)}
           >
-            <SaveIcon />
+            <SaveIcon className="size-3.5" />
           </PanelButton>
         )}
         {isMarkdown(file.path) && file.content?.kind === 'text' && (
@@ -106,7 +117,11 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
               )
             }
           >
-            {rendered(file, source) ? <CodeIcon /> : <BookOpenIcon />}
+            {rendered(file, source) ? (
+              <CodeIcon className="size-3.5" />
+            ) : (
+              <BookOpenIcon className="size-3.5" />
+            )}
           </PanelButton>
         )}
         {isSvgFile(file.path) && file.content && (
@@ -114,12 +129,12 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
             label={svgSource ? t('preview.showRendered') : t('preview.showSource')}
             onClick={() => showSvgSource(!svgSource)}
           >
-            {svgSource ? <BookOpenIcon /> : <CodeIcon />}
+            {svgSource ? <BookOpenIcon className="size-3.5" /> : <CodeIcon className="size-3.5" />}
           </PanelButton>
         )}
         <CopyButton text={file.path} label={t('preview.copyPath')} />
         <PanelButton label={t('preview.closeFile')} onClick={() => closeFile(projectPath)}>
-          <XIcon />
+          <XIcon className="size-3.5" />
         </PanelButton>
       </div>
       <Notes projectPath={projectPath} file={file} />
@@ -201,7 +216,7 @@ function Bar({ tone, children }: { tone: 'notice' | 'error' | 'muted'; children:
     <div
       role={tone === 'muted' ? undefined : 'status'}
       className={cn(
-        'flex min-h-row shrink-0 items-center gap-1.5 border-b border-subtle py-1 pr-1.5 pl-3 text-xs',
+        'flex min-h-row shrink-0 items-center gap-1.5 border-b border-subtle py-1 pr-1.5 pl-3.5 text-xs',
         tone === 'notice' && 'bg-subtle text-secondary',
         tone === 'error' && 'bg-danger-tint text-danger',
         tone === 'muted' && 'text-tertiary',

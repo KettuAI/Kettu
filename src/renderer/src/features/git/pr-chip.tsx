@@ -24,19 +24,19 @@ export function PrDetails({ pr }: { pr: PullRequest }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-start gap-2">
-        <PrIcon state={pr.state} size={15} className="mt-px" />
+        <PrIcon state={pr.state} size={14} className="mt-0.5" />
         <span className="min-w-0 flex-1 leading-[1.35] font-medium">{pr.title}</span>
         <span className="font-mono text-xs text-tertiary">#{pr.number}</span>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-[23px] text-xs text-tertiary tabular">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-5.5 text-xs text-tertiary tabular">
         <span>
           <Trans
             t={t}
             i18nKey="pr.summary"
             values={{ state: prStateText(pr.state) }}
             components={{
-              head: <span className="font-mono text-[11.5px]">{pr.head}</span>,
-              base: <span className="font-mono text-[11.5px]">{pr.base}</span>,
+              head: <span className="font-mono text-meta">{pr.head}</span>,
+              base: <span className="font-mono text-meta">{pr.base}</span>,
             }}
           />
         </span>
@@ -59,7 +59,7 @@ export function PrDetails({ pr }: { pr: PullRequest }) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 pl-[23px] text-xs text-tertiary">
+      <div className="flex items-center gap-2 pl-5.5 text-xs text-tertiary">
         <span className="flex-1">
           {pr.review
             ? t('pr.reviewUpdated', { review: t(REVIEW_KEY[pr.review]), when })
@@ -117,11 +117,11 @@ export function PrChip({ url, className }: { url: string; className?: string }) 
       target="_blank"
       rel="noreferrer"
       className={cn(
-        'inline-flex h-5 max-w-full items-center gap-1.5 rounded-[6px] bg-subtle pr-2 pl-1.5 text-control leading-none text-primary no-underline shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] transition-colors duration-(--duration-fast) hover:bg-hover hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
+        'inline-flex h-5 max-w-full items-center gap-1.5 rounded-md bg-subtle pr-2 pl-1.5 text-control leading-none text-primary no-underline shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] transition-colors duration-(--duration-fast) hover:bg-hover hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
         className,
       )}
     >
-      <PrIcon state={pr?.state ?? null} size={13} />
+      <PrIcon state={pr?.state ?? null} size={14} />
       <span className="self-baseline leading-5 whitespace-nowrap">
         {owner}/{repo}#{number}
       </span>

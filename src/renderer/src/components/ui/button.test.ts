@@ -45,6 +45,47 @@ describe('buttonVariants depth', () => {
   it('sinks a pressed quiet button', () => {
     expect(buttonVariants({ variant: 'quiet' })).toContain('aria-pressed:shadow-sunk')
   })
+
+  it('fills the destructive button with the danger color under surface text', () => {
+    const classes = buttonVariants({ variant: 'destructive' }).split(' ')
+
+    expect(classes).toContain('bg-destructive')
+    expect(classes).toContain('text-destructive-foreground')
+    expect(classes).toContain('shadow-destructive')
+    expect(classes).not.toContain('bg-destructive/10')
+  })
+
+  it('draws destructive-outline as the outline button in the danger color', () => {
+    const classes = buttonVariants({ variant: 'destructive-outline' }).split(' ')
+
+    expect(classes).toContain('bg-card')
+    expect(classes).toContain('shadow-outline')
+    expect(classes).toContain('hover:shadow-outline-hover')
+    expect(classes).toContain('text-destructive')
+    expect(classes).toContain('disabled:text-tertiary')
+  })
+})
+
+describe('buttonVariants shape', () => {
+  it.each([
+    ['xs', 'rounded-md'],
+    ['icon-xs', 'rounded-md'],
+    ['sm', 'rounded-lg'],
+    ['icon-sm', 'rounded-lg'],
+    ['default', 'rounded-lg'],
+  ] as const)('rounds the %s size at %s', (size, radius) => {
+    const classes = buttonVariants({ size }).split(' ')
+    const radii = classes.filter((c) => c.startsWith('rounded-'))
+
+    expect(radii).toEqual([radius])
+  })
+
+  it('sets sm text at the small step', () => {
+    const classes = buttonVariants({ size: 'sm' }).split(' ')
+
+    expect(classes).toContain('text-small')
+    expect(classes).not.toContain('text-ui')
+  })
 })
 
 describe('Button', () => {

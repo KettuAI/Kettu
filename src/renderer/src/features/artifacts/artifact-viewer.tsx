@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  ArrowLeftIcon,
-  CircleAlertIcon,
-  EllipsisIcon,
-  RefreshCwIcon,
-  TrashIcon,
-} from 'lucide-react'
+import { ArrowLeftIcon, CircleAlertIcon, EllipsisIcon, TrashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -40,7 +34,9 @@ import {
   DaysLeft,
   EarlierDetails,
   Presence,
+  ReloadButton,
   StatusBar,
+  ViewerTitle,
 } from './viewer-parts'
 
 /** The bar over the page, for an earlier version or one in Recently deleted, and a gap under it. */
@@ -178,36 +174,42 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   }
 
   const showing = !!(url && shown) && !states.error && !states.gone && !artifact.stopped
+  const pageName = shown?.canvas
+    ? canvasPageName(shown, (number) => t('canvas.page', { number }))
+    : null
+  const closeHistory = () => {
+    setHistoryOpen(false)
+    setPicked(null)
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TopBar>
-        <NoDrag className="-ml-2.5 min-w-0 gap-1.5">
+        <NoDrag className="-ml-2.5 min-w-0 gap-0.5">
           <BarButton label={t('viewer.back')} shortcut="Esc" onClick={closeArtifact}>
             <ArrowLeftIcon />
           </BarButton>
-          {title && <h1 className="min-w-0 truncate px-1.5 text-ui font-medium">{title}</h1>}
-          {shown && (
-            <span className="shrink-0 text-xs text-secondary tabular-nums">
-              {t('viewer.version', { version: shown.version })}
-            </span>
-          )}
+          <ViewerTitle
+            title={title}
+            version={shown ? t('viewer.version', { version: shown.version }) : null}
+            controls={controls}
+            pageName={showing ? pageName : null}
+          />
         </NoDrag>
         <span className="min-w-2 flex-1" />
         {showing && (
           <NoDrag className="min-w-0 shrink-0 gap-0.5">
             <Presence id={id} presence={artifact.presence} deleted={summary?.deletedAt != null} />
-            {shown?.canvas && (
-              <CanvasBarControls
-                controls={controls}
-                pageName={canvasPageName(shown, (number) => t('canvas.page', { number }))}
+            {pageName && <CanvasBarControls controls={controls} pageName={pageName} />}
+            {shown && (
+              <ShareButton
+                id={id}
+                title={title}
+                shown={shown.version}
+                head={head ?? shown.version}
               />
             )}
-            <span className="w-1.5" />
-            {shown && <ShareButton id={id} shown={shown.version} head={head ?? shown.version} />}
-            <BarButton label={t('viewer.reload')} onClick={artifact.reload}>
-              <RefreshCwIcon />
-            </BarButton>
+            <ReloadButton reloads={artifact.reloads} onClick={artifact.reload} />
             {summary && (
               <DropdownMenu>
                 <Tooltip>
@@ -239,7 +241,8 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                       sessionId: summary.sessionId,
                       deletedAt: summary.deletedAt,
                     }}
-                    onVersionHistory={() => setHistoryOpen(true)}
+                    historyOpen={historyOpen}
+                    onVersionHistory={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
                     onDeleted={closeArtifact}
                   />
                 </DropdownMenuContent>
@@ -256,10 +259,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
             error={versionsError}
             shown={picked}
             onPick={(version) => setPicked(version === head ? null : version)}
-            onClose={() => {
-              setHistoryOpen(false)
-              setPicked(null)
-            }}
+            onClose={closeHistory}
           />
         )}
       </div>

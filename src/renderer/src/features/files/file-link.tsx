@@ -21,7 +21,7 @@ export function FileLink({ file }: { file: FileRef & { projectPath: string } }) 
     >
       <FileTypeIcon path={file.path} className="size-3" />
       <span>{nameOf(file.path)}</span>
-      {file.line && <span className="-ml-[3px] opacity-70">:{file.line}</span>}
+      {file.line && <span className="-ml-[3px]">:{file.line}</span>}
     </button>
   )
 }
