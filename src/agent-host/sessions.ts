@@ -3526,6 +3526,7 @@ export class SessionManager {
   }
 
   async resumeQueue(sessionId: string): Promise<void> {
+    this.unarchive(sessionId)
     const live = await this.revive(sessionId)
     this.update(live, { queuePaused: false })
     this.drainQueue(live)
@@ -3800,6 +3801,8 @@ export class SessionManager {
       // After the turn's own entries, so the notice and the close come once it has ended. A
       // session being closed or deleted already is left as the user asked.
       if (!live.closing) {
+        // The archive would cancel the next prompt's turn, so it waits for Resume, as after Stop.
+        this.pauseQueue(live)
         queueMicrotask(() => {
           void this.archiveByAgent(live.id, byAgent).catch((error: unknown) => {
             this.deps.diagnostics.log(
