@@ -179,6 +179,7 @@
     "pickStart": "请选择开始日期",
     "errors": {
       "format": "请按 YYYY-MM-DD 输入日期",
+      "early": "不能早于 {{day}}",
       "future": "不能晚于今天",
       "order": "开始日期晚于结束日期"
     },

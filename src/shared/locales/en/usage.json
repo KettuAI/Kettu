@@ -183,6 +183,7 @@
     "pickStart": "Pick a start",
     "errors": {
       "format": "Enter a date as YYYY-MM-DD",
+      "early": "Choose a day from {{day}}",
       "future": "Choose a day up to today",
       "order": "The start is after the end"
     },
