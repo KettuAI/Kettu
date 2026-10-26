@@ -24,12 +24,12 @@ v0.0.5 中：
 
 - [x] 在 macOS 上，发送 Apple Events 的命令会弹出系统的授权提示，不再被直接拒绝（[#133](https://github.com/overbench/overbench/issues/133)）
 - [x] 在工具调用和文件面板中显示图片、音频和视频（[#43](https://github.com/overbench/overbench/issues/43)、[#312](https://github.com/overbench/overbench/issues/312)），在图片查看器中缩放、逐步查看和复制（[#311](https://github.com/overbench/overbench/issues/311)），以及在对话中传输音频和视频文件内容（[#313](https://github.com/overbench/overbench/issues/313)）
+- [x] 侧栏的头部和底部（[#34](https://github.com/overbench/overbench/issues/34)），以及关于页面中的 logo、应用图标和许可证（[#33](https://github.com/overbench/overbench/issues/33)）
 - [x] 较小的修复：把过长的思考折叠进它所在的工作（[#333](https://github.com/overbench/overbench/issues/333)）、通知中的链接可点击（[#345](https://github.com/overbench/overbench/issues/345)）、输入时高亮斜杠命令（[#363](https://github.com/overbench/overbench/issues/363)）、输入时隐藏最近的 Artifacts（[#391](https://github.com/overbench/overbench/issues/391)）、重新设计的链接确认（[#246](https://github.com/overbench/overbench/issues/246)）、折叠的工作行之间不再留出空白（[#244](https://github.com/overbench/overbench/issues/244)）、从历史中读取的 Codex 思考不再把标题连在一起（[#267](https://github.com/overbench/overbench/issues/267)），以及 [Milestone](https://github.com/overbench/overbench/milestone/11) 中的其他修复
 
 尚未完成：
 
 - [ ] 以 Paper 外观作为内置主题，本版本会等它完成后发布：窗口是桌面，对话、面板和页面是铺在上面的纸张，字体和多个界面的布局也随之更新（[#423](https://github.com/overbench/overbench/issues/423)）
-- [ ] 侧栏的头部和底部（[#34](https://github.com/overbench/overbench/issues/34)）、关于页面中的 logo、应用图标和许可证（[#33](https://github.com/overbench/overbench/issues/33)），以及让代码符合设计指南（[#29](https://github.com/overbench/overbench/issues/29)）
 
 ## v0.0.7：内置浏览器与更多 Agent
 
