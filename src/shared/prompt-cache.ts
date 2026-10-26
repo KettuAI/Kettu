@@ -99,6 +99,16 @@ export function knownExpiry(expiry: CacheExpiry | null): KnownExpiry | null {
   return { ...expiry, ttl: expiry.ttl, expiresAt: expiry.expiresAt }
 }
 
+/** What the session page's top bar says about the cache: its time left, or that none is reported. */
+export type CacheChipState = { kind: 'countdown'; expiry: KnownExpiry } | { kind: 'unknown' }
+
+/** Null before the session's first request, since it has no cache on record then. */
+export function cacheChipState(expiry: CacheExpiry | null): CacheChipState | null {
+  if (!expiry) return null
+  const known = knownExpiry(expiry)
+  return known ? { kind: 'countdown', expiry: known } : { kind: 'unknown' }
+}
+
 /** `ending` is the cache's `endingWindow`. */
 export function cachePhase(expiresAt: number, ending: number, now: number): CachePhase {
   if (now >= expiresAt) return 'expired'

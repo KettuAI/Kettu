@@ -90,6 +90,7 @@
       "chipAbout": "缓存约 {{time}}",
       "chipExpired": "缓存已过期",
       "chipLikelyExpired": "缓存可能已过期",
+      "chipNotReported": "未报告缓存时间",
       "left": "提示缓存剩余时间",
       "ifExpires": "如果过期，下一条消息会按全价重新读取约 {{tokens}} token。",
       "costExpired": "下一条消息会按全价重新读取约 {{tokens}} token。",

@@ -94,6 +94,7 @@
       "chipAbout": "Cache about {{time}}",
       "chipExpired": "Cache expired",
       "chipLikelyExpired": "Cache probably expired",
+      "chipNotReported": "Cache time not reported",
       "left": "Prompt cache lifetime left",
       "ifExpires": "If it expires, the next message reads about {{tokens}} tokens again at full price.",
       "costExpired": "The next message reads about {{tokens}} tokens again at full price.",
