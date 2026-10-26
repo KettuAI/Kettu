@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addressParts, addressText, isLocalHost, normalizeAddress } from './address'
+import { addressParts, addressText, isLocalHost, normalizeAddress, readableRest } from './address'
 
 describe('normalizeAddress', () => {
   it('opens a bare address over https', () => {
@@ -71,5 +71,36 @@ describe('addressParts', () => {
     expect(addressText('https://example.com/a')).toBe('example.com/a')
     expect(addressText('http://[::1]:8080/x')).toBe('[::1]:8080/x')
     expect(addressText('about:blank')).toBeNull()
+  })
+})
+
+describe('readableRest', () => {
+  it('shows escaped characters as characters', () => {
+    expect(readableRest('/%E7%BB%9F%E4%B8%80')).toBe('/统一')
+    expect(readableRest('/caf%C3%A9?q=caf%c3%a9#caf%C3%A9')).toBe('/café?q=café#café')
+    expect(readableRest('/wiki/%E7%BB%9F%E4%B8%80%E8%B5%84%E6%BA%90')).toBe('/wiki/统一资源')
+  })
+
+  it('never decodes escaped ASCII', () => {
+    expect(readableRest('/a%2Fb%25c%20d')).toBe('/a%2Fb%25c%20d')
+    expect(readableRest('/%E7%BB%9F%2F%E4%B8%80')).toBe('/统%2F一')
+  })
+
+  it('keeps a run that is not UTF-8 as it is', () => {
+    expect(readableRest('/%E7%BB')).toBe('/%E7%BB')
+    expect(readableRest('/%E7%BB/%E4%B8%80')).toBe('/%E7%BB/一')
+    expect(readableRest('/%FF%FE')).toBe('/%FF%FE')
+  })
+
+  it('keeps invisible characters and spaces escaped', () => {
+    expect(readableRest('/a%E2%80%AEb')).toBe('/a%E2%80%AEb')
+    expect(readableRest('/a%E2%80%8Bb')).toBe('/a%E2%80%8Bb')
+    expect(readableRest('/a%C2%A0b')).toBe('/a%C2%A0b')
+    expect(readableRest('/%E7%BB%9F%E2%80%8B%E4%B8%80')).toBe('/统%E2%80%8B一')
+  })
+
+  it('leaves the rest of the text alone', () => {
+    expect(readableRest('/a?b=1&c=2#d')).toBe('/a?b=1&c=2#d')
+    expect(readableRest('')).toBe('')
   })
 })

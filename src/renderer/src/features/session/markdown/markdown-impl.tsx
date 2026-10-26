@@ -15,7 +15,6 @@ import {
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
 import { ExternalLinkIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
 import {
   defaultComponents,
   Streamdown,
@@ -24,19 +23,10 @@ import {
   type LinkSafetyModalProps,
 } from 'streamdown'
 import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@renderer/components/ui/alert-dialog'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
+import { LinkConfirm } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { LocalMedia } from '@renderer/features/session/media/local-media'
 import {
@@ -84,6 +74,14 @@ const DefaultParagraph = defaultComponents.p
 const DefaultListItem = defaultComponents.li
 const DefaultTable = defaultComponents.table
 
+// Streamdown's href for a link still streaming in, which it draws as a link that opens nothing.
+const INCOMPLETE_LINK = 'streamdown:incomplete-link'
+
+function isWebLink(href: string): boolean {
+  const protocol = URL.parse(href)?.protocol
+  return protocol === 'http:' || protocol === 'https:'
+}
+
 /** A link: a pull request chip, a project file, or the default link with its safety check. */
 function Link(props: ComponentProps<'a'> & ExtraProps) {
   const raw = typeof props.href === 'string' ? props.href : ''
@@ -92,8 +90,10 @@ function Link(props: ComponentProps<'a'> & ExtraProps) {
   const file = useFileRef(href)
   if (GITHUB_PULL_REQUEST_URL.test(href)) return <PrChip url={href} />
   if (file) return <FileLink file={file} />
-  // A local path that is not one of the project's files has nowhere to go.
+  // A local path that is not one of the project's files has nowhere to go, and main opens
+  // nothing but web links.
   if (local !== null) return <span title={local}>{props.children}</span>
+  if (!isWebLink(raw) && raw !== INCOMPLETE_LINK) return <span title={raw}>{props.children}</span>
   return <DefaultLink {...props} />
 }
 
@@ -216,26 +216,6 @@ const components: Components = {
   table: Table,
   inlineCode: InlineCode,
   em: Emphasis,
-}
-
-function LinkConfirm({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProps) {
-  const { t } = useTranslation(['session', 'common'])
-  return (
-    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t('link.title')}</AlertDialogTitle>
-          <AlertDialogDescription className="font-mono text-xs break-all" data-selectable="">
-            {url}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{t('link.open')}</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
 }
 
 const linkSafety = {

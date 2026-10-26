@@ -329,7 +329,10 @@
     "catchUp": "Sent by {{name}} · Catch-up for {{when}}"
   },
   "link": {
-    "title": "Open this link?",
+    "title": "Open this {{host}} link?",
+    "opens": "It opens in your default browser.",
+    "userinfo": "The text before “@” in this link is not where it goes.",
+    "copy": "Copy link",
     "open": "Open in browser"
   },
   "svg": {

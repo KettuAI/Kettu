@@ -63,3 +63,24 @@ export function addressParts(url: string): { host: string; rest: string } | null
     return null
   }
 }
+
+const ESCAPED_NON_ASCII = /(?:%[89a-f][0-9a-f])+/gi
+// Controls, format characters such as direction marks, unassigned code points, and spaces.
+const HIDDEN = /[\p{C}\p{Z}]/u
+
+/**
+ * The path, query and fragment for reading: each run of escaped non-ASCII bytes shown as its
+ * characters. Escaped ASCII, a run that is not UTF-8, and hidden characters stay escaped.
+ */
+export function readableRest(rest: string): string {
+  return rest.replace(ESCAPED_NON_ASCII, (run) => {
+    let text: string
+    try {
+      text = decodeURIComponent(run)
+    } catch {
+      return run
+    }
+    const shown = Array.from(text, (char) => (HIDDEN.test(char) ? encodeURIComponent(char) : char))
+    return shown.join('')
+  })
+}
