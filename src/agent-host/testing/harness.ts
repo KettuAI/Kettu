@@ -1,7 +1,6 @@
 // Test helpers: the fake agent in-process, a renderer port, and a whole host in a temp dir.
 
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
-import os from 'node:os'
+import { mkdir, realpath, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AgentApp } from '@agentclientprotocol/sdk/unstable'
@@ -38,6 +37,7 @@ import type { SessionTimings } from '../sessions'
 import type { RoutineTimings } from '../routines/manager'
 import type { RoutineClock } from '../routines/scheduler'
 import type { LogReader } from '../usage/model'
+import { tempFolder } from './temp'
 import { inThreadWorker } from './thread-worker'
 import { inUsageWorker } from './usage-worker'
 
@@ -280,7 +280,7 @@ export interface TestHost {
 
 /** A whole agent host on a temp data directory, with the fake agent and no other agent found. */
 export async function startTestHost(options: TestHostOptions = {}): Promise<TestHost> {
-  const dir = options.userDataPath ?? (await mkdtemp(path.join(os.tmpdir(), 'overbench-host-')))
+  const dir = options.userDataPath ?? (await tempFolder('overbench-host-'))
   const project = options.projectDir ?? path.join(dir, 'project')
   await mkdir(project, { recursive: true })
   const module = await loadFakeAgent()

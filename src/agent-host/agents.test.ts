@@ -1,6 +1,6 @@
 // The agent lifecycle with the fake agent in-process: start, timeouts, restarts, idle stop.
 
-import { chmod, mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -44,6 +44,7 @@ import {
   loadFakeAgent,
   type FakeAgentModule,
 } from './testing/harness'
+import { tempFolder } from './testing/temp'
 
 /** A delete that fails as Windows fails it while a process runs from the folder. */
 const removal = vi.hoisted(() => ({ fail: null as Error | null, calls: 0 }))
@@ -416,7 +417,7 @@ describe('AgentManager', () => {
   /** A package agent whose install is on disk, with a first process that ignores its stop. */
   async function reinstallable() {
     const given = stopFails()
-    const root = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const root = await tempFolder('overbench-adapters-')
     const def: AgentDefinition = {
       ...fakeAgent(FAKE_AGENT_MAIN),
       launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
@@ -779,7 +780,7 @@ describe('AgentManager with an installed adapter', () => {
   })
 
   it('deletes the versions the pinned one replaced once it runs', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const dir = await tempFolder('overbench-adapters-')
     await mkdir(path.join(dir, 'fake-agent', '1.0.0'), { recursive: true })
     await mkdir(path.join(dir, 'fake-agent', '2.0.0'))
     const m = packageManager(['1.0.0', '2.0.0'], dir)
@@ -796,7 +797,7 @@ describe('AgentManager with an installed adapter', () => {
   })
 
   it('reinstalls only while no session uses the agent', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const dir = await tempFolder('overbench-adapters-')
     await mkdir(path.join(dir, 'fake-agent', '2.0.0'), { recursive: true })
     const m = packageManager(['2.0.0'], dir)
     m.setLive(1)
@@ -811,7 +812,7 @@ describe('AgentManager with an installed adapter', () => {
   })
 
   it('holds a start that comes during a reinstall until the new install runs', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const dir = await tempFolder('overbench-adapters-')
     await mkdir(path.join(dir, 'fake-agent', '2.0.0'), { recursive: true })
     const m = packageManager(['2.0.0'], dir)
     const before = await m.agents.ensureReady('fake-agent')
@@ -1322,7 +1323,7 @@ describe("a binary agent's version", () => {
 
   /** OpenCode as `fake-opencode`, on a PATH of its own, its version answered by `probe`. */
   async function opencodeManager(probe: CliProbe) {
-    const bin = await mkdtemp(path.join(os.tmpdir(), 'overbench-bin-'))
+    const bin = await tempFolder('overbench-bin-')
     const program = path.join(bin, windows ? 'fake-opencode.cmd' : 'fake-opencode')
     await writeFile(program, windows ? '@exit /b 0\r\n' : '#!/bin/sh\n')
     if (!windows) await chmod(program, 0o755)
@@ -1521,7 +1522,7 @@ describe('a configuration folder of its own', () => {
 
 describe('details', () => {
   it('reads the pinned adapter and the environment the agents see', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const dir = await tempFolder('overbench-adapters-')
     const sdk = path.join(
       dir,
       'claude-code',
@@ -1577,7 +1578,7 @@ describe('details', () => {
   })
 
   it('reads the CLI of the fallback adapter while the pinned one is not installed', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-adapters-'))
+    const dir = await tempFolder('overbench-adapters-')
     const sdk = path.join(
       dir,
       'claude-code',
@@ -1862,7 +1863,7 @@ async function updateManager(
     launcher?: AgentLauncher
   } = {},
 ) {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'overbench-updates-'))
+  const root = await tempFolder('overbench-updates-')
   const def: AgentDefinition = {
     ...fakeAgent(FAKE_AGENT_MAIN),
     id: 'codex',
@@ -2469,7 +2470,7 @@ describe('installing a binary agent', () => {
   async function binaryManager(
     run: (options: ProgramOptions, bin: string) => Promise<Partial<ProgramRun>>,
   ) {
-    const bin = await mkdtemp(path.join(os.tmpdir(), 'overbench-bin-'))
+    const bin = await tempFolder('overbench-bin-')
     const executable = async (name: string): Promise<string> => {
       const file = path.join(bin, windows ? `${name}.cmd` : name)
       await writeFile(file, windows ? '@exit /b 0\r\n' : '#!/bin/sh\n')
