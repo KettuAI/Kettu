@@ -70,12 +70,12 @@ function stepIds(order: string[], signature: string): Set<string> {
 
 // Each estimate as a class of its own, so Tailwind generates it; it replaces the item's default.
 const INTRINSIC_SIZE: Record<Estimate, string> = {
-  19: '[contain-intrinsic-size:auto_19px]',
+  16: '[contain-intrinsic-size:auto_16px]',
+  18: '[contain-intrinsic-size:auto_18px]',
   20: '[contain-intrinsic-size:auto_20px]',
-  22: '[contain-intrinsic-size:auto_22px]',
   24: '[contain-intrinsic-size:auto_24px]',
   28: '[contain-intrinsic-size:auto_28px]',
-  71: '[contain-intrinsic-size:auto_71px]',
+  69: '[contain-intrinsic-size:auto_69px]',
 }
 
 const isStep = (item: Item, steps: Set<string>): boolean =>

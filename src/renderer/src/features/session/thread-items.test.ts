@@ -492,7 +492,7 @@ describe('estimateOf', () => {
     )
   }
 
-  it('gives a step the height of its row', () => {
+  it('gives a step the height of its row, and a plan or compaction its own', () => {
     const waiting: ToolEntry = {
       ...tool('x9', 'execute', 'in_progress'),
       permission: { requestId: 'p', options: [] },
@@ -514,7 +514,7 @@ describe('estimateOf', () => {
         agent('a5'),
         waiting,
       ]),
-    ).toMatchObject({ 'run:x1': 24, 'run:r1': 24, 'run:x3': 24, p1: 24, c1: 24, x9: 24 })
+    ).toMatchObject({ 'run:x1': 24, 'run:r1': 24, 'run:x3': 24, x9: 24, p1: 16, c1: 16 })
   })
 
   it('gives the reply row its height', () => {
@@ -525,14 +525,14 @@ describe('estimateOf', () => {
     const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
     expect(
       estimates([user('u1'), thought('h1'), agent('a1'), steered, agent('a2'), end('t1')]),
-    ).toEqual({ u1: 71, h1: 19, a1: 22, s1: 71, a2: 22, 'reply:u1': 28 })
+    ).toEqual({ u1: 69, h1: 18, a1: 20, s1: 69, a2: 20, 'reply:u1': 28 })
   })
 
-  it('gives a progress note one line of a message', () => {
+  it('gives a progress note one line of a thought', () => {
     const s = state([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2')])
     const note = buildItems(s.order, signatureOf(s), false, true)[1]!
     expect(note).toMatchObject({ key: 'a1', note: true })
-    expect(estimateOf(note)).toBe(22)
+    expect(estimateOf(note)).toBe(18)
   })
 
   it('gives anything else the height of a short row', () => {

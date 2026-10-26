@@ -173,11 +173,12 @@ export function buildItems(order: string[], shape: string, live = false, notes =
 }
 
 /** An item's height in px before it renders: its kind's shortest rendered height. */
-export type Estimate = 19 | 20 | 22 | 24 | 28 | 71
+export type Estimate = 16 | 18 | 20 | 24 | 28 | 69
 
 /**
- * The height an item is laid out at until it renders, measured on macOS. It is a lower bound, so
- * an item not rendered yet never takes more room than it will.
+ * The height an item is laid out at until it renders: the shortest its kind renders at, at any
+ * text size, measured on macOS and rounded down. It is a lower bound, so an item not rendered yet
+ * never takes more room than it will.
  */
 export function estimateOf(item: Item): Estimate {
   if (item.type === 'run' || item.type === 'group') return 24
@@ -186,19 +187,22 @@ export function estimateOf(item: Item): Estimate {
     // One line of bubble and the row under it.
     case 'u':
     case 's':
-      return 71
+      return 69
     case 'a':
+      return 20
+    // A progress note is muted like a thought, in the same smaller type.
     case 'c':
-      return 22
     case 'h':
     case 'r':
     case 'q':
-      return 19
+      return 18
     case 'g':
     case 't':
     case 'w':
-    case 'p':
       return 24
+    // A plan or a compaction on its own.
+    case 'p':
+      return 16
     // A notice, a marker, a git event or a card.
     default:
       return 20
