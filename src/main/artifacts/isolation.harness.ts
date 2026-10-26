@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import {
   app,
   BrowserWindow,
+  ipcMain,
   nativeTheme,
   protocol,
   session,
@@ -60,6 +61,13 @@ if (process.platform === 'darwin') app.setActivationPolicy('accessory')
 
 /** The step the probe is on, for a run that never finishes. */
 let stage = 'starting'
+
+/**
+ * Each `app:get-info` call main answered: whether a frame was pending when it came, so that the
+ * guard held it, and whether main answered it in the turn that committed a canvas frame.
+ */
+const calls: { held: boolean; inCommitTurn: boolean }[] = []
+let inCommitTurn = false
 
 function report(result: unknown): void {
   try {
@@ -135,6 +143,15 @@ async function run(): Promise<unknown> {
     return new Response(response.body, { status: response.status, headers })
   })
   restrictPermissions(ses, isRendererUrl, (wc) => isRevoked(wc) || hasPendingFrame(wc))
+  const handle = ipcMain.handle.bind(ipcMain)
+  ipcMain.handle = (channel, listener) =>
+    handle(channel, async (event, ...args) => {
+      if (channel !== 'app:get-info') return listener(event, ...args)
+      const held = hasPendingFrame(event.sender)
+      const answer: unknown = await listener(event, ...args)
+      calls.push({ held, inCommitTurn })
+      return answer
+    })
   registerIpcHandlers({ artifacts, perf: false } as unknown as IpcDeps)
   const mediaGrants = new MediaGrants()
   mediaGrants.add({
@@ -173,6 +190,13 @@ async function run(): Promise<unknown> {
   })
   const window = createMainWindow()
   const contents = window.webContents
+  // The guard releases what it held through microtasks of the commit's own task, all of which run
+  // before this immediate; a release on a timer would come after it.
+  contents.on('did-frame-navigate', (_, url, _code, _status, isMainFrame) => {
+    if (isMainFrame || artifactHost(url) !== originId(config.canvas)) return
+    inCommitTurn = true
+    setImmediate(() => (inCommitTurn = false))
+  })
   await once(contents, 'did-finish-load')
   const page = <T>(script: string): Promise<T> => contents.executeJavaScript(script)
   const reload = async (): Promise<void> => {
@@ -351,6 +375,7 @@ async function run(): Promise<unknown> {
 
   // A canvas of 24 pages, opening while calls go on.
   stage = 'the canvas'
+  calls.length = 0
   await reload()
   const canvas = await page<{ waits: number[]; loaded: number }>(`(async () => {
     const { url } = await overbench.open(${JSON.stringify(config.canvas)})
@@ -412,7 +437,7 @@ async function run(): Promise<unknown> {
     events,
     trustedAfterProbe,
     refused,
-    canvas: { ...canvas, trusted: canvasTrusted },
+    canvas: { ...canvas, trusted: canvasTrusted, calls },
     mediaInApp,
     asked,
     opened,

@@ -302,7 +302,13 @@ interface ProbeResult {
   events: { channel: string; payload: Record<string, unknown> }[]
   trustedAfterProbe: boolean
   refused: Record<string, { waits: (number | string)[]; revoked: boolean; revocations: number }>
-  canvas: { waits: number[]; loaded: number; trusted: boolean }
+  canvas: {
+    waits: number[]
+    loaded: number
+    trusted: boolean
+    /** Each call main answered: whether the guard held it, and whether in a frame's commit turn. */
+    calls: { held: boolean; inCommitTurn: boolean }[]
+  }
   /** Whether the app's own page drew the granted picture on a canvas. */
   mediaInApp: boolean
   asked: string[]
@@ -615,15 +621,19 @@ describe.each([
     ).toBe(true)
   })
 
-  it('opens a canvas of 24 pages with the calls it holds kept short', () => {
+  it('opens a canvas of 24 pages, answering the calls it holds as the last frame commits', () => {
     expect(result.canvas.loaded).toBe(24)
     expect(result.canvas.trusted).toBe(true)
     const waits = [...result.canvas.waits].sort((a, b) => a - b)
     const p50 = waits[Math.floor(waits.length / 2)] ?? 0
     const max = waits.at(-1) ?? 0
+    const held = result.canvas.calls.filter((call) => call.held)
     console.info(
-      `Calls while 24 pages opened: ${waits.length}, p50 ${p50.toFixed(1)} ms, max ${max.toFixed(1)} ms`,
+      `Calls while 24 pages opened: ${waits.length}, ${held.length} held, p50 ${p50.toFixed(1)} ms, max ${max.toFixed(1)} ms`,
     )
-    expect(max).toBeLessThan(2_000)
+    // How long a held call waits is how long Chromium takes to commit the frames, so it is only
+    // logged: what the guard controls is that it answers them in that commit's own turn.
+    expect(held.length).toBeGreaterThan(0)
+    expect(held.every((call) => call.inCommitTurn)).toBe(true)
   })
 })
