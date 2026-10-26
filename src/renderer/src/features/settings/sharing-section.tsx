@@ -371,7 +371,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
             <AlertDialogTitle>
               {t('sharing.published.unpublishTitle', { title: title ?? page.url })}
             </AlertDialogTitle>
-            <AlertDialogDescription>{t('artifacts:share.unpublishConfirm')}</AlertDialogDescription>
+            <AlertDialogDescription>{t('artifacts:share.unpublishDescription')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
