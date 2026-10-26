@@ -23,8 +23,14 @@ const log = createLogger('artifacts')
 
 /** In memory: nothing a page stores while it renders outlives the run. */
 export const THUMBNAIL_PARTITION = 'overbench-artifact-thumbnails'
-/** How long a page may take to load, and the wait after it, before the capture. */
+/**
+ * How long a page may take to load before the capture. Each page of a canvas is a frame that loads
+ * the whole page, so a canvas waits a second more for each page after the first, up to a limit.
+ */
 const LOAD_WAIT_MS = 5_000
+const PAGE_LOAD_WAIT_MS = 1_000
+const MAX_LOAD_WAIT_MS = 30_000
+/** The wait after a load, before the capture. */
 const SETTLE_MS = 400
 /** Enough for a card two across on a 2x display. */
 const OUTPUT_WIDTH = 720
@@ -106,6 +112,11 @@ export function thumbnailDocument(
     'iframe{position:absolute;left:0;top:0;border:0;background:white;transform-origin:0 0}</style>' +
     `</head><body>${frames}</body></html>`
   )
+}
+
+/** How long the capture waits for a thumbnail of this many pages to load. */
+export function loadWait(pages: number): number {
+  return Math.min(MAX_LOAD_WAIT_MS, LOAD_WAIT_MS + PAGE_LOAD_WAIT_MS * Math.max(0, pages - 1))
 }
 
 /** The files to remove so that only the newest `keep` remain, by modification time. */
@@ -207,20 +218,20 @@ export class Thumbnails {
     try {
       const contents = window.webContents
       guardThumbnail(contents)
-      const started = Date.now()
+      // A page that has not loaded in time is captured with what it painted by then.
       const loaded = await Promise.race([
         contents
           .loadURL(
             `data:text/html;charset=utf-8,${encodeURIComponent(thumbnailDocument(origin, version, layout))}`,
           )
           .then(
-            () => true,
-            () => false,
+            () => 'loaded' as const,
+            () => 'failed' as const,
           ),
-        delay(LOAD_WAIT_MS).then(() => true),
+        delay(loadWait(layout?.length ?? 1)).then(() => 'waited' as const),
       ])
-      if (!loaded || window.isDestroyed()) return null
-      await delay(Math.min(SETTLE_MS, Math.max(0, LOAD_WAIT_MS - (Date.now() - started))))
+      if (loaded === 'failed' || window.isDestroyed()) return null
+      if (loaded === 'loaded') await delay(SETTLE_MS)
       if (window.isDestroyed()) return null
       const captured = await contents.capturePage()
       if (captured.isEmpty()) return null

@@ -16,7 +16,8 @@ vi.mock('electron', () => ({
   protocol: {},
 }))
 
-const { outdated, parseLayout, thumbnailDocument, Thumbnails } = await import('./thumbnails')
+const { loadWait, outdated, parseLayout, thumbnailDocument, Thumbnails } =
+  await import('./thumbnails')
 
 const ORIGIN = 'overbench-artifact://0123456789abcdef0123456789/'
 const PAGE: ThumbnailPage = { group: 1, index: 2, x: 0, y: 0, width: 390, height: 844 }
@@ -80,6 +81,14 @@ describe('outdated', () => {
     ]
     expect(outdated(files, 2)).toEqual(['c.jpg'])
     expect(outdated(files, 3)).toEqual([])
+  })
+})
+
+describe('loadWait', () => {
+  it('grows with the pages, each a frame that loads the whole page, up to a limit', () => {
+    expect(loadWait(1)).toBe(5_000)
+    expect(loadWait(24)).toBe(28_000)
+    expect(loadWait(40)).toBe(30_000)
   })
 })
 
