@@ -3,16 +3,6 @@ productName: OverBench
 directories:
   buildResources: build
   output: dist
-files:
-  - out/**/*
-  - package.json
-  # node-pty ships its sources and every platform's binaries; only the loader and the
-  # binaries for the target platform are needed at runtime.
-  - '!node_modules/node-pty/{binding.gyp,deps,scripts,src,third_party,typings}{,/**/*}'
-  - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
-  - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
-  - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
-  - '!out/third-party-notices.txt'
 # Outside app.asar, where the system's app for text files can open it.
 extraResources:
   - from: out/third-party-notices.txt
@@ -57,7 +47,19 @@ mac:
   extraResources:
     - from: node_modules/electron/dist/LICENSES.chromium.html
       to: LICENSES.chromium.html
+  # Each platform's files holds the whole list, with none at the top level: electron-builder walks
+  # a platform's files as a set of its own and gives a set without an inclusion **/*, so an
+  # exclusion there copied the whole project folder into app.asar.
   files:
+    - out/**/*
+    - package.json
+    # node-pty ships its sources and every platform's binaries; only the loader and the
+    # binaries for the target platform are needed at runtime.
+    - '!node_modules/node-pty/{binding.gyp,deps,scripts,src,third_party,typings}{,/**/*}'
+    - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
+    - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
+    - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+    - '!out/third-party-notices.txt'
     - '!node_modules/node-pty/prebuilds/win32-*{,/**/*}'
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
@@ -79,6 +81,13 @@ dmg:
 win:
   target: nsis
   files:
+    - out/**/*
+    - package.json
+    - '!node_modules/node-pty/{binding.gyp,deps,scripts,src,third_party,typings}{,/**/*}'
+    - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
+    - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
+    - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+    - '!out/third-party-notices.txt'
     - '!node_modules/node-pty/prebuilds/darwin-*{,/**/*}'
 nsis:
   artifactName: ${productName}-${version}-${arch}-setup.${ext}
@@ -89,6 +98,13 @@ linux:
   target: AppImage
   category: Development
   files:
+    - out/**/*
+    - package.json
+    - '!node_modules/node-pty/{binding.gyp,deps,scripts,src,third_party,typings}{,/**/*}'
+    - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
+    - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
+    - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+    - '!out/third-party-notices.txt'
     - '!node_modules/node-pty/prebuilds{,/**/*}'
 appImage:
   # No version in the name: an update replaces the file a launcher already points at.
