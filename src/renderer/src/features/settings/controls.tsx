@@ -18,6 +18,15 @@ import { fileManagerName } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 
+/** The width of Settings' confirmations, whose sentences run longer than most. */
+export const CONFIRM = 'data-[size=default]:sm:max-w-105'
+
+/** A quiet button at a group label's end, such as Browse themes. */
+export const GROUP_ACTION = 'px-2.25 text-xs text-secondary'
+
+/** A field's label above it, as the Cloudflare account and a custom proxy take them. */
+export const FIELD_LABEL = 'flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary'
+
 export function ControlError({ error }: { error: string | null }) {
   if (!error) return null
   return (
@@ -199,15 +208,15 @@ export function RevealAction({ path }: { path: string }) {
 
 /**
  * A path as a location, in the interface font: folders quiet, slashes quieter, the last part in
- * the label's weight. Too long, the folders truncate first, so the name stays; it shows in full in
- * its title. The separator before the name goes with the folders, so a name whose folders are cut
- * away entirely does not read as a root path.
+ * the label's weight. Too long, the folders truncate first, from their start, so the name and the
+ * folders nearest it stay; it shows in full in its title. The separator before the name goes with
+ * the folders, so a name whose folders are cut away entirely does not read as a root path.
  */
 export function PathText({ path, missing }: { path: string; missing?: boolean }) {
   const parts = path.split(/(?<=.)[/\\]/)
   const separator = path.includes('\\') && !path.includes('/') ? '\\' : '/'
   const name = parts.pop() ?? ''
-  const slash = <span className="mx-0.5">{separator}</span>
+  const slash = <span>{separator}</span>
   return (
     <span
       title={path}
@@ -215,13 +224,16 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
       className="flex min-w-0 text-xs leading-normal whitespace-nowrap text-tertiary"
     >
       {parts.length > 0 && (
-        <span className="min-w-0 truncate">
+        // Right to left puts the ellipsis at the start; the marks keep the slashes in place.
+        <span className="min-w-0 truncate [direction:rtl]">
+          {'\u200E'}
           {parts.map((part, i) => (
             <span key={i}>
               {part}
               {slash}
             </span>
           ))}
+          {'\u200E'}
         </span>
       )}
       <span className={cn('max-w-full shrink-0 truncate', !missing && 'font-medium text-primary')}>

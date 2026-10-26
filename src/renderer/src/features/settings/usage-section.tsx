@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SettingsFile } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
 import {
@@ -18,6 +18,7 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { toast } from '@renderer/components/ui/toast'
 import { bytes, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -26,7 +27,14 @@ import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { clearUsageRecord, reimportUsage, syncUsage, useUsageStore } from '@renderer/stores/usage'
-import { ControlError, PathText, SettingSelect, SettingSwitch } from './controls'
+import {
+  CONFIRM,
+  ControlError,
+  GROUP_ACTION,
+  PathText,
+  SettingSelect,
+  SettingSwitch,
+} from './controls'
 import { RowLine, RowText } from './rows'
 import { useApply } from './use-apply'
 
@@ -63,14 +71,14 @@ export function SyncLogs() {
       <ControlError error={error} />
       <Button
         variant="quiet"
-        size="xs"
+        size="sm"
         aria-busy={running}
         disabled={running}
         onClick={() => {
           setError(null)
           void refresh.run(syncUsage).catch((e: unknown) => setError(errorMessage(e)))
         }}
-        className="-mr-2"
+        className={GROUP_ACTION}
       >
         <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
         {t('page.sync')}
@@ -137,9 +145,9 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
     <>
       <RowLine
         text={
-          <div className="flex min-w-0 items-start gap-2.5">
-            <AgentMark agent={agentId} size={16} className="mt-0.5" />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <AgentTile agent={agentId} size={30} glyph={16} />
+            <div className="flex min-w-0 flex-1 flex-col">
               <RowText
                 name={name}
                 description={
@@ -156,8 +164,9 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
         }
       >
         <Button
-          variant="outline"
-          size="compact"
+          variant="quiet"
+          size="sm"
+          className="text-secondary"
           disabled={!log.found || scanning}
           onClick={() => setOpen(true)}
         >
@@ -165,7 +174,7 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
         </Button>
       </RowLine>
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('settings.reimport.title', { agent: name })}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -213,7 +222,7 @@ export function SidebarEnd() {
 }
 
 export function ClearRecord() {
-  const { t } = useTranslation(['usage', 'common'])
+  const { t } = useTranslation(['usage', 'common', 'settings'])
   const empty = useUsageStore((s) => s.status?.recordSince == null)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -223,6 +232,7 @@ export function ClearRecord() {
     setError(null)
     try {
       await clearUsageRecord()
+      toast(t('settings:usage.cleared'))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -234,7 +244,7 @@ export function ClearRecord() {
       <ControlError error={error} />
       <Button
         variant="destructive-outline"
-        size="compact"
+        size="sm"
         disabled={empty || busy}
         onClick={() => setOpen(true)}
       >
@@ -242,7 +252,7 @@ export function ClearRecord() {
         {t('settings.clear.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('settings.clear.title')}</AlertDialogTitle>
             <AlertDialogDescription>{t('settings.clear.description')}</AlertDialogDescription>

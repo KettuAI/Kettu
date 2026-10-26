@@ -292,11 +292,13 @@ export function DeleteSessionDialog({
   title,
   open,
   onOpenChange,
+  onDeleted,
 }: {
   sessionId: string
   title: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  onDeleted?: () => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
   const count = open ? descendantCount(sessionId) : 0
@@ -311,7 +313,10 @@ export function DeleteSessionDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => void deleteSession(sessionId)}>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => void deleteSession(sessionId).then(onDeleted)}
+          >
             {t('row.delete')}
           </AlertDialogAction>
         </AlertDialogFooter>

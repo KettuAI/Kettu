@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from 'react'
 import {
   ArchiveIcon,
   BellIcon,
@@ -16,11 +17,19 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@renderer/components/ui/empty'
 import { listedInstalled } from '@renderer/features/agents/readiness'
 import { basename, longAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -38,16 +47,19 @@ import {
 } from './about-section'
 import { AgentListItem, AgentsGroupActions, EnvironmentFooter } from './agents-section'
 import { ArchivedRow } from './archived-section'
+import { GroupLabel } from './rows'
 import { PublishedRow, SharingAccount } from './sharing-section'
 import { BrowseThemes } from './theme-catalog'
 import { useAppInfo } from './use-app-info'
 import { useLoginItemStatus } from './use-login-item'
+import { environmentText } from './environment-text'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
   BackgroundFetch,
   ClearBrowsingData,
   ColorModeTiles,
-  DataFolder,
+  DataFolderActions,
+  DataFolderText,
   DefaultAgent,
   Diagnostics,
   FontSize,
@@ -67,6 +79,7 @@ import {
   ShortcutKeys,
   TestNotification,
   TextSize,
+  WithKeys,
   Zoom,
 } from './sections'
 import { ThemeTiles } from './theme-section'
@@ -81,9 +94,10 @@ const LICENSE_URL = 'https://github.com/overbench/overbench/blob/main/LICENSE'
 
 const SHORTCUTS = [
   { group: 'sessions', keys: 'Mod+N', action: 'newSession' },
-  { group: 'sessions', keys: 'Mod+L', action: 'focusComposer' },
   { group: 'sessions', keys: 'Mod+Shift+[', action: 'previousSession' },
   { group: 'sessions', keys: 'Mod+Shift+]', action: 'nextSession' },
+  { group: 'sessions', keys: 'Mod+L', action: 'focusComposer' },
+  { group: 'sessions', keys: 'Mod+U', action: 'addFiles' },
   { group: 'sessions', keys: 'Esc', action: 'cancelTurn' },
   { group: 'sessions', keys: '1-4', action: 'answerPermission' },
   { group: 'window', keys: 'Mod+O', action: 'openProject' },
@@ -94,6 +108,7 @@ const SHORTCUTS = [
   { group: 'window', keys: 'Mod+0', action: 'resetZoom' },
   { group: 'terminal', keys: 'Ctrl+`', action: 'toggleTerminal' },
   { group: 'terminal', keys: 'Ctrl+Shift+`', action: 'newTerminal' },
+  { group: 'terminal', keys: 'Mod+L', action: 'askSelection', note: 'askSelectionNote' },
 ] as const
 
 function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>): GroupDef {
@@ -194,6 +209,11 @@ export function useAppearanceSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
   const scale = group('scale', t('appearance.groups.scale'))
+  const zoomKeys = [formatShortcut('Mod+='), formatShortcut('Mod+-')] as const
+  const zoomDescription = t('appearance.zoom.description', {
+    zoomIn: zoomKeys[0],
+    zoomOut: zoomKeys[1],
+  })
   return {
     id: 'appearance',
     title: t('sections.appearance'),
@@ -205,7 +225,10 @@ export function useAppearanceSection(): SectionDef {
         name: t('appearance.theme.name'),
         english: en('appearance.theme.name'),
         keywords: t('appearance.theme.keywords'),
-        group: group('theme', t('appearance.groups.theme'), { actions: <BrowseThemes /> }),
+        group: group('theme', t('appearance.groups.theme'), {
+          actions: <BrowseThemes />,
+          plain: true,
+        }),
         layout: 'block',
         render: () => <ThemeTiles />,
       },
@@ -214,7 +237,7 @@ export function useAppearanceSection(): SectionDef {
         name: t('appearance.colorMode.name'),
         english: en('appearance.colorMode.name'),
         keywords: t('appearance.colorMode.keywords'),
-        group: group('color-mode', t('appearance.groups.colorMode')),
+        group: group('color-mode', t('appearance.groups.colorMode'), { plain: true }),
         layout: 'block',
         render: () => <ColorModeTiles />,
       },
@@ -222,10 +245,8 @@ export function useAppearanceSection(): SectionDef {
         id: 'zoom',
         name: t('appearance.zoom.name'),
         english: en('appearance.zoom.name'),
-        description: t('appearance.zoom.description', {
-          zoomIn: formatShortcut('Mod+='),
-          zoomOut: formatShortcut('Mod+-'),
-        }),
+        description: zoomDescription,
+        rich: <WithKeys text={zoomDescription} keys={zoomKeys} />,
         keywords: t('appearance.zoom.keywords'),
         group: scale,
         render: () => <Zoom />,
@@ -264,7 +285,10 @@ export function useNotificationsSection(): SectionDef {
       name: t('notifications.groups.preview'),
       english: en('notifications.groups.preview'),
       description: t('notifications.test'),
-      group: group('preview', t('notifications.groups.preview'), { actions: <TestNotification /> }),
+      group: group('preview', t('notifications.groups.preview'), {
+        actions: <TestNotification />,
+        plain: true,
+      }),
       layout: 'custom',
       render: () => <NotificationPreview />,
     },
@@ -417,20 +441,25 @@ export function useShortcutsSection(): SectionDef {
     description: t('pages.shortcuts'),
     icon: KeyboardIcon,
     rows: SHORTCUTS.map((s) => ({
-      id: s.keys,
+      id: s.action,
       name: t(`shortcuts.${s.action}`),
       english: en(`shortcuts.${s.action}`),
+      description: 'note' in s ? t(`shortcuts.${s.note}`) : undefined,
       keywords: s.keys,
       group: groups[s.group],
+      compact: true,
       render: () => <ShortcutKeys keys={s.keys} />,
+      aside: () => <ShortcutKeys keys={s.keys} />,
     })),
   }
 }
 
 export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
+  const environment = useAgentsStore((s) => s.environment)
   const installed = agents.filter(listedInstalled)
   const missing = agents.filter((a) => !listedInstalled(a))
   const groups = {
@@ -462,6 +491,15 @@ export function useAgentsSection(): SectionDef {
     rows: [
       ...installed.map((a) => row(a, groups.installed)),
       ...missing.map((a) => row(a, groups.missing)),
+      {
+        id: 'environment',
+        name: t('agents.environment.reload'),
+        english: en('agents.environment.reload'),
+        description: environmentText(t, environment),
+        keywords: t('agents.environment.keywords'),
+        searchOnly: true,
+        render: () => null,
+      },
     ],
     footer: <EnvironmentFooter />,
     mark:
@@ -557,6 +595,7 @@ export function useBrowserSection(): SectionDef {
         english: en('browser.clearData.name'),
         description: t('browser.clearData.description'),
         keywords: t('browser.clearData.keywords'),
+        group: group('site-data', t('browser.groups.siteData')),
         render: () => <ClearBrowsingData />,
       },
     ],
@@ -590,16 +629,17 @@ export function useAdvancedSection(): SectionDef {
         description: t('advanced.diagnostics.description'),
         keywords: t('advanced.diagnostics.keywords'),
         group: data,
-        render: () => <Diagnostics />,
+        layout: 'block',
+        render: (text) => <Diagnostics label={text} />,
       },
       {
         id: 'data-folder',
         name: t('advanced.dataFolder.name'),
         english: en('advanced.dataFolder.name'),
         description: t('advanced.dataFolder.description'),
+        rich: <DataFolderText text={t('advanced.dataFolder.description')} />,
         group: data,
-        layout: 'block',
-        render: (text) => <DataFolder label={text} />,
+        render: () => <DataFolderActions />,
       },
       {
         id: 'remove-sessions',
@@ -629,6 +669,7 @@ export function useAboutSection(): SectionDef {
     name,
     keywords: t('about.version.keywords'),
     group: runtime,
+    compact: true,
     render: () => <RuntimeFact value={value} />,
   })
   return {
@@ -645,7 +686,7 @@ export function useAboutSection(): SectionDef {
         keywords: t('about.updates.keywords'),
         group: updates,
         layout: 'block',
-        render: (text) => <UpdateRow status={status} label={text} />,
+        render: () => <UpdateRow status={status} />,
       },
       ...(status?.state.kind === 'off'
         ? []
@@ -719,6 +760,7 @@ export function useArchivedSection(): SectionDef {
       ? t('sidebar:project.noProject')
       : (projects.find((p) => p.path === summary.projectPath)?.name ??
         basename(summary.projectPath))
+  const list = group('archived', t('archived.group'), { count: archived.length })
   return {
     id: 'archived',
     title: t('sections.archived'),
@@ -730,13 +772,37 @@ export function useArchivedSection(): SectionDef {
       description: where(summary),
       keywords: `${agentName(summary.agentId)} ${t('archived.keywords')}`,
       english: en('sections.archived'),
+      group: list,
       layout: 'custom',
       render: () => <ArchivedRow summary={summary} where={where(summary)} />,
     })),
     footer: archived.length === 0 && (
-      <p className="px-1 text-small text-secondary">{t('archived.empty')}</p>
+      <Empty className="px-6 py-14">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <ArchiveIcon />
+          </EmptyMedia>
+          <EmptyTitle>{t('archived.emptyTitle')}</EmptyTitle>
+          <EmptyDescription>{t('archived.emptyHint')}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     ),
   }
+}
+
+/** Each published artifact's title, read while there are published pages to name. */
+function usePublishedTitles(some: boolean): ReadonlyMap<string, string> {
+  useEffect(() => {
+    if (!some) return
+    artifactListShown(true)
+    return () => artifactListShown(false)
+  }, [some])
+  const list = useArtifactsStore((s) => s.list)
+  const deleted = useArtifactsStore((s) => s.deleted)
+  return useMemo(
+    () => new Map([...(deleted ?? []), ...(list ?? [])].map((item) => [item.id, item.title])),
+    [list, deleted],
+  )
 }
 
 export function useSharingSection(): SectionDef {
@@ -744,6 +810,7 @@ export function useSharingSection(): SectionDef {
   const en = english()
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
   const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
+  const titles = usePublishedTitles(pages.length > 0)
   const rows: RowDef[] = [
     {
       id: 'cloudflare',
@@ -759,19 +826,23 @@ export function useSharingSection(): SectionDef {
   if (pages.length > 0) {
     const published = group('published', t('sharing.groups.published'), { count: pages.length })
     rows.push(
-      ...pages.map((page): RowDef => ({
-        id: `published-${page.id}`,
-        name: page.url,
-        english: page.url,
-        description: t('sharing.published.version', {
-          version: page.version,
-          ago: longAgo(page.publishedAt),
-        }),
-        keywords: t('sharing.published.keywords'),
-        group: published,
-        layout: 'custom',
-        render: () => <PublishedRow page={page} />,
-      })),
+      ...pages.map((page): RowDef => {
+        const title = titles.get(page.id)
+        return {
+          id: `published-${page.id}`,
+          name: title ?? page.url,
+          description: title
+            ? page.url
+            : t('sharing.published.version', {
+                version: page.version,
+                ago: longAgo(page.publishedAt),
+              }),
+          keywords: t('sharing.published.keywords'),
+          group: published,
+          layout: 'custom',
+          render: () => <PublishedRow page={page} title={title} />,
+        }
+      }),
     )
   }
   return {
@@ -781,7 +852,10 @@ export function useSharingSection(): SectionDef {
     icon: ShareIcon,
     rows,
     footer: pages.length === 0 && (
-      <p className="px-1 text-small text-secondary">{t('sharing.published.empty')}</p>
+      <section aria-label={t('sharing.groups.published')} className="mt-7 flex flex-col">
+        <GroupLabel group={{ id: 'published', label: t('sharing.groups.published') }} />
+        <p className="px-1 pt-3 text-small text-tertiary">{t('sharing.published.empty')}</p>
+      </section>
     ),
   }
 }

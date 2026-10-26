@@ -104,8 +104,9 @@ export interface IpcInvokeContract {
   // `token`: from the `conflict` answer of the last `themes:install`.
   'themes:replace': { args: [token: string]; result: ThemeInstallResult }
   'themes:remove': { args: [id: string]; result: void }
-  // `text`: a whole theme file, which main checks before the save dialog; false when cancelled.
-  'themes:export': { args: [text: string]; result: boolean }
+  // `text`: a whole theme file, which main checks before the save dialog; the saved path, or null
+  // when cancelled.
+  'themes:export': { args: [text: string]; result: string | null }
   'themes:reveal': { args: [id: string]; result: void }
   // `refresh`: read the index from GitHub again rather than the copy main kept.
   'themes:catalog': { args: [refresh: boolean]; result: CatalogState }
@@ -296,8 +297,8 @@ export interface OverbenchApi {
     /** Installs the file a `conflict` answer named, in place of the installed theme. */
     replace(token: string): Promise<ThemeInstallResult>
     remove(id: string): Promise<void>
-    /** Asks where to save a theme file; false when the user cancelled. */
-    export(text: string): Promise<boolean>
+    /** Asks where to save a theme file; the saved file's path, or null when the user cancelled. */
+    export(text: string): Promise<string | null>
     /** Shows an installed theme's file in the file manager. */
     reveal(id: string): Promise<void>
     /** The online catalog's themes, read from GitHub when `refresh` is set or the first time. */

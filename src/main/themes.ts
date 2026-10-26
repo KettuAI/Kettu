@@ -350,7 +350,7 @@ export class ThemeStore {
   }
 
   /** `themes:export`: checks the file the renderer built, then saves it where the user says. */
-  async export(window: BrowserWindow | null, text: unknown): Promise<boolean> {
+  async export(window: BrowserWindow | null, text: unknown): Promise<string | null> {
     if (typeof text !== 'string') throw new Error('A theme file must be text')
     const parsed = parseThemeFile(text)
     if (!parsed.ok) throw new Error(`Not a theme file: ${parsed.error.code}`)
@@ -362,9 +362,9 @@ export class ThemeStore {
     const result = window
       ? await dialog.showSaveDialog(window, options)
       : await dialog.showSaveDialog(options)
-    if (result.canceled || !result.filePath) return false
+    if (result.canceled || !result.filePath) return null
     await writeFile(result.filePath, text, 'utf8')
-    return true
+    return result.filePath
   }
 
   /** `themes:reveal`: selects the theme's file in the file manager. */

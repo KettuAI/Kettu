@@ -269,7 +269,7 @@ describe('ThemeStore', () => {
     const target = path.join(dir, 'out.json')
     electron.save.mockResolvedValue({ canceled: false, filePath: target })
     const source = theme('My Theme')
-    expect(await themes.export(WINDOW, source)).toBe(true)
+    expect(await themes.export(WINDOW, source)).toBe(target)
     expect(await readFile(target, 'utf8')).toBe(source)
     expect(electron.save).toHaveBeenCalledWith(WINDOW, {
       title: 'Export Theme',
@@ -278,7 +278,7 @@ describe('ThemeStore', () => {
     })
 
     electron.save.mockResolvedValue({ canceled: true, filePath: '' })
-    expect(await themes.export(null, source)).toBe(false)
+    expect(await themes.export(null, source)).toBeNull()
     await expect(themes.export(null, '{"name": "x"}')).rejects.toThrow('Not a theme file')
     await expect(themes.export(null, 5)).rejects.toThrow('must be text')
     expect(electron.save).toHaveBeenCalledTimes(2)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   EllipsisIcon,
   FileDownIcon,
@@ -37,14 +37,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { toast } from '@renderer/components/ui/toast'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { isCodeTheme } from '@renderer/features/session/markdown/code-themes'
+import { basename, dirname } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { receiveThemes, useThemesStore } from '@renderer/stores/themes'
-import { ControlError } from './controls'
-import { MiniWindow, RadioDot } from './sections'
+import { CONFIRM, ControlError } from './controls'
+import { MiniWindow, TILE, TileLabel } from './sections'
 import { previewStyle, themeContrast, themeFile } from './theme-colors'
 import { useReason } from './theme-reason'
 import { useApply } from './use-apply'
@@ -74,6 +77,8 @@ export function ThemeTiles() {
   const [replaceOpen, setReplaceOpen] = useState(false)
   const [removing, setRemoving] = useState<InstalledTheme | null>(null)
   const [removeOpen, setRemoveOpen] = useState(false)
+  // The menu button that asked, which takes focus back when the dialog closes.
+  const asker = useRef<HTMLElement | null>(null)
 
   // The folder is read again each time the page shows, so a file changed by hand shows here.
   useEffect(() => {
@@ -105,12 +110,21 @@ export function ThemeTiles() {
       source={item?.catalog ? 'catalog' : item ? 'file' : 'builtIn'}
       onExport={() =>
         run(async () => {
-          await window.overbench.themes.export(themeFile(theme))
+          const saved = await window.overbench.themes.export(themeFile(theme))
+          if (saved) {
+            toast(
+              t('appearance.theme.exported', {
+                file: basename(saved),
+                folder: basename(dirname(saved)),
+              }),
+            )
+          }
         })
       }
       {...(item && {
         onReveal: () => run(() => window.overbench.themes.reveal(item.id)),
-        onRemove: () => {
+        onRemove: (from: HTMLElement | null) => {
+          asker.current = from
           setRemoving(item)
           setRemoveOpen(true)
         },
@@ -132,13 +146,13 @@ export function ThemeTiles() {
         aria-label={t('appearance.theme.name')}
         variant="tile"
         size="tile"
-        spacing={3.5}
+        spacing={3}
         value={[chosen]}
         onValueChange={(next) => {
           const picked = next[0] as string | undefined
           if (picked && picked !== chosen) apply({ appearance: { colorTheme: picked } })
         }}
-        className="grid w-full grid-cols-3 items-stretch"
+        className="grid w-full grid-cols-3 items-start"
       >
         {tile(BUILTIN_THEME_ID, null)}
         {installed.map((item) => tile(item.id, item.theme, item))}
@@ -159,7 +173,7 @@ export function ThemeTiles() {
       />
 
       <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent finalFocus={asker} className={CONFIRM}>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t('appearance.theme.removeTitle', { name: removing?.theme.name })}
@@ -174,8 +188,12 @@ export function ThemeTiles() {
               variant="destructive"
               onClick={() => {
                 setRemoveOpen(false)
-                const id = removing?.id
-                if (id) run(() => window.overbench.themes.remove(id))
+                if (!removing) return
+                const { id, theme } = removing
+                run(async () => {
+                  await window.overbench.themes.remove(id)
+                  toast(t('appearance.theme.removed', { name: theme.name }))
+                })
               }}
             >
               {t('appearance.theme.removeConfirm')}
@@ -202,40 +220,41 @@ function ThemeTile({
   source: 'builtIn' | 'file' | 'catalog'
   onExport: () => void
   onReveal?: () => void
-  onRemove?: () => void
+  /** Gets the menu's button, which focus returns to once the question is answered. */
+  onRemove?: (from: HTMLElement | null) => void
 }) {
   const { t } = useTranslation('settings')
   const name = theme?.name ?? 'OverBench'
   const issues = useMemo(() => themeContrast(theme), [theme])
   const light = useMemo(() => previewStyle(theme, 'light'), [theme])
   const dark = useMemo(() => previewStyle(theme, 'dark'), [theme])
+  const more = useRef<HTMLButtonElement>(null)
   return (
     <div className="group/tile relative min-w-0">
       <ToggleGroupItem
         value={id}
-        className="w-full items-stretch gap-2 group-hover/tile:[&>[data-tile]]:ring-border-strong"
+        className={cn(TILE, 'group-hover/tile:[&>[data-tile]]:ring-border-strong')}
       >
         <span
           data-tile=""
           aria-hidden
-          className="relative block h-26 w-full overflow-hidden rounded-xl"
+          className="relative block h-21.5 w-full overflow-hidden rounded-code"
         >
           <MiniWindow dark={false} style={light} />
           <MiniWindow dark cut style={dark} />
         </span>
-        <span className="flex min-w-0 items-center gap-2 pl-0.5 text-small text-primary">
-          <RadioDot />
-          <span className="truncate">{name}</span>
+        <TileLabel name={name}>
           {issues.length > 0 && <ContrastWarning issues={issues} />}
-          <span className="ml-auto shrink-0 pr-0.5 text-xs text-tertiary">
+          <span className="ml-auto shrink-0 pl-2 text-xs text-tertiary">
             {t(`appearance.theme.${source}`)}
           </span>
-        </span>
+        </TileLabel>
       </ToggleGroupItem>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
             <Button
+              ref={more}
               variant="outline"
               size="icon-xs"
               aria-label={t('appearance.theme.more', { name })}
@@ -245,7 +264,7 @@ function ThemeTile({
         >
           <EllipsisIcon />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="min-w-47.5">
           <DropdownMenuItem onClick={onExport}>
             <FileDownIcon />
             {t('appearance.theme.export')}
@@ -259,7 +278,7 @@ function ThemeTile({
           {onRemove && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={onRemove}>
+              <DropdownMenuItem variant="destructive" onClick={() => onRemove(more.current)}>
                 <TrashIcon />
                 {t('appearance.theme.remove')}
               </DropdownMenuItem>
@@ -286,7 +305,7 @@ export function ReplaceDialog({
   const { t } = useTranslation(['settings', 'common'])
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className={CONFIRM}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {t('appearance.theme.replaceTitle', { name: conflict?.installedName })}
@@ -353,11 +372,13 @@ function InstallTile({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="group/install flex min-w-0 flex-col items-stretch gap-2 rounded-xl text-left outline-none focus-ring"
     >
-      <span className="flex h-26 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-strong text-small text-secondary transition-colors duration-(--duration-fast) group-hover/install:bg-hover group-hover/install:text-primary">
+      <span className="grid h-21.5 w-full place-items-center rounded-code border border-dashed border-strong text-tertiary transition-colors duration-(--duration-fast) group-hover/install:bg-hover group-hover/install:text-primary">
         <PlusIcon className="size-4" />
-        {t('appearance.theme.install')}
       </span>
-      <span className="pl-0.5 text-xs text-tertiary">{t('appearance.theme.installHint')}</span>
+      <span className="flex flex-col gap-0.5 px-0.5">
+        <span className="text-ui font-medium text-primary">{t('appearance.theme.install')}</span>
+        <span className="text-xs text-tertiary">{t('appearance.theme.installHint')}</span>
+      </span>
     </button>
   )
 }

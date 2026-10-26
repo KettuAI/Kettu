@@ -17,6 +17,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { isMod } from '@renderer/lib/platform'
 import { useThemesStore } from '@renderer/stores/themes'
 import { catalogView, type CatalogAnswer } from './catalog-view'
+import { GROUP_ACTION } from './controls'
 import { MiniWindow } from './sections'
 import { previewStyle } from './theme-colors'
 import { useReason } from './theme-reason'
@@ -34,12 +35,12 @@ export function BrowseThemes() {
     <>
       <Button
         variant="quiet"
-        size="xs"
+        size="sm"
         onClick={() => {
           setOpened((count) => count + 1)
           setOpen(true)
         }}
-        className="-mr-2"
+        className={GROUP_ACTION}
       >
         {t('appearance.catalog.browse')}
       </Button>

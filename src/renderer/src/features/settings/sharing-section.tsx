@@ -1,6 +1,7 @@
 // Settings › Sharing: the Cloudflare account main publishes with, and the pages it has published.
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { CheckIcon, CircleAlertIcon, GlobeIcon, LockIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   CLOUDFLARE_ACCOUNT_ID,
@@ -11,80 +12,167 @@ import {
   type PublishedArtifact,
   type SharingResult,
 } from '@shared/sharing'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@renderer/components/ui/alert-dialog'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { toast } from '@renderer/components/ui/toast'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo } from '@renderer/lib/format'
+import { isMac, isWindows } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
+import { cn } from '@renderer/lib/utils'
+import { useSettingsStore } from '@renderer/stores/settings'
 import {
   connectSharing,
   removeSharing,
   unpublishArtifact,
   useSharingStore,
 } from '@renderer/stores/sharing'
-import { ControlError } from './controls'
+import { CONFIRM, ControlError, Masked } from './controls'
 import { RowLine, RowText } from './rows'
 
 type Failure = Extract<SharingResult, { failed: string }>
 
-/** The connected account: what Cloudflare called it, its subdomain, and Remove. */
+const LINK =
+  'rounded-sm underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring'
+
+/** The connected account: its ID, its subdomain, and Remove; the form to connect one without it. */
 export function SharingAccount() {
-  const { t } = useTranslation('settings')
+  const { t } = useTranslation(['settings', 'common', 'artifacts'])
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
+  const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
+  const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
+  // The Remove button goes with the account, so the form's first field takes the focus.
+  const [removed, setRemoved] = useState(false)
   const remove = async (): Promise<void> => {
     setBusy(true)
     setFailure(null)
     const result = await removeSharing()
     setBusy(false)
-    if ('failed' in result) setFailure(result)
+    if ('failed' in result) {
+      setFailure(result)
+      return
+    }
+    setRemoved(true)
+    toast(t('sharing.account.removed'))
   }
-  if (!account) return <ConnectForm />
+  if (!account) return <ConnectForm focus={removed} />
   return (
-    <div className="flex flex-col gap-2 py-3">
+    <div className="pl-1">
       <RowLine
         text={
           <RowText
             name={t('sharing.account.name')}
             description={
               <>
-                <span className="font-mono text-meta">{account.accountId}</span>
-                {` · ${account.subdomain}.workers.dev`}
+                {/* The ID gives way first, so the subdomain stays whole. */}
+                <span className="flex min-w-0 whitespace-nowrap">
+                  <span className="min-w-0 truncate" title={hidden ? undefined : account.accountId}>
+                    <Masked>{account.accountId}</Masked>
+                  </span>
+                  <span className="whitespace-pre">{' · '}</span>
+                  <span dir="ltr" className="shrink-0 font-mono">
+                    {account.subdomain}.workers.dev
+                  </span>
+                </span>
+                {account.plainText && (
+                  <span className="mt-1 block">{t('sharing.account.plainText')}</span>
+                )}
               </>
             }
           />
         }
       >
-        <Badge variant="success">{t('sharing.account.connected')}</Badge>
-        <Button variant="outline" size="compact" disabled={busy} onClick={() => void remove()}>
+        {failure && (
+          <ControlError
+            error={t(`artifacts:share.failures.${failure.failed}`, {
+              count: CLOUDFLARE_FREE_WORKERS,
+            })}
+          />
+        )}
+        <Badge variant="success">
+          <CheckIcon />
+          {t('sharing.account.connected')}
+        </Badge>
+        <Button
+          variant="quiet"
+          size="sm"
+          className="text-secondary"
+          disabled={busy}
+          onClick={() => setAsking(true)}
+        >
           {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
           {t('sharing.account.remove')}
         </Button>
       </RowLine>
-      {failure && <FailureText failure={failure} />}
-      {account.plainText && (
-        <p className="text-xs text-secondary">{t('sharing.account.plainText')}</p>
-      )}
+      <AlertDialog open={asking} onOpenChange={setAsking}>
+        <AlertDialogContent className={CONFIRM}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('sharing.account.removeTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('sharing.account.removeBody')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setAsking(false)
+                void remove()
+              }}
+            >
+              {t('sharing.account.remove')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
 
 /** The account ID and token, checked with Cloudflare before they are kept. */
-function ConnectForm() {
+function ConnectForm({ focus }: { focus: boolean }) {
   const { t } = useTranslation(['settings', 'artifacts'])
   const [accountId, setAccountId] = useState('')
   const [token, setToken] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
+  const [badId, setBadId] = useState(false)
+  const idField = useRef<HTMLInputElement>(null)
+  const hintId = useId()
   const id = accountId.trim().toLowerCase()
   const secret = token.trim()
-  const valid = CLOUDFLARE_ACCOUNT_ID.test(id) && CLOUDFLARE_TOKEN.test(secret)
+  const refused = failure?.failed === 'invalid_token'
+
+  useEffect(() => {
+    if (focus) idField.current?.focus()
+  }, [focus])
 
   const connect = async (event: FormEvent): Promise<void> => {
     event.preventDefault()
-    if (!valid || busy) return
+    if (!id || !secret || busy) return
+    if (!CLOUDFLARE_ACCOUNT_ID.test(id)) {
+      setBadId(true)
+      idField.current?.focus()
+      return
+    }
+    // Cloudflare would refuse a token no header can carry, so it is refused here the same way.
+    if (!CLOUDFLARE_TOKEN.test(secret)) {
+      setFailure({ failed: 'invalid_token', message: null })
+      return
+    }
     setBusy(true)
     setFailure(null)
     const result = await connectSharing(id, secret)
@@ -93,97 +181,113 @@ function ConnectForm() {
   }
 
   return (
-    <form className="flex flex-col gap-3 py-3" onSubmit={(event) => void connect(event)}>
-      <p className="text-xs text-secondary">{t('sharing.account.description')}</p>
-      <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2">
-        <label htmlFor="sharing-account" className="text-xs text-tertiary">
-          {t('sharing.account.id')}
-        </label>
-        <Input
-          id="sharing-account"
-          value={accountId}
-          placeholder={t('sharing.account.idPlaceholder')}
-          autoComplete="off"
-          spellCheck={false}
-          className="h-control font-mono text-xs"
-          onChange={(event) => {
-            setAccountId(event.target.value)
-            setFailure(null)
-          }}
-        />
-        <label htmlFor="sharing-token" className="text-xs text-tertiary">
-          {t('sharing.account.token')}
-        </label>
-        <Input
-          id="sharing-token"
-          type="password"
-          value={token}
-          autoComplete="off"
-          spellCheck={false}
-          className="h-control font-mono text-xs"
-          onChange={(event) => {
-            setToken(event.target.value)
-            setFailure(null)
-          }}
-        />
+    <form className="pl-1" onSubmit={(event) => void connect(event)}>
+      <div className="flex flex-col gap-3 py-2.5">
+        <RowText name={t('sharing.account.name')} description={t('sharing.account.description')} />
+        <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary">
+            {t('sharing.account.id')}
+            <Input
+              ref={idField}
+              value={accountId}
+              placeholder={t('sharing.account.idPlaceholder')}
+              autoComplete="off"
+              spellCheck={false}
+              disabled={busy}
+              aria-invalid={badId || undefined}
+              aria-describedby={hintId}
+              className="h-8 font-mono text-code md:text-code"
+              onChange={(event) => {
+                setAccountId(event.target.value)
+                setBadId(false)
+                setFailure(null)
+              }}
+              onBlur={() => setBadId(id !== '' && !CLOUDFLARE_ACCOUNT_ID.test(id))}
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary">
+            {t('sharing.account.token')}
+            <Input
+              type="password"
+              value={token}
+              placeholder={t('sharing.account.tokenPlaceholder')}
+              autoComplete="off"
+              spellCheck={false}
+              disabled={busy}
+              aria-invalid={refused || undefined}
+              className="h-8 text-small md:text-small"
+              onChange={(event) => {
+                setToken(event.target.value)
+                setFailure(null)
+              }}
+            />
+          </label>
+          <span id={hintId} className={cn('text-xs', badId ? 'text-danger' : 'text-tertiary')}>
+            {t(badId ? 'sharing.account.idInvalid' : 'sharing.account.idHint')}
+          </span>
+          <a
+            href={CLOUDFLARE_TOKENS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className={cn('justify-self-start text-xs text-secondary', LINK)}
+          >
+            {t('sharing.account.createToken')}
+          </a>
+        </div>
+        {failure && <FailureBox failure={failure} />}
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <a
-          href={CLOUDFLARE_TOKENS_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="text-xs text-link hover:text-link-hover"
+      <div className="relative flex min-h-13 items-center gap-4 before:absolute before:top-0 before:-right-3 before:left-0 before:h-(--hairline) before:bg-border-soft">
+        {(isMac || isWindows) && (
+          <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary">
+            <LockIcon className="size-3.5 shrink-0" />
+            {t('sharing.account.kept')}
+          </span>
+        )}
+        <Button
+          type="submit"
+          size="sm"
+          disabled={!id || !secret || busy}
+          className="ml-auto min-w-26"
         >
-          {t('sharing.account.createToken')}
-        </a>
-        <Button type="submit" size="compact" disabled={!valid || busy}>
           {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
-          {t('sharing.account.connect')}
+          {t(busy ? 'sharing.account.checking' : 'sharing.account.connect')}
         </Button>
       </div>
-      {failure && <FailureText failure={failure} />}
     </form>
   )
 }
 
 /** What a failed connect says, and where to fix it. */
-function FailureText({ failure }: { failure: Failure }) {
-  const { t } = useTranslation('settings')
-  const { t: ta } = useTranslation('artifacts')
+function FailureBox({ failure }: { failure: Failure }) {
+  const { t } = useTranslation(['settings', 'artifacts'])
   return (
-    <div className="flex flex-col items-start gap-1.5" role="alert">
-      <p className="text-xs text-danger">
-        {ta(`share.failures.${failure.failed}`, { count: CLOUDFLARE_FREE_WORKERS })}
-      </p>
-      {failure.failed === 'no_subdomain' && (
-        <a
-          href={CLOUDFLARE_DASHBOARD_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="text-xs text-link hover:text-link-hover"
-        >
-          {t('sharing.account.dashboard')}
-        </a>
-      )}
-      {failure.failed === 'invalid_token' && (
-        <a
-          href={CLOUDFLARE_TOKENS_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="text-xs text-link hover:text-link-hover"
-        >
-          {t('sharing.account.createToken')}
-        </a>
-      )}
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-code bg-danger-tint px-3 py-2.5 text-command text-danger"
+    >
+      <CircleAlertIcon className="mt-0.75 size-3.5 shrink-0" />
+      <span className="min-w-0">
+        {failure.failed === 'invalid_token'
+          ? t('sharing.account.refused')
+          : t(`artifacts:share.failures.${failure.failed}`, { count: CLOUDFLARE_FREE_WORKERS })}
+        {failure.failed === 'no_subdomain' && (
+          <>
+            {' '}
+            <a href={CLOUDFLARE_DASHBOARD_URL} target="_blank" rel="noreferrer" className={LINK}>
+              {t('sharing.account.dashboard')}
+            </a>
+          </>
+        )}
+      </span>
     </div>
   )
 }
 
-/** One published page: its URL, the version it shows, and Unpublish. */
-export function PublishedRow({ page }: { page: PublishedArtifact }) {
-  const { t } = useTranslation('settings')
-  const { t: ta } = useTranslation('artifacts')
+/** One published page: its artifact, its URL, the version it shows, and Unpublish. */
+export function PublishedRow({ page, title }: { page: PublishedArtifact; title?: string }) {
+  const { t } = useTranslation(['settings', 'artifacts', 'common'])
   const now = useNow()
+  const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const unpublish = async (): Promise<void> => {
@@ -192,37 +296,97 @@ export function PublishedRow({ page }: { page: PublishedArtifact }) {
     const result = await unpublishArtifact(page.id)
     setBusy(false)
     if ('failed' in result) setFailure(result)
+    else toast(t('sharing.published.unpublished'))
   }
+  const link = (
+    <a
+      href={page.url}
+      target="_blank"
+      rel="noreferrer"
+      dir="ltr"
+      className={cn('block truncate font-mono text-xs text-secondary hover:text-primary', LINK)}
+    >
+      {page.url}
+    </a>
+  )
+  const button = (
+    <Button
+      variant="quiet"
+      size="sm"
+      className="text-secondary"
+      disabled={busy || page.otherAccount}
+      onClick={() => setAsking(true)}
+    >
+      {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+      {t('sharing.published.unpublish')}
+    </Button>
+  )
   return (
-    <div className="flex flex-col gap-1.5 py-3">
+    <div className="pl-1">
       <RowLine
         text={
-          <RowText
-            name={
-              <span dir="ltr" className="block truncate font-mono text-xs">
-                {page.url}
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-subtle text-icon">
+              <GlobeIcon className="size-3.5" />
+            </span>
+            <div className="flex min-w-0 flex-col">
+              {title ? (
+                <>
+                  <span className="truncate text-ui font-medium">{title}</span>
+                  <span className="mt-0.5 flex leading-4">{link}</span>
+                </>
+              ) : (
+                <span className="flex">{link}</span>
+              )}
+              <span className="text-xs leading-4 text-secondary">
+                {t('sharing.published.version', {
+                  version: page.version,
+                  ago: longAgo(page.publishedAt, now),
+                })}
               </span>
-            }
-            description={t('sharing.published.version', {
-              version: page.version,
-              ago: longAgo(page.publishedAt, now),
-            })}
-          />
+            </div>
+          </div>
         }
       >
         {failure && (
           <ControlError
-            error={ta(`share.failures.${failure.failed}`, { count: CLOUDFLARE_FREE_WORKERS })}
+            error={t(`artifacts:share.failures.${failure.failed}`, {
+              count: CLOUDFLARE_FREE_WORKERS,
+            })}
           />
         )}
-        <Button variant="outline" size="compact" disabled={busy} onClick={() => void unpublish()}>
-          {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
-          {t('sharing.published.unpublish')}
-        </Button>
+        {page.otherAccount ? (
+          <Tooltip>
+            {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
+            <TooltipTrigger render={<span className="flex" />}>{button}</TooltipTrigger>
+            <TooltipContent>{t('sharing.published.otherAccount')}</TooltipContent>
+          </Tooltip>
+        ) : (
+          button
+        )}
       </RowLine>
-      {page.otherAccount && (
-        <p className="text-xs text-secondary">{t('sharing.published.otherAccount')}</p>
-      )}
+      <AlertDialog open={asking} onOpenChange={setAsking}>
+        <AlertDialogContent className={CONFIRM}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('sharing.published.unpublishTitle', { title: title ?? page.url })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{t('artifacts:share.unpublishConfirm')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setAsking(false)
+                void unpublish()
+              }}
+            >
+              {t('sharing.published.unpublish')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

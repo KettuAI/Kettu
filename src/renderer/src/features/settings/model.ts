@@ -15,6 +15,8 @@ export interface GroupDef {
   /** Small actions at the label's end, such as Send a test notification. */
   actions?: ReactNode
   tone?: 'danger'
+  /** Rows that draw on the page itself rather than on a card, as the theme tiles do. */
+  plain?: boolean
 }
 
 /** One row of a settings section: its name and description are what search matches. */
@@ -22,6 +24,8 @@ export interface RowDef {
   id: string
   name: string
   description?: string
+  /** The description as the row shows it, when it marks up more than text, such as keys. */
+  rich?: ReactNode
   /** Extra words search should find, such as "dark" for the theme row. */
   keywords?: string
   /** The name in English, so a search in English finds the row in any language. */
@@ -33,9 +37,15 @@ export interface RowDef {
    * first line and puts what it reveals underneath; `custom` renders only the control.
    */
   layout?: 'inline' | 'block' | 'custom'
+  /** A row of a name and a short control, such as a shortcut's keys, which sits lower. */
+  compact?: boolean
   render: (text: ReactNode) => ReactNode
   /** Where choosing the row in search results goes, when not to the row on its page. */
   open?: () => void
+  /** What a search result shows at its end in place of the description, such as a shortcut's keys. */
+  aside?: () => ReactNode
+  /** Found by search but drawn by the page itself, as the environment line under the agents is. */
+  searchOnly?: boolean
 }
 
 export interface SectionDef {
