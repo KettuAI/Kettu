@@ -528,6 +528,10 @@
       "name": "License",
       "keywords": "apache licence"
     },
+    "notices": {
+      "name": "Third-party notices",
+      "keywords": "licenses open source acknowledgements"
+    },
     "groups": {
       "updates": "Updates",
       "runtime": "Runtime",

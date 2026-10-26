@@ -683,6 +683,21 @@ export function useAboutSection(): SectionDef {
         ),
       },
       {
+        id: 'notices',
+        name: t('about.notices.name'),
+        english: en('about.notices.name'),
+        keywords: t('about.notices.keywords'),
+        group: links,
+        layout: 'custom',
+        render: () => (
+          <LinkRow
+            name={t('about.notices.name')}
+            onOpen={() => window.overbench.shell.openNotices()}
+            detail="third-party-notices.txt"
+          />
+        ),
+      },
+      {
         id: 'issues',
         name: t('about.issues.name'),
         english: en('about.issues.name'),

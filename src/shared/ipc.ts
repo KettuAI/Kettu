@@ -131,6 +131,7 @@ export interface IpcInvokeContract {
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
+  'shell:open-notices': { args: []; result: void }
   // A media URL main still grants, never a path; copy and save also take the bytes the thread
   // carries. `media:save-as` is false when the save dialog was cancelled.
   'media:copy-image': { args: [source: string | CarriedMedia]; result: void }
@@ -323,6 +324,8 @@ export interface OverbenchApi {
     showDataFolder(): Promise<void>
     /** Shows a file or folder in the system file manager; the path must be absolute. */
     showItem(path: string): Promise<void>
+    /** Opens third-party-notices.txt in the system's app for text files. */
+    openNotices(): Promise<void>
   }
   /** Actions on a file served on the media scheme, by its URL, or on bytes the thread carries. */
   media: {

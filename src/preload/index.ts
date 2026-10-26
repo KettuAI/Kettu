@@ -149,6 +149,7 @@ const api: OverbenchApi = {
   shell: {
     showDataFolder: () => invoke('shell:show-data-folder'),
     showItem: (path) => invoke('shell:show-item', path),
+    openNotices: () => invoke('shell:open-notices'),
   },
   media: {
     copyImage: (source) => invoke('media:copy-image', source),

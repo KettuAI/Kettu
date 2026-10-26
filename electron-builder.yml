@@ -12,6 +12,11 @@ files:
   - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
   - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
   - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+  - '!out/third-party-notices.txt'
+# Outside app.asar, where the system's app for text files can open it.
+extraResources:
+  - from: out/third-party-notices.txt
+    to: third-party-notices.txt
 # The terminal host loads pty.node and starts spawn-helper from the real file system.
 asarUnpack:
   - node_modules/node-pty/**
@@ -47,6 +52,11 @@ mac:
   identity: '-'
   hardenedRuntime: false
   notarize: false
+  # Chromium's licenses, which the Windows and Linux builds ship beside the app from Electron's own
+  # files but the macOS app bundle leaves out.
+  extraResources:
+    - from: node_modules/electron/dist/LICENSES.chromium.html
+      to: LICENSES.chromium.html
   files:
     - '!node_modules/node-pty/prebuilds/win32-*{,/**/*}'
 dmg:

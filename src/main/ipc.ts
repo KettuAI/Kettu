@@ -1,4 +1,4 @@
-import { isAbsolute } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -192,6 +192,18 @@ function absolutePath(value: unknown): string {
   return value
 }
 
+/**
+ * `shell:open-notices`: third-party-notices.txt from the resources folder, or the last build's in
+ * a development run, in the system's app for text files.
+ */
+export async function openNotices(): Promise<void> {
+  const file = app.isPackaged
+    ? join(process.resourcesPath, 'third-party-notices.txt')
+    : join(app.getAppPath(), 'out', 'third-party-notices.txt')
+  const error = await shell.openPath(file)
+  if (error) throw new Error(error)
+}
+
 /** The `text/uri-list` the clipboard holds, as the file manager writes copied files. */
 async function clipboardUriList(): Promise<string | null> {
   const [item] = await clipboard.read()
@@ -377,6 +389,8 @@ export function registerIpcHandlers({
   handle('shell:show-item', 1, (_, target) => {
     shell.showItemInFolder(absolutePath(target))
   })
+
+  handle('shell:open-notices', 0, () => openNotices())
 
   handle('media:copy-image', 1, (_, source) => copyImage(source, mediaGrants))
   handle('media:save-as', 1, ({ window }, source) => saveMediaAs(window, source, mediaGrants))
