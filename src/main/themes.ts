@@ -445,19 +445,19 @@ const WHITE: Rgba = { r: 1, g: 1, b: 1, a: 1 }
 const BLACK: Rgba = { r: 0, g: 0, b: 0, a: 1 }
 
 /**
- * A variant's window colors in hex, which Electron takes: its `bg-app` laid over white in light
- * and black in dark, and its `text-primary` over that; `fallback` for what it leaves out.
+ * A variant's window colors in hex, which Electron takes: its desk, `bg-sidebar`, laid over white
+ * in light and black in dark, and its `text-primary` over that; `fallback` for what it leaves out.
  */
 export function windowColors(
   colors: ThemeColors,
   mode: ThemeMode,
   fallback: WindowColors,
 ): WindowColors {
-  const color = (token: 'bg-app' | 'text-primary') => {
+  const color = (token: 'bg-sidebar' | 'text-primary') => {
     const value = colors[token]
     return value === undefined ? null : parseColor(value)
   }
-  const bg = color('bg-app')
+  const bg = color('bg-sidebar')
   const background = bg ? toHex(bg, mode === 'light' ? WHITE : BLACK) : fallback.background
   const fg = color('text-primary')
   return { background, symbol: fg ? toHex(fg, parseColor(background)!) : fallback.symbol }

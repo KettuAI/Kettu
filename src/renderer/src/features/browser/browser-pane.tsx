@@ -19,6 +19,7 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { PanelButton } from '@renderer/features/shell/panel-button'
+import { SHEET } from '@renderer/features/shell/sheet'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -41,7 +42,7 @@ export function BrowserPane({
   const state = useBrowserStore((s) => (sessionId ? s.bySession[sessionId] : undefined))
   const still = useBrowserStore((s) => (sessionId ? s.stills[sessionId] : undefined))
   const overlayOpen = useOverlayOpen()
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   const page = useRef<HTMLDivElement>(null)
 
@@ -132,16 +133,16 @@ export function BrowserPane({
   return (
     <div
       className={cn(
-        'flex h-full min-h-0 animate-in flex-col bg-sidebar fade-in animation-duration-(--duration-fast)',
+        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
+        SHEET,
         maximized && 'absolute inset-0 z-10',
       )}
       data-browser-panel=""
     >
       <div
         className={cn(
-          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2',
-          cornered && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
-          !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+8px)]',
+          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+          cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}

@@ -138,6 +138,11 @@
   --ansi-bright-magenta: #8660a6;
   --ansi-bright-cyan: #2f8590;
   --ansi-bright-white: #a9a69d;
+
+  /* The sheets laid on the desk: the thread, the side panes and the pages. */
+  --elevation-sheet:
+    0 0 0 1px rgb(28 27 24 / 7%), 0 1px 2px rgb(28 27 24 / 4%),
+    0 10px 30px -14px rgb(28 27 24 / 14%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -246,6 +251,10 @@
     --ansi-bright-magenta: #cbb0e2;
     --ansi-bright-cyan: #97d6d6;
     --ansi-bright-white: #f4f3ee;
+
+    --elevation-sheet:
+      0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
+      0 10px 30px -12px rgb(0 0 0 / 60%);
   }
 }
 
@@ -354,6 +363,10 @@
   --ansi-bright-magenta: #cbb0e2;
   --ansi-bright-cyan: #97d6d6;
   --ansi-bright-white: #f4f3ee;
+
+  --elevation-sheet:
+    0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
+    0 10px 30px -12px rgb(0 0 0 / 60%);
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
@@ -427,7 +440,7 @@
     transparent 2px 4px
   );
 
-  --terminal-background: var(--bg-sidebar);
+  --terminal-background: var(--bg-app);
   --terminal-foreground: var(--text-primary);
   --terminal-cursor: var(--text-primary);
   --terminal-selection: var(--selection);

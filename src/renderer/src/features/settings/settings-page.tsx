@@ -5,6 +5,7 @@ import { SearchField } from '@renderer/components/search-field'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@renderer/components/ui/empty'
+import { DESK, ON_DESK, SHEET } from '@renderer/features/shell/sheet'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -125,10 +126,24 @@ export default function SettingsPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // The desk drags the window; the column and the page's sheet on it opt out.
   return (
-    <div className="flex h-full animate-in bg-background fade-in animation-duration-(--duration-fast)">
-      <aside className="flex w-[244px] shrink-0 flex-col bg-sidebar">
-        <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2.5 pl-3">
+    <div
+      className={cn(
+        'flex h-full animate-in bg-sidebar fade-in animation-duration-(--duration-fast)',
+        DESK,
+      )}
+    >
+      <aside className={cn('flex w-[244px] shrink-0 flex-col', ON_DESK)}>
+        {/* As the sidebar's header: level with the top bar on macOS, in the band elsewhere. */}
+        <div
+          className={cn(
+            'app-region-drag flex shrink-0 items-center gap-1 pr-2.5 pl-3',
+            isMac
+              ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)'
+              : 'h-(--title-bar)',
+          )}
+        >
           {isMac && <span aria-hidden className="w-[calc(14px+var(--traffic-lights))] shrink-0" />}
           <BackButton />
         </div>
@@ -168,8 +183,15 @@ export default function SettingsPage() {
         <AppFooter />
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <div className="app-region-drag h-top-bar shrink-0" />
+      <main
+        className={cn(
+          'my-(--sheet-gap) mr-(--sheet-gap) flex min-w-0 flex-1 flex-col',
+          !isMac && 'mt-[calc(var(--title-bar)+var(--sheet-gap))]',
+          SHEET,
+        )}
+      >
+        {/* A drag region; with the desk above the sheet it spans a top bar's height. */}
+        <div className="app-region-drag h-[calc(var(--top-bar)-var(--sheet-gap))] shrink-0" />
         <div
           ref={scroller}
           className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]"

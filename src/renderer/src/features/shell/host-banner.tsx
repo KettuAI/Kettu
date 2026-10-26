@@ -7,11 +7,14 @@ import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { fadeExit } from '@renderer/lib/motion'
+import { isMac } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { useConnectionStore } from '@renderer/stores/connection'
 
 /**
- * The agent host's state while it is away: a small status pill centred over the top bar. It
- * floats instead of pushing the window down, so the macOS traffic lights never sit on it.
+ * The agent host's state while it is away: a small status pill centred over the top bar, or on
+ * Windows and Linux in the band above it. It floats instead of pushing the window down, so the
+ * macOS traffic lights never sit on it.
  */
 export function HostBanner() {
   const { t } = useTranslation('shell')
@@ -36,7 +39,14 @@ export function HostBanner() {
   }
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[7px] z-50 flex justify-center">
+    <div
+      className={cn(
+        'pointer-events-none absolute inset-x-0 z-50 flex justify-center',
+        isMac
+          ? 'top-[calc(var(--sheet-gap)+(var(--top-bar)-26px)/2)]'
+          : 'top-[calc((var(--title-bar)-26px)/2)]',
+      )}
+    >
       <AnimatePresence initial={false}>
         {state !== 'connected' && (
           <motion.div

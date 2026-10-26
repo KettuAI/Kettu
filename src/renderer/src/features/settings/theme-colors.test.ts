@@ -25,7 +25,7 @@ describe('the built-in colors', () => {
     // Tokens the dark block leaves alone, and roles, which point at other tokens.
     expect(BUILTIN_COLORS.dark['viewer-scrim']).toBe('oklch(0.14 0.004 85 / 92%)')
     expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#262521')
-    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#efede6')
+    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#fdfcf9')
   })
 
   it('cover every color token of tokens.css, or keep it out on purpose', () => {

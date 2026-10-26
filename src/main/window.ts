@@ -10,11 +10,12 @@ import type { StartMode } from './login-item'
 import { isRendererUrl, loadRenderer } from './renderer'
 import { windowColors, type WindowColors } from './themes'
 import { parseWindowState, placeWindow, type SavedWindowState } from './window-bounds'
+import { titleBarHeight, trafficLightPosition } from './window-controls'
 
 const log = createLogger('window')
 
-// Must match --bg-app in the renderer's tokens.css, or the window flashes on load.
-const BACKGROUND_COLOR = { light: '#fdfcf9', dark: '#1c1b18' }
+// The desk: must match --bg-sidebar in the renderer's tokens.css, or the window flashes on load.
+const BACKGROUND_COLOR = { light: '#efede6', dark: '#121110' }
 
 // The symbols of the Windows and Linux window controls: --text-primary of each theme.
 const SYMBOL_COLOR = { light: '#1c1b18', dark: '#eceae3' }
@@ -22,9 +23,6 @@ const SYMBOL_COLOR = { light: '#1c1b18', dark: '#eceae3' }
 // The chosen theme, whose colors replace the two above; null for the built-in theme.
 let chosen: Theme | null = null
 
-const TITLE_BAR_HEIGHT = 40
-// The traffic lights' height; at 100% they sit at { x: 16, y: 14 }, centred in the top bar.
-const TRAFFIC_LIGHTS_HEIGHT = 12
 const DEFAULT_SIZE = { width: 1280, height: 820 }
 const MIN_SIZE = { width: 960, height: 600 }
 
@@ -47,19 +45,7 @@ export function backgroundColor(): string {
 
 function titleBarOverlay(): { color: string; symbolColor: string; height: number } {
   const { background, symbol } = colors()
-  return { color: background, symbolColor: symbol, height: Math.round(TITLE_BAR_HEIGHT * zoom) }
-}
-
-/**
- * The page zoom scales the top bar but not the window controls, so the traffic lights move to
- * stay centred in it and the overlay takes its height. The renderer leaves the traffic lights
- * their unzoomed width (--traffic-lights).
- */
-function trafficLightPosition(): { x: number; y: number } {
-  return {
-    x: Math.round(16 * zoom),
-    y: Math.round((TITLE_BAR_HEIGHT * zoom - TRAFFIC_LIGHTS_HEIGHT) / 2),
-  }
+  return { color: background, symbolColor: symbol, height: titleBarHeight(zoom) }
 }
 
 /** Zooms every window and moves its window controls with the top bar. */
@@ -69,7 +55,7 @@ export function applyZoom(factor: ZoomLevel): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (window.isDestroyed()) continue
     window.webContents.setZoomFactor(zoom)
-    if (process.platform === 'darwin') window.setWindowButtonPosition(trafficLightPosition())
+    if (process.platform === 'darwin') window.setWindowButtonPosition(trafficLightPosition(zoom))
     else window.setTitleBarOverlay(titleBarOverlay())
   }
 }
@@ -174,7 +160,7 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
     ...(icon ? { icon } : {}),
     titleBarStyle: 'hidden',
     ...(isMac
-      ? { trafficLightPosition: trafficLightPosition() }
+      ? { trafficLightPosition: trafficLightPosition(zoom) }
       : { titleBarOverlay: titleBarOverlay() }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

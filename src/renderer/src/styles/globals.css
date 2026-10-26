@@ -199,6 +199,7 @@
   --shadow-attention: var(--attention-ring-shadow);
   --shadow-segment: var(--segment-ring);
   --shadow-thumb: var(--thumb-shadow);
+  --shadow-sheet: var(--elevation-sheet);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);
@@ -253,7 +254,12 @@
   --card-header: 36px;
   --composer-min: 56px;
   --icon-size: 20px;
-  --top-bar: 40px;
+  --top-bar: 48px;
+  /* The desk around a sheet, and between two sheets. */
+  --sheet-gap: 8px;
+  /* Windows and Linux: the band of desk across the window's top, where the window controls sit;
+     main's title bar overlay has the same height. */
+  --title-bar: 40px;
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
   --zoom: 1;
   --traffic-lights: calc(52px / var(--zoom));
@@ -306,10 +312,12 @@
     text-rendering: optimizeLegibility;
     scrollbar-color: var(--scrollbar-thumb) transparent;
     scrollbar-width: thin;
+    /* The window is the desk the sheets lie on. */
+    background-color: var(--bg-sidebar);
   }
   /* Interface text is --ui-size; the root stays 16 px so Tailwind's rem scale is unchanged. */
   body {
-    @apply bg-background text-foreground;
+    @apply bg-sidebar text-foreground;
     font-size: var(--ui-size);
     line-height: 1.4;
     font-weight: var(--weight-normal);
@@ -613,6 +621,9 @@
 /* A sidebar toggle in the workbench (app.tsx); resizing by drag follows the pointer at once. */
 [data-slot='resizable-panel-group'][data-sliding] > [data-panel] {
   transition: flex-grow var(--duration-slow) var(--ease-out-quart);
+  /* The main panel lets its sheets' edges show past its own; sliding, it cuts off the content
+     held against its right edge, as the sidebar's panel does. */
+  clip-path: inset(0);
 }
 
 /* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not in a layer, so they win over the utility

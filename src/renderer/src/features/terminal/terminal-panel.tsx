@@ -30,6 +30,7 @@ import {
 } from '@renderer/components/ui/context-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PanelButton } from '@renderer/features/shell/panel-button'
+import { SHEET } from '@renderer/features/shell/sheet'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -73,8 +74,8 @@ export function TerminalPanel({
   maximized: boolean
 }) {
   const { t } = useTranslation(['terminal', 'common'])
-  // Maximized with the sidebar collapsed, the header is the window's top left corner.
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized
+  // On macOS, maximized with the sidebar collapsed, the header is the window's top left corner.
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
   const list = useTerminalsStore(
     useShallow((s) => terminalsOf(s.byId, projectPath, s.order[projectPath])),
   )
@@ -109,7 +110,8 @@ export function TerminalPanel({
   return (
     <div
       className={cn(
-        'flex h-full min-h-0 animate-in flex-col bg-sidebar fade-in animation-duration-(--duration-fast)',
+        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
+        SHEET,
         // Maximized, it leaves its slot and covers the whole main area.
         maximized && 'absolute inset-0 z-10',
       )}
@@ -119,10 +121,8 @@ export function TerminalPanel({
           buttons opt out. */}
       <div
         className={cn(
-          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2',
-          cornered && (isMac ? 'pl-[calc(32px+var(--traffic-lights))]' : 'pl-2'),
-          // The panel reaches the window's right edge, where Windows and Linux put the controls.
-          !isMac && 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+8px)]',
+          'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-2 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+          cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
         {cornered && <SidebarToggle className="mr-1" />}

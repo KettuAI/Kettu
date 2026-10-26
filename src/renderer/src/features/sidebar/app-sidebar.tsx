@@ -107,8 +107,19 @@ export function AppSidebar() {
   const importSessions = (project: Project) => setImporting({ project, open: true })
 
   return (
-    <Sidebar collapsible="none" role="navigation" className="w-full" aria-label={t('nav.label')}>
-      <div className="app-region-drag flex h-top-bar shrink-0 items-center gap-2 pr-2.5 pl-4">
+    <Sidebar
+      collapsible="none"
+      role="navigation"
+      className="w-full bg-transparent"
+      aria-label={t('nav.label')}
+    >
+      {/* On macOS level with the top bar, under the gap above the sheets; elsewhere in the band. */}
+      <div
+        className={cn(
+          'app-region-drag flex shrink-0 items-center gap-2 pr-2.5 pl-4',
+          isMac ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)' : 'h-(--title-bar)',
+        )}
+      >
         {isMac && <span aria-hidden className="w-(--traffic-lights)" />}
         <span className="flex-1" />
         <SidebarToggle />

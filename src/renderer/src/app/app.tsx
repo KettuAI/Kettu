@@ -11,8 +11,11 @@ import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
 import { MainArea } from '@renderer/features/shell/main-area'
+import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
+import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
+import { isMac } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
@@ -161,16 +164,29 @@ function Workbench() {
           <AppSidebar />
         </div>
       </ResizablePanel>
-      {/* The sidebar's edge, as the reference's soft hairline. Collapsed, the handle takes no
-          width, so nothing shows at the window's edge, and leaves the tab order. */}
+      {/* On the main sheet's edge, which draws the line between the two. Collapsed, the handle
+          takes no width and leaves the tab order. */}
       <ResizableHandle
         withHandle={!collapsed}
         disabled={collapsed}
-        className={cn('bg-border-soft', collapsed && 'pointer-events-none w-0')}
+        className={cn(collapsed && 'pointer-events-none w-0')}
         onPointerDown={() => sliding.current && endSlide()}
       />
-      <ResizablePanel id="main" minSize="560px" className={cn(SLIDING_PANEL, 'bg-background')}>
-        <main ref={mainContent} className={PANEL_CONTENT}>
+      <ResizablePanel id="main" minSize="560px" className={SLIDING_PANEL} style={SHEET_PANEL}>
+        {/* The desk around the main area's sheets, which drags the window; its left side only
+            while the sidebar is collapsed. On Windows and Linux the band above them holds the
+            window controls. */}
+        <main
+          ref={mainContent}
+          className={cn(
+            PANEL_CONTENT,
+            DESK,
+            'py-(--sheet-gap) pr-(--sheet-gap)',
+            collapsed && 'pl-(--sheet-gap)',
+            !isMac && 'pt-[calc(var(--title-bar)+var(--sheet-gap))]',
+          )}
+        >
+          <TitleBand />
           <MainArea />
         </main>
       </ResizablePanel>
