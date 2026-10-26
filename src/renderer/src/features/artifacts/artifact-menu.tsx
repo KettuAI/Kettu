@@ -17,7 +17,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { askArtifactDialog, deleteArtifact, restoreArtifact } from '@renderer/stores/artifacts'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { isPublished } from '@renderer/stores/sharing'
+import { isPublished, useSharingStore } from '@renderer/stores/sharing'
 import { openSessionWithArtifact } from '@renderer/stores/view'
 
 /** What an artifact's menu acts on. */
@@ -50,6 +50,10 @@ export function ArtifactMenuItems({
   const { t } = useTranslation('artifacts')
   const session = useSessionsStore((s) =>
     target.sessionId === NO_SESSION ? null : (s.byId[target.sessionId] ?? null),
+  )
+  // Deleting a published artifact asks first, so the link can be taken down with it.
+  const asks = useSharingStore(
+    (s) => s.status?.published.some((page) => page.id === target.id) ?? false,
   )
   const failed = (what: string) => (error: unknown) =>
     console.error(`Could not ${what} ${target.id}`, error)
@@ -145,7 +149,6 @@ export function ArtifactMenuItems({
         <DropdownMenuItem
           variant="destructive"
           onClick={() => {
-            // A published artifact asks first, so the link can be taken down with it.
             if (isPublished(target.id)) {
               askArtifactDialog({ kind: 'delete', id: target.id, title: target.title, onDeleted })
               return
@@ -154,7 +157,7 @@ export function ArtifactMenuItems({
           }}
         >
           <TrashIcon />
-          {t('menu.delete')}
+          {asks ? t('menu.deleteAsk') : t('menu.delete')}
         </DropdownMenuItem>
       </DropdownMenuGroup>
     </>

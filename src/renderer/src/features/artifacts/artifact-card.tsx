@@ -32,9 +32,21 @@ function openFromPage(id: string, history = false): void {
   openArtifact(id, { history })
 }
 
+// Pointed at, focused or with its menu open, the tray darkens a little and the page lifts; a
+// canvas's pages lift less, as they lie flatter.
+const TRAY =
+  'relative isolate block aspect-16/10 w-full overflow-hidden rounded-code bg-sidebar shadow-sunk transition-colors duration-(--duration-base) group-hover/open:bg-[color-mix(in_srgb,var(--bg-sidebar),var(--text-primary)_2.5%)] group-focus-visible/open:outline-2 group-focus-visible/open:outline-offset-2 group-focus-visible/open:outline-focus group-data-held/card:bg-[color-mix(in_srgb,var(--bg-sidebar),var(--text-primary)_2.5%)]'
+const SHEET =
+  'absolute inset-[9%] overflow-hidden rounded-xs bg-canvas shadow-(--elevation-page) transition-[translate,box-shadow] duration-(--duration-base) ease-out-quart group-hover/open:shadow-(--elevation-page-lift) group-focus-visible/open:shadow-(--elevation-page-lift) group-data-held/card:shadow-(--elevation-page-lift) motion-safe:group-hover/open:-translate-y-0.5 motion-safe:group-focus-visible/open:-translate-y-0.5 motion-safe:group-data-held/card:-translate-y-0.5 motion-safe:group-active/open:-translate-y-px motion-safe:group-active/open:duration-(--duration-instant)'
+const FRAMES =
+  'absolute inset-0 transition-[translate] duration-(--duration-base) ease-out-quart motion-safe:group-hover/open:-translate-y-[1.5px] motion-safe:group-focus-visible/open:-translate-y-[1.5px] motion-safe:group-data-held/card:-translate-y-[1.5px]'
+// What lies in Recently deleted shows faded.
+const FADED = 'opacity-72 grayscale-85'
+
 /**
- * One artifact: its thumbnail, title and caption, and its menu. On the page by default; `recent` is
- * New session's shorter card, whose caption ends with when.
+ * One artifact: a sheet lying in its tray of desk, or a canvas's pages laid out as on the canvas,
+ * with the title and caption under it, and its menu. On the page by default; `recent` is New
+ * session's card, whose caption ends with when.
  */
 export const ArtifactCard = memo(function ArtifactCard({
   artifact,
@@ -57,6 +69,7 @@ export const ArtifactCard = memo(function ArtifactCard({
   const card = useRef<HTMLDivElement>(null)
   const thumbnail = useThumbnail(artifact, useInView(card))
   const [moreOpen, setMoreOpen] = useState(false)
+  const [contextOpen, setContextOpen] = useState(false)
   const shared = useSharingStore(
     (s) => s.status?.published.some((page) => page.id === artifact.id) ?? false,
   )
@@ -64,7 +77,7 @@ export const ArtifactCard = memo(function ArtifactCard({
   // Only the page takes the focus back to the card it opened.
   const open = (history = false) =>
     recent ? openArtifact(artifact.id, { history }) : openFromPage(artifact.id, history)
-  // The short card's caption keeps its room for when; its thumbnail shows a canvas's pages.
+  // The short caption keeps its room for when; the tray shows a canvas's pages anyway.
   const caption = [
     lead,
     !recent && artifact.pages >= 2 && t('card.canvas', { count: artifact.pages }),
@@ -100,22 +113,21 @@ export const ArtifactCard = memo(function ArtifactCard({
           setMoreOpen(true)
         }
       }}
-      className="relative flex w-full flex-col overflow-hidden rounded-xl bg-surface text-left shadow-(--elevation-card) outline-none transition-[translate,box-shadow] duration-(--duration-fast) focus-ring group-hover/card:shadow-float group-hover/card:-translate-y-px motion-reduce:transition-none motion-reduce:group-hover/card:translate-y-0"
+      className="group/open flex w-full flex-col gap-2.5 text-left outline-none"
     >
-      <span
-        className={cn(
-          'relative block w-full overflow-hidden bg-subtle',
-          recent ? 'h-28' : 'aspect-16/10',
-        )}
-      >
-        <ThumbnailImage thumbnail={thumbnail} inset={recent} />
+      <span className={TRAY}>
+        <TrayContent thumbnail={thumbnail} faded={artifact.deletedAt !== null} />
         {artifact.editing.length > 0 && <EditingPill />}
       </span>
-      <span className="block py-3 pr-11 pl-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-        <span className="block truncate text-ui font-medium text-primary">{artifact.title}</span>
-        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-tertiary">
+      <span className="flex min-w-0 flex-col gap-0.5 pr-9 pl-0.5">
+        <span className="truncate text-ui font-medium text-primary">{artifact.title}</span>
+        <span className="flex min-w-0 items-center gap-1.25 text-xs text-tertiary tabular-nums">
           {shared && (
-            <GlobeIcon role="img" aria-label={t('card.shared')} className="size-3 shrink-0" />
+            <GlobeIcon
+              role="img"
+              aria-label={t('card.shared')}
+              className="size-3 shrink-0 text-success"
+            />
           )}
           <span className="truncate">
             {caption}
@@ -123,20 +135,21 @@ export const ArtifactCard = memo(function ArtifactCard({
           </span>
         </span>
       </span>
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] transition-shadow duration-(--duration-fast) group-hover/card:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)] group-has-focus-visible/card:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]"
-      />
     </button>
   )
 
   return (
-    <div ref={card} className="group/card relative min-w-0">
-      <ContextMenu>
+    <div
+      ref={card}
+      data-held={moreOpen || contextOpen || undefined}
+      className="group/card relative min-w-0"
+    >
+      <ContextMenu onOpenChange={setContextOpen}>
         <Tooltip>
           <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
           <TooltipContent className="flex-col items-start gap-0.5">
-            <span>{t('card.where', { project, session })}</span>
+            <span>{project}</span>
+            <span>{session}</span>
             <CardTime artifact={artifact} />
           </TooltipContent>
         </Tooltip>
@@ -151,7 +164,7 @@ export const ArtifactCard = memo(function ArtifactCard({
               size="icon-sm"
               tabIndex={-1}
               aria-label={t('card.more', { title: artifact.title })}
-              className="absolute right-2 bottom-4 opacity-0 transition-opacity duration-(--duration-fast) group-hover/card:opacity-100 group-has-focus-visible/card:opacity-100 data-popup-open:opacity-100"
+              className="absolute -right-1 bottom-1 opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/card:opacity-100 group-hover/card:opacity-100 data-popup-open:opacity-100"
             />
           }
         >
@@ -163,36 +176,35 @@ export const ArtifactCard = memo(function ArtifactCard({
   )
 })
 
-/**
- * `inset` fits a short card: a page 10 px in from the top and sides, cut off at the bottom so its
- * top shows; a canvas whole, at the card's height and centred, so none of its pages is cut.
- */
-function ThumbnailImage({ thumbnail, inset = false }: { thumbnail: Thumbnail; inset?: boolean }) {
+/** What lies in the tray: a page as a sheet, a canvas's pages where they lie, or why neither. */
+function TrayContent({ thumbnail, faded }: { thumbnail: Thumbnail; faded: boolean }) {
   const { t } = useTranslation('artifacts')
-  if (thumbnail.state === 'loading') return <Skeleton className="absolute inset-0 rounded-none" />
+  if (thumbnail.state === 'loading') return <Skeleton className="absolute inset-[9%] rounded-xs" />
   if (thumbnail.state === 'failed') {
     return (
-      <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-xs text-tertiary">
+      <span className="absolute inset-[9%] flex flex-col items-center justify-center gap-1.5 rounded-xs border-[1.5px] border-dashed border-strong text-xs text-tertiary">
         <ImageOffIcon className="size-3.5" />
         {t('card.noPreview')}
       </span>
     )
   }
-  const image = (
-    <>
+  const fade = 'animate-in fade-in duration-(--duration-fast)'
+  if (!thumbnail.pages) {
+    return (
+      <span className={cn(SHEET, fade, faded && FADED)}>
+        <img src={thumbnail.src} alt="" draggable={false} className="size-full object-cover" />
+      </span>
+    )
+  }
+  // The image draws the pages on a clear ground; each page takes its edge and shadow over it.
+  return (
+    <span className={cn(FRAMES, fade, faded && FADED)}>
       <img src={thumbnail.src} alt="" draggable={false} className="size-full object-cover" />
-      {/* Over the image, which would cover an inset ring; a canvas's pages have their own. */}
-      {inset && !thumbnail.pages && (
-        <span
-          aria-hidden
-          className="absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]"
-        />
-      )}
-      {thumbnail.pages?.map((page, i) => (
+      {thumbnail.pages.map((page, i) => (
         <span
           key={i}
           aria-hidden
-          className="absolute shadow-[0_0_0_var(--hairline)_var(--border-default)]"
+          className="absolute shadow-[0_0_0_var(--hairline)_var(--border-default),var(--elevation-card)]"
           style={{
             left: `${page.left * 100}%`,
             top: `${page.top * 100}%`,
@@ -201,20 +213,6 @@ function ThumbnailImage({ thumbnail, inset = false }: { thumbnail: Thumbnail; in
           }}
         />
       ))}
-    </>
-  )
-  const fade = 'absolute animate-in fade-in duration-(--duration-fast)'
-  if (!inset) return <span className={cn(fade, 'inset-0')}>{image}</span>
-  if (!thumbnail.pages) {
-    return (
-      <span className={cn(fade, 'inset-x-2.5 top-2.5 aspect-16/10 overflow-hidden rounded-t-md')}>
-        {image}
-      </span>
-    )
-  }
-  return (
-    <span className={cn(fade, 'inset-0 flex justify-center')}>
-      <span className="relative aspect-16/10 h-full shrink-0">{image}</span>
     </span>
   )
 }
@@ -223,7 +221,7 @@ function ThumbnailImage({ thumbnail, inset = false }: { thumbnail: Thumbnail; in
 function EditingPill() {
   const { t } = useTranslation('artifacts')
   return (
-    <span className="absolute top-2.5 left-2.5 flex h-6 items-center gap-1.5 rounded-full bg-surface pr-2.5 pl-2 text-xs text-secondary shadow-outline">
+    <span className="absolute top-2 left-2 z-2 flex h-5.5 items-center gap-1.5 rounded-full bg-surface pr-2 pl-1.5 text-xs font-medium text-secondary shadow-card">
       <Spinner className="size-3" />
       {t('card.editing')}
     </span>
@@ -241,7 +239,7 @@ function CardTime({ artifact }: { artifact: ArtifactSummary }) {
   const { t } = useTranslation('artifacts')
   const now = useNow()
   return (
-    <span className="opacity-70">
+    <span>
       {t('card.when', { version: artifact.version, time: longAgo(artifact.updatedAt, now) })}
     </span>
   )
@@ -250,15 +248,13 @@ function CardTime({ artifact }: { artifact: ArtifactSummary }) {
 /** A card's place before the list arrives, at its real size. */
 export function CardSkeleton({ variant = 'page' }: { variant?: 'page' | 'recent' }) {
   return (
-    <div aria-hidden className="relative overflow-hidden rounded-xl bg-surface">
-      <Skeleton
-        className={cn('w-full rounded-none', variant === 'recent' ? 'h-28' : 'aspect-16/10')}
-      />
-      <div className="flex flex-col gap-2 p-4 pl-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-        <Skeleton className="h-3 w-[58%]" />
-        <Skeleton className="h-2.5 w-[36%]" />
+    <div aria-hidden className="flex min-w-0 flex-col gap-2.5">
+      <Skeleton className="aspect-16/10 w-full rounded-code" />
+      <div className="flex flex-col pr-9 pl-0.5">
+        <Skeleton className="mt-1 h-3 w-[62%]" />
+        {/* The recent card's caption, a project and a time, runs longer than a version. */}
+        <Skeleton className={cn('mt-1.5 h-2.5', variant === 'recent' ? 'w-[48%]' : 'w-[34%]')} />
       </div>
-      <span className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-card" />
     </div>
   )
 }

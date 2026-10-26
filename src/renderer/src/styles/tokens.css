@@ -143,6 +143,13 @@
   --elevation-sheet:
     0 0 0 1px rgb(28 27 24 / 7%), 0 1px 2px rgb(28 27 24 / 4%),
     0 10px 30px -14px rgb(28 27 24 / 14%);
+  /* A page lying on the desk, at rest and lifted: an artifact in its tray and on its canvas. */
+  --elevation-page:
+    0 0 0 1px rgb(28 27 24 / 7.5%), 0 1px 2px rgb(28 27 24 / 6%),
+    0 8px 18px -10px rgb(28 27 24 / 24%);
+  --elevation-page-lift:
+    0 0 0 1px rgb(28 27 24 / 7.5%), 0 3px 6px -2px rgb(28 27 24 / 8%),
+    0 16px 30px -14px rgb(28 27 24 / 34%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -255,6 +262,12 @@
     --elevation-sheet:
       0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
       0 10px 30px -12px rgb(0 0 0 / 60%);
+    --elevation-page:
+      0 0 0 1px rgb(244 243 238 / 10%), 0 1px 2px rgb(0 0 0 / 40%),
+      0 8px 18px -10px rgb(0 0 0 / 85%);
+    --elevation-page-lift:
+      0 0 0 1px rgb(244 243 238 / 10%), 0 3px 6px -2px rgb(0 0 0 / 50%),
+      0 16px 30px -14px rgb(0 0 0 / 95%);
   }
 }
 
@@ -367,6 +380,11 @@
   --elevation-sheet:
     0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
     0 10px 30px -12px rgb(0 0 0 / 60%);
+  --elevation-page:
+    0 0 0 1px rgb(244 243 238 / 10%), 0 1px 2px rgb(0 0 0 / 40%), 0 8px 18px -10px rgb(0 0 0 / 85%);
+  --elevation-page-lift:
+    0 0 0 1px rgb(244 243 238 / 10%), 0 3px 6px -2px rgb(0 0 0 / 50%),
+    0 16px 30px -14px rgb(0 0 0 / 95%);
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of

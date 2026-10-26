@@ -3,6 +3,8 @@
     "title": "Artifacts",
     "summary_one": "{{count}} artifact from $t(page.sessions, {\"count\": {{sessions}} })",
     "summary_other": "{{count}} artifacts from $t(page.sessions, {\"count\": {{sessions}} })",
+    "count_one": "{{count}} artifact",
+    "count_other": "{{count}} artifacts",
     "sessions_one": "{{count}} session",
     "sessions_other": "{{count}} sessions",
     "loading": "Loading artifacts",
@@ -10,17 +12,30 @@
     "groupByChoice": "Group by: {{choice}}",
     "sort": "Sort",
     "sortChoice": "Sort: {{choice}}",
+    "sentence": "{{summary}}, <group>{{grouping}}</group>, <sort>{{sorting}}</sort>",
     "groupings": {
       "project-session": "Project and session",
       "project": "Project",
       "date": "Date",
       "none": "None"
     },
+    "groupedBy": {
+      "project-session": "by project and session",
+      "project": "by project",
+      "date": "by date",
+      "none": "in one list"
+    },
     "sorts": {
       "newest": "Newest first",
       "oldest": "Oldest first",
       "name": "Name, A to Z",
       "name-desc": "Name, Z to A"
+    },
+    "sortedBy": {
+      "newest": "newest first",
+      "oldest": "oldest first",
+      "name": "name, A to Z",
+      "name-desc": "name, Z to A"
     },
     "filter": "Filter by title",
     "clearFilter": "Clear the filter",
@@ -37,8 +52,8 @@
     "emptyTitle": "No artifacts yet",
     "emptyDescription": "Pages your agents make for you show here, by project and session. Ask an agent for a report, a deck or design options.",
     "noMatch": "No matching artifacts",
-    "noMatchHint": "Esc clears the filter",
-    "errorTitle": "Your artifacts could not be listed",
+    "errorTitle": "Artifacts could not be loaded",
+    "errorDescription": "{{error}} Your artifacts are safe on this computer.",
     "imported": "Imported",
     "import": "Import an HTML file",
     "importEllipsis": "Import an HTML file…",
@@ -55,16 +70,14 @@
     "recentlyDeleted": "Recently deleted",
     "backToArtifacts": "Back to Artifacts",
     "deletedDescription": "Deleted artifacts stay here for 30 days, then they and every version of them are removed for good.",
-    "nothingDeleted": "Nothing in Recently deleted",
-    "nothingDeletedHint": "What you or your agents delete stays here for 30 days"
+    "nothingDeleted": "Nothing in Recently deleted"
   },
   "card": {
     "version": "v{{version}}",
     "canvas_other": "Canvas, {{count}} pages",
     "noPreview": "No preview",
     "more": "More for {{title}}",
-    "where": "{{project}} · {{session}}",
-    "when": "v{{version}} · {{time}}",
+    "when": "Version {{version}} · {{time}}",
     "daysLeft_one": "{{project}} · {{count}} day left",
     "daysLeft_other": "{{project}} · {{count}} days left",
     "editing": "Editing",
@@ -78,21 +91,23 @@
     "versionHistory": "Version history",
     "openSession": "Open the session",
     "delete": "Delete",
+    "deleteAsk": "Delete…",
     "restore": "Restore",
     "erase": "Delete permanently…"
   },
   "dialog": {
     "renameTitle": "Rename artifact",
     "title": "Title",
-    "titleTooLong": "A title holds at most {{count}} characters.",
+    "titleTooLong": "Use {{count}} characters or fewer.",
     "rename": "Rename",
     "eraseTitle": "Delete “{{title}}” permanently?",
     "eraseDescription_one": "Its one version will be removed from this computer. This cannot be undone.",
     "eraseDescription_other": "Its {{count}} versions will be removed from this computer. This cannot be undone.",
     "erase": "Delete",
     "deleteTitle": "Delete “{{title}}”?",
-    "deleteDescription": "It goes to Recently deleted and stays there for 30 days.",
-    "unpublishToo": "Unpublish it too, so its link stops working",
+    "deleteDescription": "It moves to Recently deleted, where it stays for 30 days.",
+    "unpublishToo": "Unpublish it too",
+    "unpublishTooDescription": "Its link stops working for everyone who has it.",
     "delete": "Delete"
   },
   "viewer": {

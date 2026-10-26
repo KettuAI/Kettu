@@ -81,7 +81,9 @@ function RenameForm({ dialog }: { dialog: Extract<ArtifactDialog, { kind: 'renam
         <DialogTitle>{t('dialog.renameTitle')}</DialogTitle>
       </DialogHeader>
       <Field data-invalid={tooLong || failed !== null || undefined}>
-        <FieldLabel htmlFor="artifact-title">{t('dialog.title')}</FieldLabel>
+        <FieldLabel htmlFor="artifact-title" className="sr-only">
+          {t('dialog.title')}
+        </FieldLabel>
         <Input
           id="artifact-title"
           value={title}
@@ -122,13 +124,16 @@ function UnpublishToo({
 }) {
   const { t } = useTranslation('artifacts')
   return (
-    <label className="flex items-start gap-2.5 px-1 text-left text-ui">
+    <label className="flex items-start gap-2.5 rounded-code bg-subtle px-3 py-2.5 text-left">
       <Checkbox
         checked={checked}
         onCheckedChange={(value) => onChange(value === true)}
         className="mt-0.5"
       />
-      <span className="text-secondary">{t('dialog.unpublishToo')}</span>
+      <span className="flex flex-col gap-px">
+        <span className="text-ui font-medium text-primary">{t('dialog.unpublishToo')}</span>
+        <span className="text-xs text-secondary">{t('dialog.unpublishTooDescription')}</span>
+      </span>
     </label>
   )
 }
