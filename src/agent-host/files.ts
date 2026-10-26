@@ -172,13 +172,14 @@ export class FilesService {
 
   /**
    * A file's text, or its grant when it is media, or why there is none. `relativePath` uses `/`
-   * between segments. A file named as media is one only if its first bytes say so.
+   * between segments. A file named as media is one only if its first bytes say so; `asText` reads
+   * it as any other file.
    */
-  async read(root: string, relativePath: string): Promise<FileContent> {
+  async read(root: string, relativePath: string, asText = false): Promise<FileContent> {
     const relative = this.normalize(relativePath)
     const real = await this.resolveInside(root, relative)
     const info = await this.fileStat(real, relative)
-    const grant = await this.deps.media(real, info)
+    const grant = asText ? null : await this.deps.media(real, info)
     if (grant) return { kind: 'media', path: relative, grant }
     const { size } = info
     if (size > this.limits.read) {

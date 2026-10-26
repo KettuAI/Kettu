@@ -25,10 +25,12 @@ import {
   buffers,
   closeFile,
   discardEdits,
+  isSvgFile,
   keepEdits,
   mediaVersion,
   renewOpenFile,
   saveFile,
+  showSvgSource,
   useFilesStore,
   type OpenFile,
 } from '@renderer/stores/files'
@@ -41,6 +43,7 @@ const CodeEditor = lazy(() => import('./code-editor'))
 export function FilePreview({ projectPath, file }: { projectPath: string; file: OpenFile | null }) {
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
+  const svgSource = useFilesStore((s) => s.svgSource)
   if (!file) {
     return (
       <Empty className="h-full">
@@ -104,6 +107,14 @@ export function FilePreview({ projectPath, file }: { projectPath: string; file: 
             }
           >
             {rendered(file, source) ? <CodeIcon /> : <BookOpenIcon />}
+          </PanelButton>
+        )}
+        {isSvgFile(file.path) && file.content && (
+          <PanelButton
+            label={svgSource ? t('preview.showRendered') : t('preview.showSource')}
+            onClick={() => showSvgSource(!svgSource)}
+          >
+            {svgSource ? <BookOpenIcon /> : <CodeIcon />}
           </PanelButton>
         )}
         <CopyButton text={file.path} label={t('preview.copyPath')} />

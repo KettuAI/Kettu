@@ -320,6 +320,31 @@ describe('read', () => {
     })
   })
 
+  it('reads a media file as any other file when asked, as an SVG for its source', async () => {
+    const dir = await plain()
+    granted.length = 0
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>'
+    await writeFile(join(dir, 'logo.svg'), svg)
+    const mp4 = Buffer.alloc(32)
+    mp4.writeUInt32BE(32, 0)
+    mp4.write('ftypisom', 4, 'latin1')
+    await writeFile(join(dir, 'clip.mp4'), mp4)
+    expect(await service().read(dir, 'logo.svg', true)).toEqual({
+      kind: 'text',
+      path: 'logo.svg',
+      size: 41,
+      text: svg,
+      version: sha256(svg),
+      editable: true,
+    })
+    expect(await service().read(dir, 'clip.mp4', true)).toEqual({
+      kind: 'binary',
+      path: 'clip.mp4',
+      size: 32,
+    })
+    expect(granted).toEqual([])
+  })
+
   it('reads a binary that is no media, and one named as media that is not, as any other file', async () => {
     const dir = await plain()
     granted.length = 0

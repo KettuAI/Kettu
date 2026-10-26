@@ -50,6 +50,7 @@ describe('FilePreview', () => {
     })
     expect(loaders(html, url)).toEqual(['img'])
     expect(html).toContain('41 byte')
+    expect(html).toContain('aria-label="Show source"')
   })
 
   it('shows a picture with its pixel size, and plays a clip and a sound with controls', () => {

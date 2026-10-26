@@ -160,3 +160,119 @@ describe('editing a file', () => {
     expect(open()).toMatchObject({ line: 1, dirty: true })
   })
 })
+
+describe('an SVG', () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>'
+  const picture = (path: string, v: number): FileContent => ({
+    kind: 'media',
+    path,
+    grant: {
+      url: `overbench-media://${'a'.repeat(26)}/${path}?v=${v}`,
+      kind: 'image',
+      mimeType: 'image/svg+xml',
+      size: svg.length,
+    },
+  })
+  const reads = () =>
+    request.mock.calls.filter(([method]) => method === 'files.read').map(([, params]) => params)
+
+  /** Opens `logo.svg` as its source at v1 and types into it, as the editor would. */
+  async function edited(): Promise<void> {
+    useFilesStore.setState({ svgSource: true })
+    host([text('logo.svg', svg, 'v1')])
+    files.openFile(project, 'logo.svg')
+    await settle()
+    const state = EditorState.create({ doc: svg })
+    buffers.set(project, { path: 'logo.svg', version: 'v1', base: state.doc, state })
+    buffers.get(project)!.state = state.update({ changes: { from: 4, insert: ' id="a"' } }).state
+    files.setDirty(project, 'logo.svg', true)
+  }
+
+  beforeEach(() => {
+    request.mockReset()
+    buffers.clear()
+    useFilesStore.setState({ open: {}, pending: {}, byProject: {}, svgSource: false })
+  })
+
+  it('shows its picture or its source, the choice holding for every SVG until changed', async () => {
+    host([picture('logo.svg', 1)])
+    files.openFile(project, 'logo.svg')
+    await settle()
+    expect(open().content).toMatchObject({ kind: 'media' })
+
+    host([text('logo.svg', svg, 'v1'), text('b.svg', svg, 'b1')])
+    files.showSvgSource(true)
+    await settle()
+    expect(open().content).toMatchObject({ kind: 'text', text: svg })
+    files.openFile(project, 'b.svg')
+    await settle()
+    expect(open()).toMatchObject({ path: 'b.svg', content: { kind: 'text' } })
+    expect(reads()).toEqual([
+      { projectPath: project, path: 'logo.svg' },
+      { projectPath: project, path: 'logo.svg', asText: true },
+      { projectPath: project, path: 'b.svg', asText: true },
+    ])
+    expect(useFilesStore.getState().markdownSource).toBe(false)
+
+    host([picture('b.svg', 1)])
+    files.showSvgSource(false)
+    await settle()
+    expect(open().content).toMatchObject({ kind: 'media' })
+  })
+
+  it('drops a read that the choice has changed since', async () => {
+    host([picture('logo.svg', 1)])
+    files.openFile(project, 'logo.svg')
+    await settle()
+    let answer!: (content: FileContent) => void
+    request.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    request.mockImplementationOnce(async () => picture('logo.svg', 1))
+    files.showSvgSource(true)
+    files.showSvgSource(false)
+    await settle()
+    answer(text('logo.svg', svg, 'v1'))
+    await settle()
+    expect(open().content).toMatchObject({ kind: 'media' })
+  })
+
+  it('keeps the edits to its source while the picture shows, and says if the file changed', async () => {
+    await edited()
+    host([picture('logo.svg', 1)])
+    files.showSvgSource(false)
+    await settle()
+    expect(open()).toMatchObject({ dirty: true, changedOnDisk: false, content: { kind: 'media' } })
+
+    host([text('logo.svg', '<svg/>', 'v9')])
+    files.showSvgSource(true)
+    await settle()
+    expect(open()).toMatchObject({
+      dirty: true,
+      changedOnDisk: true,
+      diskVersion: 'v9',
+      content: { kind: 'text' },
+    })
+    expect(buffers.get(project)?.state.sliceDoc()).toBe(
+      '<svg id="a" xmlns="http://www.w3.org/2000/svg"/>',
+    )
+  })
+
+  it('saves the edits while the picture shows, and shows the picture saved', async () => {
+    await edited()
+    host([picture('logo.svg', 1)])
+    files.showSvgSource(false)
+    await settle()
+    host([picture('logo.svg', 2)], [() => ({ version: 'v2', size: 48 })])
+    expect(await files.saveFile(project)).toBe(true)
+    expect(request).toHaveBeenCalledWith('files.write', {
+      projectPath: project,
+      path: 'logo.svg',
+      text: '<svg id="a" xmlns="http://www.w3.org/2000/svg"/>',
+      version: 'v1',
+    })
+    await settle()
+    expect(open()).toMatchObject({
+      dirty: false,
+      content: { kind: 'media', grant: { url: expect.stringMatching(/\?v=2$/) } },
+    })
+  })
+})

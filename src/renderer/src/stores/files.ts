@@ -59,6 +59,8 @@ interface FilesStore {
   open: Record<string, OpenFile>
   /** Markdown files show their source instead of the rendered preview, for every file. */
   markdownSource: boolean
+  /** SVG files show their source instead of the picture, for every file. */
+  svgSource: boolean
   /** By project, the change to the open file that asks first because it has unsaved edits. */
   pending: Record<string, PendingChange>
   /** By project, the diff that covers the open file until it is closed. */
@@ -69,6 +71,7 @@ export const useFilesStore = create<FilesStore>()(() => ({
   byProject: {},
   open: {},
   markdownSource: false,
+  svgSource: false,
   pending: {},
   diffs: {},
 }))
@@ -237,6 +240,10 @@ function sameMedia(shown: FileContent | null, read: FileContent): boolean {
   )
 }
 
+export const isSvgFile = (path: string) => /\.svg$/i.test(path)
+
+const readsSource = (path: string) => isSvgFile(path) && useFilesStore.getState().svgSource
+
 /**
  * Reads the open file again, keeping what is shown until the new text arrives. Unsaved edits are
  * never replaced: a different file on disk only says so. An unchanged media file keeps its URL,
@@ -246,18 +253,34 @@ async function readOpenFile(projectPath: string, renew = false): Promise<void> {
   const file = useFilesStore.getState().open[projectPath]
   if (!file) return
   const { path } = file
+  const asText = readsSource(path)
   try {
-    const content = await host('files.read', { projectPath, path })
+    const content = await host('files.read', { projectPath, path, ...(asText && { asText }) })
     update(projectPath, path, (now) => {
+      // The choice of an SVG's picture or source changed meanwhile, and its own read follows.
+      if (readsSource(path) !== asText) return {}
       const buffer = buffers.get(projectPath)
       if (!renew && sameMedia(now.content, content)) return { error: null }
-      if (!now.dirty || buffer?.path !== path) return { content, error: null }
+      // An SVG's picture has no text to set the edits against; they wait for its source.
+      if (!now.dirty || buffer?.path !== path || content.kind === 'media') {
+        return { content, error: null }
+      }
+      // Back from the picture, the source shows, and the bar says if it changed.
+      const shown = now.content?.kind === 'media' ? { content } : {}
       const version = content.kind === 'text' ? content.version : null
-      if (version === buffer.version || (version !== null && version === now.kept)) return {}
-      return { changedOnDisk: true, diskVersion: version, error: null }
+      if (version === buffer.version || (version !== null && version === now.kept)) return shown
+      return { ...shown, changedOnDisk: true, diskVersion: version, error: null }
     })
   } catch (error) {
     update(projectPath, path, { error: errorMessage(error) })
+  }
+}
+
+/** Shows every SVG as its source, or as its picture, until changed; open ones are read again. */
+export function showSvgSource(source: boolean): void {
+  useFilesStore.setState({ svgSource: source })
+  for (const [projectPath, file] of Object.entries(useFilesStore.getState().open)) {
+    if (isSvgFile(file.path)) void readOpenFile(projectPath)
   }
 }
 
@@ -285,6 +308,9 @@ export async function saveFile(projectPath: string): Promise<boolean> {
     })
     buffer.version = written.version
     buffer.base = doc
+    // Saved while an SVG's picture shows: the picture is read again, at its new version.
+    const now = useFilesStore.getState().open[projectPath]
+    const picture = now?.path === path && now.content?.kind === 'media'
     update(projectPath, path, {
       saving: false,
       // Typing during the save left more to save.
@@ -292,15 +318,18 @@ export async function saveFile(projectPath: string): Promise<boolean> {
       changedOnDisk: false,
       diskVersion: null,
       kept: null,
-      content: {
-        kind: 'text',
-        path,
-        size: written.size,
-        text,
-        version: written.version,
-        editable: true,
-      },
+      ...(!picture && {
+        content: {
+          kind: 'text',
+          path,
+          size: written.size,
+          text,
+          version: written.version,
+          editable: true,
+        },
+      }),
     })
+    if (picture) void readOpenFile(projectPath)
     return true
   } catch (error) {
     if (errorCode(error) === 'conflict') {

@@ -555,7 +555,11 @@ export interface HostContract {
   // The ids of these the host still holds, for the drafts that name them; each is kept from now.
   'attachments.held': { params: { ids: string[] }; result: string[] }
   'files.list': { params: { projectPath: string }; result: FileList }
-  'files.read': { params: { projectPath: string; path: string }; result: FileContent }
+  // `asText` reads a media file as any other file, as an SVG's source.
+  'files.read': {
+    params: { projectPath: string; path: string; asText?: boolean }
+    result: FileContent
+  }
   'files.search': { params: { projectPath: string; query: string }; result: FileSearch }
   // A null `version` overwrites whatever the file holds.
   'files.write': {
