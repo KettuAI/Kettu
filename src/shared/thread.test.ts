@@ -260,6 +260,8 @@ describe('isThreadEntry', () => {
     { kind: 'turn_end', id: 'e:4', stopReason: 'end_turn', durationMs: 5 },
     { kind: 'git', id: 'g:1', event: 'commit', commits: [{ oid: 'a', subject: 'b' }], more: 0 },
     { kind: 'git', id: 'g:2', event: 'branch', branch: 'main' },
+    { kind: 'git', id: 'g:3', event: 'push', upstream: 'origin/main', count: 1, after: 't:1' },
+    { kind: 'git', id: 'g:4', event: 'pull_request', url: 'https://x', after: null },
     {
       kind: 'artifact',
       id: 'a:6',
@@ -307,6 +309,9 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...artifact, writes: undefined })).toBe(false)
     expect(isThreadEntry({ ...artifact, after: 1 })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
+    expect(isThreadEntry({ kind: 'git', id: 'g', event: 'branch', branch: 'x', after: 1 })).toBe(
+      false,
+    )
     expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'error', title: 'x', cause: 'other' }),
     ).toBe(false)

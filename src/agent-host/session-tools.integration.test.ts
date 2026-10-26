@@ -300,6 +300,57 @@ describe('the session tools', () => {
     await port.request('sessions.cancel', { sessionId: working.id as string })
   })
 
+  it('pauses the queue when the end of the turn archives the session', async () => {
+    const { port, call, create } = await setup()
+    const a = await create()
+    const users = () => port.entries(a).filter((e) => e.kind === 'user')
+    await port.request('sessions.prompt', {
+      sessionId: a,
+      content: [{ type: 'text', text: '/permission' }],
+    })
+    await port.untilStatus(a, 'awaiting_permission')
+    expect(structured(await call(a, 'archive_session', {}))).toEqual({
+      id: a,
+      archived: 'after_turn',
+    })
+    await port.request('sessions.queue', {
+      sessionId: a,
+      content: [{ type: 'text', text: 'Next' }],
+    })
+    await port.until(() => port.thread(a).session.queue.length === 1)
+
+    // Allowing the permission ends the turn, and its end archives the session.
+    const [permission] = port
+      .entries(a)
+      .flatMap((e) => (e.kind === 'tool' && e.permission ? [e.permission] : []))
+    await port.request('permissions.respond', {
+      sessionId: a,
+      requestId: permission!.requestId,
+      optionId: permission!.options[0]!.id,
+    })
+    await port.until(() => (port.summary(a)?.archivedAt ?? null) !== null)
+    await port.untilEntry(
+      a,
+      (e) => e.kind === 'notice' && e.title === 'Fake agent archived this session',
+    )
+    await port.untilStatus(a, 'closed')
+    expect(port.thread(a).session).toMatchObject({ queuePaused: true })
+    expect(port.thread(a).session.queue).toHaveLength(1)
+    expect(users()).toHaveLength(1)
+    expect(port.entries(a).some((e) => e.kind === 'turn_end' && e.stopReason === 'cancelled')).toBe(
+      false,
+    )
+
+    // The next open shows the prompt waiting, and Resume sends it and brings the session back.
+    const { session } = await port.open(a)
+    expect(session).toMatchObject({ status: 'closed', queuePaused: true })
+    expect(session.queue.map((item) => item.content)).toEqual([[{ type: 'text', text: 'Next' }]])
+    await port.request('sessions.resumeQueue', { sessionId: a })
+    await port.until(() => users().length === 2)
+    expect(port.summary(a)?.archivedAt).toBeNull()
+    expect(port.thread(a).session.queue).toEqual([])
+  })
+
   it("tells sessions apart on an agent's folder token, as OpenCode names them", async () => {
     const { port, call, create } = await setup()
     vi.spyOn(current!.host.agents, 'mcpServersByName').mockReturnValue(true)

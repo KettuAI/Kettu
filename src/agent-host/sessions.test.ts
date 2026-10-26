@@ -2914,6 +2914,43 @@ describe('retrying a start that failed', () => {
   })
 })
 
+describe('git events', () => {
+  it('keeps one across a replay, right after the agent entry it followed', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'hello')
+    await port.untilStatus(sessionId, 'ready')
+    t.host.sessions.gitEvents(sessionId, [{ kind: 'git', event: 'branch', branch: 'feature' }])
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'git')
+    const ids = () => port.entries(sessionId).map((entry) => entry.id)
+    const event = port.entries(sessionId).find((entry) => entry.kind === 'git')!
+    const agent = port.entries(sessionId).findLast((entry) => entry.kind === 'agent')!
+
+    // The ultracode switch's session/resume fails, and Retry reopens it through session/load.
+    const { connection } = t.host.agents.runtime('fake-agent')!
+    vi.spyOn(connection, 'resumeSession').mockRejectedValueOnce(new Error('resume failed'))
+    await expect(
+      port.request('sessions.setConfigOption', {
+        sessionId,
+        optionId: '__ultracode',
+        value: true,
+      }),
+    ).rejects.toThrow()
+    expect(port.summary(sessionId)?.status).toBe('failed')
+    const loads = () =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/load').length
+    expect(loads()).toBe(0)
+    await port.request('sessions.retry', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    expect(loads()).toBe(1)
+    expect(port.entries(sessionId).find((entry) => entry.id === event.id)).toEqual(event)
+    expect(ids()[ids().indexOf(event.id) - 1]).toBe(agent.id)
+    expect(event).toMatchObject({ after: agent.id })
+  })
+})
+
 describe('out of credit', () => {
   const users = (port: TestPort, sessionId: string) =>
     port.entries(sessionId).filter((entry) => entry.kind === 'user')

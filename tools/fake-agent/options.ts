@@ -20,6 +20,7 @@ export const SCENARIOS = [
   'background',
   'requests',
   'thinking',
+  'reasoning',
   'svg',
   'usage',
   'status',
@@ -81,6 +82,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     hint: '--hold <ms before the turn ends> --then <ms until it answers by itself> --at-end',
   },
   thinking: { description: 'A long thought, then an answer' },
+  reasoning: {
+    description: 'Long raw reasoning between runs of work, beside short thoughts and messages',
+    hint: '--summaries',
+  },
   svg: { description: 'A reply with svg code blocks: a diagram, a badge and bare path data' },
   usage: {
     description: "The plan limits, as Claude Code's /usage reports them",
@@ -117,6 +122,7 @@ export interface ScenarioOptions {
   meta: string | null // artifacts: the session id the calls name instead; none names none
   execute: boolean // artifacts: the calls run inside one tool call, as OpenCode's Code Mode runs them
   silent: boolean // error, crash: fails before writing anything
+  summaries: boolean // reasoning: short summaries in place of the raw reasoning
 }
 
 export interface ScenarioChoice {
@@ -207,6 +213,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     meta: flagValue(args, 'meta') || null,
     execute: flagValue(args, 'execute') !== undefined,
     silent: flagValue(args, 'silent') !== undefined,
+    summaries: flagValue(args, 'summaries') !== undefined,
   }
   return { scenario, options, text }
 }

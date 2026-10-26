@@ -63,6 +63,11 @@ describe('chooseScenario', () => {
     expect(chooseScenario('/error --silent --hold 500', {}).options.holdMs).toBe(500)
   })
 
+  it('reads whether reasoning sends short summaries', () => {
+    expect(chooseScenario('/reasoning --summaries', {}).options.summaries).toBe(true)
+    expect(chooseScenario('/reasoning', {}).options.summaries).toBe(false)
+  })
+
   it('sizes a large history from --entries, else the environment, else 1,000', () => {
     const env = { FAKE_AGENT_HISTORY_ENTRIES: '2000' }
     expect(chooseScenario('/large-history --entries 4000', env).options.entries).toBe(4000)

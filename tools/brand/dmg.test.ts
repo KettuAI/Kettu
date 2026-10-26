@@ -19,6 +19,14 @@ const { getConfig } = builderRequire('app-builder-lib/out/util/config/config') a
 
 const dmgOf = async (file: string) => (await getConfig(root, file, null)).dmg
 
+const USAGE_STRINGS = {
+  NSAppleEventsUsageDescription:
+    'A command that an agent or the terminal runs wants to use AppleScript.',
+  NSCameraUsageDescription: 'A command that an agent or the terminal runs wants to use the camera.',
+  NSMicrophoneUsageDescription:
+    'A command that an agent or the terminal runs wants to use the microphone.',
+}
+
 /** A PNG's size in pixels, from its IHDR chunk. */
 function pngSize(file: string) {
   const png = readFileSync(join(root, file))
@@ -45,6 +53,11 @@ describe.each(CONFIGS)('%s', (file) => {
       width: width * 2,
       height: height * 2,
     })
+  })
+
+  it('gives the Apple Events, camera and microphone prompts their text', async () => {
+    const { mac } = await getConfig(root, file, null)
+    expect(mac?.extendInfo).toMatchObject(USAGE_STRINGS)
   })
 })
 

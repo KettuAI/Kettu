@@ -28,6 +28,12 @@ mac:
   category: public.app-category.developer-tools
   # Compiled by Xcode 26's actool into Assets.car and an .icns for older macOS.
   icon: build/icon.icon
+  # The text macOS shows when a command an agent or the terminal runs asks for Apple Events, the
+  # camera or the microphone, since it counts those requests as OverBench's.
+  extendInfo:
+    NSAppleEventsUsageDescription: A command that an agent or the terminal runs wants to use AppleScript.
+    NSCameraUsageDescription: A command that an agent or the terminal runs wants to use the camera.
+    NSMicrophoneUsageDescription: A command that an agent or the terminal runs wants to use the microphone.
   # Without a Developer ID the update links to the release, so the dmg is all a release needs.
   # electron-builder.mac-signed.yml adds the zip that Squirrel.Mac installs from.
   target:
