@@ -71,9 +71,10 @@
   "appearance": {
     "theme": {
       "name": "Theme",
-      "keywords": "color colors palette install import export",
+      "keywords": "color colors palette install import export catalog browse download",
       "builtIn": "Built in",
       "file": "File",
+      "catalog": "Catalog",
       "more": "More for “{{name}}”",
       "export": "Export…",
       "remove": "Remove…",
@@ -106,7 +107,31 @@
         "invalid-field": "{{path}} isn't valid",
         "invalid-color": "{{path}} isn't a color",
         "unreadable": "its file can't be read",
-        "missing": "its file is gone"
+        "missing": "its file is gone",
+        "unreachable": "it couldn't be downloaded",
+        "mismatch": "the download doesn't match the catalog"
+      }
+    },
+    "catalog": {
+      "browse": "Browse themes",
+      "title": "Browse themes",
+      "description": "Themes from the OverBench catalog on GitHub. Installing one applies it.",
+      "search": "Search themes",
+      "byline": "{{author}} · {{license}}",
+      "install": "Install",
+      "installLabel": "Install {{name}}",
+      "update": "Update to {{version}}",
+      "updateLabel": "Update {{name}} to {{version}}",
+      "installed": "Installed",
+      "loading": "Loading themes…",
+      "none": "The catalog has no themes yet.",
+      "noMatch": "No themes match “{{query}}”.",
+      "tryAgain": "Try again",
+      "installFailed": "Couldn't install {{name}}: {{reason}}.",
+      "errors": {
+        "unreachable": "Couldn't reach the theme catalog. Check your connection or proxy, then try again.",
+        "invalid": "The theme catalog couldn't be read.",
+        "newer-format": "The theme catalog needs a newer version of OverBench."
       }
     },
     "colorMode": {

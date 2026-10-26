@@ -99,6 +99,20 @@ const TOKENS: ReadonlySet<string> = new Set(THEME_TOKENS)
 
 export const isThemeToken = (name: string): name is ThemeToken => TOKENS.has(name)
 
+/** The tokens a theme's tile draws, which the catalog's index carries for each theme. */
+export const PREVIEW_TOKENS = [
+  'bg-app',
+  'bg-sidebar',
+  'bg-surface',
+  'bg-subtle',
+  'bg-selected',
+  'border-default',
+  'border-subtle',
+  'border-strong',
+  'primary-from',
+  'primary-to',
+] as const satisfies readonly ThemeToken[]
+
 export type ThemeColors = Partial<Record<ThemeToken, string>>
 
 export interface ThemeVariant {
@@ -135,6 +149,8 @@ export interface InstalledTheme {
   theme: Theme
   /** What the file holds that this version does not use, such as `dark.colors.bg-ap`. */
   ignored: string[]
+  /** The catalog version it was installed at; none for a theme installed from a file. */
+  catalog?: string
 }
 
 export type ThemeLoadFailure =
@@ -156,6 +172,32 @@ export type ThemeInstallResult =
   | { status: 'conflict'; token: string; name: string; installedName: string }
   | { status: 'failed'; file: string; error: ThemeFileError | { code: 'unreadable' } }
 
+/** A theme the catalog lists, with what installing it does given what is installed. */
+export interface CatalogTheme {
+  id: string
+  name: string
+  author: string
+  version: string
+  license: string
+  /** The PREVIEW_TOKENS it sets, checked like a theme's colors. */
+  preview: Record<ThemeMode, ThemeColors>
+  /** `install` too when the id is installed from a file, which asks before it replaces it. */
+  action: 'install' | 'update' | 'installed'
+}
+
+export type CatalogState =
+  | { status: 'ok'; themes: CatalogTheme[] }
+  // `unreachable`: no answer or an error status; `invalid`: an answer that is not an index.
+  | { status: 'unreachable' | 'invalid' | 'newer-format' }
+
+// `mismatch`: the download differs from the index's SHA-256, or its name gives another id.
+export type CatalogInstallError = ThemeFileError | { code: 'unreachable' } | { code: 'mismatch' }
+
+export type CatalogInstallResult =
+  | { status: 'installed'; id: string; ignored: string[] }
+  | { status: 'conflict'; token: string; name: string; installedName: string }
+  | { status: 'failed'; error: CatalogInstallError }
+
 const MAX_NAME = 64
 const MAX_AUTHOR = 100
 const MAX_VERSION = 32
@@ -172,10 +214,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function text(value: unknown, max: number): string | null {
+/** Trimmed text of 1 to `max` characters without control characters, or null. */
+export function plainText(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed.length > 0 && trimmed.length <= max && !CONTROL.test(trimmed) ? trimmed : null
+}
+
+/** A theme's name, author or version as the file format takes it, trimmed; null when it fails. */
+export function themeField(field: 'name' | 'author' | 'version', value: unknown): string | null {
+  const found = plainText(
+    value,
+    { name: MAX_NAME, author: MAX_AUTHOR, version: MAX_VERSION }[field],
+  )
+  return found !== null && (field !== 'version' || VERSION.test(found)) ? found : null
 }
 
 /**
@@ -209,21 +261,15 @@ export function parseThemeFile(source: string): ThemeFileResult {
   }
   if (format > THEME_FORMAT) return fail({ code: 'newer-format' })
 
-  const name = text(raw['name'], MAX_NAME)
+  const name = themeField('name', raw['name'])
   if (name === null) return fail({ code: 'invalid-field', path: 'name' })
   if (themeSlug(name) === BUILTIN_THEME_ID) return fail({ code: 'reserved-name' })
   const theme: Theme = { name, light: { colors: {} }, dark: { colors: {} } }
-  if (raw['author'] !== undefined) {
-    const author = text(raw['author'], MAX_AUTHOR)
-    if (author === null) return fail({ code: 'invalid-field', path: 'author' })
-    theme.author = author
-  }
-  if (raw['version'] !== undefined) {
-    const version = text(raw['version'], MAX_VERSION)
-    if (version === null || !VERSION.test(version)) {
-      return fail({ code: 'invalid-field', path: 'version' })
-    }
-    theme.version = version
+  for (const field of ['author', 'version'] as const) {
+    if (raw[field] === undefined) continue
+    const value = themeField(field, raw[field])
+    if (value === null) return fail({ code: 'invalid-field', path: field })
+    theme[field] = value
   }
 
   const ignored: string[] = []

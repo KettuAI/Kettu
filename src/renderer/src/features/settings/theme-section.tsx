@@ -46,10 +46,11 @@ import { receiveThemes, useThemesStore } from '@renderer/stores/themes'
 import { ControlError } from './controls'
 import { MiniWindow, RadioDot } from './sections'
 import { previewStyle, themeContrast, themeFile } from './theme-colors'
+import { useReason } from './theme-reason'
 import { useApply } from './use-apply'
 
 type InstallError = ThemeFileError | { code: 'unreadable' }
-type Conflict = Extract<ThemeInstallResult, { status: 'conflict' }>
+export type Conflict = Extract<ThemeInstallResult, { status: 'conflict' }>
 
 type Notice =
   | { kind: 'installed'; id: string; ignored: string[] }
@@ -61,22 +62,6 @@ const CONTRAST_SHOWN = 10
 
 /** Truncates, never rounds up, as the contrast check does, so 4.49 never shows as 4.50. */
 const formatRatio = (ratio: number) => (Math.floor(ratio * 100) / 100).toFixed(2)
-
-/** Why a file or the chosen theme failed, as the end of a sentence. */
-function useReason(): (error: InstallError | { code: 'missing' }) => string {
-  const { t } = useTranslation('settings')
-  return (error) => {
-    switch (error.code) {
-      case 'invalid-field':
-      case 'invalid-color':
-        return t(`appearance.theme.errors.${error.code}`, { path: error.path })
-      case 'missing-variant':
-        return t('appearance.theme.errors.missing-variant', { variant: error.variant })
-      default:
-        return t(`appearance.theme.errors.${error.code}`)
-    }
-  }
-}
 
 /** The Theme group: OverBench, the installed themes by name, and Install from file. */
 export function ThemeTiles() {
@@ -117,6 +102,7 @@ export function ThemeTiles() {
       key={id}
       id={id}
       theme={theme}
+      source={item?.catalog ? 'catalog' : item ? 'file' : 'builtIn'}
       onExport={() =>
         run(async () => {
           await window.overbench.themes.export(themeFile(theme))
@@ -163,30 +149,14 @@ export function ThemeTiles() {
         <ThemeNotice notice={notice} installed={installed} onDismiss={() => setNotice(null)} />
       )}
 
-      <AlertDialog open={replaceOpen} onOpenChange={setReplaceOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('appearance.theme.replaceTitle', { name: conflict?.installedName })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('appearance.theme.replaceDescription', { name: conflict?.name })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setReplaceOpen(false)
-                const token = conflict?.token
-                if (token) run(async () => answered(await window.overbench.themes.replace(token)))
-              }}
-            >
-              {t('appearance.theme.replace')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ReplaceDialog
+        conflict={conflict}
+        open={replaceOpen}
+        onOpenChange={setReplaceOpen}
+        onReplace={(token) =>
+          run(async () => answered(await window.overbench.themes.replace(token)))
+        }
+      />
 
       <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
         <AlertDialogContent>
@@ -221,12 +191,15 @@ export function ThemeTiles() {
 function ThemeTile({
   id,
   theme,
+  source,
   onExport,
   onReveal,
   onRemove,
 }: {
   id: string
   theme: Theme | null
+  /** Where it came from, which the tile names. */
+  source: 'builtIn' | 'file' | 'catalog'
   onExport: () => void
   onReveal?: () => void
   onRemove?: () => void
@@ -255,7 +228,7 @@ function ThemeTile({
           <span className="truncate">{name}</span>
           {issues.length > 0 && <ContrastWarning issues={issues} />}
           <span className="ml-auto shrink-0 pr-0.5 text-xs text-tertiary">
-            {t(theme ? 'appearance.theme.file' : 'appearance.theme.builtIn')}
+            {t(`appearance.theme.${source}`)}
           </span>
         </span>
       </ToggleGroupItem>
@@ -295,6 +268,46 @@ function ThemeTile({
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  )
+}
+
+/** Asks before a theme takes the place of the installed one with its id. */
+export function ReplaceDialog({
+  conflict,
+  open,
+  onOpenChange,
+  onReplace,
+}: {
+  conflict: Conflict | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onReplace: (token: string) => void
+}) {
+  const { t } = useTranslation(['settings', 'common'])
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {t('appearance.theme.replaceTitle', { name: conflict?.installedName })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('appearance.theme.replaceDescription', { name: conflict?.name })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              onOpenChange(false)
+              if (conflict) onReplace(conflict.token)
+            }}
+          >
+            {t('appearance.theme.replace')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

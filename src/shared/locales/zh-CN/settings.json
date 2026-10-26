@@ -70,9 +70,10 @@
   "appearance": {
     "theme": {
       "name": "主题",
-      "keywords": "颜色 配色 安装 导入 导出 theme color palette",
+      "keywords": "颜色 配色 安装 导入 导出 主题库 浏览 下载 theme color palette catalog",
       "builtIn": "内置",
       "file": "文件",
+      "catalog": "主题库",
       "more": "“{{name}}”的更多操作",
       "export": "导出为文件…",
       "remove": "移除…",
@@ -105,7 +106,31 @@
         "invalid-field": "{{path}} 无效",
         "invalid-color": "{{path}} 不是颜色",
         "unreadable": "无法读取文件",
-        "missing": "文件已不存在"
+        "missing": "文件已不存在",
+        "unreachable": "无法下载",
+        "mismatch": "下载的文件与主题库不一致"
+      }
+    },
+    "catalog": {
+      "browse": "浏览主题",
+      "title": "浏览主题",
+      "description": "来自 GitHub 上的 OverBench 主题库。安装后立即应用。",
+      "search": "搜索主题",
+      "byline": "{{author}} · {{license}}",
+      "install": "安装",
+      "installLabel": "安装 {{name}}",
+      "update": "更新到 {{version}}",
+      "updateLabel": "将 {{name}} 更新到 {{version}}",
+      "installed": "已安装",
+      "loading": "正在加载主题…",
+      "none": "主题库里还没有主题。",
+      "noMatch": "没有与“{{query}}”匹配的主题。",
+      "tryAgain": "重试",
+      "installFailed": "无法安装 {{name}}：{{reason}}。",
+      "errors": {
+        "unreachable": "无法连接主题库。请检查网络或代理后重试。",
+        "invalid": "无法读取主题库。",
+        "newer-format": "主题库需要更新版本的 OverBench。"
       }
     },
     "colorMode": {

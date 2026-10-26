@@ -17,7 +17,9 @@ vi.mock('electron', () => ({
   protocol: {},
 }))
 
-const { readThemeFolder, themeId, ThemeStore, windowColors } = await import('./themes')
+const { readThemeFolder, readThemeSources, themeId, ThemeStore, windowColors } =
+  await import('./themes')
+const { CATALOG_URL, ThemeCatalog } = await import('./theme-catalog')
 
 const WINDOW = {} as Electron.BrowserWindow
 
@@ -26,13 +28,23 @@ const theme = (name: string, dark: Record<string, string> = { 'bg-app': '#2e3440
 
 let dir: string
 let themesDir: string
+let sourcesFile: string
+// What the catalog's fake fetch answers, by path under CATALOG_URL.
+let served: Record<string, string>
 
 beforeEach(async () => {
   dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-themes-'))
   themesDir = path.join(dir, 'themes')
+  sourcesFile = path.join(dir, 'theme-sources.json')
+  served = {}
   await mkdir(themesDir)
   vi.clearAllMocks()
 })
+
+const fetchCatalog = async (url: string) => {
+  const body = served[url.slice(CATALOG_URL.length)]
+  return body === undefined ? new Response(null, { status: 404 }) : new Response(body)
+}
 
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
@@ -91,12 +103,37 @@ describe('ThemeStore', () => {
   async function store(chosen = 'overbench') {
     const themes: InstanceType<typeof ThemeStore> = new ThemeStore(
       await readThemeFolder(themesDir),
+      await readThemeSources(sourcesFile),
       chosen,
-      // As settings.json does: the setting changes, and its listener tells the store.
-      { dir: themesDir, select: (id) => themes.choose(id), changed },
+      {
+        dir: themesDir,
+        sourcesFile,
+        catalog: new ThemeCatalog(fetchCatalog),
+        // As settings.json does: the setting changes, and its listener tells the store.
+        select: (id) => themes.choose(id),
+        changed,
+      },
     )
     return themes
   }
+
+  /** Serves `files` as the catalog, each listed in the index at `version`. */
+  function serveCatalog(files: Record<string, string>, version = '1.0.0') {
+    const themes = Object.entries(files).map(([id, text]) => ({
+      id,
+      name: JSON.parse(text).name,
+      author: 'Someone',
+      version,
+      license: 'MIT',
+      file: `themes/${id}.json`,
+      sha256: createHash('sha256').update(text).digest('hex'),
+      preview: { light: {}, dark: { 'bg-app': '#2e3440' } },
+    }))
+    served = { 'index.json': JSON.stringify({ overbenchCatalog: 1, themes }) }
+    for (const [id, text] of Object.entries(files)) served[`themes/${id}.json`] = text
+  }
+
+  const sources = async () => JSON.parse(await readFile(sourcesFile, 'utf8'))
 
   const chooseFile = (file: string | null) =>
     electron.open.mockResolvedValue({ canceled: file === null, filePaths: file ? [file] : [] })
@@ -245,6 +282,164 @@ describe('ThemeStore', () => {
     await expect(themes.export(null, '{"name": "x"}')).rejects.toThrow('Not a theme file')
     await expect(themes.export(null, 5)).rejects.toThrow('must be text')
     expect(electron.save).toHaveBeenCalledTimes(2)
+  })
+
+  describe('the catalog', () => {
+    const nord = theme('Nord')
+    const ayu = theme('Ayu', { 'bg-app': '#0b0e14' })
+
+    it("lists the catalog's themes by name with what installing each does", async () => {
+      await put('themes/nord.json', nord)
+      await put('themes/ayu.json', ayu)
+      await put('themes/rose.json', theme('Rose'))
+      await put(
+        'theme-sources.json',
+        JSON.stringify({ version: 1, catalog: { nord: '0.9.0', ayu: '1.0.0' } }),
+      )
+      serveCatalog({ nord, rose: theme('Rose'), ayu, zen: theme('Zen') })
+      const result = await (await store()).catalog(true)
+      expect(result.status === 'ok' && result.themes.map((t) => [t.id, t.action])).toEqual([
+        ['ayu', 'installed'],
+        ['nord', 'update'],
+        // Installed from a file: installing asks first.
+        ['rose', 'install'],
+        ['zen', 'install'],
+      ])
+      expect(result.status === 'ok' && result.themes[0]).toEqual({
+        id: 'ayu',
+        name: 'Ayu',
+        author: 'Someone',
+        version: '1.0.0',
+        license: 'MIT',
+        preview: { light: {}, dark: { 'bg-app': '#2e3440' } },
+        action: 'installed',
+      })
+    })
+
+    it('says why the catalog cannot be read', async () => {
+      expect(await (await store()).catalog(true)).toEqual({ status: 'unreachable' })
+      served = { 'index.json': '{"overbenchCatalog": 2, "themes": []}' }
+      expect(await (await store()).catalog(true)).toEqual({ status: 'newer-format' })
+    })
+
+    it('installs a catalog theme, records its version and chooses it', async () => {
+      serveCatalog({ nord })
+      const themes = await store()
+      await themes.catalog(true)
+      expect(await themes.installCatalog('nord')).toEqual({
+        status: 'installed',
+        id: 'nord',
+        ignored: [],
+      })
+      expect(await readFile(path.join(themesDir, 'nord.json'), 'utf8')).toBe(nord)
+      expect(await sources()).toEqual({ version: 1, catalog: { nord: '1.0.0' } })
+      expect(themes.state()).toMatchObject({
+        chosen: 'nord',
+        installed: [{ id: 'nord', catalog: '1.0.0' }],
+      })
+      expect(changed).toHaveBeenCalledTimes(1)
+    })
+
+    it('updates a catalog theme without asking and keeps the chosen theme', async () => {
+      await put('themes/nord.json', nord)
+      await put('themes/ayu.json', ayu)
+      await put('theme-sources.json', JSON.stringify({ version: 1, catalog: { nord: '1.0.0' } }))
+      const newer = theme('Nord', { 'bg-app': '#242933' })
+      serveCatalog({ nord: newer }, '1.1.0')
+      const themes = await store('ayu')
+      await themes.catalog(true)
+      expect(await themes.installCatalog('nord')).toMatchObject({ status: 'installed' })
+      expect(await readFile(path.join(themesDir, 'nord.json'), 'utf8')).toBe(newer)
+      expect(await sources()).toEqual({ version: 1, catalog: { nord: '1.1.0' } })
+      expect(themes.state().chosen).toBe('ayu')
+      expect(changed).toHaveBeenCalledTimes(1)
+      expect(changed.mock.calls[0]![0].installed.find((t) => t.id === 'nord')?.catalog).toBe(
+        '1.1.0',
+      )
+    })
+
+    it('asks before it replaces a file theme, and records the catalog version on the yes', async () => {
+      await put('themes/nord.json', theme('Nord', { 'bg-app': '#000' }))
+      serveCatalog({ nord })
+      const themes = await store()
+      await themes.catalog(true)
+      const answer = await themes.installCatalog('nord')
+      expect(answer).toEqual({
+        status: 'conflict',
+        token: expect.any(String),
+        name: 'Nord',
+        installedName: 'Nord',
+      })
+      const token = answer.status === 'conflict' ? answer.token : ''
+      expect(await themes.replace(token)).toEqual({ status: 'installed', id: 'nord', ignored: [] })
+      expect(await readFile(path.join(themesDir, 'nord.json'), 'utf8')).toBe(nord)
+      expect(await sources()).toEqual({ version: 1, catalog: { nord: '1.0.0' } })
+      expect(themes.state().chosen).toBe('nord')
+    })
+
+    it('installs nothing when the download differs from the index or names another id', async () => {
+      serveCatalog({ nord, ayu })
+      served['themes/nord.json'] = theme('Nord', { 'bg-app': '#000' })
+      served['themes/ayu.json'] = theme('Not Ayu', { 'bg-app': '#0b0e14' })
+      const index = JSON.parse(served['index.json']!)
+      index.themes[1].sha256 = createHash('sha256').update(served['themes/ayu.json']).digest('hex')
+      served['index.json'] = JSON.stringify(index)
+      const themes = await store()
+      await themes.catalog(true)
+      for (const id of ['nord', 'ayu']) {
+        expect(await themes.installCatalog(id)).toEqual({
+          status: 'failed',
+          error: { code: 'mismatch' },
+        })
+      }
+      expect(await readdir(themesDir)).toEqual([])
+      expect(changed).not.toHaveBeenCalled()
+    })
+
+    it('refuses an id the last index does not list', async () => {
+      serveCatalog({ nord })
+      const themes = await store()
+      await expect(themes.installCatalog('nord')).rejects.toThrow('Not a theme in the catalog')
+      await themes.catalog(true)
+      await expect(themes.installCatalog('ayu')).rejects.toThrow('Not a theme in the catalog')
+      await expect(themes.installCatalog(7)).rejects.toThrow('Not a theme in the catalog')
+    })
+
+    it('drops the record when a file replaces a catalog theme or it is removed', async () => {
+      await put('themes/nord.json', nord)
+      await put('themes/ayu.json', ayu)
+      await put(
+        'theme-sources.json',
+        JSON.stringify({ version: 1, catalog: { nord: '1.0.0', ayu: '1.0.0', gone: '1.0.0' } }),
+      )
+      chooseFile(await put('downloads/nord.json', theme('Nord', { 'bg-app': '#000' })))
+      const themes = await store()
+      const answer = await themes.install(null)
+      expect(answer.status).toBe('conflict')
+      await themes.replace(answer.status === 'conflict' ? answer.token : '')
+      expect(await sources()).toEqual({ version: 1, catalog: { ayu: '1.0.0' } })
+      expect(themes.state().installed.find((t) => t.id === 'nord')?.catalog).toBeUndefined()
+
+      await themes.remove('ayu')
+      expect(await sources()).toEqual({ version: 1, catalog: {} })
+    })
+  })
+})
+
+describe('readThemeSources', () => {
+  it('reads the versions the catalog themes were installed at', async () => {
+    const file = await put(
+      'theme-sources.json',
+      JSON.stringify({ version: 1, catalog: { nord: '1.0.0', '../x': '1.0.0', ayu: 'v1' } }),
+    )
+    expect(Object.fromEntries(await readThemeSources(file))).toEqual({ nord: '1.0.0' })
+  })
+
+  it('counts every theme as a file theme when the file is missing or invalid', async () => {
+    expect((await readThemeSources(path.join(dir, 'none.json'))).size).toBe(0)
+    for (const text of ['{', '[]', '{"version": 2, "catalog": {}}', '{"version": 1}']) {
+      expect((await readThemeSources(await put('theme-sources.json', text))).size).toBe(0)
+    }
   })
 })
 
