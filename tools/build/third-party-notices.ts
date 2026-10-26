@@ -39,10 +39,9 @@ export function packageDirOf(id: string): string | null {
     .replaceAll('\\', '/')
   const at = file.lastIndexOf('/node_modules/')
   if (at < 0) return null
-  const parts = file.slice(at + '/node_modules/'.length).split('/')
-  const name = parts[0]?.startsWith('@') ? parts.slice(0, 2) : parts.slice(0, 1)
-  if (name.some((part) => !part || part.startsWith('.')) || name.length < 1) return null
-  if (name[0]!.startsWith('@') && name.length < 2) return null
+  const [first, second] = file.slice(at + '/node_modules/'.length).split('/')
+  const name = first?.startsWith('@') ? [first, second] : [first]
+  if (name.some((part) => !part || part.startsWith('.'))) return null
   return `${file.slice(0, at)}/node_modules/${name.join('/')}`
 }
 
