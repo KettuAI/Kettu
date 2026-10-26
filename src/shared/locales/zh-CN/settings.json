@@ -70,7 +70,47 @@
   "appearance": {
     "theme": {
       "name": "主题",
-      "keywords": "深色 浅色 跟随系统 颜色 theme dark light system color",
+      "keywords": "颜色 配色 安装 导入 导出 theme color palette",
+      "builtIn": "内置",
+      "file": "文件",
+      "more": "“{{name}}”的更多操作",
+      "export": "导出为文件…",
+      "remove": "移除…",
+      "install": "从文件安装…",
+      "installHint": ".json 主题文件",
+      "lowContrast": "对比度不足",
+      "contrastPair": "{{mode}}：{{fg}} 在 {{bg}} 上，{{ratio}}:1",
+      "contrastMore": "另有 {{count}} 处",
+      "installed": "已安装“{{name}}”，并已切换到它。",
+      "unused": "当前版本不使用：{{list}}。",
+      "lowContrastNotice": "部分文字和背景的对比度低于 4.5:1，可能不易阅读。",
+      "gotIt": "知道了",
+      "installFailed": "无法安装 {{file}}：{{reason}}。",
+      "replaceTitle": "替换主题“{{name}}”？",
+      "replaceDescription": "已安装的文件会被“{{name}}”替换。",
+      "replace": "替换",
+      "removeTitle": "移除主题“{{name}}”？",
+      "removeDescription": "已安装的文件会被删除。如果正在使用它，将改用 OverBench 主题。",
+      "removeConfirm": "移除",
+      "loadFailed": "主题“{{id}}”无法加载",
+      "loadFailedDescription": "已改用 OverBench 主题：{{reason}}。",
+      "useBuiltIn": "使用 OverBench",
+      "errors": {
+        "too-large": "文件超过 256 KB",
+        "not-json": "不是 JSON 文件",
+        "not-theme": "不是 OverBench 主题",
+        "newer-format": "需要更新版本的 OverBench",
+        "reserved-name": "名称与内置主题相同",
+        "missing-variant": "缺少 {{variant}} 变体",
+        "invalid-field": "{{path}} 无效",
+        "invalid-color": "{{path}} 不是颜色",
+        "unreadable": "无法读取文件",
+        "missing": "文件已不存在"
+      }
+    },
+    "colorMode": {
+      "name": "颜色模式",
+      "keywords": "深色 浅色 跟随系统 dark light system",
       "system": "跟随系统",
       "light": "浅色",
       "dark": "深色"
@@ -94,6 +134,7 @@
     },
     "groups": {
       "theme": "主题",
+      "colorMode": "颜色模式",
       "scale": "缩放与文字",
       "motion": "动态效果"
     },
@@ -462,7 +503,7 @@
   },
   "pages": {
     "general": "界面语言、输入方式，以及新会话和启动时的行为。",
-    "appearance": "主题、缩放和文字大小。改动立即生效。",
+    "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
     "notifications": "只在 OverBench 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
     "shortcuts": "会话、窗口和终端的快捷键。目前还不能修改。",
     "agents": "OverBench 通过 ACP 驱动这些编程 Agent。在这里查看账号、套餐用量和安装状态。",

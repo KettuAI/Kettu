@@ -35,12 +35,14 @@ import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
 import { framesSettled, isRevoked } from './subframes'
 import type { TerminalHost } from './terminal-host'
+import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
 
 const log = createLogger('ipc')
 
 export interface IpcDeps {
   settings: SettingsStore
+  themes: ThemeStore
   agentHost: AgentHost
   terminalHost: TerminalHost
   artifacts: Artifacts
@@ -186,6 +188,7 @@ let launchToInteractiveMs: number | null = null
 
 export function registerIpcHandlers({
   settings,
+  themes,
   agentHost,
   terminalHost,
   artifacts,
@@ -219,6 +222,13 @@ export function registerIpcHandlers({
   handle('settings:get', 0, () => settings.get())
   handle('settings:update', 1, (_, patch) => settings.update(patch))
   handle('login-item:status', 0, () => loginItemStatus())
+
+  handle('themes:get', 0, () => themes.refresh())
+  handle('themes:install', 0, ({ window }) => themes.install(window))
+  handle('themes:replace', 1, (_, token) => themes.replace(token))
+  handle('themes:remove', 1, (_, id) => themes.remove(id))
+  handle('themes:export', 1, ({ window }, text) => themes.export(window, text))
+  handle('themes:reveal', 1, (_, id) => themes.reveal(id))
 
   handle('dialog:open-project', 0, async ({ window }) => {
     const options: Electron.OpenDialogOptions = {

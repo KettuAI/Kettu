@@ -3,89 +3,21 @@
 // WCAG 2.x AA contrast (4.5:1) on the surfaces they are drawn on. No dependencies.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import contrast from '../../src/shared/contrast-pairs.json' with { type: 'json' }
 
-export const MIN_RATIO = 4.5
+// The app checks installed themes against the same pairs.
+export const MIN_RATIO = contrast.minRatio
 
-/** Foreground tokens and the background tokens each is drawn on, in both themes. */
-export const PAIR_GROUPS = [
-  {
-    fg: '--text-primary',
-    on: [
-      '--bg-app',
-      '--bg-sidebar',
-      '--bg-surface',
-      '--bg-subtle',
-      '--bg-code-inline',
-      '--bg-code-block',
-      '--bg-hover',
-      '--bg-selected',
-      '--danger-tint',
-      '--success-tint',
-      '--info-tint',
-      '--warning-tint',
-    ],
-  },
-  {
-    fg: '--text-secondary',
-    on: [
-      '--bg-app',
-      '--bg-sidebar',
-      '--bg-surface',
-      '--bg-subtle',
-      '--bg-code-block',
-      '--bg-hover',
-      '--bg-selected',
-    ],
-  },
-  {
-    fg: '--text-tertiary',
-    on: [
-      '--bg-app',
-      '--bg-sidebar',
-      '--bg-surface',
-      '--bg-subtle',
-      '--bg-code-block',
-      '--bg-hover',
-    ],
-  },
-  { fg: '--text-placeholder', on: ['--bg-surface', '--bg-app', '--bg-sidebar'] },
-  { fg: '--attention', on: ['--bg-app', '--bg-sidebar', '--bg-surface'] },
-  {
-    fg: '--danger',
-    on: [
-      '--bg-app',
-      '--bg-sidebar',
-      '--bg-surface',
-      '--bg-subtle',
-      '--bg-code-block',
-      '--bg-hover',
-      '--danger-tint',
-    ],
-  },
-  {
-    fg: '--success',
-    on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-code-block', '--success-tint'],
-  },
-  {
-    fg: '--info',
-    on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--info-tint', '--info-tint-hover'],
-  },
-  {
-    fg: '--merged',
-    on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--bg-subtle', '--bg-hover', '--bg-selected'],
-  },
-  { fg: '--warning', on: ['--bg-app', '--bg-sidebar', '--bg-surface', '--warning-tint'] },
-  { fg: '--link', on: ['--bg-app', '--bg-surface', '--bg-subtle'] },
-  { fg: '--link-hover', on: ['--bg-app', '--bg-surface', '--bg-subtle'] },
-  // Inverted fills: the send button's icon, tooltips, and a count on the attention fill.
-  { fg: '--bg-surface', on: ['--text-primary', '--attention'] },
-  { fg: '--bg-app', on: ['--text-primary'] },
-]
+/**
+ * Foreground tokens and the background tokens each is drawn on, in both themes. The last two are
+ * inverted fills: the send button's icon, tooltips, and a count on the attention fill.
+ */
+export const PAIR_GROUPS = contrast.groups
 
 export const PAIRS = PAIR_GROUPS.flatMap(({ fg, on }) => on.map((bg) => ({ fg, bg })))
 
 /** Disabled controls are exempt from contrast by WCAG, and the design keeps them faint. */
-export const EXEMPT = ['--text-disabled']
+export const EXEMPT = contrast.exempt
 
 /** @typedef {Map<string, string>} Declarations custom property name to value, trimmed */
 /** @typedef {{ light: Declarations, mediaDark: Declarations, dark: Declarations }} Blocks */

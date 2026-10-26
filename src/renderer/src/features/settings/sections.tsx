@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { BellIcon, CircleHelpIcon, FileDownIcon, MinusIcon, PlusIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -200,38 +200,38 @@ export function SendKey() {
 
 // ---- Appearance
 
-type Theme = SettingsFile['appearance']['theme']
+type ColorMode = SettingsFile['appearance']['theme']
 
-const THEMES: readonly Theme[] = ['system', 'light', 'dark']
+const COLOR_MODES: readonly ColorMode[] = ['system', 'light', 'dark']
 
-export function ThemeTiles() {
+export function ColorModeTiles() {
   const { t } = useTranslation('settings')
   const value = useSettings().appearance.theme
   const [apply, error] = useApply()
   return (
     <>
       <ToggleGroup
-        aria-label={t('appearance.theme.name')}
+        aria-label={t('appearance.colorMode.name')}
         variant="tile"
         size="tile"
         spacing={3.5}
         value={[value]}
         onValueChange={(next) => {
-          const picked = next[0] as Theme | undefined
+          const picked = next[0] as ColorMode | undefined
           if (picked && picked !== value) apply({ appearance: { theme: picked } })
         }}
         className="grid w-full grid-cols-3 items-stretch"
       >
-        {THEMES.map((theme) => (
+        {COLOR_MODES.map((mode) => (
           <ToggleGroupItem
-            key={theme}
-            value={theme}
+            key={mode}
+            value={mode}
             className="items-stretch gap-2 hover:[&>[data-tile]]:ring-border-strong"
           >
-            <ThemePreview kind={theme} />
+            <ColorModePreview kind={mode} />
             <span className="flex items-center gap-2 pl-0.5 text-small text-primary">
               <RadioDot />
-              {t(`appearance.theme.${theme}`)}
+              {t(`appearance.colorMode.${mode}`)}
             </span>
           </ToggleGroupItem>
         ))}
@@ -242,7 +242,7 @@ export function ThemeTiles() {
 }
 
 // Reads the toggle it sits in: filled with a dot while that toggle is pressed.
-function RadioDot() {
+export function RadioDot() {
   return (
     <span
       aria-hidden
@@ -253,8 +253,11 @@ function RadioDot() {
   )
 }
 
-/** A miniature window in the theme's own surfaces; System shows both, split on a diagonal. */
-function ThemePreview({ kind }: { kind: Theme }) {
+/**
+ * A miniature window in the chosen theme's surfaces for the mode; System shows both, split on a
+ * diagonal.
+ */
+function ColorModePreview({ kind }: { kind: ColorMode }) {
   return (
     <span
       data-tile=""
@@ -271,11 +274,23 @@ function MiniLine({ className }: { className?: string }) {
   return <span className={cn('block h-1.25 rounded-full bg-border', className)} />
 }
 
-// The wrapper's theme makes the tokens inside resolve for it, whatever the app shows.
-function MiniWindow({ dark, cut }: { dark: boolean; cut?: boolean }) {
+/**
+ * The wrapper's mode makes the tokens inside resolve for it, whatever the app shows; `style` can
+ * set the tokens themselves, for a theme that is not the chosen one.
+ */
+export function MiniWindow({
+  dark,
+  cut,
+  style,
+}: {
+  dark: boolean
+  cut?: boolean
+  style?: CSSProperties
+}) {
   return (
     <span
       data-theme={dark ? 'dark' : 'light'}
+      style={style}
       className={cn(
         'absolute inset-0 flex bg-background',
         cut && '[clip-path:polygon(62%_0,100%_0,100%_100%,38%_100%)]',
@@ -292,7 +307,9 @@ function MiniWindow({ dark, cut }: { dark: boolean; cut?: boolean }) {
         <span className="block h-3 w-1/2 self-end rounded-md bg-subtle" />
         <MiniLine className="w-11/12" />
         <MiniLine className="w-2/3" />
-        <span className="mt-auto block h-5 rounded-md bg-card shadow-card" />
+        <span className="mt-auto flex h-5 items-center justify-end rounded-md bg-card pr-0.75 shadow-card">
+          <span className="size-3.5 rounded-sm bg-(image:--primary-gradient)" />
+        </span>
       </span>
     </span>
   )

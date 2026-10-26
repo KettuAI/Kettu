@@ -7,6 +7,7 @@ import type { Platform } from './platform'
 import type { SettingsFile, SettingsPatch } from './settings'
 import type { SharingResult, SharingStatus } from './sharing'
 import type { TerminalsApi } from './terminal-host'
+import type { ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId } from './thread'
 import type { UpdateStatus } from './updates'
 
@@ -96,6 +97,14 @@ export interface IpcInvokeContract {
   'settings:get': { args: []; result: SettingsFile }
   'settings:update': { args: [patch: SettingsPatch]; result: SettingsFile }
   'login-item:status': { args: []; result: LoginItemStatus }
+  'themes:get': { args: []; result: ThemesState }
+  'themes:install': { args: []; result: ThemeInstallResult }
+  // `token`: from the `conflict` answer of the last `themes:install`.
+  'themes:replace': { args: [token: string]; result: ThemeInstallResult }
+  'themes:remove': { args: [id: string]; result: void }
+  // `text`: a whole theme file, which main checks before the save dialog; false when cancelled.
+  'themes:export': { args: [text: string]; result: boolean }
+  'themes:reveal': { args: [id: string]; result: void }
   'dialog:open-project': { args: []; result: string | null }
   'dialog:choose-agent-binary': { args: [agentId: AgentId]; result: string | null }
   'dialog:choose-agent-config-folder': { args: [agentId: AgentId]; result: string | null }
@@ -156,6 +165,7 @@ export type IpcInvokeResult<C extends IpcInvokeChannel> = IpcInvokeContract[C]['
 /** Events main sends to the renderer, keyed by channel name. */
 export interface IpcEventContract {
   'settings:changed': SettingsFile
+  'themes:changed': ThemesState
   'update:changed': UpdateStatus
   'app:confirm-quit': QuitRequest
   'app:command': AppCommand
@@ -250,6 +260,21 @@ export interface OverbenchApi {
     get(): Promise<SettingsFile>
     update(patch: SettingsPatch): Promise<SettingsFile>
     onChanged(listener: (settings: SettingsFile) => void): () => void
+  }
+  /** The themes folder, which main reads and checks; the page never names a path. */
+  themes: {
+    /** Reads the folder again. */
+    get(): Promise<ThemesState>
+    /** Asks for a theme file and installs it, or names the installed theme it would replace. */
+    install(): Promise<ThemeInstallResult>
+    /** Installs the file a `conflict` answer named, in place of the installed theme. */
+    replace(token: string): Promise<ThemeInstallResult>
+    remove(id: string): Promise<void>
+    /** Asks where to save a theme file; false when the user cancelled. */
+    export(text: string): Promise<boolean>
+    /** Shows an installed theme's file in the file manager. */
+    reveal(id: string): Promise<void>
+    onChanged(listener: (state: ThemesState) => void): () => void
   }
   loginItem: {
     getStatus(): Promise<LoginItemStatus>

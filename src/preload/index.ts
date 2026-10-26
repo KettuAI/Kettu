@@ -45,6 +45,7 @@ ipcRenderer.on('app:command', (_, command: AppCommand) => {
 })
 
 const onSettingsChanged = subscribe('settings:changed')
+const onThemesChanged = subscribe('themes:changed')
 
 function systemLocale(): Locale {
   const prefix = '--overbench-system-locale='
@@ -120,6 +121,15 @@ const api: OverbenchApi = {
     get: () => invoke('settings:get'),
     update: (patch) => invoke('settings:update', patch),
     onChanged: onSettingsChanged,
+  },
+  themes: {
+    get: () => invoke('themes:get'),
+    install: () => invoke('themes:install'),
+    replace: (token) => invoke('themes:replace', token),
+    remove: (id) => invoke('themes:remove', id),
+    export: (text) => invoke('themes:export', text),
+    reveal: (id) => invoke('themes:reveal', id),
+    onChanged: onThemesChanged,
   },
   loginItem: {
     getStatus: () => invoke('login-item:status'),

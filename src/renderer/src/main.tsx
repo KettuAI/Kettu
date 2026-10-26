@@ -6,8 +6,9 @@ import { createRoot } from 'react-dom/client'
 import { bootstrap } from './app/bootstrap'
 import { Root } from './app/root'
 
-// The first render waits for the settings, one IPC round trip, so it already has the user's
-// language and text size instead of switching a frame later.
+// The first render waits for the settings and the themes, an IPC round trip each and side by
+// side, so it already has the user's language, text size and colors instead of switching a frame
+// later.
 void bootstrap().then(() =>
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

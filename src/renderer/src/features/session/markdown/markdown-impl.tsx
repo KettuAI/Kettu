@@ -48,15 +48,34 @@ import {
 import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
+import { useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, spacedImages } from './local-images'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
 import { SvgBlock } from './svg-block'
 
-const plugins = {
-  code: createCodePlugin({ themes: ['github-light-default', 'github-dark-default'] }),
-  cjk,
-  renderers: [{ language: 'svg', component: SvgBlock }],
+function createPlugins({ light, dark }: CodeThemes) {
+  return {
+    code: createCodePlugin({ themes: [light, dark] }),
+    cjk,
+    renderers: [{ language: 'svg', component: SvgBlock }],
+  }
+}
+
+type Plugins = ReturnType<typeof createPlugins>
+
+// One set per pair of code themes, shared by every chunk: Streamdown's context depends on it, and
+// a new object would re-render every code block.
+const pluginsByThemes = new Map<string, Plugins>()
+
+function pluginsFor(themes: CodeThemes): Plugins {
+  const key = `${themes.light} ${themes.dark}`
+  let plugins = pluginsByThemes.get(key)
+  if (!plugins) {
+    plugins = createPlugins(themes)
+    pluginsByThemes.set(key, plugins)
+  }
+  return plugins
 }
 
 const DefaultLink = defaultComponents.a
@@ -276,6 +295,8 @@ function MarkdownImpl({
 
 const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: boolean }) {
   const source = useMemo(() => spacedImages(markdown), [markdown])
+  const themes = useCodeThemes()
+  const plugins = useMemo(() => pluginsFor(themes), [themes])
   return (
     <Streamdown
       mode="streaming"

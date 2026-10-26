@@ -71,7 +71,47 @@
   "appearance": {
     "theme": {
       "name": "Theme",
-      "keywords": "dark light system color",
+      "keywords": "color colors palette install import export",
+      "builtIn": "Built in",
+      "file": "File",
+      "more": "More for “{{name}}”",
+      "export": "Export…",
+      "remove": "Remove…",
+      "install": "Install from file…",
+      "installHint": ".json theme file",
+      "lowContrast": "Low contrast",
+      "contrastPair": "{{mode}}: {{fg}} on {{bg}}, {{ratio}}:1",
+      "contrastMore": "and {{count}} more",
+      "installed": "Installed “{{name}}” and switched to it.",
+      "unused": "This version doesn't use: {{list}}.",
+      "lowContrastNotice": "Some text is under 4.5:1 contrast with its background and may be hard to read.",
+      "gotIt": "Got it",
+      "installFailed": "Couldn't install {{file}}: {{reason}}.",
+      "replaceTitle": "Replace the theme “{{name}}”?",
+      "replaceDescription": "“{{name}}” takes the place of the installed file.",
+      "replace": "Replace",
+      "removeTitle": "Remove the theme “{{name}}”?",
+      "removeDescription": "Its installed file is deleted. If you're using it, OverBench's theme takes its place.",
+      "removeConfirm": "Remove",
+      "loadFailed": "The theme “{{id}}” couldn't load",
+      "loadFailedDescription": "OverBench's theme shows instead: {{reason}}.",
+      "useBuiltIn": "Use OverBench",
+      "errors": {
+        "too-large": "it's larger than 256 KB",
+        "not-json": "it isn't a JSON file",
+        "not-theme": "it isn't an OverBench theme",
+        "newer-format": "it needs a newer version of OverBench",
+        "reserved-name": "its name is the built-in theme's",
+        "missing-variant": "it has no {{variant}} variant",
+        "invalid-field": "{{path}} isn't valid",
+        "invalid-color": "{{path}} isn't a color",
+        "unreadable": "its file can't be read",
+        "missing": "its file is gone"
+      }
+    },
+    "colorMode": {
+      "name": "Color mode",
+      "keywords": "dark light system",
       "system": "System",
       "light": "Light",
       "dark": "Dark"
@@ -95,6 +135,7 @@
     },
     "groups": {
       "theme": "Theme",
+      "colorMode": "Color mode",
       "scale": "Zoom and text",
       "motion": "Motion"
     },
@@ -465,7 +506,7 @@
   },
   "pages": {
     "general": "The interface language, how you type, and what new sessions and launches do.",
-    "appearance": "Theme, zoom and text size. Changes apply at once.",
+    "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
     "notifications": "They show only while no OverBench window is in front, so they never interrupt what you are reading.",
     "shortcuts": "Shortcuts for sessions, the window and the terminal. They cannot be changed yet.",
     "agents": "OverBench drives these coding agents over ACP. Their accounts, plan usage and installs are here.",

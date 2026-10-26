@@ -2,11 +2,13 @@ import { join } from 'node:path'
 import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron'
 import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
+import type { Theme } from '@shared/themes'
 import { mayOpenWindow } from './artifacts/guards'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import type { StartMode } from './login-item'
 import { isRendererUrl, loadRenderer } from './renderer'
+import { windowColors, type WindowColors } from './themes'
 import { parseWindowState, placeWindow, type SavedWindowState } from './window-bounds'
 
 const log = createLogger('window')
@@ -16,6 +18,9 @@ const BACKGROUND_COLOR = { light: '#ffffff', dark: '#1b1b1a' }
 
 // The symbols of the Windows and Linux window controls: --text-primary of each theme.
 const SYMBOL_COLOR = { light: '#262626', dark: '#ececea' }
+
+// The chosen theme, whose colors replace the two above; null for the built-in theme.
+let chosen: Theme | null = null
 
 const TITLE_BAR_HEIGHT = 40
 // The traffic lights' height; at 100% they sit at { x: 16, y: 14 }, centred in the top bar.
@@ -30,17 +35,19 @@ export function devIcon(): string | null {
 
 let zoom: ZoomLevel = DEFAULT_SETTINGS.appearance.zoom
 
+function colors(): WindowColors {
+  const mode = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  const fallback = { background: BACKGROUND_COLOR[mode], symbol: SYMBOL_COLOR[mode] }
+  return chosen ? windowColors(chosen[mode].colors, mode, fallback) : fallback
+}
+
 export function backgroundColor(): string {
-  return nativeTheme.shouldUseDarkColors ? BACKGROUND_COLOR.dark : BACKGROUND_COLOR.light
+  return colors().background
 }
 
 function titleBarOverlay(): { color: string; symbolColor: string; height: number } {
-  const dark = nativeTheme.shouldUseDarkColors
-  return {
-    color: dark ? BACKGROUND_COLOR.dark : BACKGROUND_COLOR.light,
-    symbolColor: dark ? SYMBOL_COLOR.dark : SYMBOL_COLOR.light,
-    height: Math.round(TITLE_BAR_HEIGHT * zoom),
-  }
+  const { background, symbol } = colors()
+  return { color: background, symbolColor: symbol, height: Math.round(TITLE_BAR_HEIGHT * zoom) }
 }
 
 /**
@@ -71,15 +78,23 @@ export function applyTheme(theme: SettingsFile['appearance']['theme']): void {
   if (nativeTheme.themeSource !== theme) nativeTheme.themeSource = theme
 }
 
+function repaint(): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) continue
+    window.setBackgroundColor(backgroundColor())
+    if (process.platform !== 'darwin') window.setTitleBarOverlay(titleBarOverlay())
+  }
+}
+
+/** Gives every window the chosen theme's background and window controls. */
+export function applyWindowTheme(next: Theme | null): void {
+  chosen = next
+  repaint()
+}
+
 /** Keeps each window's background and window controls in step with the effective theme. */
 export function watchTheme(): void {
-  nativeTheme.on('updated', () => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (window.isDestroyed()) continue
-      window.setBackgroundColor(backgroundColor())
-      if (process.platform !== 'darwin') window.setTitleBarOverlay(titleBarOverlay())
-    }
-  })
+  nativeTheme.on('updated', repaint)
 }
 
 /** Owns window-state.json: the main window's size, position and maximized state. */

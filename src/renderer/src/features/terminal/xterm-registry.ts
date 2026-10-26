@@ -6,6 +6,7 @@ import { terminals } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { setSink, useTerminalsStore } from '@renderer/stores/terminals'
+import { onColorsChange } from '@renderer/stores/themes'
 
 // One xterm.js instance per terminal for the terminal's whole life. A tab that is hidden, or a
 // project that is not shown, keeps its instance; only its element leaves the page, so switching
@@ -84,14 +85,14 @@ function fontFamily(): string {
 
 let watching = false
 
-/** Follows the theme, the font size and removed terminals for every instance. */
+/** Follows the colors, the font size and removed terminals for every instance. */
 function watchOnce(): void {
   if (watching) return
   watching = true
-  new MutationObserver(() => {
+  onColorsChange(() => {
     const theme = readTheme()
     for (const instance of ready.values()) instance.term.options.theme = theme
-  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+  })
   useSettingsStore.subscribe((state, previous) => {
     const size = state.settings.terminal.fontSize
     if (size === previous.settings.terminal.fontSize) return

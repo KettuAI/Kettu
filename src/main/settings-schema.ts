@@ -11,6 +11,7 @@ import {
   ZOOM_LEVELS,
 } from '@shared/settings'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
+import { THEME_ID } from '@shared/themes'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 
 export const SETTINGS_VERSION = 1
@@ -34,6 +35,9 @@ const oneOf =
 const isBoolean: Check = (value, path) =>
   typeof value === 'boolean' ? null : `"${path}" must be a boolean`
 
+const isThemeId: Check = (value, path) =>
+  typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
+
 const SECTION_FIELDS = {
   general: {
     language: oneOf(...LANGUAGE_SETTINGS),
@@ -46,6 +50,7 @@ const SECTION_FIELDS = {
   thread: { outlineSummaries: isBoolean },
   appearance: {
     theme: oneOf('system', 'light', 'dark'),
+    colorTheme: isThemeId,
     textSize: oneOf('small', 'default', 'large'),
     reduceMotion: oneOf('system', 'always'),
     zoom: oneOf(...ZOOM_LEVELS),

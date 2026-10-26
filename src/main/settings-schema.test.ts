@@ -27,7 +27,7 @@ describe('validateSettingsPatch', () => {
         defaultAgent: 'codex',
         openAtLogin: true,
       },
-      appearance: { theme: 'dark', zoom: 1.25 },
+      appearance: { theme: 'dark', colorTheme: 'rose-pine', zoom: 1.25 },
       notifications: { sound: true },
       agents: { opencode: { binaryPath: null }, codex: { cli: 'bundled' } },
       proxy: { mode: 'custom', url: 'http://proxy.local:8080', noProxy: 'localhost' },
@@ -66,6 +66,10 @@ describe('validateSettingsPatch', () => {
     [{ general: { openAtLogin: 'yes' } }, '"general.openAtLogin" must be a boolean'],
     [{ general: 'enter' }, '"general" must be an object'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
+    [{ appearance: { colorTheme: '../nord' } }, '"appearance.colorTheme" must be a theme id'],
+    [{ appearance: { colorTheme: 'Nord' } }, '"appearance.colorTheme" must be a theme id'],
+    [{ appearance: { colorTheme: '' } }, '"appearance.colorTheme" must be a theme id'],
+    [{ appearance: { colorTheme: null } }, '"appearance.colorTheme" must be a theme id'],
     [{ appearance: { zoom: 2 } }, '"appearance.zoom" must be one of'],
     [{ appearance: { zoom: '1.1' } }, '"appearance.zoom" must be one of'],
     [{ notifications: { badge: 'yes' } }, '"notifications.badge" must be a boolean'],
@@ -171,6 +175,15 @@ describe('parseSettingsFile', () => {
       ...DEFAULT_SETTINGS,
       appearance: { ...DEFAULT_SETTINGS.appearance, theme: 'light' },
     })
+    expect(loaded.settings.appearance.colorTheme).toBe('overbench')
+  })
+
+  it('reads the chosen theme, keeping the built-in one for an id that is not one', () => {
+    const read = (colorTheme: unknown) =>
+      parseSettingsFile({ version: 1, appearance: { colorTheme } })
+    expect(read('rose-pine').settings.appearance.colorTheme).toBe('rose-pine')
+    expect(read('../x').settings.appearance.colorTheme).toBe('overbench')
+    expect(read('../x').problems).toEqual(['"appearance.colorTheme" must be a theme id'])
   })
 
   it('reads stored executable paths and choices of CLI', () => {

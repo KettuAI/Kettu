@@ -1,0 +1,84 @@
+{
+  "minRatio": 4.5,
+  "exempt": ["--text-disabled"],
+  "groups": [
+    {
+      "fg": "--text-primary",
+      "on": [
+        "--bg-app",
+        "--bg-sidebar",
+        "--bg-surface",
+        "--bg-subtle",
+        "--bg-code-inline",
+        "--bg-code-block",
+        "--bg-hover",
+        "--bg-selected",
+        "--danger-tint",
+        "--success-tint",
+        "--info-tint",
+        "--warning-tint"
+      ]
+    },
+    {
+      "fg": "--text-secondary",
+      "on": [
+        "--bg-app",
+        "--bg-sidebar",
+        "--bg-surface",
+        "--bg-subtle",
+        "--bg-code-block",
+        "--bg-hover",
+        "--bg-selected"
+      ]
+    },
+    {
+      "fg": "--text-tertiary",
+      "on": [
+        "--bg-app",
+        "--bg-sidebar",
+        "--bg-surface",
+        "--bg-subtle",
+        "--bg-code-block",
+        "--bg-hover"
+      ]
+    },
+    { "fg": "--text-placeholder", "on": ["--bg-surface", "--bg-app", "--bg-sidebar"] },
+    { "fg": "--attention", "on": ["--bg-app", "--bg-sidebar", "--bg-surface"] },
+    {
+      "fg": "--danger",
+      "on": [
+        "--bg-app",
+        "--bg-sidebar",
+        "--bg-surface",
+        "--bg-subtle",
+        "--bg-code-block",
+        "--bg-hover",
+        "--danger-tint"
+      ]
+    },
+    {
+      "fg": "--success",
+      "on": ["--bg-app", "--bg-sidebar", "--bg-surface", "--bg-code-block", "--success-tint"]
+    },
+    {
+      "fg": "--info",
+      "on": ["--bg-app", "--bg-sidebar", "--bg-surface", "--info-tint", "--info-tint-hover"]
+    },
+    {
+      "fg": "--merged",
+      "on": [
+        "--bg-app",
+        "--bg-sidebar",
+        "--bg-surface",
+        "--bg-subtle",
+        "--bg-hover",
+        "--bg-selected"
+      ]
+    },
+    { "fg": "--warning", "on": ["--bg-app", "--bg-sidebar", "--bg-surface", "--warning-tint"] },
+    { "fg": "--link", "on": ["--bg-app", "--bg-surface", "--bg-subtle"] },
+    { "fg": "--link-hover", "on": ["--bg-app", "--bg-surface", "--bg-subtle"] },
+    { "fg": "--bg-surface", "on": ["--text-primary", "--attention"] },
+    { "fg": "--bg-app", "on": ["--text-primary"] }
+  ]
+}
