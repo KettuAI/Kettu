@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { PanelLeftIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
@@ -39,10 +39,29 @@ export function NoDrag({ children, className }: { children: ReactNode; className
   return <div className={cn('app-region-no-drag flex items-center', className)}>{children}</div>
 }
 
+// The sidebar is inert while collapsed, and the top bar's toggle goes once it shows, so the toggle
+// in the other place takes the focus when the sidebar hides with the focus in it or shows from the
+// top bar's toggle. Read as the state changes, before the page does.
+let handOff = false
+useViewStore.subscribe((state, previous) => {
+  if (state.sidebarCollapsed === previous.sidebarCollapsed) return
+  handOff = !!document.activeElement?.closest(
+    state.sidebarCollapsed ? '[data-slot=sidebar]' : '[data-sidebar-toggle]',
+  )
+})
+
 export function SidebarToggle({ className }: { className?: string }) {
   const { t } = useTranslation('shell')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   const { summary } = useNotices()
+  const button = useRef<HTMLButtonElement>(null)
+  // Collapsed, the top bar's toggle takes the focus; shown, the sidebar's.
+  useLayoutEffect(() => {
+    const element = button.current
+    if (!handOff || !element || !!element.closest('[data-slot=sidebar]') === collapsed) return
+    handOff = false
+    element.focus()
+  }, [collapsed])
   // Collapsed, the sidebar's notices pill is out of sight, so the toggle marks and names them.
   const notices = collapsed ? summary : null
   const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
@@ -51,6 +70,8 @@ export function SidebarToggle({ className }: { className?: string }) {
       <TooltipTrigger
         render={
           <Button
+            ref={button}
+            data-sidebar-toggle=""
             variant="ghost"
             size="icon-compact"
             aria-label={label}

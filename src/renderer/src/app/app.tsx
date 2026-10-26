@@ -71,7 +71,7 @@ function Workbench() {
   const layout = useDefaultLayout({ id: 'workbench', storage: layoutStorage })
   const group = useRef<HTMLDivElement>(null)
   const sidebarContent = useRef<HTMLDivElement>(null)
-  const mainContent = useRef<HTMLDivElement>(null)
+  const mainContent = useRef<HTMLElement>(null)
   const sliding = useRef(false)
 
   // A toggle slides the sidebar: both panels' contents take their final widths at once, so the
@@ -157,21 +157,22 @@ function Workbench() {
         }}
         className={SLIDING_PANEL}
       >
-        <div ref={sidebarContent} className={PANEL_CONTENT}>
+        <div ref={sidebarContent} inert={collapsed} className={PANEL_CONTENT}>
           <AppSidebar />
         </div>
       </ResizablePanel>
       {/* The sidebar's edge, as the reference's soft hairline. Collapsed, the handle takes no
-          width, so nothing shows at the window's edge. */}
+          width, so nothing shows at the window's edge, and leaves the tab order. */}
       <ResizableHandle
         withHandle={!collapsed}
+        disabled={collapsed}
         className={cn('bg-border-soft', collapsed && 'pointer-events-none w-0')}
         onPointerDown={() => sliding.current && endSlide()}
       />
       <ResizablePanel id="main" minSize="560px" className={cn(SLIDING_PANEL, 'bg-background')}>
-        <div ref={mainContent} className={PANEL_CONTENT}>
+        <main ref={mainContent} className={PANEL_CONTENT}>
           <MainArea />
-        </div>
+        </main>
       </ResizablePanel>
     </ResizablePanelGroup>
   )
