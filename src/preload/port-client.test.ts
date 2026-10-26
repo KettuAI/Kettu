@@ -36,11 +36,41 @@ class FakeTransport {
   }
 }
 
+/** Waits that resolve once a list holds a given number of items. */
+class Counted {
+  private waits: { count: number; resolve: () => void }[] = []
+
+  constructor(private readonly items: readonly unknown[]) {}
+
+  /** Call after an item is added. */
+  added(): void {
+    this.waits = this.waits.filter((wait) => {
+      if (this.items.length < wait.count) return true
+      wait.resolve()
+      return false
+    })
+  }
+
+  until(count: number): Promise<void> {
+    if (this.items.length >= count) return Promise.resolve()
+    return new Promise((resolve) => this.waits.push({ count, resolve }))
+  }
+}
+
 /** A host end that records requests and answers them on demand. */
 class FakeHost {
   received: ToPort[] = []
+  private readonly counted = new Counted(this.received)
   constructor(readonly port: NodePort) {
-    port.on('message', (message: ToPort) => this.received.push(message))
+    port.on('message', (message: ToPort) => {
+      this.received.push(message)
+      this.counted.added()
+    })
+  }
+
+  /** Resolves once `count` requests have come. */
+  until(count: number): Promise<void> {
+    return this.counted.until(count)
   }
 
   respond(id: number, result: unknown): void {
@@ -65,8 +95,6 @@ function connectHost(transport: FakeTransport): FakeHost {
   transport.deliver(channel.port2)
   return host
 }
-
-const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10))
 
 function client(lazy = false) {
   const transport = new FakeTransport()
@@ -109,7 +137,7 @@ describe('PortClient', () => {
     expect(transport.requests).toBe(1)
     const second = portClient.request('a.set', { n: 2 })
     const host = connectHost(transport)
-    await tick()
+    await host.until(2)
     expect(states).toEqual(['connected'])
     expect(host.received).toEqual([
       { type: 'request', id: 1, method: 'a.get', params: { n: 1 } },
@@ -125,7 +153,7 @@ describe('PortClient', () => {
     const { transport, portClient } = client()
     const host = connectHost(transport)
     const pending = portClient.request('a.get', {})
-    await tick()
+    await host.until(1)
     host.fail(host.received[0].id, 'not_found', 'No such thing')
     const error = await pending.catch((reason: unknown) => reason)
     expect(error).toEqual({
@@ -143,11 +171,19 @@ describe('PortClient', () => {
     const host = connectHost(transport)
     const events: unknown[] = []
     const unsubscribe = portClient.onEvent((event) => events.push(event))
+    // A listener that stays: the port delivers in order, so once it has the second event, the
+    // first listener would have had it too.
+    const staying: unknown[] = []
+    const seen = new Counted(staying)
+    portClient.onEvent((event) => {
+      staying.push(event)
+      seen.added()
+    })
     host.emit({ type: 'x', n: 1 })
-    await tick()
+    await seen.until(1)
     unsubscribe()
     host.emit({ type: 'x', n: 2 })
-    await tick()
+    await seen.until(2)
     expect(events).toEqual([{ type: 'x', n: 1 }])
   })
 
@@ -161,9 +197,9 @@ describe('PortClient', () => {
 
   it('rejects in-flight requests on reset and reconnects with fresh ids', async () => {
     const { transport, portClient, states } = client()
-    connectHost(transport)
+    const first = connectHost(transport)
     const inFlight = portClient.request('a.get', {})
-    await tick()
+    await first.until(1)
     transport.reset(false)
     await expect(inFlight).rejects.toMatchObject({ code: 'host_restarted' })
     expect(states).toEqual(['connected', 'reconnecting'])
@@ -171,7 +207,7 @@ describe('PortClient', () => {
 
     const waiting = portClient.request('a.get', { again: true })
     const host = connectHost(transport)
-    await tick()
+    await host.until(1)
     expect(states).toEqual(['connected', 'reconnecting', 'connected'])
     expect(host.received).toEqual([
       { type: 'request', id: 1, method: 'a.get', params: { again: true } },
