@@ -1,5 +1,7 @@
 // A project's files as the Files pane lists, reads and searches them through the agent host.
 
+import type { MediaGrant } from './media'
+
 /** Paths are relative to the project's root, with `/` between segments on every platform. */
 export interface FileList {
   paths: string[]
@@ -10,21 +12,11 @@ export interface FileList {
 export type FileContent =
   // `version` is the SHA-256 of the bytes; `editable` is false when they are not valid UTF-8.
   | { kind: 'text'; path: string; size: number; text: string; version: string; editable: boolean }
-  // A picture named as one whose first bytes say which kind, read whole as base64.
-  | { kind: 'image'; path: string; size: number; mimeType: ImageType; data: string }
+  // Named as media and its first bytes say which kind: not read, but granted on the media scheme.
+  | { kind: 'media'; path: string; grant: MediaGrant }
   | { kind: 'binary'; path: string; size: number }
-  // Larger than `limit`, FILE_READ_LIMIT or FILE_IMAGE_LIMIT for an image; not read.
+  // Larger than `limit`, which is FILE_READ_LIMIT; not read.
   | { kind: 'too-large'; path: string; size: number; limit: number }
-
-/** The picture formats Chromium shows that the preview reads. */
-export type ImageType =
-  | 'image/png'
-  | 'image/jpeg'
-  | 'image/gif'
-  | 'image/webp'
-  | 'image/avif'
-  | 'image/bmp'
-  | 'image/x-icon'
 
 /** A saved file's new version and size in bytes. */
 export interface FileWritten {
@@ -46,7 +38,5 @@ export interface FileSearch {
 
 export const FILE_LIST_LIMIT = 50_000
 export const FILE_READ_LIMIT = 1024 * 1024
-// An image goes to the renderer whole, as base64 in a `data:` URL, which the CSP already allows.
-export const FILE_IMAGE_LIMIT = 10_000_000
 export const FILE_SEARCH_LIMIT = 500
 export const FILE_MATCH_CHARS = 300

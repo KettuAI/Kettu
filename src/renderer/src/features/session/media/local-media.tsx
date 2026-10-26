@@ -38,10 +38,13 @@ export function LocalMedia({
   path,
   alt = '',
   image = false,
+  imageHeight,
 }: {
   path: string
   alt?: string
   image?: boolean
+  /** The tallest an image shows, when not as in a reply. */
+  imageHeight?: number
 }) {
   const projectPath = useContext(ProjectPathContext)
   const sessionId = useContext(SessionIdContext)
@@ -156,6 +159,7 @@ export function LocalMedia({
         alt={alt}
         grant={grant}
         viewerKey={viewerKey}
+        maxHeight={imageHeight}
         onOpen={open}
         onFailed={() => failed(grant, null)}
       />
@@ -218,36 +222,51 @@ function MediaState({
     return <Placeholder title={title} detail={t('media.notFound', { path })} action={retryButton} />
   }
   const { grant } = shown
-  const act = (action: (url: string) => Promise<void>) => () => {
-    setError(null)
-    action(grant.url).catch((e: unknown) => setError(errorMessage(e)))
-  }
   return (
     <Placeholder
       title={title}
       detail={
         <>
-          {grant.kind === 'video'
-            ? t('media.unsupportedVideo')
-            : grant.kind === 'audio'
-              ? t('media.unsupportedAudio')
-              : t('media.unsupported')}
+          <UnsupportedReason kind={grant.kind} />
           {error && <span className="block text-danger">{error}</span>}
         </>
       }
-      action={
-        <>
-          <Button variant="outline" size="xs" onClick={act(window.overbench.media.openExternal)}>
-            <ExternalLinkIcon />
-            {t('media.openWithDefault')}
-          </Button>
-          <Button variant="outline" size="xs" onClick={act(window.overbench.media.reveal)}>
-            <FolderIcon />
-            {t('media.showIn', { name: fileManagerName() })}
-          </Button>
-        </>
-      }
+      action={<PlayElsewhere url={grant.url} onError={setError} />}
     />
+  )
+}
+
+/** What a file in a format Chromium cannot show or play says, by its kind. */
+export function UnsupportedReason({ kind }: { kind: MediaKind }) {
+  const { t } = useTranslation('session')
+  if (kind === 'video') return t('media.unsupportedVideo')
+  return kind === 'audio' ? t('media.unsupportedAudio') : t('media.unsupported')
+}
+
+/** Open with default app and Show in the file manager: the ways out for such a file. */
+export function PlayElsewhere({
+  url,
+  onError,
+}: {
+  url: string
+  onError: (message: string | null) => void
+}) {
+  const { t } = useTranslation('session')
+  const act = (action: (url: string) => Promise<void>) => () => {
+    onError(null)
+    action(url).catch((e: unknown) => onError(errorMessage(e)))
+  }
+  return (
+    <>
+      <Button variant="outline" size="xs" onClick={act(window.overbench.media.openExternal)}>
+        <ExternalLinkIcon />
+        {t('media.openWithDefault')}
+      </Button>
+      <Button variant="outline" size="xs" onClick={act(window.overbench.media.reveal)}>
+        <FolderIcon />
+        {t('media.showIn', { name: fileManagerName() })}
+      </Button>
+    </>
   )
 }
 

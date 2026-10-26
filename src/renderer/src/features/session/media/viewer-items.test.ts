@@ -167,6 +167,23 @@ describe('threadItems', () => {
     ])
   })
 
+  it("takes the files a tool call's diffs and locations name, after its pictures", () => {
+    const thread = state([
+      {
+        ...tool('t1', [
+          { type: 'markdown', markdown: 'Wrote `out/x.png` and ![y](out/y.png)' },
+          { type: 'diff', path: 'art/logo.svg', oldText: '<svg/>', newText: '<svg></svg>' },
+        ]),
+        toolKind: 'edit',
+        locations: [{ path: './art/logo.svg' }, { path: 'out/clip.mp4' }, { path: 'out/beep.mp3' }],
+      },
+    ])
+    expect(threadItems(thread).map((item) => [item.key, item.name])).toEqual([
+      ['t1:file:art/logo.svg', 'logo.svg'],
+      ['t1:file:out/clip.mp4', 'clip.mp4'],
+    ])
+  })
+
   it('counts a forwarded message by all its refs, attachments shown as chips', () => {
     const thread = state([
       {

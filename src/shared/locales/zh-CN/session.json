@@ -57,8 +57,7 @@
     "runInTerminal": "在终端中运行",
     "copyCommand": "复制命令",
     "showAll": "显示全部",
-    "showFullDiff": "显示完整差异",
-    "image": "图片"
+    "showFullDiff": "显示完整差异"
   },
   "permission": {
     "ask": {

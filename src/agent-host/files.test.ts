@@ -6,18 +6,21 @@ import {
   mkdir,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   symlink,
   writeFile,
 } from 'node:fs/promises'
 import { join } from 'node:path'
-import { FILE_IMAGE_LIMIT, FILE_MATCH_CHARS, FILE_READ_LIMIT } from '@shared/files'
+import { FILE_MATCH_CHARS, FILE_READ_LIMIT } from '@shared/files'
+import type { MediaGrantRecord } from '@shared/media'
 import type { Platform } from '@shared/platform'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FilesService, type FilesLimits } from './files'
 import type { Exec, ExecResult } from './git/exec'
 import { createSandbox, type Sandbox } from './git/test-support'
+import { MediaService, mediaToken } from './media'
 
 const platform: Platform = process.platform
 const posixOnly = platform === 'win32' ? it.skip : it
@@ -33,8 +36,23 @@ afterAll(async () => {
   await s.dispose()
 })
 
+/** The grants the services handed main, newest last. */
+const granted: MediaGrantRecord[] = []
+
 function service(limits: Partial<FilesLimits> = {}, exec: Exec = s.exec): FilesService {
-  return new FilesService({ exec, platform, limits })
+  const media = new MediaService({
+    platform,
+    homeDir: s.root,
+    names: async () => false,
+    grant: (record) => granted.push(record),
+    random: () => Buffer.alloc(16, 7),
+  })
+  return new FilesService({
+    exec,
+    platform,
+    limits,
+    media: (real, info) => media.grantFile(real, info, null),
+  })
 }
 
 async function repo(): Promise<string> {
@@ -237,48 +255,115 @@ describe('read', () => {
     })
   })
 
-  it('reads an image whole, typed by its first bytes, up to the image limit', async () => {
+  it('answers a picture, an SVG and a video with a grant instead of their bytes', async () => {
     const dir = await plain()
-    const png = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      Buffer.alloc(FILE_READ_LIMIT, 1),
-    ])
+    granted.length = 0
+    // A PNG header of 64 x 32, and more bytes than a text file may have.
+    const png = Buffer.alloc(33 + FILE_READ_LIMIT, 1)
+    Buffer.from('\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR', 'latin1').copy(png, 0)
+    png.writeUInt32BE(64, 16)
+    png.writeUInt32BE(32, 20)
     await writeFile(join(dir, 'cover.PNG'), png)
-    expect(await service().read(dir, 'cover.PNG')).toEqual({
-      kind: 'image',
+    await writeFile(join(dir, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>')
+    const mp4 = Buffer.alloc(32)
+    mp4.writeUInt32BE(32, 0)
+    mp4.write('ftypisom', 4, 'latin1')
+    await writeFile(join(dir, 'clip.mp4'), mp4)
+    const token = mediaToken(Buffer.alloc(16, 7))
+
+    const picture = await service().read(dir, 'cover.PNG')
+    expect(picture).toEqual({
+      kind: 'media',
       path: 'cover.PNG',
-      size: png.length,
-      mimeType: 'image/png',
-      data: png.toString('base64'),
+      grant: {
+        url: expect.stringMatching(new RegExp(`^overbench-media://${token}/cover\\.PNG\\?v=\\d+$`)),
+        kind: 'image',
+        mimeType: 'image/png',
+        size: png.length,
+        width: 64,
+        height: 32,
+      },
     })
+    expect(await service().read(dir, 'logo.svg')).toEqual({
+      kind: 'media',
+      path: 'logo.svg',
+      grant: {
+        url: expect.stringContaining('/logo.svg?v='),
+        kind: 'image',
+        mimeType: 'image/svg+xml',
+        size: 41,
+      },
+    })
+    expect(await service().read(dir, 'clip.mp4')).toMatchObject({
+      kind: 'media',
+      grant: { kind: 'video', mimeType: 'video/mp4', size: 32 },
+    })
+    // The Files pane's grants belong to no session, at the file's real path.
+    expect(granted).toEqual(
+      await Promise.all(
+        [
+          ['cover.PNG', 'image/png'],
+          ['logo.svg', 'image/svg+xml'],
+          ['clip.mp4', 'video/mp4'],
+        ].map(async ([name, mimeType]) => ({
+          token,
+          path: await realpath(join(dir, name!)),
+          mimeType,
+          sessionId: null,
+        })),
+      ),
+    )
     // A JPEG named .png is shown as what it is.
     await writeFile(join(dir, 'photo.png'), Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]))
-    expect(await service().read(dir, 'photo.png')).toMatchObject({ mimeType: 'image/jpeg' })
-    await writeFile(join(dir, 'anim.webp'), Buffer.from('RIFF\x04\x00\x00\x00WEBPVP8 ', 'latin1'))
-    expect(await service().read(dir, 'anim.webp')).toMatchObject({ mimeType: 'image/webp' })
-  })
-
-  it('does not read an image larger than the image limit', async () => {
-    const dir = await plain()
-    await writeFile(join(dir, 'big.jpg'), Buffer.alloc(12, 1))
-    expect(await service({ image: 11 }).read(dir, 'big.jpg')).toEqual({
-      kind: 'too-large',
-      path: 'big.jpg',
-      size: 12,
-      limit: 11,
+    expect(await service().read(dir, 'photo.png')).toMatchObject({
+      grant: { mimeType: 'image/jpeg' },
     })
-    expect(FILE_IMAGE_LIMIT).toBeGreaterThan(FILE_READ_LIMIT)
   })
 
-  it('treats a file named as an image that holds something else as any other file', async () => {
+  it('reads a media file as any other file when asked, as an SVG for its source', async () => {
     const dir = await plain()
+    granted.length = 0
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>'
+    await writeFile(join(dir, 'logo.svg'), svg)
+    const mp4 = Buffer.alloc(32)
+    mp4.writeUInt32BE(32, 0)
+    mp4.write('ftypisom', 4, 'latin1')
+    await writeFile(join(dir, 'clip.mp4'), mp4)
+    expect(await service().read(dir, 'logo.svg', true)).toEqual({
+      kind: 'text',
+      path: 'logo.svg',
+      size: 41,
+      text: svg,
+      version: sha256(svg),
+      editable: true,
+    })
+    expect(await service().read(dir, 'clip.mp4', true)).toEqual({
+      kind: 'binary',
+      path: 'clip.mp4',
+      size: 32,
+    })
+    expect(granted).toEqual([])
+  })
+
+  it('reads a binary that is no media, and one named as media that is not, as any other file', async () => {
+    const dir = await plain()
+    granted.length = 0
+    await writeFile(join(dir, 'data.bin'), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01]))
     await s.write(dir, 'note.png', 'not a picture')
     await writeFile(join(dir, 'odd.gif'), Buffer.from([0x00, 0x01, 0x02]))
+    await s.write(dir, 'fake.mp4', 'not a video')
+    expect(await service().read(dir, 'data.bin')).toEqual({
+      kind: 'binary',
+      path: 'data.bin',
+      size: 6,
+    })
     expect(await service().read(dir, 'note.png')).toMatchObject({
       kind: 'text',
       text: 'not a picture',
     })
     expect(await service().read(dir, 'odd.gif')).toMatchObject({ kind: 'binary' })
+    expect(await service().read(dir, 'fake.mp4')).toMatchObject({ kind: 'text' })
+    expect(granted).toEqual([])
   })
 
   it('refuses paths that could leave the project', async () => {

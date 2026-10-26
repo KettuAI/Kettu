@@ -7,7 +7,7 @@ import type { Attachment, ContentRef, ThreadEntry, ThreadState, UserContent } fr
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { isLocalImage, spacedImages } from '../markdown/local-images'
 import { isLocalLink } from '../markdown/local-links'
-import { mediaReference, sameFile } from './named'
+import { mediaReference, sameFile, toolMedia } from './named'
 
 const markdown = parser.configure(GFM)
 type SyntaxNode = ReturnType<typeof markdown.parse>['topNode']
@@ -175,8 +175,8 @@ export function markdownFiles(text: string): ShownFile[] {
   return files
 }
 
-function fileItems(entryId: string, text: string): ViewerItem[] {
-  return markdownFiles(text)
+function fileItems(entryId: string, files: ShownFile[]): ViewerItem[] {
+  return files
     .filter(({ path }) => mediaKindOfName(fileName(path)) !== 'audio')
     .map(({ path, alt }) => ({
       key: fileKey(entryId, path),
@@ -231,14 +231,23 @@ function entryItems(entry: ThreadEntry): ViewerItem[] {
     case 'session_message':
       return refItems(entry.id, refsOf(entry.content))
     case 'agent':
-      return [...fileItems(entry.id, entry.markdown), ...refItems(entry.id, entry.attachments)]
+      return [
+        ...fileItems(entry.id, markdownFiles(entry.markdown)),
+        ...refItems(entry.id, entry.attachments),
+      ]
     case 'thought':
-      return fileItems(entry.id, entry.markdown)
+      return fileItems(entry.id, markdownFiles(entry.markdown))
     case 'tool':
-      // By its index among the call's content.
-      return entry.content.flatMap((content, i) =>
-        content.type === 'ref' ? byteItem(entry.id, i, content.ref) : [],
-      )
+      // Its pictures by their index among the call's content, then the files it names.
+      return [
+        ...entry.content.flatMap((content, i) =>
+          content.type === 'ref' ? byteItem(entry.id, i, content.ref) : [],
+        ),
+        ...fileItems(
+          entry.id,
+          toolMedia(entry).map((path) => ({ path, alt: '' })),
+        ),
+      ]
     default:
       return []
   }

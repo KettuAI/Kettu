@@ -33,8 +33,6 @@
     "binaryDescription": "{{size}}, not shown.",
     "tooLargeTitle": "Too large to preview",
     "tooLargeDescription": "{{size}}; the preview shows files up to {{limit}}.",
-    "imageFailedTitle": "Couldn't show this image",
-    "imageFailedDescription": "{{size}}; its data does not decode as a picture.",
     "unsaved": "Unsaved changes",
     "save": "Save",
     "changedOnDisk": "This file changed on disk.",

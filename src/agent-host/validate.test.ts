@@ -254,6 +254,12 @@ describe('createValidators', () => {
       projectPath: '/p',
       path: 'src/a.ts',
     })
+    expect(read({ projectPath: '/p', path: 'logo.svg', asText: true })).toEqual({
+      projectPath: '/p',
+      path: 'logo.svg',
+      asText: true,
+    })
+    rejects(() => read({ projectPath: '/p', path: 'logo.svg', asText: 'yes' }))
     rejects(() => read({ projectPath: '/p' }))
     rejects(() => read({ projectPath: '/p', path: '' }))
     rejects(() => read({ projectPath: '/p', path: 3 }))

@@ -1,6 +1,8 @@
-// Grants for media files a thread names, which main then serves on the media scheme.
+// Grants for the media files a thread names or the Files pane opens, which main then serves on
+// the media scheme.
 
 import { randomBytes } from 'node:crypto'
+import type { Stats } from 'node:fs'
 import { open, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,13 +10,14 @@ import {
   mediaKindOfName,
   mediaUrl,
   type MediaAudioType,
+  type MediaGrant,
   type MediaGrantRecord,
   type MediaImageType,
   type MediaOpenResult,
   type MediaVideoType,
 } from '@shared/media'
 import type { Platform } from '@shared/platform'
-import { imageType, readBytes } from './files'
+import { readBytes } from './files'
 import { isAbsolutePath, pathKey } from './paths'
 
 /** Enough for any signature, and for a JPEG's frame header behind its metadata. */
@@ -47,6 +50,19 @@ export function mediaToken(bytes: Buffer): string {
   }
   if (bits > 0) out += BASE32[(value << (5 - bits)) & 31]
   return out
+}
+
+/** A picture's format by its signature, not its name; null when it is none of these. */
+export function imageType(bytes: Buffer): Exclude<MediaImageType, 'image/svg+xml'> | null {
+  const ascii = (start: number, end: number) => bytes.toString('latin1', start, end)
+  if (bytes[0] === 0x89 && ascii(1, 8) === 'PNG\r\n\x1a\n') return 'image/png'
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
+  if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') return 'image/gif'
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp'
+  if (ascii(4, 8) === 'ftyp' && ['avif', 'avis'].includes(ascii(8, 12))) return 'image/avif'
+  if (ascii(0, 2) === 'BM') return 'image/bmp'
+  if (ascii(0, 4) === '\0\0\x01\0') return 'image/x-icon'
+  return null
 }
 
 // After an optional BOM, XML declaration, comments and doctype, the first element is `<svg`.
@@ -263,22 +279,29 @@ export class MediaService {
     if (!(await allowed(real))) return { kind: 'forbidden' }
     const info = await stat(real)
     if (!info.isFile()) return { kind: 'not_found' }
+    const grant = await this.grantFile(real, info, sessionId)
+    return grant ? { kind: 'granted', grant } : { kind: 'not_media' }
+  }
+
+  /**
+   * A grant for the regular file at `real`, a real path the caller has allowed, when its name
+   * nominates it as media and its first bytes say which kind; null when it is no media. The
+   * Files pane's grants have no session.
+   */
+  async grantFile(real: string, info: Stats, sessionId: string | null): Promise<MediaGrant | null> {
     const name = this.paths.basename(real)
     const nominated = mediaKindOfName(name)
-    if (!nominated) return { kind: 'not_media' }
+    if (!nominated) return null
     const head = await readHead(real, Math.min(info.size, HEAD_BYTES))
     const type = nominated === 'image' ? imageOf(head) : avType(head, name)
-    if (!type) return { kind: 'not_media' }
+    if (!type) return null
     const token = mediaToken((this.deps.random ?? randomBytes)(16))
     this.deps.grant({ token, path: real, mimeType: type.mimeType, sessionId })
     return {
-      kind: 'granted',
-      grant: {
-        url: mediaUrl(token, name, info.mtimeMs),
-        ...type,
-        size: info.size,
-        ...(type.kind === 'image' ? (pixelSize(type.mimeType, head) ?? {}) : {}),
-      },
+      url: mediaUrl(token, name, info.mtimeMs),
+      ...type,
+      size: info.size,
+      ...(type.kind === 'image' ? (pixelSize(type.mimeType, head) ?? {}) : {}),
     }
   }
 

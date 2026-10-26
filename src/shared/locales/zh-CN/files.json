@@ -32,8 +32,6 @@
     "binaryDescription": "{{size}}，不显示预览。",
     "tooLargeTitle": "文件过大，无法预览",
     "tooLargeDescription": "{{size}}；预览仅支持不超过 {{limit}} 的文件。",
-    "imageFailedTitle": "无法显示此图片",
-    "imageFailedDescription": "{{size}}；图片数据无法解码。",
     "unsaved": "有未保存的更改",
     "save": "保存",
     "changedOnDisk": "这个文件在磁盘上被改动了。",

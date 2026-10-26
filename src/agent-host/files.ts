@@ -6,7 +6,6 @@ import type { Stats } from 'node:fs'
 import { open, readdir, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises'
 import path from 'node:path'
 import {
-  FILE_IMAGE_LIMIT,
   FILE_LIST_LIMIT,
   FILE_MATCH_CHARS,
   FILE_READ_LIMIT,
@@ -16,8 +15,8 @@ import {
   type FileMatch,
   type FileSearch,
   type FileWritten,
-  type ImageType,
 } from '@shared/files'
+import type { MediaGrant } from '@shared/media'
 import type { Platform } from '@shared/platform'
 import { HostError, invalidParams, notFound } from './errors'
 import { describeFailure, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './git/exec'
@@ -26,7 +25,6 @@ import { isAbsolutePath, pathKey } from './paths'
 export interface FilesLimits {
   list: number
   read: number
-  image: number
   search: number
   matchChars: number
   /** Files the search reads when the project is not in a repository. */
@@ -38,7 +36,6 @@ export interface FilesLimits {
 const DEFAULT_LIMITS: FilesLimits = {
   list: FILE_LIST_LIMIT,
   read: FILE_READ_LIMIT,
-  image: FILE_IMAGE_LIMIT,
   search: FILE_SEARCH_LIMIT,
   matchChars: FILE_MATCH_CHARS,
   scanFiles: 5_000,
@@ -56,6 +53,8 @@ export interface FilesServiceDeps {
   /** Runs git; it must give git the agent environment. */
   exec: Exec
   platform: Platform
+  /** A grant on the media scheme for a file at its real path, or null when it is no media. */
+  media(real: string, info: Stats): Promise<MediaGrant | null>
   /** Replaces the default limits, for tests. */
   limits?: Partial<FilesLimits>
 }
@@ -99,21 +98,6 @@ const RENAME_REFUSED: ReadonlySet<string> = new Set(['EPERM', 'EACCES', 'EBUSY']
 
 function isBinary(bytes: Buffer): boolean {
   return bytes.subarray(0, BINARY_PROBE_BYTES).includes(0)
-}
-
-const IMAGE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i
-
-/** The picture format by its signature, not its name; null when it is none the preview shows. */
-export function imageType(bytes: Buffer): ImageType | null {
-  const ascii = (start: number, end: number) => bytes.toString('latin1', start, end)
-  if (bytes[0] === 0x89 && ascii(1, 8) === 'PNG\r\n\x1a\n') return 'image/png'
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
-  if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') return 'image/gif'
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp'
-  if (ascii(4, 8) === 'ftyp' && ['avif', 'avis'].includes(ascii(8, 12))) return 'image/avif'
-  if (ascii(0, 2) === 'BM') return 'image/bmp'
-  if (ascii(0, 4) === '\0\0\x01\0') return 'image/x-icon'
-  return null
 }
 
 export async function readBytes(handle: FileHandle, length: number): Promise<Buffer> {
@@ -187,24 +171,21 @@ export class FilesService {
   }
 
   /**
-   * A file's text or picture, or why there is none. `relativePath` uses `/` between segments. A
-   * file named as a picture is one only if its first bytes say so.
+   * A file's text, or its grant when it is media, or why there is none. `relativePath` uses `/`
+   * between segments. A file named as media is one only if its first bytes say so; `asText` reads
+   * it as any other file.
    */
-  async read(root: string, relativePath: string): Promise<FileContent> {
+  async read(root: string, relativePath: string, asText = false): Promise<FileContent> {
     const relative = this.normalize(relativePath)
     const real = await this.resolveInside(root, relative)
-    const { size } = await this.fileStat(real, relative)
-    const named = IMAGE_NAME.test(relative)
-    const limit = named ? this.limits.image : this.limits.read
-    if (size > limit) return { kind: 'too-large', path: relative, size, limit }
-    const bytes = await this.readFile(real, size)
-    const mimeType = named ? imageType(bytes) : null
-    if (mimeType) {
-      return { kind: 'image', path: relative, size, mimeType, data: bytes.toString('base64') }
-    }
+    const info = await this.fileStat(real, relative)
+    const grant = asText ? null : await this.deps.media(real, info)
+    if (grant) return { kind: 'media', path: relative, grant }
+    const { size } = info
     if (size > this.limits.read) {
       return { kind: 'too-large', path: relative, size, limit: this.limits.read }
     }
+    const bytes = await this.readFile(real, size)
     if (isBinary(bytes)) return { kind: 'binary', path: relative, size }
     return { kind: 'text', path: relative, size, ...decode(bytes), version: versionOf(bytes) }
   }

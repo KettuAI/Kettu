@@ -66,8 +66,7 @@
     "runInTerminal": "Run in terminal",
     "copyCommand": "Copy command",
     "showAll": "Show all",
-    "showFullDiff": "Show full diff",
-    "image": "Image"
+    "showFullDiff": "Show full diff"
   },
   "permission": {
     "ask": {

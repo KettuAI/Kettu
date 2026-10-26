@@ -812,9 +812,11 @@ export function createValidators(platform: Platform): Validators {
     'files.list': project,
     'files.read': (params) => {
       const o = fields(params)
+      const asText = optionalFlag(o, 'asText')
       return {
         projectPath: absolutePath(o, 'projectPath', platform),
         path: relativePath(o, 'path', platform),
+        ...(asText === undefined ? {} : { asText }),
       }
     },
     'files.search': (params) => {
