@@ -20,7 +20,15 @@ import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
 import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
-import { buildItems, lastSent, replyKeys, signatureOf, type Item } from './thread-items'
+import {
+  buildItems,
+  estimateOf,
+  lastSent,
+  replyKeys,
+  signatureOf,
+  type Estimate,
+  type Item,
+} from './thread-items'
 import { TurnStatus } from './turn-status'
 
 // A thread opens on its latest page, and older pages load as it scrolls back toward them, a
@@ -58,6 +66,16 @@ function stepIds(order: string[], signature: string): Set<string> {
     if ('gtw'.includes(signature[i] ?? '-')) ids.add(id)
   })
   return ids
+}
+
+// Each estimate as a class of its own, so Tailwind generates it; it replaces the item's default.
+const INTRINSIC_SIZE: Record<Estimate, string> = {
+  16: '[contain-intrinsic-size:auto_16px]',
+  18: '[contain-intrinsic-size:auto_18px]',
+  20: '[contain-intrinsic-size:auto_20px]',
+  24: '[contain-intrinsic-size:auto_24px]',
+  28: '[contain-intrinsic-size:auto_28px]',
+  69: '[contain-intrinsic-size:auto_69px]',
 }
 
 const isStep = (item: Item, steps: Set<string>): boolean =>
@@ -196,6 +214,7 @@ export const Thread = memo(function Thread({
                     // content-visibility's paint containment clips at the item's edge, but fold
                     // lines and tool rows reach 6 px past the column and their focus ring 4 px more.
                     '[overflow-clip-margin:10px]',
+                    INTRINSIC_SIZE[estimateOf(item)],
                     index > 0 && spacing(item, items[index - 1]!, steps),
                     // The growing tail would flip between skipped and rendered on every chunk,
                     // recalculating its whole subtree each time.
