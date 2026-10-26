@@ -1,4 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
@@ -18,6 +19,7 @@ import {
   ComboboxTrigger,
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
+import { InputGroupAddon } from '@renderer/components/ui/input-group'
 import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -102,7 +104,8 @@ export function AgentMenu({
   const [query, setQuery] = useState('')
   const { contains } = useComboboxFilter()
   const body = useRef<HTMLDivElement>(null)
-  const [height, setHeight] = useState<number | null>(null)
+  const rail = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState<{ rail: number; height: number } | null>(null)
 
   const configs = useMemo(() => {
     const map = new Map<AgentId, ConfigOption[]>()
@@ -156,7 +159,7 @@ export function AgentMenu({
     setOpen(next)
     if (!next) {
       setQuery('')
-      setHeight(null)
+      setSize(null)
       return
     }
     setShown(
@@ -173,10 +176,13 @@ export function AgentMenu({
     refreshOnMenu(statuses.filter((s) => s.state === 'ready').map((s) => s.id))
   }
 
-  // The menu keeps the size it opened with while a search narrows it, so nothing jumps.
-  useLayoutEffect(() => {
-    if (open && !searching && body.current) setHeight(body.current.offsetHeight)
-  }, [open, searching, shown])
+  // The rail and the pane keep the sizes they had while a search narrows them, so nothing jumps.
+  const onQuery = (next: string) => {
+    if (!searching && next.trim() && body.current && rail.current) {
+      setSize({ rail: rail.current.offsetWidth, height: body.current.offsetHeight })
+    }
+    setQuery(next)
+  }
 
   const close = () => onOpenChange(false)
 
@@ -201,7 +207,7 @@ export function AgentMenu({
       open={open}
       onOpenChange={onOpenChange}
       inputValue={query}
-      onInputValueChange={setQuery}
+      onInputValueChange={onQuery}
       itemToStringLabel={label}
       autoHighlight
     >
@@ -209,21 +215,29 @@ export function AgentMenu({
         render={
           <Button
             variant="quiet"
-            size="compact"
+            size="sm"
             aria-label={t('newSession.agentMenu.label')}
-            className="min-w-0 shrink gap-1.5 px-2"
+            className="min-w-0 shrink gap-1 overflow-hidden px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
           />
         }
       >
         <AgentButtonLabel agentId={agentId} values={values} />
       </ComboboxTrigger>
-      <ComboboxContent sideOffset={6} className="flex flex-col">
+      <ComboboxContent
+        align="end"
+        sideOffset={6}
+        className="flex min-h-[min(--spacing(75),var(--available-height))] flex-col"
+      >
         <ComboboxInput
           showTrigger={false}
           placeholder={t('newSession.agentMenu.search')}
           aria-label={t('newSession.agentMenu.search')}
           spellCheck={false}
-        />
+        >
+          <InputGroupAddon>
+            <SearchIcon className="size-3.5" />
+          </InputGroupAddon>
+        </ComboboxInput>
         <Tabs
           orientation="vertical"
           value={shown}
@@ -235,14 +249,16 @@ export function AgentMenu({
         >
           <div
             ref={body}
-            className="flex min-h-0 flex-1"
-            style={searching && height ? { minHeight: height } : undefined}
+            className="flex min-h-0 flex-1 p-1.5"
+            style={searching && size ? { minHeight: size.height } : undefined}
           >
             <TabsList
+              ref={rail}
+              style={searching && size ? { minWidth: size.rail } : undefined}
               variant="rail"
               activateOnFocus
               aria-label={t('newSession.agentMenu.agents')}
-              className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(9)))] w-auto min-w-44 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain p-1.5"
+              className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
             >
               {visibleRail.map((status) => (
                 <RailRow key={status.id} status={status} />
@@ -253,7 +269,7 @@ export function AgentMenu({
               value={shown ?? undefined}
               tabIndex={-1}
               keepMounted={false}
-              className="flex w-80 min-w-0 flex-col"
+              className="ml-1.5 flex w-80 min-w-0 flex-col"
             >
               <Pane
                 status={statuses.find((s) => s.id === shown) ?? null}
@@ -294,9 +310,12 @@ function AgentButtonLabel({ agentId, values }: { agentId: AgentId | null; values
   return (
     <>
       <AgentMark agent={agentId} size={14} />
-      <span className="shrink-0 font-medium text-foreground">{agentName(agentId)}</span>
+      {/* On a narrow window the model's name gives way first, the agent's only after it. */}
+      <span className="min-w-0 truncate text-foreground" title={agentName(agentId)}>
+        {agentName(agentId)}
+      </span>
       {modelName && (
-        <span className="min-w-0 truncate text-secondary" title={modelName}>
+        <span className="min-w-0 shrink-100 truncate text-secondary" title={modelName}>
           {splitName(modelName)[1]}
         </span>
       )}
@@ -327,11 +346,26 @@ function RailRow({ status }: { status: AgentStatus }) {
               : null
 
   return (
-    <TabsTrigger value={status.id} className="justify-start gap-2">
+    <TabsTrigger
+      value={status.id}
+      // The shown agent takes the selected fill, as a menu's rail does.
+      className="justify-start gap-2 rounded-md group-data-[variant=rail]/tabs-list:data-active:bg-selected dark:group-data-[variant=rail]/tabs-list:data-active:bg-selected"
+    >
       <AgentMark agent={status.id} size={14} />
       <span className="min-w-0 flex-1 truncate text-left">{status.name}</span>
       {trailing ? (
-        <span className="shrink-0 pl-2 text-xs text-muted-foreground">{trailing}</span>
+        <span
+          className={cn(
+            'shrink-0 pl-2 text-xs',
+            need === 'sign-in'
+              ? 'text-warning'
+              : need === 'failed'
+                ? 'text-danger'
+                : 'text-muted-foreground',
+          )}
+        >
+          {trailing}
+        </span>
       ) : (
         limit && <UsageNote limits={status.limits} now={now} />
       )}
@@ -353,7 +387,7 @@ function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number
         render={
           <span
             className={cn(
-              'flex shrink-0 items-center gap-1 pl-2 text-xs tabular',
+              'flex shrink-0 items-center gap-1.25 pl-2 text-xs tabular',
               USAGE_TONE_TEXT[tone],
             )}
           />
@@ -438,13 +472,13 @@ function Pane({
   if (!searching) {
     if (need === 'install') {
       notice = (
-        <Notice text={t('newSession.agentMenu.notInstalledLong', { agent: name })}>
+        <Notice text={t('newSession.agentMenu.notInstalledLong', { agent: name })} tone="neutral">
           {install}
         </Notice>
       )
     } else if (need === 'adapter') {
       notice = (
-        <Notice text={t('newSession.agentMenu.installsOnFirstUse', { agent: name })}>
+        <Notice text={t('newSession.agentMenu.installsOnFirstUse', { agent: name })} tone="neutral">
           {install}
         </Notice>
       )
@@ -452,13 +486,17 @@ function Pane({
       notice = (
         <Notice
           text={t('newSession.agentMenu.setsUpLong', { agent: name, command: status.cli?.command })}
+          tone="neutral"
         >
           {install}
         </Notice>
       )
     } else if (need === 'failed') {
       notice = (
-        <Notice text={status.detail ?? t('newSession.agentMenu.failedLong', { agent: name })} error>
+        <Notice
+          text={status.detail ?? t('newSession.agentMenu.failedLong', { agent: name })}
+          tone="danger"
+        >
           <Button
             variant="outline"
             size="xs"
@@ -474,7 +512,7 @@ function Pane({
       )
     } else if (need === 'sign-in') {
       notice = (
-        <Notice text={t('newSession.agentMenu.signInLong', { agent: name })}>
+        <Notice text={t('newSession.agentMenu.signInLong', { agent: name })} tone="warning">
           <Button
             variant="outline"
             size="xs"
@@ -491,7 +529,7 @@ function Pane({
       notice = (
         <Notice
           text={t('newSession.agentMenu.prepareFailed', { agent: name, error: failure })}
-          error
+          tone="danger"
         >
           <Button variant="outline" size="xs" onClick={retryPrepare}>
             {t('newSession.agentMenu.retry')}
@@ -510,7 +548,7 @@ function Pane({
         // Words once a start takes longer than a moment; the space is kept, so nothing shifts.
         <div
           role="status"
-          className="flex animate-in items-center gap-1.5 px-3.5 pt-2.5 pb-1.5 text-xs text-muted-foreground fade-in fill-mode-backwards delay-1000 animation-duration-(--duration-base)"
+          className="flex animate-in items-center gap-1.5 px-2 pt-2 pb-1.5 text-xs text-muted-foreground fade-in fill-mode-backwards delay-1000 animation-duration-(--duration-base)"
         >
           <Spinner
             className={cn('size-3 shrink-0', status.state === 'installing' && 'text-info')}
@@ -526,7 +564,7 @@ function Pane({
         // The cached models stand in until the prepared session answers.
         <div
           role="status"
-          className="flex animate-in items-center gap-1.5 px-3.5 pt-2.5 pb-1.5 text-xs text-muted-foreground fade-in fill-mode-backwards delay-1000 animation-duration-(--duration-base)"
+          className="flex animate-in items-center gap-1.5 px-2 pt-2 pb-1.5 text-xs text-muted-foreground fade-in fill-mode-backwards delay-1000 animation-duration-(--duration-base)"
         >
           <Spinner className="size-3 shrink-0" />
           <span className="truncate shimmer">
@@ -536,15 +574,15 @@ function Pane({
       )}
       {!searching && installed && loading ? (
         <div
-          className="flex animate-in flex-col gap-1 p-1.5 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-base)"
+          className="flex animate-in flex-col gap-1 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-base)"
           aria-hidden
         >
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-row w-full rounded-lg" />
+            <Skeleton key={i} className="h-row w-full rounded-md" />
           ))}
         </div>
       ) : (
-        <ComboboxList className="max-h-72 scroll-fade-y">
+        <ComboboxList className="max-h-72 scroll-fade-y scroll-py-0 p-0">
           {(group: MenuGroup) => (
             <ModelGroup
               key={group.agentId}
@@ -556,15 +594,15 @@ function Pane({
         </ComboboxList>
       )}
       {searching && groups.length === 0 && (
-        <p className="px-3.5 py-2 text-ui text-muted-foreground">
+        <p className="px-2 py-5 text-center text-small text-muted-foreground">
           {t('newSession.agentMenu.noMatch')}
         </p>
       )}
       {!searching && installed && config && (isSelect(effort) || switches.length > 0) && (
-        <div className="flex flex-col p-1.5 pt-0">
+        <div className="flex flex-col">
           {isSelect(effort) && (
             <>
-              {isSelect(model) && <ComboboxSeparator className="mt-0" />}
+              {isSelect(model) && <ComboboxSeparator />}
               <EffortSegments
                 effort={effort}
                 value={String(effort.value)}
@@ -621,7 +659,7 @@ function ModelGroup({
           return choice ? (
             <Tooltip key={key}>
               <TooltipTrigger render={<ComboboxItem value={key} className="items-center" />}>
-                <ChoiceName name={choice.name} className="flex-1" />
+                <ChoiceName name={choice.name} className="flex-1 font-normal" />
               </TooltipTrigger>
               {choice.description && (
                 <TooltipContent side="right">{choice.description}</TooltipContent>
@@ -640,19 +678,34 @@ function ModelGroup({
   )
 }
 
-/** A line about the shown agent above its models, with the action that helps. */
+const NOTICE_TONE = {
+  warning: 'bg-warning-tint text-foreground',
+  danger: 'bg-danger-tint text-danger',
+  neutral: 'bg-subtle text-foreground',
+} as const
+
+/**
+ * A line about the shown agent above its models: on a tint by what it asks of you, with the action
+ * that helps, or plain when it only says what comes next.
+ */
 function Notice({
   text,
-  error = false,
+  tone,
   children,
 }: {
   text: string
-  error?: boolean
+  tone?: keyof typeof NOTICE_TONE
   children?: ReactNode
 }) {
+  if (!tone) return <p className="px-2 pt-2 pb-1.5 text-xs text-muted-foreground">{text}</p>
   return (
-    <div className="flex flex-col items-start gap-2 px-3.5 pt-2.5 pb-1.5">
-      <p className={cn('text-xs', error ? 'text-danger' : 'text-muted-foreground')}>{text}</p>
+    <div
+      className={cn(
+        'mx-0.5 mt-0.5 mb-1.5 flex items-center gap-2 rounded-md py-2 pr-2 pl-2.5 text-small',
+        NOTICE_TONE[tone],
+      )}
+    >
+      <p className="min-w-0 flex-1">{text}</p>
       {children}
     </div>
   )
@@ -672,15 +725,15 @@ function SwitchRow({
   return (
     <label
       htmlFor={id}
-      className="flex min-h-row cursor-default items-center gap-2 rounded-lg px-2 py-1 text-ui hover:bg-hover"
+      className="flex min-h-11 cursor-default items-center gap-2 rounded-md px-2 py-1.25 text-ui hover:bg-hover"
     >
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="font-medium">{option.name}</span>
+        <span>{option.name}</span>
         {option.description && (
           <span className="text-xs text-muted-foreground">{option.description}</span>
         )}
       </span>
-      <Switch id={id} size="sm" checked={option.value === true} onCheckedChange={onChange} />
+      <Switch id={id} checked={option.value === true} onCheckedChange={onChange} />
     </label>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUpIcon, CircleAlertIcon, GitBranchIcon } from 'lucide-react'
+import { ArrowUpIcon, CircleAlertIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
@@ -43,6 +43,7 @@ import {
   setOption,
   settleOptions,
 } from './new-session/prepared'
+import { RECENT, recentCards } from './new-session/recent'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { ParentLink } from './session-header'
@@ -99,11 +100,13 @@ export function NewSessionView({
         <span className="flex-1" />
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
-      {/* The heading and the composer are centred alone, raised 28 px above centre so the eye lands
-          on the composer; Recent artifacts hangs under them outside the centring. */}
-      <ColumnScroller className="flex flex-col items-center pb-14">
-        <div className="relative my-auto flex w-full max-w-thread flex-col gap-7 px-6 pt-6">
-          <h1 className="animate-in text-center font-serif text-greeting text-balance fade-in animation-duration-(--duration-slow)">
+      {/* The heading, the composer and Recent artifacts are centred as one block, raised 30 px
+          above centre so the eye lands on the composer. The spacers keep that raise out of the
+          scroll: in a short window the block scrolls with 24 px under it. */}
+      <ColumnScroller className="flex flex-col px-7">
+        <div aria-hidden className="flex-1" />
+        <div className="mx-auto flex w-full max-w-thread shrink-0 flex-col py-6">
+          <h1 className="mb-6.5 animate-in text-center font-heading text-greeting text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
           <DraftComposer
@@ -115,6 +118,7 @@ export function NewSessionView({
           />
           <RecentArtifacts hidden={holdsMessage} />
         </div>
+        <div aria-hidden className="flex-1 basis-15" />
       </ColumnScroller>
       <DropOverlay shown={drop.over} starting={false} agentName="" />
     </div>
@@ -234,7 +238,7 @@ function DraftComposer({
         : (held?.message ?? null)
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col">
       <PromptBox
         box={box}
         agentId={agentId}
@@ -251,7 +255,8 @@ function DraftComposer({
               : t('newSession.describeTask')
         }
         label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
-        size={{ minHeight: '68px', padding: '14px 20px 4px 20px' }}
+        // 112 px high empty, with the row of + and Send under the text.
+        size={{ minHeight: '62px', padding: '15px 16px 2px 16px' }}
         stacked
         onKeyDown={onKeyDown}
         end={
@@ -263,6 +268,7 @@ function DraftComposer({
                 aria-label={t('newSession.send')}
                 disabled={!canSend}
                 onClick={() => void send()}
+                className="disabled:text-disabled disabled:opacity-100"
               >
                 <ArrowUpIcon />
               </InputGroupButton>
@@ -272,7 +278,7 @@ function DraftComposer({
         }
       />
       {/* Where and with what the session starts, under the box as in the reference. */}
-      <div className="flex h-control min-w-0 items-center gap-0.5 px-2.5">
+      <div className="flex h-9.5 min-w-0 items-center gap-0.5 px-0.5 pt-1">
         {parent ? (
           <ParentProject project={project} scratch={parent.scratch} />
         ) : (
@@ -284,12 +290,12 @@ function DraftComposer({
         <ModeMenu agentId={agentId} />
       </div>
       {(projectError || (project?.missing && !inScratch)) && (
-        <p className="truncate px-5 text-xs text-danger" title={projectError ?? undefined}>
+        <p className="truncate px-2.75 text-xs text-danger" title={projectError ?? undefined}>
           {projectError ?? t('newSession.missingLine')}
         </p>
       )}
       {(box.error || held?.notice) && (
-        <p className="animate-in px-5 text-xs text-danger fade-in" role="alert">
+        <p className="animate-in px-2.75 text-xs text-danger fade-in" role="alert">
           {box.error ?? held?.message}
         </p>
       )}
@@ -314,7 +320,7 @@ function StartNotices({ agentId }: { agentId: AgentId }) {
   if (notices.length === 0) return null
   const agent = agentName(agentId)
   return (
-    <ul className="flex flex-col gap-0.5 px-5">
+    <ul className="flex flex-col gap-0.5 px-2.75">
       {notices.map((notice) => {
         const text = noticeText(t, agent, notice)
         return (
@@ -361,7 +367,7 @@ function NoAgentLine({ waitingForNode }: { waitingForNode: string[] }) {
       ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
       : t('newSession.noAgent')
   return (
-    <div className="flex min-w-0 items-center gap-2 px-5">
+    <div className="flex min-w-0 items-center gap-2 px-2.75">
       <p className="truncate text-xs text-destructive" title={text}>
         {text}
       </p>
@@ -379,7 +385,7 @@ function NoAgentLine({ waitingForNode }: { waitingForNode: string[] }) {
 
 function Slash() {
   return (
-    <span aria-hidden className="shrink-0 text-xs text-muted-foreground">
+    <span aria-hidden className="mx-0.5 shrink-0 text-control text-border-strong">
       /
     </span>
   )
@@ -392,10 +398,11 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="flex h-control min-w-12 shrink-10 items-center gap-1 overflow-hidden px-2 text-control text-muted-foreground" />
+          <span className="flex h-7 min-w-12 shrink-10 items-center gap-1 overflow-hidden px-2.25 text-control text-muted-foreground" />
         }
       >
-        <span className="truncate font-medium text-foreground">
+        <FolderIcon className="size-3.5 shrink-0" />
+        <span className="truncate text-foreground">
           {scratch ? t('newSession.noProject') : project?.name}
         </span>
         {project?.missing && !scratch && (
@@ -423,11 +430,11 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
       <Tooltip>
         <TooltipTrigger
           render={
-            <span className="flex h-control min-w-8 shrink-1000 items-center gap-1 overflow-hidden px-2 text-control text-muted-foreground" />
+            <span className="flex h-7 min-w-7.75 shrink-1000 items-center gap-1.25 overflow-hidden px-1.5 text-muted-foreground" />
           }
         >
           <GitBranchIcon className="size-3.5 shrink-0" />
-          <span className="truncate font-mono text-meta">{name}</span>
+          <span className="truncate font-mono text-code">{name}</span>
         </TooltipTrigger>
         <TooltipContent>
           {name} · {head.branch ? t('newSession.branchHint') : t('newSession.commitHint')}
@@ -448,6 +455,8 @@ function ModeMenu({ agentId }: { agentId: AgentId | null }) {
     <OptionMenu
       option={mode}
       side="bottom"
+      align="end"
+      className="text-control font-normal has-data-[icon=inline-end]:pr-2.25"
       onSelect={(optionId, value) => {
         setOption(agentId, optionId, value)
         return Promise.resolve(true)
@@ -456,8 +465,6 @@ function ModeMenu({ agentId }: { agentId: AgentId | null }) {
   )
 }
 
-const RECENT = 3
-
 /**
  * The artifacts changed last, in any project, to open again; with none, nothing shows. Hidden, it
  * stays mounted, so it keeps loading and comes back with its cards.
@@ -465,9 +472,6 @@ const RECENT = 3
 function RecentArtifacts({ hidden }: { hidden: boolean }) {
   const { t } = useTranslation('session')
   const { t: ta } = useTranslation('artifacts')
-  // It fades in only on coming back, not when the screen opens.
-  const [hiddenOnce, setHiddenOnce] = useState(hidden)
-  if (hidden && !hiddenOnce) setHiddenOnce(true)
   const recent = useArtifactsStore(useShallow((s) => s.list?.slice(0, RECENT) ?? null))
   const failed = useArtifactsStore((s) => s.error !== null)
   const projects = useProjectsStore((s) => s.projects)
@@ -487,34 +491,38 @@ function RecentArtifacts({ hidden }: { hidden: boolean }) {
     return () => artifactListShown(false)
   }, [])
 
-  // Before the first read, cards hold their places; a failed read hides the group.
-  if (recent ? recent.length === 0 : failed) return null
+  const { cards, shown } = recentCards(recent, failed, hidden)
   const where = (artifact: ArtifactSummary) =>
     artifact.scratch
       ? t('newSession.noProject')
       : (projects.find((p) => p.path === artifact.project)?.name ?? basename(artifact.project))
   return (
-    // Out of the flow 28 px under the composer, so it moves nothing as it hides and shows; the area
-    // still scrolls to show it whole, 24 px clear of the bottom.
     <section
       aria-label={t('newSession.recentArtifacts')}
-      inert={hidden}
+      inert={!shown}
       className={cn(
-        '@container absolute inset-x-6 top-full mt-7 flex flex-col gap-2 px-1 pb-6 transition-[opacity,display] transition-discrete motion-reduce:transition-none',
-        hidden
-          ? 'hidden opacity-0 duration-(--duration-fast)'
-          : cn('duration-(--duration-base)', hiddenOnce && 'starting:opacity-0'),
+        '@container mt-12 flex flex-col gap-1.5 transition-[opacity,visibility] motion-reduce:transition-none',
+        shown
+          ? 'duration-(--duration-base)'
+          : 'invisible opacity-0 duration-(--duration-fast) **:data-[slot=skeleton]:animate-none',
       )}
     >
-      <div className="flex items-center justify-between pl-2">
-        <h2 className="text-ui text-secondary">{t('newSession.recentArtifacts')}</h2>
-        <Button variant="quiet" size="sm" onClick={openArtifacts}>
+      <div className="flex items-center justify-between">
+        <h2 className="flex h-7.5 items-center px-1 text-xs font-medium text-tertiary">
+          {t('newSession.recentArtifacts')}
+        </h2>
+        <Button
+          variant="quiet"
+          size="sm"
+          onClick={openArtifacts}
+          className="px-2.25 text-ui font-normal text-secondary"
+        >
           {t('newSession.viewAll')}
         </Button>
       </div>
       {/* Two across in a narrow window, so a canvas's pages still read. */}
-      <div className="grid grid-cols-3 gap-3 @max-[32.5rem]:grid-cols-2">
-        {(recent ?? Array.from({ length: RECENT }, () => null)).map((artifact, index) => (
+      <div className="grid grid-cols-3 gap-4 @max-[32.5rem]:grid-cols-2">
+        {cards.map((artifact, index) => (
           <div
             key={artifact?.id ?? index}
             className={cn('min-w-0', index === RECENT - 1 && '@max-[32.5rem]:hidden')}

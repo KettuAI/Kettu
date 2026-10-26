@@ -194,10 +194,15 @@ export function OptionMenu({
   option,
   onSelect,
   side = 'top',
+  align = 'start',
+  className,
 }: {
   option: SelectOption
   onSelect: Select
   side?: 'top' | 'bottom'
+  align?: 'start' | 'end'
+  /** The trigger's own styles, where a row sets its buttons otherwise. */
+  className?: string
 }) {
   const [value, pick] = usePick(option, onSelect)
   return (
@@ -208,14 +213,20 @@ export function OptionMenu({
             variant="quiet"
             size="sm"
             aria-label={option.name}
-            className="gap-1 px-2.25 text-ui"
+            className={cn('gap-1 px-2.25 text-ui', className)}
           />
         }
       >
         {choiceName(option, value)}
         <ChevronDownIcon data-icon="inline-end" className="size-3 text-icon" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side={side} sideOffset={6} aria-label={option.name} className="w-64">
+      <DropdownMenuContent
+        side={side}
+        align={align}
+        sideOffset={6}
+        aria-label={option.name}
+        className="w-64"
+      >
         {option.category === 'mode' ? (
           // Each mode says what it does, so the menu needs no heading.
           <Choices option={option} value={value} onPick={pick} closeOnClick />
@@ -751,7 +762,7 @@ export function EffortSegments({
           )
         )}
       </div>
-      <div className="pb-1">
+      <div className={plain ? 'px-2 pt-0.5 pb-1.5' : 'pb-1'}>
         <SegmentedControl
           aria-labelledby={labelId}
           value={shown ?? ''}
