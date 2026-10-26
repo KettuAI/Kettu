@@ -1,4 +1,12 @@
-import { useCallback, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AtSignIcon, FileIcon, FolderIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -168,6 +176,7 @@ export function PromptBox({
     const match = /^\/(\S+)\s$/.exec(text)
     return match ? commands.find((c) => c.name === match[1])?.inputHint : undefined
   })()
+  const commandNames = useMemo(() => commands.map((c) => c.name), [commands])
 
   // The highlighted command's description, in a tooltip 8 px beside the list, whichever row it is.
   const tipText = slashOpen ? (rows[active] as SlashCommand | undefined)?.description : undefined
@@ -275,6 +284,7 @@ export function PromptBox({
             placeholder={placeholder}
             disabled={disabled}
             hint={hint}
+            commands={commandNames}
             size={size}
             popover={open ? { listId, activeId: active >= 0 ? optionId(active) : undefined } : null}
             onChange={box.changed}
