@@ -15,3 +15,12 @@ export function orderSlashMatches(
   }
   return [...starts, ...contains]
 }
+
+/**
+ * The length of the command the text starts with: `/` and one of the names exactly, case included,
+ * since the agent receives the text as typed, then a space, a line break or nothing. 0 for none.
+ */
+export function leadingCommand(text: string, names: readonly string[]): number {
+  const match = /^\/(\S+)(?=[ \n]|$)/.exec(text)
+  return match && names.includes(match[1]) ? match[0].length : 0
+}

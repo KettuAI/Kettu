@@ -21,6 +21,7 @@ import {
   WidgetType,
 } from '@codemirror/view'
 import { markdownPreview } from './markdown-preview'
+import { leadingCommand } from './slash'
 
 export interface ComposerEditorHandle {
   /** Focuses the box with the editor's own selection, which a DOM focus would lose. */
@@ -64,6 +65,16 @@ function hintAtEnd(hint: string | undefined): Extension {
   return EditorView.decorations.of((view) => Decoration.set([widget.range(view.state.doc.length)]))
 }
 
+const commandMark = Decoration.mark({ class: 'cm-slash-command' })
+
+function leadingCommandMark(names: readonly string[]): Extension {
+  if (names.length === 0) return []
+  return EditorView.decorations.of((view) => {
+    const length = leadingCommand(view.state.doc.line(1).text, names)
+    return length ? Decoration.set([commandMark.range(0, length)]) : Decoration.none
+  })
+}
+
 function editability(disabled: boolean): Extension {
   return [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)]
 }
@@ -95,6 +106,13 @@ const theme = EditorView.theme({
   '.cm-line': { padding: '0' },
   '.cm-placeholder': { color: 'var(--text-placeholder)' },
   '.cm-hint': { color: 'var(--text-placeholder)' },
+  // A shadow takes the tint 2 px past the text without moving it; it adds 2 px to the radius.
+  '.cm-slash-command': {
+    color: 'var(--info)',
+    background: 'var(--info-tint)',
+    borderRadius: '2px',
+    boxShadow: '0 0 0 2px var(--info-tint)',
+  },
   '.cm-md-mark': { color: 'var(--text-tertiary)' },
   '.cm-md-strong': { color: 'var(--foreground)', fontWeight: 'var(--font-weight-semibold)' },
   '.cm-md-em': { fontStyle: 'italic' },
@@ -140,6 +158,7 @@ export function ComposerEditor({
   placeholder,
   disabled,
   hint,
+  commands,
   size,
   popover,
   onChange,
@@ -158,6 +177,8 @@ export function ComposerEditor({
   disabled: boolean
   /** The slash command's input hint, after the text. */
   hint: string | undefined
+  /** The names of the agent's commands, for marking the one the text starts with. */
+  commands: readonly string[]
   /** The text's least height and its padding, as CSS lengths. */
   size: { minHeight: string; padding: string }
   popover: PopoverAria | null
@@ -181,9 +202,10 @@ export function ComposerEditor({
     editable: new Compartment(),
     attributes: new Compartment(),
     hint: new Compartment(),
+    command: new Compartment(),
   }))
   // What the first render had, which the editor starts with.
-  const initial = useRef({ initialText, placeholder, disabled, label, popover, hint })
+  const initial = useRef({ initialText, placeholder, disabled, label, popover, hint, commands })
   const changed = useEffectEvent(onChange)
   const moved = useEffectEvent(onCaret)
   const keyDown = useEffectEvent(onKeyDown)
@@ -245,6 +267,7 @@ export function ComposerEditor({
           parts.editable.of(editability(first.disabled)),
           parts.attributes.of(attributes(first.label, first.popover)),
           parts.hint.of(hintAtEnd(first.hint)),
+          parts.command.of(leadingCommandMark(first.commands)),
           EditorView.updateListener.of((update) => {
             if (update.transactions.some((tr) => tr.annotation(fromBox))) return
             if (update.docChanged) changed(update.state.doc.toString())
@@ -272,6 +295,9 @@ export function ComposerEditor({
   useEffect(() => {
     view.current?.dispatch({ effects: parts.hint.reconfigure(hintAtEnd(hint)) })
   }, [parts, hint])
+  useEffect(() => {
+    view.current?.dispatch({ effects: parts.command.reconfigure(leadingCommandMark(commands)) })
+  }, [parts, commands])
   const listId = popover?.listId
   const activeId = popover?.activeId
   useEffect(() => {
