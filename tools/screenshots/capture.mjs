@@ -764,17 +764,10 @@ async function run() {
       })
       await sleep(400)
     }
-    const state = () =>
-      cdp.evaluate(
-        `JSON.stringify({ footer: document.querySelector('${footer}')?.getBoundingClientRect().width, handles: [...document.querySelectorAll('[data-slot=resizable-handle]')].map((h) => h.getBoundingClientRect().left), pill: ${pill}?.innerText, at: document.elementFromPoint(${edge.x}, ${edge.y})?.className.slice(0, 60), visible: document.visibilityState, focus: document.hasFocus(), dpr: devicePixelRatio, size: [innerWidth, innerHeight] })`,
-      )
-    log(`before the drag${suffix}: ${JSON.stringify(edge)} ${await state()}`)
     await drag(edge, { x: 120, y: edge.y })
-    log(`after the drag${suffix}: ${await state()}`)
-    await sleep(2000)
-    log(`2 s after the drag${suffix}: ${await state()}`)
+    // The panels restore their layout in percentages, so the minimum can land just off 200 px.
     await waitFor(
-      `document.querySelector('${footer}').getBoundingClientRect().width === 200 && ${pill}.innerText.trim() === '1'`,
+      `Math.round(document.querySelector('${footer}').getBoundingClientRect().width) === 200 && ${pill}.innerText.trim() === '1'`,
       'the compact pill at the minimum width',
     )
     await shootFooter('compact')
