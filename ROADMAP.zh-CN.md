@@ -1,6 +1,6 @@
 # 路线图
 
-OverBench 现在有什么、接下来做什么，按版本列出。版本没有固定的发布日期：每个版本的 milestone 完成后就发一版，所以这里的先后顺序比时间更可靠。每一项都链接到对应的 Issue，你可以在那里关注进展，或者告诉我们你的需求；完整的列表（包括各项修复）见 [Milestones](https://github.com/overbench/overbench/milestones)。[English](./ROADMAP.md)
+OverBench 现在有什么、接下来做什么，按版本列出。版本没有固定的发布日期：核心功能完成后马上发版，较小的修复随下一版一起发布，所以这里的先后顺序比时间更可靠。每一项都链接到对应的 Issue，你可以在那里关注进展，或者告诉我们你的需求；完整的列表（包括各项修复）见 [Milestones](https://github.com/overbench/overbench/milestones)。[English](./ROADMAP.md)
 
 ## 现在已有
 

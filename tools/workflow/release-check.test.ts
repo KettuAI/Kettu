@@ -35,10 +35,12 @@ const published = (name: string, hours: number) => ({
   prerelease: false,
   publishedAt: hoursAgo(hours),
 })
-const urgentPull = (number: number, issue: number) => ({
+const labeledPull = (label: string) => (number: number, issue: number) => ({
   number,
-  issues: [{ number: issue, labels: ['area:session', 'urgent'] }],
+  issues: [{ number: issue, labels: ['area:session', label] }],
 })
+const corePull = labeledPull('core')
+const urgentPull = labeledPull('urgent')
 const milestone = (number: number, title: string, openIssues: number) => ({
   number,
   title,
@@ -193,7 +195,7 @@ describe('releaseTarget', () => {
     ).toMatchObject({ version: 'v0.0.3', milestone: { number: 4 }, done: true })
   })
 
-  it('takes the next version number for an urgent release, even with issues left', () => {
+  it('takes the next version number for an early release, even with issues left', () => {
     expect(releaseTarget(base.milestones, 'v0.0.4', true)).toEqual({
       version: 'v0.0.5',
       milestone: milestone(6, 'v0.0.5', 17),
@@ -311,7 +313,6 @@ describe('decide', () => {
     expect(decision).toMatchObject({
       outcome: 'none',
       fired: [],
-      held: [],
       changes: commits('fix: a (#24)', 'fix: c (#26)'),
       target: { problem: 'The earliest open milestone, v0.0.5, still has 17 open issues.' },
       releaseOpen: null,
@@ -326,51 +327,115 @@ describe('decide', () => {
     ).toMatchObject({
       outcome: 'open',
       fired: [{ name: 'Milestone', detail: 'v0.0.5 is done: all its issues have closed.' }],
-      held: [],
       target: { version: 'v0.0.5', milestone: milestone(6, 'v0.0.5', 0), done: true },
     })
   })
 
-  it('holds Milestone until 24 hours after the previous release', () => {
-    const milestones = [milestone(6, 'v0.0.5', 0)]
-    expect(decide(input({ milestones, releases: [published('v0.0.4', 23)] }))).toMatchObject({
-      outcome: 'none',
-      fired: [],
-      held: [{ name: 'Milestone', detail: 'v0.0.5 is done: all its issues have closed.' }],
-      heldUntil: new Date(NOW.getTime() + HOUR),
-    })
-    expect(decide(input({ milestones, releases: [published('v0.0.4', 24)] }))).toMatchObject({
+  it('fires Milestone on the push that completes it, however soon after the previous release', () => {
+    expect(
+      decide(
+        input({ milestones: [milestone(6, 'v0.0.5', 0)], releases: [published('v0.0.4', 1)] }),
+      ),
+    ).toMatchObject({
       outcome: 'open',
-      fired: [{ name: 'Milestone' }],
-      held: [],
+      fired: [{ name: 'Milestone', detail: 'v0.0.5 is done: all its issues have closed.' }],
+      target: { version: 'v0.0.5', done: true },
     })
   })
 
-  it('does not hold a done milestone when an urgent fix goes out at once', () => {
+  it('fires Count once 10 user-visible changes have merged since the latest tag', () => {
+    const others = commits(
+      'docs: a (#200)',
+      'ci: b (#201)',
+      'chore: c (#202)',
+      'revert: feat: add login (#33) (#203)',
+    )
+    expect(decide(input({ commits: [...fixes(9), ...others] }))).toMatchObject({
+      outcome: 'none',
+      fired: [],
+    })
+    expect(
+      decide(
+        input({
+          commits: [
+            ...fixes(8),
+            commit('feat(usage): add a one-day range (#300)'),
+            commit('perf(thread): virtualize entries (#301)'),
+            ...others,
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      outcome: 'open',
+      fired: [{ name: 'Count', detail: '10 user-visible changes have merged since v0.0.4.' }],
+      target: { version: 'v0.0.5', milestone: milestone(6, 'v0.0.5', 17), done: false },
+    })
+  })
+
+  it('fires Count on the push after a release, however soon', () => {
+    const decision = decide(input({ releases: [published('v0.0.4', 1)], commits: fixes(10) }))
+    expect(decision).toMatchObject({ outcome: 'open', fired: [{ name: 'Count' }] })
+  })
+
+  it('fires Core at once for a merged change of a core issue', () => {
+    const decision = decide(
+      input({
+        releases: [published('v0.0.4', 1)],
+        commits: [
+          commit('feat(browser): add the browser pane (#60)', 'c60'),
+          commit('revert: feat: add the media viewer (#33) (#81)', 'c81'),
+        ],
+        pulls: { c60: corePull(60, 47), c81: corePull(81, 43) },
+      }),
+    )
+    expect(decision).toMatchObject({
+      outcome: 'open',
+      fired: [
+        {
+          name: 'Core',
+          detail:
+            '"feat(browser): add the browser pane (#60)" closed core #47; "revert: feat: add the media viewer (#33) (#81)" closed core #43.',
+        },
+      ],
+      target: { version: 'v0.0.5', milestone: milestone(6, 'v0.0.5', 17), done: false },
+    })
+  })
+
+  it('ignores docs, CI and other tasks that close a core issue, and changes that close none', () => {
+    expect(
+      decide(
+        input({
+          commits: [
+            commit('docs: describe the browser pane (#80)', 'c80'),
+            commit('ci: retry the flaky job (#83)', 'c83'),
+            commit('feat: add a setting (#84)', 'c84'),
+            commit('fix: a (#30)', 'c30'),
+          ],
+          pulls: {
+            c80: corePull(80, 47),
+            c83: corePull(83, 47),
+            c84: { number: 84, issues: [{ number: 85, labels: ['area:settings'] }] },
+            c30: { number: 30, issues: [{ number: 29, labels: ['regression'] }] },
+          },
+        }),
+      ),
+    ).toMatchObject({ outcome: 'none', fired: [] })
+  })
+
+  it('takes the milestone version when a core change completes the milestone', () => {
     expect(
       decide(
         input({
           milestones: [milestone(6, 'v0.0.5', 0)],
           releases: [published('v0.0.4', 1)],
-          commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
-          pulls: { c30: urgentPull(30, 29) },
+          commits: [commit('feat(browser): add the browser pane (#60)', 'c60')],
+          pulls: { c60: corePull(60, 47) },
         }),
       ),
     ).toMatchObject({
       outcome: 'open',
-      fired: [
-        { name: 'Urgent' },
-        { name: 'Milestone', detail: 'v0.0.5 is done: all its issues have closed.' },
-      ],
-      held: [],
-    })
-  })
-
-  it('opens nothing for merged changes alone, with no Count or Time', () => {
-    expect(decide(input({ commits: fixes(20) }))).toMatchObject({
-      outcome: 'none',
-      fired: [],
-      held: [],
+      fired: [{ name: 'Core' }, { name: 'Milestone' }],
+      target: { version: 'v0.0.5', milestone: milestone(6, 'v0.0.5', 0), done: true },
     })
   })
 
@@ -427,16 +492,42 @@ describe('decide', () => {
     ).toMatchObject({ outcome: 'none', fired: [] })
   })
 
-  it('names every trigger that fired, Urgent first', () => {
+  it('fires Core and Urgent both for one change that closes a core and an urgent issue', () => {
+    const decision = decide(
+      input({
+        commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
+        pulls: {
+          c30: {
+            number: 30,
+            issues: [
+              { number: 29, labels: ['area:session', 'urgent'] },
+              { number: 31, labels: ['core'] },
+            ],
+          },
+        },
+      }),
+    )
+    expect(decision.fired).toEqual([
+      { name: 'Core', detail: '"fix(session): keep threads on crash (#30)" closed core #31.' },
+      { name: 'Urgent', detail: '"fix(session): keep threads on crash (#30)" closed urgent #29.' },
+    ])
+  })
+
+  it('names every trigger that fired, in the order Core, Urgent, Milestone, Count', () => {
     const decision = decide(
       input({
         milestones: [milestone(6, 'v0.0.5', 0)],
         releases: [published('v0.0.4', 1)],
-        commits: fixes(3),
-        pulls: { 'fix: change 2 (#102)': urgentPull(102, 40) },
+        commits: [...fixes(10), commit('feat(browser): add the browser pane (#60)', 'c60')],
+        pulls: { 'fix: change 2 (#102)': urgentPull(102, 40), c60: corePull(60, 47) },
       }),
     )
-    expect(decision.fired.map((trigger) => trigger.name)).toEqual(['Urgent', 'Milestone'])
+    expect(decision.fired.map((trigger) => trigger.name)).toEqual([
+      'Core',
+      'Urgent',
+      'Milestone',
+      'Count',
+    ])
   })
 
   it('opens nothing while a release issue is open, without a warning', () => {
@@ -524,22 +615,19 @@ describe('decide', () => {
 
   it('fails when a trigger fired but no milestone gives a version', () => {
     const milestones = [milestone(1, 'v0.1.0', 3)]
-    expect(
-      decide(
-        input({
-          milestones,
-          commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
-          pulls: { c30: urgentPull(30, 29) },
-        }),
-      ),
-    ).toMatchObject({
-      outcome: 'no-version',
-      target: {
-        problem: 'No open milestone is planned for v0.0.5, the next version after v0.0.4.',
-      },
-      failure:
-        'A release is due (Urgent), but it has no version: No open milestone is planned for v0.0.5, the next version after v0.0.4.',
-    })
+    const problem = 'No open milestone is planned for v0.0.5, the next version after v0.0.4.'
+    const commits = [commit('fix(session): keep threads on crash (#30)', 'c30')]
+    for (const [trigger, decision] of [
+      ['Urgent', decide(input({ milestones, commits, pulls: { c30: urgentPull(30, 29) } }))],
+      ['Core', decide(input({ milestones, commits, pulls: { c30: corePull(30, 29) } }))],
+      ['Count', decide(input({ milestones, commits: fixes(10) }))],
+    ] as const) {
+      expect(decision, trigger).toMatchObject({
+        outcome: 'no-version',
+        target: { problem },
+        failure: `A release is due (${trigger}), but it has no version: ${problem}`,
+      })
+    }
     expect(decide(input({ milestones, commits: fixes(2) }))).toMatchObject({
       outcome: 'none',
       failure: null,
@@ -558,6 +646,15 @@ describe('decide', () => {
     expect(decide(input({ ...first, milestones: [milestone(2, 'v0.0.1', 3)] }))).toMatchObject({
       outcome: 'none',
       fired: [],
+    })
+    expect(
+      decide(input({ ...first, milestones: [milestone(2, 'v0.0.1', 3)], commits: fixes(10) })),
+    ).toMatchObject({
+      outcome: 'open',
+      fired: [
+        { name: 'Count', detail: '10 user-visible changes have merged since the first commit.' },
+      ],
+      target: { version: 'v0.0.1', milestone: milestone(2, 'v0.0.1', 3), done: false },
     })
   })
 })
@@ -613,6 +710,48 @@ describe('issueBody', () => {
     )
   })
 
+  it('says a core release moves the unfinished issues up', () => {
+    const decision = decide(
+      input({
+        releases: [published('v0.0.4', 1)],
+        commits: [commit('feat(browser): add the browser pane (#60)', 'c60')],
+        pulls: { c60: corePull(60, 47) },
+      }),
+    )
+    expect(issueBody(decision)).toBe(
+      [
+        'The Core trigger fired: "feat(browser): add the browser pane (#60)" closed core #47.',
+        '',
+        'The version is v0.0.5, the next version number.',
+        '',
+        'The unfinished issues of its milestone move to the next version, and the planned milestones after it move up one number.',
+        '',
+        'User-visible changes and reverts since v0.0.4:',
+        '',
+        '- feat(browser): add the browser pane (#60)',
+        '',
+      ].join('\n'),
+    )
+  })
+
+  it('names the count and lists every change it counted', () => {
+    const decision = decide(input({ commits: fixes(10) }))
+    expect(issueBody(decision)).toBe(
+      [
+        'The Count trigger fired: 10 user-visible changes have merged since v0.0.4.',
+        '',
+        'The version is v0.0.5, the next version number.',
+        '',
+        'The unfinished issues of its milestone move to the next version, and the planned milestones after it move up one number.',
+        '',
+        'User-visible changes and reverts since v0.0.4:',
+        '',
+        ...fixes(10).map((change) => `- ${change.subject}`),
+        '',
+      ].join('\n'),
+    )
+  })
+
   it('lists several triggers and keeps a done milestone version', () => {
     const decision = decide(
       input({
@@ -637,6 +776,32 @@ describe('issueBody', () => {
       'User-visible changes and reverts since v0.0.4:\n\n- fix(session): keep threads on crash (#30)\n',
     )
   })
+
+  it('lists Core, Urgent, Milestone and Count together', () => {
+    const decision = decide(
+      input({
+        milestones: [milestone(6, 'v0.0.5', 0)],
+        commits: [
+          commit('fix(session): keep threads on crash (#30)', 'c30'),
+          commit('feat(browser): add the browser pane (#60)', 'c60'),
+          ...fixes(9),
+        ],
+        pulls: { c30: urgentPull(30, 29), c60: corePull(60, 47) },
+      }),
+    )
+    expect(issueBody(decision)).toContain(
+      [
+        'Triggers that fired:',
+        '',
+        '- Core: "feat(browser): add the browser pane (#60)" closed core #47.',
+        '- Urgent: "fix(session): keep threads on crash (#30)" closed urgent #29.',
+        '- Milestone: v0.0.5 is done: all its issues have closed.',
+        '- Count: 11 user-visible changes have merged since v0.0.4.',
+        '',
+        'The version is v0.0.5, the earliest open milestone, whose issues have all closed.',
+      ].join('\n'),
+    )
+  })
 })
 
 describe('summary', () => {
@@ -645,7 +810,6 @@ describe('summary', () => {
       summary(
         decide(
           input({
-            milestones: [milestone(6, 'v0.0.5', 0)],
             releases: [{ ...published('v0.0.4', 0), publishedAt: '2026-11-01T00:00:00Z' }],
             commits: [...fixes(2), commit('docs: a (#200)')],
           }),
@@ -654,9 +818,29 @@ describe('summary', () => {
     ).toEqual([
       'Last release: v0.0.4, published 2026-11-01T00:00:00Z.',
       'Since v0.0.4: 3 commits, 2 user-visible.',
-      'Version: v0.0.5, the earliest open milestone, whose issues have all closed.',
-      'Held: Milestone, v0.0.5 is done: all its issues have closed. It can fire from 2026-11-02T00:00:00Z, 24 hours after v0.0.4 was published.',
+      'Version: none. The earliest open milestone, v0.0.5, still has 17 open issues.',
+      'Triggers: none fired.',
       'Decision: no release is due.',
+    ])
+  })
+
+  it('names Core and Count, one line each', () => {
+    expect(
+      summary(
+        decide(
+          input({
+            commits: [commit('feat(browser): add the browser pane (#60)', 'c60'), ...fixes(9)],
+            pulls: { c60: corePull(60, 47) },
+          }),
+        ),
+      ),
+    ).toEqual([
+      `Last release: v0.0.4, published ${hoursAgo(48).replace('.000Z', 'Z')}.`,
+      'Since v0.0.4: 10 commits, 10 user-visible.',
+      'Version: v0.0.5, the next version number.',
+      'Fired: Core, "feat(browser): add the browser pane (#60)" closed core #47.',
+      'Fired: Count, 10 user-visible changes have merged since v0.0.4.',
+      'Decision: open "Release v0.0.5".',
     ])
   })
 
