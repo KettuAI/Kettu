@@ -8,6 +8,7 @@ import {
 import { SidebarProvider } from '@renderer/components/ui/sidebar'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
+import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
@@ -51,6 +52,7 @@ export function App() {
         </div>
         <QuitConfirm />
         <ArtifactDialogs />
+        <MediaViewer />
         <ReportInteractive />
       </SidebarProvider>
     </TooltipProvider>

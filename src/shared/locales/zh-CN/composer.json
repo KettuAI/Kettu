@@ -110,7 +110,6 @@
     "unavailable": "已不可用",
     "unavailableLong": "为这份草稿保存的副本已不在，请移除后重新添加。",
     "imageTooLarge": "这张图片太大，缩小后仍无法发送",
-    "cannotOpen": "无法打开这张图片。",
     "cannotOpenText": "无法打开这段文本。",
     "sentAsImage": "以图片发送",
     "sentScaled": "以图片发送，已缩小到 {{size}}",

@@ -102,3 +102,13 @@ export function mediaUrlToken(url: string): string | null {
 export function mediaUrl(token: string, name: string, mtimeMs: number): string {
   return `${MEDIA_SCHEME}://${token}/${encodeURIComponent(name)}?v=${Math.trunc(mtimeMs)}`
 }
+
+/** The most bytes of carried media main takes for one copy or save. */
+export const CARRIED_MEDIA_BYTES = 20 * 1024 * 1024
+
+/** Media the thread carries as bytes, for a copy or a save; `name` is what a save suggests. */
+export interface CarriedMedia {
+  bytes: Uint8Array
+  mimeType: string
+  name: string
+}

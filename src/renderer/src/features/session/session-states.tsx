@@ -141,7 +141,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
         <div className="flex flex-col items-end gap-0.5">
           {attachments.length > 0 && (
             <div className="flex w-full justify-end pb-1">
-              <SentAttachments sessionId={null} attachments={attachments} />
+              <SentAttachments sessionId={null} entryId={null} attachments={attachments} />
             </div>
           )}
           {rest.length > 0 && (

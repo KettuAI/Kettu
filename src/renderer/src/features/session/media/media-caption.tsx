@@ -4,27 +4,21 @@ import { useTranslation } from 'react-i18next'
 import type { MediaGrant } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { parseFileRef, ProjectPathContext } from '@renderer/features/files/file-refs'
+import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { bytes as formatBytes, clock } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName } from '@renderer/lib/platform'
-import { openFile } from '@renderer/stores/files'
+import { showFileAction } from './show-file'
 
 /** Shows a project file in the Files pane, any other in the file manager. */
 function useShowFile(path: string, grant: MediaGrant) {
   const { t } = useTranslation('session')
   const projectPath = useContext(ProjectPathContext)
-  const ref = projectPath ? parseFileRef(path, projectPath) : null
+  const action = showFileAction(path, projectPath, grant.url)
   return {
-    label: ref ? t('media.showInFiles') : t('media.showIn', { name: fileManagerName() }),
-    show: (): Promise<void> => {
-      if (ref && projectPath) {
-        openFile(projectPath, ref.path)
-        return Promise.resolve()
-      }
-      return window.overbench.media.reveal(grant.url)
-    },
+    label: action.inFiles ? t('media.showInFiles') : t('media.showIn', { name: fileManagerName() }),
+    show: action.show,
   }
 }
 

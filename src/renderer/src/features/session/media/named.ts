@@ -70,7 +70,8 @@ export interface MediaClaim<T> {
   paths: readonly string[]
 }
 
-const sameFile = (path: string) => path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '')
+/** A path as written, the same for two ways a message writes one file. */
+export const sameFile = (path: string) => path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '')
 
 /**
  * The files one message names, so each shows once: in place for a Markdown image, else under the

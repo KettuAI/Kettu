@@ -8,6 +8,9 @@ import { host } from '@renderer/lib/host'
  */
 export const SessionIdContext = createContext<string | null>(null)
 
+/** The entry being rendered, by which the viewer knows its media. */
+export const EntryIdContext = createContext<string | null>(null)
+
 const MAX_GRANTS = 500
 const granted = new Map<string, Promise<MediaOpenResult>>()
 

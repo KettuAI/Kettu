@@ -6,17 +6,33 @@ import type { Attachment, ContentRef, UserContent } from '@shared/thread'
 import { basename, bytes } from '@renderer/lib/format'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { host } from '@renderer/lib/host'
+import { openViewer } from '@renderer/stores/viewer'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
-import { ImageDialog, type ImageDialogTarget } from '../attachments/image-dialog'
 import { openAttachmentPath } from '../attachments/open-attachment'
+import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
+import { CarriedImage } from '../media/carried-image'
+import { attachmentKey } from '../media/viewer-items'
 
 /** Taller than this, a message collapses behind a fade and Show more. */
 const COLLAPSED_HEIGHT = 300
 
-/** The text, images and references of a prompt, as the user wrote them. */
-export function UserContentView({ content }: { content: UserContent[] }) {
+const IMAGE = 'max-h-40 max-w-60 rounded-lg object-cover shadow-card'
+
+/**
+ * The text, images and references of a prompt, as the user wrote them. In the thread, its images
+ * open the viewer.
+ */
+export function UserContentView({
+  content,
+  sessionId,
+  entryId,
+}: {
+  content: UserContent[]
+  sessionId?: string
+  entryId?: string
+}) {
   const text = content
     .filter((c): c is Extract<UserContent, { type: 'text' }> => c.type === 'text')
     .map((c) => c.text)
@@ -37,12 +53,24 @@ export function UserContentView({ content }: { content: UserContent[] }) {
         <div className="flex flex-wrap gap-1.5">
           {refs.map((ref, i) =>
             ref.kind === 'image' ? (
-              <img
-                key={i}
-                alt=""
-                src={`data:${ref.mimeType};base64,${ref.data}`}
-                className="max-h-40 max-w-60 rounded-lg object-cover shadow-card"
-              />
+              sessionId && entryId ? (
+                <CarriedImage
+                  key={i}
+                  sessionId={sessionId}
+                  entryId={entryId}
+                  index={i}
+                  mimeType={ref.mimeType}
+                  data={ref.data}
+                  className={IMAGE}
+                />
+              ) : (
+                <img
+                  key={i}
+                  alt=""
+                  src={`data:${ref.mimeType};base64,${ref.data}`}
+                  className={IMAGE}
+                />
+              )
             ) : (
               <RefChip key={i} contentRef={ref} />
             ),
@@ -78,28 +106,48 @@ export function RefChip({ contentRef }: { contentRef: Exclude<ContentRef, { kind
   )
 }
 
-/** A sent message's attachments: tiles in a row above its bubble, which open as in the composer. */
+/**
+ * A sent message's attachments: tiles in a row above its bubble, which open as in the composer;
+ * an image in the viewer, with the thread's other pictures.
+ */
 export function SentAttachments({
   sessionId,
+  entryId,
   attachments,
 }: {
   /** Null for a first message whose session does not exist yet, which nothing has sent. */
   sessionId: string | null
+  entryId: string | null
   attachments: Attachment[]
 }) {
-  const [viewing, setViewing] = useState<ImageDialogTarget | null>(null)
+  const [viewing, setViewing] = useState<TextDialogTarget | null>(null)
   const projectPath = useContext(ProjectPathContext)
-  const open = (attachment: Attachment) => {
+  const viewerKey = (attachment: Attachment) => attachmentKey(entryId ?? '', attachment.id)
+  const open = (attachment: Attachment, from: HTMLElement) => {
     if (attachment.type === 'file' || attachment.type === 'folder') {
       openAttachmentPath(attachment, projectPath).catch((error: unknown) =>
         console.warn(`Could not open ${attachment.name}`, error),
       )
       return
     }
+    if (attachment.type === 'image') {
+      openViewer({
+        sessionId,
+        projectPath,
+        draft: sessionId,
+        item: {
+          key: viewerKey(attachment),
+          source: { kind: 'attachment', attachment },
+          name: attachment.name,
+          alt: '',
+        },
+        from,
+      })
+      return
+    }
     const hash = attachment.blob
     setViewing({
       name: attachment.name,
-      text: attachment.type === 'text',
       read: () =>
         hash && sessionId
           ? host('sessions.blob', { sessionId, hash })
@@ -110,10 +158,15 @@ export function SentAttachments({
     <div role="list" className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
       {attachments.map((attachment) => (
         <div key={attachment.id} role="listitem">
-          <SentAttachment sessionId={sessionId} attachment={attachment} onOpen={open} />
+          <SentAttachment
+            sessionId={sessionId}
+            attachment={attachment}
+            viewerKey={attachment.type === 'image' ? viewerKey(attachment) : undefined}
+            onOpen={open}
+          />
         </div>
       ))}
-      <ImageDialog target={viewing} onClose={() => setViewing(null)} />
+      <TextDialog target={viewing} onClose={() => setViewing(null)} />
     </div>
   )
 }
@@ -125,11 +178,13 @@ export function SentAttachments({
 function SentAttachment({
   sessionId,
   attachment,
+  viewerKey,
   onOpen,
 }: {
   sessionId: string | null
   attachment: Attachment
-  onOpen: (attachment: Attachment) => void
+  viewerKey?: string
+  onOpen: (attachment: Attachment, from: HTMLElement) => void
 }) {
   const { t } = useTranslation('composer')
   // The made thumbnail belongs to the bytes it was made from, so another attachment or a byte
@@ -160,11 +215,12 @@ function SentAttachment({
       role="button"
       tabIndex={0}
       aria-label={`${attachment.name}, ${view.tooltip.split('\n').at(-1)}`}
-      onClick={() => onOpen(attachment)}
+      data-viewer-key={viewerKey}
+      onClick={(event) => onOpen(attachment, event.currentTarget)}
       onKeyDown={(event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return
         event.preventDefault()
-        onOpen(attachment)
+        onOpen(attachment, event.currentTarget)
       }}
     />
   )

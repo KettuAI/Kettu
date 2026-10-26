@@ -151,6 +151,8 @@ const api: OverbenchApi = {
     showItem: (path) => invoke('shell:show-item', path),
   },
   media: {
+    copyImage: (source) => invoke('media:copy-image', source),
+    saveAs: (source) => invoke('media:save-as', source),
     reveal: (url) => invoke('media:reveal', url),
     openExternal: (url) => invoke('media:open-external', url),
   },

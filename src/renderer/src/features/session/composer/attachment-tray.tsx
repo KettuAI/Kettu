@@ -11,9 +11,11 @@ import {
   useAttachmentsStore,
   type DraftAttachment,
 } from '@renderer/stores/attachments'
+import { openViewer } from '@renderer/stores/viewer'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
-import type { ImageDialogTarget } from '../attachments/image-dialog'
 import { openAttachmentPath } from '../attachments/open-attachment'
+import type { TextDialogTarget } from '../attachments/text-dialog'
+import { draftKey } from '../media/viewer-items'
 import { removeAttachment } from './attachments'
 
 const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const
@@ -24,6 +26,7 @@ const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const
  */
 export function AttachmentTray({
   draft,
+  sessionId,
   agentId,
   agentName,
   projectPath,
@@ -33,11 +36,14 @@ export function AttachmentTray({
   onLeave,
 }: {
   draft: string
+  /** The session whose thread's pictures the viewer steps through with the draft's. */
+  sessionId: string | null
   agentId: AgentId | null
   agentName: string
   /** The session's folder, whose files open in the Files pane. */
   projectPath: string | null
-  onOpen: (target: ImageDialogTarget) => void
+  /** Opens a pasted text; an image opens the viewer. */
+  onOpen: (target: TextDialogTarget) => void
   /** Puts a pasted text back in the box, in place of its tile. */
   onPasteAsText: (key: string, text: string) => void
   onError: (message: string) => void
@@ -94,17 +100,26 @@ export function AttachmentTray({
   }
   const focusAt = (i: number) => focusTile(items[i]!.key, i)
 
-  const open = (item: DraftAttachment) => {
+  const open = (item: DraftAttachment, from: HTMLElement) => {
     const attachment = item.attachment
     if (!attachment || item.status !== 'ready') return
-    const read = () => host('attachments.read', { id: attachment.id })
     if (attachment.type === 'image') {
-      onOpen({ name: item.name, read })
+      openViewer({
+        sessionId,
+        projectPath,
+        draft,
+        item: {
+          key: draftKey(draft, item.key),
+          source: { kind: 'attachment', attachment },
+          name: item.name,
+          alt: '',
+        },
+        from,
+      })
     } else if (attachment.type === 'text') {
       onOpen({
         name: item.name,
-        read,
-        text: true,
+        read: () => host('attachments.read', { id: attachment.id }),
         pasteAsText: (text) => {
           onPasteAsText(item.key, text)
           setAnnouncement(t('attachments.announceRemoved', { name: item.name }))
@@ -146,7 +161,7 @@ export function AttachmentTray({
         break
       case 'Enter':
       case ' ':
-        open(items[index]!)
+        open(items[index]!, event.target as HTMLElement)
         break
       default:
         return
@@ -188,11 +203,12 @@ export function AttachmentTray({
                   view={view(item)}
                   role="option"
                   data-key={item.key}
+                  data-viewer-key={item.kind === 'image' ? draftKey(draft, item.key) : undefined}
                   aria-selected={i === index}
                   aria-label={`${item.name}, ${view(item).tooltip.split('\n').at(-1)}`}
                   tabIndex={i === index ? 0 : -1}
                   onFocus={() => setActive(i)}
-                  onClick={() => open(item)}
+                  onClick={(event) => open(item, event.currentTarget)}
                   onRemove={() => remove(i)}
                   removeLabel={t('attachments.remove', { name: item.name })}
                 />

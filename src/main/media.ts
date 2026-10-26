@@ -154,15 +154,20 @@ export async function respondMedia(request: Request, grants: MediaGrants): Promi
 }
 
 /**
- * The real path behind a media URL main still grants, for the actions on a file: never a path
- * from the renderer. Throws when the grant is gone or the file was swapped for a link.
+ * The grant behind a media URL main still holds, for the actions on a file: never a path from
+ * the renderer. Throws when the grant is gone or the file was swapped for a link.
  */
-export async function grantedPath(url: unknown, grants: MediaGrants): Promise<string> {
+export async function grantedFile(url: unknown, grants: MediaGrants): Promise<MediaGrantRecord> {
   const token = typeof url === 'string' ? mediaUrlToken(url) : null
   const grant = token ? await grants.find(token) : null
   if (!grant) throw new Error('The file is no longer available here')
   if ((await realpath(grant.path)) !== grant.path) throw new Error('The file has moved')
-  return grant.path
+  return grant
+}
+
+/** The real path behind a media URL main still grants; see `grantedFile`. */
+export async function grantedPath(url: unknown, grants: MediaGrants): Promise<string> {
+  return (await grantedFile(url, grants)).path
 }
 
 /** Whether a request on the media scheme may go: only the app's own page, its main frame. */

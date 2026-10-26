@@ -4,6 +4,7 @@ import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserState } from './browser'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
+import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { SettingsFile, SettingsPatch } from './settings'
 import type { SharingResult, SharingStatus } from './sharing'
@@ -130,7 +131,10 @@ export interface IpcInvokeContract {
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
-  // A media URL main still grants, never a path.
+  // A media URL main still grants, never a path; copy and save also take the bytes the thread
+  // carries. `media:save-as` is false when the save dialog was cancelled.
+  'media:copy-image': { args: [source: string | CarriedMedia]; result: void }
+  'media:save-as': { args: [source: string | CarriedMedia]; result: boolean }
   'media:reveal': { args: [url: string]; result: void }
   'media:open-external': { args: [url: string]; result: void }
   'notifications:test': { args: []; result: boolean }
@@ -320,8 +324,12 @@ export interface OverbenchApi {
     /** Shows a file or folder in the system file manager; the path must be absolute. */
     showItem(path: string): Promise<void>
   }
-  /** Actions on a file served on the media scheme, by its URL. */
+  /** Actions on a file served on the media scheme, by its URL, or on bytes the thread carries. */
   media: {
+    /** Puts the picture on the clipboard as an image. */
+    copyImage(source: string | CarriedMedia): Promise<void>
+    /** Saves a copy where the save dialog says; false when cancelled. */
+    saveAs(source: string | CarriedMedia): Promise<boolean>
     /** Shows the file in the system file manager. */
     reveal(url: string): Promise<void>
     /** Opens the file in the system's default app for it. */

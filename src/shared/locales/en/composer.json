@@ -115,7 +115,6 @@
     "unavailable": "No longer available",
     "unavailableLong": "The copy kept for this draft is gone. Remove it and add it again.",
     "imageTooLarge": "This image is too large to send, even scaled down",
-    "cannotOpen": "This image can't be opened.",
     "cannotOpenText": "This text can't be opened.",
     "sentAsImage": "Sent as an image",
     "sentScaled": "Sent as an image, scaled to {{size}}",
