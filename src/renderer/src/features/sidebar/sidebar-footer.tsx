@@ -143,6 +143,11 @@ function NoticesPill({ afterLast }: { afterLast: RefObject<HTMLButtonElement | n
   const [open, setOpen] = useState(false)
   const [tip, setTip] = useState(false)
   const words = useRef<HTMLSpanElement>(null)
+  // The pill goes with the last notice, and the next one starts closed.
+  if (!summary && (open || tip)) {
+    setOpen(false)
+    setTip(false)
+  }
   const shown = open && summary !== null
   return (
     <Popover open={shown} onOpenChange={setOpen}>
