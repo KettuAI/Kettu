@@ -11,9 +11,16 @@ import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupTextarea } from '@renderer/components/ui/input-group'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
+import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import { FailedState, FirstMessage, StartingAgent, ThreadSkeleton } from './session-states'
+import {
+  ColumnScroller,
+  FailedState,
+  FirstMessage,
+  StartingAgent,
+  ThreadSkeleton,
+} from './session-states'
 import { SignIn } from './sign-in'
 
 /** A session being created: the agent starts, asks you to sign in, or fails. */
@@ -23,33 +30,36 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   const installing = useAgentsStore((s) => s.byId[pending.agentId]?.state === 'installing')
   const parent = useSessionsStore((s) => (pending.parentId ? s.byId[pending.parentId] : undefined))
   const retry = useCallback(() => retryPendingSession(), [])
+  const gutter = useScrollbarGutter()
   const error = pending.error
 
   let body
   if (error?.code === 'auth_required') {
     body = (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
+      <ColumnScroller className="flex items-center justify-center">
         <SignIn agentId={pending.agentId} projectPath={pending.projectPath} onRetry={retry} />
-      </div>
+      </ColumnScroller>
     )
   } else if (error) {
     body = (
-      <div className="mx-auto w-full max-w-thread px-6 pt-6">
-        <FailedState
-          title={t('pending.couldntStart', { agent: name })}
-          message={error.message}
-          onRetry={retry}
-        />
-      </div>
+      <ColumnScroller>
+        <div className="mx-auto w-full max-w-thread px-6 pt-6">
+          <FailedState
+            title={t('pending.couldntStart', { agent: name })}
+            message={error.message}
+            onRetry={retry}
+          />
+        </div>
+      </ColumnScroller>
     )
   } else if (pending.prompt) {
     body = <FirstMessage agentId={pending.agentId} content={pending.prompt} />
   } else {
     body = (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <ColumnScroller className="flex flex-col">
         <StartingAgent agentId={pending.agentId} />
         <ThreadSkeleton className="opacity-70" />
-      </div>
+      </ColumnScroller>
     )
   }
 
@@ -81,21 +91,26 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
         {pending.projectPath !== null && <HeaderTools projectPath={pending.projectPath} />}
       </TopBar>
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
-      <div className="mx-auto w-full max-w-thread px-6 pb-3">
-        <InputGroup variant="composer" data-disabled>
-          <InputGroupTextarea
-            rows={1}
-            disabled
-            aria-label={t('newSession.messageAgent', { agent: name })}
-            placeholder={
-              error
-                ? t('pending.notRunning', { agent: name })
-                : t(installing ? 'agentStart.installing' : 'agentStart.starting', { agent: name })
-            }
-            className="min-h-(--composer-min) py-[15px] pl-4 text-prose leading-[22px] md:text-prose"
-          />
-        </InputGroup>
-        <div className="h-row" />
+      {/* Leaves the width the column's scrollbar takes, as the session's composer row does. */}
+      <div style={{ paddingRight: gutter }}>
+        <div className="mx-auto w-full max-w-thread px-6 pb-3">
+          <InputGroup variant="composer" data-disabled>
+            <InputGroupTextarea
+              rows={1}
+              disabled
+              aria-label={t('newSession.messageAgent', { agent: name })}
+              placeholder={
+                error
+                  ? t('pending.notRunning', { agent: name })
+                  : t(installing ? 'agentStart.installing' : 'agentStart.starting', {
+                      agent: name,
+                    })
+              }
+              className="min-h-(--composer-min) py-[15px] pl-4 text-prose leading-[22px] md:text-prose"
+            />
+          </InputGroup>
+          <div className="h-row" />
+        </div>
       </div>
     </div>
   )

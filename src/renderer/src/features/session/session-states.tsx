@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ArrowUpIcon, CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, UserContent } from '@shared/thread'
@@ -14,6 +14,30 @@ import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { contentAttachments } from './composer/attachments'
 import { SentAttachments, UserContentView } from './entries/user-content'
+
+/**
+ * The scroller every view of the column but the thread sits in. Like the thread's, it keeps the
+ * scrollbar's gutter on its right whether or not it scrolls, so nothing moves sideways when one view
+ * replaces another.
+ */
+export function ColumnScroller({
+  className,
+  children,
+}: {
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        'min-h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-gutter-stable',
+        className,
+      )}
+    >
+      {children}
+    </div>
+  )
+}
 
 /**
  * A thread's shape while it loads: a message and a reply at their real sizes and spacing. It fades
@@ -135,7 +159,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
   const attachments = contentAttachments(content)
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+    <ColumnScroller>
       <div className="mx-auto flex w-full max-w-thread flex-col px-6 pt-5">
         {/* As the thread shows a user entry, so nothing moves when the session takes over. */}
         <div className="flex flex-col items-end gap-0.5">
@@ -172,7 +196,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
           ))}
         </div>
       </div>
-    </div>
+    </ColumnScroller>
   )
 }
 
