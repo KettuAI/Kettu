@@ -12,6 +12,7 @@ import { useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { attachmentContent, attachmentsBlock } from './attachments'
 import { ControlRow } from './control-row'
+import { hasMessage } from './drafts'
 import { OutOfCreditStrip } from './out-of-credit-strip'
 import { PromptBox } from './prompt-box'
 import { useOutOfCredit } from './use-out-of-credit'
@@ -41,10 +42,10 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   })
   const { text, attachments, error, setError } = box
   const blocked = attachmentsBlock(attachments, text)
-  const hasMessage = text.trim().length > 0 || attachments.length > 0
-  const canSend = idle && hasMessage && !blocked
+  const holdsMessage = hasMessage(text, attachments)
+  const canSend = idle && holdsMessage && !blocked
   // During a turn the send key queues the message and the steer key sends it into the turn.
-  const canQueue = running && hasMessage && !blocked
+  const canQueue = running && holdsMessage && !blocked
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
@@ -212,7 +213,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                   />
                 </TooltipContent>
               </Tooltip>
-            ) : blocked && hasMessage ? (
+            ) : blocked && holdsMessage ? (
               // A disabled button takes no pointer, so the tooltip says why from around it.
               <Tooltip>
                 <TooltipTrigger render={<span key="send" />}>

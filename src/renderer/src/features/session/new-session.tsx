@@ -30,7 +30,7 @@ import { openAgentSettings, openArtifacts, useViewStore } from '@renderer/stores
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { attachmentContent, attachmentsBlock } from './composer/attachments'
-import { NEW_SESSION_DRAFT } from './composer/drafts'
+import { hasMessage, NEW_SESSION_DRAFT, readDraft, readDraftAttachments } from './composer/drafts'
 import { PromptBox } from './composer/prompt-box'
 import { usePromptBox } from './composer/use-prompt-box'
 import { AgentMenu } from './new-session/agent-menu'
@@ -71,6 +71,10 @@ export function NewSessionView({
   const parentId = useViewStore((s) => (s.main.kind === 'new' ? (s.main.parentId ?? null) : null))
   const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   const toolsPath = project?.path ?? (parent?.scratch ? parent.projectPath : null)
+  // From the kept draft, so a draft left on an earlier visit hides Recent artifacts from the start.
+  const [holdsMessage, setHoldsMessage] = useState(() =>
+    hasMessage(readDraft(NEW_SESSION_DRAFT), readDraftAttachments(NEW_SESSION_DRAFT)),
+  )
 
   const drop = useFileDrop(NEW_SESSION_DRAFT, false)
 
@@ -95,9 +99,10 @@ export function NewSessionView({
         <span className="flex-1" />
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
-      {/* Raised 28 px above centre, so the eye lands on the composer. */}
+      {/* The heading and the composer are centred alone, raised 28 px above centre so the eye lands
+          on the composer; Recent artifacts hangs under them outside the centring. */}
       <ColumnScroller className="flex flex-col items-center pb-14">
-        <div className="my-auto flex w-full max-w-thread flex-col gap-7 px-6 pt-6">
+        <div className="relative my-auto flex w-full max-w-thread flex-col gap-7 px-6 pt-6">
           <h1 className="animate-in text-center font-serif text-greeting text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
@@ -106,8 +111,9 @@ export function NewSessionView({
             project={project}
             noProject={noProject}
             parent={parent}
+            onInput={setHoldsMessage}
           />
-          <RecentArtifacts />
+          <RecentArtifacts hidden={holdsMessage} />
         </div>
       </ColumnScroller>
       <DropOverlay shown={drop.over} starting={false} agentName="" />
@@ -122,11 +128,14 @@ function DraftComposer({
   project,
   noProject,
   parent,
+  onInput,
 }: {
   agentId: AgentId | null
   project: Project | null
   noProject: boolean
   parent: SessionSummary | undefined
+  /** Told on each change whether the draft holds what Send takes. */
+  onInput: (holdsMessage: boolean) => void
 }) {
   const { t } = useTranslation('session')
   const { t: tc } = useTranslation('composer')
@@ -151,7 +160,8 @@ function DraftComposer({
   const { text, attachments, editor } = box
   const ready = inScratch || (!!project && !project.missing)
   const held = attachmentsBlock(attachments, text)
-  const canSend = !!agentId && ready && (text.trim().length > 0 || attachments.length > 0) && !held
+  const holdsMessage = hasMessage(text, attachments)
+  const canSend = !!agentId && ready && holdsMessage && !held
   const tightest = limits ? tightestLimit(limits, now) : null
   const reached = tightest?.state === 'reached' ? tightest : null
   const sending = useRef(false)
@@ -171,6 +181,8 @@ function DraftComposer({
   useEffect(() => {
     editor.current?.focus()
   }, [editor])
+
+  useEffect(() => onInput(holdsMessage), [holdsMessage, onInput])
 
   // The message leaves the draft with the request and comes back to it if the start fails.
   const send = async () => {
@@ -446,10 +458,16 @@ function ModeMenu({ agentId }: { agentId: AgentId | null }) {
 
 const RECENT = 3
 
-/** The artifacts changed last, in any project, to open again; with none, nothing shows. */
-function RecentArtifacts() {
+/**
+ * The artifacts changed last, in any project, to open again; with none, nothing shows. Hidden, it
+ * stays mounted, so it keeps loading and comes back with its cards.
+ */
+function RecentArtifacts({ hidden }: { hidden: boolean }) {
   const { t } = useTranslation('session')
   const { t: ta } = useTranslation('artifacts')
+  // It fades in only on coming back, not when the screen opens.
+  const [hiddenOnce, setHiddenOnce] = useState(hidden)
+  if (hidden && !hiddenOnce) setHiddenOnce(true)
   const recent = useArtifactsStore(useShallow((s) => s.list?.slice(0, RECENT) ?? null))
   const failed = useArtifactsStore((s) => s.error !== null)
   const projects = useProjectsStore((s) => s.projects)
@@ -476,9 +494,17 @@ function RecentArtifacts() {
       ? t('newSession.noProject')
       : (projects.find((p) => p.path === artifact.project)?.name ?? basename(artifact.project))
   return (
+    // Out of the flow 28 px under the composer, so it moves nothing as it hides and shows; the area
+    // still scrolls to show it whole, 24 px clear of the bottom.
     <section
       aria-label={t('newSession.recentArtifacts')}
-      className="@container flex flex-col gap-2 px-1"
+      inert={hidden}
+      className={cn(
+        '@container absolute inset-x-6 top-full mt-7 flex flex-col gap-2 px-1 pb-6 transition-[opacity,display] transition-discrete motion-reduce:transition-none',
+        hidden
+          ? 'hidden opacity-0 duration-(--duration-fast)'
+          : cn('duration-(--duration-base)', hiddenOnce && 'starting:opacity-0'),
+      )}
     >
       <div className="flex items-center justify-between pl-2">
         <h2 className="text-ui text-secondary">{t('newSession.recentArtifacts')}</h2>
