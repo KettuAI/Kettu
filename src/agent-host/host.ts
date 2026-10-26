@@ -145,7 +145,7 @@ export class AgentHost {
   /** Runs git for the project's files, with the agent environment. */
   private readonly execRunner: ExecRunner
   private readonly files: FilesService
-  /** Grants for the images a thread names, which main serves. */
+  /** Grants for the media a thread names and the Files pane opens, which main serves. */
   private readonly media: MediaService
   private gitUnsubscribe: (() => void)[] = []
   /** Ports keeping a project's git status live, by path key. */
@@ -176,12 +176,16 @@ export class AgentHost {
     this.env.setProxy(options.settings.proxy)
     this.env.setConfigFolders(configFolders(catalog, options.settings.agents))
     this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
-    this.files = new FilesService({ exec: this.execRunner.exec, platform })
     this.media = new MediaService({
       platform,
       homeDir: options.homeDir ?? os.homedir(),
       names: (sessionId, text) => this.sessions.names(sessionId, text),
       grant: (grant) => options.send({ type: 'host:media-grant', grant }),
+    })
+    this.files = new FilesService({
+      exec: this.execRunner.exec,
+      platform,
+      media: (real, info) => this.media.grantFile(real, info, null),
     })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)

@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import {
   ArrowRightLeftIcon,
   BanIcon,
@@ -43,6 +43,10 @@ import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { Clamp } from '../clamp'
 import { Diff, Markdown } from '../markdown'
+import { CarriedImage } from '../media/carried-image'
+import { EntryIdContext, SessionIdContext } from '../media/grants'
+import { LocalMedia } from '../media/local-media'
+import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { PANEL, respondToPermission, toolLabel } from './helpers'
 import { useDiffStats } from './use-diff-stats'
@@ -103,6 +107,7 @@ export const ToolCard = memo(function ToolCard({
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const permission = entry?.permission ?? null
+  const media = useMemo(() => (entry ? toolMedia(entry) : []), [entry])
 
   useEffect(() => {
     if (permission) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -112,6 +117,7 @@ export const ToolCard = memo(function ToolCard({
   const label = toolLabel(entry, projectPath)
   const hasBody =
     entry.content.length > 0 ||
+    media.length > 0 ||
     !!permission ||
     (label.kind === 'command' &&
       !!label.target &&
@@ -161,8 +167,29 @@ export const ToolCard = memo(function ToolCard({
               <CommandBlock command={label.target} framed={framed} />
             )}
             {entry.content.map((c, i) => (
-              <ContentBlock key={i} content={c} projectPath={projectPath} framed={framed} />
+              <ContentBlock
+                key={i}
+                sessionId={sessionId}
+                entryId={entryId}
+                index={i}
+                content={c}
+                projectPath={projectPath}
+                framed={framed}
+              />
             ))}
+            {media.length > 0 && (
+              <SessionIdContext value={sessionId}>
+                <EntryIdContext value={entryId}>
+                  <div
+                    className={cn('flex flex-col items-start gap-3 empty:hidden', framed && 'p-3')}
+                  >
+                    {media.map((path) => (
+                      <LocalMedia key={path} path={path} imageHeight={MEDIA_IMAGE_HEIGHT} />
+                    ))}
+                  </div>
+                </EntryIdContext>
+              </SessionIdContext>
+            )}
             {permission && (
               <PermissionPrompt sessionId={sessionId} entry={entry} agentName={agentName} />
             )}
@@ -359,11 +386,21 @@ function CommandBlock({ command, framed }: { command: string; framed: boolean })
   )
 }
 
+/** The tallest an image shows in a tool call's details. */
+const MEDIA_IMAGE_HEIGHT = 160
+
 function ContentBlock({
+  sessionId,
+  entryId,
+  index,
   content,
   projectPath,
   framed,
 }: {
+  sessionId: string
+  entryId: string
+  /** Its place among the call's content, by which the viewer knows a picture. */
+  index: number
   content: ToolContent
   projectPath: string
   framed: boolean
@@ -400,13 +437,27 @@ function ContentBlock({
         </div>
       )
     case 'ref':
+      if (content.ref.kind === 'image') {
+        return (
+          <div className={cn(framed && 'px-3 py-2')}>
+            <CarriedImage
+              sessionId={sessionId}
+              entryId={entryId}
+              index={index}
+              mimeType={content.ref.mimeType}
+              data={content.ref.data}
+              className="max-h-40 max-w-full rounded-lg shadow-card"
+            />
+          </div>
+        )
+      }
       return (
         <div className={cn('text-xs text-muted-foreground', framed && 'px-3 py-2')}>
           {content.ref.kind === 'link'
             ? content.ref.name || content.ref.uri
             : content.ref.kind === 'unsupported'
               ? content.ref.label
-              : t('tool.image')}
+              : content.ref.attachment.name}
         </div>
       )
   }

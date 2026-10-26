@@ -223,11 +223,26 @@ export function setDirty(projectPath: string, path: string, dirty: boolean): voi
   update(projectPath, path, (file) => (file.dirty === dirty ? {} : { dirty, saveError: null }))
 }
 
+/** A media URL without its token: the file's name and the time it was granted at. */
+export const mediaVersion = (url: string): string => url.replace(/^[^:]*:\/\/[^/]*/, '')
+
+/** A read of the media file shown, unchanged since: only its grant's token differs. */
+function sameMedia(shown: FileContent | null, read: FileContent): boolean {
+  return (
+    shown?.kind === 'media' &&
+    read.kind === 'media' &&
+    shown.grant.mimeType === read.grant.mimeType &&
+    shown.grant.size === read.grant.size &&
+    mediaVersion(shown.grant.url) === mediaVersion(read.grant.url)
+  )
+}
+
 /**
  * Reads the open file again, keeping what is shown until the new text arrives. Unsaved edits are
- * never replaced: a different file on disk only says so.
+ * never replaced: a different file on disk only says so. An unchanged media file keeps its URL,
+ * so a clip goes on playing, unless `renew` asks for the fresh grant.
  */
-async function readOpenFile(projectPath: string): Promise<void> {
+async function readOpenFile(projectPath: string, renew = false): Promise<void> {
   const file = useFilesStore.getState().open[projectPath]
   if (!file) return
   const { path } = file
@@ -235,6 +250,7 @@ async function readOpenFile(projectPath: string): Promise<void> {
     const content = await host('files.read', { projectPath, path })
     update(projectPath, path, (now) => {
       const buffer = buffers.get(projectPath)
+      if (!renew && sameMedia(now.content, content)) return { error: null }
       if (!now.dirty || buffer?.path !== path) return { content, error: null }
       const version = content.kind === 'text' ? content.version : null
       if (version === buffer.version || (version !== null && version === now.kept)) return {}
@@ -243,6 +259,11 @@ async function readOpenFile(projectPath: string): Promise<void> {
   } catch (error) {
     update(projectPath, path, { error: errorMessage(error) })
   }
+}
+
+/** Reads the open media file again for a fresh grant, since main may have dropped its own. */
+export function renewOpenFile(projectPath: string): void {
+  void readOpenFile(projectPath, true)
 }
 
 /** Saves the open file's edits; false when they are still unsaved. */

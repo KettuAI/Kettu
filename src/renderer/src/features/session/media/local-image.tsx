@@ -4,7 +4,7 @@ import type { MediaGrant } from '@shared/media'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { cn } from '@renderer/lib/utils'
 
-/** The tallest an image shows in the thread; the viewer shows it whole. */
+/** The tallest an image shows in a reply; the viewer shows it whole. */
 const MAX_HEIGHT = 288
 
 /** An image a reply names, in place, as a button that opens the viewer. */
@@ -13,6 +13,7 @@ export function LocalImage({
   alt,
   grant,
   viewerKey,
+  maxHeight = MAX_HEIGHT,
   onOpen,
   onFailed,
 }: {
@@ -20,6 +21,7 @@ export function LocalImage({
   alt: string
   grant: MediaGrant
   viewerKey: string
+  maxHeight?: number
   onOpen: (from: HTMLElement) => void
   onFailed: () => void
 }) {
@@ -28,7 +30,7 @@ export function LocalImage({
   const box =
     grant.width && grant.height
       ? {
-          width: `min(100%, ${grant.width}px, ${(MAX_HEIGHT * grant.width) / grant.height}px)`,
+          width: `min(100%, ${grant.width}px, ${(maxHeight * grant.width) / grant.height}px)`,
           aspectRatio: `${grant.width} / ${grant.height}`,
         }
       : undefined
@@ -57,10 +59,8 @@ export function LocalImage({
         loading="lazy"
         onLoad={() => setLoaded(true)}
         onError={onFailed}
-        className={cn(
-          'block checkerboard',
-          box ? 'size-full object-contain' : 'max-h-[288px] max-w-full',
-        )}
+        style={box ? undefined : { maxHeight }}
+        className={cn('block checkerboard', box ? 'size-full object-contain' : 'max-w-full')}
       />
       <span
         aria-hidden

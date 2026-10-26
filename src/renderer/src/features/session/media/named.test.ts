@@ -2,8 +2,9 @@ import { createElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Streamdown, type ExtraProps } from 'streamdown'
 import { describe, expect, it } from 'vitest'
+import type { ToolEntry } from '@shared/thread'
 import { remarkPlugins } from '@renderer/features/session/markdown/remark'
-import { mediaReference, NamedMedia, namedMedia } from './named'
+import { mediaReference, NamedMedia, namedMedia, toolMedia } from './named'
 
 /** What `namedMedia` finds in each paragraph, list item and table Streamdown renders. */
 function found(markdown: string): string[][] {
@@ -110,5 +111,62 @@ describe('NamedMedia', () => {
     named.claim({ at: 'first', paths: ['a.mp4'] })()
     expect(calls).toBe(2)
     expect(named.getVersion()).toBe(before + 2)
+  })
+})
+
+describe('toolMedia', () => {
+  const call = (changes: Partial<ToolEntry>): ToolEntry => ({
+    kind: 'tool',
+    id: 't1',
+    title: 'Edit',
+    toolKind: 'edit',
+    status: 'completed',
+    content: [],
+    locations: [],
+    permission: null,
+    permissionResult: null,
+    ...changes,
+  })
+
+  it('takes the media files of its diffs, then of its locations, each once', () => {
+    const entry = call({
+      content: [
+        { type: 'diff', path: '/p/art/logo.svg', oldText: null, newText: '<svg/>' },
+        { type: 'diff', path: '/p/src/app.ts', oldText: 'a', newText: 'b' },
+      ],
+      locations: [
+        { path: '/p/out/clip.mp4' },
+        { path: '/p/art/logo.svg', line: 1 },
+        { path: '/p/notes.md', line: 3 },
+        { path: '/p/Application Support/shot one.png' },
+      ],
+    })
+    expect(toolMedia(entry)).toEqual([
+      '/p/art/logo.svg',
+      '/p/out/clip.mp4',
+      '/p/Application Support/shot one.png',
+    ])
+  })
+
+  it('reads no path from its command or its output', () => {
+    const entry = call({
+      toolKind: 'execute',
+      rawInput: 'ffmpeg -i in.mov out/clip.mp4',
+      content: [{ type: 'markdown', markdown: 'Saved `out/shot.png` and ![x](out/shot.png)' }],
+    })
+    expect(toolMedia(entry)).toEqual([])
+  })
+
+  it('shows none beside a picture of its own, nor for a deletion', () => {
+    const picture = {
+      type: 'ref' as const,
+      ref: { kind: 'image' as const, mimeType: 'image/png', data: 'AAAA' },
+    }
+    expect(
+      toolMedia(
+        call({ toolKind: 'read', content: [picture], locations: [{ path: '/p/shot.png' }] }),
+      ),
+    ).toEqual([])
+    expect(toolMedia(call({ toolKind: 'delete', locations: [{ path: '/p/old.png' }] }))).toEqual([])
   })
 })

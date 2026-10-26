@@ -1,10 +1,11 @@
-import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, SaveIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { FileContent } from '@shared/files'
+import type { MediaGrant } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -13,15 +14,20 @@ import {
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { CopyButton } from '@renderer/features/git/branch-popover'
 import { PanelButton } from '@renderer/features/shell/panel-button'
-import { bytes } from '@renderer/lib/format'
+import { bytes, clock } from '@renderer/lib/format'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { Markdown } from '@renderer/features/session/markdown'
+import { playerFailure } from '@renderer/features/session/media/failure'
+import { PlayElsewhere, UnsupportedReason } from '@renderer/features/session/media/local-media'
+import { playOneAtATime } from '@renderer/features/session/media/playback'
 import {
   buffers,
   closeFile,
   discardEdits,
   keepEdits,
+  mediaVersion,
+  renewOpenFile,
   saveFile,
   useFilesStore,
   type OpenFile,
@@ -220,7 +226,17 @@ function Body({ projectPath, file }: { projectPath: string; file: OpenFile }) {
       />
     )
   }
-  if (content.kind === 'image') return <Picture key={content.path} content={content} />
+  if (content.kind === 'media') {
+    return (
+      <FileMedia
+        // A file changed on disk starts over; a fresh grant for the same file does not.
+        key={`${content.path}\0${mediaVersion(content.grant.url)}`}
+        projectPath={projectPath}
+        path={content.path}
+        grant={content.grant}
+      />
+    )
+  }
   if (rendered(file, source)) {
     return (
       <div
@@ -251,44 +267,135 @@ export function Lines() {
   )
 }
 
+type Size = { width: number; height: number }
+
 /**
- * A picture at its own size, or fitted to the pane when larger, over squares that show its
- * transparency, with its pixel size and file size under it.
+ * A media file from the media scheme, centred: a picture at its own size, or fitted to the pane
+ * when larger, over squares that show its transparency; a clip the same way, and a sound, with
+ * Chromium's controls. Its pixel size, length and file size show under it.
  */
-function Picture({ content }: { content: Extract<FileContent, { kind: 'image' }> }) {
+function FileMedia({
+  projectPath,
+  path,
+  grant,
+}: {
+  projectPath: string
+  path: string
+  grant: MediaGrant
+}) {
   const { t } = useTranslation('files')
-  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null)
-  const [failed, setFailed] = useState(false)
-  const src = useMemo(() => `data:${content.mimeType};base64,${content.data}`, [content])
-  if (failed) {
+  const [size, setSize] = useState<Size | null>(
+    grant.width && grant.height ? { width: grant.width, height: grant.height } : null,
+  )
+  const [seconds, setSeconds] = useState<number | null>(null)
+  // A grant main dropped fails as a file it cannot play does, so one fresh grant comes first.
+  const [renewed, setRenewed] = useState(false)
+  const [failure, setFailure] = useState<{ message: string | null } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(playOneAtATime, [])
+  const name = nameOf(path)
+
+  const failed = (message: string | null) => {
+    if (renewed) setFailure({ message })
+    else {
+      setRenewed(true)
+      renewOpenFile(projectPath)
+    }
+  }
+  if (failure?.message) {
+    return <Notice title={t('preview.openFailed')} description={failure.message} />
+  }
+  if (failure) {
     return (
-      <Notice
-        title={t('preview.imageFailedTitle')}
-        description={t('preview.imageFailedDescription', { size: bytes(content.size) })}
-      />
+      <Empty className="h-full">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <FileWarningIcon />
+          </EmptyMedia>
+          <EmptyTitle>
+            <UnsupportedReason kind={grant.kind} />
+          </EmptyTitle>
+          <EmptyDescription>{bytes(grant.size)}</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <span className="flex flex-wrap justify-center gap-1.5">
+            <PlayElsewhere url={grant.url} onError={setError} />
+          </span>
+          {error && <span className="text-xs text-danger">{error}</span>}
+        </EmptyContent>
+      </Empty>
+    )
+  }
+
+  const meta = (
+    <p className="shrink-0 text-center text-xs text-tertiary tabular">
+      {[
+        size && `${size.width} × ${size.height}`,
+        seconds !== null && Number.isFinite(seconds) ? clock(seconds) : null,
+        bytes(grant.size),
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+    </p>
+  )
+  if (grant.kind === 'audio') {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-6">
+        <audio
+          src={grant.url}
+          controls
+          controlsList="nodownload"
+          preload="metadata"
+          aria-label={name}
+          onLoadedMetadata={(event) => setSeconds(event.currentTarget.duration)}
+          onError={(event) => failed(playerFailure(event.currentTarget))}
+          className="w-full max-w-[420px]"
+        />
+        {meta}
+      </div>
     )
   }
   return (
     <div className="absolute inset-0 flex flex-col">
       <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-        <img
-          src={src}
-          alt={nameOf(content.path)}
-          draggable={false}
-          onLoad={(event) =>
-            setNatural({
-              width: event.currentTarget.naturalWidth,
-              height: event.currentTarget.naturalHeight,
-            })
-          }
-          onError={() => setFailed(true)}
-          className="max-h-full max-w-full checkerboard object-contain shadow-[0_0_0_var(--hairline)_var(--border-default)]"
-        />
+        {grant.kind === 'video' ? (
+          <video
+            src={grant.url}
+            controls
+            controlsList="nodownload"
+            preload="metadata"
+            aria-label={name}
+            onLoadedMetadata={(event) => {
+              const { videoWidth, videoHeight, duration } = event.currentTarget
+              // Chromium loads some formats, such as ProRes, with sound and a picture of 0 x 0.
+              if (videoWidth === 0 || videoHeight === 0) {
+                failed(null)
+                return
+              }
+              setSize({ width: videoWidth, height: videoHeight })
+              setSeconds(duration)
+            }}
+            onError={(event) => failed(playerFailure(event.currentTarget))}
+            className="max-h-full max-w-full"
+          />
+        ) : (
+          <img
+            src={grant.url}
+            alt={name}
+            draggable={false}
+            decoding="async"
+            onLoad={(event) => {
+              const { naturalWidth, naturalHeight } = event.currentTarget
+              if (naturalWidth > 0 && naturalHeight > 0) {
+                setSize({ width: naturalWidth, height: naturalHeight })
+              }
+            }}
+            onError={() => failed(null)}
+            className="max-h-full max-w-full checkerboard object-contain shadow-[0_0_0_var(--hairline)_var(--border-default)]"
+          />
+        )}
       </div>
-      <p className="shrink-0 pb-3 text-center text-xs text-tertiary tabular">
-        {natural && `${natural.width} × ${natural.height} · `}
-        {bytes(content.size)}
-      </p>
+      <div className="pb-3">{meta}</div>
     </div>
   )
 }

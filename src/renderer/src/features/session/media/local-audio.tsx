@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { MediaGrant } from '@shared/media'
+import { playerFailure } from './failure'
 import { MediaCaption } from './media-caption'
 import { playOneAtATime } from './playback'
 
@@ -26,10 +27,7 @@ export function LocalAudio({
         preload="metadata"
         aria-label={name}
         onLoadedMetadata={(event) => setSeconds(event.currentTarget.duration)}
-        onError={(event) => {
-          const error = event.currentTarget.error
-          onFailed(error?.code === MediaError.MEDIA_ERR_NETWORK ? error.message || null : null)
-        }}
+        onError={(event) => onFailed(playerFailure(event.currentTarget))}
         className="block w-full"
       />
       <MediaCaption path={path} name={name} grant={grant} seconds={seconds} />

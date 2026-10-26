@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { MediaGrant } from '@shared/media'
 import { cn } from '@renderer/lib/utils'
 import { VIDEO_BOX } from './boxes'
+import { playerFailure } from './failure'
 import { MediaCaption } from './media-caption'
 import { playOneAtATime } from './playback'
 
@@ -64,10 +65,7 @@ export function LocalVideo({
             setRatio({ width: videoWidth, height: videoHeight })
             setSeconds(duration)
           }}
-          onError={(event) => {
-            const error = event.currentTarget.error
-            onFailed(error?.code === MediaError.MEDIA_ERR_NETWORK ? error.message || null : null)
-          }}
+          onError={(event) => onFailed(playerFailure(event.currentTarget))}
           className="block size-full object-contain"
         />
         <span

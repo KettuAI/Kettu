@@ -4,7 +4,8 @@ import { host } from '@renderer/lib/host'
 
 /**
  * The session of the agent reply being rendered, whose naming of a file lets its image through.
- * Only agent replies provide it, so images in thoughts, tool output and previews stay as text.
+ * Replies, thoughts and a tool call's media provide it, so images in tool output and previews
+ * stay as text.
  */
 export const SessionIdContext = createContext<string | null>(null)
 

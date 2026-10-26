@@ -2,6 +2,7 @@
 
 import { createContext } from 'react'
 import { mediaKindOfName } from '@shared/media'
+import type { ToolEntry } from '@shared/thread'
 import { localTarget } from '@renderer/features/session/markdown/local-links'
 
 interface HastNode {
@@ -72,6 +73,28 @@ export interface MediaClaim<T> {
 
 /** A path as written, the same for two ways a message writes one file. */
 export const sameFile = (path: string) => path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '')
+
+/**
+ * The media files a tool call names, which its details show: its diffs' paths, then its
+ * locations, each once. Its command and text output are full of paths, so they are not read. A
+ * call whose content carries a picture shows that alone, since Claude Code's Read sends the file
+ * it read both ways; and what a deletion names is gone.
+ */
+export function toolMedia(entry: Pick<ToolEntry, 'toolKind' | 'content' | 'locations'>): string[] {
+  if (entry.toolKind === 'delete') return []
+  if (entry.content.some((c) => c.type === 'ref' && c.ref.kind === 'image')) return []
+  const paths = [
+    ...entry.content.flatMap((c) => (c.type === 'diff' ? [c.path] : [])),
+    ...entry.locations.map((location) => location.path),
+  ]
+  const seen = new Set<string>()
+  return paths.filter((path) => {
+    const file = sameFile(path)
+    if (!mediaKindOfName(path) || seen.has(file)) return false
+    seen.add(file)
+    return true
+  })
+}
 
 /**
  * The files one message names, so each shows once: in place for a Markdown image, else under the
