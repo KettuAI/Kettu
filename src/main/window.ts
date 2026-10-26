@@ -14,10 +14,10 @@ import { parseWindowState, placeWindow, type SavedWindowState } from './window-b
 const log = createLogger('window')
 
 // Must match --bg-app in the renderer's tokens.css, or the window flashes on load.
-const BACKGROUND_COLOR = { light: '#ffffff', dark: '#1b1b1a' }
+const BACKGROUND_COLOR = { light: '#fdfcf9', dark: '#1c1b18' }
 
 // The symbols of the Windows and Linux window controls: --text-primary of each theme.
-const SYMBOL_COLOR = { light: '#262626', dark: '#ececea' }
+const SYMBOL_COLOR = { light: '#1c1b18', dark: '#eceae3' }
 
 // The chosen theme, whose colors replace the two above; null for the built-in theme.
 let chosen: Theme | null = null

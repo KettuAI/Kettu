@@ -216,7 +216,7 @@ describe('contrast', () => {
     expect(half).toBeCloseTo(contrastRatio(gray, parseColor('#fff')!), 5)
   })
 
-  it('lists the pairs under 4.5:1 and skips translucent surfaces', () => {
+  it('lists the pairs under 4.5:1, a translucent surface laid over the opaque ones', () => {
     const colors = {
       'text-primary': '#000000',
       'text-tertiary': '#657b83',
@@ -230,7 +230,14 @@ describe('contrast', () => {
       bg: 'bg-app',
       ratio: expect.closeTo(4.13, 2),
     })
-    expect(issues.some((issue) => issue.bg === 'bg-sidebar')).toBe(false)
+    // Half black over bg-app, the one opaque base here, is a mid grey.
+    const grey = parseColor('rgb(126.5 123 113.5)')!
+    expect(issues).toContainEqual({
+      mode: 'light',
+      fg: 'text-tertiary',
+      bg: 'bg-sidebar',
+      ratio: expect.closeTo(contrastRatio(parseColor('#657b83')!, grey), 5),
+    })
     expect(issues.some((issue) => issue.fg === 'text-primary')).toBe(false)
   })
 })

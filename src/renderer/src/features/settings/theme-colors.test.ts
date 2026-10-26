@@ -20,12 +20,12 @@ describe('the built-in colors', () => {
     for (const colors of [BUILTIN_COLORS.light, BUILTIN_COLORS.dark]) {
       expect(Object.keys(colors)).toEqual([...THEME_TOKENS])
     }
-    expect(BUILTIN_COLORS.light['bg-app']).toBe('#ffffff')
-    expect(BUILTIN_COLORS.dark['bg-app']).toBe('#1b1b1a')
+    expect(BUILTIN_COLORS.light['bg-app']).toBe('#fdfcf9')
+    expect(BUILTIN_COLORS.dark['bg-app']).toBe('#1c1b18')
     // Tokens the dark block leaves alone, and roles, which point at other tokens.
-    expect(BUILTIN_COLORS.dark['ansi-red']).toBe('#cd3131')
-    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#232322')
-    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#fafafa')
+    expect(BUILTIN_COLORS.dark['viewer-scrim']).toBe('oklch(0.14 0.004 85 / 92%)')
+    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#262521')
+    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#efede6')
   })
 
   it('cover every color token of tokens.css, or keep it out on purpose', () => {
