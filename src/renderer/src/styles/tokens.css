@@ -446,8 +446,9 @@
   --marked-line: color-mix(in srgb, var(--info) 7%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
-  --agent-claude-code: var(--brand-claude);
-  --agent-codex: var(--brand-codex-2);
+  /* A chart's series: the brand colors, a shade toward the card they are drawn on. */
+  --agent-claude-code: color-mix(in oklch, var(--brand-claude) 86%, var(--bg-surface));
+  --agent-codex: color-mix(in oklch, var(--brand-codex-2) 86%, var(--bg-surface));
   --heat-1: color-mix(in oklch, var(--heat-hue) 26%, transparent);
   --heat-2: color-mix(in oklch, var(--heat-hue) 48%, transparent);
   --heat-3: color-mix(in oklch, var(--heat-hue) 74%, transparent);

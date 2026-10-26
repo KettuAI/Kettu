@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
-import { CalendarIcon, ChevronDownIcon } from 'lucide-react'
+import { useMemo, useState, type ComponentProps } from 'react'
+import { CalendarIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { enUS, zhCN } from 'react-day-picker/locale'
-import { Button } from '@renderer/components/ui/button'
-import { Calendar } from '@renderer/components/ui/calendar'
+import { Button, buttonVariants } from '@renderer/components/ui/button'
+import { Calendar, CalendarDayButton } from '@renderer/components/ui/calendar'
 import { Input } from '@renderer/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -35,6 +35,7 @@ const ordered = (a: number, b: number): [number, number] => (a <= b ? [a, b] : [
  */
 export function RangePicker({
   value,
+  shown,
   label,
   today,
   firstDay,
@@ -44,6 +45,8 @@ export function RangePicker({
 }: {
   /** The custom range applied now, both ends included, or null while a preset range shows. */
   value: { from: number; to: number } | null
+  /** The range the page shows, both ends included, which the picker opens with. */
+  shown: { from: number; to: number } | null
   /** The button's text for that range. */
   label: string | null
   today: number
@@ -93,7 +96,8 @@ export function RangePicker({
   }
 
   const openChange = (next: boolean) => {
-    if (next) reset(value?.from ?? null, value?.to ?? null)
+    const start = value ?? shown
+    if (next) reset(start?.from ?? null, start?.to ?? null)
     setOpen(next)
   }
 
@@ -136,40 +140,41 @@ export function RangePicker({
       <PopoverTrigger
         render={
           <Button
-            variant="quiet"
+            variant="outline"
             size="compact"
             aria-pressed={value !== null}
             aria-label={t('picker.label')}
+            className="aria-pressed:shadow-outline-hover"
           />
         }
       >
-        <CalendarIcon data-icon="inline-start" />
+        <CalendarIcon data-icon="inline-start" className="size-3.5 text-tertiary" />
         <span className="tabular-nums">{label ?? t('picker.button')}</span>
-        <ChevronDownIcon data-icon="inline-end" />
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-auto flex-row gap-0 p-0">
-        <div
-          role="group"
-          aria-label={t('picker.label')}
-          className="flex w-32 shrink-0 flex-col gap-px border-r border-subtle p-1.5"
-        >
-          {presetList.map((preset: Preset) => (
-            <Button
-              key={preset.id}
-              variant="ghost"
-              size="sm"
-              aria-pressed={draft.from === preset.from && draft.to === preset.to}
-              className="justify-start font-normal aria-pressed:bg-selected aria-pressed:text-primary"
-              onClick={() => reset(preset.from, preset.to)}
-            >
-              {t(`picker.presets.${preset.id}`)}
-            </Button>
-          ))}
-        </div>
-        <div className="flex flex-col">
+      <PopoverContent align="end" sideOffset={6} className="w-auto gap-0 p-0">
+        <div className="flex">
+          <div
+            role="group"
+            aria-label={t('picker.label')}
+            className="flex w-36 shrink-0 flex-col gap-px px-2 py-2.5 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)]"
+          >
+            {presetList.map((preset: Preset) => (
+              <Button
+                key={preset.id}
+                variant="ghost"
+                size="sm"
+                aria-pressed={draft.from === preset.from && draft.to === preset.to}
+                className="h-7.5 justify-start font-normal text-secondary hover:bg-hover aria-pressed:bg-selected aria-pressed:font-medium aria-pressed:text-foreground"
+                onClick={() => reset(preset.from, preset.to)}
+              >
+                {t(`picker.presets.${preset.id}`)}
+              </Button>
+            ))}
+          </div>
           <Calendar
             mode="range"
             numberOfMonths={2}
+            showOutsideDays={false}
             locale={locale}
             weekStartsOn={firstDay as 0 | 1 | 2 | 3 | 4 | 5 | 6}
             month={month}
@@ -182,60 +187,109 @@ export function RangePicker({
             onDayMouseEnter={(day) => setHover(dayOf(day.getTime()))}
             onDayMouseLeave={() => setHover(null)}
             modifiers={{ used: (date) => used.has(dayOf(date.getTime())) }}
-            modifiersClassNames={{
-              used: 'after:absolute after:bottom-1 after:left-1/2 after:size-1 after:-translate-x-1/2 after:rounded-full after:bg-current after:opacity-50',
-            }}
-            className="bg-transparent p-3"
+            components={{ DayButton: UsedDay }}
+            classNames={CALENDAR}
+            className="bg-transparent px-4 py-3 [--cell-radius:var(--radius-lg)] [--cell-size:--spacing(8.5)]"
           />
-          <div className="flex items-center gap-2 border-t border-subtle px-3 py-2.5">
-            <DateField
-              label={t('picker.start')}
-              value={typed.from ?? (lo !== null ? iso(lo) : '')}
-              invalid={wrong('from')}
-              onChange={(text) => type('from', text)}
-              onBlur={() => setLeft((v) => ({ ...v, from: true }))}
-            />
-            <span className="text-tertiary">–</span>
-            <DateField
-              label={t('picker.end')}
-              value={typed.to ?? (hi !== null && draft.to !== null ? iso(hi) : '')}
-              invalid={wrong('to')}
-              onChange={(text) => type('to', text)}
-              onBlur={() => setLeft((v) => ({ ...v, to: true }))}
-            />
-            <span
-              aria-live="polite"
-              className={cn(
-                'min-w-14 text-xs tabular-nums',
-                fields.error ? 'text-danger' : 'text-tertiary',
-              )}
-            >
-              {fields.error
-                ? t(`picker.errors.${fields.error}`)
-                : count !== null
-                  ? t('picker.days', { count })
-                  : ''}
-            </span>
-            <span className="flex-1" />
-            <Button variant="ghost" size="compact" onClick={() => setOpen(false)}>
-              {t('picker.cancel')}
-            </Button>
-            <Button
-              size="compact"
-              disabled={!ready}
-              onClick={() => {
-                if (!ready || lo === null) return
-                // A start without an end applies as that one day.
-                onApply({ from: lo, to: draft.to === null ? lo : hi! })
-                setOpen(false)
-              }}
-            >
-              {t('picker.apply')}
-            </Button>
-          </div>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+          <DateField
+            label={t('picker.start')}
+            value={typed.from ?? (lo !== null ? iso(lo) : '')}
+            invalid={wrong('from')}
+            onChange={(text) => type('from', text)}
+            onBlur={() => setLeft((v) => ({ ...v, from: true }))}
+          />
+          <span aria-hidden className="text-tertiary">
+            –
+          </span>
+          <DateField
+            label={t('picker.end')}
+            value={typed.to ?? (hi !== null && draft.to !== null ? iso(hi) : '')}
+            invalid={wrong('to')}
+            onChange={(text) => type('to', text)}
+            onBlur={() => setLeft((v) => ({ ...v, to: true }))}
+          />
+          <span
+            aria-live="polite"
+            className={cn(
+              'ml-1.5 min-w-14 text-command tabular-nums',
+              fields.error ? 'text-danger' : 'text-tertiary',
+            )}
+          >
+            {fields.error
+              ? t(`picker.errors.${fields.error}`)
+              : count !== null
+                ? t('picker.days', { count })
+                : t('picker.pickStart')}
+          </span>
+          <span className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+            {t('picker.cancel')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!ready}
+            onClick={() => {
+              if (!ready || lo === null) return
+              // A start without an end applies as that one day.
+              onApply({ from: lo, to: draft.to === null ? lo : hi! })
+              setOpen(false)
+            }}
+          >
+            {t('picker.apply')}
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+const MONTH_BUTTON = buttonVariants({
+  variant: 'ghost',
+  size: 'icon-sm',
+  className: 'select-none aria-disabled:opacity-50',
+})
+
+/** The calendar as the picker draws it: months in the serif, the chosen range in the selection. */
+const CALENDAR = {
+  months: 'relative flex gap-7',
+  month: 'flex w-full flex-col gap-2',
+  button_previous: MONTH_BUTTON,
+  button_next: MONTH_BUTTON,
+  month_caption: 'flex h-7 w-full items-center justify-center px-7',
+  caption_label: 'font-heading text-group font-semibold select-none',
+  weekdays: 'mb-0.5 flex',
+  weekday: 'flex-1 text-meta leading-5 font-normal text-tertiary select-none',
+  week: 'mt-0.5 flex w-full',
+  // Wider than tall, and square at a row's ends, so a range reads as one band across its weeks.
+  day: 'group/day relative h-8 w-full p-0 text-center select-none',
+  day_button:
+    'aspect-auto h-8 text-small font-normal tabular-nums hover:bg-hover data-[range-middle=true]:bg-selected',
+  today: 'font-semibold [&_button]:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]',
+  range_start:
+    'relative isolate z-0 rounded-l-(--cell-radius) bg-selected after:absolute after:inset-y-0 after:right-0 after:w-4 after:bg-selected',
+  range_end:
+    'relative isolate z-0 rounded-r-(--cell-radius) bg-selected after:absolute after:inset-y-0 after:left-0 after:w-4 after:bg-selected',
+}
+
+/** A day's button, with a dot under the number on a day with usage. */
+function UsedDay(props: ComponentProps<typeof CalendarDayButton>) {
+  const { modifiers, children } = props
+  const end = modifiers.range_start || modifiers.range_end
+  return (
+    <CalendarDayButton {...props}>
+      {children}
+      {modifiers.used && (
+        <i
+          aria-hidden
+          className={cn(
+            'absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full',
+            end ? 'bg-primary-foreground' : 'bg-heat-4',
+          )}
+        />
+      )}
+    </CalendarDayButton>
   )
 }
 
@@ -253,15 +307,15 @@ function DateField({
   onBlur: () => void
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-xs text-tertiary">
-      {label}
+    <label className="flex items-center">
+      <span className="sr-only">{label}</span>
       <Input
         value={value}
         placeholder="YYYY-MM-DD"
         aria-invalid={invalid || undefined}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
-        className={cn('h-control w-28 font-mono text-xs tabular-nums')}
+        className="h-7.5 w-29.5 font-mono text-command tabular-nums md:text-command"
         spellCheck={false}
       />
     </label>

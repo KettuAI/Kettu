@@ -8,7 +8,6 @@ import {
   type KnownExpiry,
 } from '@shared/prompt-cache'
 import type { AgentId, SessionUsage } from '@shared/thread'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import {
   Collapsible,
@@ -555,84 +554,6 @@ function PlanPart({ limits, account }: { limits: PlanLimit[]; account: AgentAcco
             )
           })}
         </ul>
-      )}
-    </div>
-  )
-}
-
-export function LimitsPart({
-  limits,
-  account,
-  agent,
-  heading = true,
-  titled = true,
-}: {
-  limits: PlanLimit[]
-  account: AgentAccount | null
-  /** Names whose limits these are, where nothing around the popover does. */
-  agent?: { id: AgentId; name: string }
-  /** The plan and the title above the windows, left out where the plan shows already. */
-  heading?: boolean
-  /** The "Plan limits" title at the heading's end, left out where a card above says it. */
-  titled?: boolean
-}) {
-  const { t } = useTranslation('composer')
-  const now = useNow()
-  const observed = limits.reduce((at, l) => Math.max(at, l.observedAt), 0)
-  return (
-    <div className="flex flex-col gap-2 px-3.5 pt-3 pb-3">
-      {heading && (
-        <div className="flex items-baseline justify-between text-ui">
-          <span className="flex min-w-0 items-center gap-1.5 font-medium">
-            {agent && (
-              <>
-                <AgentMark agent={agent.id} size={12} />
-                <span>{agent.name}</span>
-                <span className="text-muted-foreground">·</span>
-              </>
-            )}
-            <span className="truncate">{account?.label ?? t('usage.limits.plan')}</span>
-          </span>
-          {titled && limits.length > 0 && (
-            <span className="text-xs text-muted-foreground">{t('usage.limits.title')}</span>
-          )}
-        </div>
-      )}
-      {limits.length > 0 && (
-        <ul className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2.5 gap-y-1.5 text-xs tabular">
-          {limits.map((limit) => (
-            <li key={limit.window} className="contents">
-              <span className="text-muted-foreground">{limitLabel(limit)}</span>
-              <Progress
-                value={limit.usedPercent ?? 0}
-                tone={usageTone(limit)}
-                aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
-              />
-              <span className={cn('w-8 text-right', USAGE_TONE_TEXT[usageTone(limit)])}>
-                {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
-              </span>
-              {limit.resetsAt ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={<span className="text-right whitespace-nowrap text-muted-foreground" />}
-                  >
-                    {resetTime(limit.resetsAt, now)}
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {observed > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {t('usage.limits.updated', { ago: longAgo(observed, now) })}
-        </p>
       )}
     </div>
   )

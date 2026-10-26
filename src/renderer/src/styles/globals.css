@@ -218,6 +218,10 @@
   --text-greeting: 34px;
   --text-greeting--line-height: 40px;
   --text-greeting--letter-spacing: -0.01em;
+  /* A figure on the usage page, the serif at weight 500 with tabular figures. */
+  --text-figure: 27px;
+  --text-figure--line-height: 32px;
+  --text-figure--letter-spacing: -0.015em;
   --text-title: 24px;
   --text-title--line-height: 30px;
   --text-title--letter-spacing: -0.008em;

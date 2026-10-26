@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChartNoAxesColumnIcon, CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus } from '@shared/agent-host'
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { UsageScope } from '@shared/usage'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -22,9 +20,9 @@ import {
 } from '@renderer/components/ui/empty'
 import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { LimitsPart } from '@renderer/features/session/composer/usage'
-import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
+import { NoDrag, SidebarToggle } from '@renderer/features/shell/top-bar'
 import {
   basename,
   bytes,
@@ -37,13 +35,13 @@ import {
 } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
+import { isMac } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { agentName } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   loadUsagePage,
-  refreshLimits,
   setUsageFilters,
   syncUsage,
   usageDayTurned,
@@ -51,6 +49,7 @@ import {
   useUsageStore,
   type UsagePage as PageData,
 } from '@renderer/stores/usage'
+import { useViewStore } from '@renderer/stores/view'
 import { HeatLegend, Heatmap, TrendAxis, TrendChart, TrendLegend } from './charts'
 import {
   addDays,
@@ -59,13 +58,16 @@ import {
   dayOf,
   dayTotals,
   figures,
+  firstDayOfWeek,
   heatmapRange,
   hourBars,
   hourLabels,
   hoursSoFar,
+  ledgerCell,
   legendHidden,
   legendHides,
   metricKind,
+  metricValue,
   modelRows,
   namesYear,
   NO_SERIES,
@@ -88,6 +90,8 @@ import {
   type RangeKind,
   type TrendBar,
 } from './model'
+import { Panel, PanelHead, Readout } from './panel'
+import { PlanLimits } from './plan-limits'
 import { RangePicker } from './range-picker'
 
 /** A one-day range's totals per hour, and the hour starts they were summed over. */
@@ -98,11 +102,17 @@ interface HourTotals {
   zoned: boolean
 }
 
+/** A scan with less than this to read is over before its progress is worth showing. */
+const IMPORT_SHOWN = 50_000_000
+
+/** Two panels in a row: the wider one first. */
+const PANEL_ROW = 'grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]'
+
 /** The usage page: a dashboard of the tokens the agents used, for a chosen agent and range. */
 export default function UsagePage() {
   const { t } = useTranslation('usage')
   const unavailable = useUsageStore((s) => s.status?.unavailable ?? false)
-  const scanning = useUsageStore((s) => s.status?.scanning != null)
+  const importing = useUsageStore((s) => (s.status?.scanning?.bytes ?? 0) >= IMPORT_SHOWN)
   const page = useUsageStore((s) => s.page)
   const error = useUsageStore((s) => s.error)
   // OverBench only can be empty while the logs are not; the filters must stay to switch back.
@@ -113,35 +123,45 @@ export default function UsagePage() {
     return () => usagePageShown(false)
   }, [])
 
+  const empty = !!page && page.summary.first === null && !narrowed
   let body: ReactNode
   if (unavailable) {
     body = <Unavailable />
+  } else if (empty) {
+    // A first import fills the page as it goes; until then its progress stands in for it.
+    body = importing ? <ImportProgress alone /> : <FirstRun />
   } else if (!page) {
-    body = error ? <ReadFailed error={error} /> : <LoadingState />
+    body = (
+      <>
+        <Filters page={null} used={NO_DAYS} />
+        {error ? <ReadFailed error={error} kept={false} /> : <LoadingState />}
+      </>
+    )
   } else {
     // The figures stay until a read replaces them, so a failure shows above them.
     body = (
-      <>
-        {error && <ReadFailed error={error} />}
-        {page.summary.first === null && !scanning && !narrowed ? (
-          <FirstRun />
-        ) : (
-          <Dashboard page={page} />
-        )}
-      </>
+      <Dashboard
+        page={page}
+        notice={
+          <>
+            {error && <ReadFailed error={error} kept />}
+            {importing && <ImportProgress alone={false} />}
+          </>
+        }
+      />
     )
   }
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar>
-        <h1 className="truncate text-ui font-medium">{t('page.title')}</h1>
-        <span className="flex-1" />
-        <SyncState />
-      </TopBar>
-      <div className="min-h-0 flex-1 overflow-y-auto px-7 pt-2 pb-9 [scrollbar-gutter:stable]">
-        <div className="@container mx-auto flex max-w-240 flex-col gap-4">
-          <Importing />
+      <PageBar />
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <div className="@container mx-auto w-full max-w-275 px-10 pb-20">
+          <header className="mb-5 flex min-h-7.5 items-center gap-3">
+            <h1 className="truncate font-heading text-title font-semibold">{t('page.title')}</h1>
+            <span className="flex-1" />
+            {!unavailable && !empty && <SyncState />}
+          </header>
           {body}
         </div>
       </div>
@@ -149,16 +169,34 @@ export default function UsagePage() {
   )
 }
 
-/** A read that failed: what went wrong, and Retry, above the figures it could not replace. */
-function ReadFailed({ error }: { error: string }) {
+/**
+ * The strip of sheet above the page, which drags the window. On macOS with the sidebar collapsed
+ * it is a top bar's height, beside the traffic lights, and holds the sidebar toggle.
+ */
+function PageBar() {
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && isMac
+  return (
+    <div
+      className={cn(
+        'app-region-drag flex shrink-0 items-center',
+        cornered ? 'h-top-bar pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]' : 'h-9',
+      )}
+    >
+      {cornered && <SidebarToggle className="-ml-1" />}
+    </div>
+  )
+}
+
+/** A read that failed: what failed, that the figures below stay, and Retry. */
+function ReadFailed({ error, kept }: { error: string; kept: boolean }) {
   const { t } = useTranslation('usage')
   return (
-    <Alert variant="destructive">
+    <Alert variant="error">
       <CircleAlertIcon />
       <AlertTitle>{t('error.title')}</AlertTitle>
-      <AlertDescription>{error}</AlertDescription>
+      <AlertDescription>{kept ? t('error.kept') : error}</AlertDescription>
       <AlertAction>
-        <Button variant="outline" size="compact" onClick={() => void loadUsagePage()}>
+        <Button variant="outline" size="sm" onClick={() => void loadUsagePage()}>
           {t('error.retry')}
         </Button>
       </AlertAction>
@@ -184,7 +222,7 @@ function Unavailable() {
     }
   }
   return (
-    <Alert variant="destructive">
+    <Alert variant="error">
       <CircleAlertIcon />
       <AlertTitle>{t('error.title')}</AlertTitle>
       <AlertDescription>
@@ -196,7 +234,7 @@ function Unavailable() {
         )}
       </AlertDescription>
       <AlertAction>
-        <Button variant="outline" size="compact" disabled={saving} onClick={() => void save()}>
+        <Button variant="outline" size="sm" disabled={saving} onClick={() => void save()}>
           {t('error.export')}
         </Button>
       </AlertAction>
@@ -224,20 +262,20 @@ function SyncState() {
   const [failed, setFailed] = useState<string | null>(null)
   if (fromComputer === null) return null
   if (!fromComputer) {
-    return <span className="text-xs text-tertiary">{t('page.record')}</span>
+    return <span className="text-command text-tertiary">{t('page.record')}</span>
   }
   const scanning = refresh.phase === 'turning'
   return (
-    <NoDrag className="gap-2">
+    <NoDrag className="gap-3">
       {failed && !scanning ? (
         <Tooltip>
-          <TooltipTrigger render={<span role="alert" className="text-xs text-danger" />}>
+          <TooltipTrigger render={<span role="alert" className="text-command text-danger" />}>
             {t('page.syncFailed')}
           </TooltipTrigger>
           <TooltipContent className="max-w-80">{failed}</TooltipContent>
         </Tooltip>
       ) : (
-        <span className="text-xs text-tertiary">
+        <span className="text-command text-tertiary">
           {scanning
             ? t('page.syncing')
             : synced !== null
@@ -247,9 +285,10 @@ function SyncState() {
       )}
       <Button
         variant="quiet"
-        size="compact"
+        size="sm"
         aria-busy={scanning}
         disabled={scanning}
+        className="-mr-2"
         onClick={() => {
           setFailed(null)
           void refresh.run(syncUsage).catch((e: unknown) => setFailed(errorMessage(e)))
@@ -262,34 +301,76 @@ function SyncState() {
   )
 }
 
-/** The first import's progress, above the figures it fills. */
-function Importing() {
+/** A scan's progress: in place of the page on its first import, else above the figures. */
+function ImportProgress({ alone }: { alone: boolean }) {
   const { t } = useTranslation('usage')
   const scanning = useUsageStore((s) => s.status?.scanning ?? null)
-  // A scan with nothing new to read is over before it is worth showing.
-  if (!scanning || scanning.bytes < 50_000_000) return null
+  const logs = useUsageStore((s) => s.status?.logs ?? null)
+  if (!scanning) return null
   const share = scanning.bytes > 0 ? (scanning.doneBytes / scanning.bytes) * 100 : 0
+  const found = (logs ?? []).filter((log) => log.found === true || log.rows > 0)
+  const since = found.reduce<number | null>(
+    (first, log) =>
+      log.first !== null && (first === null || log.first < first) ? log.first : first,
+    null,
+  )
+  const agents =
+    found.length > 0
+      ? new Intl.ListFormat(currentLocale()).format(found.map((log) => agentName(log.agentId)))
+      : null
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs text-tertiary tabular-nums">
-        {t('page.importing', { done: bytes(scanning.doneBytes), total: bytes(scanning.bytes) })}
-      </span>
-      <Progress value={share} aria-label={t('page.syncing')} />
+    <div
+      role="status"
+      className={cn(
+        'flex flex-col gap-2.5 rounded-xl bg-card px-5 py-4.5 shadow-card',
+        alone && 'mx-auto my-12 max-w-130',
+      )}
+    >
+      <div className="flex items-center gap-2 font-medium">
+        <Spinner aria-hidden className="size-3 text-tertiary" />
+        <span className="tabular-nums">
+          {t('page.importing', { done: bytes(scanning.doneBytes), total: bytes(scanning.bytes) })}
+        </span>
+      </div>
+      <Progress
+        value={share}
+        aria-label={t('page.syncing')}
+        className="[&_[data-slot=progress-indicator]]:text-foreground"
+      />
+      {alone && (
+        <p className="text-xs text-tertiary">
+          {agents === null
+            ? t('page.importingNote')
+            : since === null
+              ? t('page.importingAgents', { agents })
+              : t('page.importingFrom', {
+                  agents,
+                  date: new Intl.DateTimeFormat(currentLocale(), { dateStyle: 'medium' }).format(
+                    since,
+                  ),
+                })}
+        </p>
+      )}
     </div>
   )
 }
 
 function LoadingState() {
+  const { t } = useTranslation('usage')
   return (
     <div aria-busy className="flex flex-col gap-4">
-      <Skeleton className="h-control w-2/3" />
-      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4 @min-[60rem]:grid-cols-5">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-24 rounded-xl" />
-        ))}
+      <span role="status" className="sr-only">
+        {t('page.loading')}
+      </span>
+      <Skeleton className="h-24 rounded-xl" />
+      <div className={PANEL_ROW}>
+        <Skeleton className="h-72.5 rounded-xl" />
+        <Skeleton className="h-72.5 rounded-xl" />
       </div>
-      <Skeleton className="h-64 rounded-xl" />
-      <Skeleton className="h-48 rounded-xl" />
+      <div className={PANEL_ROW}>
+        <Skeleton className="h-55 rounded-xl" />
+        <Skeleton className="h-55 rounded-xl" />
+      </div>
     </div>
   )
 }
@@ -299,7 +380,7 @@ function FirstRun() {
   const { t } = useTranslation('usage')
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
   return (
-    <Empty className="py-24">
+    <Empty className="py-18">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <ChartNoAxesColumnIcon />
@@ -312,7 +393,7 @@ function FirstRun() {
       {!fromComputer && (
         <EmptyContent>
           <Button
-            variant="outline"
+            size="sm"
             onClick={() =>
               void useSettingsStore.getState().update({ usage: { fromComputer: true } })
             }
@@ -325,10 +406,101 @@ function FirstRun() {
   )
 }
 
-function Dashboard({ page }: { page: PageData }) {
+const NO_DAYS: ReadonlySet<number> = new Set()
+
+/** The tighter segments the filters' row needs to fit on one line. */
+const SEGMENT = 'px-2 text-command'
+const MARK_SEGMENT = 'min-w-7 px-1.75 text-command'
+
+/**
+ * One row that every panel follows: what is counted on the left, when on the right, which wraps
+ * under the left one. Before the first figures arrive, the agents are not known yet.
+ */
+function Filters({ page, used }: { page: PageData | null; used: ReadonlySet<number> }) {
   const { t } = useTranslation('usage')
   const filters = useUsageStore((s) => s.filters)
   const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? false)
+  const rangeText = useRangeText()
+  const { agent, metric, scope } = filters
+  const agents = page?.summary.agents ?? []
+  // A chosen agent stays a choice once its usage is gone, as after clearing the record.
+  const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
+  const clockDay = useClock(dayOf)
+  const today = page?.today ?? clockDay
+  const custom = filters.range.kind === 'custom' ? filters.range : null
+  return (
+    <div
+      role="toolbar"
+      aria-label={t('page.range')}
+      className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2.5"
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <SegmentedControl
+          aria-label={t('page.metric')}
+          value={metric}
+          onChange={(value) => setUsageFilters({ metric: value as Metric })}
+          itemClassName={SEGMENT}
+          segments={[
+            { value: 'tokens', label: t('metrics.tokens') },
+            { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
+            { value: 'cost', label: t('metrics.cost') },
+          ]}
+        />
+        {/* With usage from one agent only, All is the only choice. */}
+        {choices.length > 1 && (
+          <SegmentedControl
+            aria-label={t('page.agent')}
+            value={agent}
+            onChange={(value) => setUsageFilters({ agent: value })}
+            itemClassName={MARK_SEGMENT}
+            segments={[
+              { value: 'all', label: t('page.allShort') },
+              ...choices.map((id) => ({ value: id, label: <AgentSegment agentId={id} /> })),
+            ]}
+          />
+        )}
+        {fromComputer && (
+          <SegmentedControl
+            aria-label={t('page.scope')}
+            value={scope}
+            onChange={(next) => setUsageFilters({ scope: next })}
+            itemClassName={SEGMENT}
+            segments={[
+              { value: 'computer', label: t('page.scopes.computer') },
+              { value: 'overbench', label: t('page.scopes.overbench') },
+            ]}
+          />
+        )}
+      </div>
+      <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        <SegmentedControl
+          aria-label={t('page.range')}
+          value={filters.range.kind}
+          onChange={(value) => setUsageFilters({ range: { kind: value as RangeKind } })}
+          itemClassName={SEGMENT}
+          segments={RANGE_KINDS.map((rangeKind) => ({
+            value: rangeKind,
+            label: t(`page.ranges.${rangeKind}`),
+          }))}
+        />
+        <RangePicker
+          value={custom}
+          shown={page && { from: page.range.from, to: addDays(page.range.to, -1) }}
+          label={custom ? rangeText(custom.from, addDays(custom.to, 1)) : null}
+          today={today}
+          firstDay={page?.firstDay ?? firstDayOfWeek(currentLocale())}
+          first={page?.summary.first ?? null}
+          used={used}
+          onApply={(chosen) => setUsageFilters({ range: { kind: 'custom', ...chosen } })}
+        />
+      </div>
+    </div>
+  )
+}
+
+function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
+  const { t } = useTranslation('usage')
+  const filters = useUsageStore((s) => s.filters)
   const { summary, starts, range, today, firstDay } = page
   const agent = filters.agent
   const metric = filters.metric
@@ -353,9 +525,6 @@ function Dashboard({ page }: { page: PageData }) {
   // arrives.
   const day = useClock(dayOf)
   useEffect(() => usageDayTurned(day), [day])
-  // A chosen agent stays a choice once its usage is gone, as after clearing the record.
-  const choices =
-    agent === 'all' || summary.agents.includes(agent) ? summary.agents : [...summary.agents, agent]
   const facts = useMemo(() => figures(days, range, metric, scope), [days, range, metric, scope])
   // The table by type and the cache share count tokens, whatever the metric.
   const tokenFacts = useMemo(() => figures(days, range), [days, range])
@@ -372,120 +541,60 @@ function Dashboard({ page }: { page: PageData }) {
     () => new Set(allDays.filter((d) => d.total > 0).map((d) => d.day)),
     [allDays],
   )
-  const custom = filters.range.kind === 'custom' ? filters.range : null
   const rangeText = useRangeText()
 
   return (
     <>
-      {/* What is counted on the left, and when on the right; the right wraps under the left. */}
-      <div
-        role="toolbar"
-        aria-label={t('page.range')}
-        className="flex flex-wrap items-center justify-between gap-2"
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <SegmentedControl
-            aria-label={t('page.metric')}
-            value={metric}
-            onChange={(value) => setUsageFilters({ metric: value as Metric })}
-            segments={[
-              { value: 'tokens', label: t('metrics.tokens') },
-              { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
-              { value: 'cost', label: t('metrics.cost') },
-            ]}
+      <Filters page={page} used={used} />
+      <div className="flex flex-col gap-4">
+        {notice}
+        <div>
+          <Figures
+            facts={facts}
+            hours={hours}
+            kind={kind}
+            metric={metric}
+            scope={scope}
+            todayValue={todayValue}
+            single={oneDay(range)}
+            rangeLabel={rangeText(range.from, range.to)}
           />
-          {/* With usage from one agent only, All is the only choice. */}
-          {choices.length > 1 && (
-            <SegmentedControl
-              aria-label={t('page.agent')}
-              value={agent}
-              onChange={(value) => setUsageFilters({ agent: value })}
-              segments={[
-                { value: 'all', label: t('page.allShort') },
-                ...choices.map((id) => ({ value: id, label: <AgentSegment agentId={id} /> })),
-              ]}
-            />
-          )}
-          {fromComputer && (
-            <SegmentedControl
-              aria-label={t('page.scope')}
-              value={scope}
-              onChange={(next) => setUsageFilters({ scope: next })}
-              segments={[
-                { value: 'computer', label: t('page.scopes.computer') },
-                { value: 'overbench', label: t('page.scopes.overbench') },
-              ]}
-            />
+          {kind === 'cost' && (
+            <EstimateNote asOf={summary.pricesAsOf} unpriced={unpricedTokens(facts)} />
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SegmentedControl
-            aria-label={t('page.range')}
-            value={filters.range.kind}
-            onChange={(value) => setUsageFilters({ range: { kind: value as RangeKind } })}
-            segments={RANGE_KINDS.map((rangeKind) => ({
-              value: rangeKind,
-              label: t(`page.ranges.${rangeKind}`),
-            }))}
+
+        <div className={PANEL_ROW}>
+          <TrendCard days={days} hours={hours} page={page} metric={metric} scope={scope} />
+          <PlanLimits used={summary.agents} />
+        </div>
+
+        <div className={PANEL_ROW}>
+          <ActivityCard days={heatDays} page={page} metric={metric} scope={scope} />
+          <PartsCard facts={tokenFacts} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
+          <BreakdownCard
+            title={t('models.title')}
+            column={t('models.name')}
+            valueLabel={t(`metrics.${kind}`)}
+            kind={kind}
+            rows={modelRows(summary, agent, metric, scope)}
+            total={facts.total}
+            nameOf={(row) => row.name ?? t('models.unknown')}
+            mono
           />
-          <RangePicker
-            value={custom}
-            label={custom ? rangeText(custom.from, addDays(custom.to, 1)) : null}
-            today={today}
-            firstDay={firstDay}
-            first={summary.first}
-            used={used}
-            onApply={(chosen) => setUsageFilters({ range: { kind: 'custom', ...chosen } })}
+          <BreakdownCard
+            title={t('projects.title')}
+            column={t('projects.name')}
+            valueLabel={t(`metrics.${kind}`)}
+            kind={kind}
+            rows={projectRows(summary, agent, basename, metric, scope)}
+            total={facts.total}
+            nameOf={(row) => row.name ?? t('projects.none')}
           />
         </div>
-      </div>
-
-      <Figures
-        facts={facts}
-        hours={hours}
-        kind={kind}
-        metric={metric}
-        scope={scope}
-        today={today}
-        todayValue={todayValue}
-        single={oneDay(range)}
-        rangeLabel={rangeText(range.from, range.to)}
-      />
-
-      {kind === 'cost' && (
-        <EstimateNote asOf={summary.pricesAsOf} unpriced={unpricedTokens(facts)} />
-      )}
-
-      <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TrendCard days={days} hours={hours} page={page} metric={metric} scope={scope} />
-        <LimitsCard />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <ActivityCard days={heatDays} page={page} />
-        <PartsCard facts={tokenFacts} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
-        <BreakdownCard
-          title={t('models.title')}
-          column={t('models.name')}
-          valueLabel={t(`metrics.${kind}`)}
-          kind={kind}
-          rows={modelRows(summary, agent, metric, scope)}
-          total={facts.total}
-          nameOf={(row) => row.name ?? t('models.unknown')}
-          mono
-        />
-        <BreakdownCard
-          title={t('projects.title')}
-          column={t('projects.name')}
-          valueLabel={t(`metrics.${kind}`)}
-          kind={kind}
-          rows={projectRows(summary, agent, basename, metric, scope)}
-          total={facts.total}
-          nameOf={(row) => row.name ?? t('projects.none')}
-        />
       </div>
     </>
   )
@@ -496,7 +605,7 @@ function AgentSegment({ agentId }: { agentId: AgentId }) {
   const name = agentName(agentId)
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className="flex items-center px-0.5" />}>
+      <TooltipTrigger render={<span className="flex items-center" />}>
         <AgentMark agent={agentId} size={14} />
         <span className="sr-only">{name}</span>
       </TooltipTrigger>
@@ -541,33 +650,52 @@ function useHourText(zoned: boolean): (from: number, to: number) => string {
   )
 }
 
+/** "Tue, Oct 13", with the year when it is not this one. */
 function dayText(day: number): string {
+  const thisYear = new Date(day).getFullYear() === new Date().getFullYear()
   return new Intl.DateTimeFormat(currentLocale(), {
-    year: 'numeric',
+    ...(thisYear ? {} : { year: 'numeric' }),
     month: 'short',
     day: 'numeric',
     weekday: 'short',
   }).format(day)
 }
 
-function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <section
-      className={cn('flex min-w-0 flex-col gap-3 rounded-xl bg-card p-4 shadow-card', className)}
-    >
-      {children}
-    </section>
-  )
-}
-
-function CardHead({ title, aside }: { title: string; aside?: ReactNode }) {
-  return (
-    <div className="flex min-h-5 items-baseline gap-2 pb-3 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
-      <h2 className="text-ui font-medium">{title}</h2>
-      <span className="flex-1" />
-      {aside}
-    </div>
-  )
+/** An amount in the metric, compact, and in words for screen readers. */
+function useMetricText(kind: MetricKind) {
+  const { t } = useTranslation('usage')
+  return useMemo(() => {
+    const short = (value: number) => (kind === 'cost' ? usd(value) : count(value))
+    const unit = (value: number): string => {
+      const text = count(value)
+      if (kind === 'tokens') return t('units.tokens', { value: text })
+      if (kind === 'cost') return usd(value)
+      return kind === 'requests'
+        ? t(value === 1 ? 'units.request' : 'units.requests', { value: text })
+        : t(value === 1 ? 'units.turn' : 'units.turns', { value: text })
+    }
+    const sentence = (date: string, value: number): string =>
+      kind === 'tokens'
+        ? t('trend.label', { date, tokens: count(value) })
+        : kind === 'cost'
+          ? t('trend.labelCost', { date, cost: usd(value) })
+          : t('trend.labelCount', { date, value: unit(value) })
+    const part = (agent: AgentId, value: number): string =>
+      t(
+        kind === 'tokens'
+          ? 'trend.agent'
+          : kind === 'cost'
+            ? 'trend.agentCost'
+            : 'trend.agentCount',
+        {
+          agent: agentName(agent),
+          tokens: count(value),
+          cost: usd(value),
+          value: unit(value),
+        },
+      )
+    return { short, sentence, part }
+  }, [kind, t])
 }
 
 /** A count, compact, with the exact value in its tooltip. */
@@ -601,20 +729,31 @@ function EstimateNote({ asOf, unpriced }: { asOf: string; unpriced: number | nul
     year: 'numeric',
   }).format(new Date(year!, month! - 1, day!))
   return (
-    <div className="-mt-2 flex flex-col gap-0.5 text-small text-secondary">
+    <div className="mt-2 flex flex-col gap-0.5 px-0.5 text-xs text-tertiary">
       <span>{t('figures.estimated', { date })}</span>
       {unpriced !== null && <span>{t('figures.unpriced', { tokens: tokens(unpriced) })}</span>}
     </div>
   )
 }
 
+/** Each figure's hairlines when two share a row, from `ledgerCell`. */
+const LEDGER_LINES = {
+  none: '',
+  top: 'shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]',
+  left: 'shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
+  both: 'shadow-[inset_var(--hairline)_var(--hairline)_0_var(--border-subtle)]',
+} as const
+
+/**
+ * The figures in one card divided into cells: in a row from 52 rem, else two to a row. The number
+ * is compact, with the exact value in its tooltip.
+ */
 function Figures({
   facts,
   hours,
   kind,
   metric,
   scope,
-  today,
   todayValue,
   single,
   rangeLabel,
@@ -624,7 +763,6 @@ function Figures({
   kind: MetricKind
   metric: Metric
   scope: UsageScope
-  today: number
   todayValue: number | null
   single: boolean
   rangeLabel: string
@@ -638,13 +776,6 @@ function Figures({
     [hours, begun, metric, scope],
   )
   const hourEnd = (start: number) => hours?.starts[hours.starts.indexOf(start) + 1] ?? start
-  const figure = (label: string, value: ReactNode, note: string) => (
-    <Card className="gap-1.5">
-      <span className="text-xs text-tertiary">{label}</span>
-      <span className="font-heading text-title font-semibold tabular-nums">{value}</span>
-      <span className="text-xs text-pretty text-tertiary">{note}</span>
-    </Card>
-  )
   const none = <span className="text-tertiary">—</span>
   const shown = (value: number | null, priced = true): ReactNode =>
     value === null || (kind === 'cost' && !priced) ? (
@@ -663,66 +794,105 @@ function Figures({
         ? t('figures.cost')
         : t(`metrics.${kind}`)
   const perRequest = tokensPerRequest(current)
-  return (
-    <div
-      className={cn(
-        'grid grid-cols-2 gap-3 @3xl:grid-cols-4',
-        !single && '@min-[60rem]:grid-cols-5',
-      )}
-    >
-      {!single && figure(t('figures.today'), shown(todayValue), dayText(today))}
-      {figure(
-        totalLabel,
-        shown(facts.activeDays > 0 ? facts.total : null, facts.priced),
-        t('figures.days', { range: rangeLabel, count: facts.days }),
-      )}
-      {hourly
-        ? figure(
-            t('figures.hourlyAverage'),
-            shown(average, hourly.priced),
-            t('figures.activeHours', { active: hourly.activeDays, count: hourly.days }),
-          )
-        : figure(
-            t('figures.average'),
-            shown(average, facts.priced),
-            t('figures.active', { active: facts.activeDays, count: facts.days }),
-          )}
-      {hourly
-        ? figure(
-            t('figures.peakHour'),
-            peak ? shown(peak.total) : none,
-            peak ? hourText(peak.day, hourEnd(peak.day)) : t('figures.none'),
-          )
-        : figure(
-            t('figures.peak'),
-            peak ? shown(peak.total) : none,
-            peak ? dayText(peak.day) : t('figures.none'),
-          )}
-      {kind === 'tokens'
-        ? figure(
-            t('figures.cacheShare'),
+  const cells: { label: string; value: ReactNode; note: string }[] = []
+  if (!single) {
+    cells.push({
+      label: t('figures.today'),
+      value: shown(todayValue),
+      note: t('figures.sinceMidnight'),
+    })
+  }
+  cells.push({
+    label: totalLabel,
+    value: shown(facts.activeDays > 0 ? facts.total : null, facts.priced),
+    note: t('figures.days', { range: rangeLabel, count: facts.days }),
+  })
+  cells.push(
+    hourly
+      ? {
+          label: t('figures.hourlyAverage'),
+          value: shown(average, hourly.priced),
+          note: t('figures.activeHours', { active: hourly.activeDays, count: hourly.days }),
+        }
+      : {
+          label: t('figures.average'),
+          value: shown(average, facts.priced),
+          note: t('figures.active', { active: facts.activeDays, count: facts.days }),
+        },
+  )
+  cells.push(
+    hourly
+      ? {
+          label: t('figures.peakHour'),
+          value: peak ? shown(peak.total) : none,
+          note: peak ? hourText(peak.day, hourEnd(peak.day)) : t('figures.none'),
+        }
+      : {
+          label: t('figures.peak'),
+          value: peak ? shown(peak.total) : none,
+          note: peak ? dayText(peak.day) : t('figures.none'),
+        },
+  )
+  cells.push(
+    kind === 'tokens'
+      ? {
+          label: t('figures.cacheShare'),
+          value:
             facts.cacheShare !== null ? (
               <span className="tabular-nums">{percent(facts.cacheShare)}</span>
             ) : (
               none
             ),
-            t('figures.cacheShareNote'),
-          )
-        : kind === 'cost'
-          ? figure(
-              t('figures.savedByCache'),
-              current.activeDays > 0 ? shown(current.parts.cacheSaved, current.priced) : none,
-              t('figures.cacheSavedNote'),
-            )
-          : figure(
-              t('figures.tokensPerRequest'),
+          note: t('figures.cacheShareNote'),
+        }
+      : kind === 'cost'
+        ? {
+            label: t('figures.savedByCache'),
+            value: current.activeDays > 0 ? shown(current.parts.cacheSaved, current.priced) : none,
+            note: t('figures.cacheSavedNote'),
+          }
+        : {
+            label: t('figures.tokensPerRequest'),
+            value:
               perRequest !== null ? (
                 <FigureValue value={Math.round(perRequest)} kind="tokens" />
               ) : (
                 none
               ),
-              t('figures.perRequestNote'),
+            note: t('figures.perRequestNote'),
+          },
+  )
+  return (
+    <div
+      role="group"
+      aria-label={t('figures.label')}
+      className={cn(
+        'grid grid-cols-2 rounded-xl bg-card shadow-card',
+        cells.length === 5 ? '@min-[52rem]:grid-cols-5' : '@min-[52rem]:grid-cols-4',
+      )}
+    >
+      {cells.map((cell, i) => {
+        const { span, top, left } = ledgerCell(i, cells.length)
+        return (
+          <div
+            key={cell.label}
+            className={cn(
+              'flex min-w-0 flex-col px-4.5 pt-3.5 pb-3.75',
+              span && 'col-span-2',
+              LEDGER_LINES[top ? (left ? 'both' : 'top') : left ? 'left' : 'none'],
+              i === 0
+                ? '@min-[52rem]:col-span-1 @min-[52rem]:shadow-none'
+                : '@min-[52rem]:col-span-1 @min-[52rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
             )}
+          >
+            <span className="text-command font-medium text-secondary">{cell.label}</span>
+            <span className="mt-1.5 font-heading text-figure font-medium tabular-nums lining-nums">
+              {cell.value}
+            </span>
+            <span className="mt-0.75 text-xs text-pretty text-tertiary">{cell.note}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -789,6 +959,7 @@ function TrendCard({
   const rangeText = useRangeText()
   const hourText = useHourText(hours?.zoned ?? false)
   const kind = metricKind(metric, scope)
+  const text = useMetricText(kind)
   // Figures for another range or source are on their way.
   const late = useLate(
     useUsageStore(
@@ -830,18 +1001,6 @@ function TrendCard({
   const index = at ?? busiest(totals)
   const bar = index === null ? null : bars[index]!
   const title = t(TREND_TITLE[kind][unit])
-  const formatValue = useCallback(
-    (value: number) => (kind === 'cost' ? usd(value) : count(value)),
-    [kind],
-  )
-  const unitText = (value: number): string => {
-    const text = count(value)
-    if (kind === 'tokens') return t('units.tokens', { value: text })
-    if (kind === 'cost') return usd(value)
-    return kind === 'requests'
-      ? t(value === 1 ? 'units.request' : 'units.requests', { value: text })
-      : t(value === 1 ? 'units.turn' : 'units.turns', { value: text })
-  }
   const describe = (bar: TrendBar) =>
     unit === 'hour'
       ? hourText(bar.from, bar.to)
@@ -869,52 +1028,34 @@ function TrendCard({
     () => (unit === 'hour' ? (step: number) => hourLabels(froms, step) : undefined),
     [unit, froms],
   )
+  const spoken =
+    bar &&
+    [
+      text.sentence(describe(bar), totals[index!]!),
+      ...(series.length > 1
+        ? shown.filter((id) => bar.byAgent[id]).map((id) => text.part(id, bar.byAgent[id]!))
+        : []),
+    ].join(' ')
   return (
-    <Card>
-      <CardHead
+    <Panel>
+      <PanelHead
         title={title}
         aside={
-          <span aria-live="polite" className="truncate text-xs text-tertiary tabular-nums">
-            {bar &&
-              !late &&
-              (kind === 'tokens'
-                ? t('trend.label', { date: describe(bar), tokens: count(totals[index!]!) })
-                : kind === 'cost'
-                  ? t('trend.labelCost', { date: describe(bar), cost: usd(totals[index!]!) })
-                  : t('trend.labelCount', {
-                      date: describe(bar),
-                      value: unitText(totals[index!]!),
-                    }))}
-            {bar &&
-              !late &&
-              series.length > 1 &&
-              shown
-                .filter((id) => bar.byAgent[id])
-                .map((id) => (
-                  <span key={id} className="sr-only">
-                    {` ${t(
-                      kind === 'tokens'
-                        ? 'trend.agent'
-                        : kind === 'cost'
-                          ? 'trend.agentCost'
-                          : 'trend.agentCount',
-                      {
-                        agent: agentName(id),
-                        tokens: count(bar.byAgent[id]!),
-                        cost: usd(bar.byAgent[id]!),
-                        value: unitText(bar.byAgent[id]!),
-                      },
-                    )}`}
-                  </span>
-                ))}
-          </span>
+          bar &&
+          !late && (
+            <Readout
+              label={describe(bar)}
+              value={totals[index!]! > 0 ? text.short(totals[index!]!) : '—'}
+              spoken={spoken}
+            />
+          )
         }
       />
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-1 flex-col">
         {/* The scale's top, and the legend with each agent's part of the bar the header names. */}
-        <div className="flex min-h-(--control-height-sm) items-center justify-between gap-3">
-          <span aria-hidden className="text-xs text-tertiary tabular-nums">
-            {!late && max > 0 && formatValue(max)}
+        <div className="-mt-1.5 mb-2 flex min-h-6 flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span aria-hidden className="text-meta leading-6 text-tertiary tabular-nums">
+            {!late && max > 0 && text.short(max)}
           </span>
           {!late && series.length > 1 && (
             <TrendLegend
@@ -923,15 +1064,16 @@ function TrendCard({
               series={series}
               shown={shown}
               label={t('trend.legend')}
-              formatValue={formatValue}
+              keepOne={t('trend.keepOne')}
+              formatValue={text.short}
               onChange={toggle}
             />
           )}
         </div>
         {late ? (
-          <Skeleton className="h-40" />
+          <Skeleton className="min-h-49 flex-1" />
         ) : max === 0 ? (
-          <p className="flex h-40 items-center justify-center text-xs text-secondary">
+          <p className="flex min-h-49 flex-1 items-center justify-center font-serif text-prose text-tertiary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
             {kind === 'cost' && days.some((day) => day.total > 0) ? t('noCost') : t('noUsage')}
           </p>
         ) : (
@@ -947,7 +1089,7 @@ function TrendCard({
           />
         )}
         {late || max === 0 ? (
-          <span className="h-4" />
+          <span className="mt-1.5 h-5" />
         ) : (
           <TrendAxis
             count={bars.length}
@@ -958,52 +1100,29 @@ function TrendCard({
           />
         )}
       </div>
-    </Card>
+    </Panel>
   )
 }
 
-function LimitsCard() {
-  const { t } = useTranslation('usage')
-  const agents = useAgentsStore(
-    useShallow((s) =>
-      s.order.map((id) => s.byId[id]).filter((a): a is AgentStatus => !!a && a.limits.length > 0),
-    ),
-  )
-  // Read afresh when the page opens; the host asks each agent at most once a minute.
-  useEffect(() => {
-    const { byId } = useAgentsStore.getState()
-    for (const agent of Object.values(byId)) {
-      if (!agent || agent.state !== 'ready' || agent.limits.length === 0) continue
-      refreshLimits(agent.id).catch((error: unknown) =>
-        console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
-      )
-    }
-  }, [])
-  return (
-    <Card className="gap-1 px-0 pb-1">
-      <div className="px-4">
-        <CardHead title={t('limits.title')} />
-      </div>
-      {agents.length === 0 ? (
-        <p className="px-4 pt-1 pb-3 text-xs text-secondary">{t('limits.none')}</p>
-      ) : (
-        agents.map((status) => (
-          <LimitsPart
-            key={status.id}
-            titled={false}
-            limits={status.limits}
-            account={status.account}
-            agent={{ id: status.id, name: status.name }}
-          />
-        ))
-      )}
-    </Card>
-  )
-}
-
-function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
+function ActivityCard({
+  days,
+  page,
+  metric,
+  scope,
+}: {
+  days: DayTotal[]
+  page: PageData
+  metric: Metric
+  scope: UsageScope
+}) {
   const { t, i18n } = useTranslation('usage')
-  const [shown, setShown] = useState<DayTotal | null>(null)
+  const text = useMetricText(metricKind(metric, scope))
+  const starts = useMemo(() => days.map((d) => d.day), [days])
+  const values = useMemo(
+    () => days.map((d) => metricValue(d.parts, metric, scope) ?? 0),
+    [days, metric, scope],
+  )
+  const [shown, setShown] = useState<number | null>(null)
   const monthLabel = useCallback(
     (day: number) => new Intl.DateTimeFormat(i18n.language, { month: 'short' }).format(day),
     [i18n.language],
@@ -1012,85 +1131,78 @@ function ActivityCard({ days, page }: { days: DayTotal[]; page: PageData }) {
     (day: number) => new Intl.DateTimeFormat(i18n.language, { weekday: 'short' }).format(day),
     [i18n.language],
   )
-  const outside = days.some((d) => d.day < page.range.from || d.day >= page.range.to)
+  const outside = starts.some((d) => d < page.range.from || d >= page.range.to)
+  const day = shown === null ? undefined : starts[shown]
+  const value = shown === null ? 0 : values[shown]!
   return (
-    <Card>
-      <CardHead
+    <Panel>
+      <PanelHead
         title={t('activity.title')}
+        caption={<span className="ml-0.5 text-xs text-tertiary">{t('activity.weeks')}</span>}
         aside={
-          <span aria-live="polite" className="truncate text-xs text-tertiary tabular-nums">
-            {shown
-              ? t('trend.label', { date: dayText(shown.day), tokens: tokens(shown.total) })
-              : t('activity.weeks')}
-          </span>
+          day !== undefined && (
+            <Readout
+              label={dayText(day)}
+              value={value > 0 ? text.short(value) : '—'}
+              spoken={text.sentence(dayText(day), value)}
+            />
+          )
         }
       />
       <Heatmap
-        days={days}
+        days={starts}
+        values={values}
         range={page.range}
         label={t('activity.label')}
         monthLabel={monthLabel}
         weekdayLabel={weekdayLabel}
         onShow={setShown}
       />
-      <div className="flex items-center gap-2 text-xs text-tertiary">
+      <div className="mt-3 flex items-center gap-2 text-meta text-tertiary">
         {outside && <span>{t('activity.outside')}</span>}
         <span className="flex-1" />
         <HeatLegend less={t('activity.less')} more={t('activity.more')} />
       </div>
-    </Card>
+    </Panel>
   )
 }
 
-const PART_FILL = {
-  cacheRead: 'bg-heat-1',
-  input: 'bg-heat-4',
-  cacheWrite: 'bg-heat-2',
-  output: 'bg-foreground/80',
-  reasoning: 'bg-heat-3',
-} as const
+/** The table's rows: input and output, reasoning where reported, then the cache's two parts. */
+const PARTS = ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite'] as const
 
 function PartsCard({ facts }: { facts: ReturnType<typeof figures> }) {
   const { t } = useTranslation('usage')
-  const rows = (['cacheRead', 'input', 'cacheWrite', 'output', 'reasoning'] as const).filter(
-    (part) => part !== 'reasoning' || facts.parts.reasoning > 0,
-  )
+  const rows = PARTS.filter((part) => part !== 'reasoning' || facts.parts.reasoning > 0)
+  const some = facts.total > 0
   return (
-    <Card>
-      <CardHead title={t('parts.title')} />
-      <table className="w-full text-xs tabular-nums">
-        <thead className="text-tertiary">
-          <tr>
-            <th className="pb-1.5 text-left font-normal">{t('parts.type')}</th>
-            <th className="pb-1.5 text-right font-normal">{t('parts.tokens')}</th>
-            <th className="w-14 pb-1.5 text-right font-normal">{t('parts.share')}</th>
+    <Panel>
+      <PanelHead title={t('parts.title')} />
+      <table className="w-full text-small tabular-nums">
+        <thead className="text-xs text-tertiary">
+          <tr className="h-6.5">
+            <th className="text-left font-medium">{t('parts.type')}</th>
+            <th className="text-right font-medium">{t('parts.tokens')}</th>
+            <th className="w-18 pl-4 text-right font-medium">{t('parts.share')}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((part) => (
-            <tr key={part} className="border-t border-subtle">
-              <td className="py-1.5">
-                <span className="flex items-center gap-2">
-                  <span aria-hidden className={cn('size-2 rounded-xs', PART_FILL[part])} />
-                  {t(`parts.${part}`)}
-                </span>
-              </td>
-              <td className="py-1.5 text-right font-mono">{exactCount(facts.parts[part])}</td>
-              <td className="py-1.5 text-right text-tertiary">
-                {facts.total > 0 ? percent(facts.parts[part] / facts.total) : '—'}
+            <tr key={part} className="h-8.5 border-t border-subtle">
+              <td>{t(`parts.${part}`)}</td>
+              <td className="pl-4 text-right">{some ? exactCount(facts.parts[part]) : '—'}</td>
+              <td className="pl-4 text-right text-secondary">
+                {some ? percent(facts.parts[part] / facts.total) : '—'}
               </td>
             </tr>
           ))}
-          <tr className="border-t border-subtle font-medium">
-            <td className="py-1.5">{t('parts.total')}</td>
-            <td className="py-1.5 text-right font-mono">{exactCount(facts.total)}</td>
-            <td className="py-1.5 text-right text-tertiary">
-              {facts.total > 0 ? percent(1) : '—'}
-            </td>
+          <tr className="h-8.5 border-t border-default font-semibold">
+            <td>{t('parts.total')}</td>
+            <td className="pl-4 text-right">{some ? exactCount(facts.total) : '—'}</td>
+            <td className="pl-4 text-right">{some ? percent(1) : '—'}</td>
           </tr>
         </tbody>
       </table>
-    </Card>
+    </Panel>
   )
 }
 
@@ -1115,54 +1227,74 @@ function BreakdownCard({
 }) {
   const { t } = useTranslation('usage')
   return (
-    <Card>
-      <CardHead title={title} />
-      {rows.length === 0 ? (
-        <p className="text-xs text-secondary">{t('noUsage')}</p>
-      ) : (
-        <table className="w-full table-fixed text-xs tabular-nums">
-          <thead className="text-tertiary">
-            <tr>
-              <th className="pb-1.5 text-left font-normal">{column}</th>
-              <th className="w-36 pb-1.5 text-right font-normal">{valueLabel}</th>
-              <th className="w-14 pb-1.5 text-right font-normal">{t('parts.share')}</th>
+    <Panel>
+      <PanelHead title={title} />
+      <table className="w-full table-fixed text-small tabular-nums">
+        <thead className="text-xs text-tertiary">
+          <tr className="h-6.5">
+            <th className="text-left font-medium">{column}</th>
+            <th className="w-36 text-right font-medium">{valueLabel}</th>
+            <th className="w-28 pl-4 text-right font-medium">{t('parts.share')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr className="h-8.5 border-t border-subtle">
+              <td colSpan={3} className="text-tertiary">
+                {t('noUsage')}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key} className="border-t border-subtle">
-                <td className="py-1.5">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <span className={cn('block truncate', mono && row.name && 'font-mono')} />
-                      }
-                    >
-                      {nameOf(row)}
-                    </TooltipTrigger>
-                    <TooltipContent>{row.path ?? nameOf(row)}</TooltipContent>
-                  </Tooltip>
-                </td>
-                <td
-                  className={cn(
-                    'py-1.5 text-right',
-                    row.value === null ? 'text-secondary' : 'font-mono',
-                  )}
-                >
-                  {row.value === null
-                    ? t('noPrice')
-                    : kind === 'cost'
-                      ? usd(row.value)
-                      : exactCount(row.value)}
-                </td>
-                <td className="py-1.5 text-right text-tertiary">
-                  {row.value !== null && total > 0 ? percent(row.value / total) : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Card>
+          ) : (
+            rows.map((row) => {
+              const share = row.value !== null && total > 0 ? row.value / total : null
+              return (
+                <tr key={row.key} className="h-8.5 border-t border-subtle">
+                  <td className="pr-4">
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            className={cn(
+                              'block truncate',
+                              mono && row.name && 'font-mono text-command',
+                            )}
+                          />
+                        }
+                      >
+                        {nameOf(row)}
+                      </TooltipTrigger>
+                      <TooltipContent>{row.path ?? nameOf(row)}</TooltipContent>
+                    </Tooltip>
+                  </td>
+                  <td className={cn('text-right', row.value === null && 'text-secondary')}>
+                    {row.value === null
+                      ? t('noPrice')
+                      : kind === 'cost'
+                        ? usd(row.value)
+                        : exactCount(row.value)}
+                  </td>
+                  <td className="pl-4">
+                    <span className="flex items-center justify-end gap-2.5 text-secondary">
+                      <span
+                        aria-hidden
+                        className="h-1 w-11 shrink-0 overflow-hidden rounded-full bg-track"
+                      >
+                        <span
+                          className="block h-full rounded-full bg-(--text-secondary)"
+                          style={{ width: `${(share ?? 0) * 100}%` }}
+                        />
+                      </span>
+                      <span className="min-w-9.5 text-right">
+                        {share !== null ? percent(share) : '—'}
+                      </span>
+                    </span>
+                  </td>
+                </tr>
+              )
+            })
+          )}
+        </tbody>
+      </table>
+    </Panel>
   )
 }

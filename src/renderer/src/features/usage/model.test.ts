@@ -4,6 +4,7 @@ import {
   addDays,
   axisLabels,
   barCenters,
+  barGap,
   busiest,
   clocksChange,
   dayOf,
@@ -17,14 +18,17 @@ import {
   hourLabels,
   hourStarts,
   hoursSoFar,
+  ledgerCell,
   legendHidden,
   legendHides,
   modelRows,
   namesYear,
   oneDay,
+  planAgents,
   presets,
   projectRows,
   rangeOf,
+  resetForm,
   seriesOf,
   shownSeries,
   shownTotals,
@@ -337,12 +341,20 @@ describe('axis labels', () => {
     expect(wholeMonth({ from: day(2026, 10, 1), to: day(2026, 10, 24) })).toBe(false)
   })
 
-  it('lays bars out as the chart does: at most 48 px, 1 px apart, centred', () => {
-    expect(barCenters(3, 300)).toEqual([101, 150, 199])
+  it('lays bars out as the chart does: at most 48 px, 3 px apart, centred', () => {
+    expect(barCenters(3, 300)).toEqual([99, 150, 201])
     const centers = barCenters(30, 600)
-    expect(centers[1]! - centers[0]!).toBeCloseTo(571 / 30 + 1)
-    expect(centers[0]).toBeCloseTo(571 / 60)
+    expect(centers[1]! - centers[0]!).toBeCloseTo(513 / 30 + 3)
+    expect(centers[0]).toBeCloseTo(513 / 60)
     expect(barCenters(0, 600)).toEqual([])
+  })
+
+  it('puts 1 px between more than 45 bars, so they stay wider than the gaps', () => {
+    expect(barGap(45)).toBe(3)
+    expect(barGap(46)).toBe(1)
+    const centers = barCenters(90, 600)
+    expect(centers[1]! - centers[0]!).toBeCloseTo(511 / 90 + 1)
+    expect(centers[0]).toBeCloseTo(511 / 180)
   })
 
   it('names every few bars, evenly from the last, without overlap', () => {
@@ -551,6 +563,52 @@ describe('heatLevels', () => {
     expect(heatLevels([0, 1, 2, 3, 4, 1000])).toEqual([0, 1, 1, 2, 3, 4])
     expect(heatLevels([5, 5, 5])).toEqual([1, 1, 1])
     expect(heatLevels([0, 0])).toEqual([0, 0])
+  })
+})
+
+describe('figure cells', () => {
+  it('gives an odd count a first row of its own, and lines between the rest', () => {
+    const cells = (count: number) => Array.from({ length: count }, (_, i) => ledgerCell(i, count))
+    expect(cells(5)).toEqual([
+      { span: true, top: false, left: false },
+      { span: false, top: true, left: false },
+      { span: false, top: true, left: true },
+      { span: false, top: true, left: false },
+      { span: false, top: true, left: true },
+    ])
+    expect(cells(4)).toEqual([
+      { span: false, top: false, left: false },
+      { span: false, top: false, left: true },
+      { span: false, top: true, left: false },
+      { span: false, top: true, left: true },
+    ])
+  })
+})
+
+describe('plan limits', () => {
+  it('lists the agents with limits and the others with usage, in their order', () => {
+    const agents = [
+      { id: 'claude-code' as const, limits: [{}] },
+      { id: 'codex' as const, limits: [] },
+      { id: 'opencode' as const, limits: [] },
+      { id: 'fake-agent' as const, limits: [{}] },
+    ]
+    expect(planAgents(agents, ['opencode']).map((a) => a.id)).toEqual([
+      'claude-code',
+      'opencode',
+      'fake-agent',
+    ])
+    expect(planAgents(agents, [])).toHaveLength(2)
+  })
+
+  it('counts down to a reset within a day, and names the time of one further off', () => {
+    const now = TODAY + 9 * HOUR
+    expect(resetForm(now + 2 * HOUR, now)).toBe('in')
+    expect(resetForm(now + 24 * HOUR - 1, now)).toBe('in')
+    expect(resetForm(now + 24 * HOUR, now)).toBe('at')
+    expect(resetForm(now + 3 * 24 * HOUR, now)).toBe('at')
+    // A window that has already reset waits for the next read; its time is all there is to say.
+    expect(resetForm(now - HOUR, now)).toBe('at')
   })
 })
 

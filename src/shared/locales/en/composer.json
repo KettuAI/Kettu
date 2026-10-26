@@ -66,7 +66,6 @@
     "limits": {
       "plan": "Plan",
       "tier": "{{plan}} ({{tier}})",
-      "title": "Plan limits",
       "used": "{{limit}} used",
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}"
