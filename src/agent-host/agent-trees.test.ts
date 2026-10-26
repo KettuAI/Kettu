@@ -15,7 +15,11 @@ const row = (pid: number, ppid: number, pgid: number, startedAt = T + pid): Proc
 })
 
 let dir = ''
+let current: AgentTrees | null = null
 afterEach(async () => {
+  // Closed first: a write still to come would meet the removal, or make the folder again.
+  await current?.close()
+  current = null
   if (dir) await rm(dir, { recursive: true, force: true })
 })
 
@@ -58,6 +62,7 @@ async function setup(
     ...(closeWaitMs !== undefined ? { closeWaitMs } : {}),
     log: (_l, m) => logs.push(m),
   })
+  current = trees
   const stored = async () => {
     await trees.flush()
     const { processes } = JSON.parse(await readFile(file.file, 'utf8')) as {
