@@ -44,12 +44,14 @@ function items(entries: ThreadEntry[]) {
   return buildItems(s.order, signatureOf(s))
 }
 
-const thought = (id: string): ThreadEntry => ({
+const thought = (id: string, markdown = '', streaming = false): ThreadEntry => ({
   kind: 'thought',
   id,
-  markdown: '',
-  streaming: false,
+  markdown,
+  streaming,
 })
+// A thought wider than 300, raw reasoning that folds into its run.
+const long = (id: string, streaming = false) => thought(id, 'x'.repeat(301), streaming)
 const plan = (id: string): ThreadEntry => ({ kind: 'plan', id, items: [] })
 const compaction = (id: string): ThreadEntry => ({
   kind: 'compaction',
@@ -82,6 +84,24 @@ describe('signatureOf', () => {
 
   it('marks plans and compactions as work', () => {
     expect(signatureOf(state([plan('p1'), compaction('c1'), notice('n1')]))).toBe('ppo')
+  })
+
+  it('marks a thought wider than 300 as long, a CJK character counting two', () => {
+    const of = (markdown: string, streaming = false) =>
+      signatureOf(state([thought('h1', markdown, streaming)]))
+    expect(of('x'.repeat(300))).toBe('h')
+    expect(of('x'.repeat(301))).toBe('r')
+    expect(of('思'.repeat(150))).toBe('h')
+    expect(of('思'.repeat(151))).toBe('r')
+    expect(of('x'.repeat(200) + 'あ한'.repeat(25))).toBe('h')
+    expect(of('x'.repeat(201) + 'あ한'.repeat(25))).toBe('r')
+    expect(of(`\n\n  ${'x'.repeat(300)}\n`)).toBe('h')
+  })
+
+  it('shows nothing of a thought that streams until it passes 300', () => {
+    const of = (markdown: string) => signatureOf(state([thought('h1', markdown, true)]))
+    expect(of('x'.repeat(300))).toBe('q')
+    expect(of('x'.repeat(301))).toBe('r')
   })
 
   it('is empty without a state', () => {
@@ -189,13 +209,7 @@ describe('buildItems', () => {
     ])
   })
 
-  it('shows a lone thought or a request for permission at the end of a live turn as it is', () => {
-    const streaming: ThreadEntry = { kind: 'thought', id: 'h1', markdown: '', streaming: true }
-    const thinking = state([user('u1'), streaming])
-    expect(buildItems(thinking.order, signatureOf(thinking), true).map((i) => i.key)).toEqual([
-      'u1',
-      'h1',
-    ])
+  it('shows a request for permission at the end of a live turn as it is', () => {
     const asking: ToolEntry = {
       ...tool('x1', 'execute', 'pending'),
       permission: { options: [] } as unknown as ToolEntry['permission'],
@@ -207,14 +221,37 @@ describe('buildItems', () => {
     ])
   })
 
-  it('keeps a streaming thought after the tool calls of a live run', () => {
-    const streaming: ThreadEntry = { kind: 'thought', id: 'h1', markdown: '', streaming: true }
-    const s = state([user('u1'), tool('x1', 'execute'), streaming])
-    expect(buildItems(s.order, signatureOf(s), true).map((i) => i.key)).toEqual([
-      'u1',
-      'run:x1',
-      'h1',
+  it('shows nothing of a short thought while it streams', () => {
+    const s = state([user('u1'), tool('x1', 'execute'), thought('q1', 'x', true)])
+    expect(buildItems(s.order, signatureOf(s), true).map((i) => i.key)).toEqual(['u1', 'run:x1'])
+    const alone = state([user('u1'), thought('q1', 'x', true)])
+    expect(buildItems(alone.order, signatureOf(alone), true).map((i) => i.key)).toEqual(['u1'])
+  })
+
+  it('folds a long thought into the run around it', () => {
+    const result = items([
+      user('u1'),
+      tool('x1', 'execute'),
+      long('r1'),
+      tool('x2', 'execute'),
+      thought('h1'),
+      agent('a1'),
     ])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'h1', 'a1', 'reply:u1'])
+    expect(result[1]).toMatchObject({ type: 'run', ids: ['x1', 'r1', 'x2'], signature: 'trt' })
+  })
+
+  it('folds a lone long thought as a lone tool call', () => {
+    const result = items([user('u1'), long('r1'), agent('a1')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:r1', 'a1', 'reply:u1'])
+    expect(result[1]).toMatchObject({ type: 'run', ids: ['r1'], signature: 'r' })
+  })
+
+  it('folds a long thought into its run while it streams', () => {
+    const s = state([user('u1'), tool('x1', 'execute'), long('r1', true)])
+    const result = buildItems(s.order, signatureOf(s), true)
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1'])
+    expect(result[1]).toMatchObject({ ids: ['x1', 'r1'], signature: 'tr' })
   })
 
   it('folds every run of a live turn, a message between them or not', () => {
@@ -288,6 +325,15 @@ describe('progress notes', () => {
     const result = notes([user('u1'), agent('a1'), thought('h1'), agent('a2')])
     expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'h1', 'a2', 'reply:u1'])
     expect(result[1]).toMatchObject({ type: 'entry', id: 'a1', note: true })
+  })
+
+  it('treat long and streaming thoughts as work too', () => {
+    const result = notes([user('u1'), agent('a1'), long('r1'), agent('a2')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'run:r1', 'a2', 'reply:u1'])
+    expect(result[1]).toMatchObject({ type: 'entry', id: 'a1', note: true })
+    const streaming = notes([user('u1'), agent('a1'), thought('q1', 'x', true)], true)
+    expect(streaming.map((i) => i.key)).toEqual(['u1', 'a1'])
+    expect(streaming[1]).toMatchObject({ type: 'entry', id: 'a1', note: true })
   })
 
   it('leave every message as it is for other agents', () => {

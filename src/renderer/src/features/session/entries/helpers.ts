@@ -60,6 +60,7 @@ type Diff = Extract<ToolContent, { type: 'diff' }>
 
 /** A step of a folded run, as its summary counts it. */
 export type RunStep =
+  | { kind: 'thought'; durationMs?: number; streaming?: boolean }
   | {
       kind: 'tool'
       toolKind: ToolKind
@@ -97,7 +98,8 @@ export interface SummaryPart {
 
 type FilePart = 'read' | 'create' | 'edit' | 'delete' | 'move'
 
-type RunPart = FilePart | 'plan' | 'compaction' | 'execute' | 'search' | 'fetch' | 'other'
+type RunPart =
+  FilePart | 'thought' | 'plan' | 'compaction' | 'execute' | 'search' | 'fetch' | 'other'
 
 /** What a step adds to a part: an edit adds one unit per file it touched. */
 interface Unit {
@@ -157,7 +159,8 @@ function filesText(part: FilePart, paths: (string | undefined)[]): SummaryPart {
 
 /**
  * A folded run's summary, "Read README.md and 6 more · Created offload.py · Ran 5 commands": one
- * part per kind in the order it first appears, and a command's description after its part.
+ * part per kind in the order it first appears, and a command's description after its part. Long
+ * thoughts name a part only in a run of nothing else: "Thought for 25 s".
  */
 export function runSummary(steps: RunStep[]): {
   parts: SummaryPart[]
@@ -173,9 +176,24 @@ export function runSummary(steps: RunStep[]): {
   for (const unit of steps.flatMap((step) => unitsOf(step, created))) {
     byPart.set(unit.part, [...(byPart.get(unit.part) ?? []), unit])
   }
-  const parts = [...byPart].flatMap(([part, units]): SummaryPart[] => {
+  const named = byPart.size > 1 ? [...byPart].filter(([part]) => part !== 'thought') : [...byPart]
+  const parts = named.flatMap(([part, units]): SummaryPart[] => {
     const n = units.length
     switch (part) {
+      case 'thought': {
+        const ms = units.reduce(
+          (sum, u) => sum + (u.step.kind === 'thought' ? (u.step.durationMs ?? 0) : 0),
+          0,
+        )
+        return [
+          {
+            text:
+              ms >= 1000
+                ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
+                : i18n.t('session:summary.thought'),
+          },
+        ]
+      }
       case 'plan':
         return [{ text: i18n.t('session:summary.plan') }]
       case 'compaction':
@@ -207,6 +225,7 @@ export function runSummary(steps: RunStep[]): {
     parts,
     failed: steps.filter((s) => s.kind === 'tool' && s.status === 'failed').length,
     running: steps.some((s) => {
+      if (s.kind === 'thought') return !!s.streaming
       if (s.kind === 'compaction') return s.running
       if (s.kind === 'plan') return false
       return s.status === 'pending' || s.status === 'in_progress'

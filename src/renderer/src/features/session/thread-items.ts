@@ -1,9 +1,9 @@
 import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
-// streamed token: u user, s user message steered into a running turn, a agent, h thought, g
-// groupable lookup, t other tool, w tool waiting for permission, p plan or compaction, c progress
-// note, e turn end, o anything else.
+// streamed token: u user, s user message steered into a running turn, a agent, h thought shown in
+// place, r long thought, q short thought still streaming, g groupable lookup, t other tool, w tool
+// waiting for permission, p plan or compaction, c progress note, e turn end, o anything else.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -16,7 +16,7 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.kind === 'user') return entry.steered ? 's' : 'u'
   if (entry.kind === 'agent') return 'a'
   if (entry.kind === 'turn_end') return 'e'
-  if (entry.kind === 'thought') return 'h'
+  if (entry.kind === 'thought') return longThought(entry) ? 'r' : entry.streaming ? 'q' : 'h'
   if (entry.kind === 'plan' || entry.kind === 'compaction') return 'p'
   if (entry.kind !== 'tool') return 'o'
   if (entry.permission) return 'w'
@@ -29,13 +29,48 @@ function charOf(entry: ThreadEntry | undefined): string {
   return 't'
 }
 
+/** A thought wider than this is raw reasoning, which folds into the run of work around it. */
+const LONG_THOUGHT = 300
+
+// Chinese, Japanese and Korean characters, which count two toward a thought's width.
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu
+
+// The signature is read on every update, and a changed entry is a new object, so each version of
+// a thought is measured once: scanning a long thread's Chinese thoughts each time took over 1 ms.
+const measured = new WeakMap<object, boolean>()
+
+/**
+ * Whether a thought is wider than LONG_THOUGHT: the length of its trimmed Markdown, a Chinese,
+ * Japanese or Korean character counting two. Only a length that could go either way is scanned
+ * for those characters.
+ */
+function longThought(thought: { markdown: string }): boolean {
+  if (thought.markdown.length <= LONG_THOUGHT / 2) return false
+  let long = measured.get(thought)
+  if (long === undefined) {
+    const text = thought.markdown.trim()
+    long =
+      text.length > LONG_THOUGHT ||
+      (text.length > LONG_THOUGHT / 2 &&
+        text.length + (text.match(CJK)?.length ?? 0) > LONG_THOUGHT)
+    measured.set(thought, long)
+  }
+  return long
+}
+
 /** Work after a message makes that message a progress note. Thoughts count as work here. */
 const isWork = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'p'
+  char === 'h' ||
+  char === 'r' ||
+  char === 'q' ||
+  char === 'g' ||
+  char === 't' ||
+  char === 'w' ||
+  char === 'p'
 
-/** Tool calls, plans and compactions fold into a run. Thoughts and notes end it. */
+/** Tool calls, plans, compactions and long thoughts fold into a run; other thoughts end it. */
 const foldsIntoRun = (char: string | undefined): boolean =>
-  char === 'g' || char === 't' || char === 'w' || char === 'p'
+  char === 'r' || char === 'g' || char === 't' || char === 'w' || char === 'p'
 
 /**
  * Marks progress notes as c: an agent message that more work in its turn follows, as Codex's
@@ -92,9 +127,10 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       let end = i
       while (foldsIntoRun(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
-      // A lone tool call folds too, so every piece of work reads as one quiet line; a request
-      // for permission and a plan or compaction show as they are.
-      const lone = end === i && (signature[i] === 'g' || signature[i] === 't')
+      // A lone tool call or long thought folds too, so every piece of work reads as one quiet
+      // line; a request for permission and a plan or compaction show as they are.
+      const lone =
+        end === i && (signature[i] === 'g' || signature[i] === 't' || signature[i] === 'r')
       if (end > i || lone) {
         items.push({
           key: `run:${ids[0]}`,
@@ -112,14 +148,17 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       if (closing) items.push(closing)
       continue
     }
-    const id = order[i]!
-    items.push({
-      key: id,
-      type: 'entry',
-      id,
-      turnStart: signature[i] === 'u',
-      note: signature[i] === 'c',
-    })
+    // A short thought shows once it closes, so none shows in place and then moves into a run.
+    if (signature[i] !== 'q') {
+      const id = order[i]!
+      items.push({
+        key: id,
+        type: 'entry',
+        id,
+        turnStart: signature[i] === 'u',
+        note: signature[i] === 'c',
+      })
+    }
     const closing = after.get(i)
     if (closing) items.push(closing)
   }
