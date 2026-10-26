@@ -76,7 +76,7 @@ export function RangePicker({
   // The first day a click can pick, which a typed day keeps to.
   const earliest = monthStartOf(startMonth.getTime())
   const locale = currentLocale() === 'zh-CN' ? zhCN : enUS
-  const presetList = useMemo(() => presets(today, firstDay, first), [today, firstDay, first])
+  const presetList = useMemo(() => presets(today, firstDay), [today, firstDay])
 
   /** Shows `day` in the right month, or in the left one, within the months there are. */
   const show = (day: number, side: 'left' | 'right') => {
@@ -177,6 +177,7 @@ export function RangePicker({
           <Calendar
             mode="range"
             numberOfMonths={2}
+            fixedWeeks
             showOutsideDays={false}
             locale={locale}
             weekStartsOn={firstDay as 0 | 1 | 2 | 3 | 4 | 5 | 6}

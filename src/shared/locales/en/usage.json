@@ -164,17 +164,12 @@
     "button": "Custom",
     "label": "Choose a time range",
     "presets": {
-      "today": "Today",
       "yesterday": "Yesterday",
       "thisWeek": "This week",
       "lastWeek": "Last week",
       "thisMonth": "This month",
       "lastMonth": "Last month",
-      "last7": "Last 7 days",
-      "last30": "Last 30 days",
-      "last90": "Last 90 days",
-      "thisYear": "This year",
-      "allTime": "All time"
+      "thisYear": "This year"
     },
     "start": "Start",
     "end": "End",
