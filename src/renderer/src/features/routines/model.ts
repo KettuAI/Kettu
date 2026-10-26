@@ -32,6 +32,17 @@ function makeFormatters(locale: string) {
       month: 'short',
       day: 'numeric',
     }),
+    weekdayDate: new Intl.DateTimeFormat(locale, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    }),
+    weekdayDateYear: new Intl.DateTimeFormat(locale, {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
     clock: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }),
   }
 }
@@ -60,10 +71,16 @@ export function clockTime(at: number): string {
   return format().clock.format(at)
 }
 
+/** Days from `now`'s day to `at`'s, in local time: 0 today, 1 tomorrow, -1 yesterday. */
+function dayDelta(at: number, now: number): number {
+  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
+  // Rounded, since a day across a clock change is not 24 hours.
+  return Math.round((day(at) - day(now)) / DAY)
+}
+
 /** A time as a sentence names it: "Today, 9:00 AM", "Tomorrow, 9:00 AM", "Mon, 9:00 AM". */
 export function dayTime(at: number, now = Date.now()): string {
-  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
-  const days = Math.round((day(at) - day(now)) / DAY)
+  const days = dayDelta(at, now)
   const time = format().clock.format(at)
   if (days === 0) return i18n.t('routines:when.today', { time })
   if (days === 1) return i18n.t('routines:when.tomorrow', { time })
@@ -77,28 +94,97 @@ export function dayTime(at: number, now = Date.now()): string {
   return i18n.t('routines:when.date', { date, time })
 }
 
-/** How far ahead a time is: "in 14 h", "in 25 min", "in 3 days". */
+/** A day by its weekday and date, "Fri, Oct 30", with the year when it is not this one. */
+export function dayDate(at: number, now = Date.now()): string {
+  return new Date(at).getFullYear() === new Date(now).getFullYear()
+    ? format().weekdayDate.format(at)
+    : format().weekdayDateYear.format(at)
+}
+
+/** A run's day and time: "Today, 9:00 AM", "Yesterday, 10:58 PM", "Wed, Oct 28, 9:00 AM". */
+export function runDay(at: number, now = Date.now()): string {
+  const days = dayDelta(at, now)
+  const time = format().clock.format(at)
+  if (days === 0) return i18n.t('routines:when.today', { time })
+  if (days === 1) return i18n.t('routines:when.tomorrow', { time })
+  if (days === -1) return i18n.t('routines:when.yesterday', { time })
+  return i18n.t('routines:when.date', { date: dayDate(at, now), time })
+}
+
+/** Under a row's time: today and how soon, "Tomorrow", or the day, "Fri, Oct 30". */
+export function rowDay(at: number, now = Date.now()): string {
+  const days = dayDelta(at, now)
+  if (days === 0) return i18n.t('routines:row.today', { away: untilTime(at, now) })
+  if (days === 1) return i18n.t('routines:row.tomorrow')
+  return dayDate(at, now)
+}
+
+/** When something began: the time today, else its day and time. */
+export function sinceTime(at: number, now = Date.now()): string {
+  return dayDelta(at, now) === 0 ? format().clock.format(at) : runDay(at, now)
+}
+
+/** Under an empty history: what Run now does, and when the first scheduled run comes. */
+export function runsHint(routine: RoutineView, now = Date.now()): string {
+  const at = routine.nextRunAt
+  if (at === null) return i18n.t('routines:runsHint.now')
+  const days = dayDelta(at, now)
+  const time = format().clock.format(at)
+  if (days === 0) return i18n.t('routines:runsHint.today', { time })
+  if (days === 1) return i18n.t('routines:runsHint.tomorrow', { time })
+  return i18n.t('routines:runsHint.later', { when: runDay(at, now) })
+}
+
+/** How far ahead a time is, to the minute: "in 47 min", "in 17 h 47 min", "in 2 days". */
 export function untilTime(at: number, now = Date.now()): string {
-  const delta = Math.max(0, at - now)
-  if (delta < HOUR) {
-    return i18n.t('time.inMinutes', { count: Math.max(1, Math.floor(delta / MINUTE)) })
+  const minutes = Math.max(1, Math.ceil((at - now) / MINUTE))
+  if (minutes < HOUR / MINUTE) return i18n.t('routines:away.minutes', { count: minutes })
+  if (minutes < DAY / MINUTE) {
+    const hours = Math.floor(minutes / 60)
+    const rest = minutes % 60
+    return rest === 0
+      ? i18n.t('routines:away.hours', { hours })
+      : i18n.t('routines:away.hoursMinutes', { hours, minutes: rest })
   }
-  if (delta < DAY) return i18n.t('time.inHours', { count: Math.round(delta / HOUR) })
-  return i18n.t('time.inDays', { count: Math.round(delta / DAY) })
+  return i18n.t('routines:away.days', { count: Math.round((minutes * MINUTE) / DAY) })
 }
 
 /** A run's time: when it was due, or when it started for Run now. */
 export function runTime(run: RoutineRun, now = Date.now()): string | null {
-  if (run.trigger === 'manual') return run.startedAt === null ? null : dayTime(run.startedAt, now)
+  if (run.trigger === 'manual') return run.startedAt === null ? null : runDay(run.startedAt, now)
   const at = run.scheduledFor ?? run.startedAt
-  return at === null ? null : dayTime(at, now)
+  return at === null ? null : runDay(at, now)
+}
+
+/** The lengths an Every schedule offers, in minutes, with a routine's own when it is another. */
+export function everyChoices(current: number): number[] {
+  const choices = [5, 10, 15, 30, 60, 120, 180, 240, 360, 480, 720]
+  return choices.includes(current) ? choices : [...choices, current].sort((a, b) => a - b)
+}
+
+/** A length in minutes as a choice names it: "15 minutes", "1 hour", "90 minutes". */
+export function minutesLabel(minutes: number): string {
+  return minutes >= 60 && minutes % 60 === 0
+    ? i18n.t('routines:limit.hours', { count: minutes / 60 })
+    : i18n.t('routines:limit.minutes', { count: minutes })
+}
+
+/** The cron fields, in the order an expression gives them. */
+export const CRON_FIELDS = ['minute', 'hour', 'dayOfMonth', 'month', 'dayOfWeek'] as const
+
+/** Which of a cron expression's fields the caret is in; null in a macro, or past the fifth. */
+export function cronFieldAt(text: string, caret: number): number | null {
+  const before = text.slice(0, caret).replace(/^\s+/, '')
+  if (before.startsWith('@')) return null
+  const index = before.split(/\s+/).length - 1
+  return index < CRON_FIELDS.length ? index : null
 }
 
 /** "Run now", "Catch-up" or "Scheduled", after a run's time. */
-export function runTrigger(run: RoutineRun): string | null {
+export function runTrigger(run: RoutineRun): string {
   if (run.trigger === 'manual') return i18n.t('routines:trigger.manual')
   if (run.trigger === 'catch-up') return i18n.t('routines:trigger.catchUp')
-  return null
+  return i18n.t('routines:trigger.schedule')
 }
 
 /** What became of a run, or what it is doing. */
@@ -150,7 +236,7 @@ export function runDuration(run: RoutineRun, now = Date.now()): string | null {
   if (run.startedAt === null) return null
   if (run.endedAt !== null) return duration(run.workingMs)
   if (run.status === 'waiting') {
-    return i18n.t('routines:run.waited', {
+    return i18n.t('routines:run.waitingFor', {
       duration: duration(Math.max(0, now - run.startedAt - run.workingMs)),
     })
   }
@@ -169,8 +255,8 @@ export function failedRun(run: RoutineRun | null): boolean {
 export type RoutinePause = NonNullable<RoutineView['pause']>
 
 export type RoutineState =
-  | { kind: 'waiting' }
-  | { kind: 'running'; status: 'starting' | 'running' }
+  | { kind: 'waiting'; since: number | null }
+  | { kind: 'running'; status: 'starting' | 'running'; since: number | null }
   | { kind: 'queued' }
   | { kind: 'off' }
   | { kind: 'done' }
@@ -181,9 +267,13 @@ export type RoutineState =
 /** What a routine is doing, by the priority its row and page show: its run first. */
 export function routineState(routine: RoutineView): RoutineState {
   const active = routine.activeRun
-  if (active?.status === 'waiting') return { kind: 'waiting' }
+  if (active?.status === 'waiting') {
+    // Its working time stops while it waits, so the wait began that long after its start.
+    const since = active.startedAt === null ? null : active.startedAt + active.workingMs
+    return { kind: 'waiting', since }
+  }
   if (active?.status === 'starting' || active?.status === 'running') {
-    return { kind: 'running', status: active.status }
+    return { kind: 'running', status: active.status, since: active.startedAt }
   }
   if (active?.status === 'queued') return { kind: 'queued' }
   if (routine.state === 'off') return { kind: 'off' }
@@ -198,11 +288,14 @@ export function stateText(routine: RoutineView, now = Date.now()): string {
   const state = routineState(routine)
   switch (state.kind) {
     case 'waiting':
-      return i18n.t('routines:state.waiting')
+      return state.since === null
+        ? i18n.t('routines:state.waiting')
+        : i18n.t('routines:state.waitingSince', { time: sinceTime(state.since, now) })
     case 'running':
-      return i18n.t(
-        state.status === 'starting' ? 'routines:state.starting' : 'routines:state.running',
-      )
+      if (state.status === 'starting') return i18n.t('routines:state.starting')
+      return state.since === null
+        ? i18n.t('routines:state.running')
+        : i18n.t('routines:state.runningSince', { time: sinceTime(state.since, now) })
     case 'queued':
       return i18n.t('routines:state.queued')
     case 'off':
@@ -212,21 +305,26 @@ export function stateText(routine: RoutineView, now = Date.now()): string {
     case 'paused':
       return pausedText(state.pause, now)
     case 'next':
-      return i18n.t('routines:state.next', {
-        when: dayTime(state.at, now),
-        away: untilTime(state.at, now),
-      })
+      return nextText(state.at, now)
     case 'on':
       return i18n.t('routines:state.on')
   }
 }
 
-/** A routine's state at its row's end: when a pause ends, else as its page says it. */
-export function rowStateText(routine: RoutineView, now = Date.now()): string {
-  const state = routineState(routine)
-  if (state.kind !== 'paused') return stateText(routine, now)
-  if (state.pause?.resetsAt == null) return i18n.t('routines:state.paused')
-  const { day, time } = pauseEnd(state.pause.resetsAt, now)
+/** "Next run tomorrow, 9:00 AM", then how soon, as "in 17 h 47 min". */
+function nextText(at: number, now: number): string {
+  const days = dayDelta(at, now)
+  const time = format().clock.format(at)
+  const away = untilTime(at, now)
+  if (days === 0) return i18n.t('routines:state.nextToday', { time, away })
+  if (days === 1) return i18n.t('routines:state.nextTomorrow', { time, away })
+  return i18n.t('routines:state.next', { when: runDay(at, now), away })
+}
+
+/** When a paused routine resumes, under its state on its row: "Resumes at 2:30 PM". */
+export function resumeText(pause: RoutinePause | null, now = Date.now()): string | null {
+  if (pause?.resetsAt == null) return null
+  const { day, time } = pauseEnd(pause.resetsAt, now)
   return day === null
     ? i18n.t('routines:state.resumes', { time })
     : i18n.t('routines:state.resumesDay', { day, time })
@@ -287,21 +385,30 @@ function pauseWindow(pause: RoutinePause): string {
 
 /** When a pause ends: the time, with the weekday or the date when it is not today. */
 function pauseEnd(at: number, now: number): { day: string | null; time: string } {
-  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
-  const days = Math.round((day(at) - day(now)) / DAY)
+  const days = dayDelta(at, now)
   const time = format().clock.format(at)
   if (days === 0) return { day: null, time }
   const date = days > 0 && days <= 6 ? format().weekday.format(at) : format().monthDay.format(at)
   return { day: date, time }
 }
 
-/** The routines under On, by their next run; those without one, by name. */
+/** A run waiting for the user leads the list, then one at work, then the next runs in order. */
+function urgency(routine: RoutineView): number {
+  const status = routine.activeRun?.status
+  if (status === 'waiting') return 0
+  if (status === 'starting' || status === 'running' || status === 'queued') return 1
+  return 2
+}
+
+/** The routines under On, waiting and working ones first, then by their next run, then by name. */
 export function onRoutines(routines: RoutineView[]): RoutineView[] {
   return routines
     .filter((routine) => routine.state !== 'off' && routine.state !== 'done')
     .sort(
       (a, b) =>
-        (a.nextRunAt ?? Infinity) - (b.nextRunAt ?? Infinity) || a.name.localeCompare(b.name),
+        urgency(a) - urgency(b) ||
+        (a.nextRunAt ?? Infinity) - (b.nextRunAt ?? Infinity) ||
+        a.name.localeCompare(b.name),
     )
 }
 

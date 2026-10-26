@@ -17,6 +17,8 @@ const toggleVariants = cva(
         // A chart's legend key that shows or hides its series; shown, its name is in full.
         legend:
           'font-normal text-muted-foreground transition-colors duration-(--duration-fast) hover:bg-accent hover:text-foreground aria-pressed:bg-transparent aria-pressed:text-foreground aria-pressed:hover:bg-accent',
+        // One of a set picked together, such as a routine's weekdays: ringed, filled in ink when on.
+        fill: 'text-secondary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] hover:bg-transparent hover:text-foreground hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)] aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:shadow-none aria-pressed:hover:bg-primary/88',
       },
       size: {
         default:

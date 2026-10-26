@@ -307,12 +307,24 @@ describe('words', () => {
   it('reads each kind in English', () => {
     const t = translate('en')
     expect(scheduleWords({ kind: 'once', at: '2024-03-10T02:30' }, t, 'en')).toBe(
-      'Mar 10 at 2:30 AM',
+      'Sun, Mar 10 at 2:30 AM, once',
     )
-    expect(scheduleWords({ kind: 'every', minutes: 120, from: 0 }, t, 'en')).toBe('Every 2 hours')
-    expect(scheduleWords({ kind: 'every', minutes: 60, from: 0 }, t, 'en')).toBe('Every hour')
+    // Counted from a local time, as the schedule's field sets it.
+    const from = new Date(2026, 9, 26, 8, 0).getTime()
+    expect(scheduleWords({ kind: 'every', minutes: 120, from }, t, 'en')).toBe(
+      'Every 2 hours, counted from 8:00 AM',
+    )
+    expect(scheduleWords({ kind: 'every', minutes: 60, from }, t, 'en')).toBe(
+      'Every hour, counted from 8:00 AM',
+    )
+    expect(scheduleWords({ kind: 'every', minutes: 15, from }, t, 'en')).toBe(
+      'Every 15 minutes, counted from 8:00 AM',
+    )
     expect(scheduleWords({ kind: 'weekly', days: [1, 2, 3, 4, 5], time: '09:00' }, t, 'en')).toBe(
       'Weekdays at 9:00 AM',
+    )
+    expect(scheduleWords({ kind: 'weekly', days: [5], time: '17:00' }, t, 'en')).toBe(
+      'Fridays at 5:00 PM',
     )
     expect(
       scheduleWords({ kind: 'weekly', days: [0, 1, 2, 3, 4, 5, 6], time: '09:00' }, t, 'en'),
@@ -325,8 +337,16 @@ describe('words', () => {
 
   it('reads each kind in Chinese', () => {
     const t = translate('zh-CN')
-    expect(scheduleWords({ kind: 'once', at: '2024-03-10T02:30' }, t, 'zh-CN')).toBe('3月10日 2:30')
-    expect(scheduleWords({ kind: 'every', minutes: 120, from: 0 }, t, 'zh-CN')).toBe('每 2 小时')
+    expect(scheduleWords({ kind: 'once', at: '2024-03-10T02:30' }, t, 'zh-CN')).toBe(
+      '3月10日周日 2:30，仅一次',
+    )
+    const from = new Date(2026, 9, 26, 8, 0).getTime()
+    expect(scheduleWords({ kind: 'every', minutes: 120, from }, t, 'zh-CN')).toBe(
+      '每 2 小时，从 8:00 起算',
+    )
+    expect(scheduleWords({ kind: 'weekly', days: [5], time: '17:00' }, t, 'zh-CN')).toBe(
+      '每周五 17:00',
+    )
     expect(
       scheduleWords({ kind: 'weekly', days: [1, 2, 3, 4, 5], time: '09:00' }, t, 'zh-CN'),
     ).toBe('工作日 9:00')

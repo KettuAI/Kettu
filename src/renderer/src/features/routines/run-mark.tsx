@@ -20,7 +20,7 @@ export function RunningDot({ className }: { className?: string }) {
 
 /** A run's state as its icon; the row's words say the same, so it is not named again. */
 export function RunMark({ status, className }: { status: RunStatus; className?: string }) {
-  const common = cn('size-3.5 shrink-0', className)
+  const common = cn('size-4 shrink-0', className)
   switch (status) {
     case 'succeeded':
       return <CircleCheckIcon aria-hidden className={cn(common, 'text-success')} />
@@ -29,18 +29,23 @@ export function RunMark({ status, className }: { status: RunStatus; className?: 
       return <CircleAlertIcon aria-hidden className={cn(common, 'text-danger')} />
     case 'waiting':
       return (
-        <span aria-hidden className={cn('grid size-3.5 shrink-0 place-items-center', className)}>
-          <span className="size-2 rounded-full bg-attention-dot" />
-        </span>
+        <span
+          aria-hidden
+          className={cn(
+            'size-2 shrink-0 rounded-full bg-attention-dot ring-3 ring-attention-dot/16',
+            className,
+          )}
+        />
       )
     case 'running':
-      return <RunningDot className={className} />
+      return <Spinner aria-hidden className={cn('size-3 shrink-0 text-info', className)} />
     case 'starting':
-      return <Spinner aria-hidden className={cn(common, 'text-secondary')} />
+      // The app's own wait before the agent works, so it keeps a neutral spinner.
+      return <Spinner aria-hidden className={cn('size-3 shrink-0 text-secondary', className)} />
     case 'cancelled':
     case 'interrupted':
     case 'skipped':
-      return <CircleSlashIcon aria-hidden className={cn(common, 'text-muted-foreground')} />
+      return <CircleSlashIcon aria-hidden className={cn(common, 'text-tertiary')} />
     case 'queued':
       return <span aria-hidden className={cn(common, 'block')} />
   }

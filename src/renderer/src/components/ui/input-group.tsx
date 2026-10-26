@@ -11,6 +11,9 @@ const inputGroupVariants = cva(
   {
     variants: {
       variant: {
+        // A prompt written ahead, such as a routine's: the composer's raise at the card's radius.
+        prompt:
+          'rounded-xl bg-card shadow-composer transition-shadow duration-(--duration-fast) not-focus-within:hover:shadow-composer-hover focus-within:shadow-composer-focus',
         default:
           'border border-input bg-card shadow-field not-has-disabled:hover:border-strong has-disabled:bg-input/50 has-[[data-slot=input-group-control]:focus-visible]:border-strong has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-3 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:has-disabled:bg-input/80 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40',
         // Raised on surface 3; only color and shadow change on hover and focus, so the text never moves.
