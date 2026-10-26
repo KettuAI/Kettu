@@ -586,7 +586,7 @@ export function LimitsPart({
           <span className="flex min-w-0 items-center gap-1.5 font-medium">
             {agent && (
               <>
-                <AgentMark agent={agent.id} size={13} />
+                <AgentMark agent={agent.id} size={12} />
                 <span>{agent.name}</span>
                 <span className="text-muted-foreground">·</span>
               </>

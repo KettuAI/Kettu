@@ -83,7 +83,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
               : t('newSession.title')}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <AgentMark agent={pending.agentId} size={13} />
+            <AgentMark agent={pending.agentId} size={12} />
             {name}
           </span>
         </NoDrag>
