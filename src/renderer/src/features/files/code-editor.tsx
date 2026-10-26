@@ -15,7 +15,7 @@ import {
   Transaction,
   type Extension,
 } from '@codemirror/state'
-import { Decoration, keymap } from '@codemirror/view'
+import { Decoration, keymap, ViewPlugin } from '@codemirror/view'
 import { basicSetup, EditorView } from 'codemirror'
 import type { FileContent } from '@shared/files'
 import { useCodeThemes } from '@renderer/features/session/markdown/code-themes'
@@ -172,6 +172,23 @@ const marked = StateField.define<number | null>({
     }),
 })
 
+/**
+ * Gives the file's language to each view the state shows in, once it loads: a buffer outlives its
+ * views, so a view can take the state before the language arrives. A view given another state, or
+ * destroyed, drops this plugin.
+ */
+function loadLanguage(description: LanguageDescription | null): Extension {
+  if (!description) return []
+  return ViewPlugin.define((view) => {
+    let dropped = false
+    void description.load().then((support) => {
+      if (dropped || language.get(view.state) === support) return
+      view.dispatch({ effects: language.reconfigure(support) })
+    })
+    return { destroy: () => (dropped = true) }
+  })
+}
+
 function createBuffer(
   projectPath: string,
   path: string,
@@ -195,6 +212,7 @@ function createBuffer(
     EditorState.lineSeparator.of(lineBreakOf(content.text)),
     theme.of(colors),
     language.of([]),
+    loadLanguage(LanguageDescription.matchFilename(languages, nameOf(path))),
     readOnly.of(EditorState.readOnly.of(!content.editable)),
     marked,
     chrome,
@@ -220,13 +238,6 @@ function startBuffer(
   const buffer = createBuffer(projectPath, path, content, colors)
   buffers.set(projectPath, buffer)
   editor.setState(buffer.state)
-  void LanguageDescription.matchFilename(languages, nameOf(path))
-    ?.load()
-    .then((support) => {
-      if (buffers.get(projectPath) === buffer && editor.state === buffer.state) {
-        editor.dispatch({ effects: language.reconfigure(support) })
-      }
-    })
 }
 
 /** The text on disk changed and there are no edits: take it, keeping what did not change. */
