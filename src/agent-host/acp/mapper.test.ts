@@ -881,6 +881,56 @@ describe('session-level updates', () => {
   })
 })
 
+describe('a title that repeats the first message', () => {
+  const MESSAGE = 'Fix the flaky\nlogin test'
+
+  /** Runs one title update on a thread whose first user message is `text`, if any. */
+  function titled(title: string | null, text: string | null = MESSAGE) {
+    const entries: ThreadEntry[] =
+      text === null ? [] : [{ kind: 'user', id: 'u1', content: [{ type: 'text', text }] }]
+    const thread = threadFromSnapshot({ session: baseSession, entries, seq: 0 })
+    return run(
+      [
+        {
+          sessionUpdate: 'session_info_update',
+          title,
+          updatedAt: '2026-10-20T10:00:00Z',
+        },
+      ],
+      { thread },
+    )
+  }
+
+  it('drops a title equal to the message, whatever its spacing, but keeps the new time', () => {
+    const { thread, effects } = titled('Fix  the flaky login\ttest')
+    expect(thread.session.title).toBeNull()
+    expect(effects).toEqual([])
+    expect(thread.session.updatedAt).toBe(Date.parse('2026-10-20T10:00:00Z'))
+  })
+
+  it('drops the message cut short and ending in an ellipsis', () => {
+    const { thread, effects } = titled('Fix the flaky login…')
+    expect(thread.session.title).toBeNull()
+    expect(effects).toEqual([])
+  })
+
+  it('takes a real title, and one the message only starts with and no ellipsis', () => {
+    const real = titled('Login test failure')
+    expect(real.thread.session.title).toBe('Login test failure')
+    expect(real.effects).toEqual([{ kind: 'title', title: 'Login test failure' }])
+
+    const prefix = titled('Fix the flaky')
+    expect(prefix.thread.session.title).toBe('Fix the flaky')
+    expect(prefix.effects).toEqual([{ kind: 'title', title: 'Fix the flaky' }])
+  })
+
+  it('takes any title when the first user message is not in memory', () => {
+    const { thread, effects } = titled('Fix the flaky', null)
+    expect(thread.session.title).toBe('Fix the flaky')
+    expect(effects).toEqual([{ kind: 'title', title: 'Fix the flaky' }])
+  })
+})
+
 describe('prompt cache', () => {
   const usage = (
     used: number,

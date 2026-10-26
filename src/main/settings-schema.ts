@@ -46,6 +46,7 @@ const SECTION_FIELDS = {
     restoreLastSession: isBoolean,
     confirmQuitWhileRunning: isBoolean,
     openAtLogin: isBoolean,
+    sessionTitles: isBoolean,
   },
   thread: { outlineSummaries: isBoolean, confirmLinks: isBoolean },
   appearance: {
@@ -356,6 +357,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },
     usage: { fromComputer: settings.usage.fromComputer },
+    sessionTitles: settings.general.sessionTitles,
   }
 }
 

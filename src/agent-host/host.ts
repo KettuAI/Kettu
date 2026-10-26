@@ -336,6 +336,7 @@ export class AgentHost {
       diagnostics: this.diagnostics,
       git: () => this.git,
       options: this.agentOptions,
+      settings: () => this.settings,
       ...(options.sessionTimings ? { timings: options.sessionTimings } : {}),
       prepared: this.preparedRecords,
       settingsTargets: (agentId, folder) =>

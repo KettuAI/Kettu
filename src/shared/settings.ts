@@ -12,6 +12,7 @@ export interface SettingsFile {
     restoreLastSession: boolean
     confirmQuitWhileRunning: boolean
     openAtLogin: boolean // start at login, so routines keep their schedule
+    sessionTitles: boolean // a small model titles a session its agent leaves untitled
   }
   thread: {
     outlineSummaries: boolean // a small model titles the outline's messages
@@ -72,6 +73,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     restoreLastSession: true,
     confirmQuitWhileRunning: true,
     openAtLogin: false,
+    sessionTitles: true,
   },
   thread: { outlineSummaries: true, confirmLinks: true },
   appearance: {
@@ -131,6 +133,7 @@ export interface HostSettings {
   proxy: ProxySettings
   git: SettingsFile['git']
   usage: { fromComputer: boolean }
+  sessionTitles: boolean // write a title for a session its agent leaves untitled
 }
 
 /** The part of the settings the terminal host receives. */

@@ -40,6 +40,7 @@ import {
   type PromptBlock,
 } from './mapper'
 import { forkPointMeta, forksAtMessage, type ForkPoint } from './fork-point'
+import { ownTitles, type OwnTitles } from './own-titles'
 
 /** A message-level stream to an agent, from a process's stdio or an in-process agent. */
 export interface AcpTransport {
@@ -121,6 +122,8 @@ export interface AgentInit {
     forkSession: boolean
     /** `session/fork` up to a message, which only some adapters take, outside ACP. */
     forkAtMessage: boolean
+    /** How its own session titles arrive, or null when OverBench writes one. */
+    ownTitles: OwnTitles | null
     logout: boolean
     /** `_session/steering`, an extension advertised in the response's own `_meta`. */
     steering: boolean
@@ -445,6 +448,7 @@ export class AgentConnection {
         deleteSession: session.delete != null,
         forkSession: session.fork != null,
         forkAtMessage: session.fork != null && forksAtMessage(init.agentInfo),
+        ownTitles: ownTitles(init.agentInfo),
         logout: caps.auth?.logout != null,
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering

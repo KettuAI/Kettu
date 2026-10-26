@@ -49,6 +49,11 @@
       "name": "Agent 或终端命令正在运行时，退出前先询问",
       "keywords": "退出 确认 quit confirm"
     },
+    "sessionTitles": {
+      "name": "为新会话生成标题",
+      "description": "Agent 不会自行为会话起标题时，每个新会话使用一次该 Agent 的小模型，并消耗其套餐额度或积分。",
+      "keywords": "标题 命名 会话 模型 额度 title name session"
+    },
     "openAtLogin": {
       "name": "登录时打开",
       "description": "例程只在 OverBench 打开时运行。",

@@ -23,6 +23,7 @@ import { firstLine, outlineText } from '@shared/outline'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PermissionScope } from '@shared/routines'
+import type { HostSettings } from '@shared/settings'
 import {
   applyPatchInPlace,
   coalescePatches,
@@ -68,6 +69,7 @@ import {
 } from './artifacts/entries'
 import {
   addTokenTotals,
+  firstUserMessage,
   isStopReason,
   mergeConfig,
   newTurnScope,
@@ -118,6 +120,7 @@ import {
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, ReturnedFile, SessionRecord, SessionsFile } from './storage'
 import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
+import { listedTitle, titleMessageText, writeSessionTitle } from './session-titles'
 import {
   attachmentBlobs,
   changesStored,
@@ -155,6 +158,8 @@ export interface SessionTimings {
   cacheReadMs: number
   /** A prepared session is replaced this long after the last change to the agent's settings. */
   settingsDelayMs: number
+  /** An agent that lists its titles is read once more this long after the first turn's end. */
+  listedTitleRetryMs: number
 }
 
 export const SESSION_TIMINGS: SessionTimings = {
@@ -166,6 +171,7 @@ export const SESSION_TIMINGS: SessionTimings = {
   releaseUnusedMs: 60_000,
   cacheReadMs: 1_000,
   settingsDelayMs: 500,
+  listedTitleRetryMs: 10_000,
 }
 
 export interface SessionEvents {
@@ -228,6 +234,8 @@ export interface SessionManagerDeps {
   prepared?: PreparedRecords
   /** What to watch for changes to the agent's options in a folder; without it nothing is. */
   settingsTargets?: (agentId: AgentId, folder: string) => WatchTarget[]
+  /** The host's settings, read as a turn starts for whether a title is to be written. */
+  settings: () => HostSettings
   /** What a routine's run hears of its session; set once the routines manager exists. */
   routine?: RoutineSessionHooksRef
   timings?: Partial<SessionTimings>
@@ -345,6 +353,12 @@ interface Live {
   used: boolean
   /** A new session's first message, in its thread already, to send once the session has started. */
   first: { content: UserContent[]; entryId: string; from?: FromSession } | null
+  /** The message that gave the session its first title, for a written title, and its tries. */
+  titlePrompt: UserContent[] | null
+  titleWriting: boolean
+  titleFailedAt: number | null
+  /** The second read of an agent's listed title, while it may still be writing it. */
+  listedTitleTimer: ReturnType<typeof setTimeout> | null
   /** The values New session chose, set once `session/new` answers, also after a sign-in. */
   startValues: Record<string, string | boolean>
   /** A turn the host ended after a Stop the agent did not confirm, until its prompt is answered. */
@@ -1258,6 +1272,10 @@ export class SessionManager {
       checkpointTimer: null,
       used: false,
       first: null,
+      titlePrompt: null,
+      titleWriting: false,
+      titleFailedAt: null,
+      listedTitleTimer: null,
       startValues: {},
       unansweredCancel: null,
       background: false,
@@ -1299,6 +1317,7 @@ export class SessionManager {
     this.flushPatches(live)
     if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
     if (live.releaseTimer) clearTimeout(live.releaseTimer)
+    if (live.listedTitleTimer) clearTimeout(live.listedTitleTimer)
     if (live.turn?.fallback) clearTimeout(live.turn.fallback)
     live.connection?.unregister(live.record.acpSessionId, live.target)
     this.deps.mcp?.detached(live.id)
@@ -1357,9 +1376,13 @@ export class SessionManager {
         break
       case 'title': {
         if (effect.title === null) {
+          delete live.record.titleSource
           const fallback = this.firstUserText(live)
           if (fallback) this.update(live, { title: fallback })
+        } else {
+          live.record.titleSource = 'agent'
         }
+        live.titlePrompt = null
         this.persist(live)
         break
       }
@@ -1718,6 +1741,7 @@ export class SessionManager {
       acpSessionId: '',
       projectPath,
       title: params.title ?? null,
+      ...(params.title === undefined ? {} : { titleSource: 'agent' as const }),
       createdAt: now,
       updatedAt: now,
       lastViewedAt: now,
@@ -3297,7 +3321,11 @@ export class SessionManager {
     ])
     if (live.thread.session.title === null) {
       const title = fallbackTitle(content)
-      if (title) this.update(live, { title })
+      if (title) {
+        this.update(live, { title })
+        // The message a written title comes from, which the turn that starts now sends.
+        if (live.record.titleSource === undefined) live.titlePrompt = content
+      }
     }
     return entryId
   }
@@ -3643,7 +3671,74 @@ export class SessionManager {
       live.routineTurnStarted = true
       this.deps.routine?.current?.turnStarted(live.id)
     }
+    this.maybeWriteTitle(live)
     void this.runTurn(live, turn)
+  }
+
+  /**
+   * Starts a written title for the message that gave the session its first title, when a turn of
+   * it starts: once, and again on a later turn only after the last try failed 5 minutes ago.
+   */
+  private maybeWriteTitle(live: Live): void {
+    const message = live.titlePrompt
+    if (!message || live.titleWriting) return
+    if (!this.deps.settings().sessionTitles) return
+    if (live.record.origin !== 'user' || live.record.titleSource !== undefined) return
+    if (live.record.customTitle !== undefined) return
+    if (titleMessageText(message).trim() === '') return
+    if (live.titleFailedAt !== null && this.now() - live.titleFailedAt < SUMMARY_RETRY_MS) {
+      return
+    }
+    live.titleWriting = true
+    void this.writeTitle(live, message)
+  }
+
+  /** Asks the agent's hidden session for a title and applies it, unless another came meanwhile. */
+  private async writeTitle(live: Live, message: UserContent[]): Promise<void> {
+    const { agentId } = live.record
+    const name = this.deps.agents.name(agentId)
+    try {
+      const runtime = await this.deps.agents.ensureReady(agentId)
+      // Only an agent that titles none has OverBench pay for one.
+      if (runtime.init.capabilities.ownTitles !== null) {
+        live.titlePrompt = null
+        return
+      }
+      // The reports folder holds every hidden session, made once for the first of them.
+      await mkdir(this.deps.reportsDir, { recursive: true })
+      const title = await writeSessionTitle(runtime, {
+        dir: this.deps.reportsDir,
+        sessionModel: modelOf(live.thread.session.config),
+        message,
+        log: (line) => this.deps.diagnostics.log('warn', line),
+      })
+      this.applyWrittenTitle(live, title)
+    } catch (error) {
+      live.titleFailedAt = this.now()
+      this.deps.diagnostics.log(
+        'warn',
+        `${name}: could not title session ${live.id}: ${(error as Error).message}`,
+      )
+    } finally {
+      live.titleWriting = false
+    }
+  }
+
+  /** A title a hidden session wrote, under the user's and over the cut first line. */
+  private applyWrittenTitle(live: Live, title: string): void {
+    const current = this.live.get(live.id)
+    const record = current?.record ?? this.records.get(live.id)
+    if (!record || record.titleSource !== undefined) return
+    record.titleSource = 'written'
+    if (current) {
+      current.titlePrompt = null
+      this.update(current, { title })
+      this.persist(current)
+      this.touch(current.id)
+      return
+    }
+    record.title = title
+    this.saveRecord(live.id)
   }
 
   /**
@@ -3974,7 +4069,63 @@ export class SessionManager {
     }
     if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)
     else this.pauseQueue(live)
+    // An agent that lists its titles sends none in the thread: the turn's end reads the session's.
+    this.maybeReadListedTitle(live, this.userMessages(live) === 1)
     this.checkpoint(live)
+  }
+
+  /** The messages the thread holds, which says whether the turn that ended was the first one. */
+  private userMessages(live: Live): number {
+    let count = 0
+    for (const id of live.thread.order) {
+      if (live.thread.byId[id]?.kind === 'user') count++
+    }
+    return count
+  }
+
+  /** Reads the title an agent lists for the session, unless it has a title of its own already. */
+  private maybeReadListedTitle(live: Live, afterFirstTurn: boolean): void {
+    if (this.live.get(live.id) !== live || live.record.titleSource !== undefined) return
+    const runtime = this.deps.agents.runtime(live.record.agentId)
+    if (!runtime || runtime.init.capabilities.ownTitles !== 'listed') return
+    if (!runtime.init.capabilities.listSessions) return
+    void this.readListedTitle(live, afterFirstTurn)
+  }
+
+  private async readListedTitle(live: Live, retry: boolean): Promise<void> {
+    const { agentId, projectPath, acpSessionId } = live.record
+    const connection = live.connection
+    if (!connection) return
+    let title: string | null
+    try {
+      const listed = await connection.listSessions(projectPath, null)
+      title = listedTitle(
+        listed.sessions.find((item) => item.acpSessionId === acpSessionId)?.title ?? null,
+        firstUserMessage(live.thread),
+      )
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `${this.deps.agents.name(agentId)}: could not read the title of session ${live.id}: ${(error as Error).message}`,
+      )
+      return
+    }
+    if (this.live.get(live.id) !== live || live.record.titleSource !== undefined) return
+    if (title !== null) {
+      live.record.titleSource = 'agent'
+      live.titlePrompt = null
+      this.update(live, { title })
+      this.persist(live)
+      this.touch(live.id)
+      return
+    }
+    if (!retry) return
+    // OpenCode may still be writing it: one more read, while the session stays live.
+    live.listedTitleTimer = setTimeout(() => {
+      live.listedTitleTimer = null
+      this.maybeReadListedTitle(live, false)
+    }, this.timings.listedTitleRetryMs)
+    live.listedTitleTimer.unref?.()
   }
 
   /**
@@ -4610,8 +4761,10 @@ export class SessionManager {
   renameByAgent(sessionId: string, title: string): void {
     const record = this.recordOf(sessionId)
     if (record.customTitle !== undefined) return
+    record.titleSource = 'agent'
     const live = this.live.get(sessionId)
     if (live) {
+      live.titlePrompt = null
       this.update(live, { title })
       this.persist(live)
       return
@@ -5109,6 +5262,7 @@ export class SessionManager {
       acpSessionId: params.acpSessionId,
       projectPath,
       title: listed?.title ?? null,
+      ...(listed?.title ? { titleSource: 'agent' as const } : {}),
       createdAt: now,
       updatedAt: Number.isFinite(updatedAt) ? updatedAt : now,
       lastViewedAt: now,

@@ -242,6 +242,7 @@ export interface SessionRecord {
   acpSessionId: string
   projectPath: string
   title: string | null
+  titleSource?: 'agent' | 'written' // absent: the cut first line (or none)
   createdAt: number
   updatedAt: number
   lastViewedAt: number | null
@@ -534,6 +535,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       acpSessionId: item.acpSessionId,
       projectPath: item.projectPath,
       title: item.title,
+      ...(item.titleSource === 'agent' || item.titleSource === 'written'
+        ? { titleSource: item.titleSource }
+        : {}),
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       lastViewedAt: item.lastViewedAt,

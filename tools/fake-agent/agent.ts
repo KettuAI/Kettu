@@ -76,6 +76,10 @@ interface FakeSession extends FakeSessionState {
   turn: { abort: AbortController; ignoreCancel: boolean } | null
   /** Ended by `--one-session`, which leaves its running turn unanswered. */
   ended: boolean
+  createdAt: number
+  /** Its first prompt, for a title it lists instead of sending. */
+  firstPromptAt: number | null
+  firstPromptText: string | null
 }
 
 const HISTORY_LIMIT = 50_000
@@ -256,11 +260,31 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const modeState = (session: FakeSession): SessionModeState | undefined =>
     legacyModes ? { currentModeId: session.mode, availableModes: MODES } : undefined
 
+  // How it titles its sessions, standing in for the agents that title theirs: `none` sends no
+  // title, `message` sends the first prompt as the title and then its first words, `listed`
+  // sends none and lists a title instead, and unset titles each session as Claude Code's does.
+  const titlesMode = env.FAKE_AGENT_TITLES ?? 'default'
+  // Not scaled: it stands for an agent that writes its listed title after the turn.
+  const listTitleMs = Number(env.FAKE_AGENT_LIST_TITLE_MS ?? '') || 0
+
   const sessionSetup = (
     session: FakeSession,
   ): { configOptions: SessionConfigOption[]; modes?: SessionModeState } => {
     const modes = modeState(session)
     return { configOptions: configOptions(session), ...(modes ? { modes } : {}) }
+  }
+
+  /** `New session - <ISO time>`, as OpenCode names one no model has titled, until its title is due. */
+  const listedTitleOf = (session: FakeSession): string | null => {
+    if (titlesMode !== 'listed') return session.title
+    if (session.title !== null) return session.title
+    if (session.firstPromptAt === null || session.firstPromptText === null) {
+      return `New session - ${new Date(session.createdAt).toISOString()}`
+    }
+    if (Date.now() - session.firstPromptAt < listTitleMs) {
+      return `New session - ${new Date(session.createdAt).toISOString()}`
+    }
+    return session.firstPromptText.split(/\s+/).slice(0, 3).join(' ')
   }
 
   /** `history-<n>`, a session to import whose replay has n entries, as the perf script uses. */
@@ -286,6 +310,9 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       updatedAt: new Date().toISOString(),
       turn: null,
       ended: false,
+      createdAt: Date.now(),
+      firstPromptAt: null,
+      firstPromptText: null,
     }
     sessions.set(id, session)
     return session
@@ -495,7 +522,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         agentInfo: {
           name: env.FAKE_AGENT_NAME ?? 'fake-agent',
           title: 'Fake agent',
-          version: FAKE_AGENT_VERSION,
+          version: env.FAKE_AGENT_VERSION ?? FAKE_AGENT_VERSION,
         },
         // Like claude-agent-acp: `_session/steering`, advertised beside the capabilities.
         ...(without.has('steering') ? {} : { _meta: { steering: { supported: true } } }),
@@ -639,7 +666,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       const known: SessionInfo[] = [...sessions.values()].map((session) => ({
         sessionId: session.id,
         cwd: session.cwd,
-        title: session.title,
+        title: listedTitleOf(session),
         updatedAt: session.updatedAt,
       }))
       const synthetic: SessionInfo[] = [
@@ -813,7 +840,16 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       }
 
       try {
-        if (session.title === null && choice.scenario !== 'auth-required') {
+        if (session.firstPromptAt === null) {
+          session.firstPromptAt = Date.now()
+          session.firstPromptText = text
+        }
+        const firstTurn = session.turns === 1
+        if (
+          titlesMode === 'default' &&
+          session.title === null &&
+          choice.scenario !== 'auth-required'
+        ) {
           session.title =
             choice.text.split('\n')[0]!.slice(0, 50) ||
             SCENARIO_TITLES[choice.scenario] ||
@@ -837,6 +873,20 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         }
         // pi-acp 0.0.34 leaves a turn unanswered when another session ends its pi.
         if (session.ended) return new Promise<never>(() => {})
+        if (titlesMode === 'message' && firstTurn) {
+          // As codex-acp: the whole first message as the title when the turn ends, then its own.
+          await send({
+            sessionUpdate: 'session_info_update',
+            title: text.replace(/\s+/g, ' ').trim(),
+            updatedAt: session.updatedAt,
+          })
+          session.title = text.split(/\s+/).slice(0, 3).join(' ')
+          await send({
+            sessionUpdate: 'session_info_update',
+            title: session.title,
+            updatedAt: session.updatedAt,
+          })
+        }
         return {
           stopReason: abort.signal.aborted ? 'cancelled' : stopReason,
           usage: tokenUsage(session),

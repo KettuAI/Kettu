@@ -223,7 +223,8 @@ async function start(): Promise<void> {
       setLocale(localeOf(next))
       installMenu(menuDeps)
     }
-    if (reachesHost(changed) || localeChanged) {
+    // The agent host reads `general.sessionTitles`, which `reachesHost` cannot single out.
+    if (reachesHost(changed) || localeChanged || changed.has('general')) {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
     if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))

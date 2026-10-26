@@ -1,6 +1,6 @@
-// Titles for the message outline: a small model of the session's own agent summarizes the user
-// messages in a hidden session, removed afterwards as the reports' are. It is the one request
-// OverBench spends the user's plan or credits on for display, made only when the outline opens.
+// Titles the message outline shows for the user messages: a small model of the session's own
+// agent summarizes them in a hidden session, removed afterwards as the reports' are. A session's
+// own title is written the same way, from its first message.
 
 import type { OutlineTitle } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
@@ -41,15 +41,18 @@ export function pickModel(
   return small?.value ?? sessionModel
 }
 
-/** The prompt for the newest SUMMARY_MESSAGES messages, each named by its position. */
-export function summaryPrompt(messages: readonly { pos: number; text: string }[]): {
+/** The prompt for the newest SUMMARY_MESSAGES messages, each named by its position and cut short. */
+export function summaryPrompt(
+  messages: readonly { pos: number; text: string }[],
+  cut: number = SUMMARY_CHARS,
+): {
   positions: number[]
   prompt: string
 } {
   const picked = [...messages].sort((a, b) => b.pos - a.pos).slice(0, SUMMARY_MESSAGES)
   const list = picked.map(({ pos, text }) => ({
     id: String(pos),
-    text: Array.from(text).slice(0, SUMMARY_CHARS).join(''),
+    text: Array.from(text).slice(0, cut).join(''),
   }))
   return {
     positions: picked.map(({ pos }) => pos),
@@ -90,6 +93,10 @@ export interface SummaryRequest {
   /** The session's model, for an agent that offers no small one. */
   sessionModel: string | null
   messages: readonly { pos: number; text: string }[]
+  /** Each message is cut to this many characters, 500 by default. */
+  cut?: number
+  /** What the titles are for, in its log lines: the outline's messages by default. */
+  name?: string
   log(message: string): void
   timeoutMs?: number
 }
@@ -107,10 +114,11 @@ export async function writeTitles(
   if (!removal) throw new Error("the agent's hidden sessions cannot be removed without a trace")
   const { connection } = runtime
   const timeoutMs = request.timeoutMs ?? REPORT_TIMEOUT_MS
-  const { positions, prompt } = summaryPrompt(request.messages)
+  const name = request.name ?? 'the outline titles'
+  const { positions, prompt } = summaryPrompt(request.messages, request.cut)
   const remove = (acpSessionId: string): Promise<void> =>
     removeHiddenSession(runtime, acpSessionId, removal, (message) =>
-      request.log(`Could not remove the session of the outline titles: ${message}`),
+      request.log(`Could not remove the session of ${name}: ${message}`),
     )
   const opening = connection.newSession(request.dir, hiddenSessionMeta(runtime.agentId))
   let acpSessionId: string | null = null
