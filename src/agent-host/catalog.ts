@@ -48,6 +48,11 @@ export interface AgentDefinition {
    */
   progressNotes?: boolean
   /**
+   * Replays each part of a thought as a chunk of its own with nothing between them, where its live
+   * turns send a blank line between parts (codex-acp 2.2.2).
+   */
+  replaysThoughtParts?: boolean
+  /**
    * Keeps MCP servers by name for each folder rather than each session, and names the session on
    * each tool call, so the artifacts service gives its process one token per folder.
    */
@@ -88,6 +93,7 @@ export const CODEX: AgentDefinition = {
   install: NODE_INSTALL,
   reportsAccount: true,
   progressNotes: true,
+  replaysThoughtParts: true,
   launchEnv: codexLaunchEnv,
   cli: CODEX_CLI,
   configVariable: CONFIG_VARIABLES.codex,

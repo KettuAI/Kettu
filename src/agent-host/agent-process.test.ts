@@ -120,6 +120,7 @@ describe('spawnAgent', () => {
       context: () => ({
         thread,
         replaying: false,
+        thoughtParts: false,
         cancelling: false,
         scope,
         now: Date.now(),

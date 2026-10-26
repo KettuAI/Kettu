@@ -1209,6 +1209,7 @@ export class SessionManager {
       context: () => ({
         thread: live.thread,
         replaying: live.replaying,
+        thoughtParts: live.replaying && this.deps.agents.replaysThoughtParts(record.agentId),
         cancelling: live.turn ? live.turn.cancelRequested : live.unansweredCancel !== null,
         scope: live.scope,
         now: this.now(),
@@ -3174,6 +3175,7 @@ export class SessionManager {
       context: () => ({
         thread: scratch,
         replaying: true,
+        thoughtParts: false,
         cancelling: false,
         scope: newTurnScope(),
         now: this.now(),
