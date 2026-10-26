@@ -186,11 +186,20 @@ const attempts = {
     alert('blocked?')
     return performance.now() - start < 100
   },
+  // Before the camera: on Linux a peer connection made while its request still waits can block
+  // the page for seconds.
+  'STUN over UDP to another host': () => peerConnection([PEERS.host, PEER_NAMES.stun].map(
+    (host) => ({ urls: 'stun:' + host + ':' + PEERS.udp }),
+  )),
+  'TURN over TCP to another host': () => peerConnection(turnServers('turn', PEERS.tcp)),
+  'TURN over TLS to another host': () => peerConnection(turnServers('turns', PEERS.tls)),
   'notifications': async () => (await Notification.requestPermission()) !== 'granted',
   'the camera': () => {
+    const start = performance.now()
+    const answered = () => { window.__probe.cameraMs = Math.round(performance.now() - start) }
     const request = navigator.mediaDevices.getUserMedia({ video: true }).then(
-      () => { window.__probe.camera = 'allowed'; return false },
-      () => true,
+      () => { answered(); window.__probe.camera = 'allowed'; return false },
+      () => { answered(); return true },
     )
     // Linux without devices may never answer, which is no access either; a late stream still shows.
     return Promise.race([request, sleep(3000).then(() => 'pending')])
@@ -208,16 +217,11 @@ const attempts = {
     await sleep(500)
     return true
   },
-  'STUN over UDP to another host': () => peerConnection([PEERS.host, PEER_NAMES.stun].map(
-    (host) => ({ urls: 'stun:' + host + ':' + PEERS.udp }),
-  )),
-  'TURN over TCP to another host': () => peerConnection(turnServers('turn', PEERS.tcp)),
-  'TURN over TLS to another host': () => peerConnection(turnServers('turns', PEERS.tls)),
   'a service worker': () => {
     try { return fails(navigator.serviceWorker.register('/sw.js')) } catch { return true }
   },
 }
-window.__probe = { done: false, results: [], camera: null }
+window.__probe = { done: false, results: [], camera: null, cameraMs: null }
 ;(async () => {
   for (const [name, attempt] of Object.entries(attempts)) {
     const start = performance.now()
@@ -293,6 +297,8 @@ interface ProbeResult {
   attempts: { name: string; held: boolean | string; ms: number }[]
   /** 'allowed' if the camera request ever gave a stream, however late. */
   camera: string | null
+  /** When the camera request answered, from its attempt's start, or null if not by the read. */
+  cameraMs: number | null
   processes: Record<'app' | 'page', { pid: number; sandboxed: boolean | null }>
   afterNavigation: { restored: boolean; trusted: boolean; appUrl: string }
   inputs: { key: string; inArtifact: boolean }[]
@@ -550,7 +556,13 @@ describe.each([
 
   it('holds every attempt, and nothing reaches another host', () => {
     const slowest = [...result.attempts].sort((a, b) => b.ms - a.ms).slice(0, 3)
-    console.info(`Slowest attempts: ${slowest.map((a) => `${a.name} ${a.ms} ms`).join(', ')}`)
+    const camera =
+      result.cameraMs === null
+        ? 'the camera had not answered'
+        : `the camera answered after ${result.cameraMs} ms`
+    console.info(
+      `Slowest attempts: ${slowest.map((a) => `${a.name} ${a.ms} ms`).join(', ')}; ${camera}`,
+    )
     expect(result.attempts.length).toBeGreaterThanOrEqual(27)
     const held = (attempt: { name: string; held: boolean | string }) =>
       attempt.held === true || (attempt.name === 'the camera' && attempt.held === 'pending')
