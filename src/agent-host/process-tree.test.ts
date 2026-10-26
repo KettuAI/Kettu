@@ -11,6 +11,7 @@ import {
   runTool,
   signalTargets,
   stopTrees,
+  toolLimits,
   treeOf,
   type ProcessControl,
   type ProcessRow,
@@ -186,6 +187,16 @@ describe('stopTrees', () => {
     const { control, calls } = fakeControl('win32', [row(100, 4, 100), row(101, 100, 101)])
     await stopTrees(control, [root], 2000)
     expect(calls).toEqual(['taskkill 100 101'])
+  })
+})
+
+describe('toolLimits', () => {
+  it('gives a Windows listing the time a slow runner needs, and a quit its seconds', () => {
+    // A loaded windows-11-arm runner took 22 to 34 s a listing, and 77 s for its first.
+    const windows = toolLimits('win32')
+    expect(windows.listMs).toBeGreaterThanOrEqual(90_000)
+    expect(windows.quitListMs).toBe(1_500)
+    expect(toolLimits('linux').listMs).toBe(10_000)
   })
 })
 

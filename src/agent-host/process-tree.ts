@@ -116,13 +116,15 @@ export interface ToolLimits {
 
 /**
  * Long enough for a slow machine, except while quitting, which main cuts short 6 s after
- * `host:shutdown`; the longest quit adds up to 5.25 s.
+ * `host:shutdown`; the longest quit adds up to 5.25 s. A CIM query took 22 to 34 s on a loaded
+ * windows-11-arm runner, and 77 s for its first, so a Windows listing outside a quit, which runs
+ * in the background, gets 90 s.
  */
 export function toolLimits(platform: Platform): ToolLimits {
   return {
-    listMs: 10_000,
+    listMs: platform === 'win32' ? 90_000 : 10_000,
     taskkillMs: 10_000,
-    // The CIM query takes 250 to 450 ms on CI, `ps` 10 to 50 ms.
+    // A CIM query takes 250 to 450 ms on windows-latest, `ps` 10 to 50 ms.
     quitListMs: platform === 'win32' ? 1_500 : 1_000,
     quitTaskkillMs: 500,
   }
