@@ -1119,6 +1119,9 @@ function askingMode(agentId: AgentId, level: PermissionScope['level']): string |
       return level === 'read' ? 'read-only' : 'workspace-write'
     case 'opencode':
       return level === 'read' ? 'plan' : 'build'
+    // Pi has no mode to set; its caption says it does not ask before it acts.
+    case 'pi':
+      return null
     case 'fake-agent':
       return 'ask'
   }

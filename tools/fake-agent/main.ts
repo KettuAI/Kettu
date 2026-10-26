@@ -1,5 +1,6 @@
 // Runs the fake agent over stdio: `node tools/fake-agent/main.ts`, or with Electron's own
-// Node.js through ELECTRON_RUN_AS_NODE=1. `--login` performs the terminal sign-in instead.
+// Node.js through ELECTRON_RUN_AS_NODE=1. `--login` performs the terminal sign-in instead, and
+// `--one-session` keeps one live session per process, as pi-acp 0.0.34 does.
 
 import { spawn } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
@@ -55,7 +56,11 @@ if (env.FAKE_AGENT_SPAWN_CHILD === 'nested') {
   log(`fake-agent: child pid ${child.pid}`)
 }
 
-const connection = createFakeAgent({ env, log }).connect(
+const connection = createFakeAgent({
+  env,
+  log,
+  oneSession: process.argv.includes('--one-session'),
+}).connect(
   ndJsonStream(
     Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,
     Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>,

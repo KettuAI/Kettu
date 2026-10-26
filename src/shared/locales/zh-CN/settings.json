@@ -505,7 +505,7 @@
   },
   "about": {
     "version": {
-      "description": "面向 Claude Code、Codex 和 OpenCode 的桌面工作台。",
+      "description": "面向 Claude Code、Codex、OpenCode 和 Pi 的桌面工作台。",
       "keywords": "版本 version electron chromium node",
       "copy": "复制版本信息"
     },

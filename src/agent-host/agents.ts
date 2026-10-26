@@ -197,6 +197,8 @@ export interface AgentManagerDeps {
   reportsDir: string
   /** `<userData>/agents`, where package agents are installed. */
   adaptersDir: string
+  /** The session router a per-session agent launches through; null without one. */
+  sessionRouterPath?: string | null
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
   install?(options: InstallOptions): Promise<InstalledAdapter>
   /** Asks npm for an adapter's newest version and the CLI it carries. */
@@ -260,6 +262,9 @@ class Slot {
   installedCli: string | null = null
   /** A binary agent's version, from its own `--version`, until it starts and reports its own. */
   binaryVersion: string | null = null
+  /** The `requires` program detection found, and the version it printed. */
+  requiresProgram: string | null = null
+  requiresVersion: string | null = null
   /** The program `binaryVersion` was read from, so an answer for another one is dropped. */
   binaryProgram: string | null = null
   /** The `--version` failure already logged, so a repeated detection logs it once. */
@@ -430,6 +435,7 @@ export class AgentManager {
       binaryOverride: agentSettings?.binaryPath ?? null,
       node,
       adaptersDir: this.deps.adaptersDir,
+      sessionRouterPath: this.deps.sessionRouterPath ?? null,
       isExecutable,
       probeCli: (program, cliEnv) => this.askVersion(program, cliEnv),
       cliPreference: agentSettings?.cli ?? 'installed',
@@ -448,6 +454,10 @@ export class AgentManager {
     slot.detection = detection
     slot.installedCli = installedCli
     slot.installPlans = plans
+    slot.requiresProgram =
+      detection.state === 'available' ? (detection.requires?.program ?? null) : null
+    slot.requiresVersion =
+      detection.state === 'available' ? (detection.requires?.version ?? null) : null
     // A binary agent's own version is asked in the background, so detection never waits for it.
     const program =
       slot.def.launch.kind === 'binary' && detection.state === 'available'
@@ -1649,6 +1659,8 @@ export class AgentManager {
       ignored: (sessionId, what) =>
         diagnostics.event(agentId, 'ignored', sessionId ? `${what} (session ${sessionId})` : what),
       log: (level, message) => diagnostics.log(level, `${slot.def.name}: ${message}`),
+      levelsAsModes: slot.def.levelsAsModes ?? false,
+      startupNote: slot.def.startupNote ?? false,
     }
   }
 
@@ -1971,7 +1983,13 @@ export class AgentManager {
       if (shown) return shown.display
     }
     const override = this.deps.settings().agents[slot.def.id]?.binaryPath ?? null
-    return displayCommand(slot.def, this.deps.electronPath, override, this.deps.adaptersDir)
+    return displayCommand(
+      slot.def,
+      this.deps.electronPath,
+      override,
+      this.deps.adaptersDir,
+      this.deps.sessionRouterPath ?? null,
+    )
   }
 
   /** The folder picked in Settings for an agent whose folder can be moved. */
@@ -2048,11 +2066,14 @@ export class AgentManager {
       ...(method.type === 'terminal'
         ? {
             command: formatCommand(
-              {
-                command: display.command,
-                args: [...display.args, ...method.args],
-                env: { ...display.env, ...method.env, ...folderEnv },
-              },
+              // pi-acp 0.0.34's only method just runs the `requires` program, so it runs alone.
+              slot.def.signInWithCli && slot.requiresProgram
+                ? { command: slot.requiresProgram, args: [], env: {} }
+                : {
+                    command: display.command,
+                    args: [...display.args, ...method.args],
+                    env: { ...display.env, ...method.env, ...folderEnv },
+                  },
               platform,
             ),
           }
@@ -2066,7 +2087,10 @@ export class AgentManager {
       id: slot.def.id,
       name: slot.def.name,
       state: slot.state,
-      version: init?.version ?? slot.binaryVersion ?? null,
+      // For an agent with a `requires` program its own version is the one shown, never the adapter's.
+      version: slot.def.requires
+        ? (slot.requiresVersion ?? slot.binaryVersion ?? null)
+        : (init?.version ?? slot.binaryVersion ?? null),
       package:
         launch.kind === 'package'
           ? {

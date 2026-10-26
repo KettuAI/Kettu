@@ -77,6 +77,8 @@ export interface HostOptions {
   platform: Platform
   electronPath: string
   fakeAgentPath: string | null
+  /** The session router's bundle, which a per-session agent's process runs under. */
+  sessionRouterPath?: string | null
   settings: HostSettings
   baseEnv: Env
   send(message: HostToMain): void
@@ -283,6 +285,7 @@ export class AgentHost {
       settings: () => this.settings,
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
       adaptersDir: path.join(options.userDataPath, 'agents'),
+      sessionRouterPath: options.sessionRouterPath ?? null,
       ...(options.detect ? { detect: options.detect } : {}),
       ...(options.agentTimings ? { timings: options.agentTimings } : {}),
       status: (status) => {

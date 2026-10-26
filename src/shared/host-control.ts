@@ -30,6 +30,8 @@ export type MainToHost =
       fakeAgentPath: string | null // tools/fake-agent/main.ts in development, or from OVERBENCH_FAKE_AGENT
       threadWorkerPath: string // the thread worker's bundle, which main builds beside the host's
       usageWorkerPath: string // the usage worker's bundle, built the same way
+      // The session router's bundle, which a per-session agent's process runs under the user's Node.js.
+      sessionRouterPath: string
       settings: HostSettings
     }
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list

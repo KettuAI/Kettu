@@ -3,9 +3,15 @@
 
 import type { RoutineRef } from './routines'
 
-export type AgentId = 'claude-code' | 'codex' | 'opencode' | 'fake-agent'
+export type AgentId = 'claude-code' | 'codex' | 'opencode' | 'pi' | 'fake-agent'
 
-export const AGENT_IDS: readonly AgentId[] = ['claude-code', 'codex', 'opencode', 'fake-agent']
+export const AGENT_IDS: readonly AgentId[] = [
+  'claude-code',
+  'codex',
+  'opencode',
+  'pi',
+  'fake-agent',
+]
 
 export type SessionStatus =
   | 'starting' // agent starting, or session/new, load or resume in flight

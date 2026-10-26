@@ -105,9 +105,15 @@
   --brand-codex-3: #3941ff;
   --brand-opencode-frame: #17181c;
   --brand-opencode-fill: #e6e5e6;
+  /* Pi keeps its three colors in both variants. */
+  --brand-pi-coral: #f09082;
+  --brand-pi-blue: #4d9abf;
+  --brand-pi-yellow: #f1be58;
 
   /* Usage charts: each agent's series, and the amount the heatmap deepens with. */
   --agent-opencode: oklch(0.6 0.008 85);
+  /* Pi's yellow mixed 86% with the light surface, as Claude Code's and Codex's series are. */
+  --agent-pi: oklch(0.852 0.114 83.4);
   --agent-other: oklch(0.8 0.008 85);
   --heat-hue: #2e6b57;
   --heat-0: rgb(28 27 24 / 5.5%);
@@ -229,6 +235,8 @@
     --brand-overbench: #f4f3ee;
 
     --agent-opencode: oklch(0.74 0.008 85);
+    /* Pi's yellow mixed 86% with the dark surface. */
+    --agent-pi: oklch(0.749 0.115 84.2);
     --agent-other: oklch(0.46 0.008 85);
     --heat-hue: #6fb396;
     --heat-0: rgb(244 243 238 / 6.5%);
@@ -347,6 +355,8 @@
   --brand-overbench: #f4f3ee;
 
   --agent-opencode: oklch(0.74 0.008 85);
+  /* Pi's yellow mixed 86% with the dark surface. */
+  --agent-pi: oklch(0.749 0.115 84.2);
   --agent-other: oklch(0.46 0.008 85);
   --heat-hue: #6fb396;
   --heat-0: rgb(244 243 238 / 6.5%);

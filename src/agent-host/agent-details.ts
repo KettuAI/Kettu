@@ -15,6 +15,8 @@ export interface ConfigLocation {
   env: string | null
   /** The folder picked in Settings, which wins over the variable. */
   chosen?: boolean
+  /** The path shown when none exists, when that is not the first candidate. */
+  fallback?: string
 }
 
 /**
@@ -81,6 +83,29 @@ export function configLocations(
           }
       return layout(folder, xdg ? 'XDG_CONFIG_HOME' : null, settings, 'AGENTS.md')
     }
+    case 'pi': {
+      const moved = variable('PI_CODING_AGENT_DIR')
+      const folder = moved ?? p.join(home, '.pi', 'agent')
+      return [
+        ...layout(
+          folder,
+          moved ? 'PI_CODING_AGENT_DIR' : null,
+          { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+          'AGENTS.md',
+        ).map((location) =>
+          // Pi reads the first of these that exists, and AGENTS.md when none does.
+          location.id === 'instructions'
+            ? {
+                ...location,
+                candidates: ['AGENTS.override.md', 'AGENTS.md', 'CLAUDE.md'].map((name) =>
+                  p.join(folder, name),
+                ),
+                fallback: p.join(folder, 'AGENTS.md'),
+              }
+            : location,
+        ),
+      ]
+    }
     case 'fake-agent':
       return []
   }
@@ -109,7 +134,7 @@ async function resolveItem(location: ConfigLocation, log: LogFn): Promise<AgentC
       return { id: location.id, path: candidate, exists: true, env: location.env, chosen }
     }
   }
-  const path = location.candidates[0] ?? ''
+  const path = location.fallback ?? location.candidates[0] ?? ''
   return { id: location.id, path, exists: false, env: location.env, chosen }
 }
 

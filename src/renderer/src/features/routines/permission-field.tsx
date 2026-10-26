@@ -6,7 +6,7 @@ import type { AgentId } from '@shared/thread'
 import { Switch } from '@renderer/components/ui/switch'
 
 const LEVELS: readonly PermissionScope['level'][] = ['read', 'edit', 'commands']
-const CAPTION_AGENTS = ['claude-code', 'codex', 'opencode'] as const
+const CAPTION_AGENTS = ['claude-code', 'codex', 'opencode', 'pi'] as const
 
 function hasCaption(agentId: AgentId): agentId is (typeof CAPTION_AGENTS)[number] {
   return (CAPTION_AGENTS as readonly AgentId[]).includes(agentId)

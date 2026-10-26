@@ -62,6 +62,7 @@ export const THEME_TOKENS = [
   'mark',
   'checker',
   'agent-opencode',
+  'agent-pi',
   'agent-other',
   'heat-hue',
   'heat-0',

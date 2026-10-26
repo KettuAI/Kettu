@@ -36,6 +36,8 @@ const REMOVALS: Partial<Record<AgentId, Removal>> = {
   // ran `/status`, is not written at all, and closing it leaves nothing.
   codex: 'close',
   opencode: 'delete',
+  // The session router turns the delete into ending the session's adapter process, then deleting.
+  pi: 'delete',
   // The fake agent stands in for Claude Code.
   'fake-agent': 'delete-again',
 }

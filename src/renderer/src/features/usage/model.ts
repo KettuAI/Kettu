@@ -794,5 +794,6 @@ export const AGENT_FILL: Record<AgentId, string> = {
   'claude-code': 'bg-agent-claude-code',
   codex: 'bg-agent-codex',
   opencode: 'bg-agent-opencode',
+  pi: 'bg-agent-pi',
   'fake-agent': 'bg-agent-other',
 }

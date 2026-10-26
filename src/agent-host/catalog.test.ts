@@ -9,6 +9,7 @@ import {
   displayCommand,
   fakeAgent,
   OPENCODE,
+  PI,
   type DetectContext,
 } from './catalog'
 
@@ -33,7 +34,7 @@ function context(overrides: Partial<DetectContext> = {}): DetectContext {
 
 describe('buildCatalog', () => {
   it('lists the fake agent only when main passes its path', () => {
-    expect(buildCatalog(null).map((d) => d.id)).toEqual(['claude-code', 'codex', 'opencode'])
+    expect(buildCatalog(null).map((d) => d.id)).toEqual(['claude-code', 'codex', 'opencode', 'pi'])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
 })
@@ -364,6 +365,97 @@ describe('detectAgent with the CLI the user installed', () => {
           installed: { path: '/opt/claude', variable: 'CLAUDE_CODE_EXECUTABLE' },
         },
       },
+    })
+  })
+})
+
+describe('a program the adapter runs (Pi)', () => {
+  const PI_ACP = 'pi-acp'
+  const ROUTER = '/data/session-router.js'
+  const entry = (agentId: string, name: string, version: string): string =>
+    `/data/agents/${agentId}/${version}/node_modules/${name}/dist/index.js`
+  // `pi` on PATH answering 0.83.0, and pi-acp 0.0.34 installed.
+  function withPi(overrides: Partial<DetectContext> = {}, answer = '0.83.0'): DetectContext {
+    return context({
+      isExecutable: async (file) => file === '/usr/local/bin/pi',
+      probeCli: async () => ({ version: answer }),
+      installed: async (agentId, name) => [
+        {
+          version: '0.0.34',
+          dir: `/data/agents/${agentId}/0.0.34`,
+          entry: entry(agentId, name, '0.0.34'),
+          installedAt: 1,
+        },
+      ],
+      sessionRouterPath: ROUTER,
+      ...overrides,
+    })
+  }
+
+  it('launches through the router, with the variable the adapter reads', async () => {
+    const detection = await detectAgent(PI, withPi())
+    expect(detection).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/local/bin/node',
+        args: [ROUTER, '/usr/local/bin/node', entry('pi', PI_ACP, '0.0.34')],
+        env: {
+          PI_ACP_PI_COMMAND: '/usr/local/bin/pi',
+          PI_ACP_ENABLE_EMBEDDED_CONTEXT: 'true',
+        },
+      },
+      requires: { program: '/usr/local/bin/pi', version: '0.83.0' },
+    })
+    if (detection.state === 'available') expect(detection.adapter?.installed).toBe(true)
+  })
+
+  it('says how to install or update pi when it is missing, too old or does not answer', async () => {
+    const hint = 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'
+    expect(await detectAgent(PI, withPi({ isExecutable: async () => false }))).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining(hint),
+    })
+    expect(await detectAgent(PI, withPi({}, '0.80.9'))).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('0.81.0'),
+    })
+    expect(
+      await detectAgent(
+        PI,
+        withPi({ probeCli: async () => ({ error: 'pi exited with code 1.' }) }),
+      ),
+    ).toMatchObject({ state: 'not-installed', detail: expect.stringContaining('code 1') })
+  })
+
+  it('finds a pi.cmd on Windows and asks it its version', async () => {
+    const probed: string[] = []
+    const detection = await detectAgent(
+      PI,
+      withPi({
+        platform: 'win32',
+        env: { PATH: 'C:\\Users\\a\\AppData\\Roaming\\npm' },
+        isExecutable: async (file) => file === 'C:\\Users\\a\\AppData\\Roaming\\npm\\pi.cmd',
+        probeCli: async (program) => {
+          probed.push(program)
+          return { version: '0.83.0' }
+        },
+      }),
+    )
+    expect(probed).toEqual(['C:\\Users\\a\\AppData\\Roaming\\npm\\pi.cmd'])
+    expect(detection).toMatchObject({ state: 'available' })
+  })
+
+  it('runs only through a session router, so a build without one does not offer it', async () => {
+    expect(await detectAgent(PI, withPi({ sessionRouterPath: null }))).toMatchObject({
+      state: 'not-installed',
+    })
+  })
+
+  it('shows the router command line as the launch', () => {
+    expect(displayCommand(PI, '/e', null, '/data/agents', ROUTER)).toEqual({
+      command: 'node',
+      args: [ROUTER, 'node', path.join('/data/agents', 'pi', '0.0.34', 'node_modules', PI_ACP)],
+      env: { PI_ACP_ENABLE_EMBEDDED_CONTEXT: 'true' },
     })
   })
 })
