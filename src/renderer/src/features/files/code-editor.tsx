@@ -1,6 +1,6 @@
 // The Files pane's editor, CodeMirror 6, in a chunk of its own that loads with the first file.
 
-import { useEffect, useEffectEvent, useRef } from 'react'
+import { use, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { indentWithTab } from '@codemirror/commands'
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
@@ -16,27 +16,17 @@ import {
   type Extension,
 } from '@codemirror/state'
 import { Decoration, keymap } from '@codemirror/view'
-import { githubDarkInit, githubLightInit } from '@uiw/codemirror-theme-github'
 import { basicSetup, EditorView } from 'codemirror'
 import type { FileContent } from '@shared/files'
+import { useCodeThemes } from '@renderer/features/session/markdown/code-themes'
 import { useDark } from '@renderer/hooks/use-dark'
 import { i18n } from '@renderer/lib/i18n'
 import { buffers, setDirty, type Buffer, type OpenFile } from '@renderer/stores/files'
+import { editorTheme } from './code-theme'
 import { lineBreakOf, lineChange } from './editor-text'
 import { nameOf } from './paths'
 
 type TextContent = Extract<FileContent, { kind: 'text' }>
-
-// GitHub's colours, as the thread's Shiki theme, on the pane's own surface.
-const surface = {
-  background: 'var(--bg-app)',
-  gutterBackground: 'var(--bg-app)',
-  gutterForeground: 'var(--text-disabled)',
-  gutterBorder: 'transparent',
-  lineHighlight: 'var(--bg-hover)',
-}
-const light = githubLightInit({ settings: surface })
-const dark = githubDarkInit({ settings: { ...surface, foreground: 'var(--text-primary)' } })
 
 // The search panel's rules match CodeMirror's own `.cm-panel.cm-search` so they win over it.
 const chrome = EditorView.theme({
@@ -186,7 +176,7 @@ function createBuffer(
   projectPath: string,
   path: string,
   content: TextContent,
-  isDark: boolean,
+  colors: Extension,
 ): Buffer {
   const buffer: Buffer = {
     path,
@@ -203,7 +193,7 @@ function createBuffer(
     EditorView.lineWrapping,
     // The file's own line break, so saving writes back the bytes it read.
     EditorState.lineSeparator.of(lineBreakOf(content.text)),
-    theme.of(isDark ? dark : light),
+    theme.of(colors),
     language.of([]),
     readOnly.of(EditorState.readOnly.of(!content.editable)),
     marked,
@@ -225,9 +215,9 @@ function startBuffer(
   projectPath: string,
   path: string,
   content: TextContent,
-  isDark: boolean,
+  colors: Extension,
 ): void {
-  const buffer = createBuffer(projectPath, path, content, isDark)
+  const buffer = createBuffer(projectPath, path, content, colors)
   buffers.set(projectPath, buffer)
   editor.setState(buffer.state)
   void LanguageDescription.matchFilename(languages, nameOf(path))
@@ -245,11 +235,11 @@ function reload(
   projectPath: string,
   buffer: Buffer,
   content: TextContent,
-  isDark: boolean,
+  colors: Extension,
 ): void {
   const { state } = view
   if (lineBreakOf(content.text) !== state.lineBreak) {
-    startBuffer(view, projectPath, buffer.path, content, isDark)
+    startBuffer(view, projectPath, buffer.path, content, colors)
     return
   }
   const change = lineChange(state.doc.toJSON(), content.text.split(state.lineBreak))
@@ -276,16 +266,21 @@ export default function CodeEditor({
   const box = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const isDark = useDark()
+  const codeThemes = useCodeThemes()
+  const codeTheme = isDark ? codeThemes.dark : codeThemes.light
+  // The first theme loads with the editor, under its fallback; a later one while the last shows.
+  const [first] = useState(() => editorTheme(codeTheme, isDark))
+  const colors = useRef(use(first))
 
   // A buffer kept from before shows as it was left; otherwise the file starts one.
   const show = useEffectEvent((editor: EditorView) => {
     const buffer = buffers.get(projectPath)
     if (buffer?.path !== file.path) {
-      startBuffer(editor, projectPath, file.path, content, isDark)
+      startBuffer(editor, projectPath, file.path, content, colors.current)
       return
     }
     editor.setState(buffer.state)
-    editor.dispatch({ effects: theme.reconfigure(isDark ? dark : light) })
+    editor.dispatch({ effects: theme.reconfigure(colors.current) })
   })
 
   // One view per file; the state outlives it in `buffers`, with the edits and their history.
@@ -300,15 +295,25 @@ export default function CodeEditor({
   }, [projectPath, file.path, file.resets])
 
   useEffect(() => {
-    view.current?.dispatch({ effects: theme.reconfigure(isDark ? dark : light) })
-  }, [isDark])
+    let latest = true
+    void editorTheme(codeTheme, isDark).then((extension) => {
+      if (!latest) return
+      colors.current = extension
+      view.current?.dispatch({ effects: theme.reconfigure(extension) })
+    })
+    return () => {
+      latest = false
+    }
+  }, [codeTheme, isDark])
 
   useEffect(() => {
     const editor = view.current
     const buffer = buffers.get(projectPath)
     if (!editor || buffer?.path !== file.path || file.dirty) return
-    if (content.version !== buffer.version) reload(editor, projectPath, buffer, content, isDark)
-  }, [projectPath, file.path, file.dirty, content, isDark])
+    if (content.version !== buffer.version) {
+      reload(editor, projectPath, buffer, content, colors.current)
+    }
+  }, [projectPath, file.path, file.dirty, content])
 
   useEffect(() => {
     const editor = view.current
