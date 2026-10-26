@@ -24,7 +24,7 @@ import type {
   UserContent,
 } from '@shared/thread'
 import { ULTRACODE_OPTION_ID } from '@shared/thread'
-import { t } from '../i18n'
+import { currentLocale, t } from '../i18n'
 
 /** Per-turn bookkeeping the mapper needs to find "current" entries. */
 export interface TurnScope {
@@ -136,6 +136,43 @@ export function toLf(text: string): string {
 
 // Content blocks.
 
+/** The most base64 a sound or a clip keeps, so one block cannot swell the thread and its snapshots. */
+export const CARRIED_DATA_LIMIT = 20 * 1024 * 1024
+
+/** The file name a resource's URI ends in, if any. */
+function uriName(uri: string): string | null {
+  const last = URL.parse(uri)?.pathname.split('/').pop()
+  if (!last) return null
+  try {
+    return decodeURIComponent(last)
+  } catch {
+    return last
+  }
+}
+
+/** A sound or a clip from its bytes, or named by its kind and size when it is larger than that. */
+function carriedRef(
+  kind: 'audio' | 'video',
+  mimeType: string,
+  data: string,
+  name: string | null,
+): ContentRef {
+  const size = Buffer.byteLength(data, 'base64')
+  if (data.length <= CARRIED_DATA_LIMIT) return { kind, mimeType, data, size, name }
+  const megabytes = new Intl.NumberFormat(currentLocale(), {
+    style: 'unit',
+    unit: 'megabyte',
+    unitDisplay: 'short',
+    maximumFractionDigits: 0,
+  }).format(size / 1_000_000)
+  return {
+    kind: 'unsupported',
+    label: t(kind === 'audio' ? 'content.audioTooLarge' : 'content.videoTooLarge', {
+      size: megabytes,
+    }),
+  }
+}
+
 export function contentRef(block: acp.ContentBlock): ContentRef {
   switch (block.type) {
     case 'image':
@@ -143,9 +180,15 @@ export function contentRef(block: acp.ContentBlock): ContentRef {
     case 'resource_link':
       return { kind: 'link', uri: block.uri, name: block.title || block.name }
     case 'audio':
-      return { kind: 'unsupported', label: t('content.audio', { type: block.mimeType }) }
-    case 'resource':
-      return { kind: 'unsupported', label: t('content.resource', { uri: block.resource.uri }) }
+      return carriedRef('audio', block.mimeType, block.data, null)
+    case 'resource': {
+      const { resource } = block
+      const kind = /^(audio|video)\//i.exec(resource.mimeType ?? '')?.[1]?.toLowerCase()
+      if ('blob' in resource && resource.mimeType && (kind === 'audio' || kind === 'video')) {
+        return carriedRef(kind, resource.mimeType, resource.blob, uriName(resource.uri))
+      }
+      return { kind: 'unsupported', label: t('content.resource', { uri: resource.uri }) }
+    }
     case 'text':
       return { kind: 'unsupported', label: t('content.text') }
     default:
@@ -1356,6 +1399,10 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
       // The host turns attachments into images and links before a prompt goes; never reached.
       case 'attachment':
         return { type: 'text', text: ref.attachment.name }
+      // Only agents send sounds and clips, so no prompt carries one; never reached.
+      case 'audio':
+      case 'video':
+        return { type: 'text', text: ref.mimeType }
       default:
         return { type: 'text', text: ref.label }
     }

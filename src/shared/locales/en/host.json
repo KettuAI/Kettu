@@ -203,7 +203,8 @@
     "unknownRemote": "This repository has several remotes and none is set for this branch"
   },
   "content": {
-    "audio": "Audio ({{type}})",
+    "audioTooLarge": "Audio, {{size}}, too large to show",
+    "videoTooLarge": "Video, {{size}}, too large to show",
     "image": "Image {{number}}",
     "resource": "Embedded resource {{uri}}",
     "text": "Text",

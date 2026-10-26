@@ -31,6 +31,7 @@ import {
   type ViewerRequest,
 } from '@renderer/stores/viewer'
 import { openAttachmentPath } from '../attachments/open-attachment'
+import { base64Bytes } from './carried'
 import { openMedia } from './grants'
 import { showFileAction } from './show-file'
 import { placeOf } from './viewer-motion'
@@ -73,13 +74,6 @@ export function MediaViewer() {
 function base64Size(data: string): number {
   const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
   return Math.floor((data.length * 3) / 4) - padding
-}
-
-function base64Bytes(data: string): Uint8Array {
-  const text = atob(data)
-  const bytes = new Uint8Array(text.length)
-  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i)
-  return bytes
 }
 
 /**
@@ -151,10 +145,13 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
   const sourceOf = useCallback(
     (item: ViewerItem): Source => {
       if (item.source.kind !== 'bytes') return sources.get(item.key) ?? { state: 'loading' }
-      const { mimeType, data } = item.source
+      // Carried bytes are ready at once; only a failure to play them is kept.
+      const failed = sources.get(item.key)
+      if (failed) return failed
+      const { media, mimeType, data } = item.source
       return {
         state: 'ready',
-        kind: 'image',
+        kind: media,
         src: `data:${mimeType};base64,${data}`,
         mimeType,
         size: base64Size(data),
@@ -301,7 +298,11 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
 
   const ready = source.state === 'ready' ? source : null
   const isPicture = ready?.kind === 'image'
-  const name = item.name ?? t('viewer.image')
+  const name =
+    item.name ??
+    (item.source.kind === 'bytes' && item.source.media === 'video'
+      ? t('media.video')
+      : t('viewer.image'))
 
   // Copy and save take a file by its media URL and carried media by its bytes.
   const carried = (): CarriedMedia => {

@@ -15,8 +15,8 @@ import type {
 export const PAGE_ENTRIES = 60
 /** ...unless that turn is longer than this, which is then cut. */
 export const PAGE_LIMIT = 500
-/** Base64 image data longer than this is stored once per session as bytes of its own. */
-export const INLINE_IMAGE_LIMIT = 32 * 1024
+/** Base64 media data longer than this is stored once per session as bytes of its own. */
+export const INLINE_MEDIA_LIMIT = 32 * 1024
 
 export interface ThreadHead {
   agentId: AgentId

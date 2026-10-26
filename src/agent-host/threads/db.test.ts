@@ -7,7 +7,7 @@ import type { ThreadEntry } from '@shared/thread'
 import { SCHEMA_VERSION, ThreadDb, ThreadDbError } from './db'
 import {
   EMPTY_SESSION,
-  INLINE_IMAGE_LIMIT,
+  INLINE_MEDIA_LIMIT,
   PAGE_ENTRIES,
   PAGE_LIMIT,
   type PositionedEntry,
@@ -265,7 +265,7 @@ describe('the thread database', () => {
   it('keeps large images apart, once per session, and puts them back when read', () => {
     const file = tempFile()
     const db = open(file)
-    const big = Buffer.alloc(INLINE_IMAGE_LIMIT, 7).toString('base64')
+    const big = Buffer.alloc(INLINE_MEDIA_LIMIT, 7).toString('base64')
     const small = Buffer.from('tiny').toString('base64')
     const shot = (id: string, data: string): ThreadEntry => ({
       ...(tool(id) as Extract<ThreadEntry, { kind: 'tool' }>),
@@ -287,6 +287,49 @@ describe('the thread database', () => {
     raw.close()
     expect(String(json)).not.toContain(big.slice(0, 64))
     expect(String(json)).toContain('"blob"')
+  })
+
+  it('keeps large sounds and clips apart as it does images, with their kind and size', () => {
+    const file = tempFile()
+    const db = open(file)
+    const big = Buffer.alloc(INLINE_MEDIA_LIMIT, 3).toString('base64')
+    const size = Buffer.byteLength(big, 'base64')
+    const reply: ThreadEntry = {
+      kind: 'agent',
+      id: 'a',
+      markdown: 'Here',
+      attachments: [
+        { kind: 'audio', mimeType: 'audio/wav', data: big, size, name: null },
+        { kind: 'video', mimeType: 'video/mp4', data: 'AAAA', size: 3, name: 'clip.mp4' },
+      ],
+      streaming: false,
+    }
+    const call: ThreadEntry = {
+      ...(tool('t1') as Extract<ThreadEntry, { kind: 'tool' }>),
+      content: [
+        {
+          type: 'ref',
+          ref: { kind: 'video', mimeType: 'video/webm', data: big, size, name: 'demo.webm' },
+        },
+      ],
+    }
+    db.write('s1', { head, entries: [reply, call].map((entry, pos) => ({ pos, entry })) })
+    expect(db.page('s1', null)!.entries).toEqual([reply, call])
+    db.close()
+
+    const raw = new DatabaseSync(file)
+    // The same bytes once, whatever kind each ref says they are.
+    expect(raw.prepare('SELECT COUNT(*) AS n FROM blobs').get()!.n).toBe(1)
+    const json = String(raw.prepare("SELECT json FROM entries WHERE entry_id = 'a'").get()!.json)
+    raw.close()
+    expect(json).not.toContain(big.slice(0, 64))
+    expect(JSON.parse(json).attachments[0]).toEqual({
+      kind: 'audio',
+      mimeType: 'audio/wav',
+      size,
+      name: null,
+      blob: expect.any(String),
+    })
   })
 
   it('keeps the bytes of sent attachments through a whole write that still names them', () => {
@@ -381,7 +424,7 @@ describe('the thread database', () => {
   it('removes threads with their images', () => {
     const file = tempFile()
     const db = open(file)
-    const big = Buffer.alloc(INLINE_IMAGE_LIMIT, 1).toString('base64')
+    const big = Buffer.alloc(INLINE_MEDIA_LIMIT, 1).toString('base64')
     const image: ThreadEntry = {
       kind: 'agent',
       id: 'a',

@@ -13,6 +13,7 @@ import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
 import { CarriedImage } from '../media/carried-image'
+import { CarriedMedia } from '../media/carried-media'
 import { attachmentKey } from '../media/viewer-items'
 
 /** Taller than this, a message collapses behind a fade and Show more. */
@@ -71,6 +72,14 @@ export function UserContentView({
                   className={IMAGE}
                 />
               )
+            ) : ref.kind === 'audio' || ref.kind === 'video' ? (
+              <CarriedMedia
+                key={i}
+                sessionId={sessionId ?? null}
+                entryId={entryId ?? null}
+                index={i}
+                carried={ref}
+              />
             ) : (
               <RefChip key={i} contentRef={ref} />
             ),
@@ -82,7 +91,11 @@ export function UserContentView({
 }
 
 /** A link, an attachment or content OverBench cannot show, as a labelled chip. */
-export function RefChip({ contentRef }: { contentRef: Exclude<ContentRef, { kind: 'image' }> }) {
+export function RefChip({
+  contentRef,
+}: {
+  contentRef: Exclude<ContentRef, { kind: 'image' | 'audio' | 'video' }>
+}) {
   const link = contentRef.kind === 'link'
   const label =
     contentRef.kind === 'link'

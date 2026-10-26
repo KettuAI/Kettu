@@ -26,7 +26,7 @@ import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/cal
 import {
   attachmentBlobs,
   EMPTY_SESSION,
-  INLINE_IMAGE_LIMIT,
+  INLINE_MEDIA_LIMIT,
   mapRefs,
   PAGE_ENTRIES,
   PAGE_LIMIT,
@@ -137,6 +137,8 @@ const SQLITE_CONSTRAINT = 19
 const SQLITE_NOTADB = 26
 // Above every position; SQLite compares it as a 64-bit integer.
 const END = Number.MAX_SAFE_INTEGER
+// The content refs that carry bytes, which a large one keeps in the blobs table.
+const CARRIED_KINDS: ReadonlySet<string> = new Set(['image', 'audio', 'video'])
 
 export type ThreadDbLog = (level: 'info' | 'warn' | 'error', message: string) => void
 
@@ -556,11 +558,15 @@ export class ThreadDb {
         if (typeof ref.blob !== 'string') return ref
         const blob = sql.blob.get(sessionId, ref.blob)
         if (!blob) {
-          this.log('warn', `Image ${ref.blob} of session ${sessionId} is missing`)
+          this.log('warn', `Media ${ref.blob} of session ${sessionId} is missing`)
           return { kind: 'unsupported', label: String(ref.mimeType) }
         }
-        const data = Buffer.from(blob.data as Uint8Array).toString('base64')
-        return { kind: 'image', mimeType: ref.mimeType, data }
+        const restored: Record<string, unknown> = {
+          ...ref,
+          data: Buffer.from(blob.data as Uint8Array).toString('base64'),
+        }
+        delete restored.blob
+        return restored
       })
     }
     if (isThreadEntry(value)) return value
@@ -680,20 +686,22 @@ export class ThreadDb {
 
   // Writing.
 
-  /** The entry's JSON, with large images moved into the session's blobs. */
+  /** The entry's JSON, with large images, sounds and clips moved into the session's blobs. */
   private storedJson(sql: Statements, sessionId: string, entry: ThreadEntry): string {
     const stored = mapRefs(entry as unknown as Record<string, unknown>, (ref) => {
       if (
-        ref.kind !== 'image' ||
+        !CARRIED_KINDS.has(String(ref.kind)) ||
         typeof ref.data !== 'string' ||
-        ref.data.length <= INLINE_IMAGE_LIMIT
+        ref.data.length <= INLINE_MEDIA_LIMIT
       ) {
         return ref
       }
       const bytes = Buffer.from(ref.data, 'base64')
       const hash = createHash('sha256').update(bytes).digest('hex')
       sql.insertBlob.run(sessionId, hash, String(ref.mimeType), bytes)
-      return { kind: 'image', mimeType: ref.mimeType, blob: hash }
+      const moved: Record<string, unknown> = { ...ref, blob: hash }
+      delete moved.data
+      return moved
     })
     return JSON.stringify(stored)
   }

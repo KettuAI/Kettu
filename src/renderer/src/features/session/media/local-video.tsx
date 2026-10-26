@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import type { MediaGrant } from '@shared/media'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@renderer/lib/utils'
 import { VIDEO_BOX } from './boxes'
+import { playedUrl, type PlayedMedia } from './carried'
 import { playerFailure } from './failure'
 import { MediaCaption } from './media-caption'
 import { playOneAtATime } from './playback'
@@ -10,26 +10,26 @@ import { playOneAtATime } from './playback'
 const MAX_HEIGHT = 480
 
 /**
- * A clip a reply names, with Chromium's controls, in the images' frame: the column's width at its
- * own ratio, at most 480 px high. Open larger opens the viewer, which takes over the player's
- * moment. `onFailed` hears an error or a clip with no picture.
+ * A clip a reply names or the thread carries, with Chromium's controls, in the images' frame: the
+ * column's width at its own ratio, at most 480 px high. Open larger opens the viewer, which takes
+ * over the player's moment; without `onOpen` there is none. `onFailed` hears an error or a clip
+ * with no picture.
  */
 export function LocalVideo({
-  path,
+  media,
   name,
-  grant,
   viewerKey,
   onOpen,
   onFailed,
 }: {
-  path: string
+  media: PlayedMedia
   name: string
-  grant: MediaGrant
-  viewerKey: string
-  onOpen: (from: HTMLElement) => void
+  viewerKey?: string
+  onOpen?: (from: HTMLElement) => void
   onFailed: (message: string | null) => void
 }) {
   const frame = useRef<HTMLSpanElement>(null)
+  const src = useMemo(() => playedUrl(media), [media])
   const [ratio, setRatio] = useState<{ width: number; height: number } | null>(null)
   const [seconds, setSeconds] = useState<number | null>(null)
   useEffect(playOneAtATime, [])
@@ -50,7 +50,7 @@ export function LocalVideo({
         className="relative block overflow-hidden rounded-xl bg-card"
       >
         <video
-          src={grant.url}
+          src={src}
           controls
           controlsList="nodownload"
           preload="metadata"
@@ -77,11 +77,10 @@ export function LocalVideo({
         />
       </span>
       <MediaCaption
-        path={path}
+        media={media}
         name={name}
-        grant={grant}
         seconds={seconds}
-        onOpenLarger={() => frame.current && onOpen(frame.current)}
+        onOpenLarger={onOpen && (() => frame.current && onOpen(frame.current))}
       />
     </span>
   )

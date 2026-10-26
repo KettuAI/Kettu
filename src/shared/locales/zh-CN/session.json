@@ -330,7 +330,10 @@
     "openLarger": "放大查看",
     "showInFiles": "在文件面板中显示",
     "showIn": "在{{name}}中显示",
-    "openWithDefault": "用默认应用打开"
+    "openWithDefault": "用默认应用打开",
+    "saveAs": "另存为…",
+    "sound": "音频",
+    "video": "视频"
   },
   "viewer": {
     "image": "图片",

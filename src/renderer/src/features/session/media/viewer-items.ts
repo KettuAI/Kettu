@@ -14,14 +14,15 @@ type SyntaxNode = ReturnType<typeof markdown.parse>['topNode']
 
 export type ViewerSource =
   | { kind: 'file'; path: string } // a file the thread names, shown through its grant
-  | { kind: 'bytes'; mimeType: string; data: string } // base64 the thread carries
+  // base64 the thread carries
+  | { kind: 'bytes'; media: 'image' | 'video'; mimeType: string; data: string }
   | { kind: 'attachment'; attachment: Attachment } // the user's, from the thread store or a draft
 
 export interface ViewerItem {
   /** The item's place in the thread carries the same key, as `data-viewer-key`. */
   key: string
   source: ViewerSource
-  /** Null for a picture the thread carries without a name. */
+  /** Null for a picture, or a clip, the thread carries without a name. */
   name: string | null
   alt: string
 }
@@ -187,12 +188,12 @@ function fileItems(entryId: string, files: ShownFile[]): ViewerItem[] {
 }
 
 function byteItem(entryId: string, index: number, ref: ContentRef): ViewerItem[] {
-  if (ref.kind !== 'image') return []
+  if (ref.kind !== 'image' && ref.kind !== 'video') return []
   return [
     {
       key: refKey(entryId, index),
-      source: { kind: 'bytes', mimeType: ref.mimeType, data: ref.data },
-      name: null,
+      source: { kind: 'bytes', media: ref.kind, mimeType: ref.mimeType, data: ref.data },
+      name: ref.kind === 'video' ? ref.name : null,
       alt: '',
     },
   ]
