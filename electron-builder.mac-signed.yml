@@ -17,11 +17,6 @@ mac:
   # and lets commands that agents and the terminal run still ask for the camera, the microphone
   # and Apple Events, which it would otherwise deny without a prompt.
   hardenedRuntime: true
-  # The text macOS shows in those prompts.
-  extendInfo:
-    NSAppleEventsUsageDescription: A command that an agent or the terminal runs wants to use AppleScript.
-    NSCameraUsageDescription: A command that an agent or the terminal runs wants to use the camera.
-    NSMicrophoneUsageDescription: A command that an agent or the terminal runs wants to use the microphone.
   # Notarizes and staples the app with the credentials in the environment.
   notarize: true
 dmg:
