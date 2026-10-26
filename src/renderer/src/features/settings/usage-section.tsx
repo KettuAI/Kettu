@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { bytes, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -173,7 +174,12 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void reimport()}>
+            <AlertDialogAction
+              onClick={() => {
+                void reimport()
+                setOpen(false)
+              }}
+            >
               {t('settings.reimport.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -210,19 +216,29 @@ export function ClearRecord() {
   const { t } = useTranslation(['usage', 'common'])
   const empty = useUsageStore((s) => s.status?.recordSince == null)
   const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const clear = async () => {
+    setBusy(true)
     setError(null)
     try {
       await clearUsageRecord()
     } catch (e) {
       setError(errorMessage(e))
+    } finally {
+      setBusy(false)
     }
   }
   return (
     <>
       <ControlError error={error} />
-      <Button variant="destructive" size="compact" disabled={empty} onClick={() => setOpen(true)}>
+      <Button
+        variant="destructive"
+        size="compact"
+        disabled={empty || busy}
+        onClick={() => setOpen(true)}
+      >
+        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('settings.clear.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
@@ -233,7 +249,13 @@ export function ClearRecord() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void clear()}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                void clear()
+                setOpen(false)
+              }}
+            >
               {t('settings.clear.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>

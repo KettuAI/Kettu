@@ -985,7 +985,6 @@ export function ClearBrowsingData() {
     try {
       await window.overbench.browser.clearData()
       setCleared(true)
-      setOpen(false)
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -1014,7 +1013,13 @@ export function ClearBrowsingData() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void clear()}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                void clear()
+                setOpen(false)
+              }}
+            >
               {t('browser.clearData.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1028,14 +1033,18 @@ export function RemoveAll() {
   const { t } = useTranslation(['settings', 'common'])
   const count = useSessionsStore((s) => Object.keys(s.byId).length)
   const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const remove = async () => {
+    setBusy(true)
     setError(null)
     try {
       await host('sessions.removeAll', undefined)
       await useSessionsStore.getState().refresh()
     } catch (e) {
       setError(errorMessage(e))
+    } finally {
+      setBusy(false)
     }
   }
   return (
@@ -1044,9 +1053,10 @@ export function RemoveAll() {
       <Button
         variant="destructive"
         size="compact"
-        disabled={count === 0}
+        disabled={count === 0 || busy}
         onClick={() => setOpen(true)}
       >
+        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('advanced.removeSessions.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
@@ -1061,7 +1071,13 @@ export function RemoveAll() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => void remove()}>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                void remove()
+                setOpen(false)
+              }}
+            >
               {t('advanced.removeSessions.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
