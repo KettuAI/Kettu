@@ -1,6 +1,7 @@
 // How routines, their schedules and their runs read in the interface.
 
 import type { AgentOptions, Project } from '@shared/agent-host'
+import { markdownFirstLine } from '@shared/markdown-line'
 import {
   FAILED_RUN_STATUSES,
   type Routine,
@@ -138,11 +139,7 @@ export function runSummary(run: RoutineRun): string {
 }
 
 export function firstLine(text: string): string {
-  const line = text.split('\n').find((part) => part.trim() !== '') ?? ''
-  return line
-    .trim()
-    .replace(/^#{1,6}\s+/, '')
-    .slice(0, 200)
+  return markdownFirstLine(text).slice(0, 200)
 }
 
 /** How long a run worked, or has waited, at the meta role. */
