@@ -503,6 +503,9 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       // Not scaled: it stands for an agent that is slow to open a session, whatever the pace.
       const slowMs = Number(env.FAKE_AGENT_NEW_SESSION_MS ?? '') || 0
       if (slowMs > 0) await new Promise((resolve) => setTimeout(resolve, slowMs))
+      // Held until a test creates the file, checked every 10 ms, not scaled.
+      const gate = env.FAKE_AGENT_NEW_SESSION_GATE
+      while (gate && !existsSync(gate)) await new Promise((resolve) => setTimeout(resolve, 10))
       const session = newSession(nextId('fake'), ctx.params.cwd, ctx.params.mcpServers)
       Object.assign(session, projectDefaults(ctx.params.cwd))
       setTimeout(() => announceCommands(ctx.client, session.id), 0)

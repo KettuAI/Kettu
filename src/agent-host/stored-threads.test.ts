@@ -1,9 +1,11 @@
 // Integration tests: threads stored by the session layer, read back a page at a time, and
 // sessions that attach to their agent only when used.
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import type { TrafficRecord } from '@shared/agent-host'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { ThreadEntry } from '@shared/thread'
 import { processLauncher } from './agents'
@@ -133,13 +135,29 @@ describe('checkpoints', () => {
 })
 
 describe('a first message the app stops before it goes', () => {
-  /** A listing slow enough that a pending `session/new` answers before the stop closes stdin. */
-  function slowListing(): ProcessControl {
+  /**
+   * A listing that, for the quit, lets the agent answer `session/new` and lists once the answer
+   * has come: after the quit began and before the stop closes stdin.
+   */
+  function gatedListing(gate: string, traffic: () => TrafficRecord[]): ProcessControl {
     const control = processControl(process.platform)
+    const answered = (): boolean => {
+      const records = traffic()
+      const asked = records.find((r) => r.direction === 'out' && r.method === 'session/new')
+      if (!asked) return false
+      const { id } = asked.message as { id: unknown }
+      return records.some((r) => {
+        const message = r.message as { id?: unknown }
+        return r.direction === 'in' && message.id === id && 'result' in message
+      })
+    }
     return {
       ...control,
       list: async (options) => {
-        await control.delay(600)
+        if (options?.quitting) {
+          await writeFile(gate, '')
+          await vi.waitFor(() => expect(answered()).toBe(true), { timeout: 10_000 })
+        }
         return control.list(options)
       },
     }
@@ -184,12 +202,16 @@ describe('a first message the app stops before it goes', () => {
   })
 
   it('keeps the message when session/new answers as the quit stops the agent', async () => {
+    const gates = await mkdtemp(path.join(os.tmpdir(), 'overbench-gate-'))
+    onTestFinished(() => rm(gates, { recursive: true, force: true }))
+    const gate = path.join(gates, 'session-new')
+    const traffic = () => first.host.diagnostics.agentRecords('fake-agent').traffic
     const { t: first, port: before } = await setup({
       launcher: processLauncher(process.platform),
-      processControl: slowListing(),
+      processControl: gatedListing(gate, traffic),
       agentEnv: {
         FAKE_AGENT_DELAY_SCALE: '0',
-        FAKE_AGENT_NEW_SESSION_MS: '300',
+        FAKE_AGENT_NEW_SESSION_GATE: gate,
         FAKE_AGENT_IGNORE_EOF: '1',
       },
     })
@@ -201,12 +223,13 @@ describe('a first message the app stops before it goes', () => {
         prompt: text('Fix the flaky login test'),
       })
       .catch(() => null)
-    await vi.waitFor(() =>
-      expect(
-        first.host.diagnostics
-          .agentRecords('fake-agent')
-          .traffic.filter((r) => r.direction === 'out' && r.method === 'session/new'),
-      ).toHaveLength(1),
+    // Spawning the agent's process can take seconds on a loaded runner.
+    await vi.waitFor(
+      () =>
+        expect(
+          traffic().filter((r) => r.direction === 'out' && r.method === 'session/new'),
+        ).toHaveLength(1),
+      { timeout: 10_000 },
     )
     const sessionId = before.events.flatMap((e) =>
       e.type === 'session.summary' ? [e.summary.id] : [],
