@@ -163,7 +163,7 @@ export default function RoutinesPage() {
           <RunAnnouncements />
           <div className="flex items-start gap-4">
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <h1 className="text-title font-semibold">{t('page.title')}</h1>
+              <h1 className="font-heading text-title font-semibold">{t('page.title')}</h1>
               <p className="text-small leading-normal text-secondary">{t('page.description')}</p>
             </div>
             <Button onClick={() => openRoutine(null)}>

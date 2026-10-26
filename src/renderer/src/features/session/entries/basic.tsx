@@ -174,11 +174,12 @@ export const ThoughtEntry = memo(function ThoughtEntry({ sessionId, entryId }: E
     <div className={cn('text-muted-foreground', animation)} data-selectable="">
       <SessionIdContext value={sessionId}>
         <EntryIdContext value={entryId}>
-          <Clamp maxHeight={76} buttonClassName="-mx-1.5">
+          {/* Four of its lines at the default text size. */}
+          <Clamp maxHeight={90} buttonClassName="-mx-1.5">
             <Markdown
               markdown={entry.markdown}
               streaming={entry.streaming}
-              className="markdown-muted"
+              className="markdown-muted markdown-thought"
             />
           </Clamp>
         </EntryIdContext>

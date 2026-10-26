@@ -209,7 +209,7 @@ export function NavRow({
       <span className="flex-1">{label}</span>
       {extra ??
         (shortcut && (
-          <Kbd className="h-auto bg-transparent p-0 text-[11px] font-normal text-tertiary group-data-active/menu-button:text-secondary">
+          <Kbd className="h-auto bg-transparent p-0 text-meta font-normal text-tertiary group-data-active/menu-button:text-secondary">
             {formatShortcut(shortcut)}
           </Kbd>
         ))}
@@ -427,20 +427,18 @@ function ProjectGroup({
         else if (event.key === 'ArrowLeft' && open) toggle()
       }}
       className={cn(
-        'gap-1 text-small font-medium',
+        'gap-1',
         // Room for the More button before the +, so the name never runs under it.
         project && !project.missing && 'group-has-data-[sidebar=menu-action]/menu-item:pr-13',
-        project?.missing ? 'text-disabled' : 'text-secondary',
+        project?.missing ? 'text-disabled' : 'text-primary',
       )}
     >
-      <span className="min-w-0 truncate">{name}</span>
+      <span className="min-w-0 truncate font-heading text-group font-semibold">{name}</span>
       <span className="grid size-3 shrink-0 place-items-center text-icon">
         {open ? <ChevronDownIcon className="size-3!" /> : <ChevronRightIcon className="size-3!" />}
       </span>
       {project?.missing && (
-        <span className="ml-auto text-[11.5px] font-normal text-tertiary">
-          {t('project.missing')}
-        </span>
+        <span className="ml-auto text-meta font-normal text-tertiary">{t('project.missing')}</span>
       )}
     </SidebarMenuButton>
   )
@@ -566,7 +564,7 @@ function PinnedGroup({ stop }: { stop: SidebarTabStop | null }) {
           if (event.key === 'ArrowRight' && !open) toggle()
           else if (event.key === 'ArrowLeft' && open) toggle()
         }}
-        className="gap-1 text-small font-medium text-secondary"
+        className="gap-1 text-xs font-medium text-tertiary"
       >
         <span className="min-w-0 truncate">{t('pinned.label')}</span>
         <span className="grid size-3 shrink-0 place-items-center text-icon">

@@ -589,7 +589,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
       <header className="flex items-center gap-3 px-1 pb-7">
         <AgentTile agent={status.id} mono={!installed} size={40} glyph={21} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <h2 className="flex min-w-0 text-title font-semibold">
+          <h2 className="flex min-w-0 font-heading text-title font-semibold">
             <AgentPicker status={status} />
           </h2>
           <p className="flex items-center gap-2 text-small text-secondary">

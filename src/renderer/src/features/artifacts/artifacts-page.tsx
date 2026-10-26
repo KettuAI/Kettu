@@ -302,14 +302,16 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     {t('viewer.back')} <span className="opacity-60">Esc</span>
                   </TooltipContent>
                 </Tooltip>
-                <h1 className="text-title">{t('page.recentlyDeleted')}</h1>
+                <h1 className="font-heading text-title font-semibold">
+                  {t('page.recentlyDeleted')}
+                </h1>
               </div>
               <p className="mt-1 pl-8.5 text-xs text-secondary">{t('page.deletedDescription')}</p>
             </header>
           ) : (
             <header className="mb-7 flex items-end gap-4">
               <div className="min-w-0 flex-1">
-                <h1 className="text-title">{t('page.title')}</h1>
+                <h1 className="font-heading text-title font-semibold">{t('page.title')}</h1>
                 {list && list.length > 0 && (
                   <p className="mt-1 text-xs text-secondary">
                     {t('page.summary', { count: list.length, sessions: sessionCount(list) })}

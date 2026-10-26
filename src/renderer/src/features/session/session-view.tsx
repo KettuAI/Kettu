@@ -118,7 +118,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   } else if (empty && (status === 'ready' || status === 'closed')) {
     body = (
       <ColumnScroller className="flex items-center justify-center px-6 pb-16">
-        <p className="animate-in text-[15px] text-muted-foreground fade-in animation-duration-(--duration-slow)">
+        <p className="animate-in text-ui text-muted-foreground fade-in animation-duration-(--duration-slow)">
           {t('newSession.whatToWorkOn', { agent: name })}
         </p>
       </ColumnScroller>

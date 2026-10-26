@@ -124,6 +124,7 @@ const theme = EditorView.theme({
     color: 'var(--text-primary)',
     padding: '0.1em 0.35em',
     fontFamily: 'var(--font-mono)',
+    fontVariantLigatures: 'none',
     fontSize: '0.8em',
   },
   '.cm-md-link': {

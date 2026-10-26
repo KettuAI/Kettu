@@ -416,18 +416,15 @@ export function TextSize({ label }: { label: ReactNode }) {
         />
       </div>
       <div aria-hidden className={cn(PREVIEW_BOX, 'flex flex-col gap-3 px-4 py-4 text-prose')}>
-        <div className="max-w-4/5 self-end rounded-xl bg-subtle px-3 py-1.5 leading-relaxed">
+        <div className="max-w-4/5 self-end rounded-xl bg-subtle px-3 py-1.5 leading-normal">
           {t('appearance.textSize.previewUser')}
         </div>
-        <p className="text-primary">
+        {/* The thread's own prose rules, its inline code included. */}
+        <p className="markdown">
           <Trans
             t={t}
             i18nKey="appearance.textSize.previewAgent"
-            components={{
-              code: (
-                <code className="rounded-sm bg-subtle px-[0.35em] py-[0.1em] font-mono text-[0.85em]" />
-              ),
-            }}
+            components={{ code: <code data-streamdown="inline-code" /> }}
           />
         </p>
       </div>

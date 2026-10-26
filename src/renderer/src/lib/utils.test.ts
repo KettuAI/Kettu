@@ -8,6 +8,9 @@ describe('cn', () => {
     expect(cn('text-primary-foreground', 'text-ui')).toBe('text-primary-foreground text-ui')
     expect(cn('text-ui', 'text-muted-foreground')).toBe('text-ui text-muted-foreground')
     expect(cn('text-sm', 'text-ui')).toBe('text-ui')
+    expect(cn('text-heading', 'text-subheading')).toBe('text-subheading')
+    expect(cn('text-group', 'text-primary')).toBe('text-group text-primary')
+    expect(cn('text-code', 'text-command')).toBe('text-command')
   })
 
   it("merges the palette's own names as colors, not sizes", () => {

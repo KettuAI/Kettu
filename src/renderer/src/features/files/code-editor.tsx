@@ -30,11 +30,12 @@ type TextContent = Extract<FileContent, { kind: 'text' }>
 
 // The search panel's rules match CodeMirror's own `.cm-panel.cm-search` so they win over it.
 const chrome = EditorView.theme({
-  '&': { height: '100%', fontSize: '13px' },
+  '&': { height: '100%', fontSize: 'var(--text-code)' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
     fontFamily: 'var(--font-mono)',
-    lineHeight: '20px',
+    fontVariantLigatures: 'none',
+    lineHeight: 'var(--text-code--line-height)',
     overscrollBehavior: 'contain',
   },
   '.cm-content': { padding: '8px 0' },

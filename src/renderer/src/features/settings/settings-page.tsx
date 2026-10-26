@@ -133,7 +133,7 @@ export default function SettingsPage() {
           <BackButton />
         </div>
         <div className="flex flex-col gap-3 px-3 pt-1.5 pb-3.5">
-          <h1 className="px-1 text-heading font-semibold">{t('page.title')}</h1>
+          <h1 className="px-1 font-heading text-subheading font-semibold">{t('page.title')}</h1>
           <SearchField
             value={query}
             onChange={setQuery}
@@ -214,7 +214,7 @@ export function PageHeader({
 }) {
   return (
     <header className="flex flex-col gap-1.5 px-1 pb-7">
-      <h2 id={id} className="text-title font-semibold text-balance">
+      <h2 id={id} className="font-heading text-title font-semibold text-balance">
         {title}
       </h2>
       {children && <p className="text-small text-pretty text-secondary">{children}</p>}

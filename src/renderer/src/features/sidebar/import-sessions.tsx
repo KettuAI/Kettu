@@ -174,7 +174,7 @@ export function ImportSessionsDialog({
                             </span>
                           )}
                           {s.updatedAt && (
-                            <span className="text-[11.5px] text-tertiary tabular">
+                            <span className="text-meta text-tertiary tabular">
                               {shortAgo(Date.parse(s.updatedAt))}
                             </span>
                           )}

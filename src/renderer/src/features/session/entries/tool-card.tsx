@@ -260,7 +260,7 @@ function ToolHeader({
         {label.target && <Target label={label} />}
       </span>
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
-        <span className="shrink-0 animate-in font-mono text-[11.5px] tabular animation-duration-(--duration-base) fade-in">
+        <span className="shrink-0 animate-in font-mono text-meta tabular animation-duration-(--duration-base) fade-in">
           <span className="text-success">+{stats.insertions}</span>{' '}
           <span className="text-danger">−{stats.deletions}</span>
         </span>
@@ -274,7 +274,7 @@ function ToolHeader({
   // A flat row reaches past the column by its padding, so its icon lines up with the prose.
   const row = framed
     ? 'group/tool flex h-card-header w-full min-w-0 items-center gap-2 px-3 text-left outline-none'
-    : 'group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[13px] leading-[1.6] text-muted-foreground outline-none'
+    : 'group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none'
   if (!toggle) return <div className={row}>{content}</div>
   return (
     <CollapsibleTrigger
@@ -310,7 +310,7 @@ function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="flex min-w-0" />}>{text}</TooltipTrigger>
-      <TooltipContent className="max-w-[480px] font-mono text-[11.5px] break-all whitespace-pre-wrap">
+      <TooltipContent className="max-w-[480px] font-mono text-meta break-all whitespace-pre-wrap">
         {target}
       </TooltipContent>
     </Tooltip>
@@ -553,7 +553,7 @@ function PermissionPrompt({
               <Spinner data-icon="inline-start" className="size-3" />
             ) : (
               i < 4 && (
-                <span aria-hidden className="text-[11px] tabular opacity-55">
+                <span aria-hidden className="text-meta tabular opacity-55">
                   {i + 1}
                 </span>
               )

@@ -158,7 +158,7 @@ export const SessionRow = memo(function SessionRow({
       {hasChildren && !expanded && (
         <span
           aria-label={t('row.subSessions', { count: children.length })}
-          className="inline-flex items-center gap-0.5 text-[11.5px] text-tertiary tabular group-data-active/menu-button:text-secondary"
+          className="inline-flex items-center gap-0.5 text-meta text-tertiary tabular group-data-active/menu-button:text-secondary"
         >
           <CornerDownRightIcon className="size-[11px]!" />
           {children.length}

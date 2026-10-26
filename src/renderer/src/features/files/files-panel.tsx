@@ -485,7 +485,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
               title={row.text}
               onClick={() => openFile(projectPath, row.path, row.line)}
             >
-              <span className="w-8 shrink-0 text-right font-mono text-[11.5px] text-tertiary tabular">
+              <span className="w-8 shrink-0 text-right font-mono text-meta text-tertiary tabular">
                 {row.line}
               </span>
               <span className="truncate font-mono text-xs">

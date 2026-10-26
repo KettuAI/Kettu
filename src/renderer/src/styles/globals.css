@@ -3,7 +3,33 @@
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter/opsz.css';
 @import '@fontsource-variable/source-serif-4/opsz.css';
+@import '@fontsource-variable/source-serif-4/opsz-italic.css';
+@import '@fontsource-variable/jetbrains-mono/wght.css';
 @import './tokens.css';
+
+/* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
+   its Light. Each range takes the Regular, Medium or Semibold, or the nearest weight a face has. */
+@font-face {
+  font-family: 'Platform Chinese';
+  font-weight: 300 449;
+  src:
+    local('PingFang SC Regular'), local('PingFangSC-Regular'), local('Microsoft YaHei'),
+    local('MicrosoftYaHei'), local('Noto Sans CJK SC Regular'), local('NotoSansCJKsc-Regular');
+}
+@font-face {
+  font-family: 'Platform Chinese';
+  font-weight: 450 549;
+  src:
+    local('PingFang SC Medium'), local('PingFangSC-Medium'), local('Microsoft YaHei'),
+    local('MicrosoftYaHei'), local('Noto Sans CJK SC Medium'), local('NotoSansCJKsc-Medium');
+}
+@font-face {
+  font-family: 'Platform Chinese';
+  font-weight: 550 700;
+  src:
+    local('PingFang SC Semibold'), local('PingFangSC-Semibold'), local('Microsoft YaHei Bold'),
+    local('MicrosoftYaHei-Bold'), local('Noto Sans CJK SC Bold'), local('NotoSansCJKsc-Bold');
+}
 
 /* Streamdown and its code plugin style their elements with Tailwind classes. */
 @source '../../../../node_modules/streamdown/dist/*.js';
@@ -29,15 +55,16 @@
 }
 
 @theme inline {
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-serif);
   --font-sans:
-    'Inter Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
+    'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    system-ui, sans-serif;
   --font-mono:
-    ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
-  /* The New session heading only; Chinese falls through to the sans faces, as in the reference. */
+    'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  /* Titles and the agent's prose; Chinese falls through to the sans faces, as in the reference. */
   --font-serif:
-    'Source Serif 4 Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', ui-serif,
-    Georgia, serif;
+    'Source Serif 4 Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', ui-serif, Georgia, serif;
 
   /* The palette's own names, from tokens.css: bg-app, text-secondary, border-subtle, ... */
   --background-color-app: var(--bg-app);
@@ -183,21 +210,29 @@
   --container-thread: calc(50 * var(--prose-size) + 3rem);
   --text-ui: var(--ui-size);
   --text-prose--line-height: 1.45;
-  /* The type scale of the design system, used by Settings first. */
+  /* The type scale of the design system. Titles are the serif, through font-heading. */
   --text-greeting: 34px;
   --text-greeting--line-height: 40px;
   --text-greeting--letter-spacing: -0.01em;
-  --text-title: 22px;
-  --text-title--line-height: 28px;
-  --text-title--letter-spacing: -0.015em;
-  --text-heading: 16px;
+  --text-title: 24px;
+  --text-title--line-height: 30px;
+  --text-title--letter-spacing: -0.008em;
+  --text-heading: 18px;
   --text-heading--line-height: 24px;
+  --text-subheading: 16.5px;
+  --text-subheading--line-height: 22px;
+  --text-subheading--letter-spacing: -0.006em;
+  --text-group: 13.5px;
+  --text-group--line-height: 20px;
+  --text-group--letter-spacing: -0.003em;
   --text-small: 13px;
-  --text-small--line-height: 1.6;
+  --text-small--line-height: 1.5;
   --text-control: 14px;
   --text-control--line-height: 20px;
+  --text-command: 12.5px;
+  --text-command--line-height: 20px;
   --text-code: 12px;
-  --text-code--line-height: 18px;
+  --text-code--line-height: 20px;
   --text-meta: 11.5px;
   --text-meta--line-height: 16px;
 }
@@ -236,6 +271,12 @@
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
+  /* Diffs: code at the code step, separators in Inter. @pierre/diffs reads these in its shadow
+     root, where its own fallbacks are the platform's faces. */
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: var(--text-code);
+  --diffs-line-height: var(--text-code--line-height);
+  --diffs-header-font-family: var(--font-sans);
 }
 
 /* Light text on a dark surface looks heavier than it is. */
@@ -298,6 +339,17 @@
   }
   kbd {
     font-family: var(--font-mono);
+  }
+  /* JetBrains Mono's ligatures stay off, so -> and != show as typed. Diffs and the terminal draw
+     their text inside these hosts, which pass it on. */
+  code,
+  pre,
+  kbd,
+  samp,
+  .font-mono,
+  .diff,
+  .xterm {
+    font-variant-ligatures: none;
   }
 }
 
@@ -562,10 +614,15 @@
 
 /* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not in a layer, so they win over the utility
    classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
-   scales them; the spec's pixel values are those of the default 15 px. */
+   scales them; the spec's pixel values are those of the default 16.5 px. */
 .markdown {
-  font-size: var(--prose-size);
-  line-height: 1.45;
+  font-family: var(--font-serif);
+  /* The serif reads about a size smaller than Inter at the same pixel size. */
+  font-size: calc(var(--prose-size) * 1.1);
+  line-height: 1.56;
+  letter-spacing: -0.002em;
+  /* Italics are the serif's own; Chinese, which has none, stays upright. */
+  font-synthesis-style: none;
   color: var(--text-primary);
   overflow-wrap: anywhere;
   user-select: text;
@@ -588,9 +645,11 @@
   & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)) > :last-child {
     margin-bottom: 0;
   }
-  /* Media a block's file references name, under it (markdown-impl.tsx). */
+  /* Media a block's file references name, under it (markdown-impl.tsx). Its captions and
+     buttons are interface, so they stay Inter. */
   & :where([data-media-block]) {
     margin: 0 0 0.75em;
+    font-family: var(--font-sans);
   }
   & [data-media-block]:empty {
     display: none;
@@ -673,7 +732,7 @@
     color: var(--text-primary);
     padding: 0.1em 0.35em;
     font-family: var(--font-mono);
-    font-size: 0.8em;
+    font-size: 0.74em;
   }
 
   /* A file reference is a chip, not a link: its type's icon and its name, the path in its
@@ -770,8 +829,7 @@
     border-radius: 0;
     background: transparent;
     padding: 0 14px 12px;
-    font-size: 13px;
-    line-height: 1.6;
+    @apply text-code;
     overflow-x: auto;
   }
   & [data-streamdown='code-block-body'] pre {
@@ -851,16 +909,25 @@
   }
 }
 
-/* Thoughts and summaries: the same structure, quieter. */
+/* Thoughts, progress notes and summaries: the same structure, quieter. */
 .markdown-muted {
-  color: var(--muted-foreground);
-  font-size: 13px;
+  color: var(--text-tertiary);
+  font-size: calc(var(--prose-size) * 1.1 * 0.88);
+  line-height: 1.55;
+}
+/* A thought; notes and summaries stay upright, since they are messages. */
+.markdown-thought {
+  font-style: italic;
 }
 
-/* Tool output inside a card. */
+/* Tool output inside a card: what a tool returned, not the agent's writing, so Inter. */
 .markdown-compact {
+  font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.55;
+  letter-spacing: normal;
+  /* Inter's italic is not bundled. */
+  font-synthesis-style: auto;
 }
 
 /* Diffs sit on the code block surface, not on the Shiki theme's own background. Outer

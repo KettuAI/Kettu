@@ -86,7 +86,7 @@ export function StartingAgent({ agentId }: { agentId: AgentId }) {
         </span>
       </span>
       {progress.length > 0 && (
-        <div className="flex max-w-[560px] flex-col gap-0.5 font-mono text-[11.5px] text-tertiary">
+        <div className="flex max-w-[560px] flex-col gap-0.5 font-mono text-meta text-tertiary">
           {progress.slice(-3).map((line, i) => (
             <span
               key={`${i}-${line}`}
@@ -138,7 +138,7 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
         {progress && (
           <span
             key={progress}
-            className="truncate font-mono text-[11.5px] text-tertiary animate-in fade-in animation-duration-(--duration-base)"
+            className="truncate font-mono text-meta text-tertiary animate-in fade-in animation-duration-(--duration-base)"
           >
             {progress}
           </span>
@@ -189,7 +189,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
           {progress.slice(-3).map((line, i) => (
             <span
               key={`${i}-${line}`}
-              className="truncate font-mono text-[11.5px] text-tertiary animate-in fade-in animation-duration-(--duration-base)"
+              className="truncate font-mono text-meta text-tertiary animate-in fade-in animation-duration-(--duration-base)"
             >
               {line}
             </span>
@@ -244,7 +244,7 @@ export function FailedState({
       {detail && (
         <pre
           data-selectable=""
-          className="max-h-40 overflow-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-muted-foreground"
+          className="max-h-40 overflow-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-meta leading-relaxed whitespace-pre-wrap text-muted-foreground"
         >
           {detail}
         </pre>

@@ -641,7 +641,7 @@ function Figures({
   const figure = (label: string, value: ReactNode, note: string) => (
     <Card className="gap-1.5">
       <span className="text-xs text-tertiary">{label}</span>
-      <span className="text-[22px] leading-7 font-semibold tracking-[-0.015em]">{value}</span>
+      <span className="font-heading text-title font-semibold tabular-nums">{value}</span>
       <span className="text-xs text-pretty text-tertiary">{note}</span>
     </Card>
   )

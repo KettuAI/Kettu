@@ -469,7 +469,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
               : 'pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
           )}
         >
-          <DialogTitle className="min-w-0 truncate font-sans text-ui leading-normal">
+          <DialogTitle className="min-w-0 truncate font-sans text-ui leading-normal font-medium">
             {name}
           </DialogTitle>
           {facts.length > 0 && (

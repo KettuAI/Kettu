@@ -88,7 +88,8 @@ function Link(props: ComponentProps<'a'> & ExtraProps) {
   const local = localTarget(raw)
   const href = local ?? raw
   const file = useFileRef(href)
-  if (GITHUB_PULL_REQUEST_URL.test(href)) return <PrChip url={href} />
+  // A chip is interface, so it keeps Inter in the serif prose.
+  if (GITHUB_PULL_REQUEST_URL.test(href)) return <PrChip url={href} className="font-sans" />
   if (file) return <FileLink file={file} />
   // A local path that is not one of the project's files has nowhere to go, and main opens
   // nothing but web links.

@@ -35,8 +35,8 @@ export function PrDetails({ pr }: { pr: PullRequest }) {
             i18nKey="pr.summary"
             values={{ state: prStateText(pr.state) }}
             components={{
-              head: <span className="font-mono text-[11.5px]">{pr.head}</span>,
-              base: <span className="font-mono text-[11.5px]">{pr.base}</span>,
+              head: <span className="font-mono text-meta">{pr.head}</span>,
+              base: <span className="font-mono text-meta">{pr.base}</span>,
             }}
           />
         </span>
