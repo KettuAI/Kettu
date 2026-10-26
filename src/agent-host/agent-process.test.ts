@@ -9,13 +9,26 @@ import { describe, expect, it } from 'vitest'
 import { applyPatches, threadFromSnapshot, type ThreadState } from '@shared/thread'
 import { AgentConnection, type ConnectionHooks, type SessionTarget } from './acp/connection'
 import { newTurnScope } from './acp/mapper'
-import { spawnAgent, spawnArguments } from './agent-process'
+import { spawnAgent, spawnArguments, STOP_TIMINGS } from './agent-process'
 import { processLauncher, type AgentLauncher } from './agents'
 import type { LaunchSpec } from './catalog'
-import { processControl, runTool, type ProcessControl, type ToolOptions } from './process-tree'
+import {
+  processControl,
+  runTool,
+  toolLimits,
+  type ProcessControl,
+  type ToolOptions,
+} from './process-tree'
 import { startTestHost } from './testing/harness'
 
 const FAKE_AGENT = path.resolve('tools/fake-agent/main.ts')
+const LIMITS = toolLimits(process.platform)
+// A stop lists the tree before it ends the agent, waits for EOF to end it, lists again for what it
+// left and runs taskkill; each tool may take its full limit.
+const STOP_WAIT_MS = 2 * LIMITS.listMs + LIMITS.taskkillMs + STOP_TIMINGS.eofMs + 5_000
+// A note lists the tree once, and a reap lists it once more before taskkill.
+const NOTE_WAIT_MS = LIMITS.listMs + 5_000
+const REAP_WAIT_MS = LIMITS.listMs + LIMITS.taskkillMs + 5_000
 
 function spec(env: Record<string, string> = {}): LaunchSpec {
   return {
@@ -440,43 +453,55 @@ describe('what an agent leaves behind', () => {
     return { t, port, sessionId: created.id, pids, cleanUp }
   }
 
-  it('stops a child in a process group of its own when the agent stops', async () => {
-    const { t, pids, cleanUp } = await hostWith('detached')
-    try {
-      await t.host.agents.stop('fake-agent')
-      expect(await until(() => !pids.some(alive), 5_000)).toBe(true)
-    } finally {
-      await cleanUp()
-    }
-  })
+  it(
+    'stops a child in a process group of its own when the agent stops',
+    async () => {
+      const { t, pids, cleanUp } = await hostWith('detached')
+      try {
+        const started = Date.now()
+        await t.host.agents.stop('fake-agent')
+        const left = Math.max(0, STOP_WAIT_MS - (Date.now() - started))
+        expect(await until(() => !pids.some(alive), left)).toBe(true)
+      } finally {
+        await cleanUp()
+      }
+    },
+    STOP_WAIT_MS + 60_000,
+  )
 
-  it('stops what is left under its group when the agent crashes', async () => {
-    const { t, port, sessionId, pids, cleanUp } = await hostWith('nested')
-    const file = path.join(t.dir, 'state', 'agent-processes.json')
-    const recorded = (): number[] =>
-      (JSON.parse(readFileSync(file, 'utf8')) as { processes: { pid: number }[] }).processes.map(
-        (entry) => entry.pid,
-      )
-    try {
-      expect(pids).toHaveLength(2)
-      // On Windows the child ends with the agent, so only a listing taken while the agent ran
-      // leads to the grandchild; the turn's traffic brings one.
-      await port.request('sessions.prompt', {
-        sessionId,
-        content: [{ type: 'text', text: 'hello' }],
-      })
-      await port.untilStatus(sessionId, 'ready')
-      expect(await until(() => pids.every((pid) => recorded().includes(pid)), 10_000)).toBe(true)
-      await port.request('sessions.prompt', {
-        sessionId,
-        content: [{ type: 'text', text: '/crash' }],
-      })
-      await port.untilStatus(sessionId, 'closed')
-      expect(await until(() => !pids.some(alive), 5_000)).toBe(true)
-    } finally {
-      await cleanUp()
-    }
-  })
+  it(
+    'stops what is left under its group when the agent crashes',
+    async () => {
+      const { t, port, sessionId, pids, cleanUp } = await hostWith('nested')
+      const file = path.join(t.dir, 'state', 'agent-processes.json')
+      const recorded = (): number[] =>
+        (JSON.parse(readFileSync(file, 'utf8')) as { processes: { pid: number }[] }).processes.map(
+          (entry) => entry.pid,
+        )
+      try {
+        expect(pids).toHaveLength(2)
+        // On Windows the child ends with the agent, so only a listing taken while the agent ran
+        // leads to the grandchild; the turn's traffic brings one.
+        await port.request('sessions.prompt', {
+          sessionId,
+          content: [{ type: 'text', text: 'hello' }],
+        })
+        await port.untilStatus(sessionId, 'ready')
+        expect(await until(() => pids.every((pid) => recorded().includes(pid)), NOTE_WAIT_MS)).toBe(
+          true,
+        )
+        await port.request('sessions.prompt', {
+          sessionId,
+          content: [{ type: 'text', text: '/crash' }],
+        })
+        await port.untilStatus(sessionId, 'closed')
+        expect(await until(() => !pids.some(alive), REAP_WAIT_MS)).toBe(true)
+      } finally {
+        await cleanUp()
+      }
+    },
+    NOTE_WAIT_MS + REAP_WAIT_MS + 60_000,
+  )
 })
 
 describe('leftovers of the last run', () => {
