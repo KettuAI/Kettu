@@ -286,7 +286,9 @@ export function LinkRow({
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-ui font-medium">{name}</span>
         {error ? (
-          <span className="text-xs text-danger">{error}</span>
+          <span className="truncate text-xs text-danger" title={error}>
+            {error}
+          </span>
         ) : (
           <span className="truncate text-xs text-tertiary">
             {detail ?? target.url?.replace(/^https?:\/\//, '')}
