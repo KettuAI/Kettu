@@ -668,42 +668,26 @@ export function projectRows(
 }
 
 export interface Preset {
-  id:
-    | 'today'
-    | 'yesterday'
-    | 'thisWeek'
-    | 'lastWeek'
-    | 'thisMonth'
-    | 'lastMonth'
-    | 'last7'
-    | 'last30'
-    | 'last90'
-    | 'thisYear'
-    | 'allTime'
+  id: 'yesterday' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'thisYear'
   /** Local day starts, both ends included. */
   from: number
   to: number
 }
 
-/** The picker's presets for `today`; `first` is the first day with usage, if any. */
-export function presets(today: number, firstDay: number, first: number | null): Preset[] {
+/** The picker's presets for `today`: periods that start where the calendar's do. */
+export function presets(today: number, firstDay: number): Preset[] {
   const date = new Date(today)
   const week = weekStartOf(today, firstDay)
   const month = new Date(date.getFullYear(), date.getMonth(), 1).getTime()
   const lastMonth = new Date(date.getFullYear(), date.getMonth() - 1, 1).getTime()
   const year = new Date(date.getFullYear(), 0, 1).getTime()
   return [
-    { id: 'today', from: today, to: today },
     { id: 'yesterday', from: addDays(today, -1), to: addDays(today, -1) },
     { id: 'thisWeek', from: week, to: today },
     { id: 'lastWeek', from: addDays(week, -7), to: addDays(week, -1) },
     { id: 'thisMonth', from: month, to: today },
     { id: 'lastMonth', from: lastMonth, to: addDays(month, -1) },
-    { id: 'last7', from: addDays(today, -6), to: today },
-    { id: 'last30', from: addDays(today, -29), to: today },
-    { id: 'last90', from: addDays(today, -89), to: today },
     { id: 'thisYear', from: year, to: today },
-    { id: 'allTime', from: first === null ? today : Math.min(dayOf(first), today), to: today },
   ]
 }
 

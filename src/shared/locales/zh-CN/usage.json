@@ -161,17 +161,12 @@
     "button": "自定义",
     "label": "选择时间范围",
     "presets": {
-      "today": "今天",
       "yesterday": "昨天",
       "thisWeek": "本周",
       "lastWeek": "上周",
       "thisMonth": "本月",
       "lastMonth": "上个月",
-      "last7": "近 7 天",
-      "last30": "近 30 天",
-      "last90": "近 90 天",
-      "thisYear": "今年",
-      "allTime": "全部时间"
+      "thisYear": "今年"
     },
     "start": "开始",
     "end": "结束",

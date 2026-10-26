@@ -115,8 +115,20 @@ describe('days', () => {
   })
 
   it('offers presets for the picker', () => {
-    const byId = Object.fromEntries(presets(TODAY, 1, null).map((p) => [p.id, p]))
+    const list = presets(TODAY, 1)
+    expect(list.map((preset) => preset.id)).toEqual([
+      'yesterday',
+      'thisWeek',
+      'lastWeek',
+      'thisMonth',
+      'lastMonth',
+      'thisYear',
+    ])
+    const byId = Object.fromEntries(list.map((p) => [p.id, p]))
+    expect(byId.yesterday).toMatchObject({ from: day(2026, 10, 21), to: day(2026, 10, 21) })
+    expect(byId.thisWeek).toMatchObject({ from: day(2026, 10, 19), to: TODAY })
     expect(byId.lastWeek).toMatchObject({ from: day(2026, 10, 12), to: day(2026, 10, 18) })
+    expect(byId.thisMonth).toMatchObject({ from: day(2026, 10, 1), to: TODAY })
     expect(byId.lastMonth).toMatchObject({ from: day(2026, 9, 1), to: day(2026, 9, 30) })
     expect(byId.thisYear).toMatchObject({ from: day(2026, 1, 1), to: TODAY })
   })
