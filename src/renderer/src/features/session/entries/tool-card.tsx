@@ -44,6 +44,7 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { Clamp } from '../clamp'
 import { Diff, Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
+import { CarriedMedia } from '../media/carried-media'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { LocalMedia } from '../media/local-media'
 import { toolMedia } from '../media/named'
@@ -447,6 +448,18 @@ function ContentBlock({
               mimeType={content.ref.mimeType}
               data={content.ref.data}
               className="max-h-40 max-w-full rounded-lg shadow-card"
+            />
+          </div>
+        )
+      }
+      if (content.ref.kind === 'audio' || content.ref.kind === 'video') {
+        return (
+          <div className={cn(framed && 'px-3 py-2')}>
+            <CarriedMedia
+              sessionId={sessionId}
+              entryId={entryId}
+              index={index}
+              carried={content.ref}
             />
           </div>
         )

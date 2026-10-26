@@ -184,6 +184,41 @@ describe('threadItems', () => {
     ])
   })
 
+  it('takes the clips the thread carries, by their names, and leaves its sounds out', () => {
+    const clip = {
+      kind: 'video' as const,
+      mimeType: 'video/mp4',
+      data: 'AAAA',
+      size: 3,
+      name: 'demo.mp4',
+    }
+    const sound = {
+      kind: 'audio' as const,
+      mimeType: 'audio/wav',
+      data: 'AAAA',
+      size: 3,
+      name: null,
+    }
+    const thread = state([
+      tool('t1', [
+        { type: 'ref', ref: sound },
+        { type: 'ref', ref: clip },
+      ]),
+      {
+        kind: 'agent',
+        id: 'a1',
+        markdown: 'Here',
+        attachments: [{ ...clip, name: null }],
+        streaming: false,
+      },
+    ])
+    const bytes = { kind: 'bytes', media: 'video', mimeType: 'video/mp4', data: 'AAAA' }
+    expect(threadItems(thread).map((item) => [item.key, item.name, item.source])).toEqual([
+      ['t1:ref:1', 'demo.mp4', bytes],
+      ['a1:ref:0', null, bytes],
+    ])
+  })
+
   it('counts a forwarded message by all its refs, attachments shown as chips', () => {
     const thread = state([
       {

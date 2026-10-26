@@ -1,5 +1,5 @@
 import { useContext, useState, type ReactNode } from 'react'
-import { FolderIcon, Maximize2Icon } from 'lucide-react'
+import { FileDownIcon, FolderIcon, Maximize2Icon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { MediaGrant } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
@@ -9,47 +9,42 @@ import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { bytes as formatBytes, clock } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName } from '@renderer/lib/platform'
+import { saveCarried, type PlayedMedia } from './carried'
 import { showFileAction } from './show-file'
-
-/** Shows a project file in the Files pane, any other in the file manager. */
-function useShowFile(path: string, grant: MediaGrant) {
-  const { t } = useTranslation('session')
-  const projectPath = useContext(ProjectPathContext)
-  const action = showFileAction(path, projectPath, grant.url)
-  return {
-    label: action.inFiles ? t('media.showInFiles') : t('media.showIn', { name: fileManagerName() }),
-    show: action.show,
-  }
-}
 
 /**
  * The row under a clip or a sound: its type icon, name, length and size, then on hover or focus
- * Open larger, for a clip, and Show in Files or the file manager.
+ * Open larger, for a clip, and Show in Files or the file manager, or Save as… for carried bytes,
+ * which have no file to show.
  */
 export function MediaCaption({
-  path,
+  media,
   name,
-  grant,
   seconds,
   onOpenLarger,
 }: {
-  path: string
+  media: PlayedMedia
   name: string
-  grant: MediaGrant
   seconds: number | null
   onOpenLarger?: () => void
 }) {
   const { t } = useTranslation('session')
-  const showFile = useShowFile(path, grant)
   const [error, setError] = useState<string | null>(null)
+  const run = (action: () => Promise<unknown>) => {
+    setError(null)
+    action().catch((e: unknown) => setError(errorMessage(e)))
+  }
   const meta = [seconds !== null && Number.isFinite(seconds) ? clock(seconds) : null]
-    .concat(formatBytes(grant.size))
+    .concat(formatBytes(media.kind === 'file' ? media.grant.size : media.size))
     .filter(Boolean)
     .join(' · ')
   return (
     <span className="mt-1.5 flex h-6 min-w-0 items-center gap-1.5 text-small">
       <FileTypeIcon path={name} className="size-3 shrink-0" />
-      <span className="min-w-0 truncate text-muted-foreground" title={path}>
+      <span
+        className="min-w-0 truncate text-muted-foreground"
+        title={media.kind === 'file' ? media.path : name}
+      >
         {name}
       </span>
       <span className="shrink-0 text-meta text-tertiary tabular">{meta}</span>
@@ -60,17 +55,43 @@ export function MediaCaption({
             <Maximize2Icon />
           </CaptionButton>
         )}
-        <CaptionButton
-          label={showFile.label}
-          onClick={() => {
-            setError(null)
-            showFile.show().catch((e: unknown) => setError(errorMessage(e)))
-          }}
-        >
-          <FolderIcon />
-        </CaptionButton>
+        {media.kind === 'file' ? (
+          <ShowFileButton path={media.path} grant={media.grant} run={run} />
+        ) : (
+          <CaptionButton
+            label={t('media.saveAs')}
+            onClick={() => run(() => saveCarried(media.mimeType, media.data, name))}
+          >
+            <FileDownIcon />
+          </CaptionButton>
+        )}
       </span>
     </span>
+  )
+}
+
+/** Shows a project file in the Files pane, any other in the file manager. */
+function ShowFileButton({
+  path,
+  grant,
+  run,
+}: {
+  path: string
+  grant: MediaGrant
+  run: (action: () => Promise<unknown>) => void
+}) {
+  const { t } = useTranslation('session')
+  const projectPath = useContext(ProjectPathContext)
+  const action = showFileAction(path, projectPath, grant.url)
+  return (
+    <CaptionButton
+      label={
+        action.inFiles ? t('media.showInFiles') : t('media.showIn', { name: fileManagerName() })
+      }
+      onClick={() => run(action.show)}
+    >
+      <FolderIcon />
+    </CaptionButton>
   )
 }
 

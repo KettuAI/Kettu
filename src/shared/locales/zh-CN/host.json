@@ -202,7 +202,8 @@
     "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个"
   },
   "content": {
-    "audio": "音频（{{type}}）",
+    "audioTooLarge": "音频，{{size}}，太大，无法显示",
+    "videoTooLarge": "视频，{{size}}，太大，无法显示",
     "image": "图片 {{number}}",
     "resource": "嵌入资源 {{uri}}",
     "text": "文本",

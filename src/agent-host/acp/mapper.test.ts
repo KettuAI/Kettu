@@ -13,6 +13,8 @@ import codexReplay from './fixtures/replay-codex.json'
 import opencodeReplay from './fixtures/replay-opencode.json'
 import {
   addTokenTotals,
+  CARRIED_DATA_LIMIT,
+  contentRef,
   mapAuthStatus,
   mapConfig,
   mapModelUsage,
@@ -138,10 +140,69 @@ describe('message chunks', () => {
       attachments: [
         { kind: 'image', mimeType: 'image/png', data: 'AA' },
         { kind: 'link', uri: 'file:///x.md', name: 'X' },
-        { kind: 'unsupported', label: 'Audio (audio/wav)' },
+        { kind: 'audio', mimeType: 'audio/wav', data: 'AA', size: 1, name: null },
         { kind: 'unsupported', label: 'Embedded resource file:///n.txt' },
       ],
     })
+  })
+
+  it('keeps sounds and clips with their bytes, from audio blocks and resource blobs', () => {
+    const blob = (mimeType: string) => ({
+      type: 'resource' as const,
+      resource: { uri: 'file:///out/x', mimeType, blob: 'AAAAAA==' },
+    })
+    expect(contentRef({ type: 'audio', mimeType: 'audio/mpeg', data: 'AAAA' })).toEqual({
+      kind: 'audio',
+      mimeType: 'audio/mpeg',
+      data: 'AAAA',
+      size: 3,
+      name: null,
+    })
+    // A resource is named by the file its URI ends in.
+    expect(contentRef(blob('video/mp4'))).toEqual({
+      kind: 'video',
+      mimeType: 'video/mp4',
+      data: 'AAAAAA==',
+      size: 4,
+      name: 'x',
+    })
+    expect(
+      contentRef({
+        type: 'resource',
+        resource: { uri: 'file:///out/my%20clip.webm', mimeType: 'video/webm', blob: 'AAAA' },
+      }),
+    ).toMatchObject({ name: 'my clip.webm' })
+    expect(contentRef(blob('Audio/Ogg'))).toMatchObject({ kind: 'audio', mimeType: 'Audio/Ogg' })
+    // Pictures and text in a resource stay as they were, and so does a sound without its bytes.
+    expect(contentRef(blob('image/png'))).toEqual({
+      kind: 'unsupported',
+      label: 'Embedded resource file:///out/x',
+    })
+    expect(
+      contentRef({
+        type: 'resource',
+        resource: { uri: 'file:///out/a.wav', mimeType: 'audio/wav', text: 'not bytes' },
+      }),
+    ).toMatchObject({ kind: 'unsupported' })
+  })
+
+  it('names a sound or a clip over 20 MB of base64 by its kind and size instead', () => {
+    const edge = 'A'.repeat(CARRIED_DATA_LIMIT)
+    expect(contentRef({ type: 'audio', mimeType: 'audio/wav', data: edge })).toMatchObject({
+      kind: 'audio',
+      size: (CARRIED_DATA_LIMIT / 4) * 3,
+    })
+    const over = edge + 'AAAA'
+    expect(contentRef({ type: 'audio', mimeType: 'audio/wav', data: over })).toEqual({
+      kind: 'unsupported',
+      label: 'Audio, 16 MB, too large to show',
+    })
+    expect(
+      contentRef({
+        type: 'resource',
+        resource: { uri: 'file:///big.mp4', mimeType: 'video/mp4', blob: over },
+      }),
+    ).toEqual({ kind: 'unsupported', label: 'Video, 16 MB, too large to show' })
   })
 
   it('starts an agent entry from an attachment alone', () => {
@@ -439,6 +500,37 @@ describe('replayed attachments', () => {
 })
 
 describe('tool calls', () => {
+  it('keeps a sound or a clip in the content of a call', () => {
+    const { entries } = run([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'c1',
+        title: 'Render',
+        kind: 'other',
+        status: 'completed',
+        content: [
+          { type: 'content', content: { type: 'audio', mimeType: 'audio/wav', data: 'AAAA' } },
+          {
+            type: 'content',
+            content: {
+              type: 'resource',
+              resource: { uri: 'file:///out/clip.mp4', mimeType: 'video/mp4', blob: 'AAAA' },
+            },
+          },
+        ],
+      },
+    ])
+    expect(entries[0]).toMatchObject({
+      content: [
+        { type: 'ref', ref: { kind: 'audio', mimeType: 'audio/wav', data: 'AAAA', size: 3 } },
+        {
+          type: 'ref',
+          ref: { kind: 'video', mimeType: 'video/mp4', data: 'AAAA', size: 3, name: 'clip.mp4' },
+        },
+      ],
+    })
+  })
+
   it('adds a call, updates only the fields present and replaces lists', () => {
     const { entries, effects } = run([
       {

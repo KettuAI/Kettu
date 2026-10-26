@@ -349,7 +349,10 @@
     "openLarger": "Open larger",
     "showInFiles": "Show in Files",
     "showIn": "Show in {{name}}",
-    "openWithDefault": "Open with default app"
+    "openWithDefault": "Open with default app",
+    "saveAs": "Save as…",
+    "sound": "Sound",
+    "video": "Video"
   },
   "viewer": {
     "image": "Image",

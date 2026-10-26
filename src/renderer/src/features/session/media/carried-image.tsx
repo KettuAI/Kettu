@@ -37,7 +37,12 @@ export function CarriedImage({
           sessionId,
           projectPath,
           draft: sessionId,
-          item: { key, source: { kind: 'bytes', mimeType, data }, name: null, alt: '' },
+          item: {
+            key,
+            source: { kind: 'bytes', media: 'image', mimeType, data },
+            name: null,
+            alt: '',
+          },
           from: event.currentTarget,
         })
       }

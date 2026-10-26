@@ -37,6 +37,7 @@ import { Clamp } from '../clamp'
 import { ConfirmedLink } from '../link-confirm'
 import { Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
+import { CarriedMedia } from '../media/carried-media'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
@@ -146,6 +147,14 @@ export const AgentEntry = memo(function AgentEntry({
                 mimeType={ref.mimeType}
                 data={ref.data}
                 className="max-h-72 max-w-full rounded-lg shadow-card"
+              />
+            ) : ref.kind === 'audio' || ref.kind === 'video' ? (
+              <CarriedMedia
+                key={i}
+                sessionId={sessionId}
+                entryId={entryId}
+                index={i}
+                carried={ref}
               />
             ) : (
               <RefChip key={i} contentRef={ref} />

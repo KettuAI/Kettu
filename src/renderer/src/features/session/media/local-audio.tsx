@@ -1,27 +1,29 @@
-import { useEffect, useState } from 'react'
-import type { MediaGrant } from '@shared/media'
+import { useEffect, useMemo, useState } from 'react'
+import { playedUrl, type PlayedMedia } from './carried'
 import { playerFailure } from './failure'
 import { MediaCaption } from './media-caption'
 import { playOneAtATime } from './playback'
 
-/** A sound a reply names, with Chromium's audio controls, as wide as the column up to 420 px. */
+/**
+ * A sound a reply names or the thread carries, with Chromium's audio controls, as wide as the
+ * column up to 420 px.
+ */
 export function LocalAudio({
-  path,
+  media,
   name,
-  grant,
   onFailed,
 }: {
-  path: string
+  media: PlayedMedia
   name: string
-  grant: MediaGrant
   onFailed: (message: string | null) => void
 }) {
   const [seconds, setSeconds] = useState<number | null>(null)
+  const src = useMemo(() => playedUrl(media), [media])
   useEffect(playOneAtATime, [])
   return (
     <span className="group/media block w-full max-w-[420px]">
       <audio
-        src={grant.url}
+        src={src}
         controls
         controlsList="nodownload"
         preload="metadata"
@@ -30,7 +32,7 @@ export function LocalAudio({
         onError={(event) => onFailed(playerFailure(event.currentTarget))}
         className="block w-full"
       />
-      <MediaCaption path={path} name={name} grant={grant} seconds={seconds} />
+      <MediaCaption media={media} name={name} seconds={seconds} />
     </span>
   )
 }

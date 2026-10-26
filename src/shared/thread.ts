@@ -247,6 +247,9 @@ export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refu
 export type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: ContentRef }
 export type ContentRef =
   | { kind: 'image'; mimeType: string; data: string }
+  // A sound or a clip the conversation carries, `size` its bytes; `name` from a resource's URI.
+  | { kind: 'audio'; mimeType: string; data: string; size: number; name: string | null }
+  | { kind: 'video'; mimeType: string; data: string; size: number; name: string | null }
   | { kind: 'link'; uri: string; name: string }
   | { kind: 'attachment'; attachment: Attachment } // what the user added, see attachments
   | { kind: 'unsupported'; label: string }
@@ -494,6 +497,14 @@ function isContentRef(value: unknown): value is ContentRef {
   switch (value.kind) {
     case 'image':
       return typeof value.mimeType === 'string' && typeof value.data === 'string'
+    case 'audio':
+    case 'video':
+      return (
+        typeof value.mimeType === 'string' &&
+        typeof value.data === 'string' &&
+        typeof value.size === 'number' &&
+        (value.name === null || typeof value.name === 'string')
+      )
     case 'link':
       return typeof value.uri === 'string' && typeof value.name === 'string'
     case 'attachment':

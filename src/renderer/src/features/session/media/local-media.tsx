@@ -134,9 +134,8 @@ export function LocalMedia({
     if (grant.kind === 'video') {
       return (
         <LocalVideo
-          path={path}
+          media={{ kind: 'file', path, grant }}
           name={name}
-          grant={grant}
           viewerKey={viewerKey}
           onOpen={open}
           onFailed={(message) => failed(grant, message)}
@@ -146,9 +145,8 @@ export function LocalMedia({
     if (grant.kind === 'audio') {
       return (
         <LocalAudio
-          path={path}
+          media={{ kind: 'file', path, grant }}
           name={name}
-          grant={grant}
           onFailed={(message) => failed(grant, message)}
         />
       )
@@ -198,12 +196,6 @@ function MediaState({
       {t('common:actions.retry')}
     </Button>
   )
-  const title = (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <FileTypeIcon path={name} className="size-3.5 shrink-0" />
-      <span className="truncate">{name}</span>
-    </span>
-  )
   if (shown.kind === 'failed') {
     return (
       <Placeholder
@@ -219,12 +211,18 @@ function MediaState({
     )
   }
   if (shown.kind === 'missing') {
-    return <Placeholder title={title} detail={t('media.notFound', { path })} action={retryButton} />
+    return (
+      <Placeholder
+        title={<MediaTitle name={name} />}
+        detail={t('media.notFound', { path })}
+        action={retryButton}
+      />
+    )
   }
   const { grant } = shown
   return (
     <Placeholder
-      title={title}
+      title={<MediaTitle name={name} />}
       detail={
         <>
           <UnsupportedReason kind={grant.kind} />
@@ -233,6 +231,16 @@ function MediaState({
       }
       action={<PlayElsewhere url={grant.url} onError={setError} />}
     />
+  )
+}
+
+/** A state's title: the item's type icon and name. */
+export function MediaTitle({ name }: { name: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <FileTypeIcon path={name} className="size-3.5 shrink-0" />
+      <span className="truncate">{name}</span>
+    </span>
   )
 }
 
@@ -271,7 +279,7 @@ export function PlayElsewhere({
 }
 
 /** A state in the item's place: at least 96 px high, with what happened and what to do. */
-function Placeholder({
+export function Placeholder({
   title,
   detail,
   action,
