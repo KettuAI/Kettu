@@ -26,11 +26,22 @@ import { satisfiesNode, type ConfigFolder, type NodeProbe } from './shell-env'
 import { compareVersions } from './versions'
 
 export type LaunchKind =
-  // Installed from npm into the data directory and run on the user's Node.js.
-  | { kind: 'package'; package: string; version: string }
+  // Installed from npm into the data directory and run on the user's Node.js. With `perSession`,
+  // through the session router, which gives each session an adapter process of its own.
+  | { kind: 'package'; package: string; version: string; perSession?: true }
   | { kind: 'binary'; command: string; args: string[] }
   // A script run with Electron's own Node.js, so it needs no Node.js on the machine.
   | { kind: 'node-script'; script: string }
+
+/** A program the adapter runs, which the user installs beside it. */
+export interface AgentRequires {
+  /** The command looked up on PATH. */
+  command: string
+  /** The oldest version the adapter runs. */
+  minimum: string
+  /** The variable the adapter reads to run it instead. */
+  variable: string
+}
 
 export interface AgentDefinition {
   id: AgentId
@@ -38,7 +49,26 @@ export interface AgentDefinition {
   registryId: string
   launch: LaunchKind
   requiresNode?: string
+  /** A program the adapter runs and the user installs, such as pi's `pi` (pi-acp 0.0.34). */
+  requires?: AgentRequires
+  /** Variables every launch adds (pi-acp 0.0.34 reads PI_ACP_ENABLE_EMBEDDED_CONTEXT). */
+  env?: Record<string, string>
   install: { hint: HostKey; url: string }
+  /**
+   * Its terminal sign-in runs the `requires` program alone, without the launch's variables
+   * (pi-acp 0.0.34's `pi_terminal_login` only runs `pi --terminal-login`).
+   */
+  signInWithCli?: true
+  /**
+   * Sends its thought levels again as legacy `modes`, which the host ignores, so no mode picker
+   * repeats them (pi-acp 0.0.34's `thought_level` option).
+   */
+  levelsAsModes?: true
+  /**
+   * Sends the agent's startup note as the session's first `agent_message_chunk` after
+   * `session/new`, which the host drops (pi-acp 0.0.34's `_meta.piAcp.startupInfo`).
+   */
+  startupNote?: true
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
   /**
@@ -99,6 +129,28 @@ export const CODEX: AgentDefinition = {
   configVariable: CONFIG_VARIABLES.codex,
 }
 
+export const PI: AgentDefinition = {
+  id: 'pi',
+  name: 'Pi',
+  registryId: 'pi-acp',
+  // pi-acp keeps one live session per process, so every session gets an adapter process of its own.
+  launch: { kind: 'package', package: 'pi-acp', version: '0.0.34', perSession: true },
+  requiresNode: '>=22',
+  requires: { command: 'pi', minimum: '0.81.0', variable: 'PI_ACP_PI_COMMAND' },
+  // pi-acp 0.0.34 advertises embedded context only with this set, so attached files keep their text.
+  env: { PI_ACP_ENABLE_EMBEDDED_CONTEXT: 'true' },
+  // pi-acp 0.0.34's one auth method just runs `pi`, so the sign-in command is `pi` alone.
+  signInWithCli: true,
+  // pi-acp 0.0.34 sends its thought levels again as legacy modes.
+  levelsAsModes: true,
+  // pi-acp 0.0.34 sends pi's startup note as the session's first agent message.
+  startupNote: true,
+  install: {
+    hint: 'detect.hint.pi',
+    url: 'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/quickstart.md',
+  },
+}
+
 export const OPENCODE: AgentDefinition = {
   id: 'opencode',
   name: 'OpenCode',
@@ -136,7 +188,7 @@ export function fakeAgent(script: string): AgentDefinition {
 
 /** The catalog; the fake agent exists only when main passes its path. */
 export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
-  const catalog = [CLAUDE_CODE, CODEX, OPENCODE]
+  const catalog = [CLAUDE_CODE, CODEX, OPENCODE, PI]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
 }
@@ -188,10 +240,16 @@ export function displayCommand(
   electronPath: string,
   binaryOverride: string | null,
   adaptersDir: string,
+  sessionRouterPath: string | null = null,
 ): CommandWords {
   switch (def.launch.kind) {
-    case 'package':
-      return { command: 'node', args: [packageDir(adaptersDir, def) ?? ''], env: {} }
+    case 'package': {
+      const entry = packageDir(adaptersDir, def) ?? ''
+      // A per-session agent reads as the router's own command line.
+      const args =
+        def.launch.perSession && sessionRouterPath ? [sessionRouterPath, 'node', entry] : [entry]
+      return { command: 'node', args, env: { ...def.env } }
+    }
     case 'binary':
       return { command: binaryOverride ?? def.launch.command, args: def.launch.args, env: {} }
     case 'node-script':
@@ -226,35 +284,52 @@ export interface AdapterPlan {
 
 export type Detection =
   // `spec` is null for a package agent until its pinned version, or a newer one, is installed.
-  | { state: 'available'; spec: LaunchSpec | null; adapter: AdapterPlan | null }
+  | {
+      state: 'available'
+      spec: LaunchSpec | null
+      adapter: AdapterPlan | null
+      /** A `requires` program that was found, and the version it printed. */
+      requires?: { program: string; version: string }
+    }
   | { state: 'not-installed' | 'node-missing' | 'node-outdated'; detail: string }
 
-/** `node <entry>`, never through a shell unless `node` itself is a `.cmd` shim. */
+/** `node <entry>`, or `node <router> node <entry>` for a per-session agent. */
 export function packageSpec(
   node: string,
   entry: string,
   platform: Platform,
   env: Record<string, string> = {},
+  prefix: string[] = [],
 ): LaunchSpec {
+  const args = [...prefix, entry]
   return {
     command: node,
-    args: [entry],
+    args,
     env,
     shell: needsShell(node, platform),
-    display: { command: node, args: [entry], env },
+    display: { command: node, args, env },
   }
 }
 
-/** `node <entry>` for an installed adapter, with what the agent's `launchEnv` finds in it. */
+/** `node <entry>` for an installed adapter, with what its `launchEnv` and `requires` add. */
 export async function installedSpec(
   def: AgentDefinition,
   node: string,
   installed: InstalledAdapter,
   lookup: Omit<AdapterLookup, 'dir' | 'entry'>,
+  extraEnv: Record<string, string> = {},
+  sessionRouterPath: string | null = null,
 ): Promise<LaunchSpec> {
-  const env =
-    (await def.launchEnv?.({ ...lookup, dir: installed.dir, entry: installed.entry })) ?? {}
-  return packageSpec(node, installed.entry, lookup.platform, env)
+  const env = {
+    ...def.env,
+    ...extraEnv,
+    ...(await def.launchEnv?.({ ...lookup, dir: installed.dir, entry: installed.entry })),
+  }
+  const prefix =
+    def.launch.kind === 'package' && def.launch.perSession && sessionRouterPath
+      ? [sessionRouterPath, node]
+      : []
+  return packageSpec(node, installed.entry, lookup.platform, env, prefix)
 }
 
 export interface DetectContext {
@@ -265,6 +340,8 @@ export interface DetectContext {
   node: NodeProbe
   /** `<userData>/agents`, where package agents are installed. */
   adaptersDir: string
+  /** The session router every per-session agent launches through; null in a test without one. */
+  sessionRouterPath?: string | null
   isExecutable(file: string): Promise<boolean>
   isFile?(file: string): Promise<boolean>
   realpath?(file: string): Promise<string>
@@ -287,7 +364,13 @@ async function isFile(file: string): Promise<boolean> {
 
 /** Finds what an agent needs without starting it, so it can run at startup and on demand. */
 export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Promise<Detection> {
-  const display = displayCommand(def, ctx.electronPath, ctx.binaryOverride, ctx.adaptersDir)
+  const display = displayCommand(
+    def,
+    ctx.electronPath,
+    ctx.binaryOverride,
+    ctx.adaptersDir,
+    ctx.sessionRouterPath ?? null,
+  )
   const launch = def.launch
   switch (launch.kind) {
     case 'package': {
@@ -324,6 +407,57 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           detail: t('detect.npmMissing', { agent: def.name, hint: t(def.install.hint) }),
         }
       }
+      // A program the adapter runs, which the user installs: pi-acp needs the user's own `pi`.
+      let requires: { program: string; version: string } | null = null
+      if (def.requires) {
+        const hint = t(def.install.hint)
+        const program = await findCommand(def.requires.command, ctx)
+        if (!program) {
+          return {
+            state: 'not-installed',
+            detail: t('detect.requiresMissing', {
+              agent: def.name,
+              command: def.requires.command,
+              hint,
+            }),
+          }
+        }
+        const answer = ctx.probeCli
+          ? await ctx.probeCli(program, ctx.env)
+          : { error: `${def.requires.command} --version was not asked.` }
+        if ('error' in answer) {
+          return {
+            state: 'not-installed',
+            detail: t('detect.requiresFailed', {
+              agent: def.name,
+              command: def.requires.command,
+              reason: answer.error,
+              hint,
+            }),
+          }
+        }
+        if (compareVersions(answer.version, def.requires.minimum) < 0) {
+          return {
+            state: 'not-installed',
+            detail: t('detect.requiresOutdated', {
+              agent: def.name,
+              command: def.requires.command,
+              required: def.requires.minimum,
+              installed: answer.version,
+              hint,
+            }),
+          }
+        }
+        requires = { program, version: answer.version }
+      }
+      const requiresEnv =
+        requires && def.requires ? { [def.requires.variable]: requires.program } : {}
+      // A per-session agent runs only through the router, which every packaged build carries.
+      if (launch.perSession && !ctx.sessionRouterPath) {
+        return { state: 'not-installed', detail: 'The session router is missing from this build.' }
+      }
+      const prefix =
+        launch.perSession && ctx.sessionRouterPath ? [ctx.sessionRouterPath, nodePath] : []
       const lookup = {
         platform: ctx.platform,
         env: ctx.env,
@@ -353,14 +487,26 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           : null
       const specFor = async (install: InstalledAdapter): Promise<LaunchSpec | null> => {
         if (passed && def.cli) {
-          const env = { ...passed.env, [def.cli.variable]: passed.installed.path }
+          const env = {
+            ...def.env,
+            ...requiresEnv,
+            ...passed.env,
+            [def.cli.variable]: passed.installed.path,
+          }
           return {
-            ...packageSpec(nodePath, install.entry, ctx.platform, env),
+            ...packageSpec(nodePath, install.entry, ctx.platform, env, prefix),
             cli: passed.installed.path,
           }
         }
         if (install.withoutCli && decision?.runs !== 'installed') return null
-        return installedSpec(def, nodePath, install, lookup)
+        return installedSpec(
+          def,
+          nodePath,
+          install,
+          lookup,
+          requiresEnv,
+          ctx.sessionRouterPath ?? null,
+        )
       }
       const spec = current ? await specFor(current) : null
       const fallbackSpec = other ? await specFor(other) : null
@@ -381,6 +527,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
               : null,
           cli: decision ? { ...decision, needsCopy: !!current && !spec } : null,
         },
+        ...(requires ? { requires } : {}),
       }
     }
     case 'binary': {

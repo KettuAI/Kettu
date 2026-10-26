@@ -42,12 +42,14 @@ import { inThreadWorker } from './thread-worker'
 import { inUsageWorker } from './usage-worker'
 
 export const FAKE_AGENT_MAIN = path.resolve('tools/fake-agent/main.ts')
+export const SESSION_ROUTER = path.resolve('src/agent-host/session-router/router.ts')
 
 export interface FakeAgentModule {
   createFakeAgent(options: {
     env?: Env
     exit?: (code: number) => void
     log?: (line: string) => void
+    oneSession?: boolean
   }): AgentApp
 }
 
@@ -266,6 +268,11 @@ export interface TestHostOptions {
   cacheTtl?: CacheTtlReader
   /** Agents that run the fake agent under their own id, such as Claude Code for its folder. */
   fakeAs?: AgentId[]
+  /**
+   * Agents that run the fake agent with `--one-session`, through the session router or, with
+   * `router` false, as one process for all their sessions, to show what the router is for.
+   */
+  fakeThroughRouter?: { agentIds: AgentId[]; oneSession?: boolean; router?: boolean }
 }
 
 export interface TestHost {
@@ -312,10 +319,30 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
         durationMs: 0,
         warning: null,
       })),
+    sessionRouterPath: SESSION_ROUTER,
     // No Node.js is found, so only the fake agent is available.
     probeNode: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
     detect: async (def, ctx) => {
       if (def.id === 'fake-agent') return detectAgent(def, ctx)
+      if (options.fakeThroughRouter?.agentIds.includes(def.id)) {
+        const flags = options.fakeThroughRouter.oneSession ? ['--one-session'] : []
+        const router = options.fakeThroughRouter.router !== false
+        // The host starts the router as the agent's process; the router runs the agent after it.
+        const args = router
+          ? [SESSION_ROUTER, process.execPath, FAKE_AGENT_MAIN, ...flags]
+          : [FAKE_AGENT_MAIN, ...flags]
+        return {
+          state: 'available',
+          spec: {
+            command: process.execPath,
+            args,
+            env: {},
+            shell: false,
+            display: { command: 'node', args, env: {} },
+          },
+          adapter: null,
+        }
+      }
       if (options.fakeAs?.includes(def.id)) return detectAgent(fakeAgent(FAKE_AGENT_MAIN), ctx)
       return { state: 'not-installed', detail: `${def.name} is not part of the tests` }
     },

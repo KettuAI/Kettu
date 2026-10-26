@@ -870,6 +870,114 @@ function cliFound(version: string): Partial<DetectContext> {
   }
 }
 
+/**
+ * Pi as the fake agent: a package agent whose `requires` program is `fake-pi` on PATH, answering
+ * `0.83.0`, and whose terminal sign-in runs that program alone.
+ */
+function requiresManager(
+  options: {
+    version?: string
+    installed?: InstalledAdapter[]
+    /** Whether the program is on PATH; true unless set false. */
+    found?: boolean
+    /** What `--version` answers instead of a version. */
+    error?: string
+  } = {},
+) {
+  const def: AgentDefinition = {
+    ...fakeAgent(FAKE_AGENT_MAIN),
+    id: 'pi',
+    name: 'Pi',
+    launch: { kind: 'package', package: 'fake-adapter', version: '0.0.34' },
+    requires: { command: 'fake-pi', minimum: '0.81.0', variable: 'PI_ACP_PI_COMMAND' },
+    signInWithCli: true,
+    install: {
+      hint: 'detect.hint.pi',
+      url: 'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/quickstart.md',
+    },
+  }
+  const adapters = [
+    ...(options.installed ?? [
+      { version: '0.0.34', dir: '/a/0.0.34', entry: '/a/0.0.34/index.js', installedAt: 1 },
+    ]),
+  ]
+  const launches: LaunchSpec[] = []
+  const base = inProcessLauncher(module)
+  const launcher: AgentLauncher = {
+    launch: (d, spec, env, output) => {
+      launches.push(spec)
+      return base.launch(d, spec, env, output)
+    },
+  }
+  const m = manager(
+    {},
+    { progressMs: 1 },
+    {
+      catalog: [def],
+      launcher,
+      detect: async (d, ctx) =>
+        detectAgent(d, {
+          ...ctx,
+          node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
+          installed: async () => adapters,
+          env: { PATH: '/bin' },
+          isExecutable: async (file) => options.found !== false && file === '/bin/fake-pi',
+          probeCli: async () =>
+            options.error ? { error: options.error } : { version: options.version ?? '0.83.0' },
+        }),
+    },
+  )
+  return { ...m, launches, status: () => m.agents.status('pi') }
+}
+
+describe('a program the adapter runs', () => {
+  it("sets the launch's variable to the program detection found", async () => {
+    const m = requiresManager()
+    await m.agents.ensureReady('pi')
+    expect(m.launches.map((spec) => spec.env.PI_ACP_PI_COMMAND)).toEqual(['/bin/fake-pi'])
+    await m.agents.stopAll()
+  })
+
+  it("reports the program's version, never the adapter's", async () => {
+    const m = requiresManager()
+    await m.agents.list()
+    expect(m.status()).toMatchObject({ version: '0.83.0', state: 'available' })
+    await m.agents.ensureReady('pi')
+    // The fake agent's own initialize reports 0.1.0, which is not what Pi's row shows.
+    expect(m.status()).toMatchObject({ state: 'ready', version: '0.83.0' })
+    await m.agents.stopAll()
+  })
+
+  it('runs the program alone for the terminal sign-in', async () => {
+    const m = requiresManager()
+    await m.agents.ensureReady('pi')
+    const terminal = m.status().authMethods.find((method) => method.type === 'terminal')
+    expect(terminal?.command).toBe('/bin/fake-pi')
+    await m.agents.stopAll()
+  })
+
+  it('is not installed while the program is missing, too old or does not answer', async () => {
+    const missing = requiresManager({ found: false })
+    await missing.agents.list()
+    expect(missing.status()).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('earendil-works/pi-coding-agent'),
+    })
+    const old = requiresManager({ version: '0.80.9' })
+    await old.agents.list()
+    expect(old.status()).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('0.81.0'),
+    })
+    const failing = requiresManager({ error: 'fake-pi exited with code 1.' })
+    await failing.agents.list()
+    expect(failing.status()).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('code 1'),
+    })
+  })
+})
+
 /** The fake agent as a package agent whose adapter can run FAKE_CLI; installs stay in memory. */
 function cliManager(
   options: {

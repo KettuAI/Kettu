@@ -513,7 +513,7 @@
   },
   "about": {
     "version": {
-      "description": "A desktop workbench for Claude Code, Codex and OpenCode.",
+      "description": "A desktop workbench for Claude Code, Codex, OpenCode and Pi.",
       "keywords": "version electron chromium node",
       "copy": "Copy versions"
     },

@@ -159,6 +159,7 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
   opencode: 'OpenCode',
+  pi: 'Pi',
   'fake-agent': 'Fake agent',
 }
 

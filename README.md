@@ -77,8 +77,9 @@ Install at least one of these agents first; OverBench finds it on your system.
 | [Claude Code](https://github.com/anthropics/claude-code) | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use |
 | [Codex CLI](https://github.com/openai/codex)             | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use        |
 | [opencode](https://opencode.ai)                          | Your installed `opencode`, as `opencode acp`                                    |
+| [Pi](https://pi.dev)                                     | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`      |
 
-The two adapters need Node.js 22 or later with npm, which OverBench finds through your login shell.
+The adapters need Node.js 22 or later with npm, which OverBench finds through your login shell.
 
 ## Why OverBench
 

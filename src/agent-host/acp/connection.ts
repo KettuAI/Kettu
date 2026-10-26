@@ -93,6 +93,10 @@ export interface ConnectionHooks {
   /** Something the agent sent that OverBench does not use. */
   ignored(acpSessionId: string | null, what: string): void
   log(level: 'info' | 'warn' | 'error', message: string): void
+  /** The agent sends its thought levels again as legacy `modes`, which are ignored. */
+  levelsAsModes?: boolean
+  /** The agent sends its startup note as the first message after `session/new`, which is dropped. */
+  startupNote?: boolean
 }
 
 export interface AuthMethodInfo {
@@ -185,6 +189,8 @@ export class AgentConnection {
   private readonly collectors = new Map<string, (update: SessionUpdate) => void>()
   /** OpenCode's subagent sessions, to the session each runs under. */
   private readonly children = new Map<string, string>()
+  /** The startup note a session others opened by `session/new` sends before its first prompt. */
+  private readonly pendingStartup = new Map<string, string>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -268,6 +274,7 @@ export class AgentConnection {
   }
 
   private deliver(acpSessionId: string, update: SessionUpdate): void {
+    if (this.dropStartup(acpSessionId, update)) return
     this.learnChild(acpSessionId, update)
     const target = this.targets.get(acpSessionId)
     if (target) {
@@ -305,6 +312,20 @@ export class AgentConnection {
     if (entry.updates.length < PENDING_UPDATES) entry.updates.push(update)
   }
 
+  /**
+   * Drops the startup note an agent marked `startupNote` sends after `session/new`: the first
+   * agent message before its first prompt, when its text is the answer's `_meta.piAcp.startupInfo`.
+   */
+  private dropStartup(acpSessionId: string, update: SessionUpdate): boolean {
+    const note = this.pendingStartup.get(acpSessionId)
+    if (note === undefined) return false
+    if (update.sessionUpdate !== 'agent_message_chunk') return false
+    this.pendingStartup.delete(acpSessionId)
+    if (update.content.type !== 'text' || update.content.text !== note) return false
+    this.hooks.ignored(acpSessionId, 'startup note')
+    return true
+  }
+
   private learnChild(acpSessionId: string, update: SessionUpdate): void {
     const child = (
       update._meta as Record<string, { id?: unknown } | undefined> | null | undefined
@@ -332,13 +353,18 @@ export class AgentConnection {
     const early = this.pending.get(acpSessionId)
     if (!early) return
     this.pending.delete(acpSessionId)
-    for (const update of early.updates) target.apply(mapSessionUpdate(update, target.context()))
+    for (const update of early.updates) {
+      if (!this.dropStartup(acpSessionId, update)) {
+        target.apply(mapSessionUpdate(update, target.context()))
+      }
+    }
   }
 
   unregister(acpSessionId: string, target?: SessionTarget): void {
     if (target && this.targets.get(acpSessionId) !== target) return
     this.targets.delete(acpSessionId)
     this.pending.delete(acpSessionId)
+    this.pendingStartup.delete(acpSessionId)
     this.unregistered.add(acpSessionId)
     if (this.unregistered.size > CLOSED_SESSIONS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
@@ -361,6 +387,14 @@ export class AgentConnection {
   close(): void {
     this.connection.close()
     this.transport.close()
+  }
+
+  /** The agent's options; legacy `modes` are ignored for an agent that sends its levels too. */
+  private config(
+    options: Parameters<typeof mapConfig>[0],
+    modes: Parameters<typeof mapConfig>[1],
+  ): ConfigOption[] {
+    return mapConfig(options, this.hooks.levelsAsModes ? null : modes)
   }
 
   private async call<T>(run: () => Promise<T>): Promise<T> {
@@ -449,9 +483,15 @@ export class AgentConnection {
         ...(meta ? { _meta: meta } : {}),
       }),
     )
+    // pi-acp 0.0.34 repeats the startup note its answer carries as the session's first message.
+    const startup = (response._meta as { piAcp?: { startupInfo?: unknown } } | null | undefined)
+      ?.piAcp?.startupInfo
+    if (this.hooks.startupNote && typeof startup === 'string' && startup !== '') {
+      this.pendingStartup.set(response.sessionId, startup)
+    }
     return {
       acpSessionId: response.sessionId,
-      config: mapConfig(response.configOptions, response.modes),
+      config: this.config(response.configOptions, response.modes),
     }
   }
 
@@ -469,7 +509,7 @@ export class AgentConnection {
         ...(meta ? { _meta: meta } : {}),
       }),
     )
-    return { config: mapConfig(response.configOptions, response.modes) }
+    return { config: this.config(response.configOptions, response.modes) }
   }
 
   async resumeSession(
@@ -486,7 +526,7 @@ export class AgentConnection {
         ...(meta ? { _meta: meta } : {}),
       }),
     )
-    return { config: mapConfig(response.configOptions, response.modes) }
+    return { config: this.config(response.configOptions, response.modes) }
   }
 
   /**
@@ -511,7 +551,7 @@ export class AgentConnection {
     )
     return {
       acpSessionId: response.sessionId,
-      config: mapConfig(response.configOptions, response.modes),
+      config: this.config(response.configOptions, response.modes),
     }
   }
 
@@ -552,6 +592,8 @@ export class AgentConnection {
     acpSessionId: string,
     prompt: readonly PromptBlock[],
   ): Promise<{ stopReason: StopReason; tokens: TokenTotals | null; models: ModelTokens[] }> {
+    // The note comes before a session's first prompt; a message after it is the agent's own.
+    this.pendingStartup.delete(acpSessionId)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.prompt, {
         sessionId: acpSessionId,
@@ -640,7 +682,7 @@ export class AgentConnection {
           : { sessionId: acpSessionId, configId: optionId, value },
       ),
     )
-    return mapConfig(response.configOptions, null)
+    return this.config(response.configOptions, null)
   }
 
   async authenticate(methodId: string): Promise<void> {

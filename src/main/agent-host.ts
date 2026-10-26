@@ -12,6 +12,7 @@ import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
+import sessionRouterPath from '../agent-host/session-router/router?modulePath'
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
 import usageWorkerPath from '../agent-host/usage/worker?modulePath'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
@@ -56,6 +57,12 @@ const MAX_ARTIFACTS = 1_000_000
 
 type ImportAnswer = NonNullable<ArtifactImportResult>
 const UNAVAILABLE: ImportAnswer = { failed: 'unavailable' }
+
+/** The copy beside app.asar that a packaged build unpacks a file into; the path itself in dev. */
+function unpackedPath(file: string): string {
+  if (!app.isPackaged) return file
+  return file.replace(/([\\/])app\.asar([\\/])/, '$1app.asar.unpacked$2')
+}
 
 function isStringList(value: unknown): value is string[] {
   return (
@@ -159,6 +166,8 @@ export class AgentHost {
           : join(app.getAppPath(), 'tools/fake-agent/main.ts'),
         threadWorkerPath,
         usageWorkerPath,
+        // The router runs on the user's Node.js, which cannot read inside app.asar.
+        sessionRouterPath: unpackedPath(sessionRouterPath),
         settings: deps.settings(),
       }),
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),

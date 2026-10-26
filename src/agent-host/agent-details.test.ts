@@ -110,6 +110,63 @@ describe('configLocations', () => {
     ])
   })
 
+  it('puts Pi in ~/.pi/agent, or where PI_CODING_AGENT_DIR says', () => {
+    expect(summary(locations('pi', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.pi/agent'], env: null },
+      { id: 'settings', candidates: ['/home/me/.pi/agent/settings.json'], env: null },
+      {
+        id: 'instructions',
+        candidates: [
+          '/home/me/.pi/agent/AGENTS.override.md',
+          '/home/me/.pi/agent/AGENTS.md',
+          '/home/me/.pi/agent/CLAUDE.md',
+        ],
+        env: null,
+      },
+    ])
+    expect(
+      summary(locations('pi', { PI_CODING_AGENT_DIR: '/srv/pi' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/pi'], env: 'PI_CODING_AGENT_DIR' })
+  })
+
+  it('shows the first instructions file Pi finds, and AGENTS.md when none does', async () => {
+    const home = await realpath(await mkdtemp(path.join(os.tmpdir(), 'overbench-pi-details-')))
+    try {
+      const folder = path.join(home, '.pi', 'agent')
+      await mkdir(folder, { recursive: true })
+      await writeFile(path.join(folder, 'CLAUDE.md'), '# rules')
+      expect(await detailsOf('pi', home)).toMatchObject({
+        path: path.join(folder, 'CLAUDE.md'),
+        exists: true,
+      })
+      await writeFile(path.join(folder, 'AGENTS.md'), '# rules')
+      expect(await detailsOf('pi', home)).toMatchObject({
+        path: path.join(folder, 'AGENTS.md'),
+        exists: true,
+      })
+      await rm(path.join(folder, 'AGENTS.md'))
+      await rm(path.join(folder, 'CLAUDE.md'))
+      expect(await detailsOf('pi', home)).toMatchObject({
+        path: path.join(folder, 'AGENTS.md'),
+        exists: false,
+      })
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  /** Pi's instructions row in `home`. */
+  async function detailsOf(agentId: AgentId, home: string) {
+    const { config } = await readAgentDetails(agentId, {
+      getEnv: () => undefined,
+      home,
+      platform: process.platform as Platform,
+      adapterDir: null,
+      log: () => {},
+    })
+    return config.find((item) => item.id === 'instructions')!
+  }
+
   it('has nothing to show for the fake agent', () => {
     expect(locations('fake-agent', { CLAUDE_CONFIG_DIR: '/x' }, '/home/me', 'linux')).toEqual([])
   })

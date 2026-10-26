@@ -8,8 +8,10 @@ extraResources:
   - from: out/third-party-notices.txt
     to: third-party-notices.txt
 # The terminal host loads pty.node and starts spawn-helper from the real file system.
+# The session router runs on the user's Node.js, which cannot read inside app.asar.
 asarUnpack:
   - node_modules/node-pty/**
+  - out/main/chunks/router-*.js
 # The postinstall step (tools/install/app-deps.mjs) already readied node-pty for Electron: its
 # prebuilt binaries on Windows, a build from source on macOS and Linux.
 npmRebuild: false

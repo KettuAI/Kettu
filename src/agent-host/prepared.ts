@@ -21,7 +21,7 @@ export interface PreparedFile {
   sessions: PreparedRecord[]
 }
 
-const AGENT_IDS: readonly AgentId[] = ['claude-code', 'codex', 'opencode', 'fake-agent']
+const AGENT_IDS: readonly AgentId[] = ['claude-code', 'codex', 'opencode', 'pi', 'fake-agent']
 
 export function parsePreparedFile(data: Record<string, unknown>): PreparedFile | string {
   if (!Array.isArray(data.sessions)) return 'sessions is not an array'
@@ -112,6 +112,10 @@ const PROJECT_SETTINGS: Partial<Record<AgentId, { dir: string; names: string[] }
     { dir: '.codex', names: ['config.toml'] },
   ],
   opencode: [{ dir: '', names: ['opencode.json', 'opencode.jsonc', '.opencode'] }],
+  pi: [
+    { dir: '', names: ['.pi'] },
+    { dir: '.pi', names: ['settings.json'] },
+  ],
   'fake-agent': [{ dir: '', names: ['.fake-agent.json'] }],
 }
 

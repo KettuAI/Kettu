@@ -92,6 +92,7 @@ const VENDORS: Partial<Record<AgentId, string>> = {
   'claude-code': 'Anthropic',
   codex: 'OpenAI',
   opencode: 'SST',
+  pi: 'Earendil',
 }
 
 /** A check the user started counts as just done for this long, then it reads as "checked ago". */
@@ -218,7 +219,9 @@ function currentLimits(limits: PlanLimit[], now: number): PlanLimit[] {
 function useAgentVersion(status: AgentStatus): string | null {
   const details = useAgentsStore((s) => s.details[status.id])
   if (status.cli?.runs === 'installed') return status.cli.installed?.version ?? null
-  return details?.cliVersion ?? (status.package ? null : status.version)
+  // A Claude Code or Codex row shows the CLI its adapter runs, never the adapter's version; an
+  // agent that runs its own program (OpenCode, Pi) shows the version that program printed.
+  return status.cli ? (details?.cliVersion ?? null) : status.version
 }
 
 function percent(limit: PlanLimit): string {

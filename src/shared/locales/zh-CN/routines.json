@@ -223,7 +223,8 @@
     "caption": {
       "claude-code": "Claude Code 在编辑和大多数命令前会询问，因此 OverBench 会逐条回应。",
       "codex": "Codex 有自己的沙箱：选择“编辑项目”时，它也会在项目内不经询问地运行命令；离开项目或访问网络时会询问。",
-      "opencode": "OpenCode 只对它自己的权限设置标为“ask”的操作询问；默认什么都不问，所以 OverBench 无法把它限制在这个权限范围内。"
+      "opencode": "OpenCode 只对它自己的权限设置标为“ask”的操作询问；默认什么都不问，所以 OverBench 无法把它限制在这个权限范围内。",
+      "pi": "Pi 执行任何操作前都不会询问，所以 OverBench 无法把它限制在这个权限范围内。"
     }
   },
   "limit": {

@@ -224,7 +224,8 @@
     "caption": {
       "claude-code": "Claude Code asks before edits and most commands, so OverBench answers each.",
       "codex": "Codex keeps its own sandbox: Edit the project also runs commands inside the project without asking; leaving the project or reaching the network asks.",
-      "opencode": "OpenCode asks only for what its own permission settings mark “ask”; by default it asks nothing, so OverBench cannot hold it to this scope."
+      "opencode": "OpenCode asks only for what its own permission settings mark “ask”; by default it asks nothing, so OverBench cannot hold it to this scope.",
+      "pi": "Pi does not ask before it acts, so OverBench cannot hold it to this scope."
     }
   },
   "limit": {

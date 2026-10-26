@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository. `CLAUDE.md` imports this 
 
 ## Project
 
-OverBench is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI and opencode. It is in early development; [README.md](./README.md) has the product vision and features, and [ROADMAP.md](./ROADMAP.md) the plans.
+OverBench is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI, opencode and Pi. It is in early development; [README.md](./README.md) has the product vision and features, and [ROADMAP.md](./ROADMAP.md) the plans.
 
 OverBench is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP).
 

@@ -48,6 +48,7 @@ function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
     platform: message.platform,
     electronPath: message.electronPath,
     fakeAgentPath: message.fakeAgentPath,
+    sessionRouterPath: message.sessionRouterPath,
     settings: message.settings,
     baseEnv: process.env,
     send,

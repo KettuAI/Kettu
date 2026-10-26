@@ -45,6 +45,11 @@ export interface FakeAgentOptions {
   exit?: (code: number) => void
   /** A line for stderr, where real adapters print their progress. */
   log?: (line: string) => void
+  /**
+   * Keeps one live session per process, as pi-acp 0.0.34 does: `session/new` and `session/load`
+   * end the others, whose running turns never answer.
+   */
+  oneSession?: boolean
 }
 
 /** The file `main.ts --login` creates, which signs a signed-out agent back in. */
@@ -69,6 +74,8 @@ interface FakeSession extends FakeSessionState {
   turnStarts: number[] // where each prompt's records begin in `history`
   updatedAt: string
   turn: { abort: AbortController; ignoreCancel: boolean } | null
+  /** Ended by `--one-session`, which leaves its running turn unanswered. */
+  ended: boolean
 }
 
 const HISTORY_LIMIT = 50_000
@@ -119,6 +126,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   const env = options.env ?? process.env
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`))
   const exit = options.exit ?? ((code: number) => process.exit(code))
+  const oneSession = options.oneSession ?? false
   const scale = delayScale(env)
   const legacyModes = env.FAKE_AGENT_LEGACY_MODES === '1'
   const forkConfig = env.FAKE_AGENT_FORK_CONFIG ?? 'keep'
@@ -277,9 +285,20 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       turnStarts: [],
       updatedAt: new Date().toISOString(),
       turn: null,
+      ended: false,
     }
     sessions.set(id, session)
     return session
+  }
+
+  /** `--one-session`: ends every session but `keep`, whose running turn then never answers. */
+  const endOthers = (keep?: string): void => {
+    for (const [id, session] of sessions) {
+      if (id === keep) continue
+      session.ended = true
+      session.turn?.abort.abort()
+      sessions.delete(id)
+    }
   }
 
   /** Like codex-acp, which opens every session it resumes or loads at its defaults. */
@@ -506,6 +525,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       // Held until a test creates the file, checked every 10 ms, not scaled.
       const gate = env.FAKE_AGENT_NEW_SESSION_GATE
       while (gate && !existsSync(gate)) await new Promise((resolve) => setTimeout(resolve, 10))
+      if (oneSession) endOthers()
       const session = newSession(nextId('fake'), ctx.params.cwd, ctx.params.mcpServers)
       Object.assign(session, projectDefaults(ctx.params.cwd))
       setTimeout(() => announceCommands(ctx.client, session.id), 0)
@@ -513,6 +533,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     })
     .onRequest(methods.agent.session.load, async (ctx) => {
       requireSignedIn()
+      if (oneSession) endOthers(ctx.params.sessionId)
       let session = sessions.get(ctx.params.sessionId)
       if (!session) {
         session = newSession(ctx.params.sessionId, ctx.params.cwd)
@@ -808,7 +829,14 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           : choice.scenario === 'compact'
             ? compact
             : SCENARIO_RUNNERS[choice.scenario]
-        const stopReason: StopReason = await run(turn)
+        let stopReason: StopReason = 'end_turn'
+        try {
+          stopReason = await run(turn)
+        } catch (error) {
+          if (!session.ended) throw error
+        }
+        // pi-acp 0.0.34 leaves a turn unanswered when another session ends its pi.
+        if (session.ended) return new Promise<never>(() => {})
         return {
           stopReason: abort.signal.aborted ? 'cancelled' : stopReason,
           usage: tokenUsage(session),
