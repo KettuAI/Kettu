@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { GitStatusCluster } from '@renderer/features/git/git-status'
-import { cn } from '@renderer/lib/utils'
+import { formatShortcut } from '@renderer/lib/platform'
 import { useGitStore } from '@renderer/stores/git'
 import { toggleSidePane, useViewStore, type SidePane } from '@renderer/stores/view'
-import { NoDrag, TopBarRule } from './top-bar'
+import { NoDrag } from './top-bar'
 
 /**
  * The right end of the top bar: the project's git status and the side panel's panes. The git
@@ -24,9 +24,7 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
           <GitStatusCluster projectPath={projectPath} />
         </NoDrag>
       )}
-      {/* Pulled back over the bar's gap, to sit as close to the git status as before. */}
-      <NoDrag className={cn('shrink-0 gap-0.5', isRepo && '-ml-2')}>
-        {isRepo && <TopBarRule />}
+      <NoDrag className="shrink-0 gap-0.5">
         <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
           <FolderIcon />
         </PaneToggle>
@@ -70,14 +68,14 @@ function PaneToggle({
             aria-label={label}
             aria-pressed={open}
             onClick={() => toggleSidePane(projectPath, pane)}
-            className="text-foreground"
+            className="text-secondary"
           />
         }
       >
         {children}
       </TooltipTrigger>
       <TooltipContent>
-        {label} {shortcut && <span className="opacity-60">{shortcut}</span>}
+        {label} {shortcut && <span className="opacity-60">{formatShortcut(shortcut)}</span>}
       </TooltipContent>
     </Tooltip>
   )

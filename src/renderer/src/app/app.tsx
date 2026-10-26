@@ -74,15 +74,31 @@ function Workbench() {
   const layout = useDefaultLayout({ id: 'workbench', storage: layoutStorage })
   const group = useRef<HTMLDivElement>(null)
   const sidebarContent = useRef<HTMLDivElement>(null)
-  const mainContent = useRef<HTMLElement>(null)
+  const desk = useRef<HTMLElement>(null)
+  const frame = useRef<HTMLDivElement>(null)
+  const mainContent = useRef<HTMLDivElement>(null)
+  const wing = useRef<HTMLSpanElement>(null)
   const sliding = useRef(false)
 
   // A toggle slides the sidebar: both panels' contents take their final widths at once, so the
   // thread lays out once, and the panels' sizes transition around them (globals.css), each
-  // content held to its panel's right edge. Nothing else changes, so no subtree restyles.
+  // content held to its panel's right edge. The main panel's frame follows its panel and cuts
+  // the sheets to their shape, a wing of sheet filling it while it is wider than they are, so the
+  // sheet's edge follows the slide. Nothing else changes, so no subtree restyles.
   const startSlide = (sidebarWidth: number, mainWidth: number) => {
     if (sidebarContent.current) sidebarContent.current.style.width = `${sidebarWidth}px`
-    if (mainContent.current) mainContent.current.style.width = `${mainWidth}px`
+    const box = frame.current
+    if (desk.current && box && mainContent.current && wing.current) {
+      const padding = getComputedStyle(desk.current)
+      const width = mainWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight)
+      mainContent.current.style.width = `${width}px`
+      box.style.overflow = 'clip'
+      box.style.boxShadow = 'var(--elevation-sheet)'
+      // Over the sheets' rounded left edge, so the two meet as one sheet.
+      const overlap = parseFloat(getComputedStyle(box).borderTopLeftRadius)
+      wing.current.style.right = `${width - overlap}px`
+      wing.current.style.display = 'block'
+    }
     if (group.current) group.current.dataset.sliding = ''
     sliding.current = true
   }
@@ -90,6 +106,11 @@ function Workbench() {
     sliding.current = false
     if (sidebarContent.current) sidebarContent.current.style.width = ''
     if (mainContent.current) mainContent.current.style.width = ''
+    if (frame.current) {
+      frame.current.style.overflow = ''
+      frame.current.style.boxShadow = ''
+    }
+    if (wing.current) wing.current.style.display = ''
     if (group.current) delete group.current.dataset.sliding
   }
 
@@ -177,7 +198,7 @@ function Workbench() {
             while the sidebar is collapsed. On Windows and Linux the band above them holds the
             window controls. */}
         <main
-          ref={mainContent}
+          ref={desk}
           className={cn(
             PANEL_CONTENT,
             DESK,
@@ -187,7 +208,12 @@ function Workbench() {
           )}
         >
           <TitleBand />
-          <MainArea />
+          <div ref={frame} className="relative flex h-full justify-end rounded-xl">
+            <div ref={mainContent} className="isolate h-full w-full min-w-0 shrink-0">
+              <MainArea />
+            </div>
+            <span ref={wing} aria-hidden className="absolute inset-y-0 left-0 hidden bg-app" />
+          </div>
         </main>
       </ResizablePanel>
     </ResizablePanelGroup>

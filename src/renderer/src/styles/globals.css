@@ -620,12 +620,11 @@
   }
 }
 
-/* A sidebar toggle in the workbench (app.tsx); resizing by drag follows the pointer at once. */
+/* A sidebar toggle in the workbench (app.tsx); resizing by drag follows the pointer at once. The
+   sidebar's panel cuts off the content held against its right edge, and the main panel's frame
+   cuts its sheets. */
 [data-slot='resizable-panel-group'][data-sliding] > [data-panel] {
   transition: flex-grow var(--duration-slow) var(--ease-out-quart);
-  /* The main panel lets its sheets' edges show past its own; sliding, it cuts off the content
-     held against its right edge, as the sidebar's panel does. */
-  clip-path: inset(0);
 }
 
 /* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not in a layer, so they win over the utility

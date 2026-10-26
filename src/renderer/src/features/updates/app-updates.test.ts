@@ -51,7 +51,7 @@ describe('appUpdateRow', () => {
       label: 'Update ready 0.3.0',
       detail: 'Restart to finish; your sessions come back.',
       action: 'restart',
-      actionLabel: 'Restart to update',
+      actionLabel: 'Restart',
       href: null,
       dismissible: true,
     })

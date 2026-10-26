@@ -33,7 +33,7 @@ export function SessionIndicator({
       <span
         role="img"
         aria-label={t('indicator.waiting', { count: permissionCount })}
-        className="size-2 rounded-full bg-attention-dot"
+        className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_color-mix(in_srgb,var(--attention-dot)_16%,transparent)]"
       />
     )
   } else if (summary.attention === 'error' || summary.status === 'failed') {

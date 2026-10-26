@@ -82,9 +82,6 @@
     "signInOne": "{{name}} 需要登录",
     "signInMany": "{{count}} 个 Agent 需要登录",
     "signInDetail": "打开「设置 › Agent」进行登录",
-    "notices": "通知",
-    "noticesCount_other": "{{count}} 条通知",
-    "noticeWords_other": "条通知",
     "noticesName": "通知：{{list}}",
     "listSeparator": "，"
   },

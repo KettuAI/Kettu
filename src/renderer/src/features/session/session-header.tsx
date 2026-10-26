@@ -87,11 +87,13 @@ export function SessionHeader({
           </>
         )}
         {parent && <ParentLink parent={parent} />}
-        {summary.origin === 'subagent' ? (
-          <BotIcon className="ml-1.5 size-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <AgentMark agent={summary.agentId} size={14} className="ml-1.5 shrink-0" />
-        )}
+        <span className="mr-[3px] grid w-4 shrink-0 place-items-center">
+          {summary.origin === 'subagent' ? (
+            <BotIcon className="size-3.5 text-secondary" />
+          ) : (
+            <AgentMark agent={summary.agentId} size={14} />
+          )}
+        </span>
         {rename.renaming ? (
           <SessionTitleField
             summary={summary}
@@ -123,15 +125,15 @@ export function SessionHeader({
                   render={
                     <Button
                       variant="ghost"
-                      size="icon-compact"
+                      size="icon-sm"
                       aria-label={t('row.more')}
-                      className="text-muted-foreground"
+                      className="-ml-0.5 text-secondary"
                     />
                   }
                 />
               }
             >
-              <ChevronDownIcon className="size-3.5" />
+              <ChevronDownIcon />
             </TooltipTrigger>
             <TooltipContent>{t('row.more')}</TooltipContent>
           </Tooltip>

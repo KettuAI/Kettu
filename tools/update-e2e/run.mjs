@@ -526,14 +526,12 @@ async function main() {
     if (status?.state?.kind === 'error') {
       throw new Error(`The update check failed: ${status.state.message}`)
     }
-    // The renderer takes the broadcast a moment later. The notice opens from the footer's pill,
-    // which another notice may have brought before it.
-    const pill = `return document.querySelector('[data-sidebar=footer] button[aria-haspopup=dialog]')`
-    await waitFor(cdp, `(() => { ${pill} })()`, 'the notices pill', 30_000)
-    await click(cdp, pill, 'the notices pill')
+    // The renderer takes the broadcast a moment later. The notice is a card in the sidebar's
+    // footer, among any other notices.
+    const card = '[data-sidebar=footer] [data-notice]'
 
     if (platform === 'darwin') {
-      const download = `[...document.querySelectorAll('[data-slot=popover-content] a')].find((a) =>
+      const download = `[...document.querySelectorAll('${card} a')].find((a) =>
         a.textContent.includes('Download'),
       )`
       await waitFor(cdp, download, 'the notice Download link', 30_000)
@@ -543,7 +541,7 @@ async function main() {
       }
       log(`The notice's Download links to ${href}`)
     } else {
-      const updateButton = `return [...document.querySelectorAll('[data-slot=popover-content] button')].find(
+      const updateButton = `return [...document.querySelectorAll('${card} button')].find(
         (b) => b.textContent.trim() === 'Update',
       )`
       await waitFor(cdp, `(() => { ${updateButton} })()`, 'the notice Update button', 30_000)

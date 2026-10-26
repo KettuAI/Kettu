@@ -1,4 +1,3 @@
-import { createContext } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -23,13 +22,11 @@ export interface Notices {
   appUpdate: AppUpdateNotice | null
 }
 
+/** What the collapsed sidebar's toggle says of the notices it hides. */
 export interface NoticeSummary {
-  count: number
-  /** The pill's dot: a sign-in to do reads before an offer. */
-  tone: 'warning' | 'info'
-  /** Each notice's first line, in the popover's order. */
+  /** Each notice's words, in the footer's order. */
   labels: string[]
-  /** The pill's accessible name, which lists the notices. */
+  /** The notices in one sentence, which lists them. */
   name: string
 }
 
@@ -40,7 +37,7 @@ export function signInLabel(names: string[]): string {
     : i18n.t('sidebar:footer.signInMany', { count: names.length })
 }
 
-/** The notices pill's count, dot and name; null while no notice shows. */
+/** The notices' words and their sentence; null while no notice shows. */
 export function noticeSummary({ signIn, agentUpdate, appUpdate }: Notices): NoticeSummary | null {
   const labels = [
     signIn.length > 0 ? signInLabel(signIn) : null,
@@ -49,8 +46,6 @@ export function noticeSummary({ signIn, agentUpdate, appUpdate }: Notices): Noti
   ].filter((label) => label !== null)
   if (labels.length === 0) return null
   return {
-    count: labels.length,
-    tone: signIn.length > 0 ? 'warning' : 'info',
     labels,
     name: i18n.t('sidebar:footer.noticesName', {
       list: labels.join(i18n.t('sidebar:footer.listSeparator')),
@@ -77,6 +72,3 @@ export function useNotices(): Notices & { summary: NoticeSummary | null } {
   }
   return { ...notices, summary: noticeSummary(notices) }
 }
-
-/** Closes the notices popover, for a row whose text or action opens something. */
-export const CloseNoticesContext = createContext<() => void>(() => {})

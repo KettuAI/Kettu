@@ -18,7 +18,7 @@ export function TopBar({ children, className }: { children: ReactNode; className
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-2.5 pl-5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-2.5 pl-4 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
         cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         className,
       )}
@@ -71,7 +71,7 @@ export function SidebarToggle({ className }: { className?: string }) {
     handOff = false
     element.focus()
   }, [collapsed])
-  // Collapsed, the sidebar's notices pill is out of sight, so the toggle marks and names them.
+  // Collapsed, the sidebar's notices are out of sight, so the toggle marks and names them.
   const notices = collapsed ? summary : null
   const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
   return (
@@ -81,11 +81,12 @@ export function SidebarToggle({ className }: { className?: string }) {
           <Button
             ref={button}
             data-sidebar-toggle=""
-            variant="ghost"
+            variant="quiet"
             size="icon-compact"
             aria-label={label}
+            aria-description={notices?.name}
             onClick={toggleSidebar}
-            className={cn('app-region-no-drag relative', className)}
+            className={cn('app-region-no-drag relative text-secondary', className)}
           />
         }
       >
@@ -109,9 +110,4 @@ export function SidebarToggle({ className }: { className?: string }) {
       </TooltipContent>
     </Tooltip>
   )
-}
-
-/** A hairline between groups of top bar controls. */
-export function TopBarRule() {
-  return <span aria-hidden className="mx-1 h-4 w-(--hairline) shrink-0 bg-border" />
 }
