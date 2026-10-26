@@ -277,6 +277,7 @@ describe('derived settings', () => {
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
       usage: { fromComputer: false },
+      sessionTitles: true,
     })
     expect(
       hostSettings({ ...settings, general: { ...settings.general, language: 'en' } }, 'zh-CN')
@@ -284,6 +285,19 @@ describe('derived settings', () => {
     ).toBe('en')
     expect(terminalSettings(settings)).toEqual({ shellPath: '/bin/fish', fontSize: 13 })
     expect(terminalSettings(defaults()).shellPath).toBeNull()
+  })
+
+  it('writes session titles for new sessions unless turned off', () => {
+    expect(defaults().general.sessionTitles).toBe(true)
+    expect(validateSettingsPatch({ general: { sessionTitles: false } })).toEqual({
+      general: { sessionTitles: false },
+    })
+    expect(() => validateSettingsPatch({ general: { sessionTitles: 'no' } })).toThrow(
+      '"general.sessionTitles" must be a boolean',
+    )
+    expect(hostSettings(defaults(), 'en').sessionTitles).toBe(true)
+    const off = mergeSettings(defaults(), { general: { sessionTitles: false } })
+    expect(hostSettings(off, 'en').sessionTitles).toBe(false)
   })
 
   it('names the sections that changed', () => {

@@ -1046,6 +1046,7 @@ describe('prepared sessions', () => {
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       usage: { fromComputer: false },
+      sessionTitles: true,
     }
     await t.host.updateSettings(settings)
     await port.until(() => removed(port, summary.id))
@@ -2018,6 +2019,7 @@ describe('a prompt turn', () => {
         proxy: DEFAULT_SETTINGS.proxy,
         git: DEFAULT_SETTINGS.git,
         usage: { fromComputer: true },
+        sessionTitles: true,
       },
     })
     read = async () =>

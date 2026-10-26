@@ -135,6 +135,7 @@ function manager(
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
       usage: { fromComputer: false },
+      sessionTitles: true,
     }),
     reportsDir: path.join(os.tmpdir(), 'overbench-agent-reports'),
     adaptersDir: path.join(os.tmpdir(), 'overbench-no-adapters'),
@@ -1074,6 +1075,7 @@ const cliSettings = (cli: AgentCliSource): HostSettings => ({
   proxy: { mode: 'environment' },
   git: { backgroundFetch: false },
   usage: { fromComputer: false },
+  sessionTitles: true,
 })
 
 describe('the CLI the user installed', () => {
@@ -1513,6 +1515,7 @@ describe('a configuration folder of its own', () => {
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
     usage: { fromComputer: false },
+    sessionTitles: true,
   })
 
   function folderManager() {

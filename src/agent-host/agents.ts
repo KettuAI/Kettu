@@ -750,9 +750,10 @@ export class AgentManager {
       }
       const runtime: AgentRuntime = { agentId, connection, init }
       slot.init = init
-      slot.initRecord = init.version
-        ? { version: init.version, capabilities: { ...init.capabilities } }
-        : null
+      // The state file keeps booleans; how an agent titles its sessions comes with `initialize`.
+      const remembered: Partial<AgentInit['capabilities']> = { ...init.capabilities }
+      delete remembered.ownTitles
+      slot.initRecord = init.version ? { version: init.version, capabilities: remembered } : null
       slot.runtime = runtime
       slot.state = 'ready'
       slot.detail = null

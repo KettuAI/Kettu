@@ -183,6 +183,17 @@ export function useGeneralSection(): SectionDef {
         ),
       },
       {
+        id: 'session-titles',
+        name: t('general.sessionTitles.name'),
+        english: en('general.sessionTitles.name'),
+        description: t('general.sessionTitles.description'),
+        keywords: t('general.sessionTitles.keywords'),
+        group: sessions,
+        render: () => (
+          <GeneralSwitch field="sessionTitles" label={t('general.sessionTitles.name')} />
+        ),
+      },
+      {
         id: 'confirm-links',
         name: t('general.confirmLinks.name'),
         english: en('general.confirmLinks.name'),

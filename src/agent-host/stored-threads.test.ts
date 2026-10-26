@@ -464,6 +464,7 @@ describe('attaching on use', () => {
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       usage: { fromComputer: false },
+      sessionTitles: true,
     })
     const message = (folder: string) =>
       `This session was started with the configuration folder ${folder}. Switch back to it in Settings › Agents to continue it.`

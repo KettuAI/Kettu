@@ -1,0 +1,37 @@
+// How an agent titles its own sessions, read from the name and version it gives in `initialize`.
+
+import { compareVersions } from '../versions'
+
+/** How an agent's session titles arrive: as `session_info_update`, or only through `session/list`. */
+export type OwnTitles = 'sent' | 'listed'
+
+interface OwnTitlesRow {
+  since: string // the first version seen to title its sessions itself
+  kind: OwnTitles
+}
+
+// The first version of each adapter seen to title its sessions; the fake agent stands in for
+// Claude Code's. Each comment names the version that was read.
+const OWN_TITLES: ReadonlyMap<string, OwnTitlesRow> = new Map([
+  // claude-agent-acp 0.94.0 titles each session with a small model and sends it as an update.
+  ['@agentclientprotocol/claude-agent-acp', { since: '0.94.0', kind: 'sent' }],
+  // codex-acp 2.2.2 writes the title when the first turn ends and sends it as the thread's name.
+  ['@agentclientprotocol/codex-acp', { since: '2.2.2', kind: 'sent' }],
+  // fake-agent 0.1.0 sends its title as an update, as Claude Code's adapter does.
+  ['fake-agent', { since: '0.1.0', kind: 'sent' }],
+  // OpenCode 2.0.32 titles a root session but sends no update for it, only `session/list`.
+  ['OpenCode', { since: '2.0.32', kind: 'listed' }],
+])
+
+/**
+ * How the agent `initialize` names titles its sessions, or null when it titles none itself: an
+ * unknown name, a version before the one that titles, or no `agentInfo` at all.
+ */
+export function ownTitles(
+  info: { name: string; version: string } | null | undefined,
+): OwnTitles | null {
+  if (!info) return null
+  const row = OWN_TITLES.get(info.name)
+  if (!row) return null
+  return compareVersions(info.version, row.since) >= 0 ? row.kind : null
+}

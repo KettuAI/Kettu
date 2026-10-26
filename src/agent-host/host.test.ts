@@ -201,6 +201,7 @@ describe('main messages', () => {
       proxy: { mode: 'custom', url: 'http://proxy.test:8080', noProxy: 'localhost' },
       git: { backgroundFetch: true },
       usage: { fromComputer: false },
+      sessionTitles: true,
     })
     const opencode = (await port.request('agents.list', undefined)).find((a) => a.id === 'opencode')
     expect(opencode?.binaryOverride).toBe(path.join(t.dir, 'no-opencode'))
@@ -223,6 +224,7 @@ describe('main messages', () => {
       proxy: { mode: 'environment' as const },
       git: { backgroundFetch: false },
       usage: { fromComputer: false },
+      sessionTitles: true,
     }
     const warning = async () => (await port.request('agents.environment', undefined)).warning
     await port.request('agents.list', undefined)
@@ -489,6 +491,7 @@ describe('git', () => {
       proxy: { mode: 'environment' },
       git: { backgroundFetch: true },
       usage: { fromComputer: false },
+      sessionTitles: true,
     })
     expect(git.calls).toContain('setBackgroundFetch true')
   })

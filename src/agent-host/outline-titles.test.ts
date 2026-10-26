@@ -44,6 +44,12 @@ describe('the outline titles', () => {
     expect(list[1]).toEqual({ id: '118', text: 'message 118' })
   })
 
+  it('cuts each message at the cut it is given', () => {
+    const { prompt } = summaryPrompt([{ pos: 0, text: 'z'.repeat(300) }], 120)
+    const list = JSON.parse(prompt.slice(prompt.indexOf('['))) as { id: string; text: string }[]
+    expect(list).toEqual([{ id: '0', text: 'z'.repeat(120) }])
+  })
+
   it('reads the titles from plain or fenced JSON, for the ids asked, cut to 60 characters', () => {
     const asked = new Set([3, 7])
     expect(parseTitles('{"3": "Fix login", "7": "Add tests"}', asked)).toEqual([

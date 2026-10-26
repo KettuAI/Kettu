@@ -305,6 +305,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       usage: { fromComputer: false },
+      sessionTitles: true,
     },
     baseEnv: { ...process.env, ...options.agentEnv },
     send: (message) => sent.push(structuredClone(message)),

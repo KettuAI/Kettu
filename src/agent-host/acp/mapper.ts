@@ -134,6 +134,35 @@ export function toLf(text: string): string {
   return text.replace(/\r\n?/g, '\n')
 }
 
+/** The text of the thread's first user message, or null when it is not in memory. */
+export function firstUserMessage(thread: ThreadState): string | null {
+  for (const id of thread.order) {
+    const entry = thread.byId[id]
+    if (entry?.kind !== 'user') continue
+    const text = entry.content
+      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+      .join('\n')
+    return text === '' ? null : text
+  }
+  return null
+}
+
+const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
+/**
+ * Whether a title is only the first user message again: the whole of it, whatever its spacing, or
+ * the message cut and ending in an ellipsis. Adapters send the first message as the title just
+ * before their own comes.
+ */
+export function repeatsFirstMessage(title: string, message: string | null): boolean {
+  if (message === null) return false
+  const said = collapse(message)
+  if (said === '') return false
+  const cut = collapse(title)
+  if (said === cut) return true
+  return cut.endsWith('…') && cut.length > 1 && said.startsWith(cut.slice(0, -1))
+}
+
 // Content blocks.
 
 /** The most base64 a sound or a clip keeps, so one block cannot swell the thread and its snapshots. */
@@ -1272,7 +1301,11 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
       const changes: { title?: string | null; updatedAt: number } = {
         updatedAt: parseTime(update.updatedAt, ctx.now),
       }
-      if (update.title !== undefined) {
+      // A repeat of the first message is no title: the cut first line stays until the agent's own.
+      if (
+        update.title !== undefined &&
+        (update.title === null || !repeatsFirstMessage(update.title, firstUserMessage(ctx.thread)))
+      ) {
         changes.title = update.title
         out.effects.push({ kind: 'title', title: update.title })
       }
