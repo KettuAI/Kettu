@@ -421,8 +421,8 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     }
   }
 
-  // FAKE_AGENT_WITHOUT leaves session capabilities out, such as `close`, or prompt ones (`image`,
-  // `embeddedContext`).
+  // FAKE_AGENT_WITHOUT leaves session capabilities out, such as `close`, prompt ones (`image`,
+  // `embeddedContext`) or `steering`.
   const without = new Set((env.FAKE_AGENT_WITHOUT ?? '').split(',').map((name) => name.trim()))
   const sessionCapabilities = () =>
     Object.fromEntries(
@@ -479,7 +479,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           version: FAKE_AGENT_VERSION,
         },
         // Like claude-agent-acp: `_session/steering`, advertised beside the capabilities.
-        _meta: { steering: { supported: true } },
+        ...(without.has('steering') ? {} : { _meta: { steering: { supported: true } } }),
       }
       // Like claude-agent-acp, the first account push follows the initialize response.
       setTimeout(pushAuthStatus, 0)

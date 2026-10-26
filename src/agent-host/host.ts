@@ -780,6 +780,7 @@ export class AgentHost {
       'sessions.queue': ({ sessionId, content }) => sessions.queue(sessionId, content),
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
       'sessions.steer': ({ sessionId, itemId }) => sessions.steer(sessionId, itemId),
+      'sessions.sendNow': ({ sessionId, itemId }) => sessions.sendNow(sessionId, itemId),
       'sessions.resumeQueue': ({ sessionId }) => sessions.resumeQueue(sessionId),
       'sessions.blob': ({ sessionId, hash }) => sessions.blob(sessionId, hash),
       'sessions.setConfigOption': ({ sessionId, optionId, value }) =>

@@ -161,6 +161,7 @@
     "attachments_other": "{{count}} 个附件",
     "sendNow": "立即发送",
     "steer": "立即插入当前对话",
+    "stopAndSend": "停止本轮，接着发送这条消息",
     "edit": "在输入框中编辑",
     "remove": "移除"
   },

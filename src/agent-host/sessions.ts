@@ -364,6 +364,8 @@ interface Live {
   releaseTimer: ReturnType<typeof setTimeout> | null
   /** The agent that asked for this session to be archived once its running turn ends. */
   archiveAfterTurn: string | null
+  /** Send now stopped the running turn, so the queue's first prompt goes when the turn ends. */
+  sendNext: boolean
 }
 
 const TITLE_LENGTH = 60
@@ -1268,6 +1270,7 @@ export class SessionManager {
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
       archiveAfterTurn: null,
+      sendNext: false,
     }
     this.live.set(record.id, live)
     this.deps.agents.sessionsChanged(record.agentId)
@@ -2660,7 +2663,9 @@ export class SessionManager {
       if (turn && attaching) continue
       const cut = turn !== null && !turn.cancelRequested
       if (turn && !cut) {
-        // The user had stopped it, so it ends stopped rather than cut short.
+        // The user had stopped it, so it ends stopped rather than cut short. The session closes
+        // with its agent, so a prompt Send now chose waits first in the paused queue.
+        live.sendNext = false
         this.endTurn(live, turn, 'cancelled', null)
       } else if (turn) {
         const givenBack = agentAddedNothing(live.thread, turn.entryId)
@@ -3555,6 +3560,31 @@ export class SessionManager {
     this.touch(live.id)
   }
 
+  /**
+   * Sends a queued prompt now: into the running turn where the agent steers; otherwise as the next
+   * turn, by moving it to the front of the queue and stopping this one.
+   */
+  async sendNow(sessionId: string, itemId: string): Promise<void> {
+    const live = await this.revive(sessionId)
+    if (this.deps.agents.status(live.record.agentId).capabilities.steering) {
+      return this.steer(sessionId, itemId)
+    }
+    const { queue } = live.thread.session
+    const item = queue.find((i) => i.id === itemId)
+    if (!item) throw notFound(`No queued prompt ${itemId}`)
+    if (!live.turn || live.turn.ended) throw new HostError('busy', t('session.noTurn'))
+    this.update(live, { queue: [item, ...queue.filter((i) => i.id !== itemId)] })
+    this.persist(live)
+    live.sendNext = true
+    try {
+      await this.cancel(sessionId)
+    } catch (error) {
+      // The stop did not go out, so the turn's end pauses the queue as before.
+      live.sendNext = false
+      throw error
+    }
+  }
+
   async resumeQueue(sessionId: string): Promise<void> {
     this.unarchive(sessionId)
     const live = await this.revive(sessionId)
@@ -3564,12 +3594,15 @@ export class SessionManager {
     this.touch(live.id)
   }
 
-  /** Sends the oldest waiting prompt, when the session is free and the queue is not paused. */
-  private drainQueue(live: Live): void {
+  /**
+   * Sends the oldest waiting prompt when the session is free and the queue is not paused, or even
+   * when it is, for the prompt Send now chose.
+   */
+  private drainQueue(live: Live, chosen = false): void {
     const { status, queue, queuePaused } = live.thread.session
     const [next, ...rest] = queue
-    if (!next || queuePaused || !canSend(status)) return
-    this.update(live, { queue: rest })
+    if (!next || (queuePaused && !chosen) || !canSend(status)) return
+    this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     this.sendPrompt(live, next.content, next.from)
   }
 
@@ -3828,6 +3861,7 @@ export class SessionManager {
     if (turn.fallback) clearTimeout(turn.fallback)
     turn.fallback = null
     if (live.turn === turn) live.turn = null
+    live.sendNext = false
     if (turn.attachments.length > 0) void this.deps.attachments?.release(turn.attachments)
     turn.attachments = []
     this.deps.mcp?.turnEnded(live.id)
@@ -3875,6 +3909,8 @@ export class SessionManager {
     tokens: TokenTotals | null,
     models: ModelTokens[] = [],
   ): void {
+    // The prompt Send now chose goes next, whether the stop landed or the turn finished first.
+    const chosen = live.sendNext && (stopReason === 'cancelled' || stopReason === 'end_turn')
     const turnEntryId = this.finishTurn(live, turn, stopReason)
     const now = this.now()
     const changes: Partial<SessionView> = {
@@ -3936,7 +3972,7 @@ export class SessionManager {
     if (!routineTurn) {
       this.deps.events.attention(live.id, 'turn-ended', this.titleOf(live), turnEndText(stopReason))
     }
-    if (stopReason === 'end_turn') this.drainQueue(live)
+    if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)
     else this.pauseQueue(live)
     this.checkpoint(live)
   }
@@ -4018,8 +4054,10 @@ export class SessionManager {
     const mapped = agentError(error)
     const closed = mapped.code === 'agent_unavailable'
     if (closed && turn.cancelRequested) {
-      // The user had stopped it before the agent exited, so it ends stopped, as on the exit event.
+      // The user had stopped it before the agent exited, so it ends stopped, as on the exit event,
+      // and a prompt Send now chose waits first in the paused queue.
       live.connection = null
+      live.sendNext = false
       this.endTurn(live, turn, 'cancelled', null)
       return
     }

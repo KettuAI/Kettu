@@ -585,6 +585,83 @@ describe('the queue', () => {
     )
     expect(port.summary(sessionId)?.status).toBe('running')
   })
+
+  it('steers with Send now where the agent can', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    const { itemId } = await port.request('sessions.queue', {
+      sessionId,
+      content: text('Use the new clock'),
+    })
+    await port.request('sessions.sendNow', { sessionId, itemId: itemId! })
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'user' && !!entry.steered)
+    expect(port.thread(sessionId).session.queue).toEqual([])
+    expect(port.summary(sessionId)?.status).toBe('running')
+  })
+
+  describe('Send now where the agent cannot steer', () => {
+    const withoutSteering = () => setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'steering' } })
+
+    it('stops the turn and sends the chosen prompt as the next turn', async () => {
+      const { t, port } = await withoutSteering()
+      const sessionId = await newSession(t, port)
+      await turn(port, sessionId, '/cancel')
+      await port.request('sessions.queue', { sessionId, content: text('Then this') })
+      const { itemId } = await port.request('sessions.queue', {
+        sessionId,
+        content: text('/cancel'),
+      })
+      await port.request('sessions.sendNow', { sessionId, itemId: itemId! })
+      await port.until(() => userTexts(port, sessionId).length === 2)
+      expect(port.entries(sessionId).filter((entry) => entry.kind === 'turn_end')).toMatchObject([
+        { stopReason: 'cancelled' },
+      ])
+      expect(port.summary(sessionId)?.status).toBe('running')
+      expect(port.thread(sessionId).session).toMatchObject({
+        queue: [{ content: text('Then this') }],
+        queuePaused: false,
+      })
+    })
+
+    it('sends the chosen prompt beside a paused queue', async () => {
+      const { t, port } = await withoutSteering()
+      const sessionId = await newSession(t, port)
+      await turn(port, sessionId, '/cancel')
+      await port.request('sessions.queue', { sessionId, content: text('Later') })
+      await port.request('sessions.cancel', { sessionId })
+      await port.untilStatus(sessionId, 'ready')
+      const sent = await port.request('sessions.queue', { sessionId, content: text('/cancel') })
+      expect(sent.itemId).toBeNull()
+      const { itemId } = await port.request('sessions.queue', { sessionId, content: text('Now') })
+      await port.request('sessions.sendNow', { sessionId, itemId: itemId! })
+      await port.until(() => userTexts(port, sessionId).at(-1) === 'Now')
+      expect(port.thread(sessionId).session).toMatchObject({
+        queue: [{ content: text('Later') }],
+        queuePaused: true,
+      })
+    })
+
+    it('leaves the chosen prompt first in a paused queue when the agent exits', async () => {
+      const { t, port } = await withoutSteering()
+      const sessionId = await newSession(t, port)
+      await turn(port, sessionId, '/cancel --ignore-cancel')
+      await port.untilEntry(sessionId, (entry) => entry.kind === 'agent')
+      await port.request('sessions.queue', { sessionId, content: text('First') })
+      const { itemId } = await port.request('sessions.queue', {
+        sessionId,
+        content: text('Second'),
+      })
+      await port.request('sessions.sendNow', { sessionId, itemId: itemId! })
+      ;(t.launcher as InProcessLauncher).crash()
+      await port.untilStatus(sessionId, 'closed')
+      expect(userTexts(port, sessionId)).toEqual(['/cancel --ignore-cancel'])
+      expect(port.thread(sessionId).session).toMatchObject({
+        queue: [{ content: text('Second') }, { content: text('First') }],
+        queuePaused: true,
+      })
+    })
+  })
 })
 
 describe('ultracode', () => {

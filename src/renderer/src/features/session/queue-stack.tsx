@@ -66,8 +66,8 @@ const overlayOpen = () =>
  * The prompts waiting for the running turn, as a stack of cards tucked behind the composer. The
  * next one shows with the count; resting the pointer on it, or focusing it, fans three out, and
  * the wheel or the arrow keys move through the rest. The card under the pointer, or the front one
- * from the keyboard, offers its actions: Send now where the agent can steer, Edit in the composer,
- * Remove, and Resume on a paused queue's next message.
+ * from the keyboard, offers its actions: Send now while a turn runs, Edit in the composer, Remove,
+ * and Resume on a paused queue's next message.
  */
 export function QueueStack({
   session,
@@ -214,7 +214,7 @@ export function QueueStack({
   }
   const actions: CardActions = {
     resume: () => run(host('sessions.resumeQueue', { sessionId })),
-    steer: (item) => run(host('sessions.steer', { sessionId, itemId: item.id })),
+    sendNow: (item) => run(host('sessions.sendNow', { sessionId, itemId: item.id })),
     edit: (item) =>
       run(
         host('sessions.unqueue', { sessionId, itemId: item.id }).then(() => {
@@ -322,7 +322,8 @@ export function QueueStack({
                           : t('queue.queued', { count })
                   }
                   canResume={index === 0 && queuePaused}
-                  canSteer={steering && running}
+                  canSendNow={running}
+                  steering={steering}
                   actions={actions}
                   onHover={() => setHovered(item.id)}
                 />
@@ -337,7 +338,7 @@ export function QueueStack({
 
 interface CardActions {
   resume: () => void
-  steer: (item: QueuedPrompt) => void
+  sendNow: (item: QueuedPrompt) => void
   edit: (item: QueuedPrompt) => void
   remove: (item: QueuedPrompt) => void
 }
@@ -352,7 +353,8 @@ function QueueCard({
   ringed,
   count,
   canResume,
-  canSteer,
+  canSendNow,
+  steering,
   actions,
   onHover,
 }: {
@@ -364,7 +366,9 @@ function QueueCard({
   ringed: boolean
   count: string | null
   canResume: boolean
-  canSteer: boolean
+  canSendNow: boolean
+  /** Whether Send now steers into the turn, or stops it and sends the message next. */
+  steering: boolean
   actions: CardActions
   onHover: () => void
 }) {
@@ -424,15 +428,17 @@ function QueueCard({
               {t('queue.resume')}
             </Button>
           )}
-          {canSteer && (
+          {canSendNow && (
             <Tooltip>
               <TooltipTrigger
-                render={<Button variant="outline" size="xs" onClick={() => actions.steer(item)} />}
+                render={
+                  <Button variant="outline" size="xs" onClick={() => actions.sendNow(item)} />
+                }
               >
                 <CornerDownRightIcon data-icon="inline-start" />
                 {t('queue.sendNow')}
               </TooltipTrigger>
-              <TooltipContent>{t('queue.steer')}</TooltipContent>
+              <TooltipContent>{t(steering ? 'queue.steer' : 'queue.stopAndSend')}</TooltipContent>
             </Tooltip>
           )}
           <CardButton label={t('queue.edit')} onClick={() => actions.edit(item)}>

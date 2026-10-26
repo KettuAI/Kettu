@@ -470,6 +470,8 @@ export interface HostContract {
   }
   'sessions.unqueue': { params: { sessionId: string; itemId: string }; result: void }
   'sessions.steer': { params: { sessionId: string; itemId: string }; result: void }
+  // Steers where the agent can; otherwise stops the turn and sends the prompt as the next one.
+  'sessions.sendNow': { params: { sessionId: string; itemId: string }; result: void }
   'sessions.resumeQueue': { params: { sessionId: string }; result: void }
   // An image or pasted text the thread store keeps for a sent attachment, by its hash.
   'sessions.blob': { params: { sessionId: string; hash: string }; result: AttachmentBytes }
@@ -648,6 +650,7 @@ export const HOST_METHODS = [
   'sessions.queue',
   'sessions.unqueue',
   'sessions.steer',
+  'sessions.sendNow',
   'sessions.resumeQueue',
   'sessions.blob',
   'sessions.setConfigOption',
