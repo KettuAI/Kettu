@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ArtifactEntry, GitEntry, SessionView, ThreadEntry, ThreadState } from '@shared/thread'
 import {
+  agentEntryBefore,
   artifactWrite,
   gitPatch,
   ReplayKeeper,
@@ -34,11 +35,20 @@ const tool = (id: string): ThreadEntry => ({
   permission: null,
   permissionResult: null,
 })
-const turnEnd = (id: string): ThreadEntry => ({
+const turnEnd = (id: string, after?: string | null): ThreadEntry => ({
   kind: 'turn_end',
   id,
   stopReason: 'end_turn',
   durationMs: 1,
+  ...(after === undefined ? {} : { after }),
+})
+/** The host's own notice records `after`; an agent's, and one stored before, has none. */
+const notice = (id: string, after?: string | null): ThreadEntry => ({
+  kind: 'notice',
+  id,
+  severity: 'error',
+  title: 'Out of credit',
+  ...(after === undefined ? {} : { after }),
 })
 const card = (id: string, fields: Partial<ArtifactEntry> = {}): ArtifactEntry => ({
   kind: 'artifact',
@@ -157,6 +167,11 @@ describe('writePatch', () => {
     expect(other).toMatchObject({ op: 'entry.add', entry: { after: 't:2' } })
     expect(writePatch(threadOf([]), write(), newId)).toMatchObject({ entry: { after: null } })
   })
+
+  it("anchors on an agent's notice, which records no after, as on any entry of the agent's", () => {
+    const thread = threadOf([user('e:1'), tool('t:2'), notice('e:3'), notice('e:4', 't:2')])
+    expect(writePatch(thread, write(), newId)).toMatchObject({ entry: { after: 'e:3' } })
+  })
 })
 
 describe('ReplayKeeper', () => {
@@ -217,7 +232,7 @@ describe('ReplayKeeper', () => {
     )
     expect(keeper.before(user('m:1'))).toEqual([])
     expect(keeper.after(tool('t:2')).map((e) => e.id)).toEqual(['g:1', 'g:2'])
-    expect(keeper.rest()).toEqual([])
+    expect(keeper.rest().map((e) => e.id)).toEqual(['e:3'])
   })
 
   it('puts a git event whose entry never comes back at the end of its turn', () => {
@@ -239,6 +254,63 @@ describe('ReplayKeeper', () => {
     expect(keeper.before(user('m:2')).map((e) => e.id)).toEqual(['g:1'])
     expect(keeper.after(tool('t:4'))).toEqual([])
     expect(keeper.rest().map((e) => e.id)).toEqual(['g:2'])
+  })
+
+  it('puts a turn end back after the entry it followed', () => {
+    const keeper = new ReplayKeeper(
+      threadOf([user('e:1'), tool('t:2'), turnEnd('e:3', 't:2'), user('e:4'), tool('t:5')]),
+    )
+    expect(keeper.before(user('m:1'))).toEqual([])
+    expect(keeper.after(tool('t:2')).map((e) => e.id)).toEqual(['e:3'])
+    expect(keeper.empty).toBe(true)
+  })
+
+  it('puts a turn end at the end of its turn when its entry never comes back, or it has none', () => {
+    const keeper = new ReplayKeeper(
+      threadOf([
+        user('e:1'),
+        tool('t:2'),
+        turnEnd('e:3', 't:gone'),
+        user('e:4'),
+        tool('t:5'),
+        turnEnd('e:6'),
+      ]),
+    )
+    expect(keeper.before(user('m:1'))).toEqual([])
+    expect(keeper.after(tool('t:2'))).toEqual([])
+    expect(keeper.before(user('m:2')).map((e) => e.id)).toEqual(['e:3'])
+    expect(keeper.after(tool('t:5'))).toEqual([])
+    expect(keeper.rest().map((e) => e.id)).toEqual(['e:6'])
+  })
+
+  it("keeps the host's notices, null after included, and leaves the agent's to the replay", () => {
+    const keeper = new ReplayKeeper(
+      threadOf([
+        notice('e:1', null),
+        user('e:2'),
+        tool('t:3'),
+        notice('e:4', 't:3'),
+        notice('e:5'),
+      ]),
+    )
+    expect(keeper.before(user('m:1')).map((e) => e.id)).toEqual(['e:1'])
+    expect(keeper.after(tool('t:3')).map((e) => e.id)).toEqual(['e:4'])
+    expect(keeper.empty).toBe(true)
+  })
+
+  it("puts a turn end back after the agent's notice that ended its turn", () => {
+    const live = [user('e:1'), tool('t:2'), notice('e:3')]
+    const keeper = new ReplayKeeper(
+      threadOf([...live, turnEnd('e:4', agentEntryBefore(threadOf(live)))]),
+    )
+    // The replay sends the agent's notice again under a new id.
+    const replay = [user('e:5'), tool('t:2'), notice('e:6')]
+    const order = replay.flatMap((entry) => [
+      ...keeper.before(entry),
+      entry,
+      ...keeper.after(entry),
+    ])
+    expect([...order, ...keeper.rest()].map((e) => e.id)).toEqual(['e:5', 't:2', 'e:6', 'e:4'])
   })
 })
 

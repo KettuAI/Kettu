@@ -1,11 +1,14 @@
 // What a write to the artifacts service puts in the calling session's thread, and how those
-// entries, like started sessions and git events, outlive a replay.
+// entries, like started sessions, git events, turn ends and the host's notices, outlive a replay.
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ArtifactAction, ArtifactEntry, Patch, ThreadEntry, ThreadState } from '@shared/thread'
 import type { GitEventDraft } from '../git/api'
 
-type OwnEntry = Extract<ThreadEntry, { kind: 'artifact' | 'session_started' | 'git' }>
+type OwnEntry = Extract<
+  ThreadEntry,
+  { kind: 'artifact' | 'session_started' | 'git' | 'turn_end' | 'notice' }
+>
 
 const ACTIONS: Record<string, ArtifactAction> = {
   create_artifact: 'create',
@@ -24,11 +27,11 @@ export interface ArtifactWrite {
 }
 
 /** The agent's entry before the thread's end, skipping the ones the host added itself. */
-function agentEntryBefore(thread: ThreadState): string | null {
+export function agentEntryBefore(thread: ThreadState): string | null {
   const { order, byId } = thread
   for (let i = order.length - 1; i >= 0; i--) {
     const entry = byId[order[i]!]
-    if (entry && !OWN.has(entry.kind)) return entry.id
+    if (entry && !isOwn(entry)) return entry.id
   }
   return null
 }
@@ -77,15 +80,6 @@ export async function artifactWrite(
   }
 }
 
-/** Entries the host adds itself, which an agent's replay never sends again. */
-const OWN = new Set<ThreadEntry['kind']>([
-  'notice',
-  'turn_end',
-  'git',
-  'artifact',
-  'session_started',
-])
-
 /**
  * The patch a write makes: the latest turn's entry for the same artifact takes it, or a new entry
  * goes at the thread's end, after the call still running there.
@@ -96,7 +90,7 @@ export function writePatch(thread: ThreadState, write: ArtifactWrite, newId: () 
   for (let i = order.length - 1; i >= 0; i--) {
     const entry = byId[order[i]!]
     if (!entry) continue
-    if (after === null && !OWN.has(entry.kind)) after = entry.id
+    if (after === null && !isOwn(entry)) after = entry.id
     if (entry.kind === 'user') break
     if (
       write.action !== 'delete' &&
@@ -125,9 +119,28 @@ export function writePatch(thread: ThreadState, write: ArtifactWrite, newId: () 
 }
 
 /**
+ * Whether the host added the entry itself, which an agent's replay never sends again: a notice only
+ * when it records `after`, as an agent's never does.
+ */
+function isOwn(entry: ThreadEntry): entry is OwnEntry {
+  switch (entry.kind) {
+    case 'artifact':
+    case 'session_started':
+    case 'git':
+    case 'turn_end':
+      return true
+    case 'notice':
+      return entry.after !== undefined
+    default:
+      return false
+  }
+}
+
+/**
  * A thread's entries the host added and keeps while a replay rebuilds it, artifact entries,
- * started sessions and git events: each goes back after the entry it followed, or, when the replay
- * never sends that one or it recorded none, at the end of its turn, counted by user messages.
+ * started sessions, git events, turn ends and its own notices: each goes back after the entry it
+ * followed, or, when the replay never sends that one or it recorded none, at the end of its turn,
+ * counted by user messages.
  */
 export class ReplayKeeper {
   private kept: { entry: OwnEntry; turn: number }[] = []
@@ -138,13 +151,7 @@ export class ReplayKeeper {
     for (const id of thread.order) {
       const entry = thread.byId[id]
       if (entry?.kind === 'user') turn++
-      else if (
-        entry?.kind === 'artifact' ||
-        entry?.kind === 'session_started' ||
-        entry?.kind === 'git'
-      ) {
-        this.kept.push({ entry, turn })
-      }
+      else if (entry && isOwn(entry)) this.kept.push({ entry, turn })
     }
   }
 
@@ -161,7 +168,7 @@ export class ReplayKeeper {
 
   /** The kept entries that go in right after this entry of the replay. */
   after(entry: ThreadEntry): OwnEntry[] {
-    if (OWN.has(entry.kind)) return []
+    if (isOwn(entry)) return []
     return this.take((k) => k.entry.after === entry.id)
   }
 

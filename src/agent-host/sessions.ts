@@ -59,6 +59,7 @@ import {
 } from './acp/connection'
 import type { ForkPoint } from './acp/fork-point'
 import {
+  agentEntryBefore,
   gitPatch,
   ReplayKeeper,
   startedPatch,
@@ -1580,6 +1581,7 @@ export class SessionManager {
                 id: this.nextId(child),
                 stopReason: state.stopReason,
                 durationMs: now - startedAt,
+                after: agentEntryBefore(child.thread),
               },
             },
           ])
@@ -2242,7 +2244,15 @@ export class SessionManager {
       return
     }
     this.emit(live, [
-      { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          ...notice,
+          after: agentEntryBefore(live.thread),
+        },
+      },
     ])
     this.update(live, {
       queue: [
@@ -2277,6 +2287,7 @@ export class SessionManager {
           severity: 'info',
           title: t('notice.closedBeforeSent.title'),
           description: t('notice.closedBeforeSent.description'),
+          after: agentEntryBefore(live.thread),
         },
       },
     ])
@@ -2299,6 +2310,7 @@ export class SessionManager {
           severity: 'error',
           title: t('notice.signInNeeded', { agent: this.deps.agents.name(live.record.agentId) }),
           description: error.message,
+          after: agentEntryBefore(live.thread),
         },
       },
     ])
@@ -2549,6 +2561,7 @@ export class SessionManager {
                 description: t('notice.historyUnavailable.description', {
                   agent: this.deps.agents.name(live.record.agentId),
                 }),
+                after: agentEntryBefore(live.thread),
               },
             },
           ])
@@ -2660,6 +2673,7 @@ export class SessionManager {
               id: this.nextId(live),
               severity: 'error',
               ...stoppedNotice(name),
+              after: agentEntryBefore(live.thread),
             },
           },
         ])
@@ -3031,7 +3045,15 @@ export class SessionManager {
     const notice = lostValuesNotice(lost, { subject: 'session', held: turn !== null })
     if (!notice) return
     this.emit(live, [
-      { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          ...notice,
+          after: agentEntryBefore(live.thread),
+        },
+      },
     ])
     if (!turn) return
     this.finishTurn(live, turn, null)
@@ -3715,7 +3737,15 @@ export class SessionManager {
       const notice = lostValuesNotice(lostValues(carried, config))
       if (notice) {
         this.emit(live, [
-          { op: 'entry.add', entry: { kind: 'notice', id: this.nextId(live), ...notice } },
+          {
+            op: 'entry.add',
+            entry: {
+              kind: 'notice',
+              id: this.nextId(live),
+              ...notice,
+              after: agentEntryBefore(live.thread),
+            },
+          },
         ])
       }
       this.update(live, { status: 'ready' })
@@ -3829,6 +3859,7 @@ export class SessionManager {
           id,
           stopReason,
           durationMs: Math.max(0, this.now() - turn.startedAt),
+          after: agentEntryBefore(live.thread),
         },
       },
     ])
@@ -4023,6 +4054,7 @@ export class SessionManager {
                     mapped.message,
                   )
                 : { title: t('notice.turnFailed'), description: mapped.message }),
+          after: agentEntryBefore(live.thread),
         },
       },
     ])
@@ -4147,6 +4179,7 @@ export class SessionManager {
             description: t('notice.cancelUnconfirmed.description', {
               seconds: String(Math.round(this.timings.cancelFallbackMs / 1000)),
             }),
+            after: agentEntryBefore(live.thread),
           },
         },
       ])
@@ -4594,6 +4627,7 @@ export class SessionManager {
           id: this.nextId(live),
           severity: 'info',
           title: t('notice.archivedByAgent', { agent: byAgent }),
+          after: agentEntryBefore(live.thread),
         },
       },
     ])
