@@ -1,10 +1,23 @@
 import { mkdtemp, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import { join } from 'node:path'
-import type { WebFrameMain } from 'electron'
+import type {
+  CallbackResponse,
+  OnBeforeRequestListenerDetails,
+  Session,
+  WebFrameMain,
+} from 'electron'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { MediaGrantRecord } from '@shared/media'
-import { grantedPath, MediaGrants, mayRequestMedia, parseRange, respondMedia } from './media'
+import {
+  grantedPath,
+  MediaGrants,
+  mayRequestMedia,
+  mediaScheme,
+  parseRange,
+  respondMedia,
+  serveMedia,
+} from './media'
 
 const open = vi.hoisted(() => vi.fn())
 vi.mock('node:fs/promises', async (original) => {
@@ -20,6 +33,27 @@ const token = (n: number) => String.fromCharCode(97 + n).repeat(26)
 function grant(n: number, path: string, sessionId: string | null = 's1'): MediaGrantRecord {
   return { token: token(n), path, mimeType: 'image/png', sessionId }
 }
+
+const APP = 'http://localhost:5173/'
+const isRenderer = (url: string | undefined) => url === APP
+const frame = (url: string, parent: unknown = null) => ({ url, parent }) as WebFrameMain
+
+const HARDENING = {
+  'x-content-type-options': 'nosniff',
+  'cache-control': 'no-store',
+  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+}
+
+describe('mediaScheme', () => {
+  it('asks for CORS beside its other privileges', () => {
+    expect(mediaScheme.privileges).toEqual({
+      standard: true,
+      secure: true,
+      stream: true,
+      corsEnabled: true,
+    })
+  })
+})
 
 describe('MediaGrants', () => {
   it('finds a grant, and waits a moment for one that crosses the other channel', async () => {
@@ -105,16 +139,15 @@ describe('respondMedia', () => {
     return kept
   }
 
-  it('serves a granted file with its type and hardening headers', async () => {
+  it('serves a granted file with its type, CORS and hardening headers', async () => {
     const response = await respondMedia(new Request(url(0)), grants())
     expect(response.status).toBe(200)
     expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes)
     expect(Object.fromEntries(response.headers)).toMatchObject({
       'content-type': 'image/png',
       'content-length': String(bytes.length),
-      'x-content-type-options': 'nosniff',
-      'cache-control': 'no-store',
-      'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      'access-control-allow-origin': '*',
+      ...HARDENING,
     })
   })
 
@@ -139,6 +172,8 @@ describe('respondMedia', () => {
       'content-range': `bytes 4-7/${bytes.length}`,
       'content-length': '4',
       'accept-ranges': 'bytes',
+      'access-control-allow-origin': '*',
+      ...HARDENING,
     })
     const suffix = await respondMedia(
       new Request(url(0), { headers: { range: 'bytes=-4' } }),
@@ -208,13 +243,51 @@ describe('grantedPath', () => {
 })
 
 describe('mayRequestMedia', () => {
-  const isRenderer = (url: string | undefined) => url === 'http://localhost:5173/'
-  const frame = (url: string, parent: unknown = null) => ({ url, parent }) as WebFrameMain
-
   it('lets only the main frame of the app page through', () => {
-    expect(mayRequestMedia(frame('http://localhost:5173/'), isRenderer)).toBe(true)
-    expect(mayRequestMedia(frame('http://localhost:5173/', frame('x')), isRenderer)).toBe(false)
+    expect(mayRequestMedia(frame(APP), isRenderer)).toBe(true)
+    expect(mayRequestMedia(frame(APP, frame(APP)), isRenderer)).toBe(false)
+    expect(mayRequestMedia(frame('overbench-artifact://x/', frame(APP)), isRenderer)).toBe(false)
     expect(mayRequestMedia(frame('overbench-artifact://x/'), isRenderer)).toBe(false)
     expect(mayRequestMedia(null, isRenderer)).toBe(false)
+  })
+})
+
+describe('serveMedia', () => {
+  function fakeSession() {
+    const handle = vi.fn()
+    const listeners: ((
+      details: OnBeforeRequestListenerDetails,
+      callback: (response: CallbackResponse) => void,
+    ) => void)[] = []
+    const session = {
+      protocol: { handle },
+      webRequest: {
+        onBeforeRequest: (listener: (typeof listeners)[number]) => listeners.push(listener),
+      },
+    } as unknown as Session
+    const cancels = (url: string, from: WebFrameMain | null) =>
+      new Promise<boolean>((resolve) =>
+        listeners.at(-1)!({ url, frame: from } as OnBeforeRequestListenerDetails, (response) =>
+          resolve(response.cancel === true),
+        ),
+      )
+    return { session, handle, listeners, cancels }
+  }
+
+  it('handles the scheme and filters it on the session it is given, and on no other', async () => {
+    const app = fakeSession()
+    const other = fakeSession()
+    serveMedia(app.session, new MediaGrants(0), isRenderer)
+    expect(app.handle).toHaveBeenCalledWith('overbench-media', expect.any(Function))
+    expect(other.handle).not.toHaveBeenCalled()
+    expect(other.listeners).toEqual([])
+    const media = `overbench-media://${token(0)}/shot.png?v=1`
+    expect(await app.cancels(media, frame(APP))).toBe(false)
+    expect(await app.cancels(media, frame(APP, frame(APP)))).toBe(true)
+    expect(await app.cancels(media, frame('overbench-artifact://x/', frame(APP)))).toBe(true)
+    expect(await app.cancels(media, null)).toBe(true)
+    expect(await app.cancels('https://example.com/a.png', frame('overbench-artifact://x/'))).toBe(
+      false,
+    )
   })
 })

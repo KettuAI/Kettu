@@ -55,8 +55,8 @@ type Source =
       bytes: Uint8Array | null
     }
 
-// Electron decodes these when it copies a picture; any other is handed over as PNG.
-const COPIED_TYPES = new Set(['image/png', 'image/jpeg'])
+// Main decodes these when it copies a picture; any other is drawn here and handed over as PNG.
+const MAIN_DECODES = new Set(['image/png', 'image/jpeg'])
 const COPIED_MS = 1500
 
 /** The media viewer: one for the window, open while a request is. */
@@ -82,15 +82,27 @@ function base64Bytes(data: string): Uint8Array {
   return bytes
 }
 
-/** A picture drawn again as PNG, for one Electron cannot decode. */
-async function asPng(src: string): Promise<Uint8Array> {
-  const image = new Image()
-  image.src = src
-  await image.decode()
-  const canvas = new OffscreenCanvas(image.naturalWidth || 300, image.naturalHeight || 150)
-  canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height)
-  const blob = await canvas.convertToBlob({ type: 'image/png' })
-  return new Uint8Array(await blob.arrayBuffer())
+/**
+ * A picture drawn again as PNG, at `size` or its own pixels: a file by its media URL, which answers
+ * CORS so the canvas stays readable, or carried bytes. A new image that never showed draws its
+ * first frame, so an animation copies as it starts.
+ */
+async function drawnAsPng(source: string | Blob, size: Size | null): Promise<Uint8Array> {
+  const src = typeof source === 'string' ? source : URL.createObjectURL(source)
+  try {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.src = src
+    await image.decode()
+    const width = Math.max(1, Math.round(size?.width ?? image.naturalWidth))
+    const height = Math.max(1, Math.round(size?.height ?? image.naturalHeight))
+    const canvas = new OffscreenCanvas(width, height)
+    canvas.getContext('2d')!.drawImage(image, 0, 0, width, height)
+    const blob = await canvas.convertToBlob({ type: 'image/png' })
+    return new Uint8Array(await blob.arrayBuffer())
+  } finally {
+    if (typeof source !== 'string') URL.revokeObjectURL(src)
+  }
 }
 
 async function fileSource(path: string, request: ViewerRequest, fresh: boolean): Promise<Source> {
@@ -305,15 +317,27 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
   const copy = () => {
     if (!ready || !isPicture) return
     run(async () => {
-      if (ready.url) {
-        await window.overbench.media.copyImage(ready.url)
+      const media = ready.url ?? carried()
+      if (MAIN_DECODES.has(ready.mimeType)) {
+        await window.overbench.media.copyImage(media)
       } else {
-        const media = carried()
-        await window.overbench.media.copyImage(
-          COPIED_TYPES.has(media.mimeType)
+        // An SVG at the size the viewer fits it to; any other picture at its own pixels.
+        const fitted =
+          ready.mimeType === 'image/svg+xml' && view.pixels && view.zoom
+            ? {
+                width: view.pixels.width * view.zoom.fit,
+                height: view.pixels.height * view.zoom.fit,
+              }
+            : null
+        const source =
+          typeof media === 'string'
             ? media
-            : { ...media, bytes: await asPng(ready.src), mimeType: 'image/png' },
-        )
+            : new Blob([new Uint8Array(media.bytes)], { type: media.mimeType })
+        await window.overbench.media.copyImage({
+          bytes: await drawnAsPng(source, fitted),
+          mimeType: 'image/png',
+          name,
+        })
       }
       setCopied(true)
       clearTimeout(copiedTimer.current)

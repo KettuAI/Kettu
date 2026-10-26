@@ -5,7 +5,7 @@
 
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createSocket, type Socket } from 'node:dgram'
 import { createServer, type Server } from 'node:http'
 import {
@@ -40,6 +40,7 @@ function probePage(
   server: string,
   secret: string,
   image: string,
+  media: string,
   exfil: Exfil,
   peers: PeerListeners,
 ): string {
@@ -56,6 +57,7 @@ const DEV_SERVER = ${JSON.stringify(server.replace('127.0.0.1', 'localhost'))}
 const OTHER = ${JSON.stringify(artifactUrl(ids.other))}
 const SECRET = ${JSON.stringify(secret)}
 const IMAGE = ${JSON.stringify(image)}
+const MEDIA = ${JSON.stringify(media)}
 const EXFIL = ${JSON.stringify(exfil.script)}
 const PEERS = ${JSON.stringify(peers)}
 const PEER_NAMES = ${JSON.stringify({ stun: exfil.stun, turn: exfil.turn, turns: exfil.turns })}
@@ -117,6 +119,17 @@ const attempts = {
     const loaded = loads(img)
     img.src = IMAGE
     return !(await loaded)
+  },
+  'a granted picture on the media scheme by fetch': () => fails(fetch(MEDIA, { mode: 'cors' })),
+  'a granted picture on the media scheme drawn on a canvas': async () => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    const loaded = loads(img)
+    img.src = MEDIA
+    if (!(await loaded)) return true
+    const canvas = document.createElement('canvas')
+    canvas.getContext('2d').drawImage(img, 0, 0)
+    try { canvas.toDataURL(); return false } catch { return true }
   },
   "another artifact's origin by fetch": () => fails(fetch(OTHER)),
   "another artifact's origin in a frame": async () => {
@@ -290,6 +303,8 @@ interface ProbeResult {
   trustedAfterProbe: boolean
   refused: Record<string, { waits: (number | string)[]; revoked: boolean; revocations: number }>
   canvas: { waits: number[]; loaded: number; trusted: boolean }
+  /** Whether the app's own page drew the granted picture on a canvas. */
+  mediaInApp: boolean
   asked: string[]
   opened: string[]
   windows: number
@@ -411,10 +426,18 @@ async function probe(policy: boolean): Promise<ProbeResult> {
       ] as const
     ).map((name) => [name, `${name}-${nonce}.exfil.test`]),
   ) as Exfil
+  // Granted on the media scheme by its real path, as the host grants a file.
+  const mediaToken = (policy ? 'm' : 'n').repeat(26)
+  const media = {
+    token: mediaToken,
+    path: await realpath(image),
+    url: `overbench-media://${mediaToken}/secret.png?v=1`,
+  }
   const page = probePage(
     origin,
     pathToFileURL(secret).href,
     pathToFileURL(image).href,
+    media.url,
     exfil,
     peers,
   )
@@ -437,6 +460,7 @@ async function probe(policy: boolean): Promise<ProbeResult> {
     unopened: ids.unopened,
     exfil,
     netLog: path.join(run, 'net-log.json'),
+    media,
   }
   await writeFile(path.join(run, 'config.json'), JSON.stringify(config))
   // Run as Electron, and load the page from its file rather than a dev server.
@@ -531,6 +555,12 @@ describe.each([
     expect(result.asked).not.toContain(ids.other)
     expect(result.opened).toEqual([])
     expect(result.windows).toBe(1)
+  })
+
+  it("lets the app's page draw a granted picture, and refuses it to the page both ways", () => {
+    expect(result.mediaInApp).toBe(true)
+    const media = result.attempts.filter((attempt) => attempt.name.includes('the media scheme'))
+    expect(media.map((attempt) => attempt.held)).toEqual([true, true])
   })
 
   it("runs the page in a sandboxed process of its own and keeps the app's access", () => {
