@@ -4,48 +4,40 @@ OverBench 现在有什么、接下来做什么，按版本列出。版本没有�
 
 ## 现在已有
 
-v0.0.4 中：
+v0.0.5 中：
 
 - 通过 Agent Client Protocol 并排使用 Claude Code、Codex CLI 和 opencode
-- 会话历史、多会话并行、子会话，以及从任意一条回复分叉
+- 会话历史、多会话并行、子会话，以及从任意一条回复分叉，还有一份消息大纲，可以在你发过的消息之间跳转
 - 按一个键就能回答的授权卡片、会话需要你时发送通知，以及 Prompt 缓存倒计时
-- Git 状态与 Pull Request，每个项目都有文件面板和终端
+- Git 状态与 Pull Request，每个项目都有文件面板和终端，还有能保留登录状态的浏览器面板
 - 所有 Agent 的 token 用量、请求数和费用，以及套餐额度
-- Artifacts：Agent 生成的页面和画布，保留历史版本，在隔离的查看器中打开
-- 附件：粘贴图片、附加文件和文件夹、用 `@` 引用项目文件，回复中提到的图片直接显示
-- Routines：按计划自动运行的 Agent 任务，以及每次运行的记录
-- macOS、Windows、Linux 预览版，Windows 和 Linux 上自动更新
+- Artifacts：Agent 生成的页面和画布，保留历史版本，在隔离的查看器中打开，还能通过链接在线分享
+- 附件：从输入框、剪贴板或 `@` 引用附加文件、文件夹和图片，回复中提到的图片、视频和音频直接显示
+- Routines：按计划自动运行的 Agent 任务，在权限范围内运行，接近套餐额度时暂停，并保留每次运行的记录
+- 可从文件或在线目录安装的主题，有浅色和深色
+- 重新设计的模型菜单、斜杠命令列表、用量弹窗和终端标签栏，控件和表面有轻微的层次感
+- macOS、Windows、Linux 预览版，Windows 和 Linux 上的更新在你选择的时候安装
 
-## v0.0.5：核心功能
+## v0.0.6：其余的核心功能
 
 已合并，将随本版本发布：
 
-- [x] 用量页面显示请求数和费用，侧栏显示今天的费用（[#20](https://github.com/overbench/overbench/issues/20)）
-- [x] Routine 的权限范围和接近套餐额度时暂停（[#280](https://github.com/overbench/overbench/issues/280)、[#281](https://github.com/overbench/overbench/issues/281)），以及端到端检查更新（[#283](https://github.com/overbench/overbench/issues/283)、[#284](https://github.com/overbench/overbench/issues/284)）
-- [x] 打磨模型菜单（[#28](https://github.com/overbench/overbench/issues/28)）、斜杠命令弹窗（[#38](https://github.com/overbench/overbench/issues/38)）、用量弹窗（[#30](https://github.com/overbench/overbench/issues/30)）、消息大纲（[#37](https://github.com/overbench/overbench/issues/37)）和终端标签栏（[#41](https://github.com/overbench/overbench/issues/41)）
-- [x] 长段粘贴保存为 Pasted text、粘贴从文件管理器复制的文件、重放会话中的附件，以及把发送失败的消息交还输入框（[#138](https://github.com/overbench/overbench/issues/138)、[#140](https://github.com/overbench/overbench/issues/140)、[#170](https://github.com/overbench/overbench/issues/170)、[#173](https://github.com/overbench/overbench/issues/173)）
-- [x] 回复中提到的图片和媒体直接显示（[#310](https://github.com/overbench/overbench/issues/310)）
-- [x] 控件和表面有轻微的层次感（[#330](https://github.com/overbench/overbench/issues/330)），错误提示使用 destructive 样式（[#214](https://github.com/overbench/overbench/issues/214)）
+- [x] 在 macOS 上，发送 Apple Events 的命令会弹出系统的授权提示，不再被直接拒绝（[#133](https://github.com/overbench/overbench/issues/133)）
 
 尚未完成：
 
-- [ ] 自己选择更新何时下载和安装（[#67](https://github.com/overbench/overbench/issues/67)）
-- [ ] Routines 的其余部分：计划与运行记录（[#22](https://github.com/overbench/overbench/issues/22)）
-- [ ] 在对话和文件面板中显示图片、音频和视频（[#43](https://github.com/overbench/overbench/issues/43)、[#312](https://github.com/overbench/overbench/issues/312)），在图片查看器中缩放、逐步查看和复制（[#311](https://github.com/overbench/overbench/issues/311)），以及在对话中传输音频和视频文件内容（[#313](https://github.com/overbench/overbench/issues/313)）
-- [ ] 从输入框中附加文件和图片（[#40](https://github.com/overbench/overbench/issues/40)）
-- [ ] 让代码符合设计指南（[#29](https://github.com/overbench/overbench/issues/29)）、侧栏的头部和底部（[#34](https://github.com/overbench/overbench/issues/34)），以及关于页面中的 logo、应用图标和许可证（[#33](https://github.com/overbench/overbench/issues/33)）
-- [ ] Claude Code 在非 Anthropic 模型上的 Prompt 缓存倒计时（[#347](https://github.com/overbench/overbench/issues/347)）
-- [ ] 较小的修复：把过长的思考折叠进它所在的工作（[#333](https://github.com/overbench/overbench/issues/333)）、通知中的链接可点击（[#345](https://github.com/overbench/overbench/issues/345)）、输入时高亮斜杠命令（[#363](https://github.com/overbench/overbench/issues/363)）、输入时隐藏最近的 Artifacts（[#391](https://github.com/overbench/overbench/issues/391)），以及 Windows on Arm 上的进程组测试（[#262](https://github.com/overbench/overbench/issues/262)）
+- [ ] 在工具调用和文件面板中显示图片、音频和视频（[#43](https://github.com/overbench/overbench/issues/43)、[#312](https://github.com/overbench/overbench/issues/312)），在图片查看器中缩放、逐步查看和复制（[#311](https://github.com/overbench/overbench/issues/311)），以及在对话中传输音频和视频文件内容（[#313](https://github.com/overbench/overbench/issues/313)）
+- [ ] 侧栏的头部和底部（[#34](https://github.com/overbench/overbench/issues/34)）、关于页面中的 logo、应用图标和许可证（[#33](https://github.com/overbench/overbench/issues/33)），以及让代码符合设计指南（[#29](https://github.com/overbench/overbench/issues/29)）
+- [ ] 较小的修复：把过长的思考折叠进它所在的工作（[#333](https://github.com/overbench/overbench/issues/333)）、通知中的链接可点击（[#345](https://github.com/overbench/overbench/issues/345)）、输入时高亮斜杠命令（[#363](https://github.com/overbench/overbench/issues/363)）、输入时隐藏最近的 Artifacts（[#391](https://github.com/overbench/overbench/issues/391)）、重新设计的链接确认（[#246](https://github.com/overbench/overbench/issues/246)）、折叠的工作行之间不再留出空白（[#244](https://github.com/overbench/overbench/issues/244)）、从历史中读取的 Codex 思考不再把标题连在一起（[#267](https://github.com/overbench/overbench/issues/267)），以及 [Milestone](https://github.com/overbench/overbench/milestone/11) 中的其他修复
 
-## v0.0.6：内置浏览器与更多 Agent
+## v0.0.7：内置浏览器与更多 Agent
 
-- [ ] Agent 可以操作的内置浏览器，带有自己的浏览器面板和配置（[#47](https://github.com/overbench/overbench/issues/47)、[#316](https://github.com/overbench/overbench/issues/316)、[#317](https://github.com/overbench/overbench/issues/317)），并在 Agent 打开新网站前询问（[#318](https://github.com/overbench/overbench/issues/318)）
+- [ ] Agent 可以操作的内置浏览器（[#47](https://github.com/overbench/overbench/issues/47)、[#317](https://github.com/overbench/overbench/issues/317)），并在 Agent 打开新网站前询问（[#318](https://github.com/overbench/overbench/issues/318)）
 - [ ] 把 Cursor、GitHub Copilot CLI、Gemini CLI 和 Pi 接入为 Agent（[#350](https://github.com/overbench/overbench/issues/350)、[#351](https://github.com/overbench/overbench/issues/351)、[#352](https://github.com/overbench/overbench/issues/352)、[#353](https://github.com/overbench/overbench/issues/353)）
 
-## v0.1.0：更多 Agent、主题与 Artifacts
+## v0.1.0：更多 Agent 与 Artifacts
 
 - [ ] 把 Qwen Code、Kimi Code、Amp、Factory Droid、Devin CLI、Goose、Cline、Kilo Code 和 Grok 接入为 Agent（[#354](https://github.com/overbench/overbench/issues/354)、[#355](https://github.com/overbench/overbench/issues/355)、[#356](https://github.com/overbench/overbench/issues/356)、[#357](https://github.com/overbench/overbench/issues/357)、[#358](https://github.com/overbench/overbench/issues/358)、[#359](https://github.com/overbench/overbench/issues/359)、[#360](https://github.com/overbench/overbench/issues/360)、[#361](https://github.com/overbench/overbench/issues/361)、[#362](https://github.com/overbench/overbench/issues/362)）
-- [ ] 可从文件安装主题的主题系统，以及在线主题目录（[#373](https://github.com/overbench/overbench/issues/373)、[#374](https://github.com/overbench/overbench/issues/374)）
 - [ ] 以 Artifacts 形式制作幻灯片（[#368](https://github.com/overbench/overbench/issues/368)），导出为 PDF、PNG、PowerPoint 或各页的压缩包（[#367](https://github.com/overbench/overbench/issues/367)），在 Artifact 的某一部分留下评论并发送给 Agent（[#366](https://github.com/overbench/overbench/issues/366)），以及让 Artifact 页面保存的数据到达 Agent 和导出文件（[#369](https://github.com/overbench/overbench/issues/369)）
 
 ## v0.2.0：在其他设备上使用会话
