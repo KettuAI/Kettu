@@ -16,6 +16,7 @@ import {
   type SettingsSection,
 } from '@renderer/stores/view'
 import { AgentPage } from './agents-section'
+import { footerLabel } from './footer-label'
 import { FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
 import { SectionBody } from './rows'
 import {
@@ -282,25 +283,15 @@ function AppFooter() {
   const { t } = useTranslation('settings')
   const status = useUpdatesStore((s) => s.status)
   if (!status) return null
-  const { state } = status
-  const end: ReactNode =
-    state.kind === 'ready' ? (
-      <Badge variant="info" className="min-w-0 shrink">
-        <CircleArrowUpIcon data-icon="inline-start" />
-        <span className="truncate">{t('footer.ready', { version: state.version })}</span>
-      </Badge>
-    ) : state.kind === 'available' ? (
-      <Badge variant="info" className="min-w-0 shrink">
-        <CircleArrowUpIcon data-icon="inline-start" />
-        <span className="truncate">{t('footer.available', { version: state.version })}</span>
-      </Badge>
-    ) : state.kind === 'downloading' ? (
-      <span className="truncate tabular">
-        {t('footer.downloading', { percent: Math.round(state.percent) })}
-      </span>
-    ) : state.kind === 'idle' ? (
-      t('footer.upToDate')
-    ) : null
+  const label = footerLabel(status.state)
+  const end: ReactNode = !label ? null : label.pill ? (
+    <Badge variant="info" className="min-w-0 shrink">
+      <CircleArrowUpIcon data-icon="inline-start" />
+      <span className="truncate">{t(label.key, label.values)}</span>
+    </Badge>
+  ) : (
+    <span className="truncate tabular">{t(label.key, label.values)}</span>
+  )
   return (
     <button
       type="button"

@@ -262,6 +262,19 @@ describe('nextState', () => {
     ).toEqual({ kind: 'idle', checkedAt: 1000 })
   })
 
+  it('stays not checked after failed automatic checks until one found nothing', () => {
+    const check = { type: 'checking', manual: false } as const
+    const failed = { type: 'error', message: 'offline', manual: false } as const
+    const first = { ...install, lastCheckedAt: null }
+    let state: UpdateState = { kind: 'idle', checkedAt: null }
+    state = nextState(nextState(state, check, first), failed, first)
+    expect(state).toEqual({ kind: 'idle', checkedAt: null })
+    state = nextState(nextState(state, check, first), { type: 'not-available', at: 5000 }, first)
+    const later = { ...install, lastCheckedAt: 5000 }
+    state = nextState(nextState(state, check, later), failed, later)
+    expect(state).toEqual({ kind: 'idle', checkedAt: 5000 })
+  })
+
   it('shows that electron-updater could not load, even after an automatic check', () => {
     expect(
       nextState(
