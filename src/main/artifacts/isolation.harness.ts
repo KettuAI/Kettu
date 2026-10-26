@@ -257,6 +257,7 @@ async function run(): Promise<unknown> {
   }, 60_000)
   // Read before the page loads again below, which starts the probe over.
   const camera = await probeFrame.executeJavaScript('window.__probe.camera')
+  const cameraMs = await probeFrame.executeJavaScript('window.__probe.cameraMs')
   const metrics = app.getAppMetrics()
   const sandboxedOf = (pid: number) => metrics.find((m) => m.pid === pid)?.sandboxed ?? null
   const processes = {
@@ -428,6 +429,7 @@ async function run(): Promise<unknown> {
     held,
     attempts,
     camera,
+    cameraMs,
     processes,
     afterNavigation,
     inputs,
