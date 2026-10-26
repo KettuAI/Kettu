@@ -511,7 +511,7 @@ const outOfCredit: Scenario = async (turn) => {
   turn.session.outOfCredit = true
   throw RequestError.internalError(
     undefined,
-    'Insufficient Balance (request_id: 38feb58f-1d93-45e0-8b50-717b16b1390d)',
+    'Insufficient Balance (request_id: 38feb58f-1d93-45e0-8b50-717b16b1390d). Top up at https://example.com/billing',
   )
 }
 
@@ -612,7 +612,7 @@ const allUpdates: Scenario = async (turn) => {
       sessionUpdate: 'notice',
       severity: 'warning',
       title: 'A warning notice',
-      description: 'With a description.',
+      description: 'With a description that links to https://example.com/docs/notices.',
     },
     { sessionUpdate: 'notice', severity: 'error', title: 'An error notice' },
     { sessionUpdate: 'notice', severity: 'debug', title: 'A notice with an unknown severity' },

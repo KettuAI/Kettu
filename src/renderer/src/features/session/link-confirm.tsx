@@ -1,4 +1,4 @@
-import { Fragment, useRef } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -92,5 +92,29 @@ export function LinkConfirm({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/** A web address in plain text, such as a notice's, which opens through the confirmation. */
+export function ConfirmedLink({ url }: { url: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        // The classes of a reply's link button, which Streamdown draws in medium weight.
+        className="thread-link text-left font-medium [overflow-wrap:anywhere]"
+      >
+        {url}
+      </button>
+      <LinkConfirm
+        url={url}
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        // As a reply's link opens: main hands it to the default browser.
+        onConfirm={() => window.open(url, '_blank', 'noreferrer')}
+      />
+    </>
   )
 }
