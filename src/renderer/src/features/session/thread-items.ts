@@ -101,6 +101,8 @@ export type Item =
       id: string
       turnStart: boolean
       note: boolean
+      /** Its character in the signature. */
+      char: string
     }
   | { key: string; type: 'group'; ids: string[] }
   // The work between messages, two or more steps or a lone tool call, folded into one line.
@@ -140,7 +142,11 @@ export function buildItems(order: string[], shape: string, live = false, notes =
         })
       } else {
         for (const step of stepItems(ids, signature.slice(i, end + 1))) {
-          items.push(step.type === 'group' ? step : { ...step, turnStart: false, note: false })
+          items.push(
+            step.type === 'group'
+              ? step
+              : { ...step, turnStart: false, note: false, char: signature[i]! },
+          )
         }
       }
       i = end
@@ -157,12 +163,46 @@ export function buildItems(order: string[], shape: string, live = false, notes =
         id,
         turnStart: signature[i] === 'u',
         note: signature[i] === 'c',
+        char: signature[i] ?? 'o',
       })
     }
     const closing = after.get(i)
     if (closing) items.push(closing)
   }
   return items
+}
+
+/** An item's height in px before it renders: its kind's shortest rendered height. */
+export type Estimate = 19 | 20 | 22 | 24 | 28 | 71
+
+/**
+ * The height an item is laid out at until it renders, measured on macOS. It is a lower bound, so
+ * an item not rendered yet never takes more room than it will.
+ */
+export function estimateOf(item: Item): Estimate {
+  if (item.type === 'run' || item.type === 'group') return 24
+  if (item.type === 'reply') return 28
+  switch (item.char) {
+    // One line of bubble and the row under it.
+    case 'u':
+    case 's':
+      return 71
+    case 'a':
+    case 'c':
+      return 22
+    case 'h':
+    case 'r':
+    case 'q':
+      return 19
+    case 'g':
+    case 't':
+    case 'w':
+    case 'p':
+      return 24
+    // A notice, a marker, a git event or a card.
+    default:
+      return 20
+  }
 }
 
 /** The latest message you sent, steered into a running turn or not; null before the first. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionView, ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { buildItems, lastSent, replyKeys, signatureOf, stepItems } from './thread-items'
+import { buildItems, estimateOf, lastSent, replyKeys, signatureOf, stepItems } from './thread-items'
 
 const session = { id: 's1' } as SessionView
 
@@ -475,5 +475,70 @@ describe('stepItems', () => {
     const result = stepItems(['x1', 'r1', 's1', 'r2', 'e1', 'r3'], 'tgggtg')
     expect(result.map((i) => i.key)).toEqual(['x1', 'group:r1', 'e1', 'r3'])
     expect(result[1]).toMatchObject({ type: 'group', ids: ['r1', 's1', 'r2'] })
+  })
+})
+
+describe('estimateOf', () => {
+  const end = (id: string): ThreadEntry => ({
+    kind: 'turn_end',
+    id,
+    stopReason: 'end_turn',
+    durationMs: 1000,
+  })
+  const estimates = (entries: ThreadEntry[], notes = false) => {
+    const s = state(entries)
+    return Object.fromEntries(
+      buildItems(s.order, signatureOf(s), false, notes).map((i) => [i.key, estimateOf(i)]),
+    )
+  }
+
+  it('gives a step the height of its row', () => {
+    const waiting: ToolEntry = {
+      ...tool('x9', 'execute', 'in_progress'),
+      permission: { requestId: 'p', options: [] },
+    }
+    expect(
+      estimates([
+        user('u1'),
+        tool('x1', 'execute'),
+        tool('x2', 'execute'),
+        agent('a1'),
+        tool('r1', 'read'),
+        tool('r2', 'search'),
+        agent('a2'),
+        tool('x3', 'execute'),
+        agent('a3'),
+        plan('p1'),
+        agent('a4'),
+        compaction('c1'),
+        agent('a5'),
+        waiting,
+      ]),
+    ).toMatchObject({ 'run:x1': 24, 'run:r1': 24, 'run:x3': 24, p1: 24, c1: 24, x9: 24 })
+  })
+
+  it('gives the reply row its height', () => {
+    expect(estimates([user('u1'), agent('a1'), end('t1')])).toMatchObject({ 'reply:u1': 28 })
+  })
+
+  it('gives a message and a thought one line', () => {
+    const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
+    expect(
+      estimates([user('u1'), thought('h1'), agent('a1'), steered, agent('a2'), end('t1')]),
+    ).toEqual({ u1: 71, h1: 19, a1: 22, s1: 71, a2: 22, 'reply:u1': 28 })
+  })
+
+  it('gives a progress note one line of a message', () => {
+    const s = state([user('u1'), agent('a1'), tool('x1', 'execute'), agent('a2')])
+    const note = buildItems(s.order, signatureOf(s), false, true)[1]!
+    expect(note).toMatchObject({ key: 'a1', note: true })
+    expect(estimateOf(note)).toBe(22)
+  })
+
+  it('gives anything else the height of a short row', () => {
+    expect(estimates([user('u1'), tool('x1', 'execute'), end('t1'), notice('n1')])).toMatchObject({
+      t1: 20,
+      n1: 20,
+    })
   })
 })
