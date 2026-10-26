@@ -6,6 +6,7 @@ import {
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
 import { SidebarProvider } from '@renderer/components/ui/sidebar'
+import { Toaster } from '@renderer/components/ui/toast'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
@@ -56,6 +57,7 @@ export function App() {
         <QuitConfirm />
         <ArtifactDialogs />
         <MediaViewer />
+        <Toaster />
         <ReportInteractive />
       </SidebarProvider>
     </TooltipProvider>
