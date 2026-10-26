@@ -1,14 +1,14 @@
 // Settings › Sharing: the Cloudflare account main publishes with, and the pages it has published.
 
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { CheckIcon, CircleAlertIcon, GlobeIcon, LockIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
-  CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_DASHBOARD_URL,
   CLOUDFLARE_FREE_WORKERS,
   CLOUDFLARE_TOKEN,
   CLOUDFLARE_TOKENS_URL,
+  type CloudflareAccountChoice,
   type PublishedArtifact,
   type SharingResult,
 } from '@shared/sharing'
@@ -25,6 +25,14 @@ import {
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/components/ui/select'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -39,13 +47,16 @@ import {
   unpublishArtifact,
   useSharingStore,
 } from '@renderer/stores/sharing'
-import { CONFIRM, ControlError, Masked } from './controls'
+import { CONFIRM, ControlError, FIELD_LABEL, Masked } from './controls'
 import { RowLine, RowText } from './rows'
 
 type Failure = Extract<SharingResult, { failed: string }>
 
 const LINK =
   'rounded-sm underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring'
+
+/** A token pasted into the empty field connects by itself when it carries Cloudflare's prefix. */
+const PASTED_TOKEN = /^cf(?:ut|at)_/
 
 /** The connected account: its ID, its subdomain, and Remove; the form to connect one without it. */
 export function SharingAccount() {
@@ -142,98 +153,179 @@ export function SharingAccount() {
   )
 }
 
-/** The account ID and token, checked with Cloudflare before they are kept. */
+/** The API token, checked with Cloudflare before the account it reaches is kept. */
 function ConnectForm({ focus }: { focus: boolean }) {
   const { t } = useTranslation(['settings', 'artifacts'])
-  const [accountId, setAccountId] = useState('')
+  const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const [token, setToken] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
-  const [badId, setBadId] = useState(false)
-  const idField = useRef<HTMLInputElement>(null)
-  const hintId = useId()
-  const id = accountId.trim().toLowerCase()
+  const [accounts, setAccounts] = useState<CloudflareAccountChoice[] | null>(null)
+  const [chosen, setChosen] = useState<string | null>(null)
+  const tokenField = useRef<HTMLInputElement>(null)
+  const accountTrigger = useRef<HTMLButtonElement>(null)
   const secret = token.trim()
   const refused = failure?.failed === 'invalid_token'
 
   useEffect(() => {
-    if (focus) idField.current?.focus()
+    if (focus) tokenField.current?.focus()
   }, [focus])
 
-  const connect = async (event: FormEvent): Promise<void> => {
-    event.preventDefault()
-    if (!id || !secret || busy) return
-    if (!CLOUDFLARE_ACCOUNT_ID.test(id)) {
-      setBadId(true)
-      idField.current?.focus()
-      return
-    }
+  useEffect(() => {
+    if (accounts) accountTrigger.current?.focus()
+  }, [accounts])
+
+  const connect = async (accountId: string | null): Promise<void> => {
+    if (!secret || checking) return
+    await tryToken(secret, accountId)
+  }
+
+  // A paste connects with the pasted text, since the field's value has not caught up yet.
+  const connectWith = (pasted: string): Promise<void> => tryToken(pasted, null)
+
+  const tryToken = async (value: string, accountId: string | null): Promise<void> => {
     // Cloudflare would refuse a token no header can carry, so it is refused here the same way.
-    if (!CLOUDFLARE_TOKEN.test(secret)) {
+    if (!CLOUDFLARE_TOKEN.test(value)) {
       setFailure({ failed: 'invalid_token', message: null })
       return
     }
-    setBusy(true)
+    setChecking(true)
     setFailure(null)
-    const result = await connectSharing(id, secret)
-    setBusy(false)
-    if ('failed' in result) setFailure(result)
+    const result = await connectSharing(value, accountId)
+    setChecking(false)
+    if ('failed' in result) {
+      setFailure(result)
+      return
+    }
+    if ('accounts' in result) {
+      setAccounts(result.accounts)
+      setChosen(null)
+    }
+  }
+
+  const edit = (value: string): void => {
+    setToken(value)
+    setFailure(null)
+    setAccounts(null)
+    setChosen(null)
   }
 
   return (
-    <form className="pl-1" onSubmit={(event) => void connect(event)}>
+    <form
+      className="pl-1"
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault()
+        void connect(chosen)
+      }}
+    >
       <div className="flex flex-col gap-3 py-2.5">
         <RowText name={t('sharing.account.name')} description={t('sharing.account.description')} />
-        <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-x-3 gap-y-1.5">
-          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary">
-            {t('sharing.account.id')}
-            <Input
-              ref={idField}
-              value={accountId}
-              placeholder={t('sharing.account.idPlaceholder')}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={busy}
-              aria-invalid={badId || undefined}
-              aria-describedby={hintId}
-              className="h-8 font-mono text-code md:text-code"
-              onChange={(event) => {
-                setAccountId(event.target.value)
-                setBadId(false)
-                setFailure(null)
+        <label className={FIELD_LABEL}>
+          {t('sharing.account.token')}
+          <Input
+            ref={tokenField}
+            type="password"
+            value={token}
+            placeholder={t('sharing.account.tokenPlaceholder')}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={checking}
+            aria-invalid={refused || undefined}
+            className="h-8 text-small md:text-small"
+            onChange={(event) => edit(event.target.value)}
+            onPaste={(event) => {
+              const pasted = event.clipboardData.getData('text').trim()
+              // The prefix keeps a password pasted by mistake from being sent to Cloudflare.
+              if (token !== '' || !PASTED_TOKEN.test(pasted) || !CLOUDFLARE_TOKEN.test(pasted)) {
+                return
+              }
+              event.preventDefault()
+              setToken(pasted)
+              void connectWith(pasted)
+            }}
+          />
+        </label>
+        <a
+          href={CLOUDFLARE_TOKENS_URL}
+          target="_blank"
+          rel="noreferrer"
+          className={cn('self-start text-xs text-secondary', LINK)}
+        >
+          {t('sharing.account.createToken')}
+        </a>
+        {accounts && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-secondary">
+              {t('sharing.account.account')}
+            </span>
+            <Select
+              value={chosen}
+              items={accounts.map((account) => ({ value: account.id, label: account.name }))}
+              disabled={checking}
+              onValueChange={(next) => {
+                if (next === null || next === chosen) return
+                setChosen(next)
+                void connect(next)
               }}
-              onBlur={() => setBadId(id !== '' && !CLOUDFLARE_ACCOUNT_ID.test(id))}
-            />
-          </label>
-          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary">
-            {t('sharing.account.token')}
-            <Input
-              type="password"
-              value={token}
-              placeholder={t('sharing.account.tokenPlaceholder')}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={busy}
-              aria-invalid={refused || undefined}
-              className="h-8 text-small md:text-small"
-              onChange={(event) => {
-                setToken(event.target.value)
-                setFailure(null)
-              }}
-            />
-          </label>
-          <span id={hintId} className={cn('text-xs', badId ? 'text-danger' : 'text-tertiary')}>
-            {t(badId ? 'sharing.account.idInvalid' : 'sharing.account.idHint')}
-          </span>
-          <a
-            href={CLOUDFLARE_TOKENS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className={cn('justify-self-start text-xs text-secondary', LINK)}
-          >
-            {t('sharing.account.createToken')}
-          </a>
-        </div>
+            >
+              <SelectTrigger
+                ref={accountTrigger}
+                aria-label={t('sharing.account.account')}
+                className="h-8 w-full"
+              >
+                <SelectValue placeholder={t('sharing.account.choose')}>
+                  {(current: string | null) => {
+                    const picked = accounts.find((account) => account.id === current)
+                    if (!picked) return t('sharing.account.choose')
+                    return (
+                      <>
+                        <Masked revealable={false}>{picked.name}</Masked>
+                        <span
+                          className={cn(
+                            'text-meta text-tertiary',
+                            picked.subdomain !== null && 'font-mono',
+                          )}
+                        >
+                          {picked.subdomain === null
+                            ? t('sharing.account.noSubdomain')
+                            : `${picked.subdomain}.workers.dev`}
+                        </span>
+                      </>
+                    )
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start">
+                <SelectGroup>
+                  {accounts.map((account) => {
+                    const hint =
+                      account.subdomain === null
+                        ? t('sharing.account.noSubdomain')
+                        : `${account.subdomain}.workers.dev`
+                    return (
+                      <SelectItem
+                        key={account.id}
+                        value={account.id}
+                        aria-label={`${hidden ? t('agents.hidden') : account.name} ${hint}`}
+                      >
+                        <Masked revealable={false}>{account.name}</Masked>
+                        <span
+                          className={cn(
+                            'text-meta text-tertiary',
+                            account.subdomain !== null && 'font-mono',
+                          )}
+                        >
+                          {hint}
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-tertiary">{t('sharing.account.chooseHint')}</span>
+          </div>
+        )}
         {failure && <FailureBox failure={failure} />}
       </div>
       <div className="relative flex min-h-13 items-center gap-4 before:absolute before:top-0 before:-right-3 before:left-0 before:h-(--hairline) before:bg-border-soft">
@@ -246,11 +338,11 @@ function ConnectForm({ focus }: { focus: boolean }) {
         <Button
           type="submit"
           size="sm"
-          disabled={!id || !secret || busy}
+          disabled={!secret || checking || (accounts !== null && chosen === null)}
           className="ml-auto min-w-26"
         >
-          {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
-          {t(busy ? 'sharing.account.checking' : 'sharing.account.connect')}
+          {checking && <Spinner data-icon="inline-start" className="size-3.5" />}
+          {t(checking ? 'sharing.account.checking' : 'sharing.account.connect')}
         </Button>
       </div>
     </form>

@@ -7,7 +7,7 @@ import type { Locale } from './locale'
 import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { SettingsFile, SettingsPatch } from './settings'
-import type { SharingResult, SharingStatus } from './sharing'
+import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalsApi } from './terminal-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId } from './thread'
@@ -160,7 +160,11 @@ export interface IpcInvokeContract {
   // `project`: a registered project's folder, or null for No project.
   'artifact:import': { args: [project: string | null]; result: ArtifactImportResult }
   'sharing:status': { args: []; result: SharingStatus }
-  'sharing:connect': { args: [accountId: string, token: string]; result: SharingResult }
+  // `accountId`: the account the user chose, or null to use the one the token reaches.
+  'sharing:connect': {
+    args: [token: string, accountId: string | null]
+    result: SharingConnectResult
+  }
   'sharing:remove': { args: []; result: SharingStatus }
   // Main reads the version's HTML from the host, so the page never comes from the renderer.
   'sharing:publish': { args: [id: string, version: number]; result: SharingResult }
@@ -273,8 +277,11 @@ export interface OverbenchApi {
   /** Publishing artifacts online; main holds the account's token and makes every request. */
   sharing: {
     status(): Promise<SharingStatus>
-    /** Checks the account and token with Cloudflare, then keeps them. */
-    connect(accountId: string, token: string): Promise<SharingResult>
+    /**
+     * Checks the token with Cloudflare and connects the account it reaches; with an account ID, the
+     * one chosen.
+     */
+    connect(token: string, accountId: string | null): Promise<SharingConnectResult>
     /** Forgets the account and its token; published pages stay as they are. */
     remove(): Promise<SharingStatus>
     publish(id: string, version: number): Promise<SharingResult>

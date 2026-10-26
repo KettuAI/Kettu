@@ -111,7 +111,7 @@ const api: OverbenchApi = {
   },
   sharing: {
     status: () => invoke('sharing:status'),
-    connect: (accountId, token) => invoke('sharing:connect', accountId, token),
+    connect: (token, accountId) => invoke('sharing:connect', token, accountId),
     remove: () => invoke('sharing:remove'),
     publish: (id, version) => invoke('sharing:publish', id, version),
     update: (id, version) => invoke('sharing:update', id, version),

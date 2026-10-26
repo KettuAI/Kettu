@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import type { PublishedArtifact, SharingResult, SharingStatus } from '@shared/sharing'
+import type {
+  PublishedArtifact,
+  SharingConnectResult,
+  SharingResult,
+  SharingStatus,
+} from '@shared/sharing'
 import { errorMessage } from '@renderer/lib/host'
 
 interface SharingStore {
@@ -29,9 +34,13 @@ export async function initSharing(): Promise<void> {
   }
 }
 
-export async function connectSharing(accountId: string, token: string): Promise<SharingResult> {
+export async function connectSharing(
+  token: string,
+  accountId: string | null,
+): Promise<SharingConnectResult> {
   try {
-    return take(await window.overbench.sharing.connect(accountId, token))
+    const result = await window.overbench.sharing.connect(token, accountId)
+    return 'status' in result ? take(result) : result
   } catch (error) {
     return failure(error)
   }

@@ -441,7 +441,7 @@ export function registerIpcHandlers({
   handle('artifact:import', 1, ({ window }, project) => artifacts.import(window, project))
 
   handle('sharing:status', 0, () => sharing.status())
-  handle('sharing:connect', 2, (_, accountId, token) => sharing.connect(accountId, token))
+  handle('sharing:connect', 2, (_, token, accountId) => sharing.connect(token, accountId))
   handle('sharing:remove', 0, () => sharing.remove())
   handle('sharing:publish', 2, (_, id, version) => sharing.publish(id, version))
   handle('sharing:update', 2, (_, id, version) => sharing.update(id, version))
