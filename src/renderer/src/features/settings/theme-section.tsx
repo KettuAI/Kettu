@@ -1,0 +1,446 @@
+import { useEffect, useMemo, useState } from 'react'
+import {
+  EllipsisIcon,
+  FileDownIcon,
+  FolderIcon,
+  PlusIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import {
+  BUILTIN_THEME_ID,
+  THEME_MODES,
+  type ContrastIssue,
+  type InstalledTheme,
+  type Theme,
+  type ThemeFileError,
+  type ThemeInstallResult,
+  type ThemeLoadFailure,
+} from '@shared/themes'
+import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@renderer/components/ui/alert-dialog'
+import { Button } from '@renderer/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
+import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { isCodeTheme } from '@renderer/features/session/markdown/code-themes'
+import { errorMessage } from '@renderer/lib/host'
+import { fileManagerName } from '@renderer/lib/platform'
+import { receiveThemes, useThemesStore } from '@renderer/stores/themes'
+import { ControlError } from './controls'
+import { MiniWindow, RadioDot } from './sections'
+import { previewStyle, themeContrast, themeFile } from './theme-colors'
+import { useApply } from './use-apply'
+
+type InstallError = ThemeFileError | { code: 'unreadable' }
+type Conflict = Extract<ThemeInstallResult, { status: 'conflict' }>
+
+type Notice =
+  | { kind: 'installed'; id: string; ignored: string[] }
+  | { kind: 'failed'; file: string; error: InstallError }
+  | { kind: 'error'; message: string }
+
+// The pairs a low-contrast tooltip lists, the lowest first; the rest are counted.
+const CONTRAST_SHOWN = 10
+
+/** Truncates, never rounds up, as the contrast check does, so 4.49 never shows as 4.50. */
+const formatRatio = (ratio: number) => (Math.floor(ratio * 100) / 100).toFixed(2)
+
+/** Why a file or the chosen theme failed, as the end of a sentence. */
+function useReason(): (error: InstallError | { code: 'missing' }) => string {
+  const { t } = useTranslation('settings')
+  return (error) => {
+    switch (error.code) {
+      case 'invalid-field':
+      case 'invalid-color':
+        return t(`appearance.theme.errors.${error.code}`, { path: error.path })
+      case 'missing-variant':
+        return t('appearance.theme.errors.missing-variant', { variant: error.variant })
+      default:
+        return t(`appearance.theme.errors.${error.code}`)
+    }
+  }
+}
+
+/** The Theme group: OverBench, the installed themes by name, and Install from file. */
+export function ThemeTiles() {
+  const { t } = useTranslation(['settings', 'common'])
+  const { installed, chosen, failed } = useThemesStore((s) => s.state)
+  const [apply, applyError] = useApply()
+  const [notice, setNotice] = useState<Notice | null>(null)
+  // Kept while a dialog closes, so its text stays through the animation.
+  const [conflict, setConflict] = useState<Conflict | null>(null)
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [removing, setRemoving] = useState<InstalledTheme | null>(null)
+  const [removeOpen, setRemoveOpen] = useState(false)
+
+  // The folder is read again each time the page shows, so a file changed by hand shows here.
+  useEffect(() => {
+    window.overbench.themes
+      .get()
+      .then(receiveThemes, (e: unknown) => setNotice({ kind: 'error', message: errorMessage(e) }))
+  }, [])
+
+  const run = (action: () => Promise<void>) => {
+    setNotice(null)
+    action().catch((e: unknown) => setNotice({ kind: 'error', message: errorMessage(e) }))
+  }
+  const answered = (result: ThemeInstallResult) => {
+    if (result.status === 'conflict') {
+      setConflict(result)
+      setReplaceOpen(true)
+    } else if (result.status === 'failed') {
+      setNotice({ kind: 'failed', file: result.file, error: result.error })
+    } else if (result.status === 'installed') {
+      setNotice({ kind: 'installed', id: result.id, ignored: result.ignored })
+    }
+  }
+  const install = () => run(async () => answered(await window.overbench.themes.install()))
+  const tile = (id: string, theme: Theme | null, item?: InstalledTheme) => (
+    <ThemeTile
+      key={id}
+      id={id}
+      theme={theme}
+      onExport={() =>
+        run(async () => {
+          await window.overbench.themes.export(themeFile(theme))
+        })
+      }
+      {...(item && {
+        onReveal: () => run(() => window.overbench.themes.reveal(item.id)),
+        onRemove: () => {
+          setRemoving(item)
+          setRemoveOpen(true)
+        },
+      })}
+    />
+  )
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      {failed && (
+        <LoadFailure
+          id={failed.id}
+          failure={failed.failure}
+          onUseBuiltIn={() => apply({ appearance: { colorTheme: BUILTIN_THEME_ID } })}
+          onInstall={install}
+        />
+      )}
+      <ToggleGroup
+        aria-label={t('appearance.theme.name')}
+        variant="tile"
+        size="tile"
+        spacing={3.5}
+        value={[chosen]}
+        onValueChange={(next) => {
+          const picked = next[0] as string | undefined
+          if (picked && picked !== chosen) apply({ appearance: { colorTheme: picked } })
+        }}
+        className="grid w-full grid-cols-3 items-stretch"
+      >
+        {tile(BUILTIN_THEME_ID, null)}
+        {installed.map((item) => tile(item.id, item.theme, item))}
+        <InstallTile onClick={install} />
+      </ToggleGroup>
+      <ControlError error={applyError} />
+      {notice && (
+        <ThemeNotice notice={notice} installed={installed} onDismiss={() => setNotice(null)} />
+      )}
+
+      <AlertDialog open={replaceOpen} onOpenChange={setReplaceOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('appearance.theme.replaceTitle', { name: conflict?.installedName })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('appearance.theme.replaceDescription', { name: conflict?.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setReplaceOpen(false)
+                const token = conflict?.token
+                if (token) run(async () => answered(await window.overbench.themes.replace(token)))
+              }}
+            >
+              {t('appearance.theme.replace')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('appearance.theme.removeTitle', { name: removing?.theme.name })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('appearance.theme.removeDescription')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setRemoveOpen(false)
+                const id = removing?.id
+                if (id) run(() => window.overbench.themes.remove(id))
+              }}
+            >
+              {t('appearance.theme.removeConfirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+/** A theme's tile: its two variants split on a diagonal, its name, and its menu in the corner. */
+function ThemeTile({
+  id,
+  theme,
+  onExport,
+  onReveal,
+  onRemove,
+}: {
+  id: string
+  theme: Theme | null
+  onExport: () => void
+  onReveal?: () => void
+  onRemove?: () => void
+}) {
+  const { t } = useTranslation('settings')
+  const name = theme?.name ?? 'OverBench'
+  const issues = useMemo(() => themeContrast(theme), [theme])
+  const light = useMemo(() => previewStyle(theme, 'light'), [theme])
+  const dark = useMemo(() => previewStyle(theme, 'dark'), [theme])
+  return (
+    <div className="group/tile relative min-w-0">
+      <ToggleGroupItem
+        value={id}
+        className="w-full items-stretch gap-2 group-hover/tile:[&>[data-tile]]:ring-border-strong"
+      >
+        <span
+          data-tile=""
+          aria-hidden
+          className="relative block h-26 w-full overflow-hidden rounded-xl"
+        >
+          <MiniWindow dark={false} style={light} />
+          <MiniWindow dark cut style={dark} />
+        </span>
+        <span className="flex min-w-0 items-center gap-2 pl-0.5 text-small text-primary">
+          <RadioDot />
+          <span className="truncate">{name}</span>
+          {issues.length > 0 && <ContrastWarning issues={issues} />}
+          <span className="ml-auto shrink-0 pr-0.5 text-xs text-tertiary">
+            {t(theme ? 'appearance.theme.file' : 'appearance.theme.builtIn')}
+          </span>
+        </span>
+      </ToggleGroupItem>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="outline"
+              size="icon-xs"
+              aria-label={t('appearance.theme.more', { name })}
+              className="absolute top-1.5 right-1.5 size-6.5 opacity-0 transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 data-popup-open:opacity-100"
+            />
+          }
+        >
+          <EllipsisIcon />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onExport}>
+            <FileDownIcon />
+            {t('appearance.theme.export')}
+          </DropdownMenuItem>
+          {onReveal && (
+            <DropdownMenuItem onClick={onReveal}>
+              <FolderIcon />
+              {t('agents.showIn', { name: fileManagerName() })}
+            </DropdownMenuItem>
+          )}
+          {onRemove && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={onRemove}>
+                <Trash2Icon />
+                {t('appearance.theme.remove')}
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+function ContrastWarning({ issues }: { issues: ContrastIssue[] }) {
+  const { t } = useTranslation('settings')
+  const lowest = [...issues].sort((a, b) => a.ratio - b.ratio)
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex shrink-0 text-warning" />}>
+        <TriangleAlertIcon
+          role="img"
+          aria-label={t('appearance.theme.lowContrast')}
+          className="size-3.5"
+        />
+      </TooltipTrigger>
+      <TooltipContent className="flex-col items-start gap-0.5">
+        <span className="font-medium">{t('appearance.theme.lowContrast')}</span>
+        {lowest.slice(0, CONTRAST_SHOWN).map((issue) => (
+          <span key={`${issue.mode} ${issue.fg} ${issue.bg}`}>
+            {t('appearance.theme.contrastPair', {
+              mode: t(`appearance.colorMode.${issue.mode}`),
+              fg: issue.fg,
+              bg: issue.bg,
+              ratio: formatRatio(issue.ratio),
+            })}
+          </span>
+        ))}
+        {lowest.length > CONTRAST_SHOWN && (
+          <span>
+            {t('appearance.theme.contrastMore', { count: lowest.length - CONTRAST_SHOWN })}
+          </span>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function InstallTile({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation('settings')
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group/install flex min-w-0 flex-col items-stretch gap-2 rounded-xl text-left outline-none focus-ring"
+    >
+      <span className="flex h-26 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-strong text-small text-secondary transition-colors duration-(--duration-fast) group-hover/install:bg-hover group-hover/install:text-primary">
+        <PlusIcon className="size-4" />
+        {t('appearance.theme.install')}
+      </span>
+      <span className="pl-0.5 text-xs text-tertiary">{t('appearance.theme.installHint')}</span>
+    </button>
+  )
+}
+
+/** Under the grid: what an install left unused or a warning on its contrast, or why it failed. */
+function ThemeNotice({
+  notice,
+  installed,
+  onDismiss,
+}: {
+  notice: Notice
+  installed: InstalledTheme[]
+  onDismiss: () => void
+}) {
+  const { t } = useTranslation('settings')
+  const reason = useReason()
+  if (notice.kind === 'error') {
+    return (
+      <p role="alert" className="text-small text-danger" data-selectable="">
+        {notice.message}
+      </p>
+    )
+  }
+  if (notice.kind === 'failed') {
+    return (
+      <p role="alert" className="text-small text-danger" data-selectable="">
+        {t('appearance.theme.installFailed', { file: notice.file, reason: reason(notice.error) })}
+      </p>
+    )
+  }
+  const item = installed.find(({ id }) => id === notice.id)
+  if (!item) return null
+  // A Shiki theme this build does not bundle is ignored too; main cannot tell which those are.
+  const unused = [
+    ...notice.ignored,
+    ...THEME_MODES.flatMap((mode) => {
+      const code = item.theme[mode].code
+      return code !== undefined && !isCodeTheme(code) ? [`${mode}.code`] : []
+    }),
+  ]
+  const low = themeContrast(item.theme).length > 0
+  if (unused.length === 0 && !low) return null
+  return (
+    <Alert variant="warning">
+      <TriangleAlertIcon />
+      <AlertTitle>{t('appearance.theme.installed', { name: item.theme.name })}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-2.5">
+        {unused.length > 0 && (
+          <span className="break-words" data-selectable="">
+            {t('appearance.theme.unused', { list: unused.join(', ') })}
+          </span>
+        )}
+        {low && <span>{t('appearance.theme.lowContrastNotice')}</span>}
+        <span>
+          <Button variant="outline" size="compact" onClick={onDismiss}>
+            {t('appearance.theme.gotIt')}
+          </Button>
+        </span>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+/** Above the grid while the chosen theme cannot load, so the built-in one shows. */
+function LoadFailure({
+  id,
+  failure,
+  onUseBuiltIn,
+  onInstall,
+}: {
+  id: string
+  failure: ThemeLoadFailure
+  onUseBuiltIn: () => void
+  onInstall: () => void
+}) {
+  const { t } = useTranslation('settings')
+  const reason = useReason()
+  return (
+    <Alert variant="warning">
+      <TriangleAlertIcon />
+      <AlertTitle>{t('appearance.theme.loadFailed', { id })}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-2.5">
+        <span>
+          {t('appearance.theme.loadFailedDescription', {
+            reason: reason(failure.code === 'invalid' ? failure.error : failure),
+          })}
+        </span>
+        <span className="flex flex-wrap gap-1.5">
+          <Button variant="outline" size="compact" onClick={onUseBuiltIn}>
+            {t('appearance.theme.useBuiltIn')}
+          </Button>
+          <Button variant="outline" size="compact" onClick={onInstall}>
+            {t('appearance.theme.install')}
+          </Button>
+        </span>
+      </AlertDescription>
+    </Alert>
+  )
+}

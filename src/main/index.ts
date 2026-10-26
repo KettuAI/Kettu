@@ -26,10 +26,12 @@ import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { TerminalHost } from './terminal-host'
+import { readThemeFolder, ThemeStore } from './themes'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
 import {
   applyTheme,
+  applyWindowTheme,
   applyZoom,
   configureWindows,
   createMainWindow,
@@ -72,11 +74,13 @@ disableDnsPrefetching()
 async function start(): Promise<void> {
   const perf = process.argv.includes('--overbench-perf')
   const userDataPath = app.getPath('userData')
+  const themesDir = join(userDataPath, 'themes')
   // Read while Electron starts, so the first window already has the right theme and bounds.
   const loading = Promise.all([
     SettingsStore.load(userDataPath),
     WindowStateStore.load(userDataPath),
     AppStateStore.load(userDataPath),
+    readThemeFolder(themesDir),
   ])
   let ready = false
   app.on('second-instance', () => {
@@ -98,7 +102,7 @@ async function start(): Promise<void> {
     isRendererUrl,
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
   )
-  const [settings, windowState, appState] = await loading
+  const [settings, windowState, appState, themeFolder] = await loading
   syncLoginItem(settings.get().general.openAtLogin)
 
   // The system's languages are read once; macOS and Windows ask for a restart to change them.
@@ -108,6 +112,15 @@ async function start(): Promise<void> {
   setLocale(localeOf(settings.get()))
   applyTheme(settings.get().appearance.theme)
   applyZoom(settings.get().appearance.zoom)
+  const themes = new ThemeStore(themeFolder, settings.get().appearance.colorTheme, {
+    dir: themesDir,
+    select: (id) => settings.update({ appearance: { colorTheme: id } }),
+    changed: (state, chosen) => {
+      applyWindowTheme(chosen)
+      broadcast('themes:changed', state)
+    },
+  })
+  applyWindowTheme(themes.chosenTheme())
   watchTheme()
   configureWindows({ state: windowState, perf, systemLocale })
   setBadgeEnabled(settings.get().notifications.badge)
@@ -197,6 +210,7 @@ async function start(): Promise<void> {
     if (changed.has('appearance')) {
       applyTheme(next.appearance.theme)
       applyZoom(next.appearance.zoom)
+      themes.choose(next.appearance.colorTheme)
     }
     if (changed.has('notifications')) setBadgeEnabled(next.notifications.badge)
     if (changed.has('general')) syncLoginItem(next.general.openAtLogin)
@@ -206,6 +220,7 @@ async function start(): Promise<void> {
 
   registerIpcHandlers({
     settings,
+    themes,
     agentHost,
     terminalHost,
     artifacts,

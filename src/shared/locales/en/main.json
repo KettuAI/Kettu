@@ -46,7 +46,9 @@
     "exportDiagnostics": "Export Diagnostics",
     "programs": "Programs",
     "addFiles": "Add Files or Photos",
-    "addFolder": "Add Folder"
+    "addFolder": "Add Folder",
+    "installTheme": "Install Theme",
+    "exportTheme": "Export Theme"
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",

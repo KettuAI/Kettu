@@ -43,6 +43,7 @@ import { useLoginItemStatus } from './use-login-item'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
   BackgroundFetch,
+  ColorModeTiles,
   DataFolder,
   DefaultAgent,
   Diagnostics,
@@ -63,9 +64,9 @@ import {
   ShortcutKeys,
   TestNotification,
   TextSize,
-  ThemeTiles,
   Zoom,
 } from './sections'
+import { ThemeTiles } from './theme-section'
 import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage-section'
 
 // The sections of the Settings page as data, so search and the match counts read the same rows
@@ -204,6 +205,15 @@ export function useAppearanceSection(): SectionDef {
         group: group('theme', t('appearance.groups.theme')),
         layout: 'block',
         render: () => <ThemeTiles />,
+      },
+      {
+        id: 'color-mode',
+        name: t('appearance.colorMode.name'),
+        english: en('appearance.colorMode.name'),
+        keywords: t('appearance.colorMode.keywords'),
+        group: group('color-mode', t('appearance.groups.colorMode')),
+        layout: 'block',
+        render: () => <ColorModeTiles />,
       },
       {
         id: 'zoom',

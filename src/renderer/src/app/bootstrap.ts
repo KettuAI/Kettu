@@ -34,6 +34,7 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
+import { initThemes } from '@renderer/stores/themes'
 import { receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { initUpdates } from '@renderer/stores/updates'
 import {
@@ -151,7 +152,10 @@ function showFront(again = false): void {
 
 let wasDisconnected = false
 
-/** Starts loading what the shell shows; resolves once the settings are in, or failed to load. */
+/**
+ * Starts loading what the shell shows; resolves once the settings and the themes are in, or
+ * failed to load.
+ */
 export function bootstrap(): Promise<unknown> {
   // Platform styles, such as the Windows scrollbars, key off this.
   document.documentElement.dataset.platform = platform
@@ -183,6 +187,7 @@ export function bootstrap(): Promise<unknown> {
   })
 
   const settingsReady = initSettings()
+  const themesReady = initThemes()
   void initUpdates()
   void initSharing()
   initTerminals()
@@ -198,5 +203,5 @@ export function bootstrap(): Promise<unknown> {
   void Promise.allSettled([settingsReady, sessionState]).then(finishLaunch)
 
   window.addEventListener('focus', refreshShownProject)
-  return Promise.allSettled([settingsReady])
+  return Promise.allSettled([settingsReady, themesReady])
 }

@@ -84,9 +84,11 @@
   /* The top edge of a raised surface catching the light; dark theme only. */
   --highlight: 0 0 #0000;
 
-  /* The primary button: a vertical gradient, a ring, and a highlight along its top edge. */
-  --primary-gradient: linear-gradient(180deg, #3d3d3c, #191918);
-  --primary-gradient-hover: linear-gradient(180deg, #4a4a49, #232322);
+  /* The primary button: its gradient's stops, a ring, and a highlight along its top edge. */
+  --primary-from: #3d3d3c;
+  --primary-to: #191918;
+  --primary-hover-from: #4a4a49;
+  --primary-hover-to: #232322;
   --primary-ring: #141414;
   --primary-highlight: rgb(255 255 255 / 16%);
 
@@ -198,8 +200,10 @@
     --elevation-segment: inset 0 1px 0 rgb(255 255 255 / 6%), 0 1px 2px rgb(0 0 0 / 40%);
     --highlight: inset 0 1px 0 rgb(255 255 255 / 5%);
 
-    --primary-gradient: linear-gradient(180deg, #f5f5f3, #dcdcd9);
-    --primary-gradient-hover: linear-gradient(180deg, #ffffff, #e6e6e3);
+    --primary-from: #f5f5f3;
+    --primary-to: #dcdcd9;
+    --primary-hover-from: #ffffff;
+    --primary-hover-to: #e6e6e3;
     --primary-ring: #cfcfcb;
     --primary-highlight: rgb(255 255 255 / 70%);
 
@@ -296,8 +300,10 @@
   --elevation-segment: inset 0 1px 0 rgb(255 255 255 / 6%), 0 1px 2px rgb(0 0 0 / 40%);
   --highlight: inset 0 1px 0 rgb(255 255 255 / 5%);
 
-  --primary-gradient: linear-gradient(180deg, #f5f5f3, #dcdcd9);
-  --primary-gradient-hover: linear-gradient(180deg, #ffffff, #e6e6e3);
+  --primary-from: #f5f5f3;
+  --primary-to: #dcdcd9;
+  --primary-hover-from: #ffffff;
+  --primary-hover-to: #e6e6e3;
   --primary-ring: #cfcfcb;
   --primary-highlight: rgb(255 255 255 / 70%);
 
@@ -405,6 +411,14 @@
   --terminal-foreground: var(--text-primary);
   --terminal-cursor: var(--text-primary);
   --terminal-selection: var(--selection);
+
+  /* The primary button's gradients, from their stops, so a theme sets them as colors. */
+  --primary-gradient: linear-gradient(180deg, var(--primary-from), var(--primary-to));
+  --primary-gradient-hover: linear-gradient(
+    180deg,
+    var(--primary-hover-from),
+    var(--primary-hover-to)
+  );
 
   /* Borders are inset rings, so they take no layout space and follow the radius. */
   --card-ring:

@@ -2,11 +2,13 @@ import { memo, useMemo } from 'react'
 import { MultiFileDiff, WorkerPoolContext } from '@pierre/diffs/react'
 import { useDark } from '@renderer/hooks/use-dark'
 import { cn } from '@renderer/lib/utils'
-import { codeTheme as theme, diffsPool as pool } from './diff-pool'
+import { useCodeThemes } from './code-themes'
+import { diffsPool as pool } from './diff-pool'
 import type { DiffProps } from './index'
 
 function DiffImpl({ path, oldText, newText, className }: DiffProps) {
   const dark = useDark()
+  const theme = useCodeThemes()
   const files = useMemo(
     () => ({
       oldFile: oldText === null ? null : { name: path, contents: oldText },
@@ -26,7 +28,7 @@ function DiffImpl({ path, oldText, newText, className }: DiffProps) {
       disableFileHeader: true,
       preferredHighlighter: 'shiki-js' as const,
     }),
-    [dark],
+    [dark, theme],
   )
   return (
     <WorkerPoolContext.Provider value={pool}>

@@ -1,5 +1,6 @@
 import type { AgentCliSource } from './agent-host'
 import type { LanguageSetting, Locale } from './locale'
+import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId } from './thread'
 
 export interface SettingsFile {
@@ -14,7 +15,8 @@ export interface SettingsFile {
   }
   thread: { outlineSummaries: boolean } // a small model titles the outline's messages
   appearance: {
-    theme: 'system' | 'light' | 'dark'
+    theme: 'system' | 'light' | 'dark' // the color mode, which picks a theme's variant
+    colorTheme: string // an installed theme's id, or BUILTIN_THEME_ID
     textSize: 'small' | 'default' | 'large' // thread prose and the composer: 13, 14 or 15 px
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
@@ -69,7 +71,13 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     openAtLogin: false,
   },
   thread: { outlineSummaries: true },
-  appearance: { theme: 'system', textSize: 'default', reduceMotion: 'system', zoom: 1 },
+  appearance: {
+    theme: 'system',
+    colorTheme: BUILTIN_THEME_ID,
+    textSize: 'default',
+    reduceMotion: 'system',
+    zoom: 1,
+  },
   notifications: {
     permission: true,
     turnEnded: true,
