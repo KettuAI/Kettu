@@ -9,7 +9,7 @@
 // On Linux CI, run it under `xvfb-run -a`.
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -34,15 +34,18 @@ makeHistory(project, join(scratch, 'origin.git'))
 const REFUSED = 'Refusing IPC and permissions from window'
 let refused = false
 const tails = new Map()
-const app = launchApp({
-  port,
-  userData: join(scratch, 'user-data'),
-  onOutput: (text, stream) => {
-    const seen = (tails.get(stream) ?? '') + text
-    if (seen.includes(REFUSED)) refused = true
-    tails.set(stream, seen.slice(-REFUSED.length))
-  },
-})
+const userData = join(scratch, 'user-data')
+const start = () =>
+  launchApp({
+    port,
+    userData,
+    onOutput: (text, stream) => {
+      const seen = (tails.get(stream) ?? '') + text
+      if (seen.includes(REFUSED)) refused = true
+      tails.set(stream, seen.slice(-REFUSED.length))
+    },
+  })
+let app = start()
 
 // The page the browser pane opens, so a capture shows a real page and not just the pane's frame.
 const fixture = createServer((request, response) => {
@@ -166,11 +169,15 @@ async function run() {
   const platform =
     process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux'
   // Each screen in the light theme, then the dark one; the theme attribute is what Settings sets.
-  const shoot = async (name) => {
+  // A clip, in CSS pixels, captures part of the window.
+  const shoot = async (name, clip) => {
     for (const theme of ['light', 'dark']) {
       await cdp.evaluate(`document.documentElement.dataset.theme = '${theme}'`)
       await sleep(400)
-      const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+      const shot = await cdp.send('Page.captureScreenshot', {
+        format: 'png',
+        ...(clip && { clip: { ...clip, scale: 1 } }),
+      })
       writeFileSync(join(out, `${platform}-${name}-${theme}.png`), Buffer.from(shot.data, 'base64'))
     }
     await cdp.evaluate(`document.documentElement.dataset.theme = 'light'`)
@@ -548,7 +555,7 @@ async function run() {
   await sleep(300)
 
   await click(
-    `return [...document.querySelectorAll('button, a')].find((b) => b.textContent.trim().startsWith('Settings'))`,
+    `return document.querySelector('[data-sidebar=footer] button[aria-label="Settings"]')`,
     'Settings',
   )
   await waitFor(
@@ -641,5 +648,137 @@ async function run() {
   await waitFor(`${byText('button', 'Resume').slice('return '.length)}`, 'Resume')
   await sleep(600)
   await shoot('session-agent-exited')
+
+  // The sidebar footer and its notices, in a launch after an update, so the "Updated to" notice
+  // shows beside the fake agent's sign-in; agent updates need a package agent's npm check and the
+  // other update notices a packaged build. The steps also check how the notices popover behaves.
   cdp.close()
+  await stopApp(app)
+  const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../package.json')))
+  writeFileSync(
+    join(userData, 'app-state.json'),
+    JSON.stringify({ version: 1, lastRunVersion: versionBefore(version), dismissedUpdate: null }),
+  )
+  app = start()
+  cdp = await connect(port)
+  await setup()
+  await waitFor(`document.querySelector('[data-sidebar=footer]')`, 'the sidebar footer')
+  const fake = (method, params = '') =>
+    cdp.evaluate(
+      `window.overbench.agents.request('agents.${method}', { agentId: 'fake-agent'${params} })`,
+    )
+  await fake('logout')
+  await footerScreens({ suffix: '', dismiss: 'Dismiss', agents: 'Agents' })
+  await cdp.evaluate(`window.overbench.settings.update({ general: { language: 'zh-CN' } })`)
+  // A reload brings back the dismissed "Updated to" notice, which is dismissed for the page only.
+  await cdp.send('Page.reload')
+  cdp.close()
+  await sleep(1500)
+  cdp = await connect(port)
+  await setup()
+  await footerScreens({ suffix: '-zh', dismiss: '忽略', agents: 'Agent' })
+  cdp.close()
+
+  // Starts with the fake agent signed out and "Updated to" showing, and ends signed out.
+  async function footerScreens({ suffix, dismiss, agents }) {
+    const footer = '[data-sidebar=footer]'
+    const pill = `document.querySelector('${footer} button[aria-haspopup=dialog]')`
+    const popover = `document.querySelector('[data-slot=popover-content]:not([data-closed])')`
+    const rows = `[...document.querySelectorAll('[data-slot=popover-content]:not([data-closed]) [data-row-hit]')].map((b) => b.getAttribute('aria-label'))`
+    const shootFooter = async (name) => {
+      // Script focus after this tool's input draws the focus ring, which a click would not.
+      await cdp.evaluate(`${popover}?.focus()`)
+      const clip = await cdp.evaluate(`(() => {
+        const f = document.querySelector('${footer}').getBoundingClientRect()
+        const p = ${popover}?.getBoundingClientRect()
+        const top = Math.min(f.top, p ? p.top : f.top) - 16
+        return { x: 0, y: top, width: Math.max(f.right, p ? p.right : 0) + 16, height: f.bottom - top }
+      })()`)
+      await shoot(`footer-${name}${suffix}`, clip)
+    }
+    const openNotices = async () => {
+      await click(`return ${pill}`, 'the notices pill')
+      await waitFor(popover, 'the notices popover')
+      await sleep(300)
+    }
+
+    await waitFor(`${pill}?.textContent.startsWith('2')`, 'two notices')
+    await shootFooter('two')
+    await openNotices()
+    await waitFor(
+      `(() => { const r = ${rows}; return r.length === 2 && r[0].startsWith('Fake agent') })()`,
+      'the sign-in row before the update row',
+    )
+    await shootFooter('popover')
+    await click(
+      `return document.querySelector('[data-slot=popover-content] [data-notice-row] button[aria-label="${dismiss}"]')`,
+      'the dismiss button of the update row',
+    )
+    await waitFor(`${popover} && ${rows}.length === 1`, 'the dismissed row to go, the popover open')
+    await press('Escape', 27)
+    await waitFor(`!${popover}`, 'the popover to close')
+    await shootFooter('one')
+    await openNotices()
+    await click(`return document.querySelector('[data-row-hit]')`, 'the sign-in row')
+    await waitFor(
+      `!${popover} && document.querySelector('[aria-current=page]')?.textContent.trim() === '${agents}'`,
+      'Settings › Agents, the popover closed',
+    )
+    await press('Escape', 27)
+    await waitFor(`${pill}`, 'the sidebar again')
+    await openNotices()
+    await fake('authenticate', `, methodId: 'fake-login'`)
+    await waitFor(`!${popover} && !${pill}`, 'the popover to close with its last notice')
+    await sleep(300)
+    await shootFooter('none')
+    await fake('logout')
+    await waitFor(pill, 'the sign-in notice')
+    const edge = await cdp.evaluate(`(() => {
+      const r = document.querySelector('[data-slot=resizable-handle]').getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    })()`)
+    // Dragging the edge past the sidebar's 200 px minimum leaves it at the minimum.
+    const drag = async (from, to) => {
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...from })
+      await cdp.send('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        ...from,
+        button: 'left',
+        clickCount: 1,
+      })
+      for (let step = 1; step <= 10; step++) {
+        const x = from.x + ((to.x - from.x) * step) / 10
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          x,
+          y: from.y,
+          button: 'left',
+          buttons: 1,
+        })
+      }
+      await cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        ...to,
+        button: 'left',
+        clickCount: 1,
+      })
+      await sleep(400)
+    }
+    await drag(edge, { x: 120, y: edge.y })
+    await waitFor(
+      `document.querySelector('${footer}').getBoundingClientRect().width === 200 && ${pill}.innerText.trim() === '1'`,
+      'the compact pill at the minimum width',
+    )
+    await shootFooter('compact')
+    await drag({ x: 200, y: edge.y }, edge)
+  }
+}
+
+// A version just below the app's, which main reads as the one that ran before an update.
+function versionBefore(version) {
+  const [major, minor, patch] = version.split(/[.+-]/).map(Number)
+  if (patch > 0) return `${major}.${minor}.${patch - 1}`
+  if (minor > 0) return `${major}.${minor - 1}.0`
+  if (major > 0) return `${major - 1}.0.0`
+  return `${version}-0`
 }

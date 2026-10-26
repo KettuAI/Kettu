@@ -526,22 +526,24 @@ async function main() {
     if (status?.state?.kind === 'error') {
       throw new Error(`The update check failed: ${status.state.message}`)
     }
-    // The renderer takes the broadcast a moment later.
-    await waitFor(cdp, "document.querySelector('[role=status]')", 'the update notice', 30_000)
+    // The renderer takes the broadcast a moment later. The notice opens from the footer's pill,
+    // which another notice may have brought before it.
+    const pill = `return document.querySelector('[data-sidebar=footer] button[aria-haspopup=dialog]')`
+    await waitFor(cdp, `(() => { ${pill} })()`, 'the notices pill', 30_000)
+    await click(cdp, pill, 'the notices pill')
 
     if (platform === 'darwin') {
-      const href = await cdp.evaluate(`(() => {
-        const link = [...document.querySelectorAll('[role=status] a')].find((a) =>
-          a.textContent.includes('Download'),
-        )
-        return link ? link.href : null
-      })()`)
+      const download = `[...document.querySelectorAll('[data-slot=popover-content] a')].find((a) =>
+        a.textContent.includes('Download'),
+      )`
+      await waitFor(cdp, download, 'the notice Download link', 30_000)
+      const href = await cdp.evaluate(`${download}?.href ?? null`)
       if (!namesDmg(href, { version: NEW_VERSION, arch: process.arch })) {
         throw new Error(`The notice's Download does not name the ${process.arch} dmg: ${href}`)
       }
       log(`The notice's Download links to ${href}`)
     } else {
-      const updateButton = `return [...document.querySelectorAll('[role=status] button')].find(
+      const updateButton = `return [...document.querySelectorAll('[data-slot=popover-content] button')].find(
         (b) => b.textContent.trim() === 'Update',
       )`
       await waitFor(cdp, `(() => { ${updateButton} })()`, 'the notice Update button', 30_000)
