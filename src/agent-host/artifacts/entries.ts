@@ -31,7 +31,7 @@ export function agentEntryBefore(thread: ThreadState): string | null {
   const { order, byId } = thread
   for (let i = order.length - 1; i >= 0; i--) {
     const entry = byId[order[i]!]
-    if (entry && !OWN.has(entry.kind)) return entry.id
+    if (entry && !isOwn(entry)) return entry.id
   }
   return null
 }
@@ -80,15 +80,6 @@ export async function artifactWrite(
   }
 }
 
-/** Entries the host adds itself, which an agent's replay never sends again. */
-const OWN = new Set<ThreadEntry['kind']>([
-  'notice',
-  'turn_end',
-  'git',
-  'artifact',
-  'session_started',
-])
-
 /**
  * The patch a write makes: the latest turn's entry for the same artifact takes it, or a new entry
  * goes at the thread's end, after the call still running there.
@@ -99,7 +90,7 @@ export function writePatch(thread: ThreadState, write: ArtifactWrite, newId: () 
   for (let i = order.length - 1; i >= 0; i--) {
     const entry = byId[order[i]!]
     if (!entry) continue
-    if (after === null && !OWN.has(entry.kind)) after = entry.id
+    if (after === null && !isOwn(entry)) after = entry.id
     if (entry.kind === 'user') break
     if (
       write.action !== 'delete' &&
@@ -127,8 +118,11 @@ export function writePatch(thread: ThreadState, write: ArtifactWrite, newId: () 
   return { op: 'entry.add', entry }
 }
 
-/** Whether a replay keeps the entry: a notice only when it records `after`, as an agent's never does. */
-function isKept(entry: ThreadEntry): entry is OwnEntry {
+/**
+ * Whether the host added the entry itself, which an agent's replay never sends again: a notice only
+ * when it records `after`, as an agent's never does.
+ */
+function isOwn(entry: ThreadEntry): entry is OwnEntry {
   switch (entry.kind) {
     case 'artifact':
     case 'session_started':
@@ -157,7 +151,7 @@ export class ReplayKeeper {
     for (const id of thread.order) {
       const entry = thread.byId[id]
       if (entry?.kind === 'user') turn++
-      else if (entry && isKept(entry)) this.kept.push({ entry, turn })
+      else if (entry && isOwn(entry)) this.kept.push({ entry, turn })
     }
   }
 
@@ -174,7 +168,7 @@ export class ReplayKeeper {
 
   /** The kept entries that go in right after this entry of the replay. */
   after(entry: ThreadEntry): OwnEntry[] {
-    if (OWN.has(entry.kind)) return []
+    if (isOwn(entry)) return []
     return this.take((k) => k.entry.after === entry.id)
   }
 

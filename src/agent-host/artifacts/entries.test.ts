@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ArtifactEntry, GitEntry, SessionView, ThreadEntry, ThreadState } from '@shared/thread'
 import {
+  agentEntryBefore,
   artifactWrite,
   gitPatch,
   ReplayKeeper,
@@ -166,6 +167,11 @@ describe('writePatch', () => {
     expect(other).toMatchObject({ op: 'entry.add', entry: { after: 't:2' } })
     expect(writePatch(threadOf([]), write(), newId)).toMatchObject({ entry: { after: null } })
   })
+
+  it("anchors on an agent's notice, which records no after, as on any entry of the agent's", () => {
+    const thread = threadOf([user('e:1'), tool('t:2'), notice('e:3'), notice('e:4', 't:2')])
+    expect(writePatch(thread, write(), newId)).toMatchObject({ entry: { after: 'e:3' } })
+  })
 })
 
 describe('ReplayKeeper', () => {
@@ -290,6 +296,21 @@ describe('ReplayKeeper', () => {
     expect(keeper.before(user('m:1')).map((e) => e.id)).toEqual(['e:1'])
     expect(keeper.after(tool('t:3')).map((e) => e.id)).toEqual(['e:4'])
     expect(keeper.empty).toBe(true)
+  })
+
+  it("puts a turn end back after the agent's notice that ended its turn", () => {
+    const live = [user('e:1'), tool('t:2'), notice('e:3')]
+    const keeper = new ReplayKeeper(
+      threadOf([...live, turnEnd('e:4', agentEntryBefore(threadOf(live)))]),
+    )
+    // The replay sends the agent's notice again under a new id.
+    const replay = [user('e:5'), tool('t:2'), notice('e:6')]
+    const order = replay.flatMap((entry) => [
+      ...keeper.before(entry),
+      entry,
+      ...keeper.after(entry),
+    ])
+    expect([...order, ...keeper.rest()].map((e) => e.id)).toEqual(['e:5', 't:2', 'e:6', 'e:4'])
   })
 })
 
