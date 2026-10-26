@@ -131,5 +131,15 @@ describe('the browser views', () => {
       evicted: 'evicted',
       forbidden: true,
     })
+    // On macOS a frame reaching above the page rounds only its lower corners; elsewhere the page
+    // rounds its own.
+    expect(result.layout).toEqual([
+      process.platform === 'darwin'
+        ? {
+            bounds: { x: 0, y: 36, width: 800, height: 612 },
+            children: [{ x: 0, y: 12, width: 800, height: 600 }],
+          }
+        : { bounds: { x: 0, y: 48, width: 800, height: 600 }, children: [] },
+    ])
   }, 120_000)
 })

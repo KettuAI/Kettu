@@ -442,6 +442,8 @@
   --destructive-foreground: var(--bg-surface);
   --diff-add: color-mix(in srgb, var(--success) 9%, transparent);
   --diff-del: color-mix(in srgb, var(--danger) 8%, transparent);
+  /* The line a reference points at, in the Files pane's editor. */
+  --marked-line: color-mix(in srgb, var(--info) 7%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
   --agent-claude-code: var(--brand-claude);

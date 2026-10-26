@@ -4,12 +4,36 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
   session: { fromPartition: () => ({}) },
   shell: {},
+  View: class {},
   WebContentsView: class {},
 }))
 
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 
-const { leastRecentlyUsed, MAX_LIVE_PAGES } = await import('./views')
+const { framePage, leastRecentlyUsed, MAX_LIVE_PAGES } = await import('./views')
+
+describe('framePage', () => {
+  it('reaches the radius above the page, which sits that far inside it', () => {
+    expect(framePage({ x: 600, y: 56, width: 400, height: 500, radius: 12 })).toEqual({
+      frame: { x: 600, y: 44, width: 400, height: 512 },
+      page: { x: 0, y: 12, width: 400, height: 500 },
+    })
+  })
+
+  it('stops at the top of the window', () => {
+    expect(framePage({ x: 0, y: 5, width: 400, height: 500, radius: 12 })).toEqual({
+      frame: { x: 0, y: 0, width: 400, height: 505 },
+      page: { x: 0, y: 5, width: 400, height: 500 },
+    })
+  })
+
+  it('is the page itself when the corners are square', () => {
+    expect(framePage({ x: 10, y: 56, width: 400, height: 500, radius: 0 })).toEqual({
+      frame: { x: 10, y: 56, width: 400, height: 500 },
+      page: { x: 0, y: 0, width: 400, height: 500 },
+    })
+  })
+})
 
 describe('leastRecentlyUsed', () => {
   it('names the oldest live page, never the one being made', () => {

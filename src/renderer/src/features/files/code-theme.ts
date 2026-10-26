@@ -157,7 +157,11 @@ export function editorTheme(id: BundledTheme, dark: boolean): Promise<Extension>
               color: 'var(--text-disabled)',
               borderRightColor: 'transparent',
             },
-            '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--bg-hover)' },
+            // The line being edited shows only while the editor has the focus.
+            '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },
+            '&.cm-focused .cm-activeLine, &.cm-focused .cm-activeLineGutter': {
+              backgroundColor: 'var(--bg-hover)',
+            },
             // CodeMirror's own selection rules are more specific than a theme's.
             '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
               { background: 'var(--selection) !important' },

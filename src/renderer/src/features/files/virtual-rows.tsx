@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@renderer/lib/utils'
 
-// Rows are --row-height tall, read once from the theme.
-const ROW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-height'))
+// Rows are --control-height-sm tall, as the tree's rows, read once from the theme.
+const ROW = parseFloat(
+  getComputedStyle(document.documentElement).getPropertyValue('--control-height-sm'),
+)
 const OVERSCAN = 8
 
 /**
@@ -36,9 +38,11 @@ export function VirtualRows({
   useEffect(() => {
     const el = box.current
     if (!el || scrollTo === null || scrollTo === undefined) return
-    const top = scrollTo * ROW
+    const style = getComputedStyle(el)
+    const top = parseFloat(style.paddingTop) + scrollTo * ROW
+    const bottom = top + ROW + parseFloat(style.paddingBottom)
     if (top < el.scrollTop) el.scrollTop = top
-    else if (top + ROW > el.scrollTop + el.clientHeight) el.scrollTop = top + ROW - el.clientHeight
+    else if (bottom > el.scrollTop + el.clientHeight) el.scrollTop = bottom - el.clientHeight
   }, [scrollTo])
 
   const first = Math.max(0, Math.floor(view.top / ROW) - OVERSCAN)

@@ -162,21 +162,22 @@ function browserUrl(value: unknown): string {
 function browserBounds(value: unknown): BrowserBounds {
   if (typeof value !== 'object' || value === null)
     throw new Error('Browser bounds must be an object')
-  const { x, y, width, height } = value as Record<string, unknown>
-  const numbers = [x, y, width, height]
+  const { x, y, width, height, radius } = value as Record<string, unknown>
+  const numbers = [x, y, width, height, radius]
   if (
     numbers.some(
       (number) =>
         typeof number !== 'number' || !Number.isFinite(number) || number < 0 || number > BOUNDS_MAX,
     )
   ) {
-    throw new Error('Browser bounds take four numbers from 0 to 100000')
+    throw new Error('Browser bounds take five numbers from 0 to 100000')
   }
   return {
     x: Math.round(x as number),
     y: Math.round(y as number),
     width: Math.round(width as number),
     height: Math.round(height as number),
+    radius: Math.round(radius as number),
   }
 }
 

@@ -9,13 +9,14 @@ import {
   Annotation,
   Compartment,
   EditorState,
+  RangeSet,
   StateEffect,
   StateField,
   Text,
   Transaction,
   type Extension,
 } from '@codemirror/state'
-import { Decoration, keymap } from '@codemirror/view'
+import { Decoration, GutterMarker, gutterLineClass, keymap } from '@codemirror/view'
 import { basicSetup, EditorView } from 'codemirror'
 import type { FileContent } from '@shared/files'
 import { useCodeThemes } from '@renderer/features/session/markdown/code-themes'
@@ -39,11 +40,15 @@ const chrome = EditorView.theme({
     overscrollBehavior: 'contain',
   },
   '.cm-content': { padding: '8px 0' },
-  '.cm-gutters': { paddingLeft: '8px' },
-  '.cm-lineNumbers .cm-gutterElement': { padding: '0 8px 0 4px', minWidth: '28px' },
-  '.cm-activeLineGutter': { color: 'var(--foreground)' },
-  '.cm-foldGutter .cm-gutterElement': { width: '14px', color: 'var(--muted-foreground)' },
-  '.cm-marked-line': { backgroundColor: 'var(--bg-selected)' },
+  '.cm-line': { paddingLeft: '0' },
+  '.cm-lineNumbers .cm-gutterElement': { padding: '0 0 0 8px', minWidth: '28px' },
+  '&.cm-focused .cm-activeLineGutter': { color: 'var(--foreground)' },
+  '.cm-foldGutter .cm-gutterElement': { width: '12px', color: 'var(--muted-foreground)' },
+  // An image, so the mark shows over the active line's background: the cursor sits on it.
+  '.cm-marked-line': {
+    backgroundImage: 'linear-gradient(var(--marked-line), var(--marked-line))',
+  },
+  '.cm-gutterElement.cm-marked-line': { color: 'var(--text-secondary)' },
   '.cm-panels': { backgroundColor: 'var(--background)', color: 'var(--foreground)' },
   '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border-soft)' },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border-soft)' },
@@ -157,7 +162,12 @@ const readOnly = new Compartment()
 /** A reload from disk: not an edit, and not something to undo. */
 const fromDisk = Annotation.define<boolean>()
 
-// The line a reference points at, marked until another one is.
+class MarkedGutter extends GutterMarker {
+  override elementClass = 'cm-marked-line'
+}
+const markedGutter = new MarkedGutter()
+
+// The line a reference points at, marked across its number and its text until another one is.
 const markLine = StateEffect.define<number | null>()
 const marked = StateField.define<number | null>({
   create: () => null,
@@ -165,12 +175,18 @@ const marked = StateField.define<number | null>({
     for (const effect of tr.effects) if (effect.is(markLine)) return effect.value
     return line
   },
-  provide: (field) =>
+  provide: (field) => [
     EditorView.decorations.from(field, (line) => (view) => {
       if (line === null || line > view.state.doc.lines) return Decoration.none
       const at = view.state.doc.line(line).from
       return Decoration.set([Decoration.line({ class: 'cm-marked-line' }).range(at)])
     }),
+    gutterLineClass.compute([field], (state) => {
+      const line = state.field(field)
+      if (line === null || line > state.doc.lines) return RangeSet.empty
+      return RangeSet.of(markedGutter.range(state.doc.line(line).from))
+    }),
+  ],
 })
 
 function createBuffer(

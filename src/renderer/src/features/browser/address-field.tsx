@@ -46,7 +46,7 @@ export function AddressField({
       {parts && (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-2.5 text-ui whitespace-nowrap"
+          className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-2.5 text-command whitespace-nowrap"
         >
           <span ref={overlay} className="block">
             <span className="text-primary">{parts.host}</span>
@@ -99,10 +99,10 @@ export function AddressField({
           }
         }}
         className={cn(
-          'h-7 w-full min-w-0 rounded-lg bg-transparent px-2.5 text-ui text-primary outline-none',
-          'hover:bg-hover focus:bg-background focus:ring-1 focus:ring-border-strong focus:ring-inset',
+          'h-7 w-full min-w-0 rounded-lg bg-subtle px-2.5 text-command text-primary outline-none transition-[background-color,box-shadow] duration-(--duration-fast)',
+          'hover:ring-1 hover:ring-border hover:ring-inset focus:bg-surface focus:ring-1 focus:ring-border-strong focus:ring-inset',
           !editing && 'text-transparent caret-transparent',
-          invalid && 'ring-1 ring-danger ring-inset',
+          invalid && 'ring-1 ring-danger ring-inset hover:ring-danger focus:ring-danger',
         )}
       />
     </div>

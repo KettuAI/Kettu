@@ -1,8 +1,8 @@
 // One page per session in the side panel's browser. Main owns every page, since only it holds web
 // contents; the renderer draws the pane's frame and tells main where the page sits.
 
-import { BrowserWindow, session as electronSession, shell, WebContentsView } from 'electron'
-import type { Input } from 'electron'
+import { BrowserWindow, session as electronSession, shell, View, WebContentsView } from 'electron'
+import type { Input, Rectangle } from 'electron'
 import {
   BROWSER_PARTITION,
   type BrowserBounds,
@@ -20,11 +20,19 @@ const log = createLogger('browser')
 export const MAX_LIVE_PAGES = 4
 
 /** What a page gets before the pane reports its bounds. */
-export const DEFAULT_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 1280, height: 800 }
+export const DEFAULT_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 1280, height: 800, radius: 0 }
+
+// On macOS a page draws in its window's own compositor, so a view around it clips it: a frame
+// rounds the page's lower corners and leaves its upper ones square under the pane's header.
+// Elsewhere a page is a native window of its own that only its own radius clips, on all four
+// corners alike.
+const FRAMED = process.platform === 'darwin'
 
 interface Page {
   sessionId: string
   view: WebContentsView | null
+  /** The view around the page that rounds its lower corners, on macOS. */
+  frame: View | null
   bounds: BrowserBounds
   lastUrl: string | null
   lastTitle: string | null
@@ -39,6 +47,24 @@ export interface BrowserViewsDeps {
   /** The window the pages sit over; null while none exists. */
   window(): BrowserWindow | null
   send(state: BrowserState): void
+}
+
+/**
+ * A page's frame and the page inside it. The frame reaches `radius` above the page, as far as
+ * the window allows, so its own rounded upper corners fall outside the page and only the page's
+ * lower corners round, as the pane's do.
+ */
+export function framePage(bounds: BrowserBounds): { frame: Rectangle; page: Rectangle } {
+  const above = Math.min(bounds.radius, bounds.y)
+  return {
+    frame: {
+      x: bounds.x,
+      y: bounds.y - above,
+      width: bounds.width,
+      height: bounds.height + above,
+    },
+    page: { x: 0, y: above, width: bounds.width, height: bounds.height },
+  }
 }
 
 /** The least recently used page among those with a live view, other than `keep`. */
@@ -76,16 +102,14 @@ export class BrowserViews {
     for (const other of this.pages.values()) {
       if (other !== page && other.shown) {
         other.shown = false
-        other.view?.setVisible(false)
+        this.setVisible(other, false)
       }
     }
     page.shown = true
     page.frozen = false
     page.lastUsed = Date.now()
-    if (page.view) {
-      page.view.setBounds(page.bounds)
-      page.view.setVisible(true)
-    }
+    this.place(page)
+    this.setVisible(page, true)
     this.emit(page)
   }
 
@@ -94,13 +118,13 @@ export class BrowserViews {
     if (!page) return
     page.shown = false
     page.frozen = false
-    page.view?.setVisible(false)
+    this.setVisible(page, false)
   }
 
   setBounds(sessionId: string, bounds: BrowserBounds): void {
     const page = this.page(sessionId)
     page.bounds = bounds
-    if (page.shown && page.view) page.view.setBounds(bounds)
+    if (page.shown) this.place(page)
   }
 
   navigate(sessionId: string, url: string): void {
@@ -145,7 +169,7 @@ export class BrowserViews {
     const image = await page.view.webContents.capturePage()
     if (image.isEmpty()) return null
     page.frozen = true
-    page.view.setVisible(false)
+    this.setVisible(page, false)
     return image.toDataURL()
   }
 
@@ -153,7 +177,7 @@ export class BrowserViews {
     const page = this.pages.get(sessionId)
     if (!page) return
     page.frozen = false
-    if (page.shown) page.view?.setVisible(true)
+    if (page.shown) this.setVisible(page, true)
   }
 
   async clearData(): Promise<void> {
@@ -177,6 +201,7 @@ export class BrowserViews {
       page = {
         sessionId,
         view: null,
+        frame: null,
         bounds: DEFAULT_BOUNDS,
         lastUrl: null,
         lastTitle: null,
@@ -199,8 +224,8 @@ export class BrowserViews {
     page.notice = null
     page.lastUsed = Date.now()
     page.loading = true
-    view.setBounds(page.bounds)
-    if (page.shown && !page.frozen) view.setVisible(true)
+    this.place(page)
+    if (page.shown && !page.frozen) this.setVisible(page, true)
     void view.webContents.loadURL(url).catch((error: unknown) => {
       log.warn(`Could not load ${url}: ${(error as Error).message}`)
     })
@@ -222,11 +247,36 @@ export class BrowserViews {
     })
     const page = this.page(sessionId)
     page.view = view
-    window.contentView.addChildView(view)
-    view.setBounds(page.bounds)
-    view.setVisible(page.shown)
+    if (FRAMED) {
+      page.frame = new View()
+      page.frame.addChildView(view)
+    }
+    window.contentView.addChildView(page.frame ?? view)
+    this.place(page)
+    this.setVisible(page, page.shown)
     this.wire(page, view)
     return view
+  }
+
+  /** Puts the page where the pane reported it, its lower corners rounded as the pane's are. */
+  private place(page: Page): void {
+    const { view, frame, bounds } = page
+    if (!view) return
+    const { x, y, width, height, radius } = bounds
+    if (frame) {
+      const framed = framePage(bounds)
+      frame.setBounds(framed.frame)
+      frame.setBorderRadius(radius)
+      view.setBounds(framed.page)
+    } else {
+      view.setBounds({ x, y, width, height })
+      view.setBorderRadius(radius)
+    }
+  }
+
+  private setVisible(page: Page, visible: boolean): void {
+    const shown = page.frame ?? page.view
+    shown?.setVisible(visible)
   }
 
   /** Closes the least recently used page when a new one would be the fifth. */
@@ -252,11 +302,13 @@ export class BrowserViews {
 
   private close(page: Page): void {
     const view = page.view
+    const attached = page.frame ?? view
     page.view = null
+    page.frame = null
     page.loading = false
-    if (!view) return
+    if (!view || !attached) return
     const window = this.deps.window()
-    if (window && !window.isDestroyed()) window.contentView.removeChildView(view)
+    if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
     if (!view.webContents.isDestroyed()) view.webContents.close()
   }
 
@@ -322,7 +374,12 @@ export class BrowserViews {
     this.silenceDialogs(contents)
     contents.once('destroyed', () => {
       if (page.view?.webContents === contents) {
+        const window = this.deps.window()
+        if (page.frame && window && !window.isDestroyed()) {
+          window.contentView.removeChildView(page.frame)
+        }
         page.view = null
+        page.frame = null
         page.loading = false
       }
     })

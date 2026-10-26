@@ -11,6 +11,7 @@
     "rename": "重命名",
     "nameLabel": "终端名称",
     "newOutput": "有新输出",
+    "running": "正在运行",
     "close": "关闭 {{name}}"
   },
   "closeDialog": {
