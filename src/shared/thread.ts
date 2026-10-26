@@ -149,6 +149,7 @@ export type ThreadEntry =
   | GitEntry // OverBench's own observation of the repository, see the git design
   | ArtifactEntry // OverBench's own record of a write to the artifacts service
 
+/** `after`: the agent's entry before it, to put it back after a replay; older entries lack it. */
 export type GitEntry =
   | {
       kind: 'git'
@@ -156,10 +157,18 @@ export type GitEntry =
       event: 'commit'
       commits: { oid: string; subject: string }[]
       more: number
+      after?: string | null
     }
-  | { kind: 'git'; id: string; event: 'push'; upstream: string; count: number }
-  | { kind: 'git'; id: string; event: 'branch'; branch: string }
-  | { kind: 'git'; id: string; event: 'pull_request'; url: string }
+  | {
+      kind: 'git'
+      id: string
+      event: 'push'
+      upstream: string
+      count: number
+      after?: string | null
+    }
+  | { kind: 'git'; id: string; event: 'branch'; branch: string; after?: string | null }
+  | { kind: 'git'; id: string; event: 'pull_request'; url: string; after?: string | null }
 
 /**
  * A write to the artifacts service, added by the host to the calling session's thread. Writes to
@@ -587,9 +596,12 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
     case 'turn_end':
       return typeof value.stopReason === 'string' && typeof value.durationMs === 'number'
     case 'git':
-      return value.event === 'commit'
-        ? isListOf(value.commits, isRecord)
-        : typeof value.event === 'string'
+      return (
+        (value.event === 'commit'
+          ? isListOf(value.commits, isRecord)
+          : typeof value.event === 'string') &&
+        (value.after === undefined || value.after === null || typeof value.after === 'string')
+      )
     case 'artifact':
       return (
         typeof value.artifactId === 'string' &&

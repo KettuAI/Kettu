@@ -1,10 +1,11 @@
 // What a write to the artifacts service puts in the calling session's thread, and how those
-// entries outlive a replay.
+// entries, like started sessions and git events, outlive a replay.
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ArtifactAction, ArtifactEntry, Patch, ThreadEntry, ThreadState } from '@shared/thread'
+import type { GitEventDraft } from '../git/api'
 
-type OwnEntry = Extract<ThreadEntry, { kind: 'artifact' | 'session_started' }>
+type OwnEntry = Extract<ThreadEntry, { kind: 'artifact' | 'session_started' | 'git' }>
 
 const ACTIONS: Record<string, ArtifactAction> = {
   create_artifact: 'create',
@@ -43,6 +44,11 @@ export function startedPatch(thread: ThreadState, sessionId: string, newId: () =
       after: agentEntryBefore(thread),
     },
   }
+}
+
+/** The entry a git event adds to a session's thread. */
+export function gitPatch(thread: ThreadState, draft: GitEventDraft, newId: () => string): Patch {
+  return { op: 'entry.add', entry: { ...draft, id: newId(), after: agentEntryBefore(thread) } }
 }
 
 /**
@@ -119,9 +125,9 @@ export function writePatch(thread: ThreadState, write: ArtifactWrite, newId: () 
 }
 
 /**
- * A thread's entries the host added and keeps while a replay rebuilds it: each goes back after
- * the entry it followed, or, when the replay never sends that one, at the end of its turn,
- * counted by user messages.
+ * A thread's entries the host added and keeps while a replay rebuilds it, artifact entries,
+ * started sessions and git events: each goes back after the entry it followed, or, when the replay
+ * never sends that one or it recorded none, at the end of its turn, counted by user messages.
  */
 export class ReplayKeeper {
   private kept: { entry: OwnEntry; turn: number }[] = []
@@ -132,7 +138,11 @@ export class ReplayKeeper {
     for (const id of thread.order) {
       const entry = thread.byId[id]
       if (entry?.kind === 'user') turn++
-      else if (entry?.kind === 'artifact' || entry?.kind === 'session_started') {
+      else if (
+        entry?.kind === 'artifact' ||
+        entry?.kind === 'session_started' ||
+        entry?.kind === 'git'
+      ) {
         this.kept.push({ entry, turn })
       }
     }
