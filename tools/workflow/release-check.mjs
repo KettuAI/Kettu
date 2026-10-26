@@ -1,7 +1,7 @@
 // @ts-check
 // Opens a "Release vX.Y.Z" issue when a release trigger has fired and no release is open. CI runs
-// it on every push to main and once a day; run it the same way, with DRY_RUN=1 to print the
-// decision without opening anything:
+// it on every push to main; run it the same way, with DRY_RUN=1 to print the decision without
+// opening anything:
 //
 //   DRY_RUN=1 node tools/workflow/release-check.mjs
 //
@@ -14,10 +14,8 @@ import { parseTitle } from './commit-title.mjs'
 const USER_VISIBLE = ['feat', 'fix', 'perf']
 // The types that can fix an urgent issue, and that the release notes list.
 const FIXING = [...USER_VISIBLE, 'revert']
-const COUNT = 10
 const HOUR = 60 * 60 * 1000
 const SPACING = 24 * HOUR
-const PERIOD = 7 * 24 * HOUR
 const STALE = 48 * HOUR
 const VERSION = /^v(\d+)\.(\d+)\.(\d+)$/
 const RELEASE_ISSUE = /^Release (v\d+\.\d+\.\d+)$/
@@ -32,8 +30,8 @@ const PAGE = 25
 /** @typedef {{ number: number, title: string }} Item */
 /** @typedef {{ number: number, labels: string[] }} LinkedIssue */
 /** @typedef {{ number: number, issues: LinkedIssue[] }} Pull */
-/** @typedef {{ name: 'Urgent' | 'Count' | 'Time', detail: string }} Trigger */
-/** @typedef {{ version: string, milestone: Milestone, minor: boolean } | { problem: string }} Target */
+/** @typedef {{ name: 'Urgent' | 'Milestone', detail: string }} Trigger */
+/** @typedef {{ version: string, milestone: Milestone, done: boolean } | { problem: string }} Target */
 /** @typedef {{ reason: string, since: Date | null }} Open */
 
 /**
@@ -134,16 +132,24 @@ export function lastPublished(releases) {
 }
 
 /**
- * A release takes the earliest open patch milestone after the last tag. Once nothing is left
- * before a minor's own milestone and its issues have closed, it takes the minor.
- *
+ * @param {string | null} lastTag
+ * @returns {string} the version after it
+ */
+export function nextVersion(lastTag) {
+  const last = lastTag ? parseVersion(lastTag) : null
+  const [major, minor, patch] = last ?? [0, 0, 0]
+  return `v${major}.${minor}.${patch + 1}`
+}
+
+/**
  * @param {Milestone[]} milestones
  * @param {string | null} lastTag
- * @returns {Target}
+ * @returns {{ milestone: Milestone, version: number[] }[]} the open milestones above the last tag,
+ *   oldest first
  */
-export function releaseTarget(milestones, lastTag) {
+function planned(milestones, lastTag) {
   const last = lastTag ? parseVersion(lastTag) : null
-  const planned = milestones
+  return milestones
     .flatMap((milestone) => {
       const version = parseVersion(milestone.title)
       return version && (!last || compareVersions(version, last) > 0)
@@ -151,22 +157,56 @@ export function releaseTarget(milestones, lastTag) {
         : []
     })
     .sort((a, b) => compareVersions(a.version, b.version))
-  const next = planned[0]
-  if (!next) {
+}
+
+/**
+ * @param {Milestone[]} milestones
+ * @param {string | null} lastTag
+ * @returns {Milestone | null} the earliest open milestone above the last tag
+ */
+export function earliestMilestone(milestones, lastTag) {
+  return planned(milestones, lastTag)[0]?.milestone ?? null
+}
+
+/**
+ * The earliest open milestone above the last tag gives the version once all of its issues have
+ * closed. An urgent release cannot wait for that, so it takes the next version number after the
+ * last tag, which then ships with its milestone still open.
+ *
+ * @param {Milestone[]} milestones
+ * @param {string | null} lastTag
+ * @param {boolean} [urgent]
+ * @returns {Target}
+ */
+export function releaseTarget(milestones, lastTag, urgent = false) {
+  const open = planned(milestones, lastTag)
+  const earliest = open[0]
+  if (!earliest) {
     return {
       problem: lastTag
         ? `No open milestone is planned after ${lastTag}.`
         : 'No open milestone is planned.',
     }
   }
-  const { milestone, version } = next
-  const minor = version[2] === 0
-  if (minor && milestone.openIssues > 0) {
+  if (earliest.milestone.openIssues === 0) {
+    return { version: earliest.milestone.title, milestone: earliest.milestone, done: true }
+  }
+  if (!urgent) {
     return {
-      problem: `No patch milestone is open before ${milestone.title}, which still has ${plural(milestone.openIssues, 'open issue', 'open issues')}.`,
+      problem: `The earliest open milestone, ${earliest.milestone.title}, still has ${plural(earliest.milestone.openIssues, 'open issue', 'open issues')}.`,
     }
   }
-  return { version: milestone.title, milestone, minor }
+  const version = nextVersion(lastTag)
+  const wanted = parseVersion(version)
+  const milestone = open.find(
+    (candidate) => wanted && compareVersions(candidate.version, wanted) === 0,
+  )?.milestone
+  if (!milestone) {
+    return {
+      problem: `No open milestone is planned for ${version}, the next version after ${lastTag ?? 'the first commit'}.`,
+    }
+  }
+  return { version, milestone, done: false }
 }
 
 /**
@@ -223,7 +263,6 @@ export function decide(input) {
   const lastTag = latestTag(input.tags.map((tag) => tag.name))
   const published = lastPublished(input.releases)
   const changes = commits.filter((commit) => isUserVisible(commit.subject))
-  const since = lastTag ? `since ${lastTag}` : 'since the first commit'
 
   /** @type {Trigger[]} */
   const fired = []
@@ -240,24 +279,20 @@ export function decide(input) {
 
   const age = published ? now.getTime() - published.at.getTime() : null
   const spaced = age === null || age >= SPACING
-  if (changes.length >= COUNT) {
+  const done = earliestMilestone(input.milestones, lastTag)
+  if (done && done.openIssues === 0) {
     /** @type {Trigger} */
-    const count = {
-      name: 'Count',
-      detail: `${changes.length} user-visible changes have merged ${since}.`,
+    const milestone = {
+      name: 'Milestone',
+      detail: `${done.title} is done: all its issues have closed.`,
     }
-    if (spaced) fired.push(count)
-    else held.push(count)
-  }
-  if (published && age !== null && age >= PERIOD && changes.length > 0) {
-    fired.push({
-      name: 'Time',
-      detail: `${plural(Math.floor(age / (24 * HOUR)), 'day has', 'days have')} passed since ${published.tag} was published, and ${plural(changes.length, 'user-visible change has', 'user-visible changes have')} merged since.`,
-    })
+    // An urgent release goes out at once and covers the milestone with it.
+    if (spaced || urgent.length > 0) fired.push(milestone)
+    else held.push(milestone)
   }
 
   const { open, warnings } = releaseOpen(input)
-  const target = releaseTarget(input.milestones, lastTag)
+  const target = releaseTarget(input.milestones, lastTag, urgent.length > 0)
   const due = `A release is due (${fired.map((trigger) => trigger.name).join(', ')})`
   /** @type {Decision['outcome']} */
   let outcome = 'none'
@@ -295,9 +330,9 @@ export function decide(input) {
 /** @param {Target} target */
 function targetText(target) {
   if ('problem' in target) return `none. ${target.problem}`
-  return target.minor
-    ? `${target.version}, as no patch milestone is left before it and its issues have all closed.`
-    : `${target.version}, the earliest open patch milestone.`
+  return target.done
+    ? `${target.version}, the earliest open milestone, whose issues have all closed.`
+    : `${target.version}, the next version number.`
 }
 
 /** @param {{ version: string }} target */
@@ -317,11 +352,19 @@ export function issueBody(decision) {
           '',
           ...fired.map((trigger) => `- ${trigger.name}: ${trigger.detail}`),
         ]
+  const shift =
+    'problem' in target || target.done
+      ? []
+      : [
+          '',
+          'The unfinished issues of its milestone move to the next version, and the planned milestones after it move up one number.',
+        ]
   const listed = commits.filter((commit) => FIXING.includes(typeOf(commit.subject)))
   return [
     ...triggers,
     '',
     `The version is ${targetText(target)}`,
+    ...shift,
     '',
     `User-visible changes and reverts ${lastTag ? `since ${lastTag}` : 'so far'}:`,
     '',

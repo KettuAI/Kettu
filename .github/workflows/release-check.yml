@@ -3,9 +3,6 @@ name: Release check
 on:
   push:
     branches: [main]
-  # Daily, so the time trigger fires on a day without merges.
-  schedule:
-    - cron: '23 6 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
