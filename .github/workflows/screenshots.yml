@@ -34,6 +34,12 @@ jobs:
       - name: Enlarge the screen
         if: runner.os == 'Windows'
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+      # The runner has no Chinese face; --font-sans names Noto Sans CJK SC for Linux.
+      - name: Install a CJK font
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
       - name: Capture
         if: runner.os != 'Linux'
         run: node tools/screenshots/capture.mjs --out screenshots
