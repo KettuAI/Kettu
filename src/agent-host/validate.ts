@@ -589,6 +589,7 @@ export function createValidators(platform: Platform): Validators {
     },
     'sessions.unqueue': queueItem,
     'sessions.steer': queueItem,
+    'sessions.sendNow': queueItem,
     'sessions.resumeQueue': session,
     'sessions.blob': (params) => {
       const o = fields(params)
