@@ -12,10 +12,11 @@ import { execFileSync } from 'node:child_process'
 import { parseTitle } from './commit-title.mjs'
 
 const USER_VISIBLE = ['feat', 'fix', 'perf']
-// The types that can fix an urgent issue, and that the release notes list.
+// The types that can fix a core or an urgent issue, and that the release notes list.
 const FIXING = [...USER_VISIBLE, 'revert']
+// User-visible changes since the latest tag that fire Count.
+const COUNT = 10
 const HOUR = 60 * 60 * 1000
-const SPACING = 24 * HOUR
 const STALE = 48 * HOUR
 const VERSION = /^v(\d+)\.(\d+)\.(\d+)$/
 const RELEASE_ISSUE = /^Release (v\d+\.\d+\.\d+)$/
@@ -30,7 +31,7 @@ const PAGE = 25
 /** @typedef {{ number: number, title: string }} Item */
 /** @typedef {{ number: number, labels: string[] }} LinkedIssue */
 /** @typedef {{ number: number, issues: LinkedIssue[] }} Pull */
-/** @typedef {{ name: 'Urgent' | 'Milestone', detail: string }} Trigger */
+/** @typedef {{ name: 'Core' | 'Urgent' | 'Milestone' | 'Count', detail: string }} Trigger */
 /** @typedef {{ version: string, milestone: Milestone, done: boolean } | { problem: string }} Target */
 /** @typedef {{ reason: string, since: Date | null }} Open */
 
@@ -53,8 +54,6 @@ const PAGE = 25
  * @property {Commit[]} commits
  * @property {Commit[]} changes the user-visible commits
  * @property {Trigger[]} fired
- * @property {Trigger[]} held fired, but within 24 hours of the last release
- * @property {Date | null} heldUntil
  * @property {string | null} releaseOpen why a release counts as open
  * @property {Target} target
  * @property {string[]} warnings
@@ -170,15 +169,15 @@ export function earliestMilestone(milestones, lastTag) {
 
 /**
  * The earliest open milestone above the last tag gives the version once all of its issues have
- * closed. An urgent release cannot wait for that, so it takes the next version number after the
- * last tag, which then ships with its milestone still open.
+ * closed. A release that does not wait for that, because Core, Urgent or Count fired, takes the
+ * next version number after the last tag instead, which then ships with its milestone still open.
  *
  * @param {Milestone[]} milestones
  * @param {string | null} lastTag
- * @param {boolean} [urgent]
+ * @param {boolean} [early] whether any trigger other than Milestone fired
  * @returns {Target}
  */
-export function releaseTarget(milestones, lastTag, urgent = false) {
+export function releaseTarget(milestones, lastTag, early = false) {
   const open = planned(milestones, lastTag)
   const earliest = open[0]
   if (!earliest) {
@@ -191,7 +190,7 @@ export function releaseTarget(milestones, lastTag, urgent = false) {
   if (earliest.milestone.openIssues === 0) {
     return { version: earliest.milestone.title, milestone: earliest.milestone, done: true }
   }
-  if (!urgent) {
+  if (!early) {
     return {
       problem: `The earliest open milestone, ${earliest.milestone.title}, still has ${plural(earliest.milestone.openIssues, 'open issue', 'open issues')}.`,
     }
@@ -255,6 +254,23 @@ export function releaseOpen({ tags, releases, openIssues }) {
 }
 
 /**
+ * @param {Commit[]} commits
+ * @param {Record<string, Pull>} pulls
+ * @param {string} label
+ * @returns {string[]} one entry for each fixing commit whose pull request closed an issue with the
+ *   label
+ */
+function closedWith(commits, pulls, label) {
+  return commits.flatMap((commit) => {
+    if (!FIXING.includes(typeOf(commit.subject))) return []
+    const issues = (pulls[commit.sha]?.issues ?? [])
+      .filter((issue) => issue.labels.includes(label))
+      .map((issue) => `#${issue.number}`)
+    return issues.length > 0 ? [`"${commit.subject}" closed ${label} ${issues.join(', ')}`] : []
+  })
+}
+
+/**
  * @param {Input} input
  * @returns {Decision}
  */
@@ -266,33 +282,24 @@ export function decide(input) {
 
   /** @type {Trigger[]} */
   const fired = []
-  /** @type {Trigger[]} */
-  const held = []
-  const urgent = commits.flatMap((commit) => {
-    if (!FIXING.includes(typeOf(commit.subject))) return []
-    const issues = (pulls[commit.sha]?.issues ?? [])
-      .filter((issue) => issue.labels.includes('urgent'))
-      .map((issue) => `#${issue.number}`)
-    return issues.length > 0 ? [`"${commit.subject}" closed urgent ${issues.join(', ')}`] : []
-  })
+  const core = closedWith(commits, pulls, 'core')
+  if (core.length > 0) fired.push({ name: 'Core', detail: `${core.join('; ')}.` })
+  const urgent = closedWith(commits, pulls, 'urgent')
   if (urgent.length > 0) fired.push({ name: 'Urgent', detail: `${urgent.join('; ')}.` })
-
-  const age = published ? now.getTime() - published.at.getTime() : null
-  const spaced = age === null || age >= SPACING
   const done = earliestMilestone(input.milestones, lastTag)
   if (done && done.openIssues === 0) {
-    /** @type {Trigger} */
-    const milestone = {
-      name: 'Milestone',
-      detail: `${done.title} is done: all its issues have closed.`,
-    }
-    // An urgent release goes out at once and covers the milestone with it.
-    if (spaced || urgent.length > 0) fired.push(milestone)
-    else held.push(milestone)
+    fired.push({ name: 'Milestone', detail: `${done.title} is done: all its issues have closed.` })
+  }
+  if (changes.length >= COUNT) {
+    fired.push({
+      name: 'Count',
+      detail: `${changes.length} user-visible changes have merged since ${lastTag ?? 'the first commit'}.`,
+    })
   }
 
   const { open, warnings } = releaseOpen(input)
-  const target = releaseTarget(input.milestones, lastTag, urgent.length > 0)
+  const early = fired.some((trigger) => trigger.name !== 'Milestone')
+  const target = releaseTarget(input.milestones, lastTag, early)
   const due = `A release is due (${fired.map((trigger) => trigger.name).join(', ')})`
   /** @type {Decision['outcome']} */
   let outcome = 'none'
@@ -318,8 +325,6 @@ export function decide(input) {
     commits,
     changes,
     fired,
-    held,
-    heldUntil: held.length > 0 && published ? new Date(published.at.getTime() + SPACING) : null,
     releaseOpen: open?.reason ?? null,
     target,
     warnings,
@@ -378,7 +383,7 @@ export function issueBody(decision) {
  * @returns {string[]} what the check found, one line each, for the log
  */
 export function summary(decision) {
-  const { lastTag, lastPublished: published, commits, changes, fired, held } = decision
+  const { lastTag, lastPublished: published, commits, changes, fired } = decision
   const lines = [
     published
       ? `Last release: ${published.tag}, published ${iso(published.at)}.`
@@ -386,14 +391,8 @@ export function summary(decision) {
     `${lastTag ? `Since ${lastTag}` : 'Since the first commit'}: ${plural(commits.length, 'commit', 'commits')}, ${changes.length} user-visible.`,
     `Version: ${targetText(decision.target)}`,
   ]
-  if (fired.length === 0 && held.length === 0) lines.push('Triggers: none fired.')
+  if (fired.length === 0) lines.push('Triggers: none fired.')
   for (const trigger of fired) lines.push(`Fired: ${trigger.name}, ${trigger.detail}`)
-  for (const trigger of held) {
-    const until = decision.heldUntil ? iso(decision.heldUntil) : ''
-    lines.push(
-      `Held: ${trigger.name}, ${trigger.detail} It can fire from ${until}, 24 hours after ${published?.tag} was published.`,
-    )
-  }
   if (decision.releaseOpen) lines.push(`Release open: ${decision.releaseOpen}`)
   const { outcome, target } = decision
   let verdict = 'no release is due.'
