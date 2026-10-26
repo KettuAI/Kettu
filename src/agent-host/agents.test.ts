@@ -175,6 +175,32 @@ async function until(check: () => boolean, ms = 5_000): Promise<void> {
   }
 }
 
+/** A launcher whose first process ignores its stop, as after a Windows taskkill that failed. */
+function stopFails(firstEnv: Env = {}) {
+  const first = inProcessLauncher(module, firstEnv)
+  const base = inProcessLauncher(module)
+  let end: (() => Promise<unknown>) | null = null
+  const launcher: AgentLauncher = {
+    launch: (def, spec, launchEnv, output) => {
+      if (first.launches > 0) return base.launch(def, spec, launchEnv, output)
+      const launched = first.launch(def, spec, launchEnv, output)
+      end = launched.stop
+      return Object.assign(launched, {
+        pid: 4242,
+        stop: async () => ({
+          code: null,
+          signal: null,
+          error: 'taskkill failed: taskkill did not finish within 10000 ms',
+        }),
+      })
+    },
+  }
+  const pids = (m: ReturnType<typeof manager>) => m.agents.processes().map((p) => p.pid)
+  // The first process exits after all, as the reap's taskkill would end it.
+  const launches = () => first.launches + base.launches
+  return { launcher, launches, pids, exitFirst: () => end?.() }
+}
+
 describe('AgentManager', () => {
   it('starts lazily, once, however many callers wait', async () => {
     const m = manager()
@@ -360,32 +386,6 @@ describe('AgentManager', () => {
     expect(sent().filter((method) => method === 'session/new')).toHaveLength(2)
     await m.agents.stopAll()
   })
-
-  /** A launcher whose first process ignores its stop, as after a Windows taskkill that failed. */
-  function stopFails(firstEnv: Env = {}) {
-    const first = inProcessLauncher(module, firstEnv)
-    const base = inProcessLauncher(module)
-    let end: (() => Promise<unknown>) | null = null
-    const launcher: AgentLauncher = {
-      launch: (def, spec, launchEnv, output) => {
-        if (first.launches > 0) return base.launch(def, spec, launchEnv, output)
-        const launched = first.launch(def, spec, launchEnv, output)
-        end = launched.stop
-        return Object.assign(launched, {
-          pid: 4242,
-          stop: async () => ({
-            code: null,
-            signal: null,
-            error: 'taskkill failed: taskkill did not finish within 10000 ms',
-          }),
-        })
-      },
-    }
-    const pids = (m: ReturnType<typeof manager>) => m.agents.processes().map((p) => p.pid)
-    // The first process exits after all, as the reap's taskkill would end it.
-    const launches = () => first.launches + base.launches
-    return { launcher, launches, pids, exitFirst: () => end?.() }
-  }
 
   it('does not hand out the runtime of an agent its stop did not end', async () => {
     const { launcher, launches, pids, exitFirst } = stopFails()
@@ -1859,6 +1859,7 @@ async function updateManager(
     installedCli?: string
     /** The adapter pins its CLI, so the check's CLI version is the oldest it runs. */
     pinsVersion?: boolean
+    launcher?: AgentLauncher
   } = {},
 ) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'overbench-updates-'))
@@ -1918,6 +1919,7 @@ async function updateManager(
         return (options.latest ?? (async () => ({ adapterVersion: '2.0.0', cliVersion: cli })))()
       },
       rememberUpdates: (file) => saved.push(structuredClone(file)),
+      ...(options.launcher ? { launcher: options.launcher } : {}),
     },
   )
   return {
@@ -2172,6 +2174,66 @@ describe('updates', () => {
       return left.length === 1
     })
     expect(left).toEqual([fresh])
+    await m.agents.stopAll()
+  })
+
+  it('keeps the older install while a process its stop gave up still runs', async () => {
+    const given = stopFails()
+    const m = await updateManager({ launcher: given.launcher })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    await m.agents.checkUpdates()
+    await m.agents.ensureReady('codex')
+    await m.agents.update('codex')
+    const [, fresh] = await m.dirs()
+    // The stop gives up the process that runs from 2.0.0, and the next start runs the update.
+    await m.agents.stop('codex')
+    await m.agents.ensureReady('codex')
+    expect(m.status().launchCommand).toContain(path.join(m.root, 'codex', fresh!))
+    expect(given.pids(m)).toEqual([4242])
+    // A cleanup would have deleted 2.0.0 by now.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(await m.dirs()).toEqual(['2.0.0', fresh])
+
+    await given.exitFirst()
+    let left: string[] = []
+    await until(() => {
+      void m.dirs().then((names) => (left = names))
+      return left.length === 1
+    })
+    expect(left).toEqual([fresh])
+    await m.agents.stopAll()
+  })
+
+  it('keeps the older install when its given-up process exits after a failed start', async () => {
+    const given = stopFails()
+    const slow = inProcessLauncher(module, {
+      FAKE_AGENT_SLOW_START_MS: '10000',
+      FAKE_AGENT_DELAY_SCALE: '1',
+    })
+    // Every process after the given-up one is too slow to answer initialize.
+    const launcher: AgentLauncher = {
+      launch: (def, spec, env, output) =>
+        (given.launches() === 0 ? given.launcher : slow).launch(def, spec, env, output),
+    }
+    const m = await updateManager({ launcher, timings: { initializeMs: 1_000 } })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    await m.agents.checkUpdates()
+    await m.agents.ensureReady('codex')
+    await m.agents.update('codex')
+    const [, fresh] = await m.dirs()
+    await m.agents.stop('codex')
+    await expect(m.agents.ensureReady('codex')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    expect(m.status().state).toBe('failed')
+
+    // No start of the update answered, so its exit leaves 2.0.0 for a start that does.
+    await given.exitFirst()
+    await until(() => given.pids(m).length === 0)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(await m.dirs()).toEqual(['2.0.0', fresh])
     await m.agents.stopAll()
   })
 
