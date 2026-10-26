@@ -525,6 +525,10 @@
       "name": "许可证",
       "keywords": "许可 apache licence"
     },
+    "notices": {
+      "name": "第三方声明",
+      "keywords": "许可 开源 致谢 licenses open source acknowledgements"
+    },
     "groups": {
       "updates": "更新",
       "runtime": "运行环境",

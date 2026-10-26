@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import path from 'node:path'
 import type { IpcMainEvent, WebContents } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -15,7 +16,8 @@ vi.mock('electron', () => ({
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
-const { isTrusted, whenSettled } = await import('./ipc')
+const { isTrusted, openNotices, whenSettled } = await import('./ipc')
+const electron = await import('electron')
 const { watchSubframes } = await import('./subframes')
 
 const ARTIFACT = 'overbench-artifact://0123456789abcdef0123456789/'
@@ -131,5 +133,27 @@ describe('whenSettled', () => {
     contents.commit(frame, ARTIFACT)
     await call
     expect(order).toEqual(['call', 'message', 'call answered'])
+  })
+})
+
+describe('openNotices', () => {
+  const openPath = vi.fn<(file: string) => Promise<string>>(() => Promise.resolve(''))
+  Object.assign(electron.shell, { openPath })
+  Object.defineProperty(process, 'resourcesPath', { value: '/app/resources', configurable: true })
+
+  it("opens the resources folder's file when packaged, and the last build's in development", async () => {
+    Object.assign(electron.app, { isPackaged: true, getAppPath: () => '/repo' })
+    await openNotices()
+    expect(openPath).toHaveBeenLastCalledWith(
+      path.join('/app/resources', 'third-party-notices.txt'),
+    )
+    Object.assign(electron.app, { isPackaged: false })
+    await openNotices()
+    expect(openPath).toHaveBeenLastCalledWith(path.join('/repo', 'out', 'third-party-notices.txt'))
+  })
+
+  it('throws the error the system gives', async () => {
+    openPath.mockResolvedValueOnce('Failed to open path')
+    await expect(openNotices()).rejects.toThrow('Failed to open path')
   })
 })

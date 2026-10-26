@@ -267,24 +267,55 @@ export function RuntimeFact({ value }: { value: string | undefined }) {
 }
 
 /**
- * A link row: the whole row opens the page, which main sends to the system browser. The line
- * under the name is the address, unless `detail` says something more useful.
+ * A link row: the whole row opens the page, which main sends to the system browser, or, with
+ * `onOpen` in place of `url`, whatever that opens, showing its error in place of the detail. The
+ * line under the name is the address, unless `detail` says something more useful.
  */
-export function LinkRow({ name, url, detail }: { name: string; url: string; detail?: string }) {
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="group -mx-2 flex items-center gap-3 rounded-lg px-3 py-3 outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
-    >
+export function LinkRow({
+  name,
+  detail,
+  ...target
+}: { name: string; detail?: string } & (
+  { url: string; onOpen?: never } | { onOpen: () => Promise<void>; url?: never }
+)) {
+  const [error, setError] = useState<string | null>(null)
+  const className =
+    'group -mx-2 flex w-[calc(100%+--spacing(4))] items-center gap-3 rounded-lg px-3 py-3 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring'
+  const body = (
+    <>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-ui font-medium">{name}</span>
-        <span className="truncate text-xs text-tertiary">
-          {detail ?? url.replace(/^https?:\/\//, '')}
-        </span>
+        {error ? (
+          <span className="truncate text-xs text-danger" title={error}>
+            {error}
+          </span>
+        ) : (
+          <span className="truncate text-xs text-tertiary">
+            {detail ?? target.url?.replace(/^https?:\/\//, '')}
+          </span>
+        )}
       </span>
       <ExternalLinkIcon className="size-3.5 shrink-0 text-icon transition-colors duration-(--duration-fast) group-hover:text-primary" />
-    </a>
+    </>
+  )
+  if (target.url !== undefined) {
+    return (
+      <a href={target.url} target="_blank" rel="noreferrer" className={className}>
+        {body}
+      </a>
+    )
+  }
+  const { onOpen } = target
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={() => {
+        setError(null)
+        onOpen().catch((e: unknown) => setError(errorMessage(e)))
+      }}
+    >
+      {body}
+    </button>
   )
 }

@@ -20,6 +20,7 @@
   },
   "include": [
     "electron.vite.config.ts",
+    "tools/build/third-party-notices.ts",
     "vitest.config.mts",
     "src/main/**/*",
     "src/preload/**/*",
