@@ -13,7 +13,10 @@ import type {
 import {
   BASIC_DONE,
   CHINESE_ANSWER,
+  REASONING,
+  REASONING_MESSAGES,
   REPORT_ANSWER,
+  SHORT_THOUGHTS,
   BASIC_NOTE,
   BASIC_REPLY,
   CLOCK_AFTER,
@@ -961,6 +964,62 @@ const thinking: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+// Long raw reasoning between runs of work, as many models send it, beside short thoughts and two
+// short messages; with --summaries, the short summaries that other models send in its place.
+const reasoning: Scenario = async (turn) => {
+  const n = turn.session.turns
+  let calls = 0
+  const thoughts = REASONING.map((t) => (turn.options.summaries ? t.summary : t.raw))
+  // Chinese has no spaces to split tokens at, so every thought streams in short pieces.
+  const think = (text: string) =>
+    stream(turn, text, { kind: 'thought', chunks: chunkText(text, 12) })
+  const say = (text: string) => stream(turn, text, { messageId: turn.messageId() })
+  // `target` is the file the call reads or edits, the text it searches for or the command it runs.
+  const step = async (
+    kind: 'read' | 'edit' | 'search' | 'execute',
+    target: string,
+    diff?: { oldText: string | null; newText: string },
+  ) => {
+    const toolCallId = `reasoning-${n}-${calls++}`
+    const path = kind === 'read' || kind === 'edit' ? filePath(turn, target) : null
+    const verb = { read: 'Read', edit: 'Edit', search: 'Search for', execute: 'Run' }[kind]
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: `${verb} ${target}`,
+      kind,
+      status: 'in_progress',
+      locations: path ? [{ path }] : [],
+      rawInput: path ? { path } : kind === 'execute' ? { command: target } : { pattern: target },
+    })
+    await turn.sleep(250)
+    await turn.send({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      status: 'completed',
+      ...(path && diff ? { content: [{ type: 'diff', path, ...diff }] } : {}),
+    })
+    return !turn.signal.aborted
+  }
+  const done =
+    (await think(thoughts[0]!)) &&
+    (await step('read', 'src/clock.ts')) &&
+    (await step('read', 'test/login.test.ts')) &&
+    (await think(SHORT_THOUGHTS[0]!)) &&
+    (await step('search', 'validate(')) &&
+    (await think(thoughts[1]!)) &&
+    (await step('edit', 'src/clock.ts', { oldText: CLOCK_BEFORE, newText: CLOCK_AFTER })) &&
+    (await say(REASONING_MESSAGES[0]!)) &&
+    (await think(thoughts[2]!)) &&
+    (await step('edit', 'test/clock.test.ts', { oldText: null, newText: CLOCK_TEST })) &&
+    (await step('execute', 'pnpm test test/login.test.ts test/clock.test.ts')) &&
+    (await think(SHORT_THOUGHTS[1]!)) &&
+    (await say(REASONING_MESSAGES[1]!))
+  if (!done) return 'cancelled'
+  await sendUsage(turn)
+  return 'end_turn'
+}
+
 const svg: Scenario = async (turn) => {
   if (!(await stream(turn, SVG_REPLY, { messageId: turn.messageId() }))) return 'cancelled'
   return 'end_turn'
@@ -1293,6 +1352,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   background,
   requests,
   thinking,
+  reasoning,
   svg,
   usage,
   status,

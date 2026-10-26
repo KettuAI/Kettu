@@ -29,9 +29,9 @@ interface RunGroupProps {
 }
 
 /**
- * The work between messages and thoughts, two or more steps or a lone tool call, folded into one
- * line that says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands
- * to the steps. A step waiting for permission holds it open.
+ * The work between messages and short thoughts, two or more steps or a lone tool call or long
+ * thought, folded into one line that says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3
+ * commands") and expands to the steps. A step waiting for permission holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,
@@ -52,7 +52,9 @@ export const RunGroup = memo(function RunGroup({
   const steps: RunStep[] = []
   let waiting = false
   for (const entry of entries) {
-    if (entry?.kind === 'tool') {
+    if (entry?.kind === 'thought') {
+      steps.push({ kind: 'thought', durationMs: entry.durationMs, streaming: entry.streaming })
+    } else if (entry?.kind === 'tool') {
       steps.push(toolStep(entry))
       if (entry.permission) waiting = true
     } else if (entry?.kind === 'plan') {
@@ -64,7 +66,7 @@ export const RunGroup = memo(function RunGroup({
   const { parts, failed, running } = runSummary(steps)
   const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
   const spaced = useMemo(
-    () => new Set(entryIds.filter((_, i) => signature[i] === 'p')),
+    () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'r')),
     [entryIds, signature],
   )
   const open = waiting || (userOpen ?? false)
@@ -102,7 +104,7 @@ export const RunGroup = memo(function RunGroup({
                 agentName={agentName}
               />
             ) : (
-              // A plan or compaction is not a row, so it keeps room from them.
+              // A plan, compaction or thought is not a row, so it keeps room from them.
               <div key={item.key} className={cn(spaced.has(item.id) && 'py-1.5')}>
                 <Entry
                   sessionId={sessionId}

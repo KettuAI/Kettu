@@ -226,6 +226,30 @@ describe('runSummary', () => {
       ]),
     ).toEqual(['Updated the plan', 'Ran a command', 'Compacted the context'])
   })
+
+  it('says how long a run of thoughts alone thought', () => {
+    expect(text([{ kind: 'thought', durationMs: 25_000 }])).toEqual(['Thought for 25 s'])
+    expect(
+      text([
+        { kind: 'thought', durationMs: 10_000 },
+        { kind: 'thought', durationMs: 15_000 },
+      ]),
+    ).toEqual(['Thought for 25 s'])
+    expect(text([{ kind: 'thought' }])).toEqual(['Thought'])
+  })
+
+  it('names no thought beside other work, and runs while a thought streams', () => {
+    expect(runSummary([{ kind: 'thought', durationMs: 25_000 }, run('execute')])).toEqual({
+      parts: [{ text: 'Ran a command' }],
+      failed: 0,
+      running: false,
+    })
+    expect(runSummary([{ kind: 'thought', streaming: true }])).toEqual({
+      parts: [{ text: 'Thought' }],
+      failed: 0,
+      running: true,
+    })
+  })
 })
 
 describe('toolStep', () => {

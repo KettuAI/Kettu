@@ -42,6 +42,36 @@ The flake comes from reading the clock twice. Threading a single timestamp throu
 - **Guard**: a test with \`vi.useFakeTimers()\`
 `
 
+/**
+ * The reasoning scenario's thoughts: raw reasoning, as many models send it through every agent,
+ * with the short summary that summarizing models send in its place.
+ */
+export const REASONING: { raw: string; summary: string }[] = [
+  {
+    raw: `The user says the login test fails on CI but never locally. What differs on CI: slower runners, shared CPU, maybe another timezone, and test files running in parallel. The test checks that a token issued at login is still valid on the next request. If \`issueToken\` reads \`Date.now()\` and \`validate\` reads it again, a slow runner can cross a second boundary between the two reads, and with the expiry kept in whole seconds the token could look expired. But the TTL is fifteen minutes, so one second of drift should not expire it... unless the test sets a TTL of one second to cover expiry. I should read the test before guessing further, and check whether \`refresh\` calls \`validate\` with a timestamp of its own, which would be a second place that reads the clock. First \`src/clock.ts\` and \`test/login.test.ts\`.`,
+    summary:
+      'Looking for why the login test fails only on CI, starting with where the clock is read.',
+  },
+  {
+    raw: `测试文件把 TTL 设成了一秒，用来覆盖过期的情况，这就解释得通了：签发时读一次时钟，校验时再读一次，CI 机器慢的时候两次读数之间可能隔了不止一秒，令牌就被判成过期。本地机器快，两次读数几乎同时，所以复现不了。修法有两种：一是给过期判断留一点余量，但这只是把问题藏起来；二是在请求入口只读一次时钟，把同一个时间传给签发和校验。第二种更可靠，测试里也能直接用假时钟。还要确认 \`refresh\` 会不会受影响：它自己调用 \`validate\`，所以也要接收传进来的时间，默认值保持 \`Date.now()\`，已有的调用方就不用改。`,
+    summary: '测试把 TTL 设成了一秒，签发和校验各读一次时钟。改成在请求入口只读一次。',
+  },
+  {
+    raw: `The edit is in. Now the regression test: it should fail on the old code and pass on the new one. With fake timers I can freeze time at 1,999 ms, issue the token, then move the clock to 2,000 ms before validating. On the old code \`validate\` reads the new time and, with a one-second TTL, sees the token as expired; on the new code the caller passes the same \`now\` to both, so it stays valid. Nothing in the test may touch the real clock, so \`vi.useFakeTimers({ now: 1_999 })\` and \`vi.setSystemTime(2_000)\`, with \`vi.useRealTimers()\` in \`afterEach\` so the other tests are not affected. Is there a caller that really wants the second read? \`refresh\` validates an older token, and there the token's own issue time matters, not the request's, so passing the request's \`now\` is still right. The default parameter \`now = Date.now()\` is evaluated at call time, so callers that leave it out behave exactly as before. Then run the login and clock tests together, since the flake involved both files, and run them a few times so a pass is stable rather than lucky.`,
+    summary: 'Writing a fake-timer test that fails on the old code, then running both test files.',
+  },
+]
+
+export const SHORT_THOUGHTS = [
+  '`refresh` calls `validate` too, so it needs the same timestamp.',
+  'Both test files pass three times in a row.',
+]
+
+export const REASONING_MESSAGES = [
+  'The clock is read once per request now. Next, a regression test that freezes time.',
+  'Done: each request reads the clock once, and a fake-timer test guards it. The login and clock tests pass.',
+]
+
 // A diagram with a title and Chinese text, one without `xmlns` and with `&nbsp;` as agents
 // write SVG for a web page, and path data with no `<svg>` around it.
 export const SVG_REPLY = `Here is the release flow as a diagram:
