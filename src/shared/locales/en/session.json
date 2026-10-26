@@ -348,5 +348,18 @@
     "showInFiles": "Show in Files",
     "showIn": "Show in {{name}}",
     "openWithDefault": "Open with default app"
+  },
+  "viewer": {
+    "image": "Image",
+    "position": "{{number}} / {{count}}",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Zoom to fit",
+    "actualSize": "Actual size",
+    "copy": "Copy image",
+    "copied": "Copied",
+    "saveAs": "Save as…",
+    "previous": "Previous",
+    "next": "Next"
   }
 }

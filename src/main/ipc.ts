@@ -30,6 +30,7 @@ import { t } from './i18n'
 import { loginItemStatus } from './login-item'
 import { createLogger } from './log'
 import { grantedPath, type MediaGrants } from './media'
+import { copyImage, revealMedia, saveMediaAs } from './media-actions'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import { isRendererUrl } from './renderer'
@@ -377,9 +378,9 @@ export function registerIpcHandlers({
     shell.showItemInFolder(absolutePath(target))
   })
 
-  handle('media:reveal', 1, async (_, url) => {
-    shell.showItemInFolder(await grantedPath(url, mediaGrants))
-  })
+  handle('media:copy-image', 1, (_, source) => copyImage(source, mediaGrants))
+  handle('media:save-as', 1, ({ window }, source) => saveMediaAs(window, source, mediaGrants))
+  handle('media:reveal', 1, (_, url) => revealMedia(url, mediaGrants))
 
   handle('media:open-external', 1, async (_, url) => {
     const error = await shell.openPath(await grantedPath(url, mediaGrants))

@@ -35,7 +35,8 @@ import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { Clamp } from '../clamp'
 import { Markdown } from '../markdown'
-import { SessionIdContext } from '../media/grants'
+import { CarriedImage } from '../media/carried-image'
+import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
 import { OutOfCreditEnd } from './out-of-credit'
@@ -66,7 +67,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
     <div className={cn('group/actions flex flex-col items-end gap-0.5', animation)}>
       {attachments.length > 0 && (
         <div className="flex w-full justify-end pb-1">
-          <SentAttachments sessionId={sessionId} attachments={attachments} />
+          <SentAttachments sessionId={sessionId} entryId={entryId} attachments={attachments} />
         </div>
       )}
       {/* A message of attachments alone has no bubble. */}
@@ -74,7 +75,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
         <Message align="end">
           <Bubble variant="muted" className="max-w-[85%]">
             <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
-              <UserContentView content={rest} />
+              <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
             </BubbleContent>
           </Bubble>
         </Message>
@@ -123,20 +124,25 @@ export const AgentEntry = memo(function AgentEntry({
   return (
     <div className={cn('min-w-0', note && 'text-muted-foreground', animation)} data-selectable="">
       <SessionIdContext value={sessionId}>
-        <Markdown
-          markdown={entry.markdown}
-          streaming={entry.streaming}
-          className={note ? 'markdown-muted' : undefined}
-        />
+        <EntryIdContext value={entryId}>
+          <Markdown
+            markdown={entry.markdown}
+            streaming={entry.streaming}
+            className={note ? 'markdown-muted' : undefined}
+          />
+        </EntryIdContext>
       </SessionIdContext>
       {entry.attachments.length > 0 && (
         <div className="mt-2 flex flex-wrap items-start gap-1.5">
           {entry.attachments.map((ref, i) =>
             ref.kind === 'image' ? (
-              <img
+              <CarriedImage
                 key={i}
-                alt=""
-                src={`data:${ref.mimeType};base64,${ref.data}`}
+                sessionId={sessionId}
+                entryId={entryId}
+                index={i}
+                mimeType={ref.mimeType}
+                data={ref.data}
                 className="max-h-72 max-w-full rounded-lg shadow-card"
               />
             ) : (
@@ -156,13 +162,15 @@ export const ThoughtEntry = memo(function ThoughtEntry({ sessionId, entryId }: E
   return (
     <div className={cn('text-muted-foreground', animation)} data-selectable="">
       <SessionIdContext value={sessionId}>
-        <Clamp maxHeight={76} buttonClassName="-mx-1.5">
-          <Markdown
-            markdown={entry.markdown}
-            streaming={entry.streaming}
-            className="markdown-muted"
-          />
-        </Clamp>
+        <EntryIdContext value={entryId}>
+          <Clamp maxHeight={76} buttonClassName="-mx-1.5">
+            <Markdown
+              markdown={entry.markdown}
+              streaming={entry.streaming}
+              className="markdown-muted"
+            />
+          </Clamp>
+        </EntryIdContext>
       </SessionIdContext>
     </div>
   )
@@ -186,7 +194,7 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
           : t('sessionMessage.fromParent')}
       </figcaption>
       <blockquote className="border-l-2 border-border-strong pl-3 text-prose">
-        <UserContentView content={entry.content} />
+        <UserContentView content={entry.content} sessionId={sessionId} entryId={entryId} />
       </blockquote>
     </figure>
   )

@@ -328,5 +328,18 @@
     "showInFiles": "在文件面板中显示",
     "showIn": "在{{name}}中显示",
     "openWithDefault": "用默认应用打开"
+  },
+  "viewer": {
+    "image": "图片",
+    "position": "{{number}} / {{count}}",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fit": "缩放至适合",
+    "actualSize": "实际大小",
+    "copy": "复制图片",
+    "copied": "已复制",
+    "saveAs": "另存为…",
+    "previous": "上一个",
+    "next": "下一个"
   }
 }

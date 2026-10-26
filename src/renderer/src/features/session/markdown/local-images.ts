@@ -81,7 +81,8 @@ export function spacedImages(markdown: string): string {
   return out + outsideCodeSpans(prose)
 }
 
-function isLocal(url: string): boolean {
+/** Whether an image's URL names a local file, which `localImages` marks. */
+export function isLocalImage(url: string): boolean {
   if (url === '' || url.startsWith('#') || url.startsWith('//')) return false
   return !SCHEME.test(url) || DRIVE.test(url) || FILE_URI.test(url)
 }
@@ -93,7 +94,7 @@ function isLocal(url: string): boolean {
  */
 export function localImages() {
   const visit = (node: MdNode): void => {
-    if (node.type === 'image' && node.url !== undefined && isLocal(node.url)) {
+    if (node.type === 'image' && node.url !== undefined && isLocalImage(node.url)) {
       node.url = PREFIX + encodeURIComponent(node.url)
       return
     }

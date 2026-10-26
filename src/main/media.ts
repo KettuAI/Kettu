@@ -6,10 +6,13 @@ import type { CustomScheme, Session, WebFrameMain } from 'electron'
 import { MEDIA_SCHEME, MEDIA_TOKEN, mediaUrlToken, type MediaGrantRecord } from '@shared/media'
 import { refuseRequests } from './request-filter'
 
-/** `stream` too, since audio and video expect a streamed response. */
+/**
+ * `stream` too, since audio and video expect a streamed response, and `corsEnabled`, so the app's
+ * page can draw a picture on a canvas to copy it.
+ */
 export const mediaScheme: CustomScheme = {
   scheme: MEDIA_SCHEME,
-  privileges: { standard: true, secure: true, stream: true },
+  privileges: { standard: true, secure: true, stream: true, corsEnabled: true },
 }
 
 const MAX_GRANTS = 2_000
@@ -69,6 +72,8 @@ export class MediaGrants {
 
 const HEADERS = {
   'Accept-Ranges': 'bytes',
+  // Safe for any origin: the request filter, not CORS, decides who may read, the app's page alone.
+  'Access-Control-Allow-Origin': '*',
   'X-Content-Type-Options': 'nosniff',
   'Cache-Control': 'no-store',
   // Should a response ever open as a document, it runs nothing.
@@ -154,15 +159,20 @@ export async function respondMedia(request: Request, grants: MediaGrants): Promi
 }
 
 /**
- * The real path behind a media URL main still grants, for the actions on a file: never a path
- * from the renderer. Throws when the grant is gone or the file was swapped for a link.
+ * The grant behind a media URL main still holds, for the actions on a file: never a path from
+ * the renderer. Throws when the grant is gone or the file was swapped for a link.
  */
-export async function grantedPath(url: unknown, grants: MediaGrants): Promise<string> {
+export async function grantedFile(url: unknown, grants: MediaGrants): Promise<MediaGrantRecord> {
   const token = typeof url === 'string' ? mediaUrlToken(url) : null
   const grant = token ? await grants.find(token) : null
   if (!grant) throw new Error('The file is no longer available here')
   if ((await realpath(grant.path)) !== grant.path) throw new Error('The file has moved')
-  return grant.path
+  return grant
+}
+
+/** The real path behind a media URL main still grants; see `grantedFile`. */
+export async function grantedPath(url: unknown, grants: MediaGrants): Promise<string> {
+  return (await grantedFile(url, grants)).path
 }
 
 /** Whether a request on the media scheme may go: only the app's own page, its main frame. */

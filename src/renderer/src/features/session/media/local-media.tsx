@@ -9,13 +9,15 @@ import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { openViewer } from '@renderer/stores/viewer'
 import { VIDEO_BOX } from './boxes'
-import { openMedia, SessionIdContext } from './grants'
+import { EntryIdContext, openMedia, SessionIdContext } from './grants'
 import { LocalAudio } from './local-audio'
 import { LocalImage } from './local-image'
 import { LocalVideo } from './local-video'
 import { NamedMediaContext } from './named'
 import { useNearView } from './near-view'
+import { fileKey, fileName } from './viewer-items'
 
 type Shown =
   | { kind: 'asking' }
@@ -24,10 +26,6 @@ type Shown =
   | { kind: 'missing' }
   | { kind: 'unsupported'; grant: MediaGrant }
   | { kind: 'failed'; message: string }
-
-function fileName(path: string): string {
-  return path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)
-}
 
 /**
  * A media file a reply names by its path, from the media scheme: an image in place, a clip or a
@@ -47,6 +45,7 @@ export function LocalMedia({
 }) {
   const projectPath = useContext(ProjectPathContext)
   const sessionId = useContext(SessionIdContext)
+  const entryId = useContext(EntryIdContext)
   const named = useContext(NamedMediaContext)
   const enabled = !!projectPath && !!sessionId
   const ref = useRef<HTMLSpanElement>(null)
@@ -120,12 +119,23 @@ export function LocalMedia({
   }
   if (shown.kind === 'granted') {
     const { grant } = shown
+    const viewerKey = fileKey(entryId ?? '', path)
+    const open = (from: HTMLElement) =>
+      openViewer({
+        sessionId,
+        projectPath,
+        draft: sessionId,
+        item: { key: viewerKey, source: { kind: 'file', path }, name, alt },
+        from,
+      })
     if (grant.kind === 'video') {
       return (
         <LocalVideo
           path={path}
           name={name}
           grant={grant}
+          viewerKey={viewerKey}
+          onOpen={open}
           onFailed={(message) => failed(grant, message)}
         />
       )
@@ -140,7 +150,16 @@ export function LocalMedia({
         />
       )
     }
-    return <LocalImage name={name} alt={alt} grant={grant} onFailed={() => failed(grant, null)} />
+    return (
+      <LocalImage
+        name={name}
+        alt={alt}
+        grant={grant}
+        viewerKey={viewerKey}
+        onOpen={open}
+        onFailed={() => failed(grant, null)}
+      />
+    )
   }
   return <MediaState shown={shown} path={path} name={name} onRetry={retry} />
 }

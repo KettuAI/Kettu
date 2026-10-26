@@ -15,7 +15,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/compone
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import { ImageDialog, type ImageDialogTarget } from '../attachments/image-dialog'
+import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
@@ -96,7 +96,7 @@ export function PromptBox({
   // While an input method composes: whether the mention popover was open when it started.
   const [composition, setComposition] = useState<{ open: boolean } | null>(null)
   const [popover, setPopover] = useState<'slash' | MentionList | null>(null)
-  const [viewing, setViewing] = useState<ImageDialogTarget | null>(null)
+  const [viewing, setViewing] = useState<TextDialogTarget | null>(null)
   // The highlighted row, for the list `list` names.
   const [highlight, setHighlight] = useState({ list: '', index: 0 })
   const group = useRef<HTMLDivElement>(null)
@@ -251,6 +251,7 @@ export function PromptBox({
         {top}
         <AttachmentTray
           draft={draft}
+          sessionId={box.sessionId}
           agentId={agentId}
           agentName={agentName}
           projectPath={projectPath}
@@ -368,7 +369,7 @@ export function PromptBox({
           {tipText}
         </TooltipContent>
       </Tooltip>
-      <ImageDialog target={viewing} onClose={() => setViewing(null)} />
+      <TextDialog target={viewing} onClose={() => setViewing(null)} />
     </>
   )
 }

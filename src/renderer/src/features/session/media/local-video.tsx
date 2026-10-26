@@ -3,7 +3,6 @@ import type { MediaGrant } from '@shared/media'
 import { cn } from '@renderer/lib/utils'
 import { VIDEO_BOX } from './boxes'
 import { MediaCaption } from './media-caption'
-import { MediaViewer, type PlayerMoment } from './media-viewer'
 import { playOneAtATime } from './playback'
 
 /** The tallest a clip shows in the thread; the viewer shows it larger. */
@@ -11,24 +10,27 @@ const MAX_HEIGHT = 480
 
 /**
  * A clip a reply names, with Chromium's controls, in the images' frame: the column's width at its
- * own ratio, at most 480 px high. `onFailed` hears an error or a clip with no picture.
+ * own ratio, at most 480 px high. Open larger opens the viewer, which takes over the player's
+ * moment. `onFailed` hears an error or a clip with no picture.
  */
 export function LocalVideo({
   path,
   name,
   grant,
+  viewerKey,
+  onOpen,
   onFailed,
 }: {
   path: string
   name: string
   grant: MediaGrant
+  viewerKey: string
+  onOpen: (from: HTMLElement) => void
   onFailed: (message: string | null) => void
 }) {
-  const inline = useRef<HTMLVideoElement>(null)
+  const frame = useRef<HTMLSpanElement>(null)
   const [ratio, setRatio] = useState<{ width: number; height: number } | null>(null)
   const [seconds, setSeconds] = useState<number | null>(null)
-  const [viewing, setViewing] = useState(false)
-  const [moment, setMoment] = useState<PlayerMoment>({ time: 0, playing: false })
   useEffect(playOneAtATime, [])
 
   const box = ratio
@@ -38,19 +40,15 @@ export function LocalVideo({
       }
     : VIDEO_BOX
 
-  const openLarger = () => {
-    const el = inline.current
-    if (!el) return
-    setMoment({ time: el.currentTime, playing: !el.paused })
-    el.pause()
-    setViewing(true)
-  }
-
   return (
     <span className="group/media block w-full">
-      <span style={box} className="relative block overflow-hidden rounded-xl bg-card">
+      <span
+        ref={frame}
+        data-viewer-key={viewerKey}
+        style={box}
+        className="relative block overflow-hidden rounded-xl bg-card"
+      >
         <video
-          ref={inline}
           src={grant.url}
           controls
           controlsList="nodownload"
@@ -85,20 +83,7 @@ export function LocalVideo({
         name={name}
         grant={grant}
         seconds={seconds}
-        onOpenLarger={openLarger}
-      />
-      <MediaViewer
-        open={viewing}
-        onOpenChange={setViewing}
-        grant={grant}
-        name={name}
-        moment={moment}
-        onHandBack={(back) => {
-          const el = inline.current
-          if (!el) return
-          el.currentTime = back.time
-          if (back.playing) void el.play().catch(() => {})
-        }}
+        onOpenLarger={() => frame.current && onOpen(frame.current)}
       />
     </span>
   )

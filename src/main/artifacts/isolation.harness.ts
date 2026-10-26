@@ -1,22 +1,31 @@
 // Electron's main process for the isolation probe (isolation.process.test.ts), bundled by the test:
-// main's real protocol, guards, frame guard, permissions and IPC around the real main window, with
+// main's real protocols, guards, frame guard, permissions and IPC around the real main window, with
 // a stand-in for the agent host. It runs the steps below and writes what it saw to a file.
 
 import { once } from 'node:events'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, BrowserWindow, nativeTheme, session, shell, type WebFrameMain } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  nativeTheme,
+  protocol,
+  session,
+  shell,
+  type WebFrameMain,
+} from 'electron'
 import { ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import type { ArtifactContentResult } from '@shared/host-control'
 import type { IpcDeps } from '../ipc'
 import { registerIpcHandlers } from '../ipc'
+import { MediaGrants, mediaScheme, serveMedia } from '../media'
 import { restrictPermissions } from '../permissions'
 import { isRendererUrl } from '../renderer'
 import { hasPendingFrame, isRevoked, watchSubframes } from '../subframes'
 import { configureWindows, createMainWindow, WindowStateStore } from '../window'
 import { Artifacts, disableDnsPrefetching } from '.'
 import { ARTIFACT_SCHEME, artifactHost, originId } from './origins'
-import { registerArtifactScheme, respond } from './protocol'
+import { artifactScheme, respond } from './protocol'
 
 export interface ProbeConfig {
   resultFile: string
@@ -36,12 +45,15 @@ export interface ProbeConfig {
   /** Hosts the page names for DNS alone, and `control`, which main looks up itself. */
   exfil: Record<string, string> & { control: string }
   netLog: string
+  /** A picture granted on the media scheme: the app's page may draw it, the probe's page not. */
+  media: { token: string; path: string; url: string }
 }
 
 const config = JSON.parse(readFileSync(process.env.OVERBENCH_PROBE ?? '', 'utf8')) as ProbeConfig
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-registerArtifactScheme()
+// Before the app is ready, and in one call, as main registers its schemes.
+protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
 disableDnsPrefetching()
 // No Dock icon, and no activation that would take the user's focus.
 if (process.platform === 'darwin') app.setActivationPolicy('accessory')
@@ -124,6 +136,14 @@ async function run(): Promise<unknown> {
   })
   restrictPermissions(ses, isRendererUrl, (wc) => isRevoked(wc) || hasPendingFrame(wc))
   registerIpcHandlers({ artifacts, perf: false } as unknown as IpcDeps)
+  const mediaGrants = new MediaGrants()
+  mediaGrants.add({
+    token: config.media.token,
+    path: config.media.path,
+    mimeType: 'image/png',
+    sessionId: 'probe',
+  })
+  serveMedia(ses, mediaGrants, isRendererUrl)
 
   let revocations = 0
   const inputs: { key: string; inArtifact: boolean }[] = []
@@ -183,6 +203,22 @@ async function run(): Promise<unknown> {
       })
       return { waits: await Promise.all(calls) }
     })()`)
+
+  // The app's own page draws the granted picture on a canvas, so the probe's refusal is the filter's.
+  stage = 'media in the app'
+  const mediaInApp = await page<boolean>(`new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d').drawImage(img, 0, 0)
+      try { resolve(canvas.toDataURL().startsWith('data:image/png')) } catch { resolve(false) }
+    }
+    img.onerror = () => resolve(false)
+    img.src = ${JSON.stringify(config.media.url)}
+  })`)
 
   // The probe: its frame, and the calls made while it was pending.
   stage = 'the attempts'
@@ -377,6 +413,7 @@ async function run(): Promise<unknown> {
     trustedAfterProbe,
     refused,
     canvas: { ...canvas, trusted: canvasTrusted },
+    mediaInApp,
     asked,
     opened,
     windows: BrowserWindow.getAllWindows().length,

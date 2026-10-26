@@ -4,7 +4,7 @@
 import { open, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
-import { protocol, type CustomScheme, type Session } from 'electron'
+import type { CustomScheme, Session } from 'electron'
 import type { ArtifactContentResult } from '@shared/host-control'
 import { createLogger } from '../log'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
@@ -28,11 +28,6 @@ export const artifactScheme: CustomScheme = {
     stream: true,
     codeCache: true,
   },
-}
-
-/** Must run before the app is ready, and only once: the app registers its schemes together. */
-export function registerArtifactScheme(): void {
-  protocol.registerSchemesAsPrivileged([artifactScheme])
 }
 
 export interface ArtifactSource {
