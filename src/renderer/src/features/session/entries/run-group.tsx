@@ -77,7 +77,7 @@ export const RunGroup = memo(function RunGroup({
       onOpenChange={(next) => setUserOpen(next)}
       className={cn('min-w-0', animation)}
     >
-      <CollapsibleTrigger className="group/run -mx-1.5 flex h-6 max-w-[calc(100%+0.75rem)] items-center gap-1 rounded-md px-1.5 text-ui text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring">
+      <CollapsibleTrigger className="group/run -ml-2 flex min-h-7 max-w-[calc(100%+0.5rem)] items-center gap-1 rounded-md px-2 py-0.75 text-left text-ui text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
         <CutLabel
           className="min-w-0 truncate"
           full={<Summary parts={parts} failed={failed} plain />}
@@ -169,7 +169,7 @@ function PartStats({ diffs, plain }: { diffs: ToolContent[]; plain: boolean }) {
   const stats = useDiffStats(diffs)
   if (!stats || (stats.insertions === 0 && stats.deletions === 0)) return null
   return (
-    <span className="ml-1.5 font-mono text-meta tabular">
+    <span className="ml-1.5 tabular">
       <span className={cn(!plain && 'text-success')}>+{stats.insertions}</span>{' '}
       <span className={cn(!plain && 'text-danger')}>−{stats.deletions}</span>
     </span>

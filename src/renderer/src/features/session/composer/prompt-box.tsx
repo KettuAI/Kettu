@@ -271,7 +271,10 @@ export function PromptBox({
         />
         {/* After the tiles in the DOM, so they keep the first row when the box wraps. */}
         {!stacked && (
-          <InputGroupAddon align="inline-start" className="order-none self-end pb-3 pl-3">
+          <InputGroupAddon
+            align="inline-start"
+            className="order-none self-end pb-2.5 pl-2 has-[>button]:ml-0"
+          >
             {addMenu}
           </InputGroupAddon>
         )}
@@ -304,7 +307,10 @@ export function PromptBox({
             {end}
           </InputGroupAddon>
         ) : (
-          <InputGroupAddon align="inline-end" className="self-end gap-1.5 pr-3 pb-3 pl-1">
+          <InputGroupAddon
+            align="inline-end"
+            className="self-end gap-1.5 pr-2.5 pb-2.5 pl-1.5 has-[>button]:mr-0"
+          >
             {end}
           </InputGroupAddon>
         )}
@@ -449,7 +455,7 @@ function AddMenu({
       <Tooltip>
         <TooltipTrigger render={<span />}>
           <InputGroupButton size="round" variant="quiet" aria-label={t('attachments.add')} disabled>
-            <PlusIcon />
+            <PlusIcon className="size-5" />
           </InputGroupButton>
         </TooltipTrigger>
         <TooltipContent>{t('attachments.waitForAgent', { agent: agentName })}</TooltipContent>
@@ -468,7 +474,7 @@ function AddMenu({
             />
           }
         >
-          <PlusIcon />
+          <PlusIcon className="size-5" />
         </TooltipTrigger>
         <TooltipContent>
           {t('attachments.add')} <span className="opacity-60">{shortcut}</span>

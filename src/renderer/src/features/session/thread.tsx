@@ -29,7 +29,6 @@ import {
   type Estimate,
   type Item,
 } from './thread-items'
-import { TurnStatus } from './turn-status'
 
 // A thread opens on its latest page, and older pages load as it scrolls back toward them, a
 // viewport ahead. Loaded items render from the end: the first frame shows the last items, and
@@ -113,16 +112,13 @@ function OlderLoading({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * 32 px between turns and 16 px under your message; within a reply, 4 px between steps, 12 px
- * beside a step and 16 px between anything else.
+ * 32 px between turns; within one, 4 px between steps, 8 px above the reply's actions and 16 px
+ * between anything else.
  */
 function spacing(item: Item, previous: Item, steps: Set<string>): string {
   if (item.type === 'entry' && item.turnStart) return 'pt-8'
-  if (item.type === 'reply') return 'pt-2.5'
-  if (previous.type === 'entry' && previous.turnStart) return 'pt-4'
-  const step = isStep(item, steps)
-  if (step && isStep(previous, steps)) return 'pt-1'
-  if (step || isStep(previous, steps)) return 'pt-3'
+  if (item.type === 'reply') return 'pt-2'
+  if (isStep(item, steps) && isStep(previous, steps)) return 'pt-1'
   return 'pt-4'
 }
 
@@ -200,7 +196,7 @@ export const Thread = memo(function Thread({
         >
           <MessageScrollerContent
             ref={content}
-            className="mx-auto w-full max-w-thread gap-0 px-6 pt-5 pb-8"
+            className="mx-auto w-full max-w-thread gap-0 px-7 pt-7 pb-5"
             onPointerLeave={() => hoverReply(null)}
           >
             {items.slice(shownFrom).map((item, shownIndex) => {
@@ -257,11 +253,6 @@ export const Thread = memo(function Thread({
                 </MessageScrollerItem>
               )
             })}
-            {working && (
-              <MessageScrollerItem messageId="turn-status" className="pt-4">
-                <TurnStatus sessionId={sessionId} />
-              </MessageScrollerItem>
-            )}
           </MessageScrollerContent>
         </MessageScrollerViewport>
         <MessageScrollerButton

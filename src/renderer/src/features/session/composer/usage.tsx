@@ -186,7 +186,7 @@ export function UsageButton({
         render={
           <Button
             variant="quiet"
-            size="compact"
+            size="sm"
             aria-label={
               !usage
                 ? t('usage.title')
@@ -194,7 +194,7 @@ export function UsageButton({
                   ? t(RING_LABEL[ringCache][cache?.estimate ? 'estimate' : 'known'], { percent })
                   : t('usage.contextPercent', { percent })
             }
-            className="gap-1.5 px-1.5 tabular"
+            className="gap-1.5 px-1.5 text-ui tabular"
           />
         }
       >

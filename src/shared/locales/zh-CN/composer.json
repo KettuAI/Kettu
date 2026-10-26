@@ -7,7 +7,8 @@
       "steer": "让 {{agent}} 帮你…   {{queue}} 排队，{{steer}} 立即插入当前对话",
       "queue": "让 {{agent}} 帮你…   {{queue}} 排队，本轮结束后发送",
       "limitReached": "限额已用完（{{limit}}）· {{time}} 重置",
-      "ask": "让 {{agent}} 帮你…"
+      "ask": "让 {{agent}} 帮你…",
+      "denied": "告诉 {{agent}} 改用什么做法"
     },
     "queue": "加入队列",
     "stop": "停止",

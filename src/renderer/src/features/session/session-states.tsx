@@ -47,7 +47,7 @@ export function ThreadSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'mx-auto flex w-full max-w-thread animate-in flex-col px-6 pt-5 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
+        'mx-auto flex w-full max-w-thread animate-in flex-col px-7 pt-7 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
         className,
       )}
       aria-hidden
@@ -117,7 +117,7 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
           agent: agentName(agentId),
         })
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col">
       <InputGroup variant="composer">
         <div
           role="status"
@@ -128,13 +128,23 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
             <span className="truncate shimmer">{text}</span>
           </span>
         </div>
-        <InputGroupAddon align="inline-end" className="self-end pr-3 pb-3 pl-1">
-          <InputGroupButton size="round" variant="secondary" disabled tabIndex={-1} aria-hidden>
+        <InputGroupAddon
+          align="inline-end"
+          className="self-end pr-2.5 pb-2.5 pl-1.5 has-[>button]:mr-0"
+        >
+          <InputGroupButton
+            size="round"
+            variant="secondary"
+            disabled
+            tabIndex={-1}
+            aria-hidden
+            className="disabled:text-disabled disabled:opacity-100"
+          >
             <ArrowUpIcon />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
-      <div className="flex min-h-row items-center px-2">
+      <div className="flex min-h-9 items-center px-2">
         {progress && (
           <span
             key={progress}
@@ -160,7 +170,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
     <ColumnScroller>
-      <div className="mx-auto flex w-full max-w-thread flex-col px-6 pt-5">
+      <div className="mx-auto flex w-full max-w-thread flex-col px-7 pt-7">
         {/* As the thread shows a user entry, so nothing moves when the session takes over. */}
         <div className="flex flex-col items-end gap-0.5">
           {attachments.length > 0 && (
@@ -170,8 +180,8 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
           )}
           {rest.length > 0 && (
             <Message align="end">
-              <Bubble variant="muted" className="max-w-[85%]">
-                <BubbleContent className="rounded-2xl px-3.5 py-2.5 text-prose leading-normal">
+              <Bubble variant="muted">
+                <BubbleContent>
                   <UserContentView content={rest} />
                 </BubbleContent>
               </Bubble>

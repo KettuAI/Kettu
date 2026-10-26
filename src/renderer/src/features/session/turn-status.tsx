@@ -27,7 +27,10 @@ function TurnClock({ since }: { since: number }) {
   return <span className="tabular">{duration(elapsed - (elapsed % 1000))}</span>
 }
 
-/** The running turn's line at the thread's end: how long it has run, its tokens and its phase. */
+/**
+ * The running turn's status, on the right of the row above the composer: how long it has run, its
+ * tokens and its phase, with the attention dot in place of the spinner while it waits for you.
+ */
 export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('session')
   const startedAt = useThreadsStore(
@@ -37,19 +40,31 @@ export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: s
   const { phase, count } = useThreadsStore(
     useShallow((s) => turnPhase(s.replicas[sessionId]?.state)),
   )
+  const separator = (
+    <span aria-hidden className="opacity-60">
+      ·
+    </span>
+  )
   return (
     <div
       role="status"
-      className="flex min-w-0 animate-in items-center gap-1.5 text-small text-muted-foreground animation-duration-(--duration-base) fade-in"
+      className="flex min-w-0 shrink-0 animate-in items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground animation-duration-(--duration-base) fade-in"
     >
-      <Spinner aria-hidden className="size-3.5 shrink-0 text-info" />
+      {phase === 'approval' ? (
+        <span
+          aria-hidden
+          className="size-2 shrink-0 rounded-full bg-attention-dot ring-3 ring-attention-dot/16"
+        />
+      ) : (
+        <Spinner aria-hidden className="size-3 shrink-0 text-info" />
+      )}
       {/* Only the phase is announced; the clock and the count change too often to read out. */}
       {startedAt !== null && (
         <>
           <span aria-live="off">
             <TurnClock since={startedAt} />
           </span>
-          <span aria-hidden>·</span>
+          {separator}
         </>
       )}
       {added !== null && (
@@ -57,7 +72,7 @@ export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: s
           <span aria-live="off" className="tabular">
             {t('thread.tokens', { count: added, tokens: tokens(added) })}
           </span>
-          <span aria-hidden>·</span>
+          {separator}
         </>
       )}
       <span

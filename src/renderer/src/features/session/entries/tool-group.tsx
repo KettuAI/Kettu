@@ -40,7 +40,7 @@ export const ToolGroup = memo(function ToolGroup({
   )
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0', animation)}>
-      <CollapsibleTrigger className="group/tool -mx-1.5 flex h-6 w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
+      <CollapsibleTrigger className="group/tool -mx-1.5 flex h-6.5 w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
         <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
           <TelescopeIcon className="size-3.5 transition-opacity duration-(--duration-fast) group-hover/tool:opacity-0" />
           <ChevronRightIcon

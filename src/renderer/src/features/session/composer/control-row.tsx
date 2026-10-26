@@ -134,7 +134,7 @@ export function ControlRow({
   }
 
   return (
-    <div className="flex h-row items-center gap-0.5 px-2.5">
+    <div className="flex h-9 items-center gap-0.5 px-1 pt-0.5">
       {mode && <OptionMenu option={mode} onSelect={set} />}
       {leftOthers.map((o) => (
         <OptionMenu key={o.id} option={o} onSelect={set} />
@@ -204,17 +204,27 @@ export function OptionMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="quiet" size="compact" aria-label={option.name} className="gap-1 px-2" />
+          <Button
+            variant="quiet"
+            size="sm"
+            aria-label={option.name}
+            className="gap-1 px-2.25 text-ui"
+          />
         }
       >
         {choiceName(option, value)}
         <ChevronDownIcon data-icon="inline-end" className="size-3 text-icon" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side={side} sideOffset={6} className="w-64">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{option.name}</DropdownMenuLabel>
+      <DropdownMenuContent side={side} sideOffset={6} aria-label={option.name} className="w-64">
+        {option.category === 'mode' ? (
+          // Each mode says what it does, so the menu needs no heading.
           <Choices option={option} value={value} onPick={pick} closeOnClick />
-        </DropdownMenuGroup>
+        ) : (
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{option.name}</DropdownMenuLabel>
+            <Choices option={option} value={value} onPick={pick} closeOnClick />
+          </DropdownMenuGroup>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -238,12 +248,14 @@ function Choices({
           key={choice.value}
           value={choice.value}
           closeOnClick={closeOnClick}
-          className="items-start"
+          className="has-data-[slot=choice-description]:min-h-11 has-data-[slot=choice-description]:py-1.25 *:data-[slot=dropdown-menu-radio-item-indicator]:h-full"
         >
           <span className="flex min-w-0 flex-1 flex-col">
-            <ChoiceName name={choice.name} />
+            <ChoiceName name={choice.name} className="font-normal" />
             {choice.description && (
-              <span className="text-xs text-muted-foreground">{choice.description}</span>
+              <span data-slot="choice-description" className="text-xs text-muted-foreground">
+                {choice.description}
+              </span>
             )}
           </span>
         </DropdownMenuRadioItem>
@@ -595,7 +607,7 @@ function ModelMenu({
         render={
           <Button
             variant="quiet"
-            size="compact"
+            size="sm"
             aria-label={outOfCredit ? t('controls.modelOutOfCredit') : t('controls.model')}
             title={
               model
@@ -604,7 +616,7 @@ function ModelMenu({
                   : choiceName(model, modelValue)
                 : undefined
             }
-            className="min-w-0 shrink gap-1 px-2"
+            className="min-w-0 shrink gap-1 px-2.25 text-ui"
           />
         }
       >

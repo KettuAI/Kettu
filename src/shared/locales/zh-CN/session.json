@@ -81,7 +81,8 @@
       "allowedByRoutine": "由例程允许",
       "cancelled": "已取消",
       "withdrawn": "已不再需要"
-    }
+    },
+    "label": "权限请求"
   },
   "subagent": {
     "fallbackTitle": "子 Agent"
@@ -90,7 +91,8 @@
     "runsFor": "{{agent}} 正在为 <parent/> 运行这个子 Agent",
     "runsForParent": "{{agent}} 正在为<parent>父会话</parent>运行这个子 Agent",
     "stop": "停止",
-    "back": "返回 {{title}}"
+    "back": "返回 {{title}}",
+    "backShort": "返回"
   },
   "sessionMessage": {
     "from": "来自 {{title}}",

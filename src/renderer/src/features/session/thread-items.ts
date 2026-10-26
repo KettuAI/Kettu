@@ -181,8 +181,8 @@ export type Estimate = 16 | 18 | 20 | 24 | 28 | 69
  * never takes more room than it will.
  */
 export function estimateOf(item: Item): Estimate {
-  if (item.type === 'run' || item.type === 'group') return 24
-  if (item.type === 'reply') return 28
+  if (item.type === 'run') return 28
+  if (item.type === 'group' || item.type === 'reply') return 24
   switch (item.char) {
     // One line of bubble and the row under it.
     case 'u':

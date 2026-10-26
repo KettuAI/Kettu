@@ -10,6 +10,8 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useThreadsStore } from '@renderer/stores/threads'
+import { endedOnRejection } from '../turn-phase'
 import { attachmentContent, attachmentsBlock } from './attachments'
 import { ControlRow } from './control-row'
 import { hasMessage } from './drafts'
@@ -27,6 +29,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const outOfCredit = useOutOfCredit(sessionId)
+  const rejected = useThreadsStore((s) => endedOnRejection(s.replicas[sessionId]?.state))
 
   const status = session.status
   const starting = status === 'starting'
@@ -121,7 +124,9 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
               limit: limitLabel(reached),
               time: resetTime(reached.resetsAt),
             })
-          : t('prompt.placeholder.ask', { agent: agentName })
+          : rejected
+            ? t('prompt.placeholder.denied', { agent: agentName })
+            : t('prompt.placeholder.ask', { agent: agentName })
 
   const compact = session.commands.some((c) => c.name === 'compact')
     ? () => {
@@ -133,7 +138,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     : null
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col">
       <PromptBox
         box={box}
         agentId={session.agentId}
@@ -141,7 +146,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         commands={session.commands}
         placeholder={placeholder}
         label={t('prompt.label', { agent: agentName })}
-        size={{ minHeight: 'var(--composer-min)', padding: '16px 4px 16px 6px' }}
+        size={{ minHeight: 'var(--composer-min)', padding: '16px 4px 16px 10px' }}
         onKeyDown={onKeyDown}
         wrap={!!outOfCredit}
         top={
@@ -166,7 +171,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                     <InputGroupButton
                       key="queue"
                       size="round"
-                      variant="secondary"
+                      variant="quiet"
                       aria-label={t('prompt.queue')}
                       onClick={() => queue(false)}
                       className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
@@ -222,6 +227,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                     variant="secondary"
                     aria-label={t('prompt.send')}
                     disabled
+                    className="disabled:text-disabled disabled:opacity-100"
                   >
                     <ArrowUpIcon />
                   </InputGroupButton>
@@ -236,7 +242,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 aria-label={t('prompt.send')}
                 disabled={!canSend}
                 onClick={send}
-                className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
+                className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast) disabled:text-disabled disabled:opacity-100"
               >
                 <ArrowUpIcon />
               </InputGroupButton>
@@ -245,7 +251,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         }
       />
       {/* Holds the row's height while the agent starts, so nothing jumps when the options arrive. */}
-      <div className="flex min-h-row flex-col">
+      <div className="flex min-h-9 flex-col">
         {(error || blocked?.notice) && (
           <p className="animate-in px-2 pt-1 text-xs text-danger fade-in" role="alert">
             {error ?? blocked?.message}

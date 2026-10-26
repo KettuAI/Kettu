@@ -417,8 +417,8 @@
 
   /* Meaning, derived. */
   --attention-foreground: var(--bg-surface);
-  --attention-ring: color-mix(in srgb, var(--attention) 80%, transparent);
-  --attention-halo: color-mix(in srgb, var(--attention) 20%, transparent);
+  --attention-ring: color-mix(in srgb, var(--attention-dot) 55%, transparent);
+  --attention-halo: color-mix(in srgb, var(--attention-dot) 9%, transparent);
   --destructive-tint: var(--danger-tint);
   --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
   --destructive-foreground: var(--bg-surface);
@@ -483,7 +483,8 @@
   --queue-ring:
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-queue), var(--highlight);
   --attention-ring-shadow:
-    inset 0 0 0 1px var(--attention-ring), 0 0 0 3px var(--attention-halo), var(--highlight);
+    0 0 0 1px var(--attention-ring), 0 0 0 4px var(--attention-halo), var(--elevation-float),
+    var(--highlight);
   --segment-ring:
     0 0 0 var(--hairline) var(--border-default), var(--elevation-segment), var(--highlight);
   --thumb-shadow: var(--elevation-thumb);

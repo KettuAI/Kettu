@@ -156,7 +156,7 @@ export const ReplyFooter = memo(
     return (
       <div
         className={cn(
-          'group/actions -ml-1 flex h-7 min-w-0 items-center gap-0.5 text-xs text-muted-foreground',
+          'group/actions -ml-1 flex h-6 min-w-0 items-center gap-0.5 text-xs text-muted-foreground',
           animation,
         )}
       >

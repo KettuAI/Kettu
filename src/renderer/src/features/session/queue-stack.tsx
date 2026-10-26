@@ -390,19 +390,19 @@ function QueueCard({
         backgroundColor: shown ? 'var(--bg-surface)' : fill(pose.depth),
       }}
       className={cn(
-        'absolute inset-x-2 bottom-0 h-11 rounded-xl shadow-queue transition-[background-color] duration-(--duration-base)',
+        'absolute inset-x-1.5 bottom-0 h-11 rounded-2xl shadow-queue transition-[background-color] duration-(--duration-base)',
         (!pose.interactive || !present) && 'pointer-events-none',
         ringed && 'outline-2 outline-offset-2 outline-focus',
       )}
     >
       <div
         style={{ opacity: pose.content }}
-        className="flex h-9 items-center gap-2 px-3 transition-opacity duration-(--duration-base)"
+        className="flex h-9 items-center gap-2 pr-2 pl-3.5 text-small transition-opacity duration-(--duration-base)"
       >
-        <span className="w-10 shrink-0 text-xs text-muted-foreground">
+        <span className="shrink-0 font-medium text-tertiary">
           {index === 0 ? t('queue.next') : t('queue.number', { number: index + 1 })}
         </span>
-        <span className="min-w-0 flex-1 truncate text-small">
+        <span className="min-w-0 flex-1 truncate">
           {promptText(item) || (attachments === 0 && t('queue.attachment'))}
           {attachments > 0 && (
             <span className="text-tertiary">
@@ -411,12 +411,12 @@ function QueueCard({
             </span>
           )}
         </span>
-        {count && <span className="shrink-0 text-xs text-muted-foreground tabular">{count}</span>}
+        {count && <span className="shrink-0 text-tertiary tabular">{count}</span>}
       </div>
       <span
         inert={!shown}
         className={cn(
-          'absolute top-1.5 right-1.5 flex items-center opacity-0 transition-opacity duration-(--duration-fast)',
+          'absolute top-1.5 right-2 flex items-center opacity-0 transition-opacity duration-(--duration-fast)',
           shown && 'opacity-100',
         )}
       >
@@ -429,17 +429,13 @@ function QueueCard({
             </Button>
           )}
           {canSendNow && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button variant="outline" size="xs" onClick={() => actions.sendNow(item)} />
-                }
-              >
-                <CornerDownRightIcon data-icon="inline-start" />
-                {t('queue.sendNow')}
-              </TooltipTrigger>
-              <TooltipContent>{t(steering ? 'queue.steer' : 'queue.stopAndSend')}</TooltipContent>
-            </Tooltip>
+            <CardButton
+              label={t('queue.sendNow')}
+              tip={t(steering ? 'queue.steer' : 'queue.stopAndSend')}
+              onClick={() => actions.sendNow(item)}
+            >
+              <CornerDownRightIcon />
+            </CardButton>
           )}
           <CardButton label={t('queue.edit')} onClick={() => actions.edit(item)}>
             <PencilIcon />
@@ -455,10 +451,12 @@ function QueueCard({
 
 function CardButton({
   label,
+  tip = label,
   onClick,
   children,
 }: {
   label: string
+  tip?: string
   onClick: () => void
   children: ReactNode
 }) {
@@ -477,7 +475,7 @@ function CardButton({
       >
         {children}
       </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
+      <TooltipContent>{tip}</TooltipContent>
     </Tooltip>
   )
 }

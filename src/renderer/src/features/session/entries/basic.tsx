@@ -2,10 +2,10 @@ import { memo, useState } from 'react'
 import {
   ArrowUpIcon,
   CalendarClockIcon,
+  CheckIcon,
   ChevronRightIcon,
   CircleAlertIcon,
-  CircleCheckIcon,
-  CircleIcon,
+  CornerUpLeftIcon,
   GitBranchIcon,
   GitCommitHorizontalIcon,
   GitPullRequestArrowIcon,
@@ -67,7 +67,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   )
   const rest = entry.content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
-    <div className={cn('group/actions flex flex-col items-end gap-0.5', animation)}>
+    <div className={cn('group/actions flex flex-col items-end gap-1', animation)}>
       {attachments.length > 0 && (
         <div className="flex w-full justify-end pb-1">
           <SentAttachments sessionId={sessionId} entryId={entryId} attachments={attachments} />
@@ -76,8 +76,8 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
       {/* A message of attachments alone has no bubble. */}
       {rest.length > 0 && (
         <Message align="end">
-          <Bubble variant="muted" className="max-w-[85%]">
-            <BubbleContent className="rounded-2xl px-3.5 py-2.5 text-prose leading-normal">
+          <Bubble variant="muted">
+            <BubbleContent>
               <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
             </BubbleContent>
           </Bubble>
@@ -199,13 +199,19 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
   return (
-    <figure className={cn('flex flex-col gap-1.5', animation)}>
-      <figcaption className="text-xs text-muted-foreground">
+    <figure
+      className={cn(
+        'flex flex-col gap-1 rounded-xl bg-subtle px-3.5 py-2.5 text-ui text-secondary',
+        animation,
+      )}
+    >
+      <figcaption className="flex items-center gap-1.5 text-xs font-medium text-tertiary">
+        <CornerUpLeftIcon aria-hidden className="size-3 shrink-0" />
         {sender
           ? t('sessionMessage.from', { title: sessionTitle(sender) })
           : t('sessionMessage.fromParent')}
       </figcaption>
-      <blockquote className="border-l-2 border-border-strong pl-3 text-prose">
+      <blockquote>
         <UserContentView content={entry.content} sessionId={sessionId} entryId={entryId} />
       </blockquote>
     </figure>
@@ -440,39 +446,39 @@ export function PlanList({ items }: { items: PlanItem[] }) {
   return (
     <ul className="flex flex-col gap-0.5">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 py-0.5 text-ui leading-5 text-tertiary">
-          <span className="flex h-5 items-center">
+        <li
+          key={i}
+          className={cn(
+            'flex min-h-6.5 items-start gap-2.5 py-0.75 text-ui leading-5',
+            item.status === 'completed'
+              ? 'text-secondary'
+              : item.status === 'in_progress'
+                ? 'font-medium text-foreground'
+                : 'text-tertiary',
+          )}
+        >
+          <span className="flex h-5 w-3.5 shrink-0 items-center justify-center">
             {item.status === 'completed' ? (
-              <CircleCheckIcon
+              <CheckIcon
                 role="img"
                 aria-label={t('status.done')}
-                className="size-3.5 text-icon"
+                className="size-3 text-tertiary"
               />
             ) : item.status === 'in_progress' ? (
               <span
                 role="img"
                 aria-label={t('plan.inProgress')}
-                className="flex size-3.5 items-center justify-center"
-              >
-                <span className="size-2 rounded-full bg-current text-primary" />
-              </span>
+                className="size-2 rounded-full bg-info"
+              />
             ) : (
-              <CircleIcon
+              <span
                 role="img"
                 aria-label={t('plan.todo')}
-                className="size-3.5 text-disabled"
+                className="size-2 rounded-full border-[1.5px] border-strong"
               />
             )}
           </span>
-          <span
-            className={cn(
-              'min-w-0 flex-1',
-              item.status === 'completed' && 'line-through decoration-border-strong',
-              item.status === 'in_progress' && 'font-medium text-primary',
-            )}
-          >
-            {item.content}
-          </span>
+          <span className="min-w-0 flex-1">{item.content}</span>
         </li>
       ))}
     </ul>

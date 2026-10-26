@@ -210,8 +210,8 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
   --text-prose: var(--prose-size);
-  /* The thread's column: 50em of prose, about 50 Chinese characters a line, plus its gutters. */
-  --container-thread: calc(50 * var(--prose-size) + 3rem);
+  /* The thread's column, 28 px gutters included: 48em of prose, 720 px at the default size. */
+  --container-thread: calc(48 * var(--prose-size));
   --text-ui: var(--ui-size);
   --text-prose--line-height: 1.45;
   /* The type scale of the design system. Titles are the serif, through font-heading. */
@@ -251,7 +251,7 @@
   --row-height: 32px;
   /* Interface text: the sidebar, menus and controls. Prose has its own size below. */
   --ui-size: 14px;
-  --card-header: 36px;
+  --card-header: 40px;
   --composer-min: 56px;
   --icon-size: 20px;
   --top-bar: 48px;
@@ -540,22 +540,22 @@
   animation: sheen var(--duration-slower) var(--ease-out-quart) 1 both;
 }
 
-/* One-time attention pulse: the halo grows to 6 px and settles at 3 px. */
+/* One-time attention pulse: a wave leaves the ring and fades by 14 px. */
 @keyframes attention-pulse {
   0% {
     box-shadow:
-      inset 0 0 0 1px var(--attention-ring),
-      0 0 0 0 var(--attention-halo),
-      var(--highlight);
+      var(--attention-ring-shadow),
+      0 0 0 0 color-mix(in srgb, var(--attention-dot) 16%, transparent);
   }
   40% {
     box-shadow:
-      inset 0 0 0 1px var(--attention-ring),
-      0 0 0 6px var(--attention-halo),
-      var(--highlight);
+      var(--attention-ring-shadow),
+      0 0 0 8px color-mix(in srgb, var(--attention-dot) 16%, transparent);
   }
   100% {
-    box-shadow: var(--attention-ring-shadow);
+    box-shadow:
+      var(--attention-ring-shadow),
+      0 0 0 14px transparent;
   }
 }
 
@@ -586,6 +586,7 @@
   }
   .animate-pulse,
   .animate-spin,
+  .animate-attention,
   .shimmer,
   [data-caret] {
     animation: none !important;
@@ -609,6 +610,7 @@
   }
   & .animate-pulse,
   & .animate-spin,
+  & .animate-attention,
   & .shimmer,
   & [data-caret] {
     animation: none !important;
@@ -755,31 +757,34 @@
     display: inline-flex;
     vertical-align: middle;
     align-items: center;
-    gap: 3px;
-    margin-left: 4px;
+    gap: 4px;
+    margin-inline: 1px;
     /* The line counts the chip as 18 px, so it never makes a 1.45 line taller, down to 14 px. */
-    margin-block: -1px;
-    border-radius: 5px;
-    background: var(--muted);
+    margin-block: -2px;
+    border-radius: var(--radius-md);
+    background: var(--bg-code-inline);
     padding: 0 6px;
-    height: 20px;
-    color: var(--muted-foreground);
-    font-family: var(--font-mono);
-    font-size: 11.5px;
+    height: 22px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-small);
+    font-weight: var(--font-weight-medium);
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
     outline: none;
-    transition:
-      color var(--duration-fast),
-      background-color var(--duration-fast);
+    transition: background-color var(--duration-fast);
     &:hover {
-      background: var(--accent);
-      color: var(--foreground);
+      background: var(--bg-selected);
     }
     &:focus-visible {
       outline: 2px solid var(--focus);
       outline-offset: 2px;
+    }
+    /* The line it points at, after the name. */
+    & > span + span {
+      color: var(--text-tertiary);
+      font-weight: var(--font-weight-normal);
     }
   }
 
