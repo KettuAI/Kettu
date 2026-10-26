@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { ArtifactEntry, SessionView, ThreadEntry, ThreadState } from '@shared/thread'
+import type { ArtifactEntry, GitEntry, SessionView, ThreadEntry, ThreadState } from '@shared/thread'
 import {
   artifactWrite,
+  gitPatch,
   ReplayKeeper,
   startedPatch,
   writePatch,
@@ -49,6 +50,14 @@ const card = (id: string, fields: Partial<ArtifactEntry> = {}): ArtifactEntry =>
   writes: 1,
   after: null,
   ...fields,
+})
+/** A git event, without `after` when it was stored before git events recorded one. */
+const git = (id: string, after?: string | null): GitEntry => ({
+  kind: 'git',
+  id,
+  event: 'branch',
+  branch: 'feature',
+  ...(after === undefined ? {} : { after }),
 })
 const write = (fields: Partial<ArtifactWrite> = {}): ArtifactWrite => ({
   artifactId: ID,
@@ -200,6 +209,56 @@ describe('ReplayKeeper', () => {
     )
     expect(keeper.after(tool('t:2')).map((e) => e.id)).toEqual(['e:3'])
     expect(keeper.rest().map((e) => e.id)).toEqual(['e:4'])
+  })
+
+  it("puts git events back after the entry they followed, in their tool call's order", () => {
+    const keeper = new ReplayKeeper(
+      threadOf([user('e:1'), tool('t:2'), git('g:1', 't:2'), git('g:2', 't:2'), turnEnd('e:3')]),
+    )
+    expect(keeper.before(user('m:1'))).toEqual([])
+    expect(keeper.after(tool('t:2')).map((e) => e.id)).toEqual(['g:1', 'g:2'])
+    expect(keeper.rest()).toEqual([])
+  })
+
+  it('puts a git event whose entry never comes back at the end of its turn', () => {
+    const keeper = new ReplayKeeper(
+      threadOf([user('e:1'), tool('t:2'), git('g:1', 't:gone'), user('e:3'), tool('t:4')]),
+    )
+    expect(keeper.before(user('m:1'))).toEqual([])
+    expect(keeper.after(tool('t:2'))).toEqual([])
+    expect(keeper.before(user('m:2')).map((e) => e.id)).toEqual(['g:1'])
+    expect(keeper.empty).toBe(true)
+  })
+
+  it('puts a git event stored without the entry before it at the end of its turn', () => {
+    const keeper = new ReplayKeeper(
+      threadOf([user('e:1'), tool('t:2'), git('g:1'), user('e:3'), tool('t:4'), git('g:2')]),
+    )
+    expect(keeper.before(user('m:1'))).toEqual([])
+    expect(keeper.after(tool('t:2'))).toEqual([])
+    expect(keeper.before(user('m:2')).map((e) => e.id)).toEqual(['g:1'])
+    expect(keeper.after(tool('t:4'))).toEqual([])
+    expect(keeper.rest().map((e) => e.id)).toEqual(['g:2'])
+  })
+})
+
+describe('gitPatch', () => {
+  it("adds the event after the agent's entry before the thread's end", () => {
+    const thread = threadOf([
+      user('e:1'),
+      tool('t:2'),
+      card('a:3', { after: 't:2' }),
+      turnEnd('e:4'),
+    ])
+    const draft = { kind: 'git', event: 'branch', branch: 'feature' } as const
+    expect(gitPatch(thread, draft, () => 'g:5')).toEqual({
+      op: 'entry.add',
+      entry: git('g:5', 't:2'),
+    })
+    expect(gitPatch(threadOf([]), draft, () => 'g:1')).toEqual({
+      op: 'entry.add',
+      entry: git('g:1', null),
+    })
   })
 })
 

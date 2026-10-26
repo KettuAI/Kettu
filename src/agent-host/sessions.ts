@@ -58,7 +58,13 @@ import {
   type SessionTarget,
 } from './acp/connection'
 import type { ForkPoint } from './acp/fork-point'
-import { ReplayKeeper, startedPatch, writePatch, type ArtifactWrite } from './artifacts/entries'
+import {
+  gitPatch,
+  ReplayKeeper,
+  startedPatch,
+  writePatch,
+  type ArtifactWrite,
+} from './artifacts/entries'
 import {
   addTokenTotals,
   isStopReason,
@@ -331,7 +337,7 @@ interface Live {
   partial: boolean
   /** Bytes of sent attachments for the next checkpoint, by hash. */
   blobs: Map<string, StoredBlob>
-  /** The thread's artifact entries while a replay rebuilds it, which the agent does not send. */
+  /** The entries the host keeps while a replay rebuilds the thread, which the agent does not send. */
   keeper: ReplayKeeper | null
   checkpointTimer: ReturnType<typeof setTimeout> | null
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
@@ -779,7 +785,7 @@ export class SessionManager {
     this.emit(live, [writePatch(live.thread, write, () => this.nextId(live, 'a'))])
   }
 
-  /** A replay ended: the artifact entries it never came back to go at its end. */
+  /** A replay ended: the kept entries it never came back to go at its end. */
   private restoreKept(live: Live): void {
     const { keeper } = live
     if (!keeper) return
@@ -5046,11 +5052,10 @@ export class SessionManager {
   gitEvents(sessionId: string, drafts: readonly GitEventDraft[]): void {
     const live = this.live.get(sessionId)
     if (!live) return
-    const patches: Patch[] = drafts.map((draft) => ({
-      op: 'entry.add',
-      entry: { ...draft, id: this.nextId(live, 'g') } as ThreadEntry,
-    }))
-    this.emit(live, patches)
+    this.emit(
+      live,
+      drafts.map((draft) => gitPatch(live.thread, draft, () => this.nextId(live, 'g'))),
+    )
   }
 
   /** Pull requests changed for a project's branches: its rows may show a new badge. */

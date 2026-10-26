@@ -16,8 +16,8 @@ import type { GitEntry, ToolKind } from '@shared/thread'
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 
-/** A git event for a session's thread; the session gives it its `g:<n>` id. */
-export type GitEventDraft = DistributiveOmit<GitEntry, 'id'>
+/** A git event for a session's thread; the session gives it its `g:<n>` id and `after`. */
+export type GitEventDraft = DistributiveOmit<GitEntry, 'id' | 'after'>
 
 export interface BranchPullRequest {
   number: number
