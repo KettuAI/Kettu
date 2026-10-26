@@ -36,6 +36,8 @@ export interface AgentHostDeps {
   onRoutinesWorking(working: boolean): void
   /** The host started and answers requests, at launch and after each restart. */
   onReady?(): void
+  /** The artifacts service's port, which the browser's pages must never reach. */
+  onServicePort?(port: number | null): void
 }
 
 const MAX_LIST = 10_000
@@ -367,6 +369,15 @@ export class AgentHost {
           this.deps.onMediaRevoke(message.sessionId)
         }
         break
+      case 'host:service-port': {
+        const port = message.port
+        this.deps.onServicePort?.(
+          typeof port === 'number' && Number.isSafeInteger(port) && port > 0 && port < 65_536
+            ? port
+            : null,
+        )
+        break
+      }
       case 'host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
         if (message.level === 'error') log.error(text)
@@ -390,6 +401,7 @@ export class AgentHost {
     for (const resolve of this.listRequests.values()) resolve(null)
     this.listRequests.clear()
     this.deps.onMediaRevoke(null)
+    this.deps.onServicePort?.(null)
     this.deps.onRoutinesWorking(false)
     this.deps.onBadge(0)
     const roots = this.agentProcesses

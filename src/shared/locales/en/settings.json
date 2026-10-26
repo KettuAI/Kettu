@@ -10,7 +10,8 @@
     "advanced": "Advanced",
     "about": "About",
     "archived": "Archived sessions",
-    "sharing": "Sharing"
+    "sharing": "Sharing",
+    "browser": "Browser"
   },
   "page": {
     "title": "Settings",
@@ -279,6 +280,18 @@
       "terminal": "Terminal"
     }
   },
+  "browser": {
+    "clearData": {
+      "name": "Clear browsing data",
+      "description": "Cookies, site storage and cache of the browser in the side panel.",
+      "keywords": "browser cookies cache storage site data privacy",
+      "button": "Clear…",
+      "dialogTitle": "Clear browsing data?",
+      "dialogDescription": "Sign-ins and saved form entries in the browser's pages will be lost. Pages that are open stay open.",
+      "confirm": "Clear",
+      "cleared": "Browsing data cleared"
+    }
+  },
   "advanced": {
     "proxy": {
       "name": "Proxy",
@@ -540,7 +553,8 @@
     "advanced": "Network proxy, diagnostics and the data OverBench keeps on this computer.",
     "about": "OverBench and the versions it runs on.",
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
-    "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account."
+    "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
+    "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache."
   },
   "footer": {
     "about": "About OverBench",

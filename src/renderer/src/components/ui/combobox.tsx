@@ -4,6 +4,7 @@ import * as React from 'react'
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox'
 import { cn } from 'cn'
 import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react'
+import { useOverlayRoot } from '@renderer/stores/overlays'
 
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -13,7 +14,22 @@ import {
   InputGroupInput,
 } from '@renderer/components/ui/input-group'
 
-const Combobox = ComboboxPrimitive.Root
+function Combobox<Value, Multiple extends boolean | undefined = false, Item = Value>({
+  open,
+  defaultOpen,
+  onOpenChange,
+  ...props
+}: ComboboxPrimitive.Root.Props<Value, Multiple, Item>) {
+  const change = useOverlayRoot(open, defaultOpen, onOpenChange)
+  return (
+    <ComboboxPrimitive.Root
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={change}
+      {...props}
+    />
+  )
+}
 
 const useComboboxFilter = ComboboxPrimitive.useFilter
 
@@ -107,6 +123,7 @@ function ComboboxContent({
       >
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
+          data-overlay-layer=""
           data-chips={!!anchor}
           className={cn(
             'group/combobox-content relative max-h-(--available-height) max-w-(--available-width) min-w-40 origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-menu duration-100 outline-none data-[chips=true]:min-w-(--anchor-width) *:data-[slot=input-group]:h-9 *:data-[slot=input-group]:rounded-none *:data-[slot=input-group]:border-0 *:data-[slot=input-group]:bg-transparent *:data-[slot=input-group]:px-1.5 *:data-[slot=input-group]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)] *:data-[slot=input-group]:has-[[data-slot=input-group-control]:focus-visible]:outline-none *:data-[slot=input-group]:**:data-[slot=input-group-control]:px-2 *:data-[slot=input-group]:**:data-[slot=input-group-control]:text-ui data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',

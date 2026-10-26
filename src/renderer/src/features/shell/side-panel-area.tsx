@@ -20,6 +20,11 @@ import { SidePanelContext } from './side-panel'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
 const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
+const BrowserPane = lazy(() =>
+  import('@renderer/features/browser/browser-pane').then((module) => ({
+    default: module.BrowserPane,
+  })),
+)
 
 // Each pane is a panel of its own, so each keeps its width: the terminal needs less room than a
 // file beside its tree. The terminal keeps the id it had when it was the only pane.
@@ -27,6 +32,7 @@ const PANES = {
   terminal: { id: 'side-panel', defaultSize: '340px', minSize: '280px' },
   files: { id: 'side-panel-files', defaultSize: '560px', minSize: '360px' },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
+  browser: { id: 'side-panel-browser', defaultSize: '560px', minSize: '360px' },
 } as const
 
 /**
@@ -124,6 +130,8 @@ export function SidePanelArea({
                 <Suspense fallback={<div className="h-full bg-sidebar" />}>
                   {pane === 'files' ? (
                     <FilesPanel projectPath={projectPath} maximized={maximized} />
+                  ) : pane === 'browser' ? (
+                    <BrowserPane projectPath={projectPath} maximized={maximized} />
                   ) : (
                     artifact && (
                       <ArtifactPane

@@ -35,7 +35,7 @@ export const NO_PROJECT_GROUP = 'no-project'
 export const PINNED_GROUP = 'pinned'
 
 /** What the side panel shows; one pane at a time. An artifact's pane opens from the thread. */
-export type SidePane = 'terminal' | 'files' | 'artifact'
+export type SidePane = 'terminal' | 'files' | 'browser' | 'artifact'
 
 export type SettingsSection =
   | 'general'
@@ -48,6 +48,7 @@ export type SettingsSection =
   | 'shortcuts'
   | 'archived'
   | 'sharing'
+  | 'browser'
   | 'advanced'
   | 'about'
 

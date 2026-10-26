@@ -1,6 +1,7 @@
 import type { AgentsApi, DiagnosticsBundle } from './agent-host'
 import type { ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
+import type { BrowserBounds, BrowserState } from './browser'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
 import type { Platform } from './platform'
@@ -159,6 +160,20 @@ export interface IpcInvokeContract {
   'sharing:publish': { args: [id: string, version: number]; result: SharingResult }
   'sharing:update': { args: [id: string, version: number]; result: SharingResult }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
+  'browser:show': { args: [sessionId: string]; result: void }
+  'browser:hide': { args: [sessionId: string]; result: void }
+  'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
+  // A URL the renderer normalised; only http(s) ever reaches the page.
+  'browser:navigate': { args: [sessionId: string, url: string]; result: void }
+  'browser:back': { args: [sessionId: string]; result: void }
+  'browser:forward': { args: [sessionId: string]; result: void }
+  'browser:reload': { args: [sessionId: string]; result: void }
+  'browser:stop': { args: [sessionId: string]; result: void }
+  'browser:open-external': { args: [sessionId: string]; result: void }
+  // The page as it looks now, for the pane to show while an overlay would cover the view.
+  'browser:freeze': { args: [sessionId: string]; result: string | null }
+  'browser:thaw': { args: [sessionId: string]; result: void }
+  'browser:clear-data': { args: []; result: void }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -176,6 +191,7 @@ export interface IpcEventContract {
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
   'sharing:changed': SharingStatus
+  'browser:state': BrowserState
 }
 
 export type IpcEventChannel = keyof IpcEventContract
@@ -189,6 +205,8 @@ export interface IpcSendContract {
   'app:confirm-quit-unhandled': [id: number]
   /** Every file with unsaved edits, whenever that changes, so quitting can ask without a round trip. */
   'app:set-unsaved': [files: UnsavedFile[]]
+  /** The sessions the renderer still lists, so a page closes once its session leaves the host. */
+  'browser:sessions': [sessionIds: string[]]
 }
 
 /** Payload of `agent-host:reset` and `terminal-host:reset`. */
@@ -323,6 +341,30 @@ export interface OverbenchApi {
     restart(): Promise<void>
     dismiss(): Promise<void>
     onChanged(listener: (status: UpdateStatus) => void): () => void
+  }
+  /** The page in the side panel's browser, one per session, all in one profile. */
+  browser: {
+    /** Shows a session's page, or nothing when it has none yet. */
+    show(sessionId: string): Promise<void>
+    /** Hides the page, keeping it alive for when the pane shows again. */
+    hide(sessionId: string): Promise<void>
+    /** Where the pane's page sits, in device-independent pixels; null while it is not shown. */
+    setBounds(sessionId: string, bounds: BrowserBounds): Promise<void>
+    navigate(sessionId: string, url: string): Promise<void>
+    back(sessionId: string): Promise<void>
+    forward(sessionId: string): Promise<void>
+    reload(sessionId: string): Promise<void>
+    stop(sessionId: string): Promise<void>
+    /** Opens the page's current address in the system browser. */
+    openExternal(sessionId: string): Promise<void>
+    /** A still of the page for the pane to show, after which main hides the view. */
+    freeze(sessionId: string): Promise<string | null>
+    thaw(sessionId: string): Promise<void>
+    /** Clears the profile's cookies, site storage and cache. */
+    clearData(): Promise<void>
+    /** The sessions that still exist; a page whose session does not is closed. */
+    setSessions(sessionIds: string[]): void
+    onState(listener: (state: BrowserState) => void): () => void
   }
   /** What the user chose to attach, granted to the agent host by main; never a path. */
   attachments: {

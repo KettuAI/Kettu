@@ -972,6 +972,58 @@ export function DataFolder({ label }: { label: ReactNode }) {
   )
 }
 
+export function ClearBrowsingData() {
+  const { t } = useTranslation(['settings', 'common'])
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [cleared, setCleared] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const clear = async () => {
+    setBusy(true)
+    setError(null)
+    setCleared(false)
+    try {
+      await window.overbench.browser.clearData()
+      setCleared(true)
+      setOpen(false)
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      {cleared && (
+        <span role="status" className="text-xs text-tertiary">
+          {t('browser.clearData.cleared')}
+        </span>
+      )}
+      <ControlError error={error} />
+      <Button variant="outline" size="compact" disabled={busy} onClick={() => setOpen(true)}>
+        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+        {t('browser.clearData.button')}
+      </Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('browser.clearData.dialogTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('browser.clearData.dialogDescription')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => void clear()}>
+              {t('browser.clearData.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
 export function RemoveAll() {
   const { t } = useTranslation(['settings', 'common'])
   const count = useSessionsStore((s) => Object.keys(s.byId).length)

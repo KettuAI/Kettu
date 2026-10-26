@@ -4,6 +4,7 @@ import {
   BotIcon,
   ChartNoAxesColumnIcon,
   GitBranchIcon,
+  GlobeIcon,
   InfoIcon,
   KeyboardIcon,
   SettingsIcon,
@@ -44,6 +45,7 @@ import { useLoginItemStatus } from './use-login-item'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
   BackgroundFetch,
+  ClearBrowsingData,
   ColorModeTiles,
   DataFolder,
   DefaultAgent,
@@ -535,6 +537,27 @@ export function useGitSection(): SectionDef {
         description: t('git.fetch.description'),
         group: group('sync', t('git.groups.sync')),
         render: () => <BackgroundFetch />,
+      },
+    ],
+  }
+}
+
+export function useBrowserSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  return {
+    id: 'browser',
+    title: t('sections.browser'),
+    description: t('pages.browser'),
+    icon: GlobeIcon,
+    rows: [
+      {
+        id: 'clear-data',
+        name: t('browser.clearData.name'),
+        english: en('browser.clearData.name'),
+        description: t('browser.clearData.description'),
+        keywords: t('browser.clearData.keywords'),
+        render: () => <ClearBrowsingData />,
       },
     ],
   }

@@ -5,9 +5,19 @@ import { cn } from 'cn'
 import { Button } from '@renderer/components/ui/button'
 import { XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useOverlayRoot } from '@renderer/stores/overlays'
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function Dialog({ open, defaultOpen, onOpenChange, ...props }: DialogPrimitive.Root.Props) {
+  const change = useOverlayRoot(open, defaultOpen, onOpenChange)
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={change}
+      {...props}
+    />
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -49,6 +59,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        data-overlay-layer=""
         className={cn(
           'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-3xl bg-popover p-5 text-sm text-popover-foreground shadow-dialog duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
           className,

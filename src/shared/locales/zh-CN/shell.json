@@ -1,7 +1,8 @@
 {
   "headerTools": {
     "files": "文件",
-    "terminal": "终端"
+    "terminal": "终端",
+    "browser": "浏览器"
   },
   "hostBanner": {
     "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",

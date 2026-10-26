@@ -24,6 +24,7 @@ import {
   useAdvancedSection,
   useAgentsSection,
   useAppearanceSection,
+  useBrowserSection,
   useGeneralSection,
   useGitSection,
   useNotificationsSection,
@@ -47,7 +48,13 @@ export default function SettingsPage() {
   const clusters: SectionDef[][] = [
     [useGeneralSection(), useAppearanceSection(), useNotificationsSection(), useShortcutsSection()],
     [useAgentsSection(), useUsageSection(), useTerminalSection(), useGitSection()],
-    [useArchivedSection(), useSharingSection(), useAdvancedSection(), useAboutSection()],
+    [
+      useArchivedSection(),
+      useBrowserSection(),
+      useSharingSection(),
+      useAdvancedSection(),
+      useAboutSection(),
+    ],
   ]
   const sections = clusters.flat()
   const [query, setQuery] = useState('')

@@ -4,6 +4,7 @@ import 'i18next'
 import type agents from './locales/en/agents.json'
 import type app from './locales/en/app.json'
 import type artifacts from './locales/en/artifacts.json'
+import type browser from './locales/en/browser.json'
 import type common from './locales/en/common.json'
 import type composer from './locales/en/composer.json'
 import type files from './locales/en/files.json'
@@ -27,6 +28,7 @@ declare module 'i18next' {
       agents: typeof agents
       app: typeof app
       artifacts: typeof artifacts
+      browser: typeof browser
       common: typeof common
       composer: typeof composer
       files: typeof files

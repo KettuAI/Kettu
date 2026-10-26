@@ -57,6 +57,7 @@ const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
 const onSharingChanged = subscribe('sharing:changed')
+const onBrowserState = subscribe('browser:state')
 
 const pathOf = (file: File) => webUtils.getPathForFile(file)
 
@@ -155,6 +156,22 @@ const api: OverbenchApi = {
   },
   notifications: {
     test: () => invoke('notifications:test'),
+  },
+  browser: {
+    show: (id) => invoke('browser:show', id),
+    hide: (id) => invoke('browser:hide', id),
+    setBounds: (id, bounds) => invoke('browser:bounds', id, bounds),
+    navigate: (id, url) => invoke('browser:navigate', id, url),
+    back: (id) => invoke('browser:back', id),
+    forward: (id) => invoke('browser:forward', id),
+    reload: (id) => invoke('browser:reload', id),
+    stop: (id) => invoke('browser:stop', id),
+    openExternal: (id) => invoke('browser:open-external', id),
+    freeze: (id) => invoke('browser:freeze', id),
+    thaw: (id) => invoke('browser:thaw', id),
+    clearData: () => invoke('browser:clear-data'),
+    setSessions: (ids) => send('browser:sessions', ids),
+    onState: onBrowserState,
   },
   attachments: {
     pick: (kind, defaultPath) => invoke('dialog:add-attachments', kind, defaultPath),
