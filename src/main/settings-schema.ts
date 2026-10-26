@@ -47,7 +47,7 @@ const SECTION_FIELDS = {
     confirmQuitWhileRunning: isBoolean,
     openAtLogin: isBoolean,
   },
-  thread: { outlineSummaries: isBoolean },
+  thread: { outlineSummaries: isBoolean, confirmLinks: isBoolean },
   appearance: {
     theme: oneOf('system', 'light', 'dark'),
     colorTheme: isThemeId,

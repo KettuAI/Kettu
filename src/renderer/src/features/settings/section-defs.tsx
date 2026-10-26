@@ -58,6 +58,7 @@ import {
   BackgroundFetch,
   ClearBrowsingData,
   ColorModeTiles,
+  ConfirmLinks,
   DataFolderActions,
   DataFolderText,
   DefaultAgent,
@@ -180,6 +181,15 @@ export function useGeneralSection(): SectionDef {
         render: () => (
           <GeneralSwitch field="confirmQuitWhileRunning" label={t('general.confirmQuit.name')} />
         ),
+      },
+      {
+        id: 'confirm-links',
+        name: t('general.confirmLinks.name'),
+        english: en('general.confirmLinks.name'),
+        description: t('general.confirmLinks.description'),
+        keywords: t('general.confirmLinks.keywords'),
+        group: thread,
+        render: () => <ConfirmLinks label={t('general.confirmLinks.name')} />,
       },
       {
         id: 'outline-summaries',

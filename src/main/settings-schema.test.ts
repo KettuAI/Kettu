@@ -43,6 +43,12 @@ describe('validateSettingsPatch', () => {
     expect(() => validateSettingsPatch({ general: { defaultAgent: null } })).not.toThrow()
   })
 
+  it('accepts turning off the confirmation before links open', () => {
+    expect(validateSettingsPatch({ thread: { confirmLinks: false } })).toEqual({
+      thread: { confirmLinks: false },
+    })
+  })
+
   it("accepts today's cost as what the sidebar shows", () => {
     expect(validateSettingsPatch({ usage: { sidebar: 'cost' } })).toEqual({
       usage: { sidebar: 'cost' },
@@ -65,6 +71,7 @@ describe('validateSettingsPatch', () => {
     [{ general: { fontFamily: 'x' } }, 'Unknown setting "general.fontFamily"'],
     [{ general: { openAtLogin: 'yes' } }, '"general.openAtLogin" must be a boolean'],
     [{ general: 'enter' }, '"general" must be an object'],
+    [{ thread: { confirmLinks: 'no' } }, '"thread.confirmLinks" must be a boolean'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
     [{ appearance: { colorTheme: '../nord' } }, '"appearance.colorTheme" must be a theme id'],
     [{ appearance: { colorTheme: 'Nord' } }, '"appearance.colorTheme" must be a theme id'],
@@ -176,6 +183,12 @@ describe('parseSettingsFile', () => {
       appearance: { ...DEFAULT_SETTINGS.appearance, theme: 'light' },
     })
     expect(loaded.settings.appearance.colorTheme).toBe('overbench')
+  })
+
+  it('reads a stored thread setting without the link one as asking', () => {
+    const loaded = parseSettingsFile({ version: 1, thread: { outlineSummaries: false } })
+    expect(loaded.problems).toEqual([])
+    expect(loaded.settings.thread).toEqual({ outlineSummaries: false, confirmLinks: true })
   })
 
   it('reads the chosen theme, keeping the built-in one for an id that is not one', () => {
