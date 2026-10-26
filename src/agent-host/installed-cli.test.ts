@@ -1,5 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
-import os from 'node:os'
+import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ProgramOptions, ProgramRun } from './adapter-install'
@@ -16,6 +15,7 @@ import {
   type CliFiles,
 } from './installed-cli'
 import { TextRing } from './ring'
+import { tempFolder } from './testing/temp'
 
 function files(contents: Record<string, string>, links: Record<string, string> = {}): CliFiles {
   return {
@@ -197,7 +197,7 @@ describe('resolving the program the adapter runs', () => {
   })
 
   it('reads at most the start of a file when asked to', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-cli-files-'))
+    const dir = await tempFolder('overbench-cli-files-')
     const file = path.join(dir, 'big.cmd')
     await writeFile(file, 'x'.repeat(100_000))
     expect(await CLI_FILES.readText(file, 64 * 1024)).toHaveLength(64 * 1024)
