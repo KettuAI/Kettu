@@ -10,6 +10,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { connect, launchApp, makeProject, openProject, stopApp } from '../launch.mjs'
@@ -43,6 +44,30 @@ const app = launchApp({
   },
 })
 
+// The page the browser pane opens, so a capture shows a real page and not just the pane's frame.
+const fixture = createServer((request, response) => {
+  response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+  response.end(`<!doctype html><html><head><meta charset="utf-8"><title>Demo app</title>
+<style>
+  :root { color-scheme: light }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: #18181b; background: #fafafa }
+  main { max-width: 560px; margin: 0 auto; padding: 56px 32px }
+  h1 { font-size: 26px; letter-spacing: -0.01em; margin: 0 0 8px }
+  p { color: #52525b; margin: 0 0 24px }
+  .row { display: flex; gap: 8px }
+  input { flex: 1; height: 36px; padding: 0 12px; border: 1px solid #d4d4d8; border-radius: 8px; font: inherit }
+  button { height: 36px; padding: 0 16px; border: 0; border-radius: 8px; background: #18181b; color: #fff; font: inherit; font-weight: 500 }
+  a { color: #2563eb }
+</style></head><body><main>
+  <h1>Demo app</h1>
+  <p>Local dev server · signed in as demo@example.com</p>
+  <div class="row"><input value="A new todo" aria-label="Todo"><button>Add</button></div>
+  <p style="margin-top:24px"><a href="/two">Second page</a></p>
+</main></body></html>`)
+})
+await new Promise((done) => fixture.listen(0, '127.0.0.1', done))
+const fixtureUrl = `http://127.0.0.1:${fixture.address().port}/`
+
 let failed = false
 try {
   await run()
@@ -51,6 +76,7 @@ try {
   log(`Capture failed: ${error instanceof Error ? error.message : String(error)}`)
 } finally {
   await stopApp(app)
+  fixture.close()
   rmSync(scratch, { recursive: true, force: true, maxRetries: 5 })
 }
 if (refused) {
@@ -230,6 +256,50 @@ async function run() {
   )
   log(`thread scrollbar ${gutter} px`)
   await shoot('session')
+
+  // The browser pane: empty, with a page, and under an overlay that would cover its native view.
+  await click(`return document.querySelector('button[aria-label="Browser"]')`, 'the browser toggle')
+  await waitFor(`Boolean(document.querySelector('[data-browser-panel]'))`, 'the browser pane')
+  await sleep(300)
+  await shoot('browser-empty')
+  await cdp.evaluate(
+    `document.querySelector('[data-browser-panel] input[aria-label="Address"]').focus()`,
+  )
+  await cdp.send('Input.insertText', { text: fixtureUrl })
+  await press('Enter', 13)
+  await waitFor(
+    `document.querySelector('[data-browser-panel] input[aria-label="Address"]')?.value.includes('127.0.0.1')`,
+    'the fixture page',
+  )
+  await sleep(1200)
+  const maximize = await cdp.evaluate(`(() => {
+    const r = document.querySelector('[data-browser-panel] button[aria-label="Maximize"]').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })()`)
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...maximize })
+  await waitFor(
+    `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`,
+    'the still of the page',
+  )
+  await sleep(500)
+  await shoot('browser-overlay')
+  // The same still without the tooltip that asked for it.
+  await cdp.evaluate(
+    `document.querySelectorAll('[data-overlay-layer]').forEach((el) => (el.style.visibility = 'hidden'))`,
+  )
+  await sleep(200)
+  await shoot('browser-page')
+  await cdp.evaluate(
+    `document.querySelectorAll('[data-overlay-layer]').forEach((el) => (el.style.visibility = ''))`,
+  )
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
+  await sleep(400)
+  await click(
+    `return [...document.querySelectorAll('[data-browser-panel] button')].find((b) => b.getAttribute('aria-label') === 'Close')`,
+    'the browser pane close button',
+  )
+  await sleep(400)
+
   // Overlay scrollbars show only while the view scrolls, so this one is taken mid-scroll.
   const thread = await cdp.evaluate(
     `(() => { const r = document.querySelector('[data-slot=message-scroller-viewport]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`,
@@ -494,6 +564,7 @@ async function run() {
     'Usage',
     'Terminal',
     'Git',
+    'Browser',
     'Sharing',
     'Advanced',
     'About',

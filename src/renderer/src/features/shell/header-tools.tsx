@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { FolderIcon, SquareTerminalIcon } from 'lucide-react'
+import { FolderIcon, GlobeIcon, SquareTerminalIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -37,6 +37,9 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
           shortcut="Ctrl+`"
         >
           <SquareTerminalIcon />
+        </PaneToggle>
+        <PaneToggle projectPath={projectPath} pane="browser" label={t('headerTools.browser')}>
+          <GlobeIcon />
         </PaneToggle>
       </NoDrag>
     </>

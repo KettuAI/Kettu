@@ -12,6 +12,7 @@ import { restoreDraftAttachments } from '@renderer/features/session/composer/att
 import { host } from '@renderer/lib/host'
 import { platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
+import { initBrowser } from '@renderer/stores/browser'
 import {
   hostRestarted,
   preparedRemoved,
@@ -191,6 +192,7 @@ export function bootstrap(): Promise<unknown> {
   void initUpdates()
   void initSharing()
   initTerminals()
+  initBrowser()
   // Before any composer shows, so each finds its draft's attachments.
   void restoreDraftAttachments()
   void takeReturnedMessages()

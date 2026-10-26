@@ -107,8 +107,9 @@ describe('the port envelope', () => {
 describe('main messages', () => {
   it('reports projects, busy sessions and a clean stop', async () => {
     const { t, port } = await setup()
-    expect(t.sent.slice(0, 2)).toEqual([
+    expect(t.sent.slice(0, 3)).toEqual([
       { type: 'host:projects', paths: [] },
+      { type: 'host:service-port', port: expect.any(Number) },
       { type: 'host:ready' },
     ])
     const project = await port.request('projects.add', { path: t.project })

@@ -8,6 +8,7 @@ import { Artifacts, disableDnsPrefetching } from './artifacts'
 import { artifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
+import { BrowserViews } from './browser/views'
 import { broadcast } from './events'
 import { locale as currentLocale, setLocale } from './i18n'
 import { registerIpcHandlers } from './ipc'
@@ -36,6 +37,7 @@ import {
   applyZoom,
   configureWindows,
   createMainWindow,
+  currentWindow,
   devIcon,
   showMainWindow,
   watchTheme,
@@ -139,6 +141,10 @@ async function start(): Promise<void> {
   setBadgeEnabled(settings.get().notifications.badge)
 
   const mediaGrants = new MediaGrants()
+  const browserViews = new BrowserViews({
+    window: currentWindow,
+    send: (state) => broadcast('browser:state', state),
+  })
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
   // Set once the sharing service exists; the host reports ready only after that, at each start.
@@ -153,6 +159,7 @@ async function start(): Promise<void> {
     onMediaRevoke: (sessionId) => mediaGrants.revoke(sessionId),
     onRoutinesWorking: (working) => routinesAwake.set(working),
     onReady: () => reconcileSharing?.(),
+    onServicePort: (port) => browserViews.setServicePort(port),
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
@@ -240,6 +247,7 @@ async function start(): Promise<void> {
     agentHost,
     terminalHost,
     artifacts,
+    browserViews,
     mediaGrants,
     sharing,
     updater,

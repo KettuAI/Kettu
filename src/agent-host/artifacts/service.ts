@@ -180,6 +180,11 @@ export class ArtifactService {
     return this.port === null ? null : `http://127.0.0.1:${this.port}${SERVICE_PATH}`
   }
 
+  /** The port it listens on, so main can refuse a page's requests to it. */
+  get listeningPort(): number | null {
+    return this.port
+  }
+
   /**
    * What an attach of the session passes in `mcpServers`: the service with the session's token,
    * made at its first attach and kept while it stays in memory, since Codex ignores new servers

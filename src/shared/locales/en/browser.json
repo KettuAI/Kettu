@@ -1,0 +1,28 @@
+{
+  "address": {
+    "label": "Address",
+    "placeholder": "Enter an address",
+    "invalid": "Enter a web address"
+  },
+  "empty": {
+    "title": "No page open",
+    "noSession": "No session is showing",
+    "noSessionHint": "Open a session to use the browser."
+  },
+  "loading": "Loading",
+  "actions": {
+    "back": "Back",
+    "forward": "Forward",
+    "reload": "Reload",
+    "stop": "Stop",
+    "tryAgain": "Try again",
+    "openExternal": "Open in browser",
+    "maximize": "Maximize",
+    "restore": "Restore"
+  },
+  "notice": {
+    "downloadBlocked": "Downloads are blocked in OverBench's browser",
+    "evicted": "This page was closed to save memory",
+    "loadFailed": "This page did not load: {{error}}"
+  }
+}

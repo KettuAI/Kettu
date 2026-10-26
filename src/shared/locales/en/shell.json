@@ -1,7 +1,8 @@
 {
   "headerTools": {
     "files": "Files",
-    "terminal": "Terminal"
+    "terminal": "Terminal",
+    "browser": "Browser"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",

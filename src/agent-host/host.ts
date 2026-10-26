@@ -443,6 +443,7 @@ export class AgentHost {
     host.sendFolders()
     host.usage.start()
     host.artifacts.start()
+    options.send({ type: 'host:service-port', port: host.artifactService.listeningPort })
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
     void host.agents.detectAll().then(() => host.agents.scheduleUpdateChecks())

@@ -97,6 +97,8 @@ export type HostToMain =
   | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
+  // The artifacts service's port, which the browser's pages must never reach; null when it is down.
+  | { type: 'host:service-port'; port: number | null }
   | { type: 'host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'host:stopped' }
 

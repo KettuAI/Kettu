@@ -10,6 +10,7 @@ import {
   shell,
 } from 'electron'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
+import type { BrowserBounds } from '@shared/browser'
 import type {
   AppInfo,
   IpcInvokeChannel,
@@ -22,6 +23,7 @@ import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
 import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
+import type { BrowserViews } from './browser/views'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
@@ -46,6 +48,7 @@ export interface IpcDeps {
   agentHost: AgentHost
   terminalHost: TerminalHost
   artifacts: Artifacts
+  browserViews: BrowserViews
   mediaGrants: MediaGrants
   sharing: Sharing
   updater: Updater
@@ -121,6 +124,61 @@ function agentId(value: unknown): AgentId {
   return value as AgentId
 }
 
+const SESSION_ID_MAX_CHARS = 256
+const URL_MAX_CHARS = 8_192
+const BOUNDS_MAX = 100_000
+
+/** A session a browser call is for: untrusted input from the renderer. */
+function sessionId(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > SESSION_ID_MAX_CHARS ||
+    value.includes('\0')
+  ) {
+    throw new Error(`A session id must be a string of 1 to ${SESSION_ID_MAX_CHARS} characters`)
+  }
+  return value
+}
+
+/** An address the browser may open, and nothing else. */
+function browserUrl(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > URL_MAX_CHARS) {
+    throw new Error(`A browser URL must be a string of 1 to ${URL_MAX_CHARS} characters`)
+  }
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('A browser URL must be absolute')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('A browser URL must be http or https')
+  }
+  return url.href
+}
+
+function browserBounds(value: unknown): BrowserBounds {
+  if (typeof value !== 'object' || value === null)
+    throw new Error('Browser bounds must be an object')
+  const { x, y, width, height } = value as Record<string, unknown>
+  const numbers = [x, y, width, height]
+  if (
+    numbers.some(
+      (number) =>
+        typeof number !== 'number' || !Number.isFinite(number) || number < 0 || number > BOUNDS_MAX,
+    )
+  ) {
+    throw new Error('Browser bounds take four numbers from 0 to 100000')
+  }
+  return {
+    x: Math.round(x as number),
+    y: Math.round(y as number),
+    width: Math.round(width as number),
+    height: Math.round(height as number),
+  }
+}
+
 const SHOW_ITEM_MAX_CHARS = 4_096
 
 /** A path to reveal in the file manager: untrusted input from the renderer. */
@@ -192,6 +250,7 @@ export function registerIpcHandlers({
   agentHost,
   terminalHost,
   artifacts,
+  browserViews,
   mediaGrants,
   sharing,
   updater,
@@ -372,6 +431,23 @@ export function registerIpcHandlers({
   handle('sharing:update', 2, (_, id, version) => sharing.update(id, version))
   handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
 
+  handle('browser:show', 1, (_, id) => browserViews.show(sessionId(id)))
+  handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))
+  handle('browser:bounds', 2, (_, id, bounds) =>
+    browserViews.setBounds(sessionId(id), browserBounds(bounds)),
+  )
+  handle('browser:navigate', 2, (_, id, url) =>
+    browserViews.navigate(sessionId(id), browserUrl(url)),
+  )
+  handle('browser:back', 1, (_, id) => browserViews.back(sessionId(id)))
+  handle('browser:forward', 1, (_, id) => browserViews.forward(sessionId(id)))
+  handle('browser:reload', 1, (_, id) => browserViews.reload(sessionId(id)))
+  handle('browser:stop', 1, (_, id) => browserViews.stop(sessionId(id)))
+  handle('browser:open-external', 1, (_, id) => browserViews.openExternal(sessionId(id)))
+  handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
+  handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
+  handle('browser:clear-data', 0, () => browserViews.clearData())
+
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))
 
@@ -383,6 +459,18 @@ export function registerIpcHandlers({
     const valid = unsavedFiles(files)
     if (valid) quit.setUnsaved(event.sender, valid)
     else log.warn('Rejected "app:set-unsaved" with malformed files')
+  })
+
+  on('browser:sessions', (_event, ids) => {
+    if (
+      !Array.isArray(ids) ||
+      ids.length > 100_000 ||
+      !ids.every((id) => typeof id === 'string' && id.length <= SESSION_ID_MAX_CHARS)
+    ) {
+      log.warn('Rejected "browser:sessions" with malformed ids')
+      return
+    }
+    browserViews.setSessions(ids as string[])
   })
 
   on('perf:interactive', () => {

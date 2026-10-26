@@ -1,0 +1,28 @@
+{
+  "address": {
+    "label": "地址",
+    "placeholder": "输入网址",
+    "invalid": "请输入有效的网址"
+  },
+  "empty": {
+    "title": "尚未打开页面",
+    "noSession": "没有正在显示的会话",
+    "noSessionHint": "打开一个会话后即可使用浏览器。"
+  },
+  "loading": "正在加载",
+  "actions": {
+    "back": "后退",
+    "forward": "前进",
+    "reload": "重新加载",
+    "stop": "停止",
+    "tryAgain": "重试",
+    "openExternal": "在浏览器中打开",
+    "maximize": "最大化",
+    "restore": "还原"
+  },
+  "notice": {
+    "downloadBlocked": "OverBench 的浏览器会拦截下载",
+    "evicted": "为节省内存，此页面已关闭",
+    "loadFailed": "此页面未能加载：{{error}}"
+  }
+}
