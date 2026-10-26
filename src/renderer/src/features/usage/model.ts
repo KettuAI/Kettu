@@ -707,8 +707,11 @@ export function presets(today: number, firstDay: number, first: number | null): 
   ]
 }
 
-/** Why typed dates make no range: not a date, after today, or a start after the end. */
-export type DateError = 'format' | 'future' | 'order'
+/**
+ * Why typed dates make no range: not a date, after today, before the calendar's first day, or a
+ * start after the end.
+ */
+export type DateError = 'format' | 'future' | 'early' | 'order'
 
 /** A range being chosen: the start, then the end once a second day is picked. */
 export interface RangeDraft {
@@ -720,12 +723,14 @@ const TYPED_DAY = /^(\d{4})-(\d{2})-(\d{2})$/
 
 /**
  * A date typed as YYYY-MM-DD as a local day, why it is none, or null while it may still be
- * incomplete: a field validates once it holds ten characters or is left.
+ * incomplete: a field validates once it holds ten characters or is left. `earliest` is the first
+ * day the calendar offers.
  */
 export function typedDay(
   text: string,
   today: number,
   complete: boolean,
+  earliest: number,
 ): number | Exclude<DateError, 'order'> | null {
   const value = text.trim()
   const match = TYPED_DAY.exec(value)
@@ -735,7 +740,9 @@ export function typedDay(
   if (day.getFullYear() !== year || day.getMonth() !== month || day.getDate() !== date) {
     return 'format'
   }
-  return day.getTime() > today ? 'future' : day.getTime()
+  const time = day.getTime()
+  if (time > today) return 'future'
+  return time < earliest ? 'early' : time
 }
 
 /**
@@ -747,6 +754,7 @@ export function typedRange(
   typed: { from: string | null; to: string | null },
   complete: { from: boolean; to: boolean },
   today: number,
+  earliest: number,
 ): { range: RangeDraft | null; error: DateError | null } {
   let error: DateError | null = null
   let pending = false
@@ -754,7 +762,7 @@ export function typedRange(
     const text = typed[which]
     if (text === null) return draft[which]
     if (text.trim() === '') return null
-    const day = typedDay(text, today, complete[which])
+    const day = typedDay(text, today, complete[which], earliest)
     if (typeof day === 'number') return day
     if (day === null) pending = true
     else error ??= day

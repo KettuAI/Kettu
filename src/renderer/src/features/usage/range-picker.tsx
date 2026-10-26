@@ -12,6 +12,7 @@ import {
   addDays,
   dayOf,
   daysBetween,
+  monthStartOf,
   presets,
   typedDay,
   typedRange,
@@ -72,6 +73,8 @@ export function RangePicker({
   const startMonth = new Date(
     Math.min(first === null ? addDays(today, -365) : dayOf(first), lastMonth),
   )
+  // The first day a click can pick, which a typed day keeps to.
+  const earliest = monthStartOf(startMonth.getTime())
   const locale = currentLocale() === 'zh-CN' ? zhCN : enUS
   const presetList = useMemo(() => presets(today, firstDay, first), [today, firstDay, first])
 
@@ -116,23 +119,23 @@ export function RangePicker({
   }
 
   // What is typed stays as typed; the draft follows once the fields make a range.
-  const fields = typedRange(draft, typed, left, today)
+  const fields = typedRange(draft, typed, left, today, earliest)
   const ready = fields.range?.from != null
   const type = (which: End, text: string) => {
     const nextTyped = { ...typed, [which]: text }
     const nextLeft = { ...left, [which]: false }
     setTyped(nextTyped)
     setLeft(nextLeft)
-    const next = typedRange(draft, nextTyped, nextLeft, today).range
+    const next = typedRange(draft, nextTyped, nextLeft, today, earliest).range
     if (next === null) return
     setDraft(next)
-    const day = typedDay(text, today, false)
+    const day = typedDay(text, today, false, earliest)
     if (typeof day === 'number') show(day, which === 'to' ? 'right' : 'left')
   }
   const wrong = (which: End) => {
     const text = typed[which]
     if (fields.error === 'order') return text !== null && text.trim() !== ''
-    return text !== null && typeof typedDay(text, today, left[which]) === 'string'
+    return text !== null && typeof typedDay(text, today, left[which], earliest) === 'string'
   }
 
   return (
@@ -218,7 +221,7 @@ export function RangePicker({
             )}
           >
             {fields.error
-              ? t(`picker.errors.${fields.error}`)
+              ? t(`picker.errors.${fields.error}`, { day: iso(earliest) })
               : count !== null
                 ? t('picker.days', { count })
                 : t('picker.pickStart')}
