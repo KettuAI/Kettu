@@ -81,6 +81,11 @@ export function readDraftAttachments(sessionId: string): SavedAttachment[] {
   return read(sessionId).attachments
 }
 
+/** Whether a draft holds what Send takes: text other than white space, or an attachment. */
+export function hasMessage(text: string, attachments: readonly unknown[]): boolean {
+  return text.trim().length > 0 || attachments.length > 0
+}
+
 function write(sessionId: string, draft: Draft): void {
   memory.set(sessionId, draft)
   const timer = timers.get(sessionId)

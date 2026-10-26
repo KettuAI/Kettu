@@ -5,6 +5,7 @@ import {
   draftedSessions,
   draftIds,
   flushDraft,
+  hasMessage,
   NEW_SESSION_DRAFT,
   parseDraft,
   readDraft,
@@ -193,5 +194,28 @@ describe('draftedSessions', () => {
     storage.setItem('draft:saved', 'Fix the build')
     writeDraft('saved', '')
     expect(draftedSessions()).toEqual([])
+  })
+})
+
+describe('hasMessage', () => {
+  it('takes text', () => {
+    expect(hasMessage('Fix the build', [])).toBe(true)
+  })
+
+  it('leaves out spaces and line breaks alone', () => {
+    expect(hasMessage('  \n \n  ', [])).toBe(false)
+  })
+
+  it('takes an attachment alone', () => {
+    expect(hasMessage('', [saved])).toBe(true)
+    expect(hasMessage(' \n', [saved])).toBe(true)
+  })
+
+  it('takes text with an attachment', () => {
+    expect(hasMessage('What is this?', [saved])).toBe(true)
+  })
+
+  it('has nothing to send with neither', () => {
+    expect(hasMessage('', [])).toBe(false)
   })
 })
