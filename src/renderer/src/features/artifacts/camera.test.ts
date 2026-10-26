@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  atMaxZoom,
+  atMinZoom,
   between,
   fitBox,
   labelRoom,
@@ -59,6 +61,15 @@ describe('zooming', () => {
     expect(stepZoom(1, 1)).toBe(2)
     expect(stepZoom(4, 1)).toBe(4)
     expect(stepZoom(0.05, -1)).toBe(0.05)
+  })
+
+  it('knows the limits a glide ends on, a hair off them', () => {
+    const out = between({ x: 0, y: 0, z: 0.5 }, { x: 0, y: 0, z: MIN_ZOOM }, 1, VIEW).z
+    const into = between({ x: 0, y: 0, z: 0.5 }, { x: 0, y: 0, z: MAX_ZOOM }, 1, VIEW).z
+    expect(atMinZoom(out)).toBe(true)
+    expect(atMaxZoom(into)).toBe(true)
+    expect(atMinZoom(0.1)).toBe(false)
+    expect(atMaxZoom(2)).toBe(false)
   })
 
   it('moves between cameras with the zoom on a log scale', () => {

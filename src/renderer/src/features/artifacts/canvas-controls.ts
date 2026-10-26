@@ -3,6 +3,8 @@ import { useSyncExternalStore } from 'react'
 /** What the controls outside the canvas show: the top bar's, or the pane header's. */
 export interface CanvasState {
   zoom: number
+  /** Whether the camera shows every page as Zoom to fit left it, not zoomed or moved since. */
+  fitted: boolean
   selected: number
   focused: number | null
   count: number
@@ -16,7 +18,7 @@ export interface CanvasCommands {
 
 /** The canvas's state and commands for the controls around it; the view attaches its commands. */
 export class CanvasControls {
-  private state: CanvasState = { zoom: 1, selected: 0, focused: null, count: 0 }
+  private state: CanvasState = { zoom: 1, fitted: false, selected: 0, focused: null, count: 0 }
   private readonly listeners = new Set<() => void>()
   private attached: CanvasCommands | null = null
 
@@ -43,6 +45,7 @@ export class CanvasControls {
     const next = { ...this.state, ...patch }
     if (
       next.zoom === this.state.zoom &&
+      next.fitted === this.state.fitted &&
       next.selected === this.state.selected &&
       next.focused === this.state.focused &&
       next.count === this.state.count

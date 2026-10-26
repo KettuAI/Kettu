@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { NO_SESSION } from '@shared/artifacts'
 import {
+  DropdownMenuCheckboxItem,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -40,11 +41,14 @@ export function ArtifactMenuItems({
   target,
   onOpen,
   onVersionHistory,
+  historyOpen,
   onDeleted,
 }: {
   target: MenuTarget
   onOpen?: () => void
   onVersionHistory: () => void
+  /** Where the history can show beside the artifact, whether it does; Version history checks it. */
+  historyOpen?: boolean
   onDeleted?: () => void
 }) {
   const { t } = useTranslation('artifacts')
@@ -126,10 +130,21 @@ export function ArtifactMenuItems({
           <PencilIcon />
           {t('menu.rename')}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onVersionHistory}>
-          <HistoryIcon />
-          {t('menu.versionHistory')}
-        </DropdownMenuItem>
+        {historyOpen === undefined ? (
+          <DropdownMenuItem onClick={onVersionHistory}>
+            <HistoryIcon />
+            {t('menu.versionHistory')}
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuCheckboxItem
+            checked={historyOpen}
+            onCheckedChange={onVersionHistory}
+            closeOnClick
+          >
+            <HistoryIcon />
+            {t('menu.versionHistory')}
+          </DropdownMenuCheckboxItem>
+        )}
       </DropdownMenuGroup>
       {session && (
         <>
