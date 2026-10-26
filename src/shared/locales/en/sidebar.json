@@ -40,7 +40,9 @@
     "fork": "Fork",
     "openPullRequest": "Open pull request #{{number}}",
     "showIn": "Show in {{name}}",
-    "archive": "Archive"
+    "archive": "Archive",
+    "archived": "Archived “{{title}}”",
+    "undo": "Undo"
   },
   "import": {
     "title": "Import sessions",

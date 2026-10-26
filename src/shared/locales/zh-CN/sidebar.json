@@ -38,7 +38,9 @@
     "fork": "分叉",
     "openPullRequest": "打开 Pull Request #{{number}}",
     "showIn": "在{{name}}中显示",
-    "archive": "归档"
+    "archive": "归档",
+    "archived": "已归档“{{title}}”",
+    "undo": "撤销"
   },
   "import": {
     "title": "导入会话",

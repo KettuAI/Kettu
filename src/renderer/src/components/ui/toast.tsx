@@ -4,9 +4,26 @@ import { useOverlayStore } from '@renderer/stores/overlays'
 
 const manager = Toast.createToastManager()
 
-/** Confirms a finished action at the foot of the window, such as a removal whose row is gone. */
-export function toast(title: string) {
-  manager.add({ title })
+/**
+ * Confirms a finished action at the foot of the window, such as a removal whose row is gone. An
+ * action, such as Undo, keeps the toast up longer and closes it when chosen.
+ */
+export function toast(title: string, action?: { label: string; onClick: () => void }) {
+  if (!action) {
+    manager.add({ title })
+    return
+  }
+  const id: string = manager.add({
+    title,
+    timeout: 6000,
+    actionProps: {
+      children: action.label,
+      onClick: () => {
+        manager.close(id)
+        action.onClick()
+      },
+    },
+  })
 }
 
 /** The toasts' layer, mounted once at the app's root. */
@@ -37,9 +54,10 @@ function ToastList() {
       toast={item}
       swipeDirection={[]}
       data-overlay-layer=""
-      className="col-start-1 row-start-1 flex min-h-9 min-w-0 items-center justify-self-center rounded-xl bg-foreground px-3.5 py-1 text-command text-background transition-[opacity,translate] duration-(--duration-base) ease-out-quart data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-starting-style:translate-y-1"
+      className="col-start-1 row-start-1 flex min-h-9 min-w-0 items-center gap-1.5 justify-self-center rounded-xl bg-foreground px-3.5 py-1 text-command text-background has-[button]:pr-1 transition-[opacity,translate] duration-(--duration-base) ease-out-quart data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-starting-style:translate-y-1"
     >
-      <Toast.Title className="min-w-0 truncate" />
+      <Toast.Title className="min-w-0 flex-1 truncate" />
+      <Toast.Action className="h-6 shrink-0 rounded-md px-2 text-xs font-semibold text-background outline-none hover:bg-background/20 focus-ring" />
     </Toast.Root>
   ))
 }
