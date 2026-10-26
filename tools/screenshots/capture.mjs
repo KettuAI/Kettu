@@ -279,27 +279,26 @@ async function run() {
     'the fixture page',
   )
   await sleep(1200)
-  const maximize = await cdp.evaluate(`(() => {
-    const r = document.querySelector('[data-browser-panel] button[aria-label="Maximize"]').getBoundingClientRect()
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-  })()`)
-  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...maximize })
+  // The reply's link asks first, in a dialog centred over the pane. A tooltip in the pane's header
+  // would not do: below a title bar it opens above its button, clear of the page.
+  await click(byText('p button', 'Node.js timers guide'), 'the link in the reply')
   await waitFor(
     `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`,
     'the still of the page',
   )
   await sleep(500)
   await shoot('browser-overlay')
-  // The same still without the tooltip that asked for it.
-  await cdp.evaluate(
-    `document.querySelectorAll('[data-overlay-layer]').forEach((el) => (el.style.visibility = 'hidden'))`,
-  )
+  // The same still without the dialog that asked for it.
+  const dialogLayers = `document.querySelectorAll('[data-overlay-layer], [data-slot=alert-dialog-overlay]')`
+  await cdp.evaluate(`${dialogLayers}.forEach((el) => (el.style.visibility = 'hidden'))`)
   await sleep(200)
   await shoot('browser-page')
-  await cdp.evaluate(
-    `document.querySelectorAll('[data-overlay-layer]').forEach((el) => (el.style.visibility = ''))`,
+  await cdp.evaluate(`${dialogLayers}.forEach((el) => (el.style.visibility = ''))`)
+  await press('Escape', 27)
+  await waitFor(
+    `!document.querySelector('[data-browser-panel] img[aria-hidden]')`,
+    'the page in place of its still',
   )
-  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
   await sleep(400)
   await click(
     `return [...document.querySelectorAll('[data-browser-panel] button')].find((b) => b.getAttribute('aria-label') === 'Close')`,
