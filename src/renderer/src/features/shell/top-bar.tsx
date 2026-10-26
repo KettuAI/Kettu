@@ -3,10 +3,10 @@ import { PanelLeftIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
-import { useUpdatesStore } from '@renderer/stores/updates'
 import { useBesideSidePanel } from './side-panel'
 
 /**
@@ -42,13 +42,9 @@ export function NoDrag({ children, className }: { children: ReactNode; className
 export function SidebarToggle({ className }: { className?: string }) {
   const { t } = useTranslation('shell')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  const update = useUpdatesStore((s) => s.status)
-  const updateReady =
-    collapsed &&
-    update &&
-    update.dismissed !== versionOf(update.state) &&
-    (update.state.kind === 'ready' ||
-      (update.state.kind === 'available' && update.state.mode === 'link'))
+  const { summary } = useNotices()
+  // Collapsed, the sidebar's notices pill is out of sight, so the toggle marks and names them.
+  const notices = collapsed ? summary : null
   const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
   return (
     <Tooltip>
@@ -64,29 +60,25 @@ export function SidebarToggle({ className }: { className?: string }) {
         }
       >
         <PanelLeftIcon />
-        {updateReady && (
+        {notices && (
           <span
             aria-hidden
             className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary ring-2 ring-background"
           />
         )}
       </TooltipTrigger>
-      <TooltipContent className={updateReady ? 'flex-col items-start gap-0.5' : undefined}>
+      <TooltipContent className={notices ? 'flex-col items-start gap-0.5' : undefined}>
         <span>
           {label} <span className="opacity-60">{formatShortcut('Mod+B')}</span>
         </span>
-        {updateReady && update && (
-          <span className="opacity-60">
-            {t('topBar.updateReady', { version: versionOf(update.state) ?? '' })}
+        {notices?.labels.map((notice) => (
+          <span key={notice} className="opacity-60">
+            {notice}
           </span>
-        )}
+        ))}
       </TooltipContent>
     </Tooltip>
   )
-}
-
-function versionOf(state: { kind: string; version?: string }): string | null {
-  return 'version' in state ? (state.version ?? null) : null
 }
 
 /** A hairline between groups of top bar controls. */

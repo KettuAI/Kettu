@@ -16,7 +16,6 @@
   },
   "topBar": {
     "showSidebar": "Show sidebar",
-    "hideSidebar": "Hide sidebar",
-    "updateReady": "OverBench {{version}} is ready to install"
+    "hideSidebar": "Hide sidebar"
   }
 }

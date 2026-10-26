@@ -73,8 +73,20 @@
   },
   "footer": {
     "settings": "设置",
+    "archived": "已归档会话",
+    "shortcuts": "键盘快捷键",
+    "help": "帮助",
+    "documentation": "文档",
+    "reportProblem": "报告问题…",
+    "whatsNew": "更新内容",
     "signInOne": "{{name}} 需要登录",
-    "signInMany": "{{count}} 个 Agent 需要登录"
+    "signInMany": "{{count}} 个 Agent 需要登录",
+    "signInDetail": "打开「设置 › Agent」进行登录",
+    "notices": "通知",
+    "noticesCount_other": "{{count}} 条通知",
+    "noticeWords_other": "条通知",
+    "noticesName": "通知：{{list}}",
+    "listSeparator": "，"
   },
   "countdown": {
     "minutes": "{{count}} 分钟",
