@@ -52,7 +52,7 @@ export function ThreadSkeleton({ className }: { className?: string }) {
       )}
       aria-hidden
     >
-      <Skeleton className="ml-auto h-[42px] w-2/5 rounded-[14px]" />
+      <Skeleton className="ml-auto h-[42px] w-2/5 rounded-2xl" />
       {/* Bars of 10 px on the prose's 26 px lines, and a folded run's shorter line between. */}
       <div className="flex flex-col gap-4 pt-12">
         <Skeleton className="h-2.5 w-11/12" />
@@ -171,7 +171,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
           {rest.length > 0 && (
             <Message align="end">
               <Bubble variant="muted" className="max-w-[85%]">
-                <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
+                <BubbleContent className="rounded-2xl px-3.5 py-2.5 text-prose leading-normal">
                   <UserContentView content={rest} />
                 </BubbleContent>
               </Bubble>

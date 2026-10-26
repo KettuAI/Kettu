@@ -55,7 +55,7 @@ export function AttachmentTile({
           <div
             {...props}
             className={cn(
-              'group/tile relative size-28 shrink-0 cursor-default rounded-2xl outline-none select-none focus-ring',
+              'group/tile relative size-28 shrink-0 cursor-default rounded-code outline-none select-none focus-ring',
               className,
             )}
           />

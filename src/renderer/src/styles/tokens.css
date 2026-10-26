@@ -71,17 +71,19 @@
   --checker: rgb(28 27 24 / 5%);
 
   --elevation-queue: 0 1px 6px rgb(20 20 19 / 5%);
-  --elevation-popover: 0 8px 24px rgb(20 20 19 / 10%);
+  --elevation-popover: 0 12px 32px -10px rgb(28 27 24 / 20%), 0 2px 6px -2px rgb(28 27 24 / 8%);
   /* Quiet depth: the contact shadows under what you can press (control) and under cards. */
-  --elevation-control: 0 1px 2px rgb(20 20 19 / 6%);
-  --elevation-control-hover: 0 2px 4px rgb(20 20 19 / 7%);
-  --elevation-card: 0 1px 2px rgb(20 20 19 / 4%);
+  --elevation-control: 0 1px 0 rgb(28 27 24 / 6%);
+  --elevation-control-hover: 0 1px 0 rgb(28 27 24 / 8%), 0 2px 5px -1px rgb(28 27 24 / 7%);
+  --elevation-card: 0 1px 2px rgb(28 27 24 / 5%);
   /* The composer and a hovered card; used with the card tier. */
-  --elevation-float: 0 12px 32px -8px rgb(20 20 19 / 12%);
+  --elevation-float: 0 14px 34px -18px rgb(28 27 24 / 24%);
   /* A pressed toggle button sunk into its bar. */
-  --elevation-sunk: inset 0 1px 2px rgb(0 0 0 / 6%);
-  --elevation-thumb: 0 1px 2px rgb(0 0 0 / 22%), 0 0 0 0.5px rgb(0 0 0 / 8%);
-  --elevation-segment: 0 1px 2px rgb(20 20 19 / 6%);
+  --elevation-sunk: inset 0 1px 2px rgb(28 27 24 / 7%);
+  --elevation-thumb: 0 1px 2px rgb(28 27 24 / 22%), 0 0 0 0.5px rgb(28 27 24 / 8%);
+  --elevation-segment: 0 1px 0 rgb(28 27 24 / 6%);
+  --elevation-dialog: 0 28px 70px -20px rgb(28 27 24 / 30%);
+  --elevation-primary: 0 1px 2px rgb(28 27 24 / 24%);
   /* The top edge of a raised surface catching the light; dark theme only. */
   --highlight: 0 0 #0000;
 
@@ -190,15 +192,17 @@
     --checker: rgb(244 243 238 / 7%);
 
     --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
-    --elevation-popover: 0 8px 24px rgb(0 0 0 / 40%);
-    --elevation-control: 0 1px 2px rgb(0 0 0 / 40%);
-    --elevation-control-hover: 0 2px 4px rgb(0 0 0 / 40%);
-    --elevation-card: 0 1px 2px rgb(0 0 0 / 40%);
-    --elevation-float: 0 12px 32px -8px rgb(0 0 0 / 60%);
-    --elevation-sunk: inset 0 1px 2px rgb(0 0 0 / 40%);
+    --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 60%), 0 2px 6px -2px rgb(0 0 0 / 30%);
+    --elevation-control: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-control-hover: 0 2px 4px rgb(0 0 0 / 36%);
+    --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-float: 0 14px 34px -16px rgb(0 0 0 / 70%);
+    --elevation-sunk: inset 0 1px 2px rgb(0 0 0 / 30%);
     --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
-    --elevation-segment: inset 0 1px 0 rgb(255 255 255 / 6%), 0 1px 2px rgb(0 0 0 / 40%);
-    --highlight: inset 0 1px 0 rgb(255 255 255 / 5%);
+    --elevation-segment: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 65%);
+    --elevation-primary: 0 1px 2px rgb(0 0 0 / 40%);
+    --highlight: inset 0 1px 0 rgb(255 255 255 / 4%);
 
     --primary-from: #f4f3ee;
     --primary-to: #e3e1d9;
@@ -296,15 +300,17 @@
   --checker: rgb(244 243 238 / 7%);
 
   --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
-  --elevation-popover: 0 8px 24px rgb(0 0 0 / 40%);
-  --elevation-control: 0 1px 2px rgb(0 0 0 / 40%);
-  --elevation-control-hover: 0 2px 4px rgb(0 0 0 / 40%);
-  --elevation-card: 0 1px 2px rgb(0 0 0 / 40%);
-  --elevation-float: 0 12px 32px -8px rgb(0 0 0 / 60%);
-  --elevation-sunk: inset 0 1px 2px rgb(0 0 0 / 40%);
+  --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 60%), 0 2px 6px -2px rgb(0 0 0 / 30%);
+  --elevation-control: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-control-hover: 0 2px 4px rgb(0 0 0 / 36%);
+  --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-float: 0 14px 34px -16px rgb(0 0 0 / 70%);
+  --elevation-sunk: inset 0 1px 2px rgb(0 0 0 / 30%);
   --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
-  --elevation-segment: inset 0 1px 0 rgb(255 255 255 / 6%), 0 1px 2px rgb(0 0 0 / 40%);
-  --highlight: inset 0 1px 0 rgb(255 255 255 / 5%);
+  --elevation-segment: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 65%);
+  --elevation-primary: 0 1px 2px rgb(0 0 0 / 40%);
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 4%);
 
   --primary-from: #f4f3ee;
   --primary-to: #e3e1d9;
@@ -402,6 +408,7 @@
   --attention-halo: color-mix(in srgb, var(--attention) 20%, transparent);
   --destructive-tint: var(--danger-tint);
   --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
+  --destructive-foreground: var(--bg-surface);
   --diff-add: color-mix(in srgb, var(--success) 9%, transparent);
   --diff-del: color-mix(in srgb, var(--danger) 8%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -442,13 +449,17 @@
     inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-control-hover),
     var(--highlight);
   --sunk-ring: inset 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-sunk);
+  /* A field draws its line as a border, which an invalid field recolors; this is the depth. */
+  --field-shadow: var(--elevation-control), var(--highlight);
   --primary-shadow:
-    inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 2px 0 var(--primary-highlight),
-    var(--elevation-control);
+    inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 1px 0 var(--primary-highlight),
+    var(--elevation-primary);
+  /* The solid danger button has no ring: a faint top highlight and the control tier's contact. */
+  --destructive-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), var(--elevation-control);
   --menu-ring:
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
   --dialog-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
+    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-dialog), var(--highlight);
   --float-shadow: var(--elevation-card), var(--elevation-float);
   --composer-ring:
     inset 0 0 0 var(--hairline) var(--border-default), var(--float-shadow), var(--highlight);
@@ -460,7 +471,8 @@
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-queue), var(--highlight);
   --attention-ring-shadow:
     inset 0 0 0 1px var(--attention-ring), 0 0 0 3px var(--attention-halo), var(--highlight);
-  --segment-ring: 0 0 0 var(--hairline) var(--border-default), var(--elevation-segment);
+  --segment-ring:
+    0 0 0 var(--hairline) var(--border-default), var(--elevation-segment), var(--highlight);
   --thumb-shadow: var(--elevation-thumb);
   --elevation-sm: var(--elevation-card);
   --elevation-md: var(--elevation-popover);

@@ -82,7 +82,7 @@ export function PageFrame({
       {blocked && blockedHost && (
         <div
           role="status"
-          className="absolute inset-x-3 top-2.5 flex items-center gap-2.5 rounded-2xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"
+          className="absolute inset-x-3 top-2.5 flex items-center gap-2.5 rounded-xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"
         >
           <span className="flex min-w-0 flex-1 whitespace-pre text-secondary">
             <Trans

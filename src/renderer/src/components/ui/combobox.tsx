@@ -45,7 +45,7 @@ function ComboboxTrigger({ className, children, ...props }: ComboboxPrimitive.Tr
       {...props}
     >
       {children}
-      <ChevronDownIcon data-icon="inline-end" className="pointer-events-none size-3 opacity-70" />
+      <ChevronDownIcon data-icon="inline-end" className="pointer-events-none size-3 text-icon" />
     </ComboboxPrimitive.Trigger>
   )
 }
@@ -126,7 +126,7 @@ function ComboboxContent({
           data-overlay-layer=""
           data-chips={!!anchor}
           className={cn(
-            'group/combobox-content relative max-h-(--available-height) max-w-(--available-width) min-w-40 origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-menu duration-100 outline-none data-[chips=true]:min-w-(--anchor-width) *:data-[slot=input-group]:h-9 *:data-[slot=input-group]:rounded-none *:data-[slot=input-group]:border-0 *:data-[slot=input-group]:bg-transparent *:data-[slot=input-group]:px-1.5 *:data-[slot=input-group]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)] *:data-[slot=input-group]:has-[[data-slot=input-group-control]:focus-visible]:outline-none *:data-[slot=input-group]:**:data-[slot=input-group-control]:px-2 *:data-[slot=input-group]:**:data-[slot=input-group-control]:text-ui data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+            'group/combobox-content relative max-h-(--available-height) max-w-(--available-width) min-w-40 origin-(--transform-origin) overflow-hidden rounded-xl bg-popover text-popover-foreground shadow-menu duration-100 outline-none data-[chips=true]:min-w-(--anchor-width) *:data-[slot=input-group]:h-9 *:data-[slot=input-group]:rounded-none *:data-[slot=input-group]:border-0 *:data-[slot=input-group]:bg-transparent *:data-[slot=input-group]:px-1.5 *:data-[slot=input-group]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)] *:data-[slot=input-group]:has-[[data-slot=input-group-control]:focus-visible]:outline-none *:data-[slot=input-group]:**:data-[slot=input-group-control]:px-2 *:data-[slot=input-group]:**:data-[slot=input-group-control]:text-ui data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
             className,
           )}
           {...props}
@@ -154,7 +154,7 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "relative flex min-h-row w-full cursor-default items-center gap-2 rounded-lg py-1 pr-8 pl-2 text-ui outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex min-h-row w-full cursor-default items-center gap-2 rounded-md py-1 pr-8 pl-2 text-ui outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -179,7 +179,10 @@ function ComboboxLabel({ className, ...props }: ComboboxPrimitive.GroupLabel.Pro
   return (
     <ComboboxPrimitive.GroupLabel
       data-slot="combobox-label"
-      className={cn('px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground', className)}
+      className={cn(
+        'flex h-7 items-center px-2 text-xs font-medium text-muted-foreground',
+        className,
+      )}
       {...props}
     />
   )

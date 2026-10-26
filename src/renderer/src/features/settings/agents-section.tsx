@@ -1069,7 +1069,7 @@ function InstallNotice({ status }: { status: AgentStatus }) {
         )}
         {method && (
           <code
-            className="block truncate rounded-lg bg-card px-3 py-2 font-mono text-code text-primary"
+            className="block truncate rounded-lg bg-code-block px-3 py-2 font-mono text-code text-primary"
             data-selectable=""
             title={method.command}
           >
@@ -1110,7 +1110,7 @@ function Log({ lines, error }: { lines: string[]; error?: boolean }) {
     <pre
       data-selectable=""
       className={cn(
-        'max-h-40 overflow-auto rounded-lg bg-card px-3 py-2 font-mono text-meta whitespace-pre-wrap',
+        'max-h-40 overflow-auto rounded-lg bg-code-block px-3 py-2 font-mono text-meta whitespace-pre-wrap',
         error ? 'text-danger' : 'text-tertiary',
       )}
     >

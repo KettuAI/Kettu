@@ -115,8 +115,7 @@ export default function FilesPanel({
             label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}
             onClick={() => (listHidden ? list.current?.expand() : list.current?.collapse())}
           >
-            {/* At the top bar's pane toggle size, as the Folder toggle beside it. */}
-            <FolderTreeIcon className="size-[15px]" />
+            <FolderTreeIcon className="size-4" />
           </PanelButton>
         )}
         {listShown && (

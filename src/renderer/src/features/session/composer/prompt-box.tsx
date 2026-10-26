@@ -325,7 +325,7 @@ export function PromptBox({
               className={cn(
                 'flex max-h-[min(var(--available-height),320px)] origin-(--transform-origin) flex-col overflow-hidden bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
                 showing === 'slash'
-                  ? 'w-max max-w-80 min-w-40 rounded-2xl'
+                  ? 'w-max max-w-80 min-w-40 rounded-xl'
                   : 'w-[min(var(--anchor-width),420px)] rounded-xl',
               )}
             >

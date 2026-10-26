@@ -443,7 +443,7 @@ function CacheTime({ cache, phase }: { cache: KnownExpiry; phase: RingCache }) {
     >
       {phase === 'ending' ? (
         <>
-          <CacheHourglass expiresAt={cache.expiresAt} ttl={cache.ttl} className="size-[13px]" />
+          <CacheHourglass expiresAt={cache.expiresAt} ttl={cache.ttl} className="size-3" />
           {cache.estimate ? t('usage.cache.about', { time }) : time}
         </>
       ) : (

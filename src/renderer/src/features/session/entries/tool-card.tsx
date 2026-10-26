@@ -13,7 +13,7 @@ import {
   RepeatIcon,
   SearchIcon,
   SquareTerminalIcon,
-  Trash2Icon,
+  TrashIcon,
   WrenchIcon,
   XIcon,
   type LucideIcon,
@@ -55,7 +55,7 @@ import { useDiffStats } from './use-diff-stats'
 const KIND_ICON: Record<ToolKind, LucideIcon> = {
   read: FileTextIcon,
   edit: FilePenIcon,
-  delete: Trash2Icon,
+  delete: TrashIcon,
   move: ArrowRightLeftIcon,
   search: SearchIcon,
   execute: SquareTerminalIcon,
@@ -425,7 +425,7 @@ function ContentBlock({
             'flex flex-col',
             framed
               ? 'mx-(--hairline) last:mb-(--hairline)'
-              : 'overflow-hidden rounded-lg border border-subtle',
+              : 'overflow-hidden rounded-code border border-subtle',
           )}
         >
           <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">

@@ -229,7 +229,7 @@ export function StatusBar({
   return (
     <div
       role="status"
-      className="absolute inset-x-3 top-2.5 z-10 flex min-h-11 items-center gap-2.5 rounded-2xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"
+      className="absolute inset-x-3 top-2.5 z-10 flex min-h-11 items-center gap-2.5 rounded-xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"
     >
       <span className="min-w-0 flex-1 truncate text-secondary">
         <span className="font-medium text-foreground">{lead}</span>

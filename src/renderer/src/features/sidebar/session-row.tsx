@@ -160,7 +160,7 @@ export const SessionRow = memo(function SessionRow({
           aria-label={t('row.subSessions', { count: children.length })}
           className="inline-flex items-center gap-0.5 text-meta text-tertiary tabular group-data-active/menu-button:text-secondary"
         >
-          <CornerDownRightIcon className="size-[11px]!" />
+          <CornerDownRightIcon className="size-3!" />
           {children.length}
         </span>
       )}

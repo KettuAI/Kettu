@@ -209,7 +209,7 @@ export function NavRow({
       <span className="flex-1">{label}</span>
       {extra ??
         (shortcut && (
-          <Kbd className="h-auto bg-transparent p-0 text-meta font-normal text-tertiary group-data-active/menu-button:text-secondary">
+          <Kbd className="h-auto bg-transparent p-0 text-meta font-normal text-tertiary shadow-none group-data-active/menu-button:text-secondary">
             {formatShortcut(shortcut)}
           </Kbd>
         ))}

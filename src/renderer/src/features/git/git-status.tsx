@@ -147,7 +147,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
         <>
           {!upstream && !head.detached && !unborn && (
             <span className="ml-1 inline-flex shrink-0 items-center gap-1">
-              <CloudUploadIcon className="size-[13px]" />
+              <CloudUploadIcon className="size-3" />
               <span className="@max-[720px]/top-bar:sr-only">{t('status.notPublished')}</span>
             </span>
           )}
@@ -182,7 +182,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
       )}
       {changes.conflicted > 0 ? (
         <span className="ml-1 inline-flex items-center gap-[3px] font-medium text-danger">
-          <TriangleAlertIcon className="size-[13px]" />
+          <TriangleAlertIcon className="size-3" />
           {changes.conflicted}
         </span>
       ) : (
@@ -191,7 +191,7 @@ function BranchSummary({ status }: { status: GitStatus }) {
             className="ml-1 inline-flex animate-in items-center gap-[3px] animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
             key={`c${changed}`}
           >
-            <FileDiffIcon className="size-[13px]" />
+            <FileDiffIcon className="size-3" />
             {changed}
           </span>
         )

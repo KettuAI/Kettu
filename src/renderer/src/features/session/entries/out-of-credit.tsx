@@ -46,7 +46,10 @@ export function OutOfCreditEnd({
       </AlertTitle>
       {description && (
         <CollapsibleContent className={cn(PANEL, 'col-start-2')}>
-          <div className="relative mt-1.5 rounded-md bg-card py-2 pr-9 pl-2.5" data-selectable="">
+          <div
+            className="relative mt-1.5 rounded-md bg-code-block py-2 pr-9 pl-2.5"
+            data-selectable=""
+          >
             <p className="font-mono text-xs break-all whitespace-pre-wrap text-secondary">
               {splitLinks(description).map((part, i) =>
                 part.type === 'link' ? <ConfirmedLink key={i} url={part.url} /> : part.text,

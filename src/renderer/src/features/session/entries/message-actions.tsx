@@ -48,7 +48,7 @@ function ActionButton({
             aria-label={label}
             disabled={disabled}
             onClick={onClick}
-            className="shrink-0 rounded-[6px] [&_svg]:size-3.5"
+            className="shrink-0 [&_svg]:size-3.5"
           />
         }
       >

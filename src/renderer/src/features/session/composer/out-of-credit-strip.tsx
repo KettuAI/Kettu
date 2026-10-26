@@ -43,7 +43,7 @@ export function OutOfCreditStrip({
   return (
     <motion.div
       exit={fadeExit}
-      className="flex w-full animate-in flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-t-4xl border-b-(length:--hairline) border-default bg-subtle py-2 pr-2.5 pl-3.5 text-small fade-in animation-duration-(--duration-fast)"
+      className="flex w-full animate-in flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-t-3xl border-b-(length:--hairline) border-default bg-subtle py-2 pr-2.5 pl-3.5 text-small fade-in animation-duration-(--duration-fast)"
     >
       <WalletIcon className="size-4 shrink-0 text-warning" />
       <div className="min-w-0 flex-[1_1_12rem] text-primary">

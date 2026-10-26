@@ -1,6 +1,6 @@
 // The actions a routine offers, in its row's context menu and in its page's More menu.
 
-import { CopyIcon, PlayIcon, Trash2Icon } from 'lucide-react'
+import { CopyIcon, PlayIcon, TrashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { RoutineView } from '@shared/routines'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@renderer/components/ui/dropdown-menu'
@@ -42,7 +42,7 @@ export function RoutineMenuItems({
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem variant="destructive" onClick={onDelete}>
-        <Trash2Icon />
+        <TrashIcon />
         {t('routine.delete')}
       </DropdownMenuItem>
     </>

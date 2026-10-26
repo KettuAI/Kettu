@@ -233,7 +233,7 @@ export function ClearRecord() {
     <>
       <ControlError error={error} />
       <Button
-        variant="destructive"
+        variant="destructive-outline"
         size="compact"
         disabled={empty || busy}
         onClick={() => setOpen(true)}

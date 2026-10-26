@@ -1048,7 +1048,7 @@ export function RemoveAll() {
     <>
       <ControlError error={error} />
       <Button
-        variant="destructive"
+        variant="destructive-outline"
         size="compact"
         disabled={count === 0 || busy}
         onClick={() => setOpen(true)}

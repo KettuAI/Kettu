@@ -221,14 +221,14 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
                   setName(routine.name)
                 }
               }}
-              className="min-w-0 rounded-[6px] bg-transparent font-heading text-title font-semibold outline-none focus-visible:outline-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-offset-2"
+              className="min-w-0 rounded-md bg-transparent font-heading text-title font-semibold outline-none focus-visible:outline-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-offset-2"
             />
           ) : (
             <button
               type="button"
               onClick={() => setRenaming(true)}
               title={t('routine.rename')}
-              className="min-w-0 truncate rounded-[6px] text-left font-heading text-title font-semibold outline-none hover:text-primary focus-ring"
+              className="min-w-0 truncate rounded-md text-left font-heading text-title font-semibold outline-none hover:text-primary focus-ring"
             >
               {routine.name}
             </button>
@@ -438,7 +438,7 @@ function NewRoutine() {
             placeholder={t('routine.untitled')}
             aria-label={t('routine.name')}
             onChange={(event) => setName(event.target.value)}
-            className="min-w-0 rounded-[6px] bg-transparent font-heading text-title font-semibold outline-none placeholder:text-tertiary focus-visible:outline-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-offset-2"
+            className="min-w-0 rounded-md bg-transparent font-heading text-title font-semibold outline-none placeholder:text-tertiary focus-visible:outline-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-offset-2"
           />
           <p className="text-small leading-normal text-secondary">{t('routine.newLine')}</p>
         </div>
@@ -679,7 +679,7 @@ function RoutineTile({ agent }: { agent: AgentId | null }) {
   return (
     <span
       aria-hidden
-      className="grid size-8 shrink-0 place-items-center rounded-[8px] bg-tile text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+      className="grid size-8 shrink-0 place-items-center rounded-lg bg-tile text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
     >
       <CalendarClockIcon className="size-4" />
     </span>

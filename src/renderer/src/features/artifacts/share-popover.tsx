@@ -174,7 +174,7 @@ export function ShareButton({
                 {t('share.cancel')}
               </Button>
               <Button
-                variant="destructive"
+                variant="destructive-outline"
                 size="compact"
                 disabled={busy}
                 onClick={() => run(() => unpublishArtifact(id))}

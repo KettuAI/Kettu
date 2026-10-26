@@ -25,7 +25,7 @@ export function CopyButton({
           setTimeout(() => setCopied(false), 1500)
         })
       }}
-      className={cn('shrink-0 rounded-[6px]', className)}
+      className={cn('shrink-0', className)}
     >
       {copied ? (
         <CheckIcon className="size-3.5 animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75" />

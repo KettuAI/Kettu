@@ -4,7 +4,7 @@ import {
   FileDownIcon,
   FolderIcon,
   PlusIcon,
-  Trash2Icon,
+  TrashIcon,
   TriangleAlertIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -260,7 +260,7 @@ function ThemeTile({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onRemove}>
-                <Trash2Icon />
+                <TrashIcon />
                 {t('appearance.theme.remove')}
               </DropdownMenuItem>
             </>

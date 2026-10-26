@@ -125,6 +125,7 @@
   --color-border-soft: var(--border-soft);
   --color-border-strong: var(--border-strong);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-tint: var(--destructive-tint);
   --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-accent-foreground: var(--accent-foreground);
@@ -170,13 +171,13 @@
   --color-heat-3: var(--heat-3);
   --color-heat-4: var(--heat-4);
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-code: calc(var(--radius) * 1.25);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 1.75);
+  --radius-3xl: calc(var(--radius) * 2);
 
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -185,7 +186,9 @@
   --shadow-outline: var(--outline-ring);
   --shadow-outline-hover: var(--outline-hover);
   --shadow-sunk: var(--sunk-ring);
+  --shadow-field: var(--field-shadow);
   --shadow-primary: var(--primary-shadow);
+  --shadow-destructive: var(--destructive-shadow);
   --shadow-float: var(--float-shadow);
   --shadow-menu: var(--menu-ring);
   --shadow-dialog: var(--dialog-ring);
@@ -773,7 +776,7 @@
     margin-block: 1em;
     gap: 0;
     border: 1px solid var(--border-subtle);
-    border-radius: 8px;
+    border-radius: var(--radius-code);
     background: var(--bg-code-block);
     padding: 0;
     overflow: hidden;

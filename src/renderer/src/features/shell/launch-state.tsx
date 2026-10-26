@@ -37,7 +37,7 @@ export function LaunchState() {
     <div className="flex h-full animate-in flex-col items-center justify-center gap-6 pb-10 animation-duration-(--duration-base) fade-in">
       <BrandMark width={72} />
       <div role="status" className="flex items-center gap-2.5 text-ui font-medium text-secondary">
-        <Spinner className="size-[18px]" />
+        <Spinner className="size-4" />
         {t('launch.starting')}
       </div>
     </div>

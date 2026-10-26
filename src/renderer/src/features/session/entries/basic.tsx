@@ -77,7 +77,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
       {rest.length > 0 && (
         <Message align="end">
           <Bubble variant="muted" className="max-w-[85%]">
-            <BubbleContent className="rounded-[14px] px-3.5 py-2.5 text-prose leading-normal">
+            <BubbleContent className="rounded-2xl px-3.5 py-2.5 text-prose leading-normal">
               <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
             </BubbleContent>
           </Bubble>
@@ -415,7 +415,7 @@ function CommitId({ oid }: { oid: string }) {
         })
       }}
       className={cn(
-        'rounded-[4px] px-0.5 font-mono text-xs outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring',
+        'rounded-sm px-0.5 font-mono text-xs outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring',
         copied && 'text-primary',
       )}
     >

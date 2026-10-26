@@ -208,7 +208,7 @@ export function OptionMenu({
         }
       >
         {choiceName(option, value)}
-        <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
+        <ChevronDownIcon data-icon="inline-end" className="size-3 text-icon" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side={side} sideOffset={6} className="w-64">
         <DropdownMenuGroup>
@@ -618,7 +618,7 @@ function ModelMenu({
           <span className="shrink-0 text-tertiary">{choiceName(effort, effortValue)}</span>
         )}
         {!model && !effort && <span>{t('controls.options')}</span>}
-        <ChevronDownIcon data-icon="inline-end" className="size-3 opacity-70" />
+        <ChevronDownIcon data-icon="inline-end" className="size-3 text-icon" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" sideOffset={6} onKeyDown={onKeyDown}>
         <DropdownMenuList>
@@ -673,7 +673,10 @@ function ModelMenu({
 export function PlainLabel({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
-      className={cn('px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground', className)}
+      className={cn(
+        'flex h-7 items-center px-2 text-xs font-medium text-muted-foreground',
+        className,
+      )}
       {...props}
     />
   )

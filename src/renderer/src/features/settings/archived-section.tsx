@@ -48,7 +48,7 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
         <Button variant="outline" size="compact" onClick={() => void restore()}>
           {t('archived.restore')}
         </Button>
-        <Button variant="destructive" size="compact" onClick={() => setDeleting(true)}>
+        <Button variant="destructive-outline" size="compact" onClick={() => setDeleting(true)}>
           {t('archived.delete')}
         </Button>
       </RowLine>

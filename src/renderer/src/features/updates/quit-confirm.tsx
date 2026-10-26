@@ -75,7 +75,7 @@ export function QuitConfirm() {
           </AlertDialogDescription>
         </AlertDialogHeader>
         {busy && (
-          <ul className="rounded-[9px] bg-subtle py-0.5 text-ui">
+          <ul className="rounded-code bg-subtle py-0.5 text-ui">
             {request?.sessions.map((s) => (
               <li key={s.sessionId} className="flex h-8 items-center gap-2 px-2.5">
                 <AgentMark agent={s.agentId} size={14} />
@@ -96,7 +96,7 @@ export function QuitConfirm() {
           <p className="text-control leading-normal text-secondary">{t('quit.unsavedFiles')}</p>
         )}
         {unsaved.length > 0 && (
-          <ul className="rounded-[9px] bg-subtle py-0.5 text-ui">
+          <ul className="rounded-code bg-subtle py-0.5 text-ui">
             {unsaved.map((file) => (
               <li
                 key={`${file.projectPath}\0${file.path}`}
