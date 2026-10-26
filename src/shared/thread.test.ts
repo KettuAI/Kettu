@@ -255,9 +255,12 @@ describe('isThreadEntry', () => {
       title: 'x',
       cause: 'out_of_credit',
       model: 'deepseek-v4.1-flash',
+      after: 'm:1',
     },
+    { kind: 'notice', id: 'e:7', severity: 'info', title: 'x', after: null },
     { kind: 'compaction', id: 'c:1', status: 'completed', summary: '' },
     { kind: 'turn_end', id: 'e:4', stopReason: 'end_turn', durationMs: 5 },
+    { kind: 'turn_end', id: 'e:8', stopReason: 'cancelled', durationMs: 5, after: 't:1' },
     { kind: 'git', id: 'g:1', event: 'commit', commits: [{ oid: 'a', subject: 'b' }], more: 0 },
     { kind: 'git', id: 'g:2', event: 'branch', branch: 'main' },
     { kind: 'git', id: 'g:3', event: 'push', upstream: 'origin/main', count: 1, after: 't:1' },
@@ -312,6 +315,12 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'branch', branch: 'x', after: 1 })).toBe(
       false,
     )
+    expect(isThreadEntry({ kind: 'notice', id: 'n', severity: 'info', title: 'x', after: 1 })).toBe(
+      false,
+    )
+    expect(
+      isThreadEntry({ kind: 'turn_end', id: 'e', stopReason: 'end_turn', durationMs: 1, after: 1 }),
+    ).toBe(false)
     expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'error', title: 'x', cause: 'other' }),
     ).toBe(false)

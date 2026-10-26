@@ -138,6 +138,9 @@ export type ThreadEntry =
       // The notice ends the turn: the agent exited mid-turn, or its model provider is out of credit.
       cause?: 'agent_stopped' | 'out_of_credit'
       model?: string // out_of_credit: the session's model when the turn failed
+      // The agent's entry before it, to put it back after a replay: set on the notices OverBench
+      // adds itself, never on an agent's, which its replay sends again.
+      after?: string | null
     }
   | {
       kind: 'compaction'
@@ -145,7 +148,13 @@ export type ThreadEntry =
       status: 'in_progress' | 'completed' | 'failed' | 'cancelled'
       summary: string
     }
-  | { kind: 'turn_end'; id: string; stopReason: StopReason; durationMs: number }
+  | {
+      kind: 'turn_end'
+      id: string
+      stopReason: StopReason
+      durationMs: number
+      after?: string | null // the agent's entry before it, to put it back after a replay
+    }
   | GitEntry // OverBench's own observation of the repository, see the git design
   | ArtifactEntry // OverBench's own record of a write to the artifacts service
 
@@ -589,12 +598,17 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.cause === undefined ||
           value.cause === 'agent_stopped' ||
           value.cause === 'out_of_credit') &&
-        (value.model === undefined || typeof value.model === 'string')
+        (value.model === undefined || typeof value.model === 'string') &&
+        (value.after === undefined || value.after === null || typeof value.after === 'string')
       )
     case 'compaction':
       return typeof value.status === 'string' && typeof value.summary === 'string'
     case 'turn_end':
-      return typeof value.stopReason === 'string' && typeof value.durationMs === 'number'
+      return (
+        typeof value.stopReason === 'string' &&
+        typeof value.durationMs === 'number' &&
+        (value.after === undefined || value.after === null || typeof value.after === 'string')
+      )
     case 'git':
       return (
         (value.event === 'commit'

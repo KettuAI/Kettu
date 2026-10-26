@@ -1535,6 +1535,7 @@ describe('forking with the source config', () => {
         mode: 'code',
       })
       expect(values(port, forkId)).toMatchObject({ mode: 'ask' })
+      const agent = port.entries(forkId).findLast((entry) => entry.kind === 'agent')!
       expect(notices(port, forkId)).toEqual([
         {
           kind: 'notice',
@@ -1542,6 +1543,7 @@ describe('forking with the source config', () => {
           severity: 'warning',
           title: 'This fork could not keep all of its settings',
           description: 'Mode is Ask instead of Code.\nYou can change them in the composer.',
+          after: agent.id,
         },
       ])
     })
@@ -2331,6 +2333,7 @@ describe('opening and recovering', () => {
         severity: 'error',
         cause: 'agent_stopped',
         title: 'Fake agent exited before finishing this turn',
+        after: tools(port, sessionId)[0]!.id,
       },
     ])
     // The cut turn is the latest, so it ends the thread.
@@ -2915,7 +2918,7 @@ describe('retrying a start that failed', () => {
 })
 
 describe('git events', () => {
-  it('keeps one across a replay, right after the agent entry it followed', async () => {
+  it('keeps one across a replay, in its place after the agent entry it followed', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
     await turn(port, sessionId, 'hello')
@@ -2925,6 +2928,7 @@ describe('git events', () => {
     const ids = () => port.entries(sessionId).map((entry) => entry.id)
     const event = port.entries(sessionId).find((entry) => entry.kind === 'git')!
     const agent = port.entries(sessionId).findLast((entry) => entry.kind === 'agent')!
+    const end = port.entries(sessionId).find((entry) => entry.kind === 'turn_end')!
 
     // The ultracode switch's session/resume fails, and Retry reopens it through session/load.
     const { connection } = t.host.agents.runtime('fake-agent')!
@@ -2946,8 +2950,59 @@ describe('git events', () => {
     await port.untilStatus(sessionId, 'ready')
     expect(loads()).toBe(1)
     expect(port.entries(sessionId).find((entry) => entry.id === event.id)).toEqual(event)
-    expect(ids()[ids().indexOf(event.id) - 1]).toBe(agent.id)
+    // The turn's end, which the host keeps as well, stays between them.
+    const from = ids().indexOf(agent.id)
+    expect(ids().slice(from, from + 3)).toEqual([agent.id, end.id, event.id])
     expect(event).toMatchObject({ after: agent.id })
+  })
+})
+
+describe('turn ends and notices', () => {
+  it("keeps the host's across a replay, and shows the agent's notices once", async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/all-updates')
+    await port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    await port.untilStatus(sessionId, 'ready')
+    await turn(port, sessionId, '/out-of-credit')
+    const isCredit = (entry: ThreadEntry) =>
+      entry.kind === 'notice' && entry.cause === 'out_of_credit'
+    await port.untilEntry(sessionId, isCredit)
+    await port.untilStatus(sessionId, 'ready')
+    const before = port.entries(sessionId)
+    const kept = [before.find((entry) => entry.kind === 'turn_end')!, before.find(isCredit)!]
+
+    // The ultracode switch's session/resume fails, and Retry reopens it through session/load.
+    const { connection } = t.host.agents.runtime('fake-agent')!
+    vi.spyOn(connection, 'resumeSession').mockRejectedValueOnce(new Error('resume failed'))
+    await expect(
+      port.request('sessions.setConfigOption', {
+        sessionId,
+        optionId: '__ultracode',
+        value: true,
+      }),
+    ).rejects.toThrow()
+    expect(port.summary(sessionId)?.status).toBe('failed')
+    const loads = () =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === 'session/load').length
+    expect(loads()).toBe(0)
+    await port.request('sessions.retry', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    expect(loads()).toBe(1)
+    // The replay gives user messages new ids, so places are compared by position.
+    const after = port.entries(sessionId)
+    expect(after.map((entry) => entry.kind)).toEqual(before.map((entry) => entry.kind))
+    for (const entry of kept) expect(after[before.indexOf(entry)]).toEqual(entry)
+    for (const title of [
+      'An info notice',
+      'A warning notice',
+      'An error notice',
+      'A notice with an unknown severity',
+    ]) {
+      expect(after.filter((e) => e.kind === 'notice' && e.title === title)).toHaveLength(1)
+    }
   })
 })
 
