@@ -768,7 +768,10 @@ export class AgentManager {
     this.deps.diagnostics.event(agentId, 'exit', describeExit(info))
     void this.reapTree(slot, launched)
     connection.close()
-    if (this.givenUp.delete(launched)) this.emitProcesses()
+    if (this.givenUp.delete(launched)) {
+      this.emitProcesses()
+      if (!this.stopped && !this.givenUpRuns(slot)) this.cleanUpVersions(slot)
+    }
     if (slot.launched !== launched) return
     slot.launched = null
     slot.runtime = null
@@ -891,7 +894,9 @@ export class AgentManager {
 
   /**
    * Once the install a start picks runs, the older installs go. A newer one, such as an update
-   * that finished meanwhile, stays, and so does the install this process runs from.
+   * that finished meanwhile, stays, and so does the install this process runs from. While a
+   * process its stop gave up still runs, possibly from an older install, nothing goes until the
+   * last one exits.
    */
   private cleanUpVersions(slot: Slot): void {
     const detection = slot.detection
@@ -900,6 +905,7 @@ export class AgentManager {
     const current = detection.adapter?.current
     if (!current || !detection.spec || slot.launchSpec !== detection.spec) return
     if (slot.cleanedDir === current.dir) return
+    if (this.givenUpRuns(slot)) return
     slot.cleanedDir = current.dir
     const agentId = slot.def.id
     removeOlderInstalls(this.deps.adaptersDir, agentId, launch.package, current).then(
