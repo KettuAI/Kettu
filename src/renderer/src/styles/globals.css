@@ -332,6 +332,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A link in the thread: a reply's, or a web address in a notice. */
+@utility thread-link {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
+  text-underline-offset: 3px;
+  transition:
+    color var(--duration-fast),
+    text-decoration-color var(--duration-fast);
+  &:hover {
+    color: var(--link-hover);
+    text-decoration-color: currentColor;
+  }
+}
+
 @utility h-control {
   height: var(--control-height);
 }
@@ -649,17 +664,7 @@
   }
 
   & [data-streamdown='link'] {
-    color: var(--link);
-    text-decoration: underline;
-    text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
-    text-underline-offset: 3px;
-    transition:
-      color var(--duration-fast),
-      text-decoration-color var(--duration-fast);
-    &:hover {
-      color: var(--link-hover);
-      text-decoration-color: currentColor;
-    }
+    @apply thread-link;
   }
 
   & [data-streamdown='inline-code'] {

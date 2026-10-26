@@ -34,12 +34,14 @@ import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { Clamp } from '../clamp'
+import { ConfirmedLink } from '../link-confirm'
 import { Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
 import { OutOfCreditEnd } from './out-of-credit'
+import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
@@ -233,7 +235,9 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
       <AlertTitle>{entry.title}</AlertTitle>
       {entry.description && (
         <AlertDescription className="whitespace-pre-wrap" data-selectable="">
-          {entry.description}
+          {splitLinks(entry.description).map((part, i) =>
+            part.type === 'link' ? <ConfirmedLink key={i} url={part.url} /> : part.text,
+          )}
         </AlertDescription>
       )}
     </Alert>

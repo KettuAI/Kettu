@@ -9,7 +9,9 @@ import {
 } from '@renderer/components/ui/collapsible'
 import { CopyButton } from '@renderer/features/git/copy-button'
 import { cn } from '@renderer/lib/utils'
+import { ConfirmedLink } from '../link-confirm'
 import { PANEL } from './helpers'
+import { splitLinks } from './text-links'
 
 /**
  * The line that ends a turn the model provider refused for want of credit. It only records what
@@ -46,7 +48,9 @@ export function OutOfCreditEnd({
         <CollapsibleContent className={cn(PANEL, 'col-start-2')}>
           <div className="relative mt-1.5 rounded-md bg-card py-2 pr-9 pl-2.5" data-selectable="">
             <p className="font-mono text-xs break-all whitespace-pre-wrap text-secondary">
-              {description}
+              {splitLinks(description).map((part, i) =>
+                part.type === 'link' ? <ConfirmedLink key={i} url={part.url} /> : part.text,
+              )}
             </p>
             <CopyButton
               text={description}
