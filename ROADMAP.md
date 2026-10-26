@@ -23,12 +23,12 @@ In v0.0.5:
 Merged, and shipping with this release:
 
 - [x] On macOS, a command that sends Apple Events gets the system's permission prompt instead of a refusal ([#133](https://github.com/overbench/overbench/issues/133))
+- [x] Images, audio and video in tool calls and the Files pane ([#43](https://github.com/overbench/overbench/issues/43), [#312](https://github.com/overbench/overbench/issues/312)), zoom, step and copy in the image viewer ([#311](https://github.com/overbench/overbench/issues/311)), and audio and video bytes in the conversation ([#313](https://github.com/overbench/overbench/issues/313))
 - [x] Smaller fixes: long reasoning folded into its run ([#333](https://github.com/overbench/overbench/issues/333)), clickable links in notices ([#345](https://github.com/overbench/overbench/issues/345)), a slash command highlighted as it is typed ([#363](https://github.com/overbench/overbench/issues/363)), Recent artifacts hidden while the composer has input ([#391](https://github.com/overbench/overbench/issues/391)), a redesigned link confirmation ([#246](https://github.com/overbench/overbench/issues/246)), collapsed work rows without the gaps between them ([#244](https://github.com/overbench/overbench/issues/244)), Codex thoughts from history with their headings apart ([#267](https://github.com/overbench/overbench/issues/267)), and more in the [milestone](https://github.com/overbench/overbench/milestone/11)
 
 Still to come:
 
 - [ ] The Paper look as the built-in theme, which this release waits for: the window as a desk and the thread, panes and pages as sheets on it, with new type and new layouts for several screens ([#423](https://github.com/overbench/overbench/issues/423))
-- [ ] Images, audio and video in tool calls and the Files pane ([#43](https://github.com/overbench/overbench/issues/43), [#312](https://github.com/overbench/overbench/issues/312)), zoom, step and copy in the image viewer ([#311](https://github.com/overbench/overbench/issues/311)), and audio and video bytes in the conversation ([#313](https://github.com/overbench/overbench/issues/313))
 - [ ] The sidebar's header and footer ([#34](https://github.com/overbench/overbench/issues/34)), the logo, app icon and license in About ([#33](https://github.com/overbench/overbench/issues/33)), and the code aligned with the design guides ([#29](https://github.com/overbench/overbench/issues/29))
 
 ## v0.0.7: the built-in browser and more agents
