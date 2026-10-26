@@ -1,7 +1,7 @@
 {
   "status": {
     "repository": "Repository",
-    "pullRequest": "Pull request #{{number}}",
+    "pullRequestState": "Pull request #{{number}} · {{state}}",
     "detachedAt": "Detached at {{ref}}",
     "branch": "Branch {{name}}",
     "detached": "detached",
@@ -74,17 +74,19 @@
     "copyId": "Copy commit id",
     "copyMessage": "Copy message",
     "openOnGitHub": "Open on GitHub",
-    "onRemote": "on {{upstream}}",
-    "notPushed": "not pushed",
-    "notPublished": "not published",
     "more": "{{count}} more",
     "baseAhead_one": "{{count}} new commit since branching",
     "baseAhead_other": "{{count}} new commits since branching",
     "baseEven": "No new commits since branching"
   },
   "prPart": {
-    "meta": "<state>{{state}}</state> · <head/> → <base/> · updated {{when}}",
+    "meta": "<state>{{state}}</state> · <nw><head/> → <base/></nw> · <nw>updated {{when}}</nw>",
     "queued": "Queued",
+    "run": {
+      "passed": "Passed",
+      "failed": "Failed",
+      "running": "Running"
+    },
     "installGh": "Install the <cli>GitHub CLI</cli> to see and create pull requests.",
     "signInGh": "Sign in to the GitHub CLI to see pull requests:",
     "copyCommand": "Copy command",
@@ -100,6 +102,7 @@
     }
   },
   "sync": {
+    "label": "Sync",
     "fetched": "fetched {{when}}",
     "neverFetched": "never fetched",
     "noRemote": "No remote",

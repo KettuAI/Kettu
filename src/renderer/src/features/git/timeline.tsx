@@ -18,14 +18,31 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { openDiff } from '@renderer/stores/files'
 import { CopyButton } from './copy-button'
+import { disclosureKeys, kidKeys } from './popover-keys'
 import { projectRelative } from './sync'
+import {
+  changesOpenFirst,
+  segmentBelow,
+  timelineItems,
+  type Segment,
+  type TimelineItem,
+} from './timeline-model'
 import { loadCommit, useChanges, useCommit, useIncoming } from './use-git-data'
 
-/** A row of the popover: menu-family height, padding and highlight, one for pointer and keys. */
+/**
+ * A row of the popover: menu-family height, padding and radius. The highlight is focus, which
+ * follows the pointer too, so the pointer and the arrow keys share one.
+ */
 export const ROW =
-  'flex h-row w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:bg-hover data-[popup-open]:bg-hover'
+  'flex h-row w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-small outline-none transition-colors duration-(--duration-fast) focus:bg-hover data-[popup-open]:bg-hover in-data-[popup-open]:bg-hover'
 
-/** A part of the popover, under a separator; a part with nothing to show is left out whole. */
+/** A row inside an expanded one: shorter, quieter, its lane continuing past it. */
+export const KID =
+  'flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-small text-secondary outline-none transition-colors duration-(--duration-fast) focus:bg-hover'
+
+const KID_STATIC = 'flex h-7 min-w-0 items-center gap-2 px-2 text-small text-secondary'
+
+/** A part of the popover, under a hairline; a part with nothing to show is left out whole. */
 export function Part({ children }: { children: ReactNode }) {
   return (
     <>
@@ -35,100 +52,112 @@ export function Part({ children }: { children: ReactNode }) {
   )
 }
 
-/** Commits shown before "N more". */
-const FIRST_COMMITS = 10
-
-type Segment = 'solid' | 'dashed' | null
 type Node = 'pushed' | 'unpushed' | 'work' | 'base' | 'incoming' | null
 
+const LINE = 'absolute inset-x-0 mx-auto w-[1.5px]'
+const SOLID = 'bg-border-strong'
+const DASHED =
+  'bg-[repeating-linear-gradient(to_bottom,var(--border-strong)_0_2px,transparent_2px_4.5px)]'
+
 /** One row's piece of the branch's lane: the line above and below, and the row's node. */
-function Lane({ top, bottom, node }: { top: Segment; bottom: Segment; node: Node }) {
-  const line = (segment: Segment, y1: number, y2: number) =>
-    segment && (
-      <line
-        x1={8}
-        x2={8}
-        y1={y1}
-        y2={y2}
-        className="stroke-border-strong"
-        strokeWidth={1.25}
-        strokeDasharray={segment === 'dashed' ? '2 2.5' : undefined}
-      />
-    )
-  const gap = node === null ? 0 : node === 'work' ? 5 : 4.5
+function Lane({
+  top,
+  bottom,
+  node,
+  className,
+}: {
+  top: Segment
+  bottom: Segment
+  node: Node
+  className?: string
+}) {
+  // The line stops short of a node, so a ring never has the lane running through it.
+  const gap = node !== null
   return (
-    <svg aria-hidden width={16} height={28} viewBox="0 0 16 28" className="-my-px shrink-0">
-      {line(top, 0, 14 - gap)}
-      {line(bottom, 14 + gap, 28)}
-      {node === 'pushed' && <circle cx={8} cy={14} r={3.5} className="fill-muted-foreground" />}
-      {node === 'unpushed' && (
-        <circle
-          cx={8}
-          cy={14}
-          r={3.5}
-          strokeWidth={1.5}
-          className="fill-popover stroke-foreground"
+    <span aria-hidden className={cn('relative w-4 shrink-0 self-stretch', className)}>
+      {top && (
+        <span
+          className={cn(
+            LINE,
+            'top-0',
+            gap ? 'bottom-[calc(50%+6.5px)]' : 'bottom-1/2',
+            top === 'dashed' ? DASHED : SOLID,
+          )}
         />
       )}
-      {node === 'work' && (
-        <circle
-          cx={8}
-          cy={14}
-          r={4}
-          strokeWidth={1.25}
-          strokeDasharray="2 2"
-          className="fill-popover stroke-muted-foreground"
+      {bottom && (
+        <span
+          className={cn(
+            LINE,
+            'bottom-0',
+            gap ? 'top-[calc(50%+6.5px)]' : 'top-1/2',
+            bottom === 'dashed' ? DASHED : SOLID,
+          )}
         />
       )}
-      {node === 'base' && <circle cx={8} cy={14} r={3} className="fill-border-strong" />}
-      {node === 'incoming' && (
-        <circle
-          cx={8}
-          cy={14}
-          r={3}
-          strokeWidth={1.25}
-          className="fill-popover stroke-border-strong"
-        />
+      {node && (
+        <svg
+          viewBox="0 0 10 10"
+          className={cn(
+            'absolute top-1/2 left-0.75 size-2.5 -translate-y-1/2 overflow-visible',
+            NODE_COLOR[node],
+          )}
+        >
+          {node === 'pushed' ? (
+            <circle cx={5} cy={5} r={3} className="fill-current" />
+          ) : (
+            <circle
+              cx={5}
+              cy={5}
+              r={3.6}
+              strokeWidth={1.5}
+              strokeDasharray={node === 'work' ? '2.1 1.67' : undefined}
+              className="fill-none stroke-current"
+            />
+          )}
+          {node === 'base' && <circle cx={5} cy={5} r={1.3} className="fill-current" />}
+        </svg>
       )}
-    </svg>
+    </span>
   )
 }
 
-function RefPill({ name, strong }: { name: string; strong?: boolean }) {
+const NODE_COLOR = {
+  unpushed: 'text-primary',
+  pushed: 'text-tertiary',
+  work: 'text-secondary',
+  incoming: 'text-tertiary',
+  base: 'text-tertiary',
+} as const
+
+/** A remote or branch name, as a ref on the lane. */
+export function RefPill({ name }: { name: string }) {
   return (
-    <span
-      className={cn(
-        'inline-flex h-4.5 shrink-0 items-center rounded-md px-1.5 font-mono text-meta whitespace-nowrap',
-        strong
-          ? 'bg-subtle text-primary'
-          : 'text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
-      )}
-    >
+    <span className="inline-flex h-4.5 shrink-0 items-center rounded-md bg-subtle px-1.5 font-mono text-meta font-medium whitespace-nowrap text-secondary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]">
       {name}
     </span>
   )
 }
 
-function Chevron({ open }: { open: boolean }) {
+export function Chevron({ open }: { open: boolean }) {
   return (
     <ChevronRightIcon
       aria-hidden
       className={cn(
-        'size-3 shrink-0 text-icon transition-transform duration-(--duration-fast) motion-reduce:transition-none',
+        'size-3.5 shrink-0 text-tertiary transition-transform duration-(--duration-fast) motion-reduce:transition-none',
         open && 'rotate-90',
       )}
     />
   )
 }
 
-/** Arrow keys fold and unfold a row that opens in place. */
-function disclosureKeys(open: boolean, toggle: () => void) {
-  return (event: KeyboardEvent) => {
-    if ((event.key === 'ArrowRight' && !open) || (event.key === 'ArrowLeft' && open)) {
-      event.preventDefault()
-      toggle()
-    }
-  }
+/** What an expanded row holds, under it on the lane. */
+export function Kids({ children }: { children: ReactNode }) {
+  return (
+    <div role="group" data-git-kids="" className="flex flex-col pb-0.5">
+      {children}
+    </div>
+  )
 }
 
 const STATUS_LETTER: Record<ChangedFile['status'], { letter: string; className: string }> = {
@@ -142,7 +171,7 @@ const STATUS_LETTER: Record<ChangedFile['status'], { letter: string; className: 
   conflicted: { letter: '!', className: 'text-danger' },
 }
 
-function LineCounts({
+export function LineCounts({
   insertions,
   deletions,
 }: {
@@ -151,9 +180,8 @@ function LineCounts({
 }) {
   if (insertions === null || deletions === null) return null
   return (
-    <span className="shrink-0 font-mono text-meta tabular">
+    <span className="inline-flex shrink-0 gap-1.5 text-xs tabular">
       {insertions > 0 && <span className="text-success">+{insertions}</span>}
-      {insertions > 0 && deletions > 0 && ' '}
       {deletions > 0 && <span className="text-danger">−{deletions}</span>}
     </span>
   )
@@ -176,15 +204,17 @@ function FileRow({
   const { t } = useTranslation('git')
   const slash = file.path.lastIndexOf('/')
   const name = file.path.slice(slash + 1)
-  const folder = slash < 0 ? '' : file.path.slice(0, slash)
+  const folder = slash < 0 ? '' : file.path.slice(0, slash + 1)
   const { letter, className } = STATUS_LETTER[file.status]
   return (
     <button
       type="button"
+      tabIndex={-1}
       data-git-row=""
-      className={ROW}
+      className={KID}
       title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
       aria-label={t('timeline.openDiff', { name })}
+      onKeyDown={kidKeys}
       onClick={() => {
         const root = status.repo?.root ?? status.projectPath
         openDiff(status.projectPath, {
@@ -197,14 +227,12 @@ function FileRow({
         onOpened()
       }}
     >
-      <Lane top={lane} bottom={lane} node={null} />
-      <span className={cn('w-3 shrink-0 text-center font-mono text-meta', className)}>
+      <Lane top={lane} bottom={lane} node={null} className="mr-3" />
+      <span className={cn('w-3 shrink-0 text-center font-mono text-meta font-medium', className)}>
         {letter}
       </span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        <span className="shrink-0 truncate">{name}</span>
-        {folder && <span className="min-w-0 truncate text-xs text-tertiary">{folder}</span>}
-      </span>
+      <span className="min-w-0 truncate text-primary">{name}</span>
+      <span className="min-w-0 flex-1 truncate text-tertiary">{folder}</span>
       <LineCounts insertions={file.insertions} deletions={file.deletions} />
     </button>
   )
@@ -212,8 +240,8 @@ function FileRow({
 
 function LoadingRows({ lane, count = 2 }: { lane: Segment; count?: number }) {
   return Array.from({ length: count }, (_, i) => (
-    <div key={i} className="flex h-row items-center gap-2 px-2">
-      <Lane top={lane} bottom={lane} node={null} />
+    <div key={i} className={KID_STATIC}>
+      <Lane top={lane} bottom={lane} node={null} className="mr-3" />
       <Skeleton className="h-3 w-3" />
       <Skeleton className="h-3 flex-1" style={{ maxWidth: `${70 - i * 18}%` }} />
     </div>
@@ -222,39 +250,36 @@ function LoadingRows({ lane, count = 2 }: { lane: Segment; count?: number }) {
 
 function ErrorRow({ lane, message }: { lane: Segment; message: string }) {
   return (
-    <div className="flex h-row items-center gap-2 px-2 text-xs text-danger" title={message}>
-      <Lane top={lane} bottom={lane} node={null} />
+    <div className={cn(KID_STATIC, 'text-xs text-danger')} title={message}>
+      <Lane top={lane} bottom={lane} node={null} className="mr-3" />
       <span className="min-w-0 truncate">{message.split('\n')[0]}</span>
     </div>
   )
 }
 
+/** Commits from a log, such as the ones to pull, with their author. */
 function LogRows({ commits, lane }: { commits: LogCommit[]; lane: Segment }) {
   const now = useNow()
   return commits.map((c) => (
-    <div key={c.oid} className="flex h-row items-center gap-2 px-2 text-tertiary">
-      <Lane top={lane} bottom={lane} node={null} />
-      <span className="w-13 shrink-0 font-mono text-meta">{c.oid.slice(0, 7)}</span>
-      <span className="min-w-0 flex-1 truncate" title={c.subject}>
+    <div key={c.oid} className={KID_STATIC}>
+      <Lane top={lane} bottom={lane} node={null} className="mr-3" />
+      <span className="shrink-0 font-mono text-meta text-tertiary">{c.oid.slice(0, 7)}</span>
+      <span className="min-w-0 flex-1 truncate text-primary" title={c.subject}>
         {c.subject}
       </span>
-      <span className="max-w-24 shrink-0 truncate text-xs">{c.authorName}</span>
-      <span className="w-6 shrink-0 text-right text-xs tabular">{shortAgo(c.authoredAt, now)}</span>
+      <span className="flex max-w-32 shrink-0 gap-1 text-xs text-tertiary tabular">
+        <span className="min-w-0 truncate">{c.authorName}</span>
+        <span className="shrink-0">· {shortAgo(c.authoredAt, now)}</span>
+      </span>
     </div>
   ))
 }
 
-type Item =
-  | { kind: 'up' }
-  | { kind: 'work' }
-  | { kind: 'commit'; commit: CommitSummary; upstreamTip: boolean }
-  | { kind: 'more'; count: number }
-  | { kind: 'base' }
-
 /** The branch's history as one lane of rows: to pull, uncommitted, commits, then the base. */
 export function Timeline({ status, onOpened }: { status: GitStatus; onOpened: () => void }) {
-  const { upstream, changes, commits, base } = status
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
+  const [open, setOpen] = useState<ReadonlySet<string>>(() =>
+    changesOpenFirst(status) ? new Set(['changes']) : new Set(),
+  )
   const [all, setAll] = useState(false)
   // Once one commit's card shows, the next opens at once, as VS Code's hover groups do.
   const [warm, setWarm] = useState(false)
@@ -272,92 +297,66 @@ export function Timeline({ status, onOpened }: { status: GitStatus; onOpened: ()
       return next
     })
 
-  const files = changes.staged + changes.unstaged + changes.untracked + changes.conflicted
-  const shown = all ? commits : commits.slice(0, FIRST_COMMITS)
-  const tip = commits.findIndex((c) => c.pushed)
-  const items: Item[] = []
-  if (upstream && upstream.behind > 0) items.push({ kind: 'up' })
-  if (files > 0) items.push({ kind: 'work' })
-  shown.forEach((commit, i) => items.push({ kind: 'commit', commit, upstreamTip: i === tip }))
-  if (shown.length < commits.length)
-    items.push({ kind: 'more', count: commits.length - shown.length })
-  if (base && status.head.branch !== status.defaultBranch) items.push({ kind: 'base' })
+  const items = timelineItems(status, all)
   if (items.length === 0) return null
-
-  // The lane is dashed next to what is not on the branch yet: commits to pull, uncommitted work.
-  const segment = (i: number): Segment => {
-    const a = items[i]
-    const b = items[i + 1]
-    if (!a || !b) return null
-    return a.kind === 'up' || a.kind === 'work' || b.kind === 'up' || b.kind === 'work'
-      ? 'dashed'
-      : 'solid'
-  }
 
   return (
     <Part>
-      <div className="flex flex-col p-1.5">
+      <div className="min-h-0 overflow-y-auto overscroll-contain p-1.5">
         {items.map((item, i) => {
-          const top = segment(i - 1)
-          const bottom = segment(i)
+          const top = segmentBelow(items, i - 1)
+          const bottom = segmentBelow(items, i)
+          const key = itemKey(item)
+          const lane = { top, bottom }
           switch (item.kind) {
-            case 'up':
+            case 'incoming':
               return (
                 <IncomingPart
-                  key="up"
+                  key={key}
                   status={status}
-                  open={open.has('up')}
-                  toggle={toggle('up')}
-                  top={top}
-                  bottom={bottom}
+                  count={item.count}
+                  open={open.has(key)}
+                  toggle={toggle(key)}
+                  {...lane}
                 />
               )
-            case 'work':
+            case 'changes':
               return (
                 <ChangesPart
-                  key="work"
+                  key={key}
                   status={status}
-                  files={files}
-                  open={open.has('work')}
-                  toggle={toggle('work')}
-                  top={top}
-                  bottom={bottom}
+                  files={item.files}
+                  open={open.has(key)}
+                  toggle={toggle(key)}
                   onOpened={onOpened}
+                  {...lane}
                 />
               )
             case 'commit':
               return (
                 <CommitPart
-                  key={item.commit.oid}
+                  key={key}
                   status={status}
                   commit={item.commit}
                   upstreamTip={item.upstreamTip}
-                  open={open.has(item.commit.oid)}
-                  toggle={toggle(item.commit.oid)}
-                  top={top}
-                  bottom={bottom}
+                  open={open.has(key)}
+                  toggle={toggle(key)}
                   warm={warm}
                   onCard={onCard}
                   onOpened={onOpened}
+                  {...lane}
                 />
               )
             case 'more':
-              return (
-                <MoreRow
-                  key="more"
-                  count={item.count}
-                  top={top}
-                  bottom={bottom}
-                  onShow={() => setAll(true)}
-                />
-              )
+              return <MoreRow key={key} count={item.count} onShow={() => setAll(true)} {...lane} />
             case 'base':
               return (
                 <BasePart
-                  key="base"
+                  key={key}
                   status={status}
-                  open={open.has('base')}
-                  toggle={toggle('base')}
+                  count={item.count}
+                  open={open.has(key)}
+                  toggle={toggle(key)}
                   top={top}
                 />
               )
@@ -368,26 +367,41 @@ export function Timeline({ status, onOpened }: { status: GitStatus; onOpened: ()
   )
 }
 
+function itemKey(item: TimelineItem): string {
+  return item.kind === 'commit' ? item.commit.oid : item.kind
+}
+
+function Count({ count }: { count: number }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-px text-xs text-secondary tabular">
+      <ArrowDownIcon aria-hidden className="size-3" />
+      {count}
+    </span>
+  )
+}
+
 function IncomingPart({
   status,
+  count,
   open,
   toggle,
   top,
   bottom,
 }: {
   status: GitStatus
+  count: number
   open: boolean
   toggle: () => void
   top: Segment
   bottom: Segment
 }) {
   const { t } = useTranslation('git')
-  const behind = status.upstream?.behind ?? 0
   const incoming = useIncoming(status.projectPath, 'upstream', open)
   return (
     <>
       <button
         type="button"
+        tabIndex={-1}
         data-git-row=""
         className={ROW}
         aria-expanded={open}
@@ -397,21 +411,21 @@ function IncomingPart({
       >
         <Lane top={top} bottom={bottom} node="incoming" />
         <RefPill name={status.remote?.name ?? 'origin'} />
-        <span className="min-w-0 flex-1 truncate">{t('timeline.incoming', { count: behind })}</span>
-        <span className="inline-flex shrink-0 items-center gap-px text-xs text-secondary tabular">
-          <ArrowDownIcon className="size-3" />
-          {behind}
-        </span>
+        <span className="min-w-0 flex-1 truncate">{t('timeline.incoming', { count })}</span>
+        <Count count={count} />
         <Chevron open={open} />
       </button>
-      {open &&
-        (incoming.data ? (
-          <LogRows commits={incoming.data} lane={bottom} />
-        ) : incoming.error ? (
-          <ErrorRow lane={bottom} message={incoming.error} />
-        ) : (
-          <LoadingRows lane={bottom} count={Math.min(behind, 3)} />
-        ))}
+      {open && (
+        <Kids>
+          {incoming.data ? (
+            <LogRows commits={incoming.data} lane={bottom} />
+          ) : incoming.error ? (
+            <ErrorRow lane={bottom} message={incoming.error} />
+          ) : (
+            <LoadingRows lane={bottom} count={Math.min(count, 3)} />
+          )}
+        </Kids>
+      )}
     </>
   )
 }
@@ -440,6 +454,7 @@ function ChangesPart({
     <>
       <button
         type="button"
+        tabIndex={-1}
         data-git-row=""
         className={ROW}
         aria-expanded={open}
@@ -448,31 +463,51 @@ function ChangesPart({
       >
         <Lane top={top} bottom={bottom} node="work" />
         <span className="min-w-0 flex-1 truncate">{t('timeline.uncommitted')}</span>
-        <span className="shrink-0 text-xs text-tertiary tabular">
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-tertiary tabular">
           {t('timeline.files', { count: files })}
+          <LineCounts insertions={insertions} deletions={deletions} />
         </span>
-        <LineCounts insertions={insertions} deletions={deletions} />
         <Chevron open={open} />
       </button>
-      {open &&
-        (list.data ? (
-          list.data.map((file) => (
-            <FileRow
-              key={file.path}
-              status={status}
-              file={file}
-              ref={null}
-              lane={bottom}
-              onOpened={onOpened}
-            />
-          ))
-        ) : list.error ? (
-          <ErrorRow lane={bottom} message={list.error} />
-        ) : (
-          <LoadingRows lane={bottom} count={Math.min(files, 3)} />
-        ))}
+      {open && (
+        <Kids>
+          {list.data ? (
+            list.data.map((file) => (
+              <FileRow
+                key={file.path}
+                status={status}
+                file={file}
+                ref={null}
+                lane={bottom}
+                onOpened={onOpened}
+              />
+            ))
+          ) : list.error ? (
+            <ErrorRow lane={bottom} message={list.error} />
+          ) : (
+            <LoadingRows lane={bottom} count={Math.min(files, 3)} />
+          )}
+        </Kids>
+      )}
     </>
   )
+}
+
+/** Opens the row's context menu from the keyboard, under the row's start. */
+function openMenuFromKeys(event: KeyboardEvent<HTMLElement>): boolean {
+  if (!((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu')) return false
+  // Prevented, Shift+F10 sends no contextmenu of its own where the platform has one.
+  event.preventDefault()
+  const box = event.currentTarget.getBoundingClientRect()
+  event.currentTarget.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: box.left + 32,
+      clientY: box.bottom,
+    }),
+  )
+  return true
 }
 
 function CommitPart({
@@ -503,7 +538,6 @@ function CommitPart({
   const [copied, setCopied] = useState(false)
   const details = useCommit(status.projectPath, commit.oid, open)
   const github = status.remote?.github
-  const short = commit.oid.slice(0, 7)
   const copy = (text: string) => void navigator.clipboard.writeText(text)
   const copyId = (): void => {
     copy(commit.oid)
@@ -521,37 +555,51 @@ function CommitPart({
               render={
                 <button
                   type="button"
+                  tabIndex={-1}
                   data-git-row=""
                   className={ROW}
                   aria-expanded={open}
                   onClick={toggle}
                   onKeyDown={(event) => {
                     if (isMod(event) && !event.shiftKey && event.key.toLowerCase() === 'c') {
+                      if (window.getSelection()?.toString()) return
                       event.preventDefault()
                       copyId()
                       return
                     }
+                    if (openMenuFromKeys(event)) return
                     disclosureKeys(open, toggle)(event)
                   }}
                 />
               }
             >
               <Lane top={top} bottom={bottom} node={commit.pushed ? 'pushed' : 'unpushed'} />
+              <span className="shrink-0 font-mono text-meta text-tertiary">
+                {commit.oid.slice(0, 7)}
+              </span>
+              <span
+                className={cn('min-w-0 flex-1 truncate', commit.pushed && 'text-secondary')}
+                title={commit.subject}
+              >
+                {commit.subject}
+              </span>
+              {upstreamTip && status.remote && <RefPill name={status.remote.name} />}
               <span
                 className={cn(
-                  'w-13 shrink-0 font-mono text-meta text-tertiary',
+                  'min-w-5.5 shrink-0 text-right text-xs text-tertiary tabular',
                   copied && 'text-secondary',
                 )}
               >
-                {copied ? t('timeline.copied') : short}
-              </span>
-              <span className="min-w-0 flex-1 truncate">{commit.subject}</span>
-              {upstreamTip && status.remote && <RefPill name={status.remote.name} />}
-              <span className="w-6 shrink-0 text-right text-xs text-tertiary tabular">
-                {shortAgo(commit.authoredAt, now)}
+                {copied ? t('timeline.copied') : shortAgo(commit.authoredAt, now)}
               </span>
             </HoverCardTrigger>
-            <HoverCardContent side="left" align="start" sideOffset={14} className="w-xs p-3">
+            <HoverCardContent
+              side="left"
+              align="start"
+              sideOffset={14}
+              alignOffset={-8}
+              className="flex w-75 flex-col gap-1.25 pt-3 pr-3 pb-2 pl-3.5"
+            >
               <CommitCard status={status} commit={commit} />
             </HoverCardContent>
           </HoverCard>
@@ -591,23 +639,26 @@ function CommitPart({
           )}
         </ContextMenuContent>
       </ContextMenu>
-      {open &&
-        (details.data ? (
-          details.data.files.map((file) => (
-            <FileRow
-              key={file.path}
-              status={status}
-              file={file}
-              ref={commit.oid}
-              lane={bottom}
-              onOpened={onOpened}
-            />
-          ))
-        ) : details.error ? (
-          <ErrorRow lane={bottom} message={details.error} />
-        ) : (
-          <LoadingRows lane={bottom} />
-        ))}
+      {open && (
+        <Kids>
+          {details.data ? (
+            details.data.files.map((file) => (
+              <FileRow
+                key={file.path}
+                status={status}
+                file={file}
+                ref={commit.oid}
+                lane={bottom}
+                onOpened={onOpened}
+              />
+            ))
+          ) : details.error ? (
+            <ErrorRow lane={bottom} message={details.error} />
+          ) : (
+            <LoadingRows lane={bottom} />
+          )}
+        </Kids>
+      )}
     </>
   )
 }
@@ -618,43 +669,36 @@ function CommitCard({ status, commit }: { status: GitStatus; commit: CommitSumma
   const { data, error } = useCommit(status.projectPath, commit.oid, true)
   const insertions = data?.files.reduce((sum, f) => sum + (f.insertions ?? 0), 0) ?? 0
   const deletions = data?.files.reduce((sum, f) => sum + (f.deletions ?? 0), 0) ?? 0
-  const where = commit.pushed
-    ? t('timeline.onRemote', { upstream: status.upstream?.name ?? status.remote?.name })
-    : status.upstream
-      ? t('timeline.notPushed')
-      : t('timeline.notPublished')
   return (
-    <div className="flex flex-col gap-2 text-xs">
-      <div className="flex flex-col gap-1">
-        <span className="text-ui leading-5 font-medium">{commit.subject}</span>
-        {data?.body && (
-          <p
-            data-selectable=""
-            className="max-h-40 overflow-y-auto leading-5 whitespace-pre-wrap text-secondary [overflow-wrap:anywhere]"
-          >
-            {data.body}
-          </p>
-        )}
-        {!data && !error && <Skeleton className="h-3 w-40" />}
-        <span className="text-tertiary">
-          {data ? `${data.authorName} · ` : ''}
-          {fullTime(commit.authoredAt)} · {where}
-        </span>
-      </div>
-      <div className="h-px bg-border-soft" />
-      <div className="flex items-center gap-2 text-tertiary tabular">
-        <span className="flex-1">
-          {data ? t('timeline.files', { count: data.files.length }) : error ? error : ' '}
+    <>
+      <span data-selectable="" className="text-small font-semibold">
+        {commit.subject}
+      </span>
+      {data?.body && (
+        <p
+          data-selectable=""
+          className="max-h-40 overflow-y-auto text-xs leading-normal whitespace-pre-wrap text-secondary [overflow-wrap:anywhere]"
+        >
+          {data.body}
+        </p>
+      )}
+      {!data && !error && <Skeleton className="my-0.5 h-3 w-40" />}
+      <span data-selectable="" className="text-xs text-tertiary">
+        {data ? `${data.authorName} · ` : ''}
+        {fullTime(commit.authoredAt)}
+      </span>
+      <Separator className="mt-1.25 bg-border-soft" />
+      <div className="-mr-1.5 flex items-center gap-1.5 text-xs text-tertiary tabular">
+        <span className={cn('min-w-0 truncate', error && 'text-danger')} title={error ?? undefined}>
+          {data ? t('timeline.files', { count: data.files.length }) : (error?.split('\n')[0] ?? '')}
         </span>
         {data && <LineCounts insertions={insertions} deletions={deletions} />}
-      </div>
-      <div className="-mr-1.5 -mb-1 flex items-center gap-1">
-        <span data-selectable="" className="flex-1 font-mono text-meta text-tertiary">
-          {commit.oid.slice(0, 12)}
+        <span data-selectable="" className="ml-auto font-mono text-meta text-secondary">
+          {commit.oid.slice(0, 7)}
         </span>
         <CopyButton text={commit.oid} label={t('timeline.copyId')} />
       </div>
-    </div>
+    </>
   )
 }
 
@@ -671,7 +715,13 @@ function MoreRow({
 }) {
   const { t } = useTranslation('git')
   return (
-    <button type="button" data-git-row="" className={cn(ROW, 'text-tertiary')} onClick={onShow}>
+    <button
+      type="button"
+      tabIndex={-1}
+      data-git-row=""
+      className={cn(ROW, 'text-tertiary')}
+      onClick={onShow}
+    >
       <Lane top={top} bottom={bottom} node={null} />
       <span className="text-xs">{t('timeline.more', { count })}</span>
     </button>
@@ -680,33 +730,37 @@ function MoreRow({
 
 function BasePart({
   status,
+  count,
   open,
   toggle,
   top,
 }: {
   status: GitStatus
+  count: number
   open: boolean
   toggle: () => void
   top: Segment
 }) {
   const { t } = useTranslation('git')
-  const behind = status.base?.behind ?? 0
   const name = status.defaultBranch ?? status.base?.name ?? ''
-  const incoming = useIncoming(status.projectPath, 'base', open && behind > 0)
+  const incoming = useIncoming(status.projectPath, 'base', open && count > 0)
   const label = (
     <>
       <Lane top={top} bottom={null} node="base" />
-      <RefPill name={name} strong />
-      <span className="min-w-0 flex-1 truncate text-tertiary">
-        {behind > 0 ? t('timeline.baseAhead', { count: behind }) : t('timeline.baseEven')}
+      <RefPill name={name} />
+      <span className="min-w-0 flex-1 truncate text-secondary">
+        {count > 0 ? t('timeline.baseAhead', { count }) : t('timeline.baseEven')}
       </span>
     </>
   )
-  if (behind === 0) return <Static>{label}</Static>
+  if (count === 0) {
+    return <div className="flex h-row min-w-0 items-center gap-2 px-2 text-small">{label}</div>
+  }
   return (
     <>
       <button
         type="button"
+        tabIndex={-1}
         data-git-row=""
         className={ROW}
         aria-expanded={open}
@@ -715,24 +769,20 @@ function BasePart({
         onKeyDown={disclosureKeys(open, toggle)}
       >
         {label}
-        <span className="inline-flex shrink-0 items-center gap-px text-xs text-tertiary tabular">
-          <ArrowDownIcon className="size-3" />
-          {behind}
-        </span>
+        <Count count={count} />
         <Chevron open={open} />
       </button>
-      {open &&
-        (incoming.data ? (
-          <LogRows commits={incoming.data} lane={null} />
-        ) : incoming.error ? (
-          <ErrorRow lane={null} message={incoming.error} />
-        ) : (
-          <LoadingRows lane={null} count={Math.min(behind, 3)} />
-        ))}
+      {open && (
+        <Kids>
+          {incoming.data ? (
+            <LogRows commits={incoming.data} lane={null} />
+          ) : incoming.error ? (
+            <ErrorRow lane={null} message={incoming.error} />
+          ) : (
+            <LoadingRows lane={null} count={Math.min(count, 3)} />
+          )}
+        </Kids>
+      )}
     </>
   )
-}
-
-function Static({ children }: { children: ReactNode }) {
-  return <div className="flex h-row min-w-0 items-center gap-2 px-2 text-ui">{children}</div>
 }

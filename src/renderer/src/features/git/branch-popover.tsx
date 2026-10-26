@@ -1,16 +1,18 @@
-import type { KeyboardEvent } from 'react'
 import { GitBranchIcon, GitCommitHorizontalIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { GitStatus, PullRequest } from '@shared/git'
-import { isMod } from '@renderer/lib/platform'
 import { CopyButton } from './copy-button'
+import { branchName } from './popover-keys'
 import { PullRequestPart } from './pr-part'
-import { SyncPart } from './sync-part'
-import { Part, Timeline } from './timeline'
+import { SyncButtons, SyncFooter, SyncNote } from './sync-part'
+import { Timeline } from './timeline'
 
 export { CopyButton } from './copy-button'
 
-/** The branch, its history as a timeline, its pull request, then Pull and Push. */
+/**
+ * The branch with Pull and Push and the next step, its pull request, its history as a timeline,
+ * then the remote with Fetch.
+ */
 export function BranchPopover({
   status,
   pr,
@@ -20,38 +22,35 @@ export function BranchPopover({
   pr: PullRequest | null
   onClose: () => void
 }) {
-  const { head } = status
-  const branch = head.detached ? (head.oid?.slice(0, 7) ?? 'HEAD') : (head.branch ?? 'HEAD')
   return (
-    <div className="flex flex-col" onKeyDown={(event) => rowKeys(event, branch)}>
-      <Header status={status} branch={branch} />
-      <Timeline status={status} onOpened={onClose} />
+    <div className="flex min-h-0 flex-col">
+      <Header status={status} onClose={onClose} />
       <PullRequestPart status={status} pr={pr} onClose={onClose} />
-      <Part>
-        <SyncPart status={status} onClose={onClose} />
-      </Part>
+      <Timeline status={status} onOpened={onClose} />
+      <SyncFooter status={status} />
     </div>
   )
 }
 
-function Header({ status, branch }: { status: GitStatus; branch: string }) {
+function Header({ status, onClose }: { status: GitStatus; onClose: () => void }) {
   const { t } = useTranslation('git')
   const { head, upstream, base, defaultBranch } = status
+  const branch = branchName(status)
   const fromBase = base && defaultBranch && head.branch !== defaultBranch
+  const Icon = head.detached ? GitCommitHorizontalIcon : GitBranchIcon
   return (
-    <div className="flex flex-col gap-0.5 px-3.5 pt-3 pb-2.5">
-      <div className="-mr-1.5 flex items-center gap-2">
-        {head.detached ? (
-          <GitCommitHorizontalIcon className="size-4 shrink-0" />
-        ) : (
-          <GitBranchIcon className="size-4 shrink-0" />
-        )}
-        <span className="min-w-0 flex-1 font-mono text-control font-medium [overflow-wrap:anywhere]">
-          {branch}
-        </span>
-        <CopyButton text={branch} label={t('popover.copyBranch')} />
+    <div className="shrink-0 pt-3 pr-3 pb-3.25 pl-3.5">
+      <div className="flex items-start gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-1.5 pt-1">
+          <Icon aria-hidden className="mt-0.75 size-3.5 shrink-0 text-secondary" />
+          <span className="min-w-0 font-mono text-group font-medium tracking-[-0.01em] [overflow-wrap:anywhere]">
+            {branch}
+          </span>
+          <CopyButton text={branch} label={t('popover.copyBranch')} className="-mt-0.5 -ml-1" />
+        </div>
+        <SyncButtons status={status} onClose={onClose} />
       </div>
-      <span className="pl-6 text-xs text-tertiary">
+      <p className="mt-0.75 pl-5 text-xs text-tertiary">
         {head.detached ? (
           t('popover.detached')
         ) : !head.oid ? (
@@ -62,7 +61,7 @@ function Header({ status, branch }: { status: GitStatus; branch: string }) {
               <Trans
                 t={t}
                 i18nKey="popover.from"
-                components={{ branch: <span className="font-mono text-meta" /> }}
+                components={{ branch: <span className="font-mono text-meta text-secondary" /> }}
                 values={{ name: defaultBranch }}
               />
             )}
@@ -71,7 +70,7 @@ function Header({ status, branch }: { status: GitStatus; branch: string }) {
               <Trans
                 t={t}
                 i18nKey="popover.tracking"
-                components={{ branch: <span className="font-mono text-meta" /> }}
+                components={{ branch: <span className="font-mono text-meta text-secondary" /> }}
                 values={{ name: upstream.name }}
               />
             ) : (
@@ -79,30 +78,8 @@ function Header({ status, branch }: { status: GitStatus; branch: string }) {
             )}
           </>
         )}
-      </span>
+      </p>
+      <SyncNote status={status} onClose={onClose} />
     </div>
   )
-}
-
-/** Up and Down move through the popover's rows; `Mod+C` off a commit copies the branch name. */
-function rowKeys(event: KeyboardEvent<HTMLDivElement>, branch: string): void {
-  if (event.defaultPrevented || event.nativeEvent.isComposing) return
-  if (isMod(event) && !event.shiftKey && event.key.toLowerCase() === 'c') {
-    if (window.getSelection()?.toString()) return
-    event.preventDefault()
-    void navigator.clipboard.writeText(branch)
-    return
-  }
-  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-  const rows = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[data-git-row]'))
-  if (rows.length === 0) return
-  event.preventDefault()
-  const at = rows.indexOf(document.activeElement as HTMLElement)
-  const next =
-    at < 0
-      ? event.key === 'ArrowDown'
-        ? 0
-        : rows.length - 1
-      : Math.min(rows.length - 1, Math.max(0, at + (event.key === 'ArrowDown' ? 1 : -1)))
-  rows[next]?.focus()
 }

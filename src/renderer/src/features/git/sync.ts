@@ -48,6 +48,42 @@ export interface SyncPlan {
   hint: SyncHint | null
 }
 
+/** How the line under the branch reads: done, on offer, something to do, or a failure. */
+export type NoteTone = 'ok' | 'info' | 'warning' | 'error'
+
+export const HINT_TONE: Record<SyncHint, NoteTone> = {
+  noBranch: 'info',
+  operation: 'warning',
+  publishRepo: 'info',
+  publishBranch: 'info',
+  diverged: 'warning',
+  upToDate: 'ok',
+  ghMissing: 'warning',
+  ghSignedOut: 'warning',
+  unknownRemote: 'warning',
+  localUpstream: 'warning',
+  otherName: 'warning',
+}
+
+export type SyncStep = 'conflicts' | 'merge' | 'rebase' | 'cherryPick' | 'revert'
+
+/** What has to end before a pull or a push: the conflicts first, then the operation itself. */
+export function stepOf(status: GitStatus): SyncStep {
+  if (status.changes.conflicted > 0) return 'conflicts'
+  switch (status.operation?.kind) {
+    case 'merge':
+      return 'merge'
+    case 'rebase':
+      return 'rebase'
+    case 'cherry-pick':
+      return 'cherryPick'
+    case 'revert':
+      return 'revert'
+    default:
+      return 'conflicts'
+  }
+}
+
 const off = (kind: OperationKind, reason: SyncReason, count = 0): SyncButton => ({
   kind,
   count,
@@ -74,11 +110,12 @@ function pullButton(upstream: GitStatus['upstream']): SyncButton {
 /** The Pull and Push buttons for a repository, as the branch popover's table says. */
 export function planSync(status: GitStatus, gh: GitTools['gh']['state'] | null): SyncPlan {
   const { head, upstream, operation, changes, push } = status
-  if (head.detached || head.branch === null || head.oid === null || push === null) {
-    return { pull: off('pull', 'noBranch'), push: off('push', 'noBranch'), hint: 'noBranch' }
-  }
+  // Before the detached head, which a rebase leaves until it is finished.
   if (operation || changes.conflicted > 0) {
     return { pull: off('pull', 'operation'), push: off('push', 'operation'), hint: 'operation' }
+  }
+  if (head.detached || head.branch === null || head.oid === null || push === null) {
+    return { pull: off('pull', 'noBranch'), push: off('push', 'noBranch'), hint: 'noBranch' }
   }
   if (push.kind === 'noRemote') {
     if (gh !== 'ready') {
