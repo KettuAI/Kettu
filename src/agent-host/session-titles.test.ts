@@ -271,6 +271,20 @@ describe("OpenCode's listed titles", () => {
     await waitFor(() => port.summary(sessionId)?.title === WRITTEN)
   })
 
+  it('lists a session this build reads at a later turn, whose end takes its title', async () => {
+    const { t, port } = await setup({
+      agentEnv: { ...OPENCODE, FAKE_AGENT_LIST_TITLE_MS: '1000' },
+      sessionTimings: { listedTitleRetryMs: 600_000 },
+    })
+    const sessionId = await newSession(t, port)
+    await send(port, sessionId, MESSAGE)
+    // The second read is held far off, so the next turn's end is what reads the title.
+    expect(port.summary(sessionId)?.title).toBe(CUT)
+    await sleep(1100)
+    await send(port, sessionId, 'A second message')
+    await waitFor(() => port.summary(sessionId)?.title === WRITTEN)
+  })
+
   it("leaves a title the agent renamed alone at the next turn's end", async () => {
     const { t, port } = await setup({ agentEnv: OPENCODE })
     const sessionId = await newSession(t, port)
