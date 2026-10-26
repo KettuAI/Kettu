@@ -21,10 +21,7 @@
     "seconds": "{{s}} 秒",
     "minutesSeconds": "{{m}} 分 {{s}} 秒",
     "minutesLeft": "{{m}} 分钟",
-    "hoursMinutes": "{{h}} 小时 {{m}} 分",
-    "inMinutes": "{{count}} 分钟后",
-    "inHours": "{{count}} 小时后",
-    "inDays_other": "{{count}} 天后"
+    "hoursMinutes": "{{h}} 小时 {{m}} 分"
   },
   "errors": {
     "hostRestarted": "OverBench 的后台进程已重启，请重试。"
