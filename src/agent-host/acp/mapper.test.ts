@@ -54,6 +54,7 @@ const baseSession: SessionView = {
 
 interface RunOptions {
   replaying?: boolean
+  thoughtParts?: boolean
   cancelling?: boolean
   thread?: ThreadState
   scope?: TurnScope
@@ -73,6 +74,7 @@ function run(updates: SessionUpdate[], options: RunOptions = {}) {
     const out = mapSessionUpdate(update, {
       thread,
       replaying: options.replaying ?? false,
+      thoughtParts: options.thoughtParts ?? false,
       cancelling: options.cancelling ?? false,
       scope,
       now,
@@ -190,6 +192,43 @@ describe('message chunks', () => {
   it('adds replayed entries as not streaming', () => {
     const { entries } = run([text('Old answer', 'h1')], { replaying: true })
     expect(entries[0]).toMatchObject({ streaming: false })
+  })
+
+  describe('a replayed thought in parts', () => {
+    const part = (value: string): SessionUpdate => ({
+      sessionUpdate: 'agent_thought_chunk',
+      messageId: 'r1',
+      content: { type: 'text', text: value },
+    })
+    const markdown = (updates: SessionUpdate[], options: RunOptions) =>
+      run(updates, options).entries.map((e) => (e.kind === 'thought' ? e.markdown : null))
+
+    it('puts a blank line between the parts', () => {
+      expect(
+        markdown([part('**A**'), part('**B**'), part('Plain text')], {
+          replaying: true,
+          thoughtParts: true,
+        }),
+      ).toEqual(['**A**\n\n**B**\n\nPlain text'])
+    })
+
+    it('runs them together as sent for other agents and live', () => {
+      const parts = [part('**A**'), part('**B**')]
+      expect(markdown(parts, { replaying: true })).toEqual(['**A****B**'])
+      expect(markdown(parts, {})).toEqual(['**A****B**'])
+    })
+
+    it('adds no second break to a part or a thought that has one', () => {
+      const options = { replaying: true, thoughtParts: true }
+      expect(markdown([part('**A**'), part('\n\n**B**')], options)).toEqual(['**A**\n\n**B**'])
+      expect(markdown([part('**A**\n\n'), part('**B**')], options)).toEqual(['**A**\n\n**B**'])
+      expect(markdown([part('**A**\n'), part('**B**')], options)).toEqual(['**A**\n**B**'])
+    })
+
+    it('starts an empty thought with its first text', () => {
+      const options = { replaying: true, thoughtParts: true }
+      expect(markdown([part(''), part('**A**')], options)).toEqual(['**A**'])
+    })
   })
 })
 
@@ -996,6 +1035,7 @@ describe('permissions', () => {
       {
         thread,
         replaying: false,
+        thoughtParts: false,
         cancelling: false,
         scope: newTurnScope(),
         now: 1,
