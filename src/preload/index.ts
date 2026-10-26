@@ -129,6 +129,8 @@ const api: OverbenchApi = {
     remove: (id) => invoke('themes:remove', id),
     export: (text) => invoke('themes:export', text),
     reveal: (id) => invoke('themes:reveal', id),
+    catalog: (refresh) => invoke('themes:catalog', refresh),
+    installCatalog: (id) => invoke('themes:install-catalog', id),
     onChanged: onThemesChanged,
   },
   loginItem: {

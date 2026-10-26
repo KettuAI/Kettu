@@ -38,6 +38,7 @@ import {
 import { AgentListItem, AgentsGroupActions, EnvironmentFooter } from './agents-section'
 import { ArchivedRow } from './archived-section'
 import { PublishedRow, SharingAccount } from './sharing-section'
+import { BrowseThemes } from './theme-catalog'
 import { useAppInfo } from './use-app-info'
 import { useLoginItemStatus } from './use-login-item'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
@@ -202,7 +203,7 @@ export function useAppearanceSection(): SectionDef {
         name: t('appearance.theme.name'),
         english: en('appearance.theme.name'),
         keywords: t('appearance.theme.keywords'),
-        group: group('theme', t('appearance.groups.theme')),
+        group: group('theme', t('appearance.groups.theme'), { actions: <BrowseThemes /> }),
         layout: 'block',
         render: () => <ThemeTiles />,
       },

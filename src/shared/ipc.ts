@@ -7,7 +7,7 @@ import type { Platform } from './platform'
 import type { SettingsFile, SettingsPatch } from './settings'
 import type { SharingResult, SharingStatus } from './sharing'
 import type { TerminalsApi } from './terminal-host'
-import type { ThemeInstallResult, ThemesState } from './themes'
+import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId } from './thread'
 import type { UpdateStatus } from './updates'
 
@@ -105,6 +105,9 @@ export interface IpcInvokeContract {
   // `text`: a whole theme file, which main checks before the save dialog; false when cancelled.
   'themes:export': { args: [text: string]; result: boolean }
   'themes:reveal': { args: [id: string]; result: void }
+  // `refresh`: read the index from GitHub again rather than the copy main kept.
+  'themes:catalog': { args: [refresh: boolean]; result: CatalogState }
+  'themes:install-catalog': { args: [id: string]; result: CatalogInstallResult }
   'dialog:open-project': { args: []; result: string | null }
   'dialog:choose-agent-binary': { args: [agentId: AgentId]; result: string | null }
   'dialog:choose-agent-config-folder': { args: [agentId: AgentId]; result: string | null }
@@ -274,6 +277,10 @@ export interface OverbenchApi {
     export(text: string): Promise<boolean>
     /** Shows an installed theme's file in the file manager. */
     reveal(id: string): Promise<void>
+    /** The online catalog's themes, read from GitHub when `refresh` is set or the first time. */
+    catalog(refresh: boolean): Promise<CatalogState>
+    /** Downloads a catalog theme and installs it, or names the file theme it would replace. */
+    installCatalog(id: string): Promise<CatalogInstallResult>
     onChanged(listener: (state: ThemesState) => void): () => void
   }
   loginItem: {

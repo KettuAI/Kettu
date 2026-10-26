@@ -39,7 +39,12 @@ export function useKeyboardShortcuts(): void {
         return
       }
 
-      if (event.key === 'Escape' && view.settings.open && !isEditable(event.target)) {
+      if (
+        event.key === 'Escape' &&
+        view.settings.open &&
+        !isEditable(event.target) &&
+        !layerOpen()
+      ) {
         event.preventDefault()
         settingsBack()
         return
@@ -113,6 +118,14 @@ function isEditable(target: EventTarget | null): boolean {
     el.tagName === 'TEXTAREA' ||
     el.tagName === 'SELECT'
   )
+}
+
+/**
+ * Whether a dialog or menu is open, closing included: Esc is its own, and Base UI leaves the event
+ * unprevented. Focus can be on the body by then, after the button it went back to was disabled.
+ */
+function layerOpen(): boolean {
+  return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
 }
 
 /** Previous or next session in sidebar order, across Pinned, the projects and No project. */

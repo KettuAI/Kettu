@@ -1,5 +1,5 @@
-// The themes folder in the data folder: every file read and checked in full, installing,
-// replacing, removing, exporting and revealing them, and the chosen theme.
+// The themes folder in the data folder: every file read and checked in full, installing from a
+// file or the catalog, replacing, removing, exporting and revealing them, and the chosen theme.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { open, readdir, rm, writeFile } from 'node:fs/promises'
@@ -11,8 +11,12 @@ import {
   parseThemeFile,
   THEME_ID,
   THEME_MAX_BYTES,
+  themeField,
   themeSlug,
   toHex,
+  type CatalogInstallResult,
+  type CatalogState,
+  type CatalogTheme,
   type InstalledTheme,
   type Rgba,
   type Theme,
@@ -25,8 +29,10 @@ import {
 } from '@shared/themes'
 import { safeName } from './artifacts/files'
 import { t } from './i18n'
-import { writeFileAtomic } from './json-file'
+import { readJsonFile, writeFileAtomic } from './json-file'
 import { createLogger, describeError } from './log'
+import type { ThemeCatalog } from './theme-catalog'
+import { compareVersions } from './update-state'
 
 const log = createLogger('themes')
 
@@ -70,6 +76,13 @@ export async function readThemeFile(path: string): Promise<ThemeReadResult> {
     return { ok: false, error: { code: 'unreadable' } }
   }
   if (!data) return { ok: false, error: { code: 'too-large' } }
+  return checkThemeBytes(data)
+}
+
+/** Checks a theme file's bytes, from disk or the catalog. */
+function checkThemeBytes(
+  data: Buffer,
+): Exclude<ThemeReadResult, { ok: false }> | { ok: false; error: ThemeFileError } {
   let text: string
   try {
     text = UTF8.decode(data)
@@ -135,9 +148,36 @@ export async function readThemeFolder(dir: string): Promise<ThemeFolder> {
 
 const snapshot = (folder: ThemeFolder) => JSON.stringify([folder.installed, [...folder.failed]])
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** Which installed themes came from the catalog, by id, and the version each was installed at. */
+export type ThemeSources = Map<string, string>
+
+/** Reads `theme-sources.json`; a missing or unreadable file counts every theme as a file theme. */
+export async function readThemeSources(path: string): Promise<ThemeSources> {
+  const sources: ThemeSources = new Map()
+  const read = await readJsonFile(path)
+  if (read.kind === 'unreadable') log.warn(`theme-sources.json is unreadable: ${read.reason}`)
+  if (read.kind !== 'ok') return sources
+  const { value } = read
+  if (!isRecord(value) || value['version'] !== 1 || !isRecord(value['catalog'])) {
+    log.warn('theme-sources.json is invalid; every theme counts as installed from a file')
+    return sources
+  }
+  for (const [id, version] of Object.entries(value['catalog'])) {
+    const checked = themeField('version', version)
+    if (THEME_ID.test(id) && checked !== null) sources.set(id, checked)
+  }
+  return sources
+}
+
 export interface ThemeStoreDeps {
   /** `themes/` in the data folder. */
   dir: string
+  /** `theme-sources.json` in the data folder, beside `themes/`. */
+  sourcesFile: string
+  catalog: ThemeCatalog
   /** Makes `id` the setting; the change comes back through `choose`. */
   select(id: string): void
   /** After an install, a removal, a change found on disk or another theme chosen. */
@@ -146,11 +186,21 @@ export interface ThemeStoreDeps {
 
 /** Owns the themes folder; the setting, `appearance.colorTheme`, says which theme shows. */
 export class ThemeStore {
-  // A checked file that a `themes:install` answer offered to put in place of an installed theme.
-  private pending: { token: string; id: string; text: string; ignored: string[] } | null = null
+  // A checked file that an install answer offered to put in place of an installed theme, with the
+  // catalog version it comes at, if it comes from the catalog.
+  private pending: {
+    token: string
+    id: string
+    text: string
+    ignored: string[]
+    catalog?: string
+  } | null = null
+  // Changes to the folder, one at a time, so two installs never write the same file at once.
+  private queue: Promise<unknown> = Promise.resolve()
 
   constructor(
     private folder: ThemeFolder,
+    private sources: ThemeSources,
     private chosen: string,
     private readonly deps: ThemeStoreDeps,
   ) {
@@ -158,12 +208,16 @@ export class ThemeStore {
   }
 
   state(): ThemesState {
-    const { chosen, folder } = this
+    const { chosen, folder, sources } = this
     const failure: ThemeLoadFailure | null =
       chosen === BUILTIN_THEME_ID || this.find(chosen)
         ? null
         : (folder.failed.get(chosen) ?? { code: 'missing' })
-    return { installed: folder.installed, chosen, failed: failure && { id: chosen, failure } }
+    const installed = folder.installed.map((theme) => {
+      const catalog = sources.get(theme.id)
+      return catalog === undefined ? theme : { ...theme, catalog }
+    })
+    return { installed, chosen, failed: failure && { id: chosen, failure } }
   }
 
   /** The chosen theme, or null while the built-in one shows. */
@@ -218,19 +272,79 @@ export class ThemeStore {
     return this.write(id, read.text, read.ignored)
   }
 
-  /** `themes:replace`: installs the file the last `themes:install` answer named. */
+  /** `themes:replace`: installs the file the last install answer named. */
   async replace(token: unknown): Promise<ThemeInstallResult> {
     const pending = this.pending
     if (!pending || token !== pending.token) throw new Error('No theme is waiting to be installed')
     this.pending = null
-    return this.write(pending.id, pending.text, pending.ignored)
+    return this.write(pending.id, pending.text, pending.ignored, pending.catalog)
+  }
+
+  /**
+   * `themes:catalog`: the catalog's themes and what installing each does, from the index read when
+   * `refresh` is set or the first time, otherwise from the one read last.
+   */
+  async catalog(refresh: unknown): Promise<CatalogState> {
+    const index = await this.deps.catalog.index(refresh === true)
+    if (!index.ok) return { status: index.error }
+    const themes = index.entries.map(({ id, name, author, version, license, preview }) => {
+      const installedAt = this.find(id) && this.sources.get(id)
+      const action: CatalogTheme['action'] = !installedAt
+        ? 'install'
+        : compareVersions(version, installedAt) > 0
+          ? 'update'
+          : 'installed'
+      return { id, name, author, version, license, preview, action }
+    })
+    themes.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    return { status: 'ok', themes }
+  }
+
+  /**
+   * `themes:install-catalog`: downloads a theme the last index lists and installs it. A theme
+   * installed from the catalog is replaced without asking, and an update keeps the chosen theme;
+   * one installed from a file is named for `themes:replace` first.
+   */
+  async installCatalog(id: unknown): Promise<CatalogInstallResult> {
+    this.pending = null
+    const entry = typeof id === 'string' ? this.deps.catalog.find(id) : undefined
+    if (!entry) throw new Error('Not a theme in the catalog')
+    const data = await this.deps.catalog.download(entry)
+    if (!Buffer.isBuffer(data)) return { status: 'failed', error: data }
+    const read = checkThemeBytes(data)
+    if (!read.ok) return { status: 'failed', error: read.error }
+    if (themeId(read.theme.name) !== entry.id)
+      return { status: 'failed', error: { code: 'mismatch' } }
+    this.folder = await readThemeFolder(this.deps.dir)
+    const installed = this.find(entry.id)
+    const fromCatalog = installed && this.sources.has(entry.id)
+    if ((installed || this.folder.failed.has(entry.id)) && !fromCatalog) {
+      const token = randomUUID()
+      this.pending = {
+        token,
+        id: entry.id,
+        text: read.text,
+        ignored: read.ignored,
+        catalog: entry.version,
+      }
+      return {
+        status: 'conflict',
+        token,
+        name: read.theme.name,
+        installedName: installed?.theme.name ?? entry.id,
+      }
+    }
+    return this.write(entry.id, read.text, read.ignored, entry.version, !fromCatalog)
   }
 
   /** `themes:remove`: deletes the file; removing the chosen theme brings back the built-in one. */
   async remove(id: unknown): Promise<void> {
     const file = this.fileOf(id)
-    await rm(file, { force: true })
-    this.folder = await readThemeFolder(this.deps.dir)
+    await this.serial(async () => {
+      await rm(file, { force: true })
+      this.folder = await readThemeFolder(this.deps.dir)
+      await this.record(basename(file, '.json'), undefined)
+    })
     if (id === this.chosen) this.deps.select(BUILTIN_THEME_ID)
     else this.publish()
   }
@@ -270,13 +384,44 @@ export class ThemeStore {
     return join(this.deps.dir, `${id}.json`)
   }
 
-  private async write(id: string, text: string, ignored: string[]): Promise<ThemeInstallResult> {
-    await writeFileAtomic(join(this.deps.dir, `${id}.json`), text)
-    this.folder = await readThemeFolder(this.deps.dir)
-    // Installing applies the theme: through the setting, unless it is the chosen one already.
-    if (id === this.chosen) this.publish()
-    else this.deps.select(id)
+  /**
+   * Installs a checked file and records where it came from: the catalog at `catalog`, or a file.
+   * Installing applies the theme unless `choose` is false, as for an update from the catalog.
+   */
+  private async write(
+    id: string,
+    text: string,
+    ignored: string[],
+    catalog?: string,
+    choose = true,
+  ): Promise<{ status: 'installed'; id: string; ignored: string[] }> {
+    await this.serial(async () => {
+      await writeFileAtomic(join(this.deps.dir, `${id}.json`), text)
+      this.folder = await readThemeFolder(this.deps.dir)
+      await this.record(id, catalog)
+    })
+    // Through the setting, unless the theme is the chosen one already.
+    if (choose && id !== this.chosen) this.deps.select(id)
+    else this.publish()
     return { status: 'installed', id, ignored }
+  }
+
+  /** Records the catalog version a theme was installed at, or drops its record when undefined. */
+  private async record(id: string, catalog: string | undefined): Promise<void> {
+    if (catalog === this.sources.get(id)) return
+    if (catalog === undefined) this.sources.delete(id)
+    else this.sources.set(id, catalog)
+    // Records of themes no longer installed go with this write.
+    const kept = [...this.sources].filter(([key]) => this.find(key) || this.folder.failed.has(key))
+    this.sources = new Map(kept)
+    const data = { version: 1, catalog: Object.fromEntries(kept) }
+    await writeFileAtomic(this.deps.sourcesFile, `${JSON.stringify(data, null, 2)}\n`)
+  }
+
+  private serial<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(task, task)
+    this.queue = run.catch(() => undefined)
+    return run
   }
 
   private publish(): void {

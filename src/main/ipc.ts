@@ -229,6 +229,8 @@ export function registerIpcHandlers({
   handle('themes:remove', 1, (_, id) => themes.remove(id))
   handle('themes:export', 1, ({ window }, text) => themes.export(window, text))
   handle('themes:reveal', 1, (_, id) => themes.reveal(id))
+  handle('themes:catalog', 1, (_, refresh) => themes.catalog(refresh))
+  handle('themes:install-catalog', 1, (_, id) => themes.installCatalog(id))
 
   handle('dialog:open-project', 0, async ({ window }) => {
     const options: Electron.OpenDialogOptions = {

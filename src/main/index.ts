@@ -26,7 +26,8 @@ import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { TerminalHost } from './terminal-host'
-import { readThemeFolder, ThemeStore } from './themes'
+import { ThemeCatalog } from './theme-catalog'
+import { readThemeFolder, readThemeSources, ThemeStore } from './themes'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
 import {
@@ -75,12 +76,14 @@ async function start(): Promise<void> {
   const perf = process.argv.includes('--overbench-perf')
   const userDataPath = app.getPath('userData')
   const themesDir = join(userDataPath, 'themes')
+  const themeSourcesFile = join(userDataPath, 'theme-sources.json')
   // Read while Electron starts, so the first window already has the right theme and bounds.
   const loading = Promise.all([
     SettingsStore.load(userDataPath),
     WindowStateStore.load(userDataPath),
     AppStateStore.load(userDataPath),
     readThemeFolder(themesDir),
+    readThemeSources(themeSourcesFile),
   ])
   let ready = false
   app.on('second-instance', () => {
@@ -102,7 +105,7 @@ async function start(): Promise<void> {
     isRendererUrl,
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
   )
-  const [settings, windowState, appState, themeFolder] = await loading
+  const [settings, windowState, appState, themeFolder, themeSources] = await loading
   syncLoginItem(settings.get().general.openAtLogin)
 
   // The system's languages are read once; macOS and Windows ask for a restart to change them.
@@ -112,8 +115,18 @@ async function start(): Promise<void> {
   setLocale(localeOf(settings.get()))
   applyTheme(settings.get().appearance.theme)
   applyZoom(settings.get().appearance.zoom)
-  const themes = new ThemeStore(themeFolder, settings.get().appearance.colorTheme, {
+  // The catalog's own session, so its requests follow the proxy setting and keep no cookies or
+  // storage. Only its dialog reads it, so startup does not wait for the proxy.
+  const themesSession = session.fromPartition('overbench-themes')
+  let themesProxy = themesSession.setProxy(sessionProxy(settings.get().proxy))
+  const catalog = new ThemeCatalog(async (url, init) => {
+    await themesProxy
+    return themesSession.fetch(url, init) as unknown as Promise<Response>
+  })
+  const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
     dir: themesDir,
+    sourcesFile: themeSourcesFile,
+    catalog,
     select: (id) => settings.update({ appearance: { colorTheme: id } }),
     changed: (state, chosen) => {
       applyWindowTheme(chosen)
@@ -214,7 +227,10 @@ async function start(): Promise<void> {
     }
     if (changed.has('notifications')) setBadgeEnabled(next.notifications.badge)
     if (changed.has('general')) syncLoginItem(next.general.openAtLogin)
-    if (changed.has('proxy')) void sharingSession.setProxy(sessionProxy(next.proxy))
+    if (changed.has('proxy')) {
+      void sharingSession.setProxy(sessionProxy(next.proxy))
+      themesProxy = themesSession.setProxy(sessionProxy(next.proxy))
+    }
     updater.settingsChanged(next, changed)
   })
 
