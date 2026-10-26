@@ -132,7 +132,7 @@ export function AppSidebar() {
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2" onKeyDown={moveRowFocus}>
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
-        <SidebarGroup role="group" aria-label={t('nav.projects')} className="gap-0.5 p-0">
+        <SidebarGroup role="group" aria-label={t('nav.sessions')} className="gap-0.5 p-0">
           {!loaded && loadError ? (
             <p className="px-2 py-1 text-xs leading-normal text-secondary">
               {t('nav.unavailable')}
