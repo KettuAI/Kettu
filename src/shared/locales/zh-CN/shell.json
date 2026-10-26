@@ -16,7 +16,6 @@
   },
   "topBar": {
     "showSidebar": "显示侧边栏",
-    "hideSidebar": "隐藏侧边栏",
-    "updateReady": "OverBench {{version}} 可以安装了"
+    "hideSidebar": "隐藏侧边栏"
   }
 }

@@ -1,19 +1,14 @@
+import { BotIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { errorMessage, host } from '@renderer/lib/host'
-import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { openAgentSettings, openSettings, useViewStore } from '@renderer/stores/view'
-import { agentUpdateNotice } from './agent-updates'
-import { NoticeCard } from './update-notice'
+import { openAgentSettings, openSettings } from '@renderer/stores/view'
+import { agentUpdateLabel, type AgentUpdateNotice } from './agent-updates'
+import { NoticeRow, NoticeVersion } from './update-notice'
 
-/** A newer Claude Code or Codex, or adapter, in the sidebar footer, above the app's notice. */
-export function AgentUpdateNotice() {
+/** A newer Claude Code or Codex, or adapter, as a row in the sidebar's notices. */
+export function AgentUpdateRow({ notice }: { notice: AgentUpdateNotice }) {
   const { t } = useTranslation('updates')
-  const statuses = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const agentsSettingsOpen = useViewStore((s) => s.settings.open && s.settings.section === 'agents')
-  const notice = agentUpdateNotice(statuses)
-  if (!notice || agentsSettingsOpen) return null
 
   const open = () => {
     if (notice.kind === 'one') openAgentSettings(notice.agentId)
@@ -29,36 +24,31 @@ export function AgentUpdateNotice() {
     }
   }
 
-  const tooltip =
-    notice.kind === 'one'
-      ? t('agentNotice.oneTooltip', { name: notice.name, version: notice.version })
-      : t('agentNotice.manyTooltip', { count: notice.agentIds.length })
-
-  // The words hide whole once the label cannot hold them beside the value.
   return (
-    <NoticeCard tooltip={tooltip} onClick={open} onDismiss={dismiss}>
-      {notice.kind === 'one' ? (
-        <>
-          <AgentMark agent={notice.agentId} size={14} />
-          <span className="@container/notice flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
-            <span className="truncate font-medium @max-[10rem]/notice:sr-only">
-              {t('agentNotice.one', { name: notice.name })}
-            </span>
-            <span className="shrink-0 font-mono text-meta text-tertiary tabular">
-              {notice.version}
-            </span>
-          </span>
-        </>
-      ) : (
-        <span className="@container/notice flex min-w-0 flex-1 items-baseline gap-1.5 whitespace-nowrap">
-          <span className="truncate font-medium @max-[7rem]/notice:sr-only">
-            {t('agentNotice.many')}
-          </span>
-          <span className="shrink-0 font-mono text-meta text-tertiary tabular">
-            {notice.agentIds.length}
-          </span>
-        </span>
-      )}
-    </NoticeCard>
+    <NoticeRow
+      icon={
+        notice.kind === 'one' ? (
+          <AgentMark agent={notice.agentId} size={16} />
+        ) : (
+          <BotIcon className="size-4 text-icon" />
+        )
+      }
+      text={
+        notice.kind === 'one' ? (
+          <>
+            {t('agentNotice.one', { name: notice.name })}{' '}
+            <NoticeVersion>{notice.version}</NoticeVersion>
+          </>
+        ) : (
+          <>
+            {t('agentNotice.many')} <NoticeVersion>{notice.agentIds.length}</NoticeVersion>
+          </>
+        )
+      }
+      label={agentUpdateLabel(notice)}
+      detail={t('agentNotice.detail')}
+      onOpen={open}
+      onDismiss={dismiss}
+    />
   )
 }

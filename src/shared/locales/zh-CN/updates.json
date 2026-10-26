@@ -11,17 +11,15 @@
     "downloadProgress": "下载进度",
     "cancel": "取消更新",
     "whatsNew": "更新内容",
-    "readyTooltip": "OverBench {{version}} 已下载完成。重启以更新即可完成，会话会自动恢复。",
-    "updateTooltip": "OverBench {{version}} 已发布。点击「更新」会下载并重启 OverBench，会话会自动恢复。",
-    "downloadingTooltip": "OverBench {{version}} 正在下载。取消会停止下载，更新仍然保留。",
-    "availableTooltip": "OverBench {{version}} 已发布，请从发布页面下载。",
-    "updatedTooltip": "OverBench 已更新到 {{version}}。"
+    "readyDetail": "重启即可完成，会话会自动恢复。",
+    "updateDetail": "「更新」会下载并重启，会话会自动恢复。",
+    "downloadDetail": "请从发布页面下载。",
+    "updatedDetail": "从 {{version}} 更新而来。"
   },
   "agentNotice": {
     "one": "{{name}} 有更新",
     "many": "Agent 有更新",
-    "oneTooltip": "{{name}} {{version}} 已发布。打开「设置 › Agent」进行更新。",
-    "manyTooltip_other": "{{count}} 个 Agent 有可用更新。打开「设置 › Agent」进行更新。"
+    "detail": "打开「设置 › Agent」进行更新"
   },
   "quit": {
     "titleUpdate": "重启以完成更新？",

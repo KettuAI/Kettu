@@ -1,7 +1,8 @@
 import type { AgentStatus } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
+import { i18n } from '@renderer/lib/i18n'
 
-/** The agents whose update the footer's notice shows, and what it names for one. */
+/** The agents whose update the notice shows, and what it names for one. */
 export type AgentUpdateNotice =
   | { kind: 'one'; agentId: AgentId; name: string; version: string }
   | { kind: 'many'; agentIds: AgentId[] }
@@ -25,4 +26,11 @@ export function agentUpdateNotice(statuses: AgentStatus[]): AgentUpdateNotice | 
   if (shown.length === 0) return null
   if (shown.length === 1) return { kind: 'one', ...shown[0]! }
   return { kind: 'many', agentIds: shown.map((agent) => agent.agentId) }
+}
+
+/** The notice's first line as one string: "Claude Code update 2.1.310", "Agent updates 2". */
+export function agentUpdateLabel(notice: AgentUpdateNotice): string {
+  return notice.kind === 'one'
+    ? `${i18n.t('updates:agentNotice.one', { name: notice.name })} ${notice.version}`
+    : `${i18n.t('updates:agentNotice.many')} ${notice.agentIds.length}`
 }

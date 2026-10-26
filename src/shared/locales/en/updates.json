@@ -11,18 +11,15 @@
     "downloadProgress": "Download progress",
     "cancel": "Cancel update",
     "whatsNew": "What’s new",
-    "readyTooltip": "OverBench {{version}} is downloaded. Restart to update to finish; your sessions come back.",
-    "updateTooltip": "OverBench {{version}} is out. Update downloads it, then restarts OverBench; your sessions come back.",
-    "downloadingTooltip": "OverBench {{version}} is downloading. Cancel stops it and leaves the update on offer.",
-    "availableTooltip": "OverBench {{version}} is out. Download it from the release page.",
-    "updatedTooltip": "OverBench was updated to {{version}}."
+    "readyDetail": "Restart to finish; your sessions come back.",
+    "updateDetail": "Update downloads it, then restarts; your sessions come back.",
+    "downloadDetail": "Download it from the release page.",
+    "updatedDetail": "Updated from {{version}}."
   },
   "agentNotice": {
     "one": "{{name}} update",
     "many": "Agent updates",
-    "oneTooltip": "{{name}} {{version}} is available. Open Settings › Agents to update.",
-    "manyTooltip_one": "{{count}} agent update is available. Open Settings › Agents to update.",
-    "manyTooltip_other": "{{count}} agent updates are available. Open Settings › Agents to update."
+    "detail": "Open Settings › Agents to update"
   },
   "quit": {
     "titleUpdate": "Restart to update?",
