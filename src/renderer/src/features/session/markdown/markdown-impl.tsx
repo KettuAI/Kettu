@@ -26,6 +26,7 @@ import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
+import { asksBeforeOpening } from '@renderer/features/session/link-open'
 import { LinkConfirm } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { LocalMedia } from '@renderer/features/session/media/local-media'
@@ -37,6 +38,7 @@ import {
 } from '@renderer/features/session/media/named'
 import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { splitIntoChunks } from './chunks'
 import { useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, spacedImages } from './local-images'
@@ -221,6 +223,9 @@ const components: Components = {
 
 const linkSafety = {
   enabled: true,
+  // Read at the click: a setting change re-renders no message, since this object stays the same.
+  onLinkCheck: (url: string) =>
+    !asksBeforeOpening(url, useSettingsStore.getState().settings.thread.confirmLinks),
   renderModal: (props: LinkSafetyModalProps) => <LinkConfirm {...props} />,
 }
 

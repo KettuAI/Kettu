@@ -13,6 +13,8 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { addressParts, readableRest } from '@renderer/features/browser/address'
 import { CopyButton } from '@renderer/features/git/copy-button'
+import { useSettingsStore } from '@renderer/stores/settings'
+import { asksBeforeOpening, hasUserinfo } from './link-open'
 
 /**
  * The address as the browser pane's field draws it, with a break before each separator and
@@ -61,7 +63,7 @@ export function LinkConfirm({
   const parsed = URL.parse(url)
   const parts = addressParts(url)
   if (!parsed || !parts) return null
-  const userinfo = parsed.username !== '' || parsed.password !== ''
+  const userinfo = hasUserinfo(url)
   return (
     <AlertDialog open={isOpen} onOpenChange={(next) => !next && onClose()}>
       <AlertDialogContent initialFocus={userinfo ? cancel : open}>
@@ -98,23 +100,23 @@ export function LinkConfirm({
 /** A web address in plain text, such as a notice's, which opens through the confirmation. */
 export function ConfirmedLink({ url }: { url: string }) {
   const [open, setOpen] = useState(false)
+  // As a reply's link opens: main hands it to the default browser.
+  const openUrl = () => window.open(url, '_blank', 'noreferrer')
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          const { confirmLinks } = useSettingsStore.getState().settings.thread
+          if (asksBeforeOpening(url, confirmLinks)) setOpen(true)
+          else openUrl()
+        }}
         // The classes of a reply's link button, which Streamdown draws in medium weight.
         className="thread-link text-left font-medium [overflow-wrap:anywhere]"
       >
         {url}
       </button>
-      <LinkConfirm
-        url={url}
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        // As a reply's link opens: main hands it to the default browser.
-        onConfirm={() => window.open(url, '_blank', 'noreferrer')}
-      />
+      <LinkConfirm url={url} isOpen={open} onClose={() => setOpen(false)} onConfirm={openUrl} />
     </>
   )
 }

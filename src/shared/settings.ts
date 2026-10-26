@@ -13,7 +13,10 @@ export interface SettingsFile {
     confirmQuitWhileRunning: boolean
     openAtLogin: boolean // start at login, so routines keep their schedule
   }
-  thread: { outlineSummaries: boolean } // a small model titles the outline's messages
+  thread: {
+    outlineSummaries: boolean // a small model titles the outline's messages
+    confirmLinks: boolean // show where a link goes before it opens in the default browser
+  }
   appearance: {
     theme: 'system' | 'light' | 'dark' // the color mode, which picks a theme's variant
     colorTheme: string // an installed theme's id, or BUILTIN_THEME_ID
@@ -70,7 +73,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     confirmQuitWhileRunning: true,
     openAtLogin: false,
   },
-  thread: { outlineSummaries: true },
+  thread: { outlineSummaries: true, confirmLinks: true },
   appearance: {
     theme: 'system',
     colorTheme: BUILTIN_THEME_ID,

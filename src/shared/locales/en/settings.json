@@ -57,6 +57,11 @@
       "unavailable": "Available in the installed app.",
       "keywords": "login startup launch start routine"
     },
+    "confirmLinks": {
+      "name": "Ask before opening links",
+      "description": "Shows where a link goes before it opens in your default browser.",
+      "keywords": "link url browser open confirm"
+    },
     "outlineSummaries": {
       "name": "Summarize messages in the outline",
       "description": "Uses a small model of each session's agent, and its plan or credits, when the outline opens with messages it has not summarized.",

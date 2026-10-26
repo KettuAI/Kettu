@@ -167,6 +167,21 @@ export function GeneralSwitch({
   )
 }
 
+export function ConfirmLinks({ label }: { label: string }) {
+  const checked = useSettings().thread.confirmLinks
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        onChange={(v) => apply({ thread: { confirmLinks: v } })}
+      />
+    </>
+  )
+}
+
 export function OutlineSummaries({ label }: { label: string }) {
   const checked = useSettings().thread.outlineSummaries
   const [apply, error] = useApply()

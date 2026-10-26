@@ -56,6 +56,11 @@
       "unavailable": "仅在已安装的应用中可用。",
       "keywords": "登录 启动 开机 例程 login startup launch routine"
     },
+    "confirmLinks": {
+      "name": "打开链接前先询问",
+      "description": "在默认浏览器中打开前，先显示链接的去向。",
+      "keywords": "链接 网址 浏览器 打开 确认 link url browser"
+    },
     "outlineSummaries": {
       "name": "在大纲中总结消息",
       "description": "大纲打开且有尚未总结的消息时，使用该会话 Agent 的小模型，并消耗其套餐额度或积分。",
