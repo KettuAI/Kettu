@@ -2205,6 +2205,38 @@ describe('updates', () => {
     await m.agents.stopAll()
   })
 
+  it('keeps the older install when its given-up process exits after a failed start', async () => {
+    const given = stopFails()
+    const slow = inProcessLauncher(module, {
+      FAKE_AGENT_SLOW_START_MS: '10000',
+      FAKE_AGENT_DELAY_SCALE: '1',
+    })
+    // Every process after the given-up one is too slow to answer initialize.
+    const launcher: AgentLauncher = {
+      launch: (def, spec, env, output) =>
+        (given.launches() === 0 ? given.launcher : slow).launch(def, spec, env, output),
+    }
+    const m = await updateManager({ launcher, timings: { initializeMs: 1_000 } })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    await m.agents.checkUpdates()
+    await m.agents.ensureReady('codex')
+    await m.agents.update('codex')
+    const [, fresh] = await m.dirs()
+    await m.agents.stop('codex')
+    await expect(m.agents.ensureReady('codex')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    expect(m.status().state).toBe('failed')
+
+    // No start of the update answered, so its exit leaves 2.0.0 for a start that does.
+    await given.exitFirst()
+    await until(() => given.pids(m).length === 0)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(await m.dirs()).toEqual(['2.0.0', fresh])
+    await m.agents.stopAll()
+  })
+
   it('reports a failed update as a failed task and leaves the old install', async () => {
     const m = await updateManager({
       latest: async () => ({ adapterVersion: '2.1.0', cliVersion: null }),

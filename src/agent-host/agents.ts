@@ -770,7 +770,8 @@ export class AgentManager {
     connection.close()
     if (this.givenUp.delete(launched)) {
       this.emitProcesses()
-      if (!this.stopped && !this.givenUpRuns(slot)) this.cleanUpVersions(slot)
+      // Only while the agent runs, since launchSpec also matches a start that failed initialize.
+      if (!this.stopped && !this.givenUpRuns(slot) && slot.runtime) this.cleanUpVersions(slot)
     }
     if (slot.launched !== launched) return
     slot.launched = null
