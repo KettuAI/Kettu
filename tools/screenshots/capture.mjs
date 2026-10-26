@@ -554,6 +554,74 @@ async function run() {
   await press('Escape', 27)
   await sleep(300)
 
+  // A routine made on New routine and run once, the run's session, then the Routines list.
+  const routinesRow = `[...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.trim() === 'Routines')`
+  const buttonNamed = (text) =>
+    `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`
+  const moveAway = () => cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 })
+  await click(`return ${routinesRow}`, 'the Routines row')
+  await waitFor(
+    `[...document.querySelectorAll('h1')].some((h) => h.textContent === 'Routines')`,
+    'the Routines page',
+  )
+  await click(`return ${buttonNamed('New routine')}`, 'New routine')
+  const nameField = `document.querySelector('input[aria-label="Routine name"]')`
+  await waitFor(nameField, 'the New routine form')
+  await click(`return ${nameField}`, 'the routine name')
+  await cdp.send('Input.insertText', { text: 'Morning briefing' })
+  await click(`return document.querySelector('textarea[aria-label=Prompt]')`, 'the prompt')
+  await cdp.send('Input.insertText', {
+    text: "Summarize yesterday's commits and list anything that needs a follow-up",
+  })
+  // A fresh data folder has no default agent, so the form starts with none.
+  await openAgentMenu()
+  await waitFor(
+    `[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('Fake Balanced'))`,
+    "the fake agent's models",
+  )
+  await click(byText('[role=option]', 'Fake Balanced'), 'Fake Balanced')
+  await waitFor(
+    `!document.querySelector('[role=tablist]') && ${buttonNamed('Create routine')}?.disabled === false`,
+    'Create routine to be enabled',
+  )
+  await click(`return ${buttonNamed('Create routine')}`, 'Create routine')
+  await waitFor(`${buttonNamed('Run now')}?.disabled === false`, 'the routine page')
+  await click(`return ${buttonNamed('Run now')}`, 'Run now')
+  // The run's row shows its answer's first line, so the page's status line says when it ends.
+  await waitFor(
+    `[...document.querySelectorAll('[role=status]')].some((s) => s.textContent === 'Morning briefing: Finished')`,
+    'the run to finish',
+    120_000,
+  )
+  // The page counts the run as seen, which clears the Routines row's mark.
+  await waitFor(
+    `${routinesRow}?.getAttribute('aria-label') === 'Routines'`,
+    'the Routines row without a mark',
+  )
+  await moveAway()
+  await sleep(600)
+  await shoot('routine')
+  await cdp.evaluate(`document.querySelector('section[aria-label=Runs]').scrollIntoView()`)
+  // Long enough for an overlay scrollbar to fade.
+  await sleep(1200)
+  await shoot('routine-runs')
+  await click(`return document.querySelector('section[aria-label=Runs] button')`, 'the run')
+  await waitFor(
+    `document.querySelector('[data-slot=message-scroller-viewport]')?.textContent.includes('Summarize yesterday')`,
+    "the run's session",
+  )
+  await moveAway()
+  await sleep(800)
+  await shoot('routine-run')
+  await click(`return ${routinesRow}`, 'the Routines row')
+  await waitFor(
+    `document.querySelector('[data-routine-row][aria-label="Open Morning briefing"]')`,
+    'the routine in the list',
+  )
+  await moveAway()
+  await sleep(600)
+  await shoot('routines')
+
   await click(
     `return document.querySelector('[data-sidebar=footer] button[aria-label="Settings"]')`,
     'Settings',
