@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { PlanLimit, RoutineList, SessionSummary } from '@shared/agent-host'
+import { markdownFirstLine } from '@shared/markdown-line'
 import { nextRuns } from '@shared/schedule'
 import {
   KEPT_RUN_SESSIONS,
@@ -1146,15 +1147,10 @@ function routineName(name: string, prompt: string): string {
     : line
 }
 
-/** The first line of an output, to say what a finished run found. */
+/** The first line of an output, as plain text, to say what a finished run found. */
 function firstLine(output: string | null): string | null {
   if (!output) return null
-  const line =
-    output
-      .split('\n')
-      .map((part) => part.trim())
-      .find((part) => part !== '') ?? ''
-  return line === '' ? null : line
+  return markdownFirstLine(output) || null
 }
 
 /** A run keeps at most 64 KB of output, on a character boundary. */
