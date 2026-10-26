@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
+  accountSubdomain,
   assetHash,
   CLOUDFLARE_API,
   Cloudflare,
   COMPATIBILITY_DATE,
   type Fetch,
-  verifyAccount,
+  findAccounts,
+  listAccounts,
   WORKER_MODULE,
   workerName,
 } from './cloudflare'
 import { headersFile, pageHeaders, withMeta } from './page'
 
 const ACCOUNT = '0123456789abcdef0123456789abcdef'
+const OTHER = 'fedcba9876543210fedcba9876543210'
 const TOKEN = 'test-token'
 const WORKER = 'ob-aaaaaaaaaaaaaaaa'
 const HTML = '<html><head><title>Report</title></head><body>Hi</body></html>'
@@ -37,6 +40,34 @@ function fail(status: number, code: number, message: string): Response {
     status,
     headers: { 'content-type': 'application/json' },
   })
+}
+
+function listing(accounts: unknown[], totalCount?: number): Response {
+  return new Response(
+    JSON.stringify({
+      success: true,
+      errors: [],
+      messages: [],
+      result: accounts,
+      ...(totalCount === undefined ? {} : { result_info: { total_count: totalCount } }),
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  )
+}
+
+function hex(value: number): string {
+  return value.toString(16).padStart(32, '0')
+}
+
+function listed(count: number): { id: string; name: string }[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: hex(index + 1),
+    name: `Account ${index + 1}`,
+  }))
+}
+
+function apiPath(call: Call): string {
+  return new URL(call.url).pathname.replace('/client/v4', '')
 }
 
 function server(answer: (call: Call) => Response): { fetch: Fetch; calls: Call[] } {
@@ -244,36 +275,175 @@ describe('failures', () => {
   })
 })
 
-describe('verifyAccount', () => {
-  it('checks the token, then reads the account subdomain', async () => {
+describe('listAccounts', () => {
+  it('asks for 50 a page and follows pages until a short one', async () => {
+    const first = listed(50)
+    const second = [{ id: ACCOUNT, name: 'Team' }]
     const { fetch, calls } = server((call) => {
-      if (call.url.endsWith('/user/tokens/verify')) return ok({ status: 'active' })
+      return new URL(call.url).searchParams.get('page') === '1' ? listing(first) : listing(second)
+    })
+
+    await expect(listAccounts(fetch, TOKEN)).resolves.toEqual([...first, ...second])
+    expect(calls.map((call) => new URL(call.url).search)).toEqual([
+      '?per_page=50&page=1',
+      '?per_page=50&page=2',
+    ])
+  })
+
+  it('stops once result_info.total_count is reached', async () => {
+    const { fetch, calls } = server(() => listing(listed(50), 50))
+
+    await expect(listAccounts(fetch, TOKEN)).resolves.toHaveLength(50)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('fails after 20 full pages', async () => {
+    const { fetch, calls } = server(() => listing(listed(50), 10_000))
+
+    await expect(listAccounts(fetch, TOKEN)).rejects.toMatchObject({
+      failure: 'failed',
+      message: 'Cloudflare listed more than 1,000 accounts for this token.',
+    })
+    expect(calls).toHaveLength(20)
+  })
+
+  it('skips entries without a 32-hex id or a name', async () => {
+    const { fetch } = server(() =>
+      listing([
+        { id: ACCOUNT, name: 'Team' },
+        { id: 'nope', name: 'Bad id' },
+        { id: OTHER },
+        { name: 'No id' },
+        null,
+        'entry',
+        { id: OTHER, name: 'Other' },
+      ]),
+    )
+
+    await expect(listAccounts(fetch, TOKEN)).resolves.toEqual([
+      { id: ACCOUNT, name: 'Team' },
+      { id: OTHER, name: 'Other' },
+    ])
+  })
+
+  it('maps a refusal to invalid_token', async () => {
+    const { fetch } = server(() => fail(403, 9109, 'Invalid access token'))
+
+    await expect(listAccounts(fetch, TOKEN)).rejects.toMatchObject({ failure: 'invalid_token' })
+  })
+})
+
+describe('accountSubdomain', () => {
+  it('reads the account subdomain', async () => {
+    const { fetch, calls } = server(() => ok({ subdomain: 'team' }))
+
+    await expect(accountSubdomain(fetch, TOKEN, ACCOUNT)).resolves.toBe('team')
+    expect(calls.map((call) => call.url)).toEqual([
+      `${CLOUDFLARE_API}/accounts/${ACCOUNT}/workers/subdomain`,
+    ])
+    expect(calls[0]!.headers.Authorization).toBe(`Bearer ${TOKEN}`)
+  })
+
+  it('is null when Cloudflare answers 404 or code 10007', async () => {
+    for (const answer of [
+      () => fail(404, 10007, 'Not found'),
+      () => fail(400, 10007, 'Not found'),
+    ]) {
+      const { fetch } = server(answer)
+      await expect(accountSubdomain(fetch, TOKEN, ACCOUNT)).resolves.toBeNull()
+    }
+  })
+
+  it('is null when the subdomain is empty', async () => {
+    const { fetch } = server(() => ok({ subdomain: '' }))
+
+    await expect(accountSubdomain(fetch, TOKEN, ACCOUNT)).resolves.toBeNull()
+  })
+
+  it('rejects a value that is no DNS label', async () => {
+    const { fetch } = server(() => ok({ subdomain: 'Not A Label' }))
+
+    await expect(accountSubdomain(fetch, TOKEN, ACCOUNT)).rejects.toMatchObject({
+      failure: 'failed',
+    })
+  })
+})
+
+describe('findAccounts', () => {
+  it('drops an account that refuses the token and keeps one without a subdomain', async () => {
+    const { fetch } = server((call) => {
+      if (apiPath(call) === '/accounts') {
+        return listing([
+          { id: hex(1), name: 'Alpha' },
+          { id: hex(2), name: 'Refused' },
+          { id: hex(3), name: 'No subdomain' },
+        ])
+      }
+      if (apiPath(call) === `/accounts/${hex(1)}/workers/subdomain`) {
+        return ok({ subdomain: 'team' })
+      }
+      if (apiPath(call) === `/accounts/${hex(2)}/workers/subdomain`) {
+        return fail(403, 9109, 'Invalid access token')
+      }
+      return fail(404, 10007, 'Not found')
+    })
+
+    await expect(findAccounts(fetch, TOKEN)).resolves.toEqual([
+      { id: hex(1), name: 'Alpha', subdomain: 'team' },
+      { id: hex(3), name: 'No subdomain', subdomain: null },
+    ])
+  })
+
+  it('fails the whole lookup when an account has a network error', async () => {
+    const { fetch } = server((call) => {
+      if (apiPath(call) === '/accounts') return listing([{ id: ACCOUNT, name: 'Team' }])
+      throw new Error('getaddrinfo ENOTFOUND api.cloudflare.com')
+    })
+
+    await expect(findAccounts(fetch, TOKEN)).rejects.toMatchObject({ failure: 'network' })
+  })
+
+  it('never has more than four requests open at once', async () => {
+    const accounts = listed(12)
+    let open = 0
+    let most = 0
+    const fetch: Fetch = async (url) => {
+      if (new URL(url).pathname === '/client/v4/accounts') return listing(accounts)
+      open++
+      most = Math.max(most, open)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      open--
+      return ok({ subdomain: 'team' })
+    }
+
+    await expect(findAccounts(fetch, TOKEN)).resolves.toHaveLength(12)
+    expect(most).toBe(4)
+  })
+
+  it('sorts by name, ignoring case', async () => {
+    const { fetch } = server((call) => {
+      if (apiPath(call) === '/accounts') {
+        return listing([
+          { id: hex(1), name: 'Zulu' },
+          { id: hex(2), name: 'alpha' },
+          { id: hex(3), name: 'Bravo' },
+        ])
+      }
       return ok({ subdomain: 'team' })
     })
 
-    await expect(verifyAccount(fetch, ACCOUNT, TOKEN)).resolves.toBe('team')
-    expect(calls.map((call) => call.url)).toEqual([
-      `${CLOUDFLARE_API}/user/tokens/verify`,
-      `${CLOUDFLARE_API}/accounts/${ACCOUNT}/workers/subdomain`,
-    ])
-    expect(calls.every((call) => call.headers.Authorization === `Bearer ${TOKEN}`)).toBe(true)
+    const found = await findAccounts(fetch, TOKEN)
+    expect(found.map((account) => account.name)).toEqual(['alpha', 'Bravo', 'Zulu'])
   })
 
-  it('says when the account has no workers.dev subdomain', async () => {
-    const { fetch } = server((call) => {
-      if (call.url.endsWith('/user/tokens/verify')) return ok({ status: 'active' })
-      return fail(404, 10007, 'Not found')
+  it('never calls GET /user/tokens/verify', async () => {
+    const { fetch, calls } = server((call) => {
+      if (apiPath(call) === '/accounts') return listing([{ id: ACCOUNT, name: 'Team' }])
+      return ok({ subdomain: 'team' })
     })
-    await expect(verifyAccount(fetch, ACCOUNT, TOKEN)).rejects.toMatchObject({
-      failure: 'no_subdomain',
-    })
-  })
 
-  it('refuses a token that is not active', async () => {
-    const { fetch } = server(() => ok({ status: 'expired' }))
-    await expect(verifyAccount(fetch, ACCOUNT, TOKEN)).rejects.toMatchObject({
-      failure: 'invalid_token',
-    })
+    await findAccounts(fetch, TOKEN)
+    expect(calls.some((call) => call.url.includes('/user/tokens/verify'))).toBe(false)
   })
 })
 

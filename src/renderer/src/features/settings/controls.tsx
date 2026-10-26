@@ -246,9 +246,16 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
 /**
  * Account details behind a mask while Settings > Agents hides them: blurred on screen, and the
  * value itself withheld from the accessibility tree and from copying. Clicking the mask shows
- * that one value until it is clicked again; the setting itself stays on.
+ * that one value until it is clicked again; the setting itself stays on. `revealable` is false
+ * where the show button cannot sit, as inside a menu item.
  */
-export function Masked({ children }: { children: string }) {
+export function Masked({
+  children,
+  revealable = true,
+}: {
+  children: string
+  revealable?: boolean
+}) {
   const { t } = useTranslation('settings')
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const [revealed, setRevealed] = useState(false)
@@ -259,6 +266,12 @@ export function Masked({ children }: { children: string }) {
     setRevealed(false)
   }
   if (!hidden) return <span data-selectable="">{children}</span>
+  const dots = (
+    <span aria-hidden className="inline-block blur-xs select-none">
+      {'•'.repeat(Math.min(Math.max(children.length, 6), 18))}
+    </span>
+  )
+  if (!revealable) return dots
   return (
     <Tooltip>
       <TooltipTrigger
@@ -272,13 +285,7 @@ export function Masked({ children }: { children: string }) {
           />
         }
       >
-        {revealed ? (
-          children
-        ) : (
-          <span aria-hidden className="inline-block blur-xs select-none">
-            {'•'.repeat(Math.min(Math.max(children.length, 6), 18))}
-          </span>
-        )}
+        {revealed ? children : dots}
       </TooltipTrigger>
       <TooltipContent>{t(revealed ? 'agents.maskAccount' : 'agents.revealAccount')}</TooltipContent>
     </Tooltip>

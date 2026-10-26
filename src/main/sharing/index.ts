@@ -7,13 +7,15 @@ import type { ArtifactContentResult } from '@shared/host-control'
 import {
   CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_TOKEN,
+  type CloudflareAccountChoice,
+  type SharingConnectResult,
   type SharingFailure,
   type SharingResult,
   type SharingStatus,
 } from '@shared/sharing'
 import { isInside } from '../artifacts/protocol'
 import { createLogger } from '../log'
-import { Cloudflare, verifyAccount, type Fetch } from './cloudflare'
+import { accountSubdomain, Cloudflare, findAccounts, type Fetch } from './cloudflare'
 import { pageHeaders, withMeta } from './page'
 import { SharingError, type SharingProvider } from './provider'
 import {
@@ -100,24 +102,50 @@ export class Sharing {
     }
   }
 
-  /** Checks the account and token with Cloudflare, then keeps them. */
-  async connect(rawAccountId: unknown, rawToken: unknown): Promise<SharingResult> {
-    const accountId = typeof rawAccountId === 'string' ? rawAccountId.trim().toLowerCase() : ''
+  /**
+   * Checks the token with Cloudflare and keeps the account it reaches. With an account ID it reads
+   * that account alone; without one it answers with the accounts when the token reaches several,
+   * since choosing one is the user's.
+   */
+  async connect(rawToken: unknown, rawAccountId: unknown): Promise<SharingConnectResult> {
     const token = typeof rawToken === 'string' ? rawToken.trim() : ''
-    if (!CLOUDFLARE_ACCOUNT_ID.test(accountId)) {
-      return failed('failed', 'The account ID must be 32 hexadecimal characters.')
-    }
     if (!CLOUDFLARE_TOKEN.test(token)) return failed('failed', 'The API token is not valid.')
+    let accountId: string | null = null
+    if (rawAccountId !== null) {
+      accountId = typeof rawAccountId === 'string' ? rawAccountId.trim().toLowerCase() : ''
+      if (!CLOUDFLARE_ACCOUNT_ID.test(accountId)) {
+        return failed('failed', 'The account ID must be 32 hexadecimal characters.')
+      }
+    }
     try {
       if (!(await this.deps.encryptionAvailable())) {
         return failed('encryption', 'This system cannot encrypt the token.')
       }
-      const subdomain = await verifyAccount(this.deps.fetch, accountId, token)
-      await this.store.connect(accountId, subdomain, token, this.deps.plainText())
-      return this.report()
+      if (accountId !== null) {
+        const subdomain = await accountSubdomain(this.deps.fetch, token, accountId)
+        if (subdomain === null) {
+          return failed('no_subdomain', 'The account has no workers.dev subdomain.')
+        }
+        return await this.keep(accountId, subdomain, token)
+      }
+      const accounts = await findAccounts(this.deps.fetch, token)
+      if (accounts.length === 0) {
+        return failed('invalid_token', 'The token reaches no account it can publish to.')
+      }
+      if (accounts.length > 1) return { accounts }
+      const [only] = accounts as [CloudflareAccountChoice]
+      if (only.subdomain === null) {
+        return failed('no_subdomain', 'The account has no workers.dev subdomain.')
+      }
+      return await this.keep(only.id, only.subdomain, token)
     } catch (error) {
       return this.failure(error)
     }
+  }
+
+  private async keep(accountId: string, subdomain: string, token: string): Promise<SharingResult> {
+    await this.store.connect(accountId, subdomain, token, this.deps.plainText())
+    return this.report()
   }
 
   /** Forgets the account and its token; published pages stay as they are. */

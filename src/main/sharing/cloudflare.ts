@@ -3,8 +3,12 @@
 // workers.dev subdomain.
 
 import { createHash, randomBytes } from 'node:crypto'
+import { CLOUDFLARE_ACCOUNT_ID, type CloudflareAccountChoice } from '@shared/sharing'
+import { createLogger } from '../log'
 import { headersFile } from './page'
 import { SharingError, type Published, type SharingProvider } from './provider'
+
+const log = createLogger('sharing')
 
 export const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4'
 
@@ -40,7 +44,7 @@ interface Envelope<T> {
   success?: unknown
   errors?: unknown
   result?: T
-  result_info?: { total_pages?: unknown } | null
+  result_info?: { total_pages?: unknown; total_count?: unknown } | null
 }
 
 interface Asset {
@@ -145,31 +149,80 @@ async function call<T>(fetch: Fetch, token: string, path: string, init: RequestI
   return result
 }
 
-/** Checks a token and account; resolves with the account's workers.dev subdomain. */
-export async function verifyAccount(
+const ACCOUNTS_PER_PAGE = 50
+const MAX_ACCOUNT_PAGES = 20
+
+export interface ListedAccount {
+  id: string
+  name: string
+}
+
+/** A page's accounts, how many entries it held, and every account Cloudflare says the token reaches. */
+async function accountPage(
   fetch: Fetch,
-  accountId: string,
   token: string,
-): Promise<string> {
-  const verified = await call<{ status?: unknown }>(fetch, token, '/user/tokens/verify', {
+  page: number,
+): Promise<{ accounts: ListedAccount[]; count: number; total: number | null }> {
+  const params = new URLSearchParams({ per_page: String(ACCOUNTS_PER_PAGE), page: String(page) })
+  const { result, result_info } = await send<unknown>(fetch, token, `/accounts?${params}`, {
     method: 'GET',
   })
-  if (verified.status !== 'active') {
-    throw new SharingError('invalid_token', `The token is ${String(verified.status)}`)
+  if (!Array.isArray(result)) {
+    throw new SharingError('failed', 'Cloudflare answered with no list of accounts')
   }
+  const accounts: ListedAccount[] = []
+  let skipped = 0
+  for (const entry of result) {
+    if (typeof entry !== 'object' || entry === null) {
+      skipped++
+      continue
+    }
+    const { id, name } = entry as Record<string, unknown>
+    // An account without a usable id or name cannot be published to, so it is left out.
+    if (typeof id !== 'string' || !CLOUDFLARE_ACCOUNT_ID.test(id) || typeof name !== 'string') {
+      skipped++
+      continue
+    }
+    accounts.push({ id, name })
+  }
+  if (skipped > 0)
+    log.warn(`Left out ${skipped} account(s) Cloudflare listed without an id or name`)
+  const total = result_info?.total_count
+  return { accounts, count: result.length, total: typeof total === 'number' ? total : null }
+}
+
+/** Every account the token can reach, at most 1,000, in Cloudflare's order. */
+export async function listAccounts(fetch: Fetch, token: string): Promise<ListedAccount[]> {
+  const accounts: ListedAccount[] = []
+  let seen = 0
+  for (let page = 1; page <= MAX_ACCOUNT_PAGES; page++) {
+    const found = await accountPage(fetch, token, page)
+    accounts.push(...found.accounts)
+    seen += found.count
+    if (found.count < ACCOUNTS_PER_PAGE) return accounts
+    if (found.total !== null && seen >= found.total) return accounts
+  }
+  throw new SharingError('failed', `Cloudflare listed more than 1,000 accounts for this token.`)
+}
+
+/**
+ * The account's workers.dev subdomain, or null when it has none. A refusal is `invalid_token`, as
+ * every call here is; a value that is no DNS label fails rather than name a page's URL.
+ */
+export async function accountSubdomain(
+  fetch: Fetch,
+  token: string,
+  accountId: string,
+): Promise<string | null> {
   let found: { subdomain?: unknown }
   try {
     found = await call(fetch, token, `/accounts/${accountId}/workers/subdomain`, { method: 'GET' })
   } catch (error) {
-    if (error instanceof SharingError && error.failure === 'not_found') {
-      throw new SharingError('no_subdomain', 'The account has no workers.dev subdomain')
-    }
+    if (error instanceof SharingError && error.failure === 'not_found') return null
     throw error
   }
   const { subdomain } = found
-  if (typeof subdomain !== 'string' || subdomain === '') {
-    throw new SharingError('no_subdomain', 'The account has no workers.dev subdomain')
-  }
+  if (typeof subdomain !== 'string' || subdomain === '') return null
   if (!LABEL.test(subdomain)) {
     throw new SharingError(
       'failed',
@@ -177,6 +230,39 @@ export async function verifyAccount(
     )
   }
   return subdomain
+}
+
+/** How many accounts are asked about at once; Cloudflare's API allows more, this keeps it polite. */
+const ACCOUNT_CONCURRENCY = 4
+
+/**
+ * The accounts a token can publish to, with their subdomains. An account that refuses the token is
+ * left out, since some accounts allow a token and others do not; any other failure fails the whole
+ * lookup, because the list would be missing accounts without saying so.
+ */
+export async function findAccounts(
+  fetch: Fetch,
+  token: string,
+): Promise<CloudflareAccountChoice[]> {
+  const accounts = await listAccounts(fetch, token)
+  const found: CloudflareAccountChoice[] = []
+  let next = 0
+  let failure: unknown = null
+  const worker = async (): Promise<void> => {
+    while (failure === null && next < accounts.length) {
+      const account = accounts[next++]!
+      try {
+        const subdomain = await accountSubdomain(fetch, token, account.id)
+        found.push({ id: account.id, name: account.name, subdomain })
+      } catch (error) {
+        if (error instanceof SharingError && error.failure === 'invalid_token') continue
+        failure ??= error
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(ACCOUNT_CONCURRENCY, accounts.length) }, worker))
+  if (failure) throw failure
+  return found.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
 }
 
 export class Cloudflare implements SharingProvider {
