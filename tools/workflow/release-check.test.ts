@@ -7,6 +7,7 @@ import {
   latestTag,
   mergedPull,
   missing,
+  nextVersion,
   pullNumber,
   readPull,
   releaseOpen,
@@ -17,7 +18,8 @@ import {
 type Input = Parameters<typeof decide>[0]
 
 const NOW = new Date('2026-11-01T12:00:00Z')
-const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000).toISOString()
+const HOUR = 3_600_000
+const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * HOUR).toISOString()
 const commit = (subject: string, sha = subject, hours = 10) => ({
   sha,
   subject,
@@ -37,17 +39,18 @@ const urgentPull = (number: number, issue: number) => ({
   number,
   issues: [{ number: issue, labels: ['area:session', 'urgent'] }],
 })
+const milestone = (number: number, title: string, openIssues: number) => ({
+  number,
+  title,
+  openIssues,
+})
 
 const base: Input = {
   now: NOW,
-  tags: [tag('v0.0.1', 49)],
+  tags: [tag('v0.0.4', 49)],
   commits: [],
-  releases: [published('v0.0.1', 48)],
-  milestones: [
-    { number: 1, title: 'v0.1.0', openIssues: 6 },
-    { number: 4, title: 'v0.0.3', openIssues: 8 },
-    { number: 3, title: 'v0.0.2', openIssues: 5 },
-  ],
+  releases: [published('v0.0.4', 48)],
+  milestones: [milestone(7, 'v0.0.6', 8), milestone(1, 'v0.1.0', 6), milestone(6, 'v0.0.5', 17)],
   openIssues: [{ number: 12, title: 'Use the installed agents' }],
   pulls: {},
 }
@@ -66,6 +69,15 @@ describe('latestTag', () => {
   it('returns null before the first release', () => {
     expect(latestTag([])).toBeNull()
     expect(latestTag(['nightly'])).toBeNull()
+  })
+})
+
+describe('nextVersion', () => {
+  it('takes the next patch after the last tag', () => {
+    expect(nextVersion('v0.0.4')).toBe('v0.0.5')
+    expect(nextVersion('v0.0.9')).toBe('v0.0.10')
+    expect(nextVersion('v0.1.0')).toBe('v0.1.1')
+    expect(nextVersion(null)).toBe('v0.0.1')
   })
 })
 
@@ -115,22 +127,22 @@ describe('lastPublished', () => {
   it('takes the latest published release and ignores drafts', () => {
     expect(
       lastPublished([
-        { tag: 'v0.0.3', draft: true, prerelease: false, publishedAt: null },
-        published('v0.0.1', 200),
-        published('v0.0.2', 100),
+        { tag: 'v0.0.4', draft: true, prerelease: false, publishedAt: null },
+        published('v0.0.2', 200),
+        published('v0.0.3', 100),
       ]),
-    ).toEqual({ tag: 'v0.0.2', at: new Date(hoursAgo(100)) })
+    ).toEqual({ tag: 'v0.0.3', at: new Date(hoursAgo(100)) })
   })
 
   it('ignores prereleases and tags that are not versions', () => {
     expect(
       lastPublished([
-        published('v0.0.1', 48),
-        { ...published('v0.0.2', 2), prerelease: true },
-        published('v0.0.2-beta.1', 3),
+        published('v0.0.3', 48),
+        { ...published('v0.0.4', 2), prerelease: true },
+        published('v0.0.4-beta.1', 3),
         published('nightly', 1),
       ]),
-    ).toEqual({ tag: 'v0.0.1', at: new Date(hoursAgo(48)) })
+    ).toEqual({ tag: 'v0.0.3', at: new Date(hoursAgo(48)) })
   })
 
   it('returns null when nothing is published', () => {
@@ -142,84 +154,75 @@ describe('lastPublished', () => {
 })
 
 describe('releaseTarget', () => {
-  it('takes the earliest open patch milestone after the last tag', () => {
-    expect(releaseTarget(base.milestones, 'v0.0.1')).toEqual({
-      version: 'v0.0.2',
-      milestone: { number: 3, title: 'v0.0.2', openIssues: 5 },
-      minor: false,
-    })
+  it('takes the earliest open milestone once all of its issues have closed', () => {
     expect(
       releaseTarget(
-        [
-          { number: 9, title: 'v0.0.10', openIssues: 1 },
-          { number: 8, title: 'v0.0.9', openIssues: 4 },
-        ],
-        'v0.0.8',
+        [milestone(7, 'v0.0.6', 8), milestone(6, 'v0.0.5', 0), milestone(1, 'v0.1.0', 6)],
+        'v0.0.4',
       ),
-    ).toMatchObject({ version: 'v0.0.9' })
+    ).toEqual({
+      version: 'v0.0.5',
+      milestone: milestone(6, 'v0.0.5', 0),
+      done: true,
+    })
+    expect(
+      releaseTarget([milestone(9, 'v0.0.10', 1), milestone(8, 'v0.0.9', 0)], 'v0.0.8'),
+    ).toMatchObject({ version: 'v0.0.9', done: true })
+  })
+
+  it('waits while the earliest open milestone still has issues', () => {
+    expect(releaseTarget(base.milestones, 'v0.0.4')).toEqual({
+      problem: 'The earliest open milestone, v0.0.5, still has 17 open issues.',
+    })
+    expect(releaseTarget([milestone(6, 'v0.0.5', 1)], 'v0.0.4')).toEqual({
+      problem: 'The earliest open milestone, v0.0.5, still has 1 open issue.',
+    })
   })
 
   it('skips a milestone left open at or before the last tag, and titles that are not versions', () => {
     expect(
       releaseTarget(
         [
-          { number: 2, title: 'Backlog', openIssues: 40 },
-          { number: 3, title: 'v0.0.2', openIssues: 1 },
-          { number: 7, title: 'v0.0', openIssues: 1 },
-          { number: 4, title: 'v0.0.3', openIssues: 8 },
+          milestone(2, 'Backlog', 40),
+          milestone(3, 'v0.0.2', 1),
+          milestone(7, 'v0.0', 1),
+          milestone(4, 'v0.0.3', 0),
         ],
         'v0.0.2',
       ),
-    ).toMatchObject({ version: 'v0.0.3', milestone: { number: 4 } })
+    ).toMatchObject({ version: 'v0.0.3', milestone: { number: 4 }, done: true })
   })
 
-  it('takes the minor once nothing is left before it and its issues have closed', () => {
-    expect(
-      releaseTarget(
-        [
-          { number: 10, title: 'v0.1.1', openIssues: 3 },
-          { number: 1, title: 'v0.1.0', openIssues: 0 },
-        ],
-        'v0.0.5',
-      ),
-    ).toEqual({
-      version: 'v0.1.0',
-      milestone: { number: 1, title: 'v0.1.0', openIssues: 0 },
-      minor: true,
+  it('takes the next version number for an urgent release, even with issues left', () => {
+    expect(releaseTarget(base.milestones, 'v0.0.4', true)).toEqual({
+      version: 'v0.0.5',
+      milestone: milestone(6, 'v0.0.5', 17),
+      done: false,
+    })
+    expect(releaseTarget([milestone(7, 'v0.0.6', 8)], 'v0.0.4', true)).toEqual({
+      problem: 'No open milestone is planned for v0.0.5, the next version after v0.0.4.',
     })
   })
 
   it('names the problem when no version fits', () => {
-    expect(
-      releaseTarget(
-        [
-          { number: 10, title: 'v0.1.1', openIssues: 3 },
-          { number: 1, title: 'v0.1.0', openIssues: 2 },
-        ],
-        'v0.0.5',
-      ),
-    ).toEqual({
-      problem: 'No patch milestone is open before v0.1.0, which still has 2 open issues.',
-    })
-    expect(releaseTarget([{ number: 1, title: 'v0.1.0', openIssues: 1 }], 'v0.0.5')).toEqual({
-      problem: 'No patch milestone is open before v0.1.0, which still has 1 open issue.',
-    })
-    expect(releaseTarget([], 'v0.0.1')).toEqual({
-      problem: 'No open milestone is planned after v0.0.1.',
+    expect(releaseTarget([], 'v0.0.4')).toEqual({
+      problem: 'No open milestone is planned after v0.0.4.',
     })
     expect(releaseTarget([], null)).toEqual({ problem: 'No open milestone is planned.' })
   })
 
   it('considers every milestone before the first tag', () => {
     expect(
-      releaseTarget(
-        [
-          { number: 1, title: 'v0.1.0', openIssues: 6 },
-          { number: 2, title: 'v0.0.1', openIssues: 3 },
-        ],
-        null,
-      ),
-    ).toMatchObject({ version: 'v0.0.1' })
+      releaseTarget([milestone(1, 'v0.1.0', 6), milestone(2, 'v0.0.1', 0)], null),
+    ).toMatchObject({ version: 'v0.0.1', done: true })
+    expect(releaseTarget([milestone(2, 'v0.0.1', 3)], null)).toEqual({
+      problem: 'The earliest open milestone, v0.0.1, still has 3 open issues.',
+    })
+    expect(releaseTarget([milestone(2, 'v0.0.1', 3)], null, true)).toEqual({
+      version: 'v0.0.1',
+      milestone: milestone(2, 'v0.0.1', 3),
+      done: false,
+    })
   })
 })
 
@@ -232,24 +235,24 @@ describe('releaseOpen', () => {
   it('counts an open issue titled exactly "Release vX.Y.Z" above the last tag', () => {
     expect(
       releaseOpen(
-        input({ openIssues: [...base.openIssues, { number: 61, title: 'Release v0.0.2' }] }),
+        input({ openIssues: [...base.openIssues, { number: 61, title: 'Release v0.0.5' }] }),
       ),
-    ).toEqual({ open: { reason: '#61, "Release v0.0.2", is open.', since: null }, warnings: [] })
+    ).toEqual({ open: { reason: '#61, "Release v0.0.5", is open.', since: null }, warnings: [] })
   })
 
   it('warns about a release issue left open after its version shipped, and does not count it', () => {
     expect(
       releaseOpen(
         input({
-          tags: [tag('v0.0.1', 200), tag('v0.0.2', 49)],
-          releases: [published('v0.0.1', 200), published('v0.0.2', 48)],
-          openIssues: [{ number: 61, title: 'Release v0.0.2' }],
+          tags: [tag('v0.0.4', 200), tag('v0.0.5', 49)],
+          releases: [published('v0.0.4', 200), published('v0.0.5', 48)],
+          openIssues: [{ number: 61, title: 'Release v0.0.5' }],
         }),
       ),
     ).toEqual({
       open: null,
       warnings: [
-        '#61, "Release v0.0.2", is open, but v0.0.2 is not above the last tag, v0.0.2, so it does not count as an open release.',
+        '#61, "Release v0.0.5", is open, but v0.0.5 is not above the last tag, v0.0.5, so it does not count as an open release.',
       ],
     })
   })
@@ -259,16 +262,16 @@ describe('releaseOpen', () => {
       releaseOpen(
         input({
           openIssues: [
-            { number: 90, title: 'Release v0.0.3 crashes on launch' },
+            { number: 90, title: 'Release v0.0.5 crashes on launch' },
             { number: 70, title: 'Release view crashes' },
-            { number: 71, title: 'Plan the Release v0.0.2 notes' },
+            { number: 71, title: 'Plan the Release v0.0.5 notes' },
           ],
         }),
       ),
     ).toEqual({
       open: null,
       warnings: [
-        '#90, "Release v0.0.3 crashes on launch", does not count as an open release: only the exact title "Release vX.Y.Z" does.',
+        '#90, "Release v0.0.5 crashes on launch", does not count as an open release: only the exact title "Release vX.Y.Z" does.',
       ],
     })
   })
@@ -277,8 +280,8 @@ describe('releaseOpen', () => {
     expect(
       releaseOpen(
         input({
-          tags: [tag('v0.0.1', 200), tag('v0.0.2', 31)],
-          releases: [published('v0.0.1', 200), published('v0.0.2', 30)],
+          tags: [tag('v0.0.4', 200), tag('v0.0.5', 31)],
+          releases: [published('v0.0.4', 200), published('v0.0.5', 30)],
           commits: fixes(3),
         }),
       ),
@@ -286,15 +289,15 @@ describe('releaseOpen', () => {
   })
 
   it('counts the latest tag while it has no published release, whether its draft is visible or not', () => {
-    const tags = [tag('v0.0.1', 200), tag('v0.0.2', 5)]
+    const tags = [tag('v0.0.4', 200), tag('v0.0.5', 5)]
     const expected = {
       open: {
-        reason: 'v0.0.2 is tagged, and no release of it is published yet.',
+        reason: 'v0.0.5 is tagged, and no release of it is published yet.',
         since: new Date(hoursAgo(5)),
       },
       warnings: [],
     }
-    const draft = { tag: 'v0.0.2', draft: true, prerelease: false, publishedAt: null }
+    const draft = { tag: 'v0.0.5', draft: true, prerelease: false, publishedAt: null }
     expect(releaseOpen(input({ tags, releases: [draft, ...base.releases] }))).toEqual(expected)
     expect(releaseOpen(input({ tags }))).toEqual(expected)
   })
@@ -310,59 +313,71 @@ describe('decide', () => {
       fired: [],
       held: [],
       changes: commits('fix: a (#24)', 'fix: c (#26)'),
-      target: { version: 'v0.0.2' },
+      target: { problem: 'The earliest open milestone, v0.0.5, still has 17 open issues.' },
       releaseOpen: null,
       warnings: [],
       failure: null,
     })
   })
 
-  it('fires Count at 10 user-visible changes, not 9', () => {
-    expect(decide(input({ commits: fixes(10) }))).toMatchObject({
+  it('fires Milestone once the earliest open milestone has no open issues', () => {
+    expect(
+      decide(input({ milestones: [milestone(6, 'v0.0.5', 0), milestone(7, 'v0.0.6', 8)] })),
+    ).toMatchObject({
       outcome: 'open',
-      fired: [{ name: 'Count', detail: '10 user-visible changes have merged since v0.0.1.' }],
+      fired: [{ name: 'Milestone', detail: 'v0.0.5 is done: all its issues have closed.' }],
+      held: [],
+      target: { version: 'v0.0.5', milestone: milestone(6, 'v0.0.5', 0), done: true },
     })
-    const nine = [...fixes(9), ...commits('docs: a (#90)', 'ci: b (#91)', 'revert: c (#92)')]
-    expect(decide(input({ commits: nine }))).toMatchObject({ outcome: 'none', fired: [] })
   })
 
-  it('holds Count until 24 hours after the previous release', () => {
-    expect(
-      decide(input({ commits: fixes(12), releases: [published('v0.0.1', 23)] })),
-    ).toMatchObject({
+  it('holds Milestone until 24 hours after the previous release', () => {
+    const milestones = [milestone(6, 'v0.0.5', 0)]
+    expect(decide(input({ milestones, releases: [published('v0.0.4', 23)] }))).toMatchObject({
       outcome: 'none',
       fired: [],
-      held: [{ name: 'Count', detail: '12 user-visible changes have merged since v0.0.1.' }],
+      held: [{ name: 'Milestone', detail: 'v0.0.5 is done: all its issues have closed.' }],
+      heldUntil: new Date(NOW.getTime() + HOUR),
     })
-    expect(
-      decide(input({ commits: fixes(12), releases: [published('v0.0.1', 24)] })),
-    ).toMatchObject({ outcome: 'open', fired: [{ name: 'Count' }], held: [] })
+    expect(decide(input({ milestones, releases: [published('v0.0.4', 24)] }))).toMatchObject({
+      outcome: 'open',
+      fired: [{ name: 'Milestone' }],
+      held: [],
+    })
   })
 
-  it('fires Time 7 days after the last release when a user-visible change has merged', () => {
-    const week = [published('v0.0.1', 7 * 24)]
-    expect(decide(input({ commits: fixes(1), releases: week }))).toMatchObject({
+  it('does not hold a done milestone when an urgent fix goes out at once', () => {
+    expect(
+      decide(
+        input({
+          milestones: [milestone(6, 'v0.0.5', 0)],
+          releases: [published('v0.0.4', 1)],
+          commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
+          pulls: { c30: urgentPull(30, 29) },
+        }),
+      ),
+    ).toMatchObject({
       outcome: 'open',
       fired: [
-        {
-          name: 'Time',
-          detail:
-            '7 days have passed since v0.0.1 was published, and 1 user-visible change has merged since.',
-        },
+        { name: 'Urgent' },
+        { name: 'Milestone', detail: 'v0.0.5 is done: all its issues have closed.' },
       ],
+      held: [],
     })
-    expect(
-      decide(input({ commits: commits('docs: a (#1)', 'revert: b (#2)'), releases: week })),
-    ).toMatchObject({ outcome: 'none', fired: [] })
-    expect(
-      decide(input({ commits: fixes(3), releases: [published('v0.0.1', 7 * 24 - 1)] })),
-    ).toMatchObject({ outcome: 'none', fired: [] })
+  })
+
+  it('opens nothing for merged changes alone, with no Count or Time', () => {
+    expect(decide(input({ commits: fixes(20) }))).toMatchObject({
+      outcome: 'none',
+      fired: [],
+      held: [],
+    })
   })
 
   it('fires Urgent at once for a merged fix or revert of an urgent issue', () => {
     const decision = decide(
       input({
-        releases: [published('v0.0.1', 1)],
+        releases: [published('v0.0.4', 1)],
         commits: [
           commit('fix(session): keep threads on crash (#30)', 'c30'),
           commit('revert: feat: add login (#33) (#81)', 'c81'),
@@ -388,6 +403,7 @@ describe('decide', () => {
             '"fix(session): keep threads on crash (#30)" closed urgent #29; "revert: feat: add login (#33) (#81)" closed urgent #82.',
         },
       ],
+      target: { version: 'v0.0.5', milestone: milestone(6, 'v0.0.5', 17), done: false },
     })
   })
 
@@ -395,7 +411,7 @@ describe('decide', () => {
     expect(
       decide(
         input({
-          releases: [published('v0.0.1', 1)],
+          releases: [published('v0.0.4', 1)],
           commits: [
             commit('docs: note the workaround (#80)', 'c80'),
             commit('ci: retry the flaky job (#83)', 'c83'),
@@ -414,21 +430,27 @@ describe('decide', () => {
   it('names every trigger that fired, Urgent first', () => {
     const decision = decide(
       input({
-        releases: [published('v0.0.1', 8 * 24)],
-        commits: fixes(10),
-        pulls: { 'fix: change 5 (#105)': urgentPull(105, 40) },
+        milestones: [milestone(6, 'v0.0.5', 0)],
+        releases: [published('v0.0.4', 1)],
+        commits: fixes(3),
+        pulls: { 'fix: change 2 (#102)': urgentPull(102, 40) },
       }),
     )
-    expect(decision.fired.map((trigger) => trigger.name)).toEqual(['Urgent', 'Count', 'Time'])
+    expect(decision.fired.map((trigger) => trigger.name)).toEqual(['Urgent', 'Milestone'])
   })
 
   it('opens nothing while a release issue is open, without a warning', () => {
     expect(
-      decide(input({ commits: fixes(10), openIssues: [{ number: 61, title: 'Release v0.0.2' }] })),
+      decide(
+        input({
+          milestones: [milestone(6, 'v0.0.5', 0)],
+          openIssues: [{ number: 61, title: 'Release v0.0.5' }],
+        }),
+      ),
     ).toMatchObject({
       outcome: 'release-open',
-      fired: [{ name: 'Count' }],
-      releaseOpen: '#61, "Release v0.0.2", is open.',
+      fired: [{ name: 'Milestone' }],
+      releaseOpen: '#61, "Release v0.0.5", is open.',
       warnings: [],
       failure: null,
     })
@@ -436,11 +458,17 @@ describe('decide', () => {
 
   it('warns while an unpublished release holds back a trigger', () => {
     expect(
-      decide(input({ tags: [tag('v0.0.1', 200), tag('v0.0.2', 47)], commits: fixes(10) })),
+      decide(
+        input({
+          tags: [tag('v0.0.4', 200), tag('v0.0.5', 47)],
+          releases: [published('v0.0.4', 200)],
+          milestones: [milestone(7, 'v0.0.6', 0)],
+        }),
+      ),
     ).toMatchObject({
       outcome: 'release-open',
       warnings: [
-        'A release is due (Count), but v0.0.2 is tagged, and no release of it is published yet.',
+        'A release is due (Milestone), but v0.0.5 is tagged, and no release of it is published yet.',
       ],
       failure: null,
     })
@@ -448,108 +476,150 @@ describe('decide', () => {
 
   it('fails once an unpublished release has held a trigger back for 48 hours', () => {
     expect(
-      decide(input({ tags: [tag('v0.0.1', 200), tag('v0.0.2', 48)], commits: fixes(10) })),
+      decide(
+        input({
+          tags: [tag('v0.0.4', 200), tag('v0.0.5', 48)],
+          releases: [published('v0.0.4', 200)],
+          milestones: [milestone(7, 'v0.0.6', 0)],
+        }),
+      ),
     ).toMatchObject({
       outcome: 'release-open',
       warnings: [],
-      failure: `A release is due (Count), but v0.0.2 is tagged, and no release of it is published yet. That has held since ${hoursAgo(48).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
+      failure: `A release is due (Milestone), but v0.0.5 is tagged, and no release of it is published yet. That has held since ${hoursAgo(48).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
     })
     expect(
       decide(
         input({
-          tags: [tag('v0.0.1', 400), tag('v0.0.2', 300)],
-          releases: [published('v0.0.1', 400)],
+          tags: [tag('v0.0.4', 400), tag('v0.0.5', 300)],
+          releases: [published('v0.0.4', 400)],
+          milestones: [milestone(7, 'v0.0.6', 0)],
           commits: fixes(1),
         }),
       ),
     ).toMatchObject({
       outcome: 'release-open',
-      fired: [{ name: 'Time' }],
-      failure: `A release is due (Time), but v0.0.2 is tagged, and no release of it is published yet. That has held since ${hoursAgo(300).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
+      fired: [{ name: 'Milestone' }],
+      failure: `A release is due (Milestone), but v0.0.5 is tagged, and no release of it is published yet. That has held since ${hoursAgo(300).replace('.000Z', 'Z')}, over 48 hours; finish that release.`,
     })
   })
 
   it('neither warns nor fails about a release under way when nothing is due', () => {
     expect(
-      decide(input({ tags: [tag('v0.0.1', 400), tag('v0.0.2', 300)], commits: fixes(2) })),
+      decide(
+        input({
+          tags: [tag('v0.0.4', 400), tag('v0.0.5', 300)],
+          releases: [published('v0.0.4', 400)],
+          milestones: [milestone(7, 'v0.0.6', 2)],
+          commits: fixes(2),
+        }),
+      ),
     ).toMatchObject({
       outcome: 'none',
-      releaseOpen: 'v0.0.2 is tagged, and no release of it is published yet.',
+      releaseOpen: 'v0.0.5 is tagged, and no release of it is published yet.',
       warnings: [],
       failure: null,
     })
   })
 
   it('fails when a trigger fired but no milestone gives a version', () => {
-    const milestones = [{ number: 1, title: 'v0.1.0', openIssues: 3 }]
-    expect(decide(input({ commits: fixes(10), milestones }))).toMatchObject({
+    const milestones = [milestone(1, 'v0.1.0', 3)]
+    expect(
+      decide(
+        input({
+          milestones,
+          commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
+          pulls: { c30: urgentPull(30, 29) },
+        }),
+      ),
+    ).toMatchObject({
       outcome: 'no-version',
       target: {
-        problem: 'No patch milestone is open before v0.1.0, which still has 3 open issues.',
+        problem: 'No open milestone is planned for v0.0.5, the next version after v0.0.4.',
       },
       failure:
-        'A release is due (Count), but it has no version: No patch milestone is open before v0.1.0, which still has 3 open issues.',
+        'A release is due (Urgent), but it has no version: No open milestone is planned for v0.0.5, the next version after v0.0.4.',
     })
-    expect(decide(input({ commits: fixes(2), milestones }))).toMatchObject({
+    expect(decide(input({ milestones, commits: fixes(2) }))).toMatchObject({
       outcome: 'none',
       failure: null,
     })
   })
 
-  it('counts from the first commit before any release, and never fires Time', () => {
+  it('releases the first milestone before any tag', () => {
     const first = { tags: [], releases: [] }
-    expect(decide(input({ ...first, commits: fixes(10) }))).toMatchObject({
+    expect(decide(input({ ...first, milestones: [milestone(2, 'v0.0.1', 0)] }))).toMatchObject({
       outcome: 'open',
       lastTag: null,
       lastPublished: null,
-      fired: [
-        { name: 'Count', detail: '10 user-visible changes have merged since the first commit.' },
-      ],
+      fired: [{ name: 'Milestone', detail: 'v0.0.1 is done: all its issues have closed.' }],
+      target: { version: 'v0.0.1', done: true },
     })
-    expect(decide(input({ ...first, commits: fixes(9) }))).toMatchObject({ outcome: 'none' })
+    expect(decide(input({ ...first, milestones: [milestone(2, 'v0.0.1', 3)] }))).toMatchObject({
+      outcome: 'none',
+      fired: [],
+    })
   })
 })
 
 describe('issueBody', () => {
-  it('names the trigger and the version, and lists the user-visible changes and reverts', () => {
+  it('names the done milestone and the version, and lists the user-visible changes and reverts', () => {
     const decision = decide(
       input({
-        releases: [published('v0.0.1', 1)],
+        milestones: [milestone(6, 'v0.0.5', 0)],
         commits: [
           commit('feat(usage): add a one-day range (#45)'),
           commit('docs: explain the release (#46)'),
-          commit('revert: feat: add login (#33) (#81)', 'c81'),
           commit('perf(thread): virtualize entries (#47)'),
         ],
-        pulls: { c81: urgentPull(81, 82) },
       }),
     )
     expect(issueBody(decision)).toBe(
       [
-        'The Urgent trigger fired: "revert: feat: add login (#33) (#81)" closed urgent #82.',
+        'The Milestone trigger fired: v0.0.5 is done: all its issues have closed.',
         '',
-        'The version is v0.0.2, the earliest open patch milestone.',
+        'The version is v0.0.5, the earliest open milestone, whose issues have all closed.',
         '',
-        'User-visible changes and reverts since v0.0.1:',
+        'User-visible changes and reverts since v0.0.4:',
         '',
         '- feat(usage): add a one-day range (#45)',
-        '- revert: feat: add login (#33) (#81)',
         '- perf(thread): virtualize entries (#47)',
         '',
       ].join('\n'),
     )
   })
 
-  it('lists several triggers and says why a minor is next', () => {
+  it('says an urgent release moves the unfinished issues up', () => {
     const decision = decide(
       input({
-        tags: [tag('v0.0.5', 8 * 24 + 1)],
-        releases: [published('v0.0.5', 8 * 24)],
-        milestones: [
-          { number: 1, title: 'v0.1.0', openIssues: 0 },
-          { number: 10, title: 'v0.1.1', openIssues: 2 },
-        ],
-        commits: fixes(10),
+        releases: [published('v0.0.4', 1)],
+        commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
+        pulls: { c30: urgentPull(30, 29) },
+      }),
+    )
+    expect(issueBody(decision)).toBe(
+      [
+        'The Urgent trigger fired: "fix(session): keep threads on crash (#30)" closed urgent #29.',
+        '',
+        'The version is v0.0.5, the next version number.',
+        '',
+        'The unfinished issues of its milestone move to the next version, and the planned milestones after it move up one number.',
+        '',
+        'User-visible changes and reverts since v0.0.4:',
+        '',
+        '- fix(session): keep threads on crash (#30)',
+        '',
+      ].join('\n'),
+    )
+  })
+
+  it('lists several triggers and keeps a done milestone version', () => {
+    const decision = decide(
+      input({
+        milestones: [milestone(6, 'v0.0.5', 0)],
+        releases: [published('v0.0.4', 1)],
+        commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
+        pulls: { c30: urgentPull(30, 29) },
       }),
     )
     const body = issueBody(decision)
@@ -557,14 +627,14 @@ describe('issueBody', () => {
       [
         'Triggers that fired:',
         '',
-        '- Count: 10 user-visible changes have merged since v0.0.5.',
-        '- Time: 8 days have passed since v0.0.5 was published, and 10 user-visible changes have merged since.',
+        '- Urgent: "fix(session): keep threads on crash (#30)" closed urgent #29.',
+        '- Milestone: v0.0.5 is done: all its issues have closed.',
         '',
-        'The version is v0.1.0, as no patch milestone is left before it and its issues have all closed.',
+        'The version is v0.0.5, the earliest open milestone, whose issues have all closed.',
       ].join('\n'),
     )
     expect(body).toContain(
-      'User-visible changes and reverts since v0.0.5:\n\n- fix: change 1 (#101)\n',
+      'User-visible changes and reverts since v0.0.4:\n\n- fix(session): keep threads on crash (#30)\n',
     )
   })
 })
@@ -575,16 +645,17 @@ describe('summary', () => {
       summary(
         decide(
           input({
-            releases: [{ ...published('v0.0.1', 0), publishedAt: '2026-11-01T00:00:00Z' }],
-            commits: [...fixes(10), commit('docs: a (#200)')],
+            milestones: [milestone(6, 'v0.0.5', 0)],
+            releases: [{ ...published('v0.0.4', 0), publishedAt: '2026-11-01T00:00:00Z' }],
+            commits: [...fixes(2), commit('docs: a (#200)')],
           }),
         ),
       ),
     ).toEqual([
-      'Last release: v0.0.1, published 2026-11-01T00:00:00Z.',
-      'Since v0.0.1: 11 commits, 10 user-visible.',
-      'Version: v0.0.2, the earliest open patch milestone.',
-      'Held: Count, 10 user-visible changes have merged since v0.0.1. It can fire from 2026-11-02T00:00:00Z, 24 hours after v0.0.1 was published.',
+      'Last release: v0.0.4, published 2026-11-01T00:00:00Z.',
+      'Since v0.0.4: 3 commits, 2 user-visible.',
+      'Version: v0.0.5, the earliest open milestone, whose issues have all closed.',
+      'Held: Milestone, v0.0.5 is done: all its issues have closed. It can fire from 2026-11-02T00:00:00Z, 24 hours after v0.0.4 was published.',
       'Decision: no release is due.',
     ])
   })
@@ -594,39 +665,51 @@ describe('summary', () => {
       summary(
         decide(
           input({
-            commits: fixes(10),
-            openIssues: [...base.openIssues, { number: 60, title: 'Release v0.0.2' }],
+            milestones: [milestone(6, 'v0.0.5', 0)],
+            openIssues: [...base.openIssues, { number: 60, title: 'Release v0.0.5' }],
           }),
         ),
       ),
     ).toEqual([
-      `Last release: v0.0.1, published ${hoursAgo(48).replace('.000Z', 'Z')}.`,
-      'Since v0.0.1: 10 commits, 10 user-visible.',
-      'Version: v0.0.2, the earliest open patch milestone.',
-      'Fired: Count, 10 user-visible changes have merged since v0.0.1.',
-      'Release open: #60, "Release v0.0.2", is open.',
+      `Last release: v0.0.4, published ${hoursAgo(48).replace('.000Z', 'Z')}.`,
+      'Since v0.0.4: 0 commits, 0 user-visible.',
+      'Version: v0.0.5, the earliest open milestone, whose issues have all closed.',
+      'Fired: Milestone, v0.0.5 is done: all its issues have closed.',
+      'Release open: #60, "Release v0.0.5", is open.',
       'Decision: no new issue, because a release is open.',
     ])
     expect(
       summary(
         decide(
           input({
-            commits: fixes(10),
-            milestones: [{ number: 1, title: 'v0.1.0', openIssues: 3 }],
+            milestones: [milestone(1, 'v0.1.0', 3)],
+            commits: [commit('fix(session): keep threads on crash (#30)', 'c30')],
+            pulls: { c30: urgentPull(30, 29) },
           }),
         ),
       ).slice(2),
     ).toEqual([
-      'Version: none. No patch milestone is open before v0.1.0, which still has 3 open issues.',
-      'Fired: Count, 10 user-visible changes have merged since v0.0.1.',
+      'Version: none. No open milestone is planned for v0.0.5, the next version after v0.0.4.',
+      'Fired: Urgent, "fix(session): keep threads on crash (#30)" closed urgent #29.',
       'Decision: a release is due, but no milestone gives its version; plan one.',
     ])
-    expect(summary(decide(input({ tags: [], releases: [], commits: fixes(10) })))).toEqual([
+    expect(
+      summary(
+        decide(
+          input({
+            tags: [],
+            releases: [],
+            milestones: [milestone(2, 'v0.0.1', 0)],
+            commits: fixes(1),
+          }),
+        ),
+      ),
+    ).toEqual([
       'Last release: none yet.',
-      'Since the first commit: 10 commits, 10 user-visible.',
-      'Version: v0.0.2, the earliest open patch milestone.',
-      'Fired: Count, 10 user-visible changes have merged since the first commit.',
-      'Decision: open "Release v0.0.2".',
+      'Since the first commit: 1 commit, 1 user-visible.',
+      'Version: v0.0.1, the earliest open milestone, whose issues have all closed.',
+      'Fired: Milestone, v0.0.1 is done: all its issues have closed.',
+      'Decision: open "Release v0.0.1".',
     ])
   })
 })
@@ -706,14 +789,14 @@ describe('readPull', () => {
 })
 
 describe('missing', () => {
-  const want = { type: 'Task', milestone: 3, labels: ['state:ready', 'area:build'] }
+  const want = { type: 'Task', milestone: 6, labels: ['state:ready', 'area:build'] }
 
   it('finds nothing missing on a complete issue', () => {
     expect(
       missing(
         {
           type: { name: 'Task' },
-          milestone: { number: 3 },
+          milestone: { number: 6 },
           labels: [{ name: 'area:build' }, { name: 'state:ready' }],
         },
         want,
@@ -724,13 +807,13 @@ describe('missing', () => {
   it('names what the token could not set', () => {
     expect(missing({ type: null, milestone: null, labels: [] }, want)).toEqual([
       'type Task',
-      'milestone #3',
+      'milestone #6',
       'label state:ready',
       'label area:build',
     ])
     expect(
       missing(
-        { type: { name: 'Bug' }, milestone: { number: 3 }, labels: [{ name: 'state:ready' }] },
+        { type: { name: 'Bug' }, milestone: { number: 6 }, labels: [{ name: 'state:ready' }] },
         want,
       ),
     ).toEqual(['type Task', 'label area:build'])
