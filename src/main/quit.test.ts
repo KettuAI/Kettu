@@ -69,7 +69,9 @@ const session = { sessionId: 's1', agentId: 'codex' as const, title: 'Fix the fl
 const terminal = { id: 't1', projectPath: '/p', title: 'node' }
 const unsaved = { projectPath: '/p', path: 'src/a.ts' }
 
-function setup(options: { busy?: boolean; confirm?: boolean; window?: boolean } = {}) {
+function setup(
+  options: { busy?: boolean; confirm?: boolean; window?: boolean; moves?: boolean } = {},
+) {
   const settings: SettingsFile = structuredClone(DEFAULT_SETTINGS)
   settings.general.confirmQuitWhileRunning = options.confirm ?? true
   const window = new FakeWindow()
@@ -84,6 +86,11 @@ function setup(options: { busy?: boolean; confirm?: boolean; window?: boolean } 
     },
     installUpdate: async () => {
       calls.push('installUpdate')
+    },
+    moveApp: async () => {
+      // Electron's move fires before-quit itself, as a quit from the menu would.
+      calls.push(beforeQuit() ? 'moveApp, before-quit held' : 'moveApp, before-quit passed')
+      return options.moves ?? true
     },
   })
   const beforeQuit = (): boolean => {
@@ -227,6 +234,30 @@ describe('QuitFlow', () => {
     await settle()
     expect(calls).toEqual(['shutDown', 'installUpdate'])
     expect(electron.app.quit).not.toHaveBeenCalled()
+  })
+
+  it('moves the app before the hosts stop, asking as a restart to update does', async () => {
+    const { flow, calls, question } = setup({ busy: true })
+    flow.request('move')
+    await settle()
+    expect(question()?.reason).toBe('update')
+    expect(calls).toEqual([])
+    flow.respond(1, true)
+    await settle()
+    expect(calls).toEqual(['moveApp, before-quit held', 'shutDown'])
+    expect(electron.app.quit).toHaveBeenCalledOnce()
+  })
+
+  it('stops nothing when the app is not moved, and can quit later', async () => {
+    const { flow, calls, beforeQuit } = setup({ moves: false })
+    flow.request('move')
+    await settle()
+    expect(calls).toEqual(['moveApp, before-quit held'])
+    expect(electron.app.quit).not.toHaveBeenCalled()
+    expect(beforeQuit()).toBe(true)
+    await settle()
+    expect(calls).toEqual(['moveApp, before-quit held', 'shutDown'])
+    expect(electron.app.quit).toHaveBeenCalledOnce()
   })
 
   it('asks about unsaved files whatever the setting says, until the page goes away', async () => {

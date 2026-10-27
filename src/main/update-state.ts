@@ -46,6 +46,19 @@ export function updateMode(platform: Platform, configured: string | undefined): 
   return platform === 'darwin' ? 'link' : 'install'
 }
 
+/**
+ * Whether the app is not writable because its volume is mounted read-only, as the mounted disk
+ * image and a copy Gatekeeper translocated are; Squirrel.Mac installs nothing there.
+ */
+export function readOnlyVolume(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EROFS'
+}
+
+/** Electron 44 throws this when the user cancels the password prompt of a move to /Applications. */
+export function moveCancelled(error: unknown): boolean {
+  return error instanceof Error && error.message === 'User rejected the authorization request'
+}
+
 /** Why this build cannot update itself, or null when it can. */
 export function offReason(
   isPackaged: boolean,
@@ -105,6 +118,9 @@ export type UpdaterEvent =
   | { type: 'progress'; percent: number }
   | { type: 'downloaded'; version: string }
   | { type: 'download-cancelled' }
+  | { type: 'moving'; version: string }
+  | { type: 'move-cancelled' }
+  | { type: 'move-failed'; message: string }
   | { type: 'error'; message: string; manual: boolean }
   | { type: 'load-failed'; message: string; manual: boolean }
 
@@ -150,6 +166,13 @@ export function nextState(
       return { kind: 'ready', version: event.version }
     case 'download-cancelled':
       return state.kind === 'downloading' ? available(state.version, context) : state
+    case 'moving':
+      return { kind: 'moving', version: event.version }
+    case 'move-cancelled':
+      return state.kind === 'moving' ? available(state.version, context) : state
+    case 'move-failed':
+      // Only Update moves the app, so its failure is always the user's to see.
+      return { kind: 'error', message: event.message, manual: true, move: true }
     case 'error':
       if (event.manual) return { kind: 'error', message: event.message, manual: true }
       // Automatic failures are only logged and retried at the next check, so the state falls

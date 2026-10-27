@@ -20,10 +20,12 @@ export interface QuitDeps {
   /** Stops both hosts and flushes every pending write. */
   shutDown(): Promise<void>
   installUpdate(): Promise<void>
+  /** Update on a read-only volume: moves the app to /Applications; false when it stays. */
+  moveApp(): Promise<boolean>
 }
 
 type Phase = 'idle' | 'asking' | 'stopping' | 'done'
-type QuitReason = Exclude<QuitRequest['reason'], 'close'>
+type QuitReason = Exclude<QuitRequest['reason'], 'close'> | 'move'
 
 interface PendingAnswer {
   request: QuitRequest
@@ -147,19 +149,26 @@ export class QuitFlow {
       if (sessions.length > 0 || terminals.length > 0 || unsaved.length > 0) {
         const confirmed = await this.ask({
           id: this.nextId++,
-          reason,
+          // Moving the app restarts it to update, so it asks the same question.
+          reason: reason === 'move' ? 'update' : reason,
           sessions,
           terminals,
           unsaved,
         })
         if (!confirmed) {
-          log.info(`${reason === 'update' ? 'Restart' : 'Quit'} cancelled`)
+          log.info(`${reason === 'quit' ? 'Quit' : 'Restart'} cancelled`)
           this.phase = 'idle'
           return
         }
       }
     }
     this.phase = 'stopping'
+    // Before the hosts stop, so a failed move leaves the app as it was. The move fires before-quit,
+    // which is held while this runs, and opens the copy once this process has exited.
+    if (reason === 'move' && !(await this.deps.moveApp())) {
+      this.phase = 'idle'
+      return
+    }
     const started = performance.now()
     await this.deps.shutDown()
     log.info(`Hosts stopped and state flushed in ${(performance.now() - started).toFixed(1)} ms`)

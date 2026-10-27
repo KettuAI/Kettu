@@ -6,8 +6,10 @@ import {
   dmgDownloadUrl,
   errorMessage,
   installOnQuit,
+  moveCancelled,
   nextState,
   offReason,
+  readOnlyVolume,
   type TransitionContext,
   updatedFrom,
   updateMode,
@@ -114,7 +116,13 @@ describe('dmgDownloadUrl', () => {
 })
 
 describe('dismissTarget', () => {
-  const base = { mode: 'install' as const, current: '0.3.0', updatedFrom: null, dismissed: null }
+  const base = {
+    mode: 'install' as const,
+    readOnly: false,
+    current: '0.3.0',
+    updatedFrom: null,
+    dismissed: null,
+  }
 
   it('dismisses the version on the notice', () => {
     expect(dismissTarget({ ...base, state: { kind: 'ready', version: '0.4.0' } })).toBe('0.4.0')
@@ -311,6 +319,47 @@ describe('nextState', () => {
     expect(nextState(idle, { type: 'progress', percent: 50 }, install)).toBe(idle)
     const off: UpdateState = { kind: 'off', reason: 'development' }
     expect(nextState(off, { type: 'checking', manual: true }, install)).toBe(off)
+  })
+
+  it('moves the app for Update, and offers the update again when it stays', () => {
+    const notify = { ...install, autoDownload: false }
+    const available: UpdateState = {
+      kind: 'available',
+      version: '0.4.0',
+      mode: 'install',
+      downloadUrl: null,
+    }
+    const moving = nextState(available, { type: 'moving', version: '0.4.0' }, notify)
+    expect(moving).toEqual({ kind: 'moving', version: '0.4.0' })
+    expect(nextState(moving, { type: 'move-cancelled' }, notify)).toEqual(available)
+    expect(nextState(idle, { type: 'move-cancelled' }, notify)).toBe(idle)
+    expect(nextState(moving, { type: 'move-failed', message: 'disk full' }, notify)).toEqual({
+      kind: 'error',
+      message: 'disk full',
+      manual: true,
+      move: true,
+    })
+  })
+})
+
+describe('readOnlyVolume', () => {
+  it('tells a read-only volume from other reasons the app is not writable', () => {
+    const error = (code: string) => Object.assign(new Error(code), { code })
+    expect(readOnlyVolume(error('EROFS'))).toBe(true)
+    expect(readOnlyVolume(error('EACCES'))).toBe(false)
+    expect(readOnlyVolume(error('ENOENT'))).toBe(false)
+    expect(readOnlyVolume('EROFS')).toBe(false)
+    expect(readOnlyVolume(null)).toBe(false)
+  })
+})
+
+describe('moveCancelled', () => {
+  it("knows Electron's refused password prompt from a failed move", () => {
+    expect(moveCancelled(new Error('User rejected the authorization request'))).toBe(true)
+    expect(
+      moveCancelled(new Error('Failed to copy current bundle to the applications folder')),
+    ).toBe(false)
+    expect(moveCancelled('User rejected the authorization request')).toBe(false)
   })
 })
 

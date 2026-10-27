@@ -8,11 +8,13 @@
     "update": "更新",
     "download": "下载",
     "downloading": "正在下载",
+    "moving": "正在移到“应用程序”…",
     "downloadProgress": "下载进度",
     "cancel": "取消更新",
     "whatsNew": "更新内容",
     "readyDetail": "重启即可完成，会话会自动恢复。",
     "updateDetail": "「更新」会下载并重启，会话会自动恢复。",
+    "moveDetail": "「更新」会把 OverBench 移到“应用程序”文件夹并重启，会话会自动恢复。",
     "downloadDetail": "请从发布页面下载。",
     "updatedDetail": "从 {{version}} 更新而来。"
   },

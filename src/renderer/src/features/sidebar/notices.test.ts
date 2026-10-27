@@ -35,7 +35,7 @@ describe('noticeSummary', () => {
     const summary = noticeSummary({
       signIn: ['Codex', 'Claude Code'],
       agentUpdate: { kind: 'one', agentId: 'claude-code', name: 'Claude Code', version: '2.1.310' },
-      appUpdate: { kind: 'available', version: '0.3.0' },
+      appUpdate: { kind: 'available', version: '0.3.0', moves: false },
     })
     expect(summary).toMatchObject({
       name: 'Notices: 2 agents need you to sign in, Claude Code update 2.1.310, 0.3.0 is out',

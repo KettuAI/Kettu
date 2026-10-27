@@ -6,13 +6,15 @@ export type UpdateState =
   | { kind: 'checking'; manual: boolean }
   // Found, not downloading. In Link mode downloadUrl is the .dmg for this Mac, when there is one.
   | { kind: 'available'; version: string; mode: 'install' | 'link'; downloadUrl: string | null }
+  | { kind: 'moving'; version: string } // Update on a read-only volume, moving the app first
   | { kind: 'downloading'; version: string; percent: number; manual: boolean } // manual: Update
   | { kind: 'ready'; version: string } // downloaded and verified
-  | { kind: 'error'; message: string; manual: boolean }
+  | { kind: 'error'; message: string; manual: boolean; move?: true } // move: the move failed
 
 export interface UpdateStatus {
   state: UpdateState
   mode: 'install' | 'link' // how this build updates, even while updates are off
+  readOnly: boolean // on a read-only volume, which only macOS Install mode tests
   current: string // the running version
   updatedFrom: string | null // set for the first launch after an update
   dismissed: string | null // the version whose notice was dismissed

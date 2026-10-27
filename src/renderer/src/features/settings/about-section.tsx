@@ -137,6 +137,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       break
     case 'available':
       title = t('about.updates.available', { version: state.version })
+      if (state.mode === 'install' && status.readOnly) detail = t('about.updates.movesFirst')
       action = (
         <>
           {whatsNew(state.version)}
@@ -158,8 +159,11 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
         </>
       )
       break
+    case 'moving':
+      title = t('about.updates.moving')
+      break
     case 'error':
-      title = t('about.updates.failed')
+      title = state.move ? t('about.updates.moveFailed') : t('about.updates.failed')
       detail = <span data-selectable="">{state.message}</span>
       action = (
         <Button variant="outline" size="sm" onClick={() => run(checkForUpdates)}>

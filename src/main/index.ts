@@ -197,6 +197,7 @@ async function start(): Promise<void> {
     appState,
     settings: () => settings.get(),
     requestRestart: () => quit?.request('update'),
+    requestMove: () => quit?.request('move'),
   })
   quit = new QuitFlow({
     settings: () => settings.get(),
@@ -207,6 +208,7 @@ async function start(): Promise<void> {
       await Promise.all([settings.flush(), windowState.flush(), appState.flush(), sharing.flush()])
     },
     installUpdate: () => updater.installNow(),
+    moveApp: () => updater.moveNow(),
   })
   const quitFlow = quit
 
