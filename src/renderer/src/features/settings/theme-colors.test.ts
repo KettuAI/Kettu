@@ -28,6 +28,12 @@ describe('the built-in colors', () => {
     expect(BUILTIN_COLORS.light['terminal-background']).toBe('#fdfcf9')
   })
 
+  it('deepen the heatmap from the secondary text color', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      expect(BUILTIN_COLORS[mode]['heat-hue']).toBe(BUILTIN_COLORS[mode]['text-secondary'])
+    }
+  })
+
   it('cover every color token of tokens.css, or keep it out on purpose', () => {
     const palette = tokensCss.slice(0, tokensCss.indexOf('/* Roles built from the tokens'))
     const names = new Set([...palette.matchAll(/--([\w-]+)\s*:/g)].map((match) => match[1]!))

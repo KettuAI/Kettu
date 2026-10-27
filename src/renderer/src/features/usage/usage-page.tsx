@@ -365,10 +365,7 @@ function LoadingState() {
         <Skeleton className="h-72.5 rounded-xl" />
         <Skeleton className="h-72.5 rounded-xl" />
       </div>
-      <div className={PANEL_ROW}>
-        <Skeleton className="h-55 rounded-xl" />
-        <Skeleton className="h-55 rounded-xl" />
-      </div>
+      <Skeleton className="h-57 rounded-xl" />
     </div>
   )
 }
@@ -561,10 +558,8 @@ function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
           <PlanLimits used={summary.agents} />
         </div>
 
-        <div className={PANEL_ROW}>
-          <ActivityCard days={heatDays} page={page} metric={metric} scope={scope} />
-          <PartsCard facts={tokenFacts} />
-        </div>
+        <ActivityCard days={heatDays} page={page} metric={metric} scope={scope} />
+        <PartsCard facts={tokenFacts} />
 
         <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
           <BreakdownCard

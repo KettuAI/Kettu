@@ -110,12 +110,11 @@
   --brand-pi-blue: #4d9abf;
   --brand-pi-yellow: #f1be58;
 
-  /* Usage charts: each agent's series, and the amount the heatmap deepens with. */
+  /* Usage charts: each agent's series, and the empty day the heatmap deepens from. */
   --agent-opencode: oklch(0.6 0.008 85);
   /* Pi's yellow mixed 86% with the light surface, as Claude Code's and Codex's series are. */
   --agent-pi: oklch(0.852 0.114 83.4);
   --agent-other: oklch(0.8 0.008 85);
-  --heat-hue: #2e6b57;
   --heat-0: rgb(28 27 24 / 5.5%);
 
   /* What fills the context in the usage popover, by source. */
@@ -238,7 +237,6 @@
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
     --agent-other: oklch(0.46 0.008 85);
-    --heat-hue: #6fb396;
     --heat-0: rgb(244 243 238 / 6.5%);
 
     /* What fills the context in the usage popover, by source. */
@@ -358,7 +356,6 @@
   /* Pi's yellow mixed 86% with the dark surface. */
   --agent-pi: oklch(0.749 0.115 84.2);
   --agent-other: oklch(0.46 0.008 85);
-  --heat-hue: #6fb396;
   --heat-0: rgb(244 243 238 / 6.5%);
 
   /* What fills the context in the usage popover, by source. */
@@ -459,6 +456,8 @@
   /* A chart's series: the brand colors, a shade toward the card they are drawn on. */
   --agent-claude-code: color-mix(in oklch, var(--brand-claude) 86%, var(--bg-surface));
   --agent-codex: color-mix(in oklch, var(--brand-codex-2) 86%, var(--bg-surface));
+  /* The heatmap deepens in the secondary text color, which the page already draws amounts in. */
+  --heat-hue: var(--text-secondary);
   --heat-1: color-mix(in oklch, var(--heat-hue) 26%, transparent);
   --heat-2: color-mix(in oklch, var(--heat-hue) 48%, transparent);
   --heat-3: color-mix(in oklch, var(--heat-hue) 74%, transparent);
