@@ -871,6 +871,12 @@ function cliFound(version: string): Partial<DetectContext> {
   }
 }
 
+/** Where the PATH lookup finds `fake-pi`, which on Windows takes an extension from PATHEXT. */
+const FAKE_PI = path.join(
+  path.resolve('/bin'),
+  process.platform === 'win32' ? 'fake-pi.exe' : 'fake-pi',
+)
+
 /**
  * Pi as the fake agent: a package agent whose `requires` program is `fake-pi` on PATH, answering
  * `0.83.0`, and whose terminal sign-in runs that program alone.
@@ -921,8 +927,8 @@ function requiresManager(
           ...ctx,
           node: { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' },
           installed: async () => adapters,
-          env: { PATH: '/bin' },
-          isExecutable: async (file) => options.found !== false && file === '/bin/fake-pi',
+          env: { PATH: path.resolve('/bin') },
+          isExecutable: async (file) => options.found !== false && file === FAKE_PI,
           probeCli: async () =>
             options.error ? { error: options.error } : { version: options.version ?? '0.83.0' },
         }),
@@ -935,7 +941,7 @@ describe('a program the adapter runs', () => {
   it("sets the launch's variable to the program detection found", async () => {
     const m = requiresManager()
     await m.agents.ensureReady('pi')
-    expect(m.launches.map((spec) => spec.env.PI_ACP_PI_COMMAND)).toEqual(['/bin/fake-pi'])
+    expect(m.launches.map((spec) => spec.env.PI_ACP_PI_COMMAND)).toEqual([FAKE_PI])
     await m.agents.stopAll()
   })
 
@@ -953,7 +959,7 @@ describe('a program the adapter runs', () => {
     const m = requiresManager()
     await m.agents.ensureReady('pi')
     const terminal = m.status().authMethods.find((method) => method.type === 'terminal')
-    expect(terminal?.command).toBe('/bin/fake-pi')
+    expect(terminal?.command).toBe(FAKE_PI)
     await m.agents.stopAll()
   })
 
