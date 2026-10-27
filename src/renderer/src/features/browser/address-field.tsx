@@ -42,7 +42,7 @@ export function AddressField({
   const parts = editing ? null : url ? addressParts(url) : null
 
   return (
-    <div className={cn('relative min-w-0', className)}>
+    <div className={cn('app-region-no-drag relative min-w-0', className)}>
       {parts && (
         <span
           aria-hidden
