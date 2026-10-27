@@ -560,7 +560,7 @@
     "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
-    "mcp": "Agent 能用的服务器：OverBench 自带的，以及各 Agent 自己的服务器所在的位置。"
+    "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 OverBench 自带的服务器，以及各 Agent 自己的服务器所在的位置。"
   },
   "footer": {
     "about": "关于 OverBench",

@@ -563,7 +563,7 @@
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
-    "mcp": "The servers agents get: OverBench's own, and where each agent keeps its own."
+    "mcp": "Agents reach tools through these MCP servers. OverBench's own is here, and where each agent keeps its own."
   },
   "footer": {
     "about": "About OverBench",
