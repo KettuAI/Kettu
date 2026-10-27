@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUpIcon, CircleAlertIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -100,25 +100,21 @@ export function NewSessionView({
         <span className="flex-1" />
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
-      {/* The heading, the composer and Recent artifacts are centred as one block, raised 30 px
-          above centre so the eye lands on the composer. The spacers keep that raise out of the
-          scroll: in a short window the block scrolls with 24 px under it. */}
       <ColumnScroller className="flex flex-col px-7">
-        <div aria-hidden className="flex-1" />
-        <div className="mx-auto flex w-full max-w-thread shrink-0 flex-col py-6">
-          <h1 className="mb-6.5 animate-in text-center font-heading text-greeting text-balance fade-in animation-duration-(--duration-slow)">
+        <div className="mx-auto flex w-full max-w-thread flex-1 flex-col justify-end">
+          <h1 className="mt-6 mb-6.5 animate-in text-center font-heading text-greeting text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
-          <DraftComposer
-            agentId={agentId}
-            project={project}
-            noProject={noProject}
-            parent={parent}
-            onInput={setHoldsMessage}
-          />
-          <RecentArtifacts hidden={holdsMessage} />
         </div>
-        <div aria-hidden className="flex-1 basis-15" />
+        <DraftComposer
+          agentId={agentId}
+          project={project}
+          noProject={noProject}
+          parent={parent}
+          onInput={setHoldsMessage}
+        >
+          <RecentArtifacts hidden={holdsMessage} />
+        </DraftComposer>
       </ColumnScroller>
       <DropOverlay shown={drop.over} starting={false} agentName="" />
     </div>
@@ -133,6 +129,7 @@ function DraftComposer({
   noProject,
   parent,
   onInput,
+  children,
 }: {
   agentId: AgentId | null
   project: Project | null
@@ -140,6 +137,7 @@ function DraftComposer({
   parent: SessionSummary | undefined
   /** Told on each change whether the draft holds what Send takes. */
   onInput: (holdsMessage: boolean) => void
+  children?: ReactNode
 }) {
   const { t } = useTranslation('session')
   const { t: tc } = useTranslation('composer')
@@ -238,70 +236,77 @@ function DraftComposer({
         : (held?.message ?? null)
 
   return (
-    <div className="flex flex-col">
-      <PromptBox
-        box={box}
-        agentId={agentId}
-        agentName={name ?? tc('attachments.theAgent')}
-        commands={NO_COMMANDS}
-        placeholder={
-          reached?.resetsAt
-            ? tc('prompt.placeholder.limitReached', {
-                limit: limitLabel(reached),
-                time: resetTime(reached.resetsAt),
-              })
-            : name
-              ? t('newSession.askAgent', { agent: name })
-              : t('newSession.describeTask')
-        }
-        label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
-        // 112 px high empty, with the row of + and Send under the text.
-        size={{ minHeight: '62px', padding: '15px 16px 2px 16px' }}
-        stacked
-        onKeyDown={onKeyDown}
-        end={
-          <Tooltip>
-            <TooltipTrigger render={<span />}>
-              <InputGroupButton
-                size="round"
-                variant={canSend ? 'default' : 'secondary'}
-                aria-label={t('newSession.send')}
-                disabled={!canSend}
-                onClick={() => void send()}
-                className="disabled:text-disabled disabled:opacity-100"
-              >
-                <ArrowUpIcon />
-              </InputGroupButton>
-            </TooltipTrigger>
-            <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
-          </Tooltip>
-        }
-      />
-      {/* Where and with what the session starts, under the box as in the reference. */}
-      <div className="flex h-9.5 min-w-0 items-center gap-0.5 px-0.5 pt-1">
-        {parent ? (
-          <ParentProject project={project} scratch={parent.scratch} />
-        ) : (
-          <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
-        )}
-        {!inScratch && project && <BranchLabel projectPath={project.path} />}
-        <span className="min-w-2 flex-1" />
-        <AgentMenu agentId={agentId} onChoose={choose} />
-        <ModeMenu agentId={agentId} />
+    <>
+      <div className="mx-auto w-full max-w-thread shrink-0">
+        <PromptBox
+          box={box}
+          agentId={agentId}
+          agentName={name ?? tc('attachments.theAgent')}
+          commands={NO_COMMANDS}
+          placeholder={
+            reached?.resetsAt
+              ? tc('prompt.placeholder.limitReached', {
+                  limit: limitLabel(reached),
+                  time: resetTime(reached.resetsAt),
+                })
+              : name
+                ? t('newSession.askAgent', { agent: name })
+                : t('newSession.describeTask')
+          }
+          label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
+          // 112 px high empty, with the row of + and Send under the text.
+          size={{ minHeight: '62px', padding: '15px 16px 2px 16px' }}
+          stacked
+          onKeyDown={onKeyDown}
+          end={
+            <Tooltip>
+              <TooltipTrigger render={<span />}>
+                <InputGroupButton
+                  size="round"
+                  variant={canSend ? 'default' : 'secondary'}
+                  aria-label={t('newSession.send')}
+                  disabled={!canSend}
+                  onClick={() => void send()}
+                  className="disabled:text-disabled disabled:opacity-100"
+                >
+                  <ArrowUpIcon />
+                </InputGroupButton>
+              </TooltipTrigger>
+              <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
+            </Tooltip>
+          }
+        />
       </div>
-      {(projectError || (project?.missing && !inScratch)) && (
-        <p className="truncate px-2.75 text-xs text-danger" title={projectError ?? undefined}>
-          {projectError ?? t('newSession.missingLine')}
-        </p>
-      )}
-      {(box.error || held?.notice) && (
-        <p className="animate-in px-2.75 text-xs text-danger fade-in" role="alert">
-          {box.error ?? held?.message}
-        </p>
-      )}
-      {agentId && <StartNotices agentId={agentId} />}
-      {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} />}
-    </div>
+      {/* The lower part starts the top bar's height taller: the column begins that far below the
+          sheet's top, so an even split of the rest about the box centres it on the sheet. */}
+      <div className="mx-auto flex w-full max-w-thread flex-1 basis-(--top-bar) flex-col">
+        {/* Where and with what the session starts, under the box as in the reference. */}
+        <div className="flex h-9.5 min-w-0 items-center gap-0.5 px-0.5 pt-1">
+          {parent ? (
+            <ParentProject project={project} scratch={parent.scratch} />
+          ) : (
+            <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
+          )}
+          {!inScratch && project && <BranchLabel projectPath={project.path} />}
+          <span className="min-w-2 flex-1" />
+          <AgentMenu agentId={agentId} onChoose={choose} />
+          <ModeMenu agentId={agentId} />
+        </div>
+        {(projectError || (project?.missing && !inScratch)) && (
+          <p className="truncate px-2.75 text-xs text-danger" title={projectError ?? undefined}>
+            {projectError ?? t('newSession.missingLine')}
+          </p>
+        )}
+        {(box.error || held?.notice) && (
+          <p className="animate-in px-2.75 text-xs text-danger fade-in" role="alert">
+            {box.error ?? held?.message}
+          </p>
+        )}
+        {agentId && <StartNotices agentId={agentId} />}
+        {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} />}
+        {children}
+      </div>
+    </>
   )
 }
 
@@ -501,10 +506,9 @@ function RecentArtifacts({ hidden }: { hidden: boolean }) {
       aria-label={t('newSession.recentArtifacts')}
       inert={!shown}
       className={cn(
-        '@container mt-12 flex flex-col gap-1.5 transition-[opacity,visibility] motion-reduce:transition-none',
-        shown
-          ? 'duration-(--duration-base)'
-          : 'invisible opacity-0 duration-(--duration-fast) **:data-[slot=skeleton]:animate-none',
+        '@container mt-12 mb-6 flex flex-col gap-1.5 transition-[opacity,translate,visibility] duration-(--duration-slow) ease-out-quart',
+        !shown &&
+          'invisible translate-y-2 opacity-0 motion-reduce:translate-y-0 **:data-[slot=skeleton]:animate-none',
       )}
     >
       <div className="flex items-center justify-between">
