@@ -50,6 +50,12 @@ export interface ArtifactSummary {
   editing: string[] // the sessions whose running turn changed it
 }
 
+/** A session using an artifact now: its running turn read it, or changed it. */
+export interface ArtifactSession {
+  sessionId: string
+  editing: boolean // its running turn changed it; false while it only reads
+}
+
 export interface VersionSummary {
   version: number
   createdAt: number

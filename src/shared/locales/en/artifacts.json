@@ -135,8 +135,12 @@
     "daysLeft_other": " · {{count}} days left",
     "goneTitle": "This artifact was deleted",
     "goneDescription": "It stays in Recently deleted for 30 days.",
-    "editing": "{{session}} is editing",
     "editingLabel": "{{session}} is editing this artifact. Open the session",
+    "readingLabel": "{{session}} is reading this artifact. Open the session",
+    "stateEditing": "Editing",
+    "stateReading": "Reading",
+    "using": "Using this artifact",
+    "moreSessions_other": "{{count}} more sessions",
     "places_other": "Open in {{count}} places",
     "placesTip_other": "This artifact is open in {{count}} places in OverBench"
   },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactSession, ArtifactSummary } from '@shared/artifacts'
 import { errorCode, host } from '@renderer/lib/host'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
@@ -17,7 +17,7 @@ export interface ShownVersion {
 
 export interface Presence {
   viewers: number
-  editing: string[]
+  sessions: ArtifactSession[]
 }
 
 /**
@@ -107,7 +107,7 @@ export function useArtifact(id: string, version: number | null) {
     void host('artifacts.watch', { id }).catch(() => {})
     const off = window.overbench.agents.onEvent((event) => {
       if (event.type === 'artifacts.activity' && event.id === id) {
-        setPresence({ viewers: event.viewers, editing: event.editing })
+        setPresence({ viewers: event.viewers, sessions: event.sessions })
       } else if (event.type === 'artifacts.version' && event.id === id) {
         setAnnounced((n) => Math.max(n, event.version))
       }
@@ -132,7 +132,14 @@ export function useArtifact(id: string, version: number | null) {
     error: openError ?? readError,
     summary,
     shown,
-    presence: presence ?? (summary ? { viewers: 1, editing: summary.editing } : null),
+    presence:
+      presence ??
+      (summary
+        ? {
+            viewers: 1,
+            sessions: summary.editing.map((sessionId) => ({ sessionId, editing: true })),
+          }
+        : null),
     stopped,
     /** Counts Reload presses, for the frames to load their page again. */
     reloads,

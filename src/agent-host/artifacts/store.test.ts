@@ -93,7 +93,7 @@ describe('the artifact store', () => {
     await store.watch(id, 'port-2')
     expect(events.activity.at(-1)).toEqual({
       ports: ['port-1', 'port-2'],
-      activity: { id, viewers: 3, editing: [] },
+      activity: { id, viewers: 3, sessions: [] },
     })
 
     clock.now = 2_000
@@ -126,7 +126,7 @@ describe('the artifact store', () => {
     store.portClosed('port-1')
     expect(events.activity.at(-1)).toEqual({
       ports: ['port-2'],
-      activity: { id, viewers: 1, editing: [] },
+      activity: { id, viewers: 1, sessions: [] },
     })
     const sent = events.activity.length
     store.unwatch(id, 'port-1')

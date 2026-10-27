@@ -1,6 +1,11 @@
 // The Artifacts page's list: the filter, then the groups and their order.
 
-import { ARTIFACT_KEEP_DELETED_MS, NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
+import {
+  ARTIFACT_KEEP_DELETED_MS,
+  NO_SESSION,
+  type ArtifactSession,
+  type ArtifactSummary,
+} from '@shared/artifacts'
 import { basename } from '@renderer/lib/format'
 
 export type ArtifactGrouping = 'project-session' | 'project' | 'date' | 'none'
@@ -218,6 +223,29 @@ function sessionSections(
     sessionId: row.sessionId,
     artifacts: row.artifacts,
   }))
+}
+
+/** How many sessions the artifact's top shows as avatars before it counts the rest. */
+const PRESENCE_SHOWN = 3
+
+export interface PresenceShown {
+  all: ArtifactSession[]
+  shown: ArtifactSession[]
+  more: number
+}
+
+/**
+ * Who shows at an artifact's top: the editing sessions first, then the reading ones, each in the
+ * order it started; three at most, or two and the count of the rest from four.
+ */
+export function presenceShown(sessions: readonly ArtifactSession[]): PresenceShown {
+  const all = [
+    ...sessions.filter((session) => session.editing),
+    ...sessions.filter((session) => !session.editing),
+  ]
+  if (all.length <= PRESENCE_SHOWN) return { all, shown: all, more: 0 }
+  const shown = all.slice(0, PRESENCE_SHOWN - 1)
+  return { all, shown, more: all.length - shown.length }
 }
 
 /** How many sessions the artifacts come from; the user's imports come from none. */

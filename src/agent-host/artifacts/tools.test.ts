@@ -24,6 +24,8 @@ afterEach(async () => {
 
 const A: Caller = { sessionId: 'session-a', project: '/projects/a' }
 const B: Caller = { sessionId: 'session-b', project: '/projects/b' }
+/** A second session in A's project, for what several sessions using one artifact show. */
+const C: Caller = { sessionId: 'session-c', project: '/projects/a' }
 const MISSING = 'art_00000000000000000000000000'
 const CANVAS =
   '<body><section data-page="One" data-page-size="390x844">1</section>' +
@@ -53,6 +55,7 @@ function setup() {
   const titles = new Map<string, string | null>([
     [A.sessionId, 'Design the sign-in'],
     [B.sessionId, null],
+    [C.sessionId, 'Build the deck'],
   ])
   // Each session's running turn, compared by identity.
   const turns = new Map<string, object>()
@@ -540,16 +543,20 @@ describe('the artifacts tools', () => {
       [id]: [A.sessionId],
       [idle]: [A.sessionId],
     })
-    expect(events.activity.at(-1)).toEqual({ id, viewers: 1, editing: [A.sessionId] })
+    expect(events.activity.at(-1)).toEqual({
+      id,
+      viewers: 1,
+      sessions: [{ sessionId: A.sessionId, editing: true }],
+    })
 
     const changed = events.changed
-    store.stopEditing(A.sessionId)
-    expect(events.activity.at(-1)).toEqual({ id, viewers: 1, editing: [] })
+    store.stopUsing(A.sessionId)
+    expect(events.activity.at(-1)).toEqual({ id, viewers: 1, sessions: [] })
     expect(events.changed).toBe(changed + 1)
     expect((await store.list({ project: A.project })).every((a) => a.editing.length === 0)).toBe(
       true,
     )
-    store.stopEditing(A.sessionId)
+    store.stopUsing(A.sessionId)
     expect(events.changed).toBe(changed + 1)
   })
 
@@ -571,11 +578,117 @@ describe('the artifacts tools', () => {
         // turn's end clears what it edited before the write comes back.
         if (next === 'none') turns.delete(A.sessionId)
         else turns.set(A.sessionId, {})
-        store.stopEditing(A.sessionId)
+        store.stopUsing(A.sessionId)
         expect((await writing).isError).toBeUndefined()
         const listed = await store.list({ project: A.project })
         expect(listed.map((artifact) => artifact.editing)).toEqual(listed.map(() => []))
       }
     }
+  })
+
+  it('count a running turn that reads as reading, and as editing once it writes', async () => {
+    const { call, create, store, turns, events } = setup()
+    const id = await create(A, { html: '<p>v1</p>' })
+    await store.watch(id, 'port-1')
+    const sessions = () => events.activity.at(-1)!.sessions
+
+    turns.set(A.sessionId, {})
+    await call(A, 'read_artifact', { id })
+    expect(sessions()).toEqual([{ sessionId: A.sessionId, editing: false }])
+    expect((await store.list({ project: A.project }))[0]!.editing).toEqual([])
+
+    await call(A, 'list_artifact_versions', { id })
+    expect(sessions()).toEqual([{ sessionId: A.sessionId, editing: false }])
+
+    await call(A, 'update_artifact', { id, base_version: 1, html: '<p>v2</p>' })
+    expect(sessions()).toEqual([{ sessionId: A.sessionId, editing: true }])
+    expect((await store.list({ project: A.project }))[0]!.editing).toEqual([A.sessionId])
+  })
+
+  it('keep each session where it joined as a second one starts using the artifact', async () => {
+    const { call, create, store, turns, events } = setup()
+    const id = await create(A, { html: '<p>v1</p>' })
+    await store.watch(id, 'port-1')
+    const sessions = () => events.activity.at(-1)!.sessions
+
+    turns.set(A.sessionId, {})
+    await call(A, 'read_artifact', { id })
+    turns.set(C.sessionId, {})
+    await call(C, 'read_artifact', { id })
+    expect(sessions()).toEqual([
+      { sessionId: A.sessionId, editing: false },
+      { sessionId: C.sessionId, editing: false },
+    ])
+
+    await call(C, 'update_artifact', { id, base_version: 1, html: '<p>v2</p>' })
+    expect(sessions()).toEqual([
+      { sessionId: A.sessionId, editing: false },
+      { sessionId: C.sessionId, editing: true },
+    ])
+  })
+
+  it('add nobody for the calls that use no artifact', async () => {
+    const { call, create, store, turns, events } = setup()
+    const id = await create(A, { html: '<p>v1</p>' })
+    await store.watch(id, 'port-1')
+    const sent = events.activity.length
+    turns.set(A.sessionId, {})
+
+    await call(A, 'list_artifacts', {})
+    expect(events.activity).toHaveLength(sent)
+
+    refused((await call(A, 'read_artifact', { id: MISSING })).result, 'not_found')
+    expect(events.activity).toHaveLength(sent)
+
+    await call(A, 'delete_artifact', { id })
+    expect(events.activity).toHaveLength(sent)
+  })
+
+  it('add nobody for a read with no running turn, or one whose turn ended while it ran', async () => {
+    const { tools, create, store, turns, events } = setup()
+    const id = await create(A, { html: '<p>v1</p>' })
+    await store.watch(id, 'port-1')
+    const sent = events.activity.length
+
+    const idle = await tools.call(A, 'read_artifact', { id })
+    expect(idle.isError).toBeUndefined()
+    expect(events.activity).toHaveLength(sent)
+
+    for (const next of ['none', 'another turn']) {
+      turns.set(A.sessionId, {})
+      const reading = tools.call(A, 'read_artifact', { id })
+      // Stopped, closed or cut off by the agent's exit while the read runs.
+      if (next === 'none') turns.delete(A.sessionId)
+      else turns.set(A.sessionId, {})
+      store.stopUsing(A.sessionId)
+      expect((await reading).isError).toBeUndefined()
+      expect(events.activity).toHaveLength(sent)
+    }
+  })
+
+  it('stop using the artifact when the turn ends, and change the list only for an editor', async () => {
+    const { call, create, store, turns, events } = setup()
+    const id = await create(A, { html: '<p>v1</p>' })
+    await store.watch(id, 'port-1')
+
+    turns.set(A.sessionId, {})
+    await call(A, 'read_artifact', { id })
+    turns.set(C.sessionId, {})
+    await call(C, 'read_artifact', { id })
+
+    const changed = events.changed
+    store.stopUsing(A.sessionId)
+    expect(events.activity.at(-1)).toEqual({
+      id,
+      viewers: 1,
+      sessions: [{ sessionId: C.sessionId, editing: false }],
+    })
+    expect(events.changed).toBe(changed)
+
+    await call(C, 'update_artifact', { id, base_version: 1, html: '<p>v2</p>' })
+    const written = events.changed
+    store.stopUsing(C.sessionId)
+    expect(events.activity.at(-1)).toEqual({ id, viewers: 1, sessions: [] })
+    expect(events.changed).toBe(written + 1)
   })
 })

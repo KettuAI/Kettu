@@ -8,11 +8,25 @@ import {
   RotateCcwIcon,
   ScanIcon,
 } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
+import type { SessionSummary } from '@shared/agent-host'
+import type { ArtifactSession } from '@shared/artifacts'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo } from '@renderer/lib/format'
+import { fadeExit, glide } from '@renderer/lib/motion'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -20,7 +34,7 @@ import { openSessionWithArtifact } from '@renderer/stores/view'
 import { atMaxZoom, atMinZoom } from './camera'
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { CanvasView } from './canvas-view'
-import { daysLeft } from './model'
+import { daysLeft, presenceShown } from './model'
 import { PageFrame } from './page-frame'
 import { pageUrl, type Presence as PresenceState, type ShownVersion } from './use-artifact'
 
@@ -141,9 +155,16 @@ export function ViewerTitle({
   )
 }
 
+/** The avatars' stacking, the first of them over the one after it. */
+const STACK = ['z-3', 'z-2', 'z-1'] as const
+
+/** A 24 px round avatar on the tile, with its hairline ring and the sheet's 2 px ring around it. */
+const AVATAR =
+  'grid size-6 shrink-0 place-items-center rounded-full bg-tile text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle),0_0_0_2px_var(--bg-app)] outline-none transition-shadow duration-(--duration-fast) hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong),0_0_0_2px_var(--bg-app)] focus-visible:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong),0_0_0_2px_var(--bg-app)] focus-ring'
+
 /**
- * Who else is at the artifact: the session whose running turn changes it, which opens that
- * session with the artifact beside it, and how many places in OverBench show it.
+ * Who is at the artifact: every session using it now, the editing ones first, as avatars that
+ * open their session with the artifact beside it, and how many places in OverBench show it.
  */
 export function Presence({
   id,
@@ -157,31 +178,133 @@ export function Presence({
   size?: Size
 }) {
   const { t } = useTranslation(['artifacts', 'common'])
-  const editorId = deleted ? undefined : presence?.editing[0]
-  const editor = useSessionsStore((s) => (editorId ? s.byId[editorId] : undefined))
+  const reduceMotion = useReducedMotion()
+  const sessions = deleted ? [] : (presence?.sessions ?? [])
+  // The sessions the window knows, which are the ones it can draw a mark for and open.
+  const summaries = useSessionsStore(
+    useShallow((s) => {
+      const known: Record<string, SessionSummary> = {}
+      for (const session of sessions) {
+        const summary = s.byId[session.sessionId]
+        if (summary) known[session.sessionId] = summary
+      }
+      return known
+    }),
+  )
+  const { all, shown, more } = presenceShown(sessions.filter((s) => summaries[s.sessionId]))
   const places = presence?.viewers ?? 1
-  if (!editor && places < 2) return null
-  const name = editor ? (editor.title ?? t('common:untitledSession')) : ''
+  if (all.length === 0 && places < 2) return null
+
+  const name = (sessionId: string) => summaries[sessionId].title ?? t('common:untitledSession')
+  const state = (editing: boolean) => t(editing ? 'viewer.stateEditing' : 'viewer.stateReading')
+  const open = (sessionId: string) => {
+    const summary = summaries[sessionId]
+    openSessionWithArtifact(summary.id, summary.projectPath, id)
+  }
+  const label = (session: ArtifactSession) =>
+    t(session.editing ? 'viewer.editingLabel' : 'viewer.readingLabel', {
+      session: name(session.sessionId),
+    })
+
   return (
     <>
-      {editor && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="quiet"
-                size={size === 'pane' ? 'xs' : 'sm'}
-                aria-label={t('viewer.editingLabel', { session: name })}
-                onClick={() => openSessionWithArtifact(editor.id, editor.projectPath, id)}
-                className="max-w-80 min-w-0 gap-1.75 px-2 text-xs font-normal text-secondary"
-              />
-            }
-          >
-            <Spinner className="size-3" />
-            <span className="truncate">{t('viewer.editing', { session: name })}</span>
-          </TooltipTrigger>
-          <TooltipContent>{t('page.openSession')}</TooltipContent>
-        </Tooltip>
+      {all.length > 0 && (
+        <span role="group" aria-label={t('viewer.using')} className="flex shrink-0 items-center">
+          <AnimatePresence initial={false}>
+            {shown.map((session, i) => (
+              <motion.span
+                key={session.sessionId}
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={fadeExit}
+                transition={glide}
+                className={cn(
+                  'relative flex hover:z-10 has-focus-visible:z-10',
+                  i > 0 && '-ml-1.5',
+                  STACK[i] ?? 'z-0',
+                )}
+              >
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label={label(session)}
+                        onClick={() => open(session.sessionId)}
+                        className={AVATAR}
+                      />
+                    }
+                  >
+                    <AgentMark agent={summaries[session.sessionId].agentId} size={14} />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <span className="flex flex-col items-start">
+                      <span>{name(session.sessionId)}</span>
+                      <span className="opacity-60">{state(session.editing)}</span>
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+                {session.editing && (
+                  <Spinner
+                    aria-hidden
+                    className="pointer-events-none absolute -inset-1 z-10 m-auto size-8 text-info"
+                  />
+                )}
+              </motion.span>
+            ))}
+            {more > 0 && (
+              <motion.span
+                key="more"
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={fadeExit}
+                transition={glide}
+                className={cn('relative -ml-1.5 flex z-0 hover:z-10 has-focus-visible:z-10')}
+              >
+                <DropdownMenu>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <DropdownMenuTrigger
+                          render={
+                            <button
+                              type="button"
+                              aria-label={t('viewer.moreSessions', { count: more })}
+                              className={cn(
+                                AVATAR,
+                                'text-xs font-medium text-secondary tabular-nums hover:text-primary',
+                              )}
+                            />
+                          }
+                        />
+                      }
+                    >
+                      {`+${more}`}
+                    </TooltipTrigger>
+                    <TooltipContent>{t('viewer.moreSessions', { count: more })}</TooltipContent>
+                  </Tooltip>
+                  <DropdownMenuContent align="end" className="min-w-55">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>{t('viewer.using')}</DropdownMenuLabel>
+                      {all.map((session) => (
+                        <DropdownMenuItem
+                          key={session.sessionId}
+                          onClick={() => open(session.sessionId)}
+                        >
+                          <AgentMark agent={summaries[session.sessionId].agentId} size={14} />
+                          <span className="min-w-0 flex-1 truncate">{name(session.sessionId)}</span>
+                          <span className="shrink-0 text-muted-foreground">
+                            {state(session.editing)}
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </span>
       )}
       {places > 1 && (
         <Tooltip>

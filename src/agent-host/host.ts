@@ -317,9 +317,9 @@ export class AgentHost {
             : this.artifactService.servers(sessionId, record.projectPath),
         detached: (sessionId) => {
           this.artifactService.revoke(sessionId)
-          this.artifacts.stopEditing(sessionId)
+          this.artifacts.stopUsing(sessionId)
         },
-        turnEnded: (sessionId) => this.artifacts.stopEditing(sessionId),
+        turnEnded: (sessionId) => this.artifacts.stopUsing(sessionId),
       },
       usage: this.usage,
       cacheTtl:

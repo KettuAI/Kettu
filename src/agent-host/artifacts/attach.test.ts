@@ -242,15 +242,36 @@ describe('the artifacts service in sessions', () => {
     await port.request('artifacts.watch', { id })
     const activity = () =>
       port.events.flatMap((event) =>
-        event.type === 'artifacts.activity' && event.id === id ? [event.editing] : [],
+        event.type === 'artifacts.activity' && event.id === id ? [event.sessions] : [],
       )
     const changes = port.events.filter((event) => event.type === 'artifacts.changed').length
     await run(port, sessionId, '/artifacts')
     await port.until(() => activity().length >= 3)
-    expect(activity()).toEqual([[], [sessionId], []])
+    expect(activity()).toEqual([[], [{ sessionId, editing: true }], []])
     // The cards read who edits from the list, so its end is a change of the list.
     const changed = port.events.filter((event) => event.type === 'artifacts.changed').length
     expect(changed).toBe(changes + 2)
+    expect((await port.request('artifacts.list', {}))[0]!.editing).toEqual([])
+  })
+
+  it('shows a session as reading while its turn runs, and sends no change when it ends', async () => {
+    const { port, create } = await setup()
+    const author = await create()
+    await run(port, author, '/artifacts')
+    const [artifact] = await port.request('artifacts.list', {})
+    const id = artifact!.id
+    const reader = await create()
+    await port.request('artifacts.watch', { id })
+    const activity = () =>
+      port.events.flatMap((event) =>
+        event.type === 'artifacts.activity' && event.id === id ? [event.sessions] : [],
+      )
+    const changes = port.events.filter((event) => event.type === 'artifacts.changed').length
+    await run(port, reader, `/artifacts --read ${id}`)
+    await port.until(() => activity().length >= 3)
+    expect(activity()).toEqual([[], [{ sessionId: reader, editing: false }], []])
+    // Reading changes no list, so its end is no change of the list.
+    expect(port.events.filter((event) => event.type === 'artifacts.changed').length).toBe(changes)
     expect((await port.request('artifacts.list', {}))[0]!.editing).toEqual([])
   })
 
@@ -271,7 +292,10 @@ describe('the artifacts service in sessions', () => {
       })
       await port.until(() => {
         const last = editing()
-        return last?.type === 'artifacts.activity' && last.editing.includes(sessionId)
+        return (
+          last?.type === 'artifacts.activity' &&
+          last.sessions.some((s) => s.sessionId === sessionId && s.editing)
+        )
       })
       expect((await port.request('artifacts.list', {}))[0]!.editing).toEqual([sessionId])
       if (end === 'cancel') await port.request('sessions.cancel', { sessionId })
@@ -279,7 +303,7 @@ describe('the artifacts service in sessions', () => {
       else (t.launcher as InProcessLauncher).crash()
       await port.until(() => {
         const last = editing()
-        return last?.type === 'artifacts.activity' && last.editing.length === 0
+        return last?.type === 'artifacts.activity' && last.sessions.length === 0
       })
       expect((await port.request('artifacts.list', {}))[0]!.editing).toEqual([])
     },

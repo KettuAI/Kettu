@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
+import { NO_SESSION, type ArtifactSession, type ArtifactSummary } from '@shared/artifacts'
 import {
   dateBucket,
   daysLeft,
   filterByTitle,
   groupArtifacts,
+  presenceShown,
   sessionCount,
   type ArtifactGrouping,
   type ArtifactSort,
@@ -229,5 +230,50 @@ describe('daysLeft', () => {
 
   it('says 30 for a deletion newer than the clock the view last read', () => {
     expect(daysLeft(NOW + 40_000, NOW)).toBe(30)
+  })
+})
+
+describe('presenceShown', () => {
+  const session = (sessionId: string, editing = false): ArtifactSession => ({ sessionId, editing })
+
+  it('shows nobody for none', () => {
+    expect(presenceShown([])).toEqual({ all: [], shown: [], more: 0 })
+  })
+
+  it('puts the editing sessions first, each kind in the order they started', () => {
+    const sessions = [session('a'), session('b', true), session('c'), session('d', true)]
+    expect(presenceShown(sessions).all.map((s) => s.sessionId)).toEqual(['b', 'd', 'a', 'c'])
+    expect(presenceShown(sessions).shown.map((s) => s.sessionId)).toEqual(['b', 'd'])
+    expect(presenceShown(sessions).more).toBe(2)
+  })
+
+  it('shows the first one or two whole, and all three from three', () => {
+    expect(presenceShown([session('a')])).toEqual({
+      all: [session('a')],
+      shown: [session('a')],
+      more: 0,
+    })
+    const two = presenceShown([session('a'), session('b')])
+    expect(two.shown.map((s) => s.sessionId)).toEqual(['a', 'b'])
+    expect(two.more).toBe(0)
+    const three = presenceShown([session('a'), session('b'), session('c')])
+    expect(three.shown.map((s) => s.sessionId)).toEqual(['a', 'b', 'c'])
+    expect(three.more).toBe(0)
+  })
+
+  it('shows two and counts the rest from four', () => {
+    const four = presenceShown([session('a'), session('b'), session('c'), session('d')])
+    expect(four.shown.map((s) => s.sessionId)).toEqual(['a', 'b'])
+    expect(four.more).toBe(2)
+    expect(four.all).toHaveLength(4)
+    const five = presenceShown([
+      session('a'),
+      session('b'),
+      session('c'),
+      session('d'),
+      session('e'),
+    ])
+    expect(five.shown.map((s) => s.sessionId)).toEqual(['a', 'b'])
+    expect(five.more).toBe(3)
   })
 })
