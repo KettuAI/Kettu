@@ -20,15 +20,18 @@ export function DiffPreview({ projectPath, diff }: { projectPath: string; diff: 
           className="flex min-w-0 flex-1 items-baseline gap-1.5"
           title={diff.oldPath ? `${diff.oldPath} → ${diff.path}` : diff.path}
         >
-          <span className="shrink-0 font-mono text-code font-medium">{nameOf(diff.path)}</span>
-          <span className="shrink-0 text-tertiary">
+          <span className="min-w-0 shrink truncate font-mono text-code font-medium">
+            {nameOf(diff.path)}
+          </span>
+          {/* The status gives way first, to an ellipsis of its own rather than a sliver. */}
+          <span className="min-w-4 shrink-1000 truncate text-tertiary">
             {diff.ref ? (
               <span className="font-mono text-meta">{diff.ref.slice(0, 7)}</span>
             ) : (
               t('diff.uncommitted')
             )}
           </span>
-          {folder && <span className="truncate text-tertiary">{folder}</span>}
+          {folder && <span className="min-w-0 shrink-100 truncate text-tertiary">{folder}</span>}
         </span>
         {diff.projectFile !== null && (
           <PanelButton

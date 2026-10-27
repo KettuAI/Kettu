@@ -33,7 +33,7 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
       <Button
         variant="quiet"
         size="compact"
-        className="min-w-16 shrink-100 px-1.5"
+        className="min-w-16 shrink-1000 px-1.5"
         onClick={() => openSession(parent.id, parent.projectPath)}
       >
         <span className="truncate">{sessionTitle(parent)}</span>
@@ -70,14 +70,15 @@ export function SessionHeader({
 
   return (
     <TopBar>
-      {/* The title gives way last: the git status shrinks first (see HeaderTools). */}
-      <NoDrag className="min-w-0 gap-0.5">
+      {/* The title gives way last: the git status shrinks first (see HeaderTools). What is left
+          once the title reaches its least width is cut at the group's edge, not under the tools. */}
+      <NoDrag className="min-w-0 gap-0.5 overflow-clip">
         {routine && summary.routine && (
           <>
             <Button
               variant="quiet"
               size="compact"
-              className="min-w-16 shrink-100 px-1.5"
+              className="min-w-16 shrink-1000 px-1.5"
               aria-label={ts('routine.link', { name: routine.name })}
               onClick={() => openRoutine(summary.routine!.routineId)}
             >
@@ -108,7 +109,7 @@ export function SessionHeader({
             ref={titleButton}
             variant="ghost"
             title={`${title} · ${agentName(summary.agentId)}`}
-            className="mx-[3px] h-7.5 min-w-0 shrink rounded-md px-[3px] font-heading text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
+            className="mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-heading text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
             onClick={() => {
               measureTitle()
               rename.start()

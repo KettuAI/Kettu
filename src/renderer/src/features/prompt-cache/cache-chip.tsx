@@ -10,9 +10,9 @@ import { CacheDetails } from './cache-details'
 import { CacheHourglass } from './cache-hourglass'
 import { useCacheLeft, useCachePhase } from './cache-phase'
 
-// It gives way before the title, down to its hourglass, so a narrow bar never overlaps it.
+// It gives way only once the bar is full, down to its hourglass, so a narrow bar never overlaps it.
 const CHIP =
-  'ml-1.5 inline-flex h-6 min-w-7 shrink-100 items-center gap-[5px] overflow-hidden rounded-md bg-subtle px-2 text-xs text-tertiary tabular'
+  'ml-1.5 inline-flex h-6 min-w-7 shrink items-center gap-[5px] overflow-hidden rounded-md bg-subtle px-2 text-xs text-tertiary tabular'
 
 /**
  * The top bar's chip: the time the session's prompt cache has left, between turns, which a click

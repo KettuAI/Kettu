@@ -6,7 +6,7 @@
     "routines": "例程",
     "sessions": "会话",
     "unavailable": "暂时无法加载项目。",
-    "empty": "你打开的项目会显示在这里。"
+    "empty": "会话会显示在这里。"
   },
   "project": {
     "missing": "未找到",

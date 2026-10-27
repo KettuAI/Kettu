@@ -208,7 +208,7 @@ export default function RoutinesPage() {
   return (
     <div className="flex h-full flex-col">
       <TopBar className="shadow-none">{null}</TopBar>
-      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+      <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto [scrollbar-gutter:stable]">
         {/* Block flow, so a notice's margin and the foot's meet as one gap. */}
         <div className="mx-auto w-full max-w-210 px-10 pb-20">
           <RunAnnouncements />

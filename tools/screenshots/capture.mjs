@@ -24,6 +24,10 @@ const out = resolve(valueOf('--out') ?? 'screenshots')
 const port = Number(valueOf('--port') ?? 9230)
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 const log = (text) => process.stderr.write(`${text}\n`)
+// Cursor moves, colours and the like; what is left is what a person reads on the grid.
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-Za-z]/g
+const printedText = (replay) => replay.replace(ANSI, '').trim()
 
 mkdirSync(out, { recursive: true })
 const scratch = mkdtempSync(join(tmpdir(), 'overbench-shots-'))
@@ -183,6 +187,17 @@ async function run() {
     await cdp.evaluate(`document.documentElement.dataset.theme = 'light'`)
     log(`captured ${name}`)
   }
+  // A window hidden behind others never runs requestAnimationFrame, so what draws from one, such
+  // as xterm's grid, has not appeared; a tiny capture makes Chromium produce a frame.
+  const pumpFrames = async (count = 3) => {
+    for (let i = 0; i < count; i++) {
+      await cdp.send('Page.captureScreenshot', {
+        format: 'png',
+        clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 },
+      })
+      await sleep(100)
+    }
+  }
   const byText = (selector, text) =>
     `return [...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.textContent.includes(${JSON.stringify(text)}))`
 
@@ -192,7 +207,23 @@ async function run() {
     `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
     'New session on first run',
   )
-  await sleep(1500)
+  // The heading fades in; a capture taken mid-fade shows it almost invisible, so wait until its
+  // opacity has rested at 1 for a few frames.
+  await cdp.evaluate(`new Promise((done, fail) => {
+    const started = Date.now()
+    let still = 0
+    const check = () => {
+      const heading = [...document.querySelectorAll('h1')].find((h) => h.textContent.startsWith('What should'))
+      still = heading && getComputedStyle(heading).opacity === '1' ? still + 1 : 0
+      if (still >= 3) return done(true)
+      if (Date.now() - started > 15_000) return fail(new Error('the heading stayed faded'))
+      setTimeout(check, 100)
+    }
+    check()
+  })`)
+  // The heading's serif face loads with the first text the app draws; a capture before that
+  // shows a fallback face.
+  await cdp.evaluate('document.fonts.ready.then(() => true)')
   log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
   await shoot('first-run')
 
@@ -325,12 +356,13 @@ async function run() {
   )
   log('captured session-scrolling')
 
-  // Chinese notes between runs of work; the pointer rests beside the column, so no reply row shows.
+  // Chinese notes between runs of work; the pointer rests beside the column and at the top of the
+  // thread, so neither a reply row nor the outline rail's popover shows.
   await prompt('/report')
   await waitFor(`document.body.textContent.includes('还没做的')`, 'the report', 60_000)
   await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to end', 120_000)
   const beside = await cdp.evaluate(
-    `(() => { const r = document.querySelector('[data-slot=message-scroller-viewport]').getBoundingClientRect(); return { x: r.left + 8, y: r.top + r.height / 2 } })()`,
+    `(() => { const r = document.querySelector('[data-slot=message-scroller-viewport]').getBoundingClientRect(); return { x: r.left + 8, y: r.top + 8 } })()`,
   )
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...beside })
   await sleep(800)
@@ -389,10 +421,35 @@ async function run() {
   await click(byText('button', 'Allow'), 'Allow')
   await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to end', 120_000)
 
+  // xterm's WebGL canvas comes out blank in these captures, where its DOM renderer draws the same
+  // grid as text the capture includes; without a WebGL context the addon stays off.
+  await cdp.evaluate(`(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+      return /^webgl/i.test(type) ? null : getContext.call(this, type, ...rest)
+    }
+    return true
+  })()`)
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
   await waitFor(`document.querySelector('[data-terminal-panel] .xterm')`, 'the terminal')
-  // PowerShell takes a few seconds to print its first prompt on a CI runner.
-  await sleep(5000)
+  // A window behind others may not composite its frames; asking for the front lets it draw.
+  await cdp.send('Page.bringToFront')
+  // The grid stays empty until the shell prints its prompt, a few seconds after it starts, so the
+  // host's replay says when there is something to see; the frames let the terminal draw it.
+  const terminalPrinted = async () => {
+    const replay =
+      await cdp.evaluate(`window.overbench.terminals.request('terminals.list', { projectPath: ${JSON.stringify(project)} }).then((list) => {
+        const terminal = list.sort((a, b) => b.createdAt - a.createdAt)[0]
+        return terminal ? window.overbench.terminals.request('terminals.attach', { id: terminal.id }).then((reply) => reply.replay) : ''
+      })`)
+    return printedText(replay).length > 0
+  }
+  const terminalDeadline = Date.now() + 60_000
+  while (!(await terminalPrinted())) {
+    if (Date.now() > terminalDeadline) throw new Error('The terminal printed nothing')
+    await pumpFrames(1)
+  }
+  await pumpFrames()
   log(
     `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)}`,
   )

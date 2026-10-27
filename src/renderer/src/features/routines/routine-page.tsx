@@ -560,7 +560,7 @@ function RoutineShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full flex-col">
       <TopBar className="shadow-none">{null}</TopBar>
-      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+      <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto [scrollbar-gutter:stable]">
         {/* Block flow, so a section's margin and the header's meet as one gap. */}
         <div className="@container/routine mx-auto w-full max-w-210 px-10 pb-20">
           <div className="mb-3.5 flex">
