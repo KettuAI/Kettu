@@ -37,6 +37,8 @@ const variants = cva(
         icon: 'size-8',
         'icon-xs':
           "size-6 rounded-md in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+        // The base variant's 16 px icon in the 24 px box, for a message's quiet actions.
+        'icon-message': 'size-6 rounded-md',
         'icon-sm': 'size-7 in-data-[slot=button-group]:rounded-lg',
         'icon-lg': 'size-9',
       },

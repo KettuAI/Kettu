@@ -160,7 +160,9 @@
   "replyFooter": {
     "copyReply": "Copy reply",
     "fork": "Fork into a new session",
-    "forking": "Forking…"
+    "forking": "Forking…",
+    "forkBetweenTurns": "Forks between turns",
+    "forkNotReady": "Forks once the session is ready"
   },
   "queue": {
     "label": "Queued messages: {{count}}",
