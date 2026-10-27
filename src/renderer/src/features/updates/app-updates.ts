@@ -4,7 +4,9 @@ import { i18n } from '@renderer/lib/i18n'
 /** The app's update notice, shown only when there is something to do. */
 export type AppUpdateNotice =
   | { kind: 'ready'; version: string }
-  | { kind: 'available'; version: string }
+  // moves: on a read-only volume, Update moves the app to Applications first.
+  | { kind: 'available'; version: string; moves: boolean }
+  | { kind: 'moving'; version: string }
   | { kind: 'link'; version: string; downloadUrl: string | null }
   | { kind: 'downloading'; version: string; percent: number }
   | { kind: 'updated'; version: string; from: string }
@@ -15,13 +17,14 @@ export function appUpdateNotice(
 ): AppUpdateNotice | null {
   if (!status) return null
   const { state } = status
+  if (state.kind === 'moving') return { kind: 'moving', version: state.version }
   if (state.kind === 'downloading' && state.manual && status.dismissed !== state.version)
     return { kind: 'downloading', version: state.version, percent: state.percent }
   if (state.kind === 'ready' && status.dismissed !== state.version)
     return { kind: 'ready', version: state.version }
   if (state.kind === 'available' && status.dismissed !== state.version) {
     return state.mode === 'install'
-      ? { kind: 'available', version: state.version }
+      ? { kind: 'available', version: state.version, moves: status.readOnly }
       : { kind: 'link', version: state.version, downloadUrl: state.downloadUrl }
   }
   if (status.updatedFrom && !updatedSeen)
@@ -40,7 +43,8 @@ export interface AppUpdateRow {
   label: string
   /** The second line; null while downloading, when the progress bar is the second line. */
   detail: string | null
-  action: AppUpdateAction
+  /** Null while the app moves, which nothing can stop. */
+  action: AppUpdateAction | null
   actionLabel: string
   /** The page an action opens in the browser. */
   href: string | null
@@ -80,10 +84,24 @@ export function appUpdateRow(notice: AppUpdateNotice): AppUpdateRow {
       return row(
         i18n.t('updates:notice.available'),
         true,
-        i18n.t('updates:notice.updateDetail'),
+        notice.moves ? i18n.t('updates:notice.moveDetail') : i18n.t('updates:notice.updateDetail'),
         'update',
         i18n.t('updates:notice.update'),
       )
+    case 'moving': {
+      // The app moves, not the version, so the words stand alone.
+      const words = i18n.t('updates:notice.moving')
+      return {
+        words,
+        versionFirst: false,
+        label: words,
+        detail: null,
+        action: null,
+        actionLabel: '',
+        href: null,
+        dismissible: false,
+      }
+    }
     case 'link':
       return row(
         i18n.t('updates:notice.available'),

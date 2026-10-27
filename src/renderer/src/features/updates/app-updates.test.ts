@@ -9,6 +9,7 @@ function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
   return {
     state: { kind: 'idle', checkedAt: null },
     mode: 'install',
+    readOnly: false,
     current: '0.2.0',
     updatedFrom: null,
     dismissed: null,
@@ -41,6 +42,31 @@ describe('appUpdateNotice', () => {
     })
     expect(appUpdateNotice(updated, true)).toBeNull()
   })
+
+  it('says when Update moves the app first, and shows the move', () => {
+    const available = {
+      kind: 'available' as const,
+      version: '0.3.0',
+      mode: 'install' as const,
+      downloadUrl: null,
+    }
+    expect(appUpdateNotice(status({ state: available }), false)).toEqual({
+      kind: 'available',
+      version: '0.3.0',
+      moves: false,
+    })
+    expect(appUpdateNotice(status({ state: available, readOnly: true }), false)).toEqual({
+      kind: 'available',
+      version: '0.3.0',
+      moves: true,
+    })
+    expect(
+      appUpdateNotice(
+        status({ state: { kind: 'moving', version: '0.3.0' }, readOnly: true }),
+        false,
+      ),
+    ).toEqual({ kind: 'moving', version: '0.3.0' })
+  })
 })
 
 describe('appUpdateRow', () => {
@@ -58,13 +84,31 @@ describe('appUpdateRow', () => {
   })
 
   it('offers to download and install an update on offer', () => {
-    expect(appUpdateRow({ kind: 'available', version: '0.3.0' })).toMatchObject({
+    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false })).toMatchObject({
       label: '0.3.0 is out',
       detail: 'Update downloads it, then restarts; your sessions come back.',
       action: 'update',
       actionLabel: 'Update',
       href: null,
       dismissible: true,
+    })
+  })
+
+  it('says that Update moves the app first from a read-only volume, and shows the move', () => {
+    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true })).toMatchObject({
+      label: '0.3.0 is out',
+      detail: 'Update moves OverBench to Applications, then restarts; your sessions come back.',
+      action: 'update',
+    })
+    expect(appUpdateRow({ kind: 'moving', version: '0.3.0' })).toEqual({
+      words: 'Moving to Applications…',
+      versionFirst: false,
+      label: 'Moving to Applications…',
+      detail: null,
+      action: null,
+      actionLabel: '',
+      href: null,
+      dismissible: false,
     })
   })
 
@@ -107,10 +151,14 @@ describe('appUpdateRow', () => {
 
   it('speaks Chinese', async () => {
     await i18n.changeLanguage('zh-CN')
-    expect(appUpdateRow({ kind: 'available', version: '0.3.0' })).toMatchObject({
+    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false })).toMatchObject({
       label: '0.3.0 已发布',
       detail: '「更新」会下载并重启，会话会自动恢复。',
     })
+    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true }).detail).toBe(
+      '「更新」会把 OverBench 移到“应用程序”文件夹并重启，会话会自动恢复。',
+    )
+    expect(appUpdateRow({ kind: 'moving', version: '0.3.0' }).label).toBe('正在移到“应用程序”…')
     expect(appUpdateRow({ kind: 'updated', version: '0.3.0', from: '0.2.0' }).detail).toBe(
       '从 0.2.0 更新而来。',
     )

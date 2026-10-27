@@ -8,11 +8,13 @@
     "update": "Update",
     "download": "Download",
     "downloading": "Downloading",
+    "moving": "Moving to Applications…",
     "downloadProgress": "Download progress",
     "cancel": "Cancel update",
     "whatsNew": "What’s new",
     "readyDetail": "Restart to finish; your sessions come back.",
     "updateDetail": "Update downloads it, then restarts; your sessions come back.",
+    "moveDetail": "Update moves OverBench to Applications, then restarts; your sessions come back.",
     "downloadDetail": "Download it from the release page.",
     "updatedDetail": "Updated from {{version}}."
   },

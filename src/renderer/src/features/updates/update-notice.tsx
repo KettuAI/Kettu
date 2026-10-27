@@ -3,6 +3,7 @@ import { CircleArrowUpIcon, CircleCheckIcon, ExternalLinkIcon, XIcon } from 'luc
 import { useTranslation } from 'react-i18next'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
@@ -145,7 +146,7 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
 
   // A download in progress is cancelled from the card's corner, so it has no action of its own.
   const action =
-    row.action === 'cancel' ? null : row.href ? (
+    row.action === null || row.action === 'cancel' ? null : row.href ? (
       <a
         href={row.href}
         target="_blank"
@@ -166,12 +167,16 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
       icon={
         notice.kind === 'updated' ? (
           <CircleCheckIcon className="size-3.5 text-success" />
+        ) : notice.kind === 'moving' ? (
+          <Spinner aria-hidden className="size-3.5 text-info" />
         ) : (
           <CircleArrowUpIcon className="size-3.5 text-info" />
         )
       }
       text={
-        row.versionFirst ? (
+        notice.kind === 'moving' ? (
+          row.words
+        ) : row.versionFirst ? (
           <>
             {version} {row.words}
           </>

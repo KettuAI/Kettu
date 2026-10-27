@@ -1,3 +1,5 @@
+import { access, constants } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { app } from 'electron'
 import type { AppUpdater, CancellationToken } from 'electron-updater'
 import type { SettingsFile } from '@shared/settings'
@@ -13,8 +15,10 @@ import {
   dmgDownloadUrl,
   errorMessage,
   installOnQuit,
+  moveCancelled,
   nextState,
   offReason,
+  readOnlyVolume,
   type StartedBy,
   type UpdateMode,
   type UpdaterEvent,
@@ -26,12 +30,16 @@ const log = createLogger('updater')
 
 const FIRST_CHECK_MS = 30_000
 const CHECK_INTERVAL_MS = 60 * 60 * 1000
+// Electron copies the app synchronously, so the window gets a few frames to show the move first.
+const MOVE_PAINT_MS = 100
 
 export interface UpdaterDeps {
   appState: AppStateStore
   settings(): SettingsFile
   /** Restarts through the quit flow, which confirms and then calls `installNow`. */
   requestRestart(): void
+  /** Moves the app through the quit flow, which confirms and then calls `moveNow`. */
+  requestMove(): void
 }
 
 /** Checks GitHub Releases through electron-updater, which loads only after the window shows. */
@@ -52,10 +60,15 @@ export class Updater {
   /** Stops the download the user started with Update. */
   private cancellation: CancellationToken | null = null
   private shuttingDown = false
+  /** Set once the app is known to run from a read-only volume, where Update moves it first. */
+  private readOnly = false
+  private readonly located: Promise<void>
+  /** The version of an Update that moved the app, which this launch carries on with. */
+  private afterMove: string | null
 
   constructor(private readonly deps: UpdaterDeps) {
     const current = app.getVersion()
-    const { lastRunVersion, dismissedUpdate } = deps.appState.get()
+    const { lastRunVersion, dismissedUpdate, updateAfterMove } = deps.appState.get()
     this.mode = updateMode(process.platform, import.meta.env.MAIN_VITE_UPDATE_MODE)
     this.status = {
       state: offReason(app.isPackaged, process.platform, process.env) ?? {
@@ -63,11 +76,14 @@ export class Updater {
         checkedAt: null,
       },
       mode: this.mode,
+      readOnly: false,
       current,
       updatedFrom: updatedFrom(lastRunVersion, current),
       dismissed: dismissedUpdate,
     }
-    deps.appState.update({ lastRunVersion: current })
+    this.afterMove = updateAfterMove
+    deps.appState.update({ lastRunVersion: current, updateAfterMove: null })
+    this.located = this.locate()
   }
 
   getStatus(): UpdateStatus {
@@ -79,6 +95,7 @@ export class Updater {
     if (this.started || this.status.state.kind === 'off') return
     this.started = true
     log.info(`Updates in ${this.mode} mode`)
+    if (this.afterMove) void this.continueAfterMove()
     setTimeout(() => {
       void this.automaticCheck()
       setInterval(() => void this.automaticCheck(), CHECK_INTERVAL_MS).unref()
@@ -88,7 +105,9 @@ export class Updater {
   /** A check the user asked for; its errors are shown. Resolves once it has finished. */
   async check(): Promise<UpdateStatus> {
     const { kind } = this.status.state
-    if (kind === 'off' || kind === 'ready' || kind === 'downloading') return this.status
+    if (kind === 'off' || kind === 'ready' || kind === 'downloading' || kind === 'moving') {
+      return this.status
+    }
     await this.runCheck(true)
     return this.status
   }
@@ -108,8 +127,46 @@ export class Updater {
     }
     const { state } = this.status
     if (state.kind !== 'available') throw new Error('There is no update to download')
+    if (this.readOnly) {
+      this.deps.requestMove()
+      return
+    }
     this.manual = true
     await this.startDownload(state.version, 'user')
+  }
+
+  /**
+   * The first step of Update on a read-only volume, once the quit flow has asked: moves the app
+   * to /Applications, after which the flow quits and Electron opens the copy. False when the app
+   * stays where it is, with the update on offer or the failure in the state.
+   */
+  async moveNow(): Promise<boolean> {
+    const { state } = this.status
+    if (state.kind !== 'available') return false
+    // Electron would return true without moving or quitting, and the flow would quit for nothing.
+    if (app.isInApplicationsFolder()) {
+      this.moveFailed('The app is in an Applications folder on a read-only volume')
+      return false
+    }
+    this.dispatch({ type: 'moving', version: state.version })
+    this.deps.appState.update({ updateAfterMove: state.version })
+    await new Promise((done) => setTimeout(done, MOVE_PAINT_MS))
+    let moved: boolean
+    try {
+      moved = app.moveToApplicationsFolder()
+    } catch (error) {
+      if (!moveCancelled(error)) {
+        this.deps.appState.update({ updateAfterMove: null })
+        this.moveFailed(errorMessage(error))
+        return false
+      }
+      moved = false
+    }
+    if (moved) return true
+    log.info('Moving the app to /Applications was cancelled')
+    this.deps.appState.update({ updateAfterMove: null })
+    this.dispatch({ type: 'move-cancelled' })
+    return false
   }
 
   /** Stops a download started with Update, which leaves the update available again. */
@@ -163,7 +220,13 @@ export class Updater {
 
   private autoDownload(settings: SettingsFile): boolean {
     const { automatic } = settings.updates
-    return this.mode === 'install' && (automatic === 'download' || automatic === 'restart')
+    // A read-only volume could not install it, and the launch after a move downloads as Update.
+    return (
+      this.mode === 'install' &&
+      !this.readOnly &&
+      this.afterMove === null &&
+      (automatic === 'download' || automatic === 'restart')
+    )
   }
 
   /**
@@ -174,12 +237,60 @@ export class Updater {
     const ready = this.status.state.kind === 'ready'
     updater.autoInstallOnAppQuit =
       this.mode === 'install' &&
+      !this.readOnly &&
       !this.shuttingDown &&
       (!ready || installOnQuit({ choice: settings.updates.automatic, startedBy: this.startedBy }))
   }
 
+  /**
+   * Squirrel.Mac installs nothing into an app on a read-only volume, so this tests what it tests:
+   * the volume, not whether the app sits in an Applications folder. An AppImage always runs from
+   * a read-only mount, so Linux is never tested.
+   */
+  private async locate(): Promise<void> {
+    if (process.platform !== 'darwin' || this.mode !== 'install') return
+    if (this.status.state.kind === 'off') return
+    // The bundle holds the executable in Contents/MacOS.
+    const bundle = resolve(process.execPath, '..', '..', '..')
+    try {
+      await access(bundle, constants.W_OK)
+    } catch (error) {
+      if (!readOnlyVolume(error)) return
+      log.info(`${bundle} is on a read-only volume, so Update moves it to /Applications first`)
+      this.readOnly = true
+      this.publish({ ...this.status, readOnly: true })
+    }
+  }
+
+  /** The first launch after Update moved the app: carries on with that Update at once. */
+  private async continueAfterMove(): Promise<void> {
+    await this.located
+    if (this.readOnly) {
+      log.warn('Still on a read-only volume after moving to /Applications')
+      this.afterMove = null
+      return
+    }
+    log.info(`Moved to /Applications to update to ${this.afterMove}`)
+    try {
+      await this.runCheck(true)
+    } finally {
+      this.afterMove = null
+      const updater = await this.updater?.catch(() => null)
+      if (updater) updater.autoDownload = this.autoDownload(this.deps.settings())
+    }
+    // A failed download is in the state and the log, as after any Update.
+    if (this.status.state.kind === 'available') await this.download().catch(() => undefined)
+  }
+
+  private moveFailed(message: string): void {
+    log.warn(`Could not move the app to /Applications: ${message}`)
+    this.dispatch({ type: 'move-failed', message })
+  }
+
   private load(): Promise<AppUpdater> {
-    this.updater ??= loadAutoUpdater().then(({ autoUpdater, CancellationToken }) => {
+    this.updater ??= loadAutoUpdater().then(async ({ autoUpdater, CancellationToken }) => {
+      // Automatic downloads depend on where the app runs.
+      await this.located
       this.newToken = () => new CancellationToken()
       const settings = this.deps.settings()
       autoUpdater.logger = {
@@ -248,7 +359,9 @@ export class Updater {
   private async automaticCheck(): Promise<void> {
     if (this.deps.settings().updates.automatic === 'off') return
     const { kind } = this.status.state
-    if (kind === 'ready' || kind === 'downloading' || kind === 'checking') return
+    if (kind === 'ready' || kind === 'downloading' || kind === 'checking' || kind === 'moving') {
+      return
+    }
     await this.runCheck(false)
   }
 

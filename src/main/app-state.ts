@@ -7,6 +7,7 @@ const log = createLogger('app-state')
 export interface AppState {
   lastRunVersion: string | null // the version that ran last, to tell a launch after an update
   dismissedUpdate: string | null // the version whose update notice was dismissed
+  updateAfterMove: string | null // the version Update moved the app to /Applications for
 }
 
 interface AppStateFile extends AppState {
@@ -15,13 +16,24 @@ interface AppStateFile extends AppState {
 
 function parseAppState(raw: unknown): AppState | null {
   if (typeof raw !== 'object' || raw === null) return null
-  const { version, lastRunVersion, dismissedUpdate } = raw as Record<string, unknown>
+  // Files written before updateAfterMove existed lack it.
+  const {
+    version,
+    lastRunVersion,
+    dismissedUpdate,
+    updateAfterMove = null,
+  } = raw as Record<string, unknown>
   const optionalString = (value: unknown): value is string | null =>
     value === null || (typeof value === 'string' && value.length <= 256)
-  if (version !== 1 || !optionalString(lastRunVersion) || !optionalString(dismissedUpdate)) {
+  if (
+    version !== 1 ||
+    !optionalString(lastRunVersion) ||
+    !optionalString(dismissedUpdate) ||
+    !optionalString(updateAfterMove)
+  ) {
     return null
   }
-  return { lastRunVersion, dismissedUpdate }
+  return { lastRunVersion, dismissedUpdate, updateAfterMove }
 }
 
 /** Owns app-state.json: small facts main remembers between launches. */
@@ -33,7 +45,7 @@ export class AppStateStore {
 
   static async load(userDataPath: string): Promise<AppStateStore> {
     const path = join(userDataPath, 'app-state.json')
-    const empty: AppState = { lastRunVersion: null, dismissedUpdate: null }
+    const empty: AppState = { lastRunVersion: null, dismissedUpdate: null, updateAfterMove: null }
     const read = await readJsonFile(path)
     let state = empty
     if (read.kind === 'ok') state = parseAppState(read.value) ?? empty
@@ -56,7 +68,8 @@ export class AppStateStore {
     const next = { ...this.state, ...changes }
     if (
       next.lastRunVersion === this.state.lastRunVersion &&
-      next.dismissedUpdate === this.state.dismissedUpdate
+      next.dismissedUpdate === this.state.dismissedUpdate &&
+      next.updateAfterMove === this.state.updateAfterMove
     ) {
       return
     }
