@@ -14,6 +14,32 @@
     "loadFailed": "无法加载你的项目",
     "starting": "正在启动 OverBench…"
   },
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "openProject": "打开项目",
+    "newSession": "新建会话",
+    "showShortcuts": "显示键盘快捷键",
+    "toggleSidebar": "显示或隐藏侧边栏",
+    "focusComposer": "聚焦输入框",
+    "addFiles": "向输入框添加文件或照片",
+    "previousSession": "侧边栏中的上一个会话",
+    "nextSession": "侧边栏中的下一个会话",
+    "settings": "打开设置；按 Esc 返回",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "resetZoom": "将缩放重置为 100%",
+    "toggleTerminal": "显示或隐藏终端",
+    "newTerminal": "新建终端",
+    "cancelTurn": "停止本轮对话",
+    "answerPermission": "回应待处理的授权请求",
+    "askSelection": "就选中的内容询问 Agent",
+    "askSelectionNote": "在终端中选中文本时",
+    "groups": {
+      "sessions": "会话",
+      "window": "窗口",
+      "terminal": "终端"
+    }
+  },
   "topBar": {
     "showSidebar": "显示侧边栏",
     "hideSidebar": "隐藏侧边栏"

@@ -9,6 +9,7 @@ import {
   settingsBack,
   openSession,
   openSettings,
+  toggleShortcuts,
   toggleSidebar,
   toggleTerminal,
   useViewStore,
@@ -56,6 +57,11 @@ export function useKeyboardShortcuts(): void {
       if (inTerminal && !isMac) {
         const selection = window.getSelection()?.toString() ?? ''
         if (!(event.key.toLowerCase() === 'l' && !event.shiftKey && selection)) return
+      }
+
+      // The Files pane's editor keeps this key, which comments the selected lines there.
+      if (event.key === '/' && !inCodeEditor(event.target)) {
+        return run(event, () => toggleShortcuts(layerOpen()))
       }
 
       const key = event.key.toLowerCase()
@@ -118,6 +124,10 @@ function isEditable(target: EventTarget | null): boolean {
     el.tagName === 'TEXTAREA' ||
     el.tagName === 'SELECT'
   )
+}
+
+function inCodeEditor(target: EventTarget | null): boolean {
+  return !!(target as HTMLElement | null)?.closest('[data-code-editor]')
 }
 
 /**

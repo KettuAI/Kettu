@@ -14,6 +14,32 @@
     "loadFailed": "Couldn't load your projects",
     "starting": "Starting OverBench…"
   },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "openProject": "Open project",
+    "newSession": "New session",
+    "showShortcuts": "Show the keyboard shortcuts",
+    "toggleSidebar": "Toggle the sidebar",
+    "focusComposer": "Focus the composer",
+    "addFiles": "Add files or photos to the composer",
+    "previousSession": "Previous session in the sidebar",
+    "nextSession": "Next session in the sidebar",
+    "settings": "Settings; Esc goes back",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset the zoom to 100%",
+    "toggleTerminal": "Show or hide the terminal",
+    "newTerminal": "New terminal",
+    "cancelTurn": "Cancel the running turn",
+    "answerPermission": "Answer the pending permission request",
+    "askSelection": "Ask the agent about the selection",
+    "askSelectionNote": "With text selected in the terminal",
+    "groups": {
+      "sessions": "Sessions",
+      "window": "Window",
+      "terminal": "Terminal"
+    }
+  },
   "topBar": {
     "showSidebar": "Show sidebar",
     "hideSidebar": "Hide sidebar"

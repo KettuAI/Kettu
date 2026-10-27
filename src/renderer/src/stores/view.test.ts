@@ -12,6 +12,8 @@ const {
   openSession,
   openSettings,
   settingsBack,
+  showShortcuts,
+  toggleShortcuts,
   useViewStore,
 } = await import('./view')
 
@@ -79,6 +81,39 @@ describe('settings view', () => {
     expect(settings()).toEqual({ open: true, section: 'agents', agent: null })
     settingsBack()
     expect(settings()).toEqual({ open: false, section: 'agents', agent: null })
+  })
+})
+
+describe('shortcuts view', () => {
+  const open = () => useViewStore.getState().shortcutsOpen
+
+  beforeEach(() => {
+    useViewStore.setState({ shortcutsOpen: false })
+  })
+
+  it('opens the dialog with the shortcut and closes it again', () => {
+    toggleShortcuts(false)
+    expect(open()).toBe(true)
+    toggleShortcuts(false)
+    expect(open()).toBe(false)
+  })
+
+  it('leaves the dialog closed while another layer is open', () => {
+    toggleShortcuts(true)
+    expect(open()).toBe(false)
+  })
+
+  it('closes an open dialog even while another layer is open', () => {
+    toggleShortcuts(false)
+    toggleShortcuts(true)
+    expect(open()).toBe(false)
+  })
+
+  it('shows and hides the dialog', () => {
+    showShortcuts(true)
+    expect(open()).toBe(true)
+    showShortcuts(false)
+    expect(open()).toBe(false)
   })
 })
 

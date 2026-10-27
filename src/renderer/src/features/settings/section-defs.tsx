@@ -7,7 +7,6 @@ import {
   GitBranchIcon,
   GlobeIcon,
   InfoIcon,
-  KeyboardIcon,
   SettingsIcon,
   ShareIcon,
   SquareTerminalIcon,
@@ -71,7 +70,6 @@ import {
   RemoveAll,
   SendKey,
   ShellPicker,
-  ShortcutKeys,
   TestNotification,
   TextSize,
   WithKeys,
@@ -85,25 +83,6 @@ import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage
 
 const SOURCE_URL = 'https://github.com/overbench/overbench'
 const LICENSE_URL = 'https://github.com/overbench/overbench/blob/main/LICENSE'
-
-const SHORTCUTS = [
-  { group: 'sessions', keys: 'Mod+N', action: 'newSession' },
-  { group: 'sessions', keys: 'Mod+Shift+[', action: 'previousSession' },
-  { group: 'sessions', keys: 'Mod+Shift+]', action: 'nextSession' },
-  { group: 'sessions', keys: 'Mod+L', action: 'focusComposer' },
-  { group: 'sessions', keys: 'Mod+U', action: 'addFiles' },
-  { group: 'sessions', keys: 'Esc', action: 'cancelTurn' },
-  { group: 'sessions', keys: '1-4', action: 'answerPermission' },
-  { group: 'window', keys: 'Mod+O', action: 'openProject' },
-  { group: 'window', keys: 'Mod+B', action: 'toggleSidebar' },
-  { group: 'window', keys: 'Mod+,', action: 'settings' },
-  { group: 'window', keys: 'Mod+=', action: 'zoomIn' },
-  { group: 'window', keys: 'Mod+-', action: 'zoomOut' },
-  { group: 'window', keys: 'Mod+0', action: 'resetZoom' },
-  { group: 'terminal', keys: 'Ctrl+`', action: 'toggleTerminal' },
-  { group: 'terminal', keys: 'Ctrl+Shift+`', action: 'newTerminal' },
-  { group: 'terminal', keys: 'Mod+L', action: 'askSelection', note: 'askSelectionNote' },
-] as const
 
 function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>): GroupDef {
   return { id, label, ...extra }
@@ -438,33 +417,6 @@ export function useUsageSection(): SectionDef {
     description: t('settings.description'),
     icon: ChartNoAxesColumnIcon,
     rows,
-  }
-}
-
-export function useShortcutsSection(): SectionDef {
-  const { t } = useTranslation('settings')
-  const en = english()
-  const groups = {
-    sessions: group('sessions', t('shortcuts.groups.sessions')),
-    window: group('window', t('shortcuts.groups.window')),
-    terminal: group('terminal', t('shortcuts.groups.terminal')),
-  }
-  return {
-    id: 'shortcuts',
-    title: t('sections.shortcuts'),
-    description: t('pages.shortcuts'),
-    icon: KeyboardIcon,
-    rows: SHORTCUTS.map((s) => ({
-      id: s.action,
-      name: t(`shortcuts.${s.action}`),
-      english: en(`shortcuts.${s.action}`),
-      description: 'note' in s ? t(`shortcuts.${s.note}`) : undefined,
-      keywords: s.keys,
-      group: groups[s.group],
-      compact: true,
-      render: () => <ShortcutKeys keys={s.keys} />,
-      aside: () => <ShortcutKeys keys={s.keys} />,
-    })),
   }
 }
 

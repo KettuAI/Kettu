@@ -85,9 +85,7 @@ function Row({ row }: { row: RowDef }) {
   }
   return (
     <RowShell id={row.id}>
-      <RowLine text={text} compact={row.compact}>
-        {row.render(text)}
-      </RowLine>
+      <RowLine text={text}>{row.render(text)}</RowLine>
     </RowShell>
   )
 }

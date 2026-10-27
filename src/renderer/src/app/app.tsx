@@ -12,6 +12,7 @@ import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
 import { MainArea } from '@renderer/features/shell/main-area'
+import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
 import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
@@ -57,6 +58,7 @@ export function App() {
         <QuitConfirm />
         <ArtifactDialogs />
         <MediaViewer />
+        <ShortcutsDialog />
         <Toaster />
         <ReportInteractive />
       </SidebarProvider>

@@ -354,5 +354,5 @@ export default function CodeEditor({
     })
   }, [file.line, file.path, file.resets])
 
-  return <div ref={box} className="absolute inset-0" data-selectable="" />
+  return <div ref={box} className="absolute inset-0" data-selectable="" data-code-editor="" />
 }

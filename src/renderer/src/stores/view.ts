@@ -45,7 +45,6 @@ export type SettingsSection =
   | 'git'
   | 'notifications'
   | 'usage'
-  | 'shortcuts'
   | 'archived'
   | 'sharing'
   | 'browser'
@@ -60,6 +59,8 @@ interface ViewStore {
    * `agent` is the agent whose own page Agents shows instead of the list.
    */
   settings: { open: boolean; section: SettingsSection | null; agent: AgentId | null }
+  /** The shortcuts dialog, over whatever the window shows. Not persisted. */
+  shortcutsOpen: boolean
   sidebarCollapsed: boolean
   /** Groups the user collapsed, by path, `NO_PROJECT_GROUP` or `PINNED_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
@@ -93,6 +94,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   projectPath: saved.projectPath ?? null,
   main: { kind: 'launch' },
   settings: { open: false, section: null, agent: null },
+  shortcutsOpen: false,
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
   expandedParents: saved.expandedParents ?? {},
@@ -298,6 +300,18 @@ export function closeSettings(): void {
 
 export function toggleSidebar(): void {
   useViewStore.setState((s) => ({ sidebarCollapsed: !s.sidebarCollapsed }))
+}
+
+/** Shows the shortcuts dialog, or closes it. */
+export function showShortcuts(open: boolean): void {
+  useViewStore.setState({ shortcutsOpen: open })
+}
+
+/** Closes the shortcuts dialog when open, and otherwise opens it unless another layer is open. */
+export function toggleShortcuts(layerOpen: boolean): void {
+  useViewStore.setState((s) =>
+    s.shortcutsOpen ? { shortcutsOpen: false } : layerOpen ? s : { shortcutsOpen: true },
+  )
 }
 
 /** Shows the pane in the project's side panel, or closes the panel when that pane is shown. */

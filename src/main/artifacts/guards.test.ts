@@ -138,6 +138,16 @@ describe('forwardedKey', () => {
     }
   })
 
+  it('passes the shortcuts dialog key on every platform', () => {
+    for (const platform of ['darwin', 'win32', 'linux'] as const) {
+      const modifier = platform === 'darwin' ? { meta: true } : { control: true }
+      expect(forwardedKey(input('/', 'Slash', modifier), platform)).toMatchObject({ key: '/' })
+      expect(
+        forwardedKey(input('/', 'Slash', { ...modifier, shift: true }), platform),
+      ).toMatchObject({ key: '/' })
+    }
+  })
+
   it("keeps the page's own keys in the page", () => {
     expect(forwardedKey(input('c', 'KeyC', { control: true }), 'win32')).toBeNull()
     expect(forwardedKey(input('b', 'KeyB'), 'win32')).toBeNull()

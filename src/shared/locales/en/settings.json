@@ -6,7 +6,6 @@
     "terminal": "Terminal",
     "git": "Git",
     "notifications": "Notifications",
-    "shortcuts": "Keyboard shortcuts",
     "advanced": "Advanced",
     "about": "About",
     "archived": "Archived sessions",
@@ -271,30 +270,6 @@
     "previewTitle": "Claude Code needs your approval",
     "previewBody": "overbench · run {{command}}",
     "previewTime": "now"
-  },
-  "shortcuts": {
-    "openProject": "Open project",
-    "newSession": "New session",
-    "toggleSidebar": "Toggle the sidebar",
-    "focusComposer": "Focus the composer",
-    "addFiles": "Add files or photos to the composer",
-    "previousSession": "Previous session in the sidebar",
-    "nextSession": "Next session in the sidebar",
-    "settings": "Settings; Esc goes back",
-    "zoomIn": "Zoom in",
-    "zoomOut": "Zoom out",
-    "resetZoom": "Reset the zoom to 100%",
-    "toggleTerminal": "Show or hide the terminal",
-    "newTerminal": "New terminal",
-    "cancelTurn": "Cancel the running turn",
-    "answerPermission": "Answer the pending permission request",
-    "askSelection": "Ask the agent about the selection",
-    "askSelectionNote": "With text selected in the terminal",
-    "groups": {
-      "sessions": "Sessions",
-      "window": "Window",
-      "terminal": "Terminal"
-    }
   },
   "browser": {
     "clearData": {
@@ -579,7 +554,6 @@
     "general": "The interface language, how you type, and what new sessions and launches do.",
     "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
     "notifications": "They show only while no OverBench window is in front, so they never interrupt what you are reading.",
-    "shortcuts": "Shortcuts for sessions, the window and the terminal. They cannot be changed yet.",
     "agents": "OverBench drives these coding agents over ACP. Their accounts, plan usage and installs are here.",
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
