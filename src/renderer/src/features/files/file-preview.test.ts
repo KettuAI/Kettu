@@ -6,7 +6,10 @@ import type { MediaGrant } from '@shared/media'
 import type { OpenFile } from '@renderer/stores/files'
 
 vi.mock('./file-type-icon', () => ({ FileTypeIcon: () => null }))
-vi.stubGlobal('window', { overbench: { platform: 'darwin' } })
+vi.stubGlobal('window', {
+  overbench: { platform: 'darwin' },
+  matchMedia: () => ({ matches: false, addEventListener: () => {} }),
+})
 
 const { FilePreview } = await import('./file-preview')
 

@@ -17,8 +17,8 @@ export const MAX_ZOOM = 8
 export const ZOOM_STEP = 1.25
 /** From this zoom a picture renders pixelated, so its pixels stay crisp. */
 export const PIXELATED_FROM = 3
-/** The room the fitted picture leaves on each side of the stage. */
-const FIT_MARGIN = 48
+/** The room the fitted picture leaves on each side of the stage, unless asked otherwise. */
+export const FIT_MARGIN = 48
 /** How far past its edges a zoomed picture pans. */
 const PAN_MARGIN = 24
 /** A zoom that ends this close to the fit snaps back to it. */
@@ -27,11 +27,11 @@ const SNAP = 0.05
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
 /** The zoom that shows the picture whole inside the stage less its margins, never enlarged. */
-export function fitZoom(picture: Size, stage: Size): number {
+export function fitZoom(picture: Size, stage: Size, margin = FIT_MARGIN): number {
   const z = Math.min(
     1,
-    (stage.width - 2 * FIT_MARGIN) / Math.max(1, picture.width),
-    (stage.height - 2 * FIT_MARGIN) / Math.max(1, picture.height),
+    (stage.width - 2 * margin) / Math.max(1, picture.width),
+    (stage.height - 2 * margin) / Math.max(1, picture.height),
   )
   // A stage too small to leave its margins still shows a sliver.
   return Math.max(z, 0.001)

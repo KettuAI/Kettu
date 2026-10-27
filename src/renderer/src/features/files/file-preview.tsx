@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, SaveIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
@@ -21,7 +21,15 @@ import { cn } from '@renderer/lib/utils'
 import { Markdown } from '@renderer/features/session/markdown'
 import { playerFailure } from '@renderer/features/session/media/failure'
 import { PlayElsewhere, UnsupportedReason } from '@renderer/features/session/media/local-media'
+import {
+  DEFAULT_PICTURE_SIZE,
+  handleZoomKeys,
+  usePictureZoom,
+  type PictureControls,
+} from '@renderer/features/session/media/picture-zoom'
 import { playOneAtATime } from '@renderer/features/session/media/playback'
+import { ZoomControls, type ZoomLevel } from '@renderer/features/session/media/zoom-controls'
+import type { Size } from '@renderer/features/session/media/zoom'
 import {
   buffers,
   closeFile,
@@ -41,6 +49,15 @@ import { folderOf, nameOf } from './paths'
 
 const CodeEditor = lazy(() => import('./code-editor'))
 
+/** The picture's controls and zoom, which its stage hands up to the header. */
+interface Picture {
+  controls: PictureControls
+  zoom: ZoomLevel
+}
+
+/** The room a fitted picture leaves on each side of the pane, as it always has. */
+const PANE_FIT_MARGIN = 24
+
 /** The open file, in the editor, or what stands in for it. */
 export function FilePreview({
   projectPath,
@@ -54,6 +71,12 @@ export function FilePreview({
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
   const svgSource = useFilesStore((s) => s.svgSource)
+  // The picture's own zoom, shown in the header and turned by the keys; a clip or a text has none.
+  const [media, setMedia] = useState<{ path: string; picture: Picture } | null>(null)
+  const picture = file && media?.path === file.path ? media.picture : null
+  const onPicture = useCallback((path: string, next: Picture | null) => {
+    setMedia(next ? { path, picture: next } : null)
+  }, [])
   if (!file) {
     return (
       <Empty className="h-full">
@@ -74,6 +97,7 @@ export function FilePreview({
       className="flex h-full min-h-0 flex-col bg-background"
       // Anywhere in the pane, so it still saves after a click on one of the bars' buttons.
       onKeyDown={(event) => {
+        if (handleZoomKeys(event, picture?.controls ?? null)) return
         if (!isMod(event) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 's')
           return
         event.preventDefault()
@@ -103,6 +127,7 @@ export function FilePreview({
             <SaveIcon className="size-3.5" />
           </PanelButton>
         )}
+        {picture && <ZoomControls zoom={picture.zoom} controls={picture.controls} size="xs" />}
         {isMarkdown(file.path) && file.content?.kind === 'text' && (
           <PanelButton
             label={rendered(file, source) ? t('preview.showSource') : t('preview.showRendered')}
@@ -139,7 +164,7 @@ export function FilePreview({
       </div>
       <Notes projectPath={projectPath} file={file} />
       <div className="relative min-h-0 flex-1">
-        <Body projectPath={projectPath} file={file} />
+        <Body projectPath={projectPath} file={file} onPicture={onPicture} />
       </div>
     </div>
   )
@@ -227,7 +252,15 @@ function Bar({ tone, children }: { tone: 'notice' | 'error' | 'muted'; children:
   )
 }
 
-function Body({ projectPath, file }: { projectPath: string; file: OpenFile }) {
+function Body({
+  projectPath,
+  file,
+  onPicture,
+}: {
+  projectPath: string
+  file: OpenFile
+  onPicture: (path: string, picture: Picture | null) => void
+}) {
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
   const { content, error } = file
@@ -260,6 +293,7 @@ function Body({ projectPath, file }: { projectPath: string; file: OpenFile }) {
         projectPath={projectPath}
         path={content.path}
         grant={content.grant}
+        onPicture={onPicture}
       />
     )
   }
@@ -293,21 +327,21 @@ export function Lines() {
   )
 }
 
-type Size = { width: number; height: number }
-
 /**
- * A media file from the media scheme, centred: a picture at its own size, or fitted to the pane
- * when larger, over squares that show its transparency; a clip the same way, and a sound, with
- * Chromium's controls. Its pixel size, length and file size show under it.
+ * A media file from the media scheme, centred: a picture on a stage of its own, where it zooms and
+ * pans as it does in the viewer, over squares that show its transparency; a clip fitted to the
+ * pane, and a sound, with Chromium's controls. Its pixel size, length and file size show under it.
  */
 function FileMedia({
   projectPath,
   path,
   grant,
+  onPicture,
 }: {
   projectPath: string
   path: string
   grant: MediaGrant
+  onPicture: (path: string, picture: Picture | null) => void
 }) {
   const { t } = useTranslation('files')
   const [size, setSize] = useState<Size | null>(
@@ -383,8 +417,8 @@ function FileMedia({
   }
   return (
     <div className="absolute inset-0 flex flex-col">
-      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-        {grant.kind === 'video' ? (
+      {grant.kind === 'video' ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
           <video
             src={grant.url}
             controls
@@ -404,24 +438,117 @@ function FileMedia({
             onError={(event) => failed(playerFailure(event.currentTarget))}
             className="max-h-full max-w-full"
           />
-        ) : (
-          <img
-            src={grant.url}
-            alt={name}
-            draggable={false}
-            decoding="async"
-            onLoad={(event) => {
-              const { naturalWidth, naturalHeight } = event.currentTarget
-              if (naturalWidth > 0 && naturalHeight > 0) {
-                setSize({ width: naturalWidth, height: naturalHeight })
-              }
-            }}
-            onError={() => failed(null)}
-            className="max-h-full max-w-full checkerboard object-contain shadow-[0_0_0_var(--hairline)_var(--border-default)]"
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <PictureStage
+          path={path}
+          url={grant.url}
+          name={name}
+          onSize={setSize}
+          onFailed={() => failed(null)}
+          onPicture={onPicture}
+        />
+      )}
       <div className="pb-3">{meta}</div>
+    </div>
+  )
+}
+
+/**
+ * A picture on a stage of the space above its facts, which zooms and pans as the viewer's does:
+ * the same gestures, the same fit margin, and a hairline edge that stays a hairline.
+ */
+function PictureStage({
+  path,
+  url,
+  name,
+  onSize,
+  onFailed,
+  onPicture,
+}: {
+  path: string
+  url: string
+  name: string
+  onSize: (size: Size) => void
+  onFailed: () => void
+  onPicture: (path: string, picture: Picture | null) => void
+}) {
+  const [natural, setNatural] = useState<Size | null>(null)
+  const [stage, setStage] = useState<Size>({ width: 0, height: 0 })
+  const [element, setElement] = useState<HTMLDivElement | null>(null)
+  const stageRef = useCallback((el: HTMLDivElement | null) => setElement(el), [])
+  const { picture, controls, zoom, zoomed, dragging } = usePictureZoom({
+    natural,
+    stage,
+    element,
+    margin: PANE_FIT_MARGIN,
+    edge: true,
+  })
+
+  useEffect(() => {
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setStage({ width: entry.contentRect.width, height: entry.contentRect.height })
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [element])
+
+  useEffect(() => {
+    if (controls && zoom) onPicture(path, { controls, zoom })
+  }, [path, controls, zoom, onPicture])
+  useEffect(
+    () => () => {
+      onPicture(path, null)
+    },
+    [path, onPicture],
+  )
+
+  return (
+    <div
+      ref={stageRef}
+      tabIndex={0}
+      role="group"
+      aria-label={name}
+      onPointerDown={(event) => event.currentTarget.focus()}
+      className="relative min-h-0 flex-1 overflow-hidden outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+    >
+      <img
+        ref={picture}
+        src={url}
+        alt={name}
+        decoding="async"
+        draggable={false}
+        onLoad={(event) => {
+          const el = event.currentTarget
+          el.decode().then(
+            () => {
+              const size =
+                el.naturalWidth > 0 && el.naturalHeight > 0
+                  ? { width: el.naturalWidth, height: el.naturalHeight }
+                  : DEFAULT_PICTURE_SIZE
+              setNatural(size)
+              onSize(size)
+            },
+            () => onFailed(),
+          )
+        }}
+        onError={onFailed}
+        style={
+          natural
+            ? {
+                width: natural.width,
+                height: natural.height,
+                marginLeft: -natural.width / 2,
+                marginTop: -natural.height / 2,
+              }
+            : { visibility: 'hidden' }
+        }
+        className={cn(
+          'absolute top-1/2 left-1/2 max-w-none bg-card checkerboard select-none',
+          zoomed && (dragging ? 'cursor-grabbing' : 'cursor-grab'),
+        )}
+      />
     </div>
   )
 }
