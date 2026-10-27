@@ -49,7 +49,7 @@ export function LocalImage({
       {!loaded && (
         // Shown only when the picture takes a while, so a quick one never flashes.
         <span className="absolute inset-0 animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
-          <Skeleton className="size-full rounded-[inherit]" />
+          <Skeleton render={<span />} className="size-full rounded-[inherit]" />
         </span>
       )}
       <img
