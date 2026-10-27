@@ -276,17 +276,24 @@ export function usePictureZoom({
       const box = picture.current?.getBoundingClientRect()
       return !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
     }
-    let press: { x: number; y: number; camera: Camera; moved: boolean } | null
+    let press: { x: number; y: number; camera: Camera; moved: boolean; onPicture: boolean } | null
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0 || disabled) return
-      press = { x: event.clientX, y: event.clientY, camera: camera.current, moved: false }
+      const onPicture = overPicture(event.clientX, event.clientY)
+      press = {
+        x: event.clientX,
+        y: event.clientY,
+        camera: camera.current,
+        moved: false,
+        onPicture,
+      }
       // A pointer captured on the stage keeps sending its moves once the drag leaves it.
-      if (overPicture(event.clientX, event.clientY) && isZoomed(camera.current, fit.current)) {
+      if (onPicture && isZoomed(camera.current, fit.current)) {
         element.setPointerCapture(event.pointerId)
       }
     }
     const onPointerMove = (event: PointerEvent) => {
-      if (!press || !isZoomed(press.camera, fit.current)) return
+      if (!press?.onPicture || !isZoomed(press.camera, fit.current)) return
       const dx = event.clientX - press.x
       const dy = event.clientY - press.y
       if (!press.moved && Math.hypot(dx, dy) > DRAG_SLOP) {
