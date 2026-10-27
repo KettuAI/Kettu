@@ -391,7 +391,7 @@
     },
     "environment": {
       "pending": "正在读取你的环境…",
-      "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}} ms。",
+      "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}}\u00a0ms。",
       "loginShellPlain": "已从登录 Shell 读取。",
       "inherited": "继承自 OverBench 的启动方式。",
       "fallback": "正在使用备用 PATH。",

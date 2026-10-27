@@ -101,6 +101,7 @@ export function SidePanelArea({
       defaultLayout={layout.defaultLayout}
       onLayoutChanged={layout.onLayoutChanged}
       className="relative"
+      style={SHEET_PANEL}
     >
       <ResizablePanel id="content" minSize="360px" className="min-w-0" style={SHEET_PANEL}>
         {/* Under the maximized panel the content keeps its state but is not rendered, and its

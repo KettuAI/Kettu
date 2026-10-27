@@ -104,7 +104,14 @@ const theme = EditorView.theme({
     caretColor: 'var(--text-primary)',
   },
   '.cm-line': { padding: '0' },
-  '.cm-placeholder': { color: 'var(--text-placeholder)' },
+  // One line, cut with an ellipsis, so a long placeholder does not make the caret two lines tall.
+  '.cm-placeholder': {
+    color: 'var(--text-placeholder)',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
   '.cm-hint': { color: 'var(--text-placeholder)' },
   // A shadow takes the tint 2 px past the text without moving it; it adds 2 px to the radius.
   '.cm-slash-command': {

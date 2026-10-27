@@ -258,7 +258,7 @@ export const Thread = memo(function Thread({
         <MessageScrollerButton
           variant="outline"
           size="icon-sm"
-          className="rounded-full shadow-md"
+          className="rounded-full bg-card shadow-menu"
         />
         <OlderLoading sessionId={sessionId} />
         <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />

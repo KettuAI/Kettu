@@ -393,7 +393,7 @@
     },
     "environment": {
       "pending": "Reading your environment…",
-      "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}} ms.",
+      "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}}\u00a0ms.",
       "loginShellPlain": "Read from your login shell.",
       "inherited": "Inherited from how OverBench was started.",
       "fallback": "Using a fallback PATH.",

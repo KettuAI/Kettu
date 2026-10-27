@@ -192,7 +192,23 @@ async function run() {
     `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
     'New session on first run',
   )
-  await sleep(1500)
+  // The heading fades in; a capture taken mid-fade shows it almost invisible, so wait until its
+  // opacity has rested at 1 for a few frames.
+  await cdp.evaluate(`new Promise((done, fail) => {
+    const started = Date.now()
+    let still = 0
+    const check = () => {
+      const heading = [...document.querySelectorAll('h1')].find((h) => h.textContent.startsWith('What should'))
+      still = heading && getComputedStyle(heading).opacity === '1' ? still + 1 : 0
+      if (still >= 3) return done(true)
+      if (Date.now() - started > 15_000) return fail(new Error('the heading stayed faded'))
+      setTimeout(check, 100)
+    }
+    check()
+  })`)
+  // The heading's serif face loads with the first text the app draws; a capture before that
+  // shows a fallback face.
+  await cdp.evaluate('document.fonts.ready.then(() => true)')
   log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
   await shoot('first-run')
 
@@ -325,12 +341,13 @@ async function run() {
   )
   log('captured session-scrolling')
 
-  // Chinese notes between runs of work; the pointer rests beside the column, so no reply row shows.
+  // Chinese notes between runs of work; the pointer rests beside the column and at the top of the
+  // thread, so neither a reply row nor the outline rail's popover shows.
   await prompt('/report')
   await waitFor(`document.body.textContent.includes('还没做的')`, 'the report', 60_000)
   await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to end', 120_000)
   const beside = await cdp.evaluate(
-    `(() => { const r = document.querySelector('[data-slot=message-scroller-viewport]').getBoundingClientRect(); return { x: r.left + 8, y: r.top + r.height / 2 } })()`,
+    `(() => { const r = document.querySelector('[data-slot=message-scroller-viewport]').getBoundingClientRect(); return { x: r.left + 8, y: r.top + 8 } })()`,
   )
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...beside })
   await sleep(800)
@@ -391,8 +408,21 @@ async function run() {
 
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
   await waitFor(`document.querySelector('[data-terminal-panel] .xterm')`, 'the terminal')
-  // PowerShell takes a few seconds to print its first prompt on a CI runner.
-  await sleep(5000)
+  // The shell prints its prompt a few seconds after it starts; the grid stays empty until it
+  // does, so the host's replay is what says it has printed.
+  await cdp.evaluate(`(async () => {
+    const deadline = Date.now() + 60_000
+    for (;;) {
+      const list = await window.overbench.terminals.request('terminals.list', { projectPath: ${JSON.stringify(project)} })
+      const terminal = list.sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (terminal) {
+        const { replay } = await window.overbench.terminals.request('terminals.attach', { id: terminal.id })
+        if (replay.trim()) return true
+      }
+      if (Date.now() > deadline) throw new Error('the terminal printed nothing')
+      await new Promise((done) => setTimeout(done, 100))
+    }
+  })()`)
   log(
     `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)}`,
   )

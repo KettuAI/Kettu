@@ -140,7 +140,7 @@ export function ControlRow({
         <OptionMenu key={o.id} option={o} onSelect={set} />
       ))}
       <span
-        className="min-w-0 flex-1 truncate px-1.5 text-xs text-danger"
+        className={cn('min-w-0 flex-1 truncate text-xs text-danger', error && 'px-1.5')}
         title={error ?? undefined}
       >
         {error}
