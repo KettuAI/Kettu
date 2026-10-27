@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUpRightIcon, CheckIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { ArrowUpRightIcon, CheckIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
@@ -17,7 +17,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
-import { ControlError, GROUP_ACTION, SettingSelect } from './controls'
+import { ControlError, SettingSelect } from './controls'
 import { useApply } from './use-apply'
 
 /** The top of the About page, in place of the page title. */
@@ -31,7 +31,7 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
       <p className="text-small text-pretty text-secondary">{t('about.version.description')}</p>
       {info ? (
         <p data-selectable="" className="font-mono text-code text-tertiary">
-          {`${info.version} · ${info.platform} ${info.arch}`}
+          {`${info.version} · ${info.system}`}
         </p>
       ) : (
         <Skeleton className="h-4 w-44" />
@@ -222,46 +222,6 @@ export function AutomaticUpdates() {
         onChange={(v) => apply({ updates: { automatic: v } })}
       />
     </>
-  )
-}
-
-const versionsText = (info: AppInfo) =>
-  `OverBench ${info.version} (${info.platform} ${info.arch})\nElectron ${info.versions.electron}\nChromium ${info.versions.chrome}\nNode.js ${info.versions.node}`
-
-/** Copies the version block; the icon and label turn into a check for a moment. */
-export function CopyVersions({ info }: { info: AppInfo }) {
-  const { t } = useTranslation('settings')
-  const [copied, setCopied] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(timer.current), [])
-  const copy = () => {
-    void navigator.clipboard.writeText(versionsText(info)).then(() => {
-      setCopied(true)
-      clearTimeout(timer.current)
-      timer.current = setTimeout(() => setCopied(false), 1500)
-    })
-  }
-  return (
-    <Button variant="quiet" size="sm" onClick={copy} className={GROUP_ACTION}>
-      {copied ? (
-        <CheckIcon
-          data-icon="inline-start"
-          className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75"
-        />
-      ) : (
-        <CopyIcon data-icon="inline-start" />
-      )}
-      {copied ? t('about.runtime.copied') : t('about.runtime.copy')}
-    </Button>
-  )
-}
-
-export function RuntimeFact({ value }: { value: string | undefined }) {
-  if (value === undefined) return <Skeleton className="h-4 w-24" />
-  return (
-    <span data-selectable="" className="font-mono text-command text-secondary">
-      {value}
-    </span>
   )
 }
 

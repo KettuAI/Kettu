@@ -37,6 +37,7 @@ import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
 import { framesSettled, isRevoked } from './subframes'
+import { systemNameForRun } from './system-name'
 import type { TerminalHost } from './terminal-host'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
@@ -271,16 +272,10 @@ export function registerIpcHandlers({
   quit,
   perf,
 }: IpcDeps): void {
-  handle('app:get-info', 0, (): AppInfo => ({
+  handle('app:get-info', 0, async (): Promise<AppInfo> => ({
     name: app.getName(),
     version: app.getVersion(),
-    platform: process.platform,
-    arch: process.arch,
-    versions: {
-      electron: process.versions.electron,
-      chrome: process.versions.chrome,
-      node: process.versions.node,
-    },
+    system: await systemNameForRun(),
     userDataPath: app.getPath('userData'),
     isPackaged: app.isPackaged,
   }))
