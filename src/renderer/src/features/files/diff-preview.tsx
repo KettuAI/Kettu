@@ -23,7 +23,8 @@ export function DiffPreview({ projectPath, diff }: { projectPath: string; diff: 
           <span className="min-w-0 shrink truncate font-mono text-code font-medium">
             {nameOf(diff.path)}
           </span>
-          <span className="min-w-0 shrink-1000 truncate text-tertiary">
+          {/* The status gives way first, to an ellipsis of its own rather than a sliver. */}
+          <span className="min-w-4 shrink-1000 truncate text-tertiary">
             {diff.ref ? (
               <span className="font-mono text-meta">{diff.ref.slice(0, 7)}</span>
             ) : (
