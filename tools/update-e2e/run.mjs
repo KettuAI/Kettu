@@ -5,6 +5,10 @@
 // Chrome DevTools Protocol, and passes once 0.0.901 has started. It uses the default data folder
 // only after confirming it is absent, so it never touches an installation someone uses.
 //
+// On macOS, CSC_LINK and CSC_KEY_PASSWORD sign both builds with the Developer ID, which needs a
+// build with MAIN_VITE_UPDATE_MODE=install, and 0.0.900 goes into /Applications. Without them the
+// builds are ad-hoc signed and update in Link mode, so the check stops at the notice's Download.
+//
 //   pnpm build && node tools/update-e2e/run.mjs [--port 9240]
 //
 // On Linux CI, run it under `xvfb-run -a`.
@@ -34,6 +38,7 @@ const root = resolve(import.meta.dirname, '..', '..')
 const OLD_VERSION = '0.0.900'
 const NEW_VERSION = '0.0.901'
 const UPDATE_TIMEOUT_MS = 3 * 60 * 1000
+const MAC_APP = '/Applications/OverBench.app'
 /** @param {number} ms @returns {Promise<void>} */
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 /** @param {string} text */
@@ -130,6 +135,65 @@ function safeDecode(text) {
 }
 
 /**
+ * electron-builder's arguments and environment for one version: the version comes from the
+ * configuration so package.json stays 0.0.0, and the feed is the local one instead of GitHub.
+ * @param {{
+ *   platform: NodeJS.Platform
+ *   version: string
+ *   output: string
+ *   feedUrl: string
+ *   signed: boolean
+ * }} input
+ * @returns {{ args: string[], env: Record<string, string> }}
+ */
+export function packageArgs({ platform, version, output, feedUrl, signed }) {
+  const target = platform === 'darwin' ? 'mac' : platform === 'win32' ? 'win' : 'linux'
+  return {
+    args: [
+      '--publish',
+      'never',
+      // The release's own Developer ID build; Squirrel.Mac checks the signature, never the
+      // notarization, which the release run checks.
+      ...(signed ? ['--config', 'electron-builder.mac-signed.yml', '-c.mac.notarize=false'] : []),
+      `-c.extraMetadata.version=${version}`,
+      // The platform's own publish config wins over the root one, so the GitHub release settings
+      // stay out of it; overriding the root object would keep their keys.
+      `-c.${target}.publish.provider=generic`,
+      `-c.${target}.publish.url=${feedUrl}`,
+      `-c.directories.output=${output}`,
+    ],
+    // An ad-hoc build must never pick an identity from the keychain; the signed one's empty
+    // identity is found only by discovery, in the keychain electron-builder imports from CSC_LINK.
+    env: signed ? {} : { CSC_IDENTITY_AUTO_DISCOVERY: 'false' },
+  }
+}
+
+/**
+ * The update mode 0.0.900 needs, which `pnpm build` fixes: only a Developer ID signed macOS build
+ * can replace itself, so an ad-hoc one links to the release.
+ * @param {{ platform: NodeJS.Platform, signed: boolean }} input
+ * @returns {'install' | 'link'}
+ */
+export function expectedMode({ platform, signed }) {
+  return platform === 'darwin' && !signed ? 'link' : 'install'
+}
+
+/**
+ * The processes running an executable inside the folder, from `ps -axo pid=,comm=`, which on
+ * macOS prints each executable's full path.
+ * @param {string} output
+ * @param {string} folder
+ * @returns {number[]}
+ */
+export function processesUnder(output, folder) {
+  const prefix = folder.endsWith('/') ? folder : `${folder}/`
+  return output.split('\n').flatMap((line) => {
+    const match = /^\s*(\d+)\s+(.+)$/.exec(line)
+    return match && match[2].startsWith(prefix) ? [Number(match[1])] : []
+  })
+}
+
+/**
  * Serves the newer build's output folder, which holds the update files and the installer.
  * @param {string} folder
  * @returns {Promise<{ root: string, url: string, close: () => Promise<void> }>}
@@ -169,39 +233,50 @@ async function serveFeed(folder) {
 }
 
 /**
- * Packages the build: the version comes from the configuration so package.json stays 0.0.0, and
- * both versions point at the local feed instead of GitHub.
  * @param {string} version
  * @param {string} output
  * @param {string} feedUrl
+ * @param {boolean} signed
  */
-function packageApp(version, output, feedUrl) {
+function packageApp(version, output, feedUrl, signed) {
   const cli = join(root, 'node_modules', 'electron-builder', 'cli.js')
-  // The platform's own publish config wins over the root one, so the GitHub release settings
-  // stay out of it; overriding the root object would keep their keys.
-  const target =
-    process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux'
-  const result = spawnSync(
-    process.execPath,
-    [
-      cli,
-      '--publish',
-      'never',
-      `-c.extraMetadata.version=${version}`,
-      `-c.${target}.publish.provider=generic`,
-      `-c.${target}.publish.url=${feedUrl}`,
-      `-c.directories.output=${output}`,
-    ],
-    {
-      cwd: root,
-      stdio: 'inherit',
-      timeout: 15 * 60 * 1000,
-      // Ad-hoc signing on macOS; never pick an identity from the keychain.
-      env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' },
-    },
-  )
+  const { args, env } = packageArgs({
+    platform: process.platform,
+    version,
+    output,
+    feedUrl,
+    signed,
+  })
+  const result = spawnSync(process.execPath, [cli, ...args], {
+    cwd: root,
+    stdio: 'inherit',
+    timeout: 15 * 60 * 1000,
+    env: { ...process.env, ...env },
+  })
   if (result.error) throw new Error(`Packaging ${version} failed: ${result.error.message}`)
   if (result.status !== 0) throw new Error(`Packaging ${version} failed`)
+}
+
+/**
+ * Installs the app as users do, from its dmg into /Applications, where Squirrel.Mac replaces it.
+ * @param {string} dmg
+ * @param {string} mount
+ */
+function installFromDmg(dmg, mount) {
+  mkdirSync(mount, { recursive: true })
+  runTool('hdiutil', ['attach', dmg, '-nobrowse', '-readonly', '-mountpoint', mount])
+  try {
+    runTool('ditto', [join(mount, 'OverBench.app'), MAC_APP])
+  } finally {
+    spawnSync('hdiutil', ['detach', mount, '-force'], { stdio: 'inherit' })
+  }
+}
+
+/** @param {string} command @param {string[]} args */
+function runTool(command, args) {
+  const result = spawnSync(command, args, { stdio: 'inherit', timeout: 5 * 60 * 1000 })
+  if (result.error) throw new Error(`${command} failed: ${result.error.message}`)
+  if (result.status !== 0) throw new Error(`${[command, ...args].join(' ')} failed`)
 }
 
 /** @param {string} out */
@@ -215,7 +290,8 @@ function macExecutable(out) {
 
 /**
  * Starts the 0.0.900 executable with a fresh data folder. The installer-launched version inherits
- * the Chromium log file, which is the only output the tool can see from 0.0.901.
+ * the Chromium log file, which is the only output the tool can see from 0.0.901, except on macOS,
+ * where ShipIt starts it through launchd without the environment.
  * @param {{
  *   executable: string
  *   port: number
@@ -340,6 +416,22 @@ async function killAppImageProcesses(appImage) {
       // The process ended between the listing and the read.
     }
   }
+  await stopProcesses(pids)
+}
+
+/**
+ * Stops every process running from the installed app, where launchd, not this tool, started
+ * ShipIt and the version it installed.
+ * @param {string} app
+ */
+async function killMacApp(app) {
+  if (process.platform !== 'darwin') return
+  const listed = spawnSync('ps', ['-axo', 'pid=,comm='], { encoding: 'utf8' })
+  await stopProcesses(processesUnder(listed.stdout ?? '', app))
+}
+
+/** @param {number[]} pids */
+async function stopProcesses(pids) {
   for (const pid of pids) {
     try {
       process.kill(pid, 'SIGTERM')
@@ -423,6 +515,9 @@ async function main() {
     installDir = windowsInstallFolder({ home, localAppData: process.env['LOCALAPPDATA'] })
     if (existsSync(installDir)) throw new Error(`Refusing to run: ${installDir} already exists`)
   }
+  // electron-builder signs with the Developer ID certificate it imports from CSC_LINK.
+  const signed = platform === 'darwin' && Boolean(process.env['CSC_LINK'])
+  if (signed && existsSync(MAC_APP)) throw new Error(`Refusing to run: ${MAC_APP} already exists`)
   if (!existsSync(join(root, 'out', 'main', 'index.js'))) {
     throw new Error('out/main/index.js is missing; run pnpm build first')
   }
@@ -451,11 +546,14 @@ async function main() {
     const newOutput = join(scratch, 'build-0.0.901')
     feed = await serveFeed(newOutput)
     log(`Feed at ${feed.url}`)
+    if (platform === 'darwin') {
+      log(signed ? 'Signing with the Developer ID in CSC_LINK' : 'No CSC_LINK: ad-hoc signing')
+    }
     log(`Packaging ${OLD_VERSION}`)
-    packageApp(OLD_VERSION, join(scratch, 'build-0.0.900'), feed.url)
+    packageApp(OLD_VERSION, join(scratch, 'build-0.0.900'), feed.url, signed)
     log(`Packaged ${OLD_VERSION}`)
     log(`Packaging ${NEW_VERSION}`)
-    packageApp(NEW_VERSION, newOutput, feed.url)
+    packageApp(NEW_VERSION, newOutput, feed.url, signed)
     log(`Packaged ${NEW_VERSION}`)
 
     const newFiles = readdirSync(newOutput)
@@ -494,6 +592,10 @@ async function main() {
       copyFileSync(join(oldOutput, installer), appImage)
       chmodSync(appImage, 0o755)
       executable = appImage
+    } else if (signed) {
+      log(`Installing ${OLD_VERSION} into ${MAC_APP}`)
+      installFromDmg(join(oldOutput, installer), join(scratch, 'dmg'))
+      executable = join(MAC_APP, 'Contents', 'MacOS', 'OverBench')
     } else {
       executable = macExecutable(oldOutput)
     }
@@ -523,6 +625,12 @@ async function main() {
       60_000,
       'the update check',
     )
+    const mode = expectedMode({ platform, signed })
+    if (status?.mode !== mode) {
+      throw new Error(
+        `${OLD_VERSION} updates in ${status?.mode} mode, not ${mode}: build it with MAIN_VITE_UPDATE_MODE=${mode}`,
+      )
+    }
     if (status?.state?.kind === 'error') {
       throw new Error(`The update check failed: ${status.state.message}`)
     }
@@ -530,7 +638,7 @@ async function main() {
     // footer, among any other notices.
     const card = '[data-sidebar=footer] [data-notice]'
 
-    if (platform === 'darwin') {
+    if (mode === 'link') {
       const download = `[...document.querySelectorAll('${card} a')].find((a) =>
         a.textContent.includes('Download'),
       )`
@@ -578,13 +686,26 @@ async function main() {
       killWindowsApp(installDir)
       await uninstallWindowsApp(installDir)
     }
+    if (signed) {
+      await killMacApp(MAC_APP)
+      await removeFolder(MAC_APP)
+    }
     await removeFolder(dataFolder)
     if (feed) await feed.close()
     if (failure) {
       log('0.0.900 log:')
       printLog(oldLog)
-      log('0.0.901 log:')
-      printLog(newLog)
+      if (signed) {
+        // ShipIt starts 0.0.901 without the Chromium log file; its own logs, in a folder named
+        // after the appId, say how far the install got.
+        const shipIt = join(home, 'Library', 'Caches', 'com.overbench.app.ShipIt')
+        log('ShipIt logs:')
+        printLog(join(shipIt, 'ShipIt_stderr.log'))
+        printLog(join(shipIt, 'ShipIt_stdout.log'))
+      } else {
+        log('0.0.901 log:')
+        printLog(newLog)
+      }
     }
     await removeFolder(scratch)
   }
