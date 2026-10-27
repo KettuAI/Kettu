@@ -7,6 +7,7 @@ vi.stubGlobal('window', { overbench: { agents: { request } } })
 
 const {
   DEFAULT_FILTERS,
+  loadContext,
   loadUsagePage,
   setUsageFilters,
   usageChanged,
@@ -32,7 +33,13 @@ const empty: UsageSummary = {
 describe('usage store', () => {
   beforeEach(() => {
     request.mockReset()
-    useUsageStore.setState({ page: null, loading: false, error: null, filters: DEFAULT_FILTERS })
+    useUsageStore.setState({
+      context: {},
+      page: null,
+      loading: false,
+      error: null,
+      filters: DEFAULT_FILTERS,
+    })
   })
 
   it('reads the page once more after changes that arrive while it loads', async () => {
@@ -205,5 +212,32 @@ describe('usage store', () => {
     expect(range.from).toBe(from)
     expect(starts[0]).toBe(from)
     expect(starts.at(-1)).toBe(addDays(today, 1))
+  })
+
+  it('drops the older breakdown when a re-read fails, and keeps its error', async () => {
+    const breakdown = {
+      model: 'fake-model',
+      used: 11_000,
+      size: 200_000,
+      categories: [{ name: 'Messages', tokens: 11_000, share: 0.055 }],
+      lists: [],
+      observedAt: 1,
+    }
+    request.mockResolvedValueOnce(breakdown)
+    loadContext('session-1', '11000/200000')
+    await vi.waitFor(() =>
+      expect(useUsageStore.getState().context['session-1']?.breakdown).toEqual(breakdown),
+    )
+
+    request.mockRejectedValueOnce(new Error('Fake agent cannot fork sessions'))
+    loadContext('session-1', '12000/200000')
+    await vi.waitFor(() =>
+      expect(useUsageStore.getState().context['session-1']).toEqual({
+        key: '12000/200000',
+        breakdown: null,
+        loading: false,
+        error: 'Fake agent cannot fork sessions',
+      }),
+    )
   })
 })

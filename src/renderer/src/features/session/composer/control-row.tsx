@@ -177,7 +177,8 @@ export function ControlRow({
       <UsageButton
         sessionId={session.id}
         agentId={session.agentId}
-        idle={session.status === 'ready'}
+        idle={!running && session.status !== 'starting'}
+        reports={agent?.capabilities.context ?? false}
         running={running}
         usage={session.usage}
         cache={cacheExpiry(session, agent?.account ?? null)}

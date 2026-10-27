@@ -71,6 +71,7 @@ import { claudeJsonPath, readPlanTier } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import {
+  hasContextReport,
   hiddenRemoval,
   hiddenSessionMeta,
   limitsReport,
@@ -2151,6 +2152,7 @@ export class AgentManager {
         // running (its PR #593 would fix it), which OverBench would not know about.
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
         reports: limitsReport(slot.def.id) !== null,
+        context: hasContextReport(slot.def.id),
         account: slot.def.reportsAccount ?? false,
         progressNotes: slot.def.progressNotes ?? false,
         prompt: capabilities?.prompt ?? null,

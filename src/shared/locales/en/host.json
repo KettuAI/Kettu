@@ -163,7 +163,8 @@
       "notOnPath": "{{agent}} was installed in {{folder}}, but {{command}} is still not found on PATH. Add that folder to PATH and reload the environment, or choose the program in Settings › Agents.",
       "notFound": "{{agent}} was installed, but {{command}} is still not found on PATH. Reload the environment, or choose the program in Settings › Agents."
     },
-    "reportTimeout": "{{command}} did not finish in {{seconds}} s"
+    "reportTimeout": "{{command}} did not finish in {{seconds}} s",
+    "unreadableReport": "{{agent}}'s {{command}} gave no report OverBench can read"
   },
   "detect": {
     "nodeMissing": "{{agent}} runs on Node.js 22 or later, and node was not found on PATH.",

@@ -94,7 +94,8 @@ function setReport(sessionId: string, report: ContextReport): void {
 
 /**
  * Reads what fills the session's context unless it was read for the same context already. Each
- * read forks the session in the agent, so a breakdown holds until the context changes.
+ * read forks the session in the agent, so a breakdown holds until the context changes. A read
+ * that fails drops the older breakdown, which described another context.
  */
 export function loadContext(sessionId: string, key: string): void {
   const current = useUsageStore.getState().context[sessionId]
@@ -110,7 +111,7 @@ export function loadContext(sessionId: string, key: string): void {
     .catch((error: unknown) =>
       setReport(sessionId, {
         key,
-        breakdown: current?.breakdown ?? null,
+        breakdown: null,
         loading: false,
         error: errorMessage(error),
       }),

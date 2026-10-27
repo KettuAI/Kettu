@@ -162,7 +162,8 @@
       "notOnPath": "{{agent}} 已安装到 {{folder}}，但在 PATH 中仍然找不到 {{command}}。请把该文件夹加入 PATH 后重新加载环境，或在「设置 › Agent」中选择它的程序。",
       "notFound": "{{agent}} 已安装，但在 PATH 中仍然找不到 {{command}}。请重新加载环境，或在「设置 › Agent」中选择它的程序。"
     },
-    "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成"
+    "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
+    "unreadableReport": "{{agent}} 的 {{command}} 没有返回 OverBench 能读取的报告"
   },
   "detect": {
     "nodeMissing": "{{agent}} 需要 Node.js 22 或更高版本，但在 PATH 中找不到 node。",

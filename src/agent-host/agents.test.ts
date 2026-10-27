@@ -334,6 +334,24 @@ describe('AgentManager', () => {
     await m.agents.stopAll()
   })
 
+  it('tells which agents break their context down', async () => {
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [
+          { ...fakeAgent(FAKE_AGENT_MAIN) },
+          { ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' },
+          { ...fakeAgent(FAKE_AGENT_MAIN), id: 'opencode', name: 'opencode' },
+        ],
+      },
+    )
+    expect(m.agents.status('fake-agent').capabilities.context).toBe(true)
+    expect(m.agents.status('codex').capabilities.context).toBe(false)
+    expect(m.agents.status('opencode').capabilities.context).toBe(false)
+    await m.agents.stopAll()
+  })
+
   it('opens no hidden session in an agent that lacks the request that removes it', async () => {
     const m = manager(
       { FAKE_AGENT_WITHOUT: 'close' },
