@@ -425,7 +425,9 @@
       "description": "Where {{name}} keeps its sign-in, settings and history.",
       "useEnvironment": "Use the environment",
       "custom": "A folder of its own",
+      "explain": "The folder you choose keeps {{name}}'s sign-in, settings and history apart from the {{name}} you run in a terminal. Nothing is copied into it: a new folder needs you to sign in again, and sessions started with the current folder continue only after you switch back.",
       "chosen": "Chosen in OverBench",
+      "untilChosen": "{{name}} uses this folder until you choose one.",
       "nextStart": "Takes effect from the agent's next start."
     },
     "setBy": "Set by {{env}}",

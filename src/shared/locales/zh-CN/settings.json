@@ -423,7 +423,9 @@
       "description": "{{name}} 存放登录信息、设置和历史记录的位置。",
       "useEnvironment": "使用环境变量",
       "custom": "单独的目录",
+      "explain": "你选择的目录会单独存放 {{name}} 的登录信息、设置和历史记录，与你在终端中运行的 {{name}} 互不影响。原目录中的内容不会复制过去：新目录需要重新登录，用原目录开始的会话要切换回来才能继续。",
       "chosen": "在 OverBench 中选定",
+      "untilChosen": "选择目录前，{{name}} 仍使用这个目录。",
       "nextStart": "将在 Agent 下次启动时生效。"
     },
     "setBy": "由 {{env}} 指定",
